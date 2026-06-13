@@ -89,13 +89,22 @@ release begins.
   import/WHAT_IF semantics (P1.9 — CREATE-based statements are not yet rerun-safe), companion
   content manifest (P1.10), round-trip proof (P1.11), and Grammar.md/completion-surface docs to
   ride with the P1.9 import work.
-- [ ] **P1.8 Exclude secrets and ephemeral/security artifacts from configuration export.**
+- [x] **P1.8 Exclude secrets and ephemeral/security artifacts from configuration export.**
   Never export password hashes, encrypted ciphertext, JWT/dataset-at-rest keys, SMTP passwords,
   Orchestrator API keys, refresh/share/embed tokens, sessions, job history, audit rows, cached dataset
   contents, or snapshots as configuration. Emit explicit placeholders such as
   `${INITIAL_ADMIN_PASSWORD}`, `${SMTP_CORPORATE_PASSWORD}`, and `${ORCHESTRATOR_API_KEY}` with a generated
   requirements header. Prefer environment/secret-provider references so an administrator does not have
   to place plaintext directly in the bootstrap script.
+  *(done — v0.11.0)* The export queries only configuration tables; it never reads or emits password
+  hashes, encrypted SMTP ciphertext, keys, API keys, refresh/share/embed tokens, sessions, history,
+  audit rows, or caches (those are listed under the script's runtime-only summary). The `REQUIRED
+  SECRETS` header now documents the three substitution forms in preference order — `ENV('NAME')`
+  (no plaintext in the file), `ENC:...`, then a plaintext literal — and an unsubstituted `${...}`
+  placeholder is rejected at import before reaching the portal (P1.9 fail-closed). New
+  `ConfigurationExportSecretExclusionTests` seeds real marker secrets (password hash, SMTP
+  ciphertext, refresh/share/embed tokens) and asserts none appear in the export while the credential
+  is still represented by its placeholder. Admin guide §9.0 updated.
 - [x] **P1.9 Add deterministic import, validation, and dry-run behavior.**
   The exported script must support `SET WHAT_IF ON`, report missing secrets and conflicting objects before
   mutation, and be safe to rerun. Define create/update/skip behavior explicitly; do not depend on source

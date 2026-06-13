@@ -1028,6 +1028,18 @@ skipped, and runtime-only item so nothing is omitted silently. The same script i
 `GET /api/admin/configuration/export`, and each export writes an `EXPORT_PORTAL_CONFIGURATION`
 audit event.
 
+No real secret or security material ever appears in the export — not password hashes, encrypted SMTP
+credentials, JWT/dataset-at-rest keys, Orchestrator API keys, refresh tokens, or share/embed
+capability tokens. Each credential is a `${...}` placeholder you replace before import, ideally
+**without putting plaintext in the file**:
+
+- `ENV('NAME')` — resolve from an environment variable at import (preferred; nothing sensitive in the script).
+- `ENC:...` — an encrypted literal, unlocked by `USE PASSWORD = ...` at import.
+- `'...'` — a plaintext literal (least preferred; avoid committing).
+
+An unsubstituted `${...}` placeholder is rejected at import before it reaches the portal (see §9.0
+import behavior), so a forgotten secret fails closed rather than provisioning an empty credential.
+
 Notes:
 
 - The engine write-blocks script extensions (`.etlsql`, `.sql`) as control-plane protection, so

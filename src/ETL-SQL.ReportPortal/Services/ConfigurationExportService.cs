@@ -249,7 +249,13 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         if (secrets.Count > 0)
         {
             sb.AppendLine("--");
-            sb.AppendLine("-- REQUIRED SECRETS — replace every ${...} placeholder before executing:");
+            sb.AppendLine("-- REQUIRED SECRETS — supply each before executing. Real secret material is never");
+            sb.AppendLine("-- exported; every credential below is a ${...} placeholder you must replace with one of:");
+            sb.AppendLine("--   • an environment reference:   ENV('NAME')        (no plaintext in this file; preferred)");
+            sb.AppendLine("--   • an encrypted literal:       ENC:...            (USE PASSWORD = ... unlocks it at import)");
+            sb.AppendLine("--   • a plaintext literal:        '...'              (least preferred — avoid committing)");
+            sb.AppendLine("-- An unsubstituted ${...} placeholder is rejected at import before it reaches the portal.");
+            sb.AppendLine("-- Placeholders:");
             foreach (var secret in secrets.Distinct().OrderBy(s => s))
                 sb.AppendLine($"--   ${{{secret}}}");
         }
