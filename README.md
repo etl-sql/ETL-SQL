@@ -29,6 +29,12 @@ Forget setting up complex BI tools or reporting servers. Append `CREATE VISUAL` 
 ### 🛡️ Sandboxed Zero-Trust Security
 Security is built into the parser. ETL-SQL features native encryption for credentials (`ENC:`), memory-purged `SECRET` variables, path traversal guardrails, script immutability, and transactional outboxes. Validate side-effecting operations safely with `SET WHAT_IF ON` before deploying.
 
+### 🌿 Git-Friendly & Dev-First (Plain Text Code)
+Traditional BI and ETL tools lock you into proprietary binary formats, database-stored procedures, or messy auto-generated XML/JSON that make version control a nightmare. ETL-SQL pipelines and dashboards are 100% plain text. Run a standard `git diff`, review code changes in Pull Requests, and track history cleanly while keeping passwords securely encrypted via native `ENC:` tags.
+
+### 🏷️ End-to-End Lineage: From Source to Visual
+Build absolute trust in your reports. By attaching lineage tags (`/*@tag: val */`) at the column or row level, metadata cascades automatically from the source extract, through the transformations, all the way to the final dashboard visual. If a business stakeholder asks, *"Where did this metric come from?"*, the Report Portal displays its exact provenance, source table, and transformations in a live lineage diagram.
+
 ---
 
 ## See It In Action
