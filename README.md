@@ -35,6 +35,12 @@ Traditional BI and ETL tools lock you into proprietary binary formats, database-
 ### 🏷️ End-to-End Lineage: From Source to Visual
 Build absolute trust in your reports. By attaching lineage tags (`/*@tag: val */`) at the column or row level, metadata cascades automatically from the source extract, through the transformations, all the way to the final dashboard visual. If a business stakeholder asks, *"Where did this metric come from?"*, the Report Portal displays its exact provenance, source table, and transformations in a live lineage diagram.
 
+### 🐳 Docker Lifecycle Control directly in SQL
+Spin up disposable databases for sandbox staging or integration testing without writing separate orchestration bash scripts. Declare `USE DOCKER('postgres:15-alpine') AS temp_pg;` in your script, fetch its dynamically configured connection string, run migrations and tests, and call `CLOSE DOCKER temp_pg;` when done. 
+
+### 🔄 Resumable Sessions (Skip Redundant Re-runs)
+Long-running ETL processes shouldn't have to restart from scratch when a network timeout occurs at step 4 of 5. By defining labels in your script, ETL-SQL establishes checkpoints. Run scripts with `--session` and `--resume` flags to skip completed steps and restart failed runs exactly where they left off.
+
 ---
 
 ## See It In Action
