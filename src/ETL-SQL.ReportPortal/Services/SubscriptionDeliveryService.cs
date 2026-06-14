@@ -1,6 +1,6 @@
-using System.Text;
 using System.Net.Mail;
 using System.Security.Cryptography;
+using System.Text;
 using ETL_SQL.Core;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;

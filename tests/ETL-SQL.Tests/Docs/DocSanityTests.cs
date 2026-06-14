@@ -181,10 +181,10 @@ namespace ETL_SQL.Tests.Docs
 
                 if (line.Contains("Help File", StringComparison.OrdinalIgnoreCase) || line.Contains("Help", StringComparison.OrdinalIgnoreCase))
                 {
-                    helpColumnIndex = Array.FindIndex(cells, c => 
-                        c.Equals("Help File", StringComparison.OrdinalIgnoreCase) || 
-                        c.Equals("Help", StringComparison.OrdinalIgnoreCase) || 
-                        c.Equals("Help File/Docs", StringComparison.OrdinalIgnoreCase) || 
+                    helpColumnIndex = Array.FindIndex(cells, c =>
+                        c.Equals("Help File", StringComparison.OrdinalIgnoreCase) ||
+                        c.Equals("Help", StringComparison.OrdinalIgnoreCase) ||
+                        c.Equals("Help File/Docs", StringComparison.OrdinalIgnoreCase) ||
                         c.Equals("Help File / Docs", StringComparison.OrdinalIgnoreCase));
                     continue;
                 }

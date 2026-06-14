@@ -210,7 +210,7 @@ namespace ETL_SQL.Tests.Connectors
 
             var batch = new DataTable();
             batch.SetColumns(new[] { "ID" });
-            
+
             // 6 digits is overflow for INT(5) (ignoring negative sign)
             var row = batch.NewRow();
             row["ID"] = "-123456";
