@@ -77,8 +77,9 @@ WITH (
 - Dataset export credentials are operation-only and are never persisted. Output is committed atomically,
   so a failure preserves any existing destination.
 - `EXPORT SCRIPT` preserves published bundle relative paths but does not decrypt or reveal secrets; recovered scripts may require credentials to be re-entered.
+- `EXPORT PORTAL CONFIGURATION` is an administrative command run inside an `EXECUTE portal` block to export the portal's entire configuration schema (see: PORTAL_ADMIN).
 - Explicit `PDF_MODE = HOSTED` and `PDF_MODE = BROWSER` require a `HOST` URL and a discoverable or configured installed browser; use `PDF_MODE = AUTO` to allow fallback to `STATIC`.
-- See: CREATE CONNECTION, SELECT
+- See: CREATE CONNECTION, SELECT, PORTAL_ADMIN
 
 References:
 - [Grammar](../../../../../Docs/Reference/Grammar.md)
