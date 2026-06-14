@@ -188,7 +188,8 @@ AT <smtp-alias>
     @param1 = '<value>',
     @param2 = '<value>',
     ...
-) ];
+) ]
+[ ENABLE | DISABLE ];
 ```
 
 `'<name>'` is an optional human-readable label. If omitted, the subscription is anonymous and identified by its ID in `ALTER` / `DROP` statements.

@@ -776,7 +776,8 @@ runtime, and never persist credentials in jobs or generated scripts.
 CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
     WHEN VISUAL 'Revenue' >= 1000
     DELIVER TO 'ops@example.com'
-    AT smtp;
+    AT smtp
+    DISABLE;
 
 SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
 DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
@@ -895,11 +896,17 @@ Because delivery happens in the portal, the **portal process must be running** f
 
 ### 8.3 Delivery Semantics
 
-Subscription delivery is **at-most-once per scheduler trigger**. Every delivery is claimed in a durable delivery ledger keyed on `(subscription, trigger)` — the trigger being the Orchestrator completion's timestamp — so a completion observed twice (a poller re-read or a scheduler double-fire) is suppressed without re-sending. Each attempt carries a `delivery-<id>` that matches its audit correlation id, and the ledger records the terminal outcome (`Delivered`, `Failed`, `Denied`, `Skipped`).
+Subscription delivery is **at-most-once per recipient and scheduler trigger**. Recipient addresses
+are normalized and deduplicated, then each recipient is claimed independently in a durable delivery
+ledger keyed on `(subscription, trigger, recipient key)`. A repeated scheduler completion is
+suppressed without re-sending recipients already claimed. Each attempt carries a `delivery-<id>`
+that matches its audit correlation id, and records `Delivered`, `Failed`, `Denied`, or `Skipped`.
 
 The portal never records `Delivered` unless the in-process delivery run reports success, so it errs toward recording a failure rather than a false success. The one boundary it cannot control is SMTP itself: if the SMTP server accepts a message but the connection then times out, the recipient may receive a copy that the portal records as `Failed` — at the wire that single case is at-least-once. The ledger makes every attempt and outcome observable so such cases are visible rather than silent.
 
-> Per-recipient delivery is currently whole-subscription: one message is composed for all recipients and the outcome applies to the subscription. Splitting delivery per recipient (so one bad address does not fail the rest) is a planned refinement.
+An invalid or SMTP-rejected address fails only its recipient row; valid recipients continue. Logs
+and audit details use a recipient fingerprint rather than the address. Authorized delivery history
+retains the normalized address for diagnosis.
 
 ### 8.4 Delivery Failures
 
@@ -930,12 +937,15 @@ AT <smtp-alias>
     @param1 = '<value>',
     @param2 = '<value>',
     ...
-) ];
+) ]
+[ ENABLE | DISABLE ];
 ```
 
 The optional `'<name>'` is a human-readable label shown in subscription lists. It is optional — if omitted the subscription is identified by its generated ID.
 
 Parameter values are stored as strings and must be single-quoted. Use the report script's defaults when you want an unset parameter.
+New subscriptions are enabled by default. Add `DISABLE` when reconstructing a paused subscription;
+`ENABLE` is accepted when an explicit active state is useful in generated configuration.
 
 When these statements are executed remotely through a `REPORTPORTAL` connection, `FORMAT PDF` and `FORMAT CSV` are supported. `FORMAT BOTH` and `DELIVER TO GROUP` are valid ETL-SQL syntax but are not yet supported by the portal connector — the remote call will fail at runtime. Use a single format and a named recipient address until portal support for multi-format delivery and group expansion ships.
 
@@ -1113,9 +1123,10 @@ Notes:
   (1) configuration — this script, the auditable clean-start path; (2) content — the manifest's
   report scripts and datasets, copied/published separately; (3) exact-state disaster recovery —
   restoring the portal and Orchestrator database/file backups, which this export does not replace.
-- Replay against a fresh portal requires substituting every `${...}` placeholder first; scheduled
-  refresh jobs are listed in the summary for manual re-creation because they need an Orchestrator
-  connection alias.
+- Replay against a fresh portal requires substituting every `${...}` placeholder first. To include
+  scheduled refresh jobs, request the export with a target alias:
+  `GET /api/admin/configuration/export?orchestratorAlias=orch`. Without an alias, refresh jobs are
+  listed as manual follow-up rather than binding the export to a source environment.
 
 #### Importing (replaying the bootstrap)
 
@@ -1133,16 +1144,15 @@ SET WHAT_IF OFF;
 
 Import behavior:
 
-- **Idempotent (safe to rerun).** Provisioning the identity/permission graph — users, groups,
-  group memberships, folders, folder grants, SMTP connections, report publications — is
-  create-or-skip: an object that already exists is left untouched and logged as skipped, so the
-  same bootstrap can be replayed without `409 Conflict` errors. (Subscriptions and alerts are not
-  yet name-keyed and would be re-created on a rerun — drop them first or run them once.)
+- **Idempotent (safe to rerun).** Provisioning uses stable logical keys. Users, groups,
+  memberships, folders, grants, SMTP connections, and report publications are create-or-skip.
+  Named subscriptions use report path + name, and alerts use report path + name; those definitions
+  are created, updated when configuration drifts, or skipped when already equal.
 - **Fail-closed before mutation.** A missing referenced folder, group, user, or report stops the
   statement with a clear error instead of a generic portal failure, and an unsubstituted `${...}`
   secret placeholder is rejected before it is ever sent to the portal.
 - **`SET WHAT_IF ON` is a validating dry-run.** Each statement reports what it *would* do
-  (create / skip) and performs the same reference and secret validation as a real apply — without
+  (create / update / skip) and performs the same reference and secret validation as a real apply — without
   writing anything — so you can confirm a clean import before committing to it.
 
 ### 9.1 Report Operations

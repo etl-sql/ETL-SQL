@@ -1,4 +1,6 @@
 using System.Text;
+using System.Net.Mail;
+using System.Security.Cryptography;
 using ETL_SQL.Core;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
@@ -42,10 +44,10 @@ public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : I
 /// credential is decrypted per delivery and never written to disk), and records the outcome.
 /// A denied delivery is recorded without report data and is not treated as a transient failure.
 ///
-/// <para><b>Delivery semantics (P2.3): at-most-once per scheduler trigger.</b> Every delivery is
+/// <para><b>Delivery semantics: at-most-once per recipient and scheduler trigger.</b> Every delivery is
 /// claimed in the durable <see cref="SubscriptionDelivery"/> ledger keyed on
-/// <c>(SubscriptionId, TriggerKey)</c>; a duplicate trigger (poller re-observation, scheduler
-/// double-fire) is suppressed without re-sending. The portal never records <c>Delivered</c> unless
+/// <c>(SubscriptionId, TriggerKey, RecipientKey)</c>; a duplicate trigger (poller re-observation,
+/// scheduler double-fire) is suppressed without re-sending that recipient. The portal never records <c>Delivered</c> unless
 /// the in-process runner reports success, so it errs toward recording a failure rather than a false
 /// success. The one caveat is SMTP itself: a timeout after the SMTP server has already accepted a
 /// message can leave the recipient with a copy the portal records as <c>Failed</c> — at the wire
@@ -68,44 +70,76 @@ public class SubscriptionDeliveryService(
     public async Task<SubscriptionDeliveryResult> DeliverAsync(
         int subscriptionId, string triggerKey, CancellationToken ct = default)
     {
-        var recipients = await db.Subscriptions
+        var subscription = await db.Subscriptions
             .Where(s => s.Id == subscriptionId)
             .Select(s => new { s.Recipients })
             .FirstOrDefaultAsync(ct);
-        if (recipients is null)
+        if (subscription is null)
             return SubscriptionDeliveryResult.Skipped("Subscription no longer exists.");
 
-        // Claim this (subscription, trigger). At-most-once: a duplicate trigger is suppressed.
-        var (ledger, claimed) = await TryClaimAsync(subscriptionId, triggerKey, recipients.Recipients, ct);
-        if (!claimed)
+        var recipients = NormalizeRecipients(subscription.Recipients);
+        var results = new List<SubscriptionDeliveryResult>();
+        foreach (var recipient in recipients)
+        {
+            var recipientKey = RecipientKey(recipient.Value);
+            var (ledger, claimed) = await TryClaimAsync(
+                subscriptionId, triggerKey, recipientKey, recipient.Value, ct);
+            if (!claimed)
+                continue;
+
+            SubscriptionDeliveryResult result;
+            try
+            {
+                result = recipient.IsValid
+                    ? await ExecuteDeliveryAsync(subscriptionId, recipient.Value, ledger.DeliveryId, ct)
+                    : SubscriptionDeliveryResult.Failed("Recipient address is invalid.");
+            }
+            catch (Exception ex)
+            {
+                // Unknown outcome: record it against this recipient and never re-claim the same
+                // trigger. A later, distinct trigger may retry independently.
+                result = SubscriptionDeliveryResult.Failed(Sanitize(ex.Message, null));
+            }
+
+            ledger.Outcome = result.Outcome.ToString();
+            ledger.Detail = result.Reason;
+            ledger.CompletedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+            results.Add(result);
+        }
+
+        if (results.Count == 0)
             return SubscriptionDeliveryResult.Skipped(
-                "Duplicate trigger — a delivery is already recorded for this completion.");
+                "Duplicate trigger — delivery outcomes already exist for every recipient.");
 
-        SubscriptionDeliveryResult result;
-        try
+        var tracked = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
+        if (tracked is not null)
         {
-            result = await ExecuteDeliveryAsync(subscriptionId, ledger.DeliveryId, ct);
-        }
-        catch (Exception ex)
-        {
-            // Unknown outcome (e.g. an unexpected crash mid-delivery): record it, never re-claim.
-            result = SubscriptionDeliveryResult.Failed(Sanitize(ex.Message, null));
+            if (results.Any(result => result.Outcome == SubscriptionDeliveryOutcome.Delivered))
+                tracked.LastSentAt = DateTime.UtcNow;
+            if (results.Any(result => result.Outcome == SubscriptionDeliveryOutcome.Failed))
+                tracked.FailCount++;
+            else if (results.All(result => result.Outcome == SubscriptionDeliveryOutcome.Delivered))
+                tracked.FailCount = 0;
+            await db.SaveChangesAsync(ct);
         }
 
-        ledger.Outcome = result.Outcome.ToString();
-        ledger.Detail = result.Reason;
-        ledger.CompletedAt = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return result;
+        return Aggregate(results);
     }
 
     /// <summary>Inserts the InProgress ledger row, or reports the claim lost when the trigger is a
     /// duplicate (unique-index race included).</summary>
     private async Task<(SubscriptionDelivery Ledger, bool Claimed)> TryClaimAsync(
-        int subscriptionId, string triggerKey, string recipients, CancellationToken ct)
+        int subscriptionId,
+        string triggerKey,
+        string recipientKey,
+        string recipient,
+        CancellationToken ct)
     {
         if (await db.SubscriptionDeliveries
-                .AnyAsync(d => d.SubscriptionId == subscriptionId && d.TriggerKey == triggerKey, ct))
+                .AnyAsync(d => d.SubscriptionId == subscriptionId
+                    && d.TriggerKey == triggerKey
+                    && d.RecipientKey == recipientKey, ct))
             return (null!, false);
 
         var ledger = new SubscriptionDelivery
@@ -113,8 +147,9 @@ public class SubscriptionDeliveryService(
             DeliveryId = $"delivery-{Guid.NewGuid():N}",
             SubscriptionId = subscriptionId,
             TriggerKey = triggerKey,
+            RecipientKey = recipientKey,
             Outcome = "InProgress",
-            Recipients = recipients,
+            Recipients = recipient,
             StartedAt = DateTime.UtcNow
         };
         db.SubscriptionDeliveries.Add(ledger);
@@ -131,7 +166,10 @@ public class SubscriptionDeliveryService(
     }
 
     private async Task<SubscriptionDeliveryResult> ExecuteDeliveryAsync(
-        int subscriptionId, string correlationId, CancellationToken ct)
+        int subscriptionId,
+        string recipient,
+        string correlationId,
+        CancellationToken ct)
     {
         var sub = await db.Subscriptions
             .Include(s => s.Report)
@@ -152,9 +190,10 @@ public class SubscriptionDeliveryService(
 
         if (!PortalPathGuard.TryResolveScript(config, sub.Report.ScriptPath, out var reportScriptPath))
             return await RecordFailureAsync(sub,
-                "Report script path is outside the configured script root.", correlationId, ct);
+                recipient, "Report script path is outside the configured script root.", correlationId, ct);
         if (!File.Exists(reportScriptPath))
-            return await RecordFailureAsync(sub, "Report script file no longer exists.", correlationId, ct);
+            return await RecordFailureAsync(
+                sub, recipient, "Report script file no longer exists.", correlationId, ct);
 
         SmtpConnection? smtp = null;
         if (!string.IsNullOrEmpty(sub.SmtpAlias))
@@ -162,12 +201,12 @@ public class SubscriptionDeliveryService(
             smtp = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Alias == sub.SmtpAlias, ct);
             if (smtp is null)
                 return await RecordFailureAsync(sub,
-                    $"SMTP connection '{sub.SmtpAlias}' no longer exists.", correlationId, ct);
+                    recipient, $"SMTP connection '{sub.SmtpAlias}' no longer exists.", correlationId, ct);
         }
         else if (sub.Format != SubscriptionFormat.Link)
         {
             return await RecordFailureAsync(sub,
-                "Subscription has no SMTP alias for attachment delivery.", correlationId, ct);
+                recipient, "Subscription has no SMTP alias for attachment delivery.", correlationId, ct);
         }
         else
         {
@@ -177,12 +216,14 @@ public class SubscriptionDeliveryService(
 
         var smtpPassword = pwdProtector.Unprotect(smtp.EncryptedPassword);
         if (!string.IsNullOrEmpty(smtp.EncryptedPassword) && smtpPassword is null)
-            return await RecordFailureAsync(sub, "SMTP credential could not be resolved.", correlationId, ct);
+            return await RecordFailureAsync(
+                sub, recipient, "SMTP credential could not be resolved.", correlationId, ct);
 
         string? exportPath = null;
         try
         {
-            var script = ComposeDeliveryScript(sub, reportScriptPath, smtp, smtpPassword, out exportPath);
+            var script = ComposeDeliveryScript(
+                sub, recipient, reportScriptPath, smtp, smtpPassword, out exportPath);
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, config.Resources.ExecutionTimeoutSeconds)));
@@ -191,7 +232,8 @@ public class SubscriptionDeliveryService(
             string? error;
             try
             {
-                (success, error) = await runner.RunAsync(script, $"sub-delivery-{sub.Id}", cts.Token);
+                (success, error) = await runner.RunAsync(
+                    script, $"sub-delivery-{sub.Id}-{RecipientKey(recipient)[..12]}", cts.Token);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -203,17 +245,19 @@ public class SubscriptionDeliveryService(
             }
 
             if (!success)
-                return await RecordFailureAsync(sub, Sanitize(error, smtpPassword), correlationId, ct);
+                return await RecordFailureAsync(
+                    sub, recipient, Sanitize(error, smtpPassword), correlationId, ct);
 
-            sub.LastSentAt = DateTime.UtcNow;
-            sub.FailCount = 0;
-            // Staged so the delivery bookkeeping and its audit record share one commit.
+            // Recipient outcome and its audit record share one commit. The address is represented
+            // by a fingerprint in operational records; the delivery ledger retains the address for
+            // authorized history views.
             audit.Stage(sub.UserId, "SUBSCRIPTION_DELIVERED", "Subscription",
-                sub.Id.ToString(), $"Report {sub.ReportId} ({sub.Format}) to {sub.Recipients}",
+                sub.Id.ToString(),
+                $"Report {sub.ReportId} ({sub.Format}); RecipientKey={RecipientKey(recipient)}",
                 correlationId);
             await db.SaveChangesAsync(ct);
-            log.LogInformation("Subscription {SubscriptionId} delivered to {Recipients}",
-                sub.Id, sub.Recipients);
+            log.LogInformation(
+                "Subscription {SubscriptionId} delivered to one recipient.", sub.Id);
             return SubscriptionDeliveryResult.Delivered();
         }
         finally
@@ -266,6 +310,7 @@ public class SubscriptionDeliveryService(
 
     private static string ComposeDeliveryScript(
         Subscription sub,
+        string recipient,
         string reportScriptPath,
         SmtpConnection smtp,
         string? smtpPassword,
@@ -300,7 +345,7 @@ public class SubscriptionDeliveryService(
             sb.AppendLine();
             AppendSmtpConnection(sb, smtp, smtpPassword);
             sb.AppendLine("SEND EMAIL");
-            sb.AppendLine($"    TO      '{Esc(sub.Recipients)}'");
+            sb.AppendLine($"    TO      '{Esc(recipient)}'");
             sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
             sb.AppendLine($"    SUBJECT 'Report: {Esc(sub.Report.Name)}'");
             sb.AppendLine($"    BODY    'Please find the attached report: {Esc(sub.Report.Name)}.'");
@@ -313,7 +358,7 @@ public class SubscriptionDeliveryService(
             var portalUrl = $"{{portal_url}}/index.html#report/{sub.ReportId}";
             AppendSmtpConnection(sb, smtp, smtpPassword);
             sb.AppendLine("SEND EMAIL");
-            sb.AppendLine($"    TO      '{Esc(sub.Recipients)}'");
+            sb.AppendLine($"    TO      '{Esc(recipient)}'");
             sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
             sb.AppendLine($"    SUBJECT 'Report ready: {Esc(sub.Report.Name)}'");
             sb.AppendLine($"    BODY    'Your report is ready. View it here: {portalUrl}'");
@@ -340,15 +385,74 @@ public class SubscriptionDeliveryService(
     // ── Outcome recording ─────────────────────────────────────────────────────
 
     private async Task<SubscriptionDeliveryResult> RecordFailureAsync(
-        Subscription sub, string reason, string correlationId, CancellationToken ct)
+        Subscription sub,
+        string recipient,
+        string reason,
+        string correlationId,
+        CancellationToken ct)
     {
-        sub.FailCount++;
-        // Staged so the failure bookkeeping and its audit record share one commit.
+        var safeReason = reason.Replace(
+            recipient,
+            "[recipient]",
+            StringComparison.OrdinalIgnoreCase);
         audit.Stage(sub.UserId, "SUBSCRIPTION_DELIVERY_FAILED", "Subscription",
-            sub.Id.ToString(), reason, correlationId);
+            sub.Id.ToString(),
+            $"RecipientKey={RecipientKey(recipient)}; {safeReason}",
+            correlationId);
         await db.SaveChangesAsync(ct);
-        log.LogWarning("Subscription {SubscriptionId} delivery failed: {Reason}", sub.Id, reason);
-        return SubscriptionDeliveryResult.Failed(reason);
+        log.LogWarning(
+            "Subscription {SubscriptionId} delivery failed for one recipient: {Reason}",
+            sub.Id,
+            safeReason);
+        return SubscriptionDeliveryResult.Failed(safeReason);
+    }
+
+    private sealed record NormalizedRecipient(string Value, bool IsValid);
+
+    private static IReadOnlyList<NormalizedRecipient> NormalizeRecipients(string recipients)
+    {
+        var result = new List<NormalizedRecipient>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in recipients.Split(
+                     [';', ','],
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (MailAddress.TryCreate(raw, out var parsed))
+            {
+                var normalized = parsed.Address.Trim().ToLowerInvariant();
+                if (seen.Add(normalized))
+                    result.Add(new(normalized, true));
+            }
+            else
+            {
+                var invalid = raw.Trim();
+                if (seen.Add(invalid))
+                    result.Add(new(invalid, false));
+            }
+        }
+        if (result.Count == 0)
+            result.Add(new("(missing)", false));
+        return result;
+    }
+
+    private static string RecipientKey(string recipient) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(recipient.ToLowerInvariant())));
+
+    private static SubscriptionDeliveryResult Aggregate(
+        IReadOnlyCollection<SubscriptionDeliveryResult> results)
+    {
+        var delivered = results.Count(result => result.Outcome == SubscriptionDeliveryOutcome.Delivered);
+        var failed = results.Count(result => result.Outcome == SubscriptionDeliveryOutcome.Failed);
+        var denied = results.Count(result => result.Outcome == SubscriptionDeliveryOutcome.Denied);
+        if (failed > 0)
+            return SubscriptionDeliveryResult.Failed(
+                $"{delivered} recipient(s) delivered; {failed} failed; {denied} denied.");
+        if (denied > 0)
+            return SubscriptionDeliveryResult.Denied(
+                $"{delivered} recipient(s) delivered; {denied} denied.");
+        if (delivered > 0)
+            return SubscriptionDeliveryResult.Delivered();
+        return SubscriptionDeliveryResult.Skipped("No recipient required delivery.");
     }
 
     /// <summary>The persisted failure detail must never echo the SMTP credential.</summary>

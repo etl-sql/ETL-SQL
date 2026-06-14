@@ -20,12 +20,49 @@ public class SubscriptionsController(
     AuditService audit,
     SubscriptionDeliveryStatusService deliveryStatus,
     FolderPermissionService folderPermissions,
-    SmtpPasswordProtector pwdProtector) : ControllerBase
+    SmtpPasswordProtector pwdProtector,
+    IDatasetRegistry datasetRegistry) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
 
     // ── Subscription CRUD ──────────────────────────────────────────────────────
+
+    [HttpPost("api/subscriptions/refresh-jobs")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> CreateRefreshJob([FromBody] CreateRefreshJobRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.ReportName)
+            || string.IsNullOrWhiteSpace(req.Schedule)
+            || string.IsNullOrWhiteSpace(req.OrchestratorAlias))
+        {
+            return BadRequest(new { error = "ReportName, Schedule, and OrchestratorAlias are required." });
+        }
+
+        var target = req.ReportName.Trim();
+        var reports = await db.Reports
+            .Include(r => r.Folder)
+            .Where(r => !r.IsDeleted)
+            .ToListAsync();
+        var matches = reports.Where(r =>
+            r.Name.Equals(target, StringComparison.OrdinalIgnoreCase)
+            || $"{r.Folder.Path}/{r.Name}".Equals(target, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (matches.Count == 0) return NotFound(new { error = $"Report '{target}' not found." });
+        if (matches.Count > 1) return Conflict(new { error = $"Report '{target}' is ambiguous." });
+
+        var report = matches[0];
+        var alias = req.OrchestratorAlias.Trim();
+        var jobName = $"portal-refresh:{alias}:{report.Id}";
+        await datasetRegistry.RegisterRefreshJobAsync(report.Id, jobName, req.Schedule.Trim());
+        await audit.LogAsync(
+            CurrentUserId,
+            "CREATE_REFRESH_JOB",
+            "Report",
+            report.Id.ToString(),
+            $"Alias={alias}; Schedule={req.Schedule.Trim()}");
+        return Ok(new { reportId = report.Id, jobName, schedule = req.Schedule.Trim(), orchestratorAlias = alias });
+    }
 
     /// <summary>List subscriptions the current user owns (admins see all).</summary>
     [HttpGet("api/subscriptions")]

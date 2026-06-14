@@ -282,10 +282,9 @@ public class SmtpConnection : IVersionedEntity
 // ── Subscription delivery ledger ────────────────────────────────────────────────
 
 /// <summary>
-/// Durable record of one subscription delivery attempt (P2.3). The unique
-/// <c>(SubscriptionId, TriggerKey)</c> index gives <b>at-most-once-per-trigger</b> delivery: a
-/// duplicate scheduler completion — poller re-observation or a scheduler double-fire — is
-/// suppressed because its trigger is already claimed. Every attempt and its terminal outcome is
+/// Durable record of one recipient delivery attempt. The unique
+/// <c>(SubscriptionId, TriggerKey, RecipientKey)</c> index gives
+/// <b>at-most-once-per-recipient-trigger</b> delivery. Every attempt and terminal outcome is
 /// observable here, and <see cref="DeliveryId"/> equals the audit correlation id so delivery rows
 /// and audit events join.
 /// </summary>
@@ -301,6 +300,10 @@ public class SubscriptionDelivery
     /// <summary>Identity of the triggering scheduler completion (its <c>EndTime</c>, round-trip
     /// "o" format), or <c>manual:&lt;guid&gt;</c> for an ad-hoc delivery. Unique per subscription.</summary>
     public string TriggerKey { get; set; } = "";
+
+    /// <summary>Stable SHA-256 key of the normalized recipient. Used for per-recipient trigger
+    /// deduplication without putting an email address in indexes or operational messages.</summary>
+    public string RecipientKey { get; set; } = "";
 
     /// <summary>InProgress | Delivered | Failed | Denied | Skipped.</summary>
     public string Outcome { get; set; } = "InProgress";

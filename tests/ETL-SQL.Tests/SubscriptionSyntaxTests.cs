@@ -219,6 +219,16 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
+        public void Create_Disable_PreservesInactiveState()
+        {
+            var stmt = ParseCreate(
+                "CREATE SUBSCRIPTION 'Paused' FOR REPORT '/Finance/Sales' " +
+                "DELIVER TO 'ops@example.com' SCHEDULE 'Daily' FORMAT PDF AT smtp DISABLE;");
+
+            Assert.False(stmt.IsActive);
+        }
+
+        [Fact]
         public void ShowActiveSessions_WithInto_ParsesTarget()
         {
             var script = TestHelpers.Parse("SHOW ACTIVE SESSIONS INTO #sessions;");

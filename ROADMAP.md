@@ -4,6 +4,9 @@ This document outlines the future release sequence, feature specifications, and 
 
 When development begins on a release, its next actionable phase is moved into `TODO.md` to be tracked as active tasks.
 
+The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment promise are defined in
+[`Docs/Strategy/Enterprise_Platform_Strategy.md`](Docs/Strategy/Enterprise_Platform_Strategy.md).
+
 ---
 
 ## Product Direction
@@ -11,11 +14,11 @@ When development begins on a release, its next actionable phase is moved into `T
 ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams:
 
 1. **v0.11.0 (Active):** Hardening multi-user standalone correctness and script-first recovery.
-2. **v0.12.0:** Operator Tooling (doctor, backup, restore, support-bundle).
-3. **v0.13.0:** Practical High Availability (PostgreSQL state and shared storage).
-4. **v0.14.0:** Introducing Governance Core (Org policy and secure audit outbox).
-5. **v0.15.0:** Integrating Enterprise Identity (OIDC and approval workflows).
-6. **v0.16.0:** Enforcing Departmental Isolation (Repeatable isolated container deployments).
+2. ** Operator Tooling (doctor, backup, restore, support-bundle).
+3. ** Practical High Availability (PostgreSQL state and shared storage).
+4. ** Introducing Governance Core (Org policy and secure audit outbox).
+5. ** Integrating Enterprise Identity (OIDC and approval workflows).
+6. ** Enforcing Departmental Isolation (Repeatable isolated container deployments).
 7. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
 
 ---
@@ -41,23 +44,34 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 *Focuses on multi-user correctness, script-first recovery, and establishing a stable single-server benchmark.*
 
 #### TODOs:
-- [ ] **Phase 1: Multi-User Correctness**
+- [x] **Phase 1: Multi-User Correctness**
   - Fix folder and asset ownership lifecycle (resolve `Folder.OwnerId` permission gaps).
   - Make audit recording a transactional operation contract to prevent un-audited state mutations.
-- [ ] **Phase 2: Script-First Reconstruction**
+- [x] **Phase 2: Script-First Reconstruction**
   - Implement `EXPORT PORTAL CONFIGURATION` to export all users, folders, ACLs, and jobs as a versioned, idempotent `.etlsql` bootstrap script.
   - Exclude all credentials, keys, and cached dataset values from the configuration export (use env/secret placeholders).
   - Implement dry-run/validation behavior (`SET WHAT_IF ON`) during configuration imports.
-  - Verify full portal round-trip reconstruction on clean database initialization.
-- [ ] **Phase 3: Verification & Observability**
-  - Implement multi-process concurrent tests to verify job scheduling stability.
+  - Verify full portal round-trip reconstruction on clean database initialization, including
+    reports, dataset metadata/grants, target-aliased refresh jobs, subscriptions, and alerts.
+  - Isolate subscription delivery and durable deduplication per normalized recipient.
+- [x] **Phase 3: Verification & Observability**
+  - Implement independent-service/shared-connection tests to verify SQLite job and delivery
+    coordination for the supported single-Portal topology.
   - Add subscription delivery outbox and idempotency tests.
   - Automate a complete backup and restore validation drill.
-  - Add OpenTelemetry metrics for queue depth, active executions, and disk usage.
+  - Expose operational metrics (queue depth, active executions, failure rates, dataset/snapshot
+    disk usage) via an admin metrics endpoint. **OpenTelemetry export was deliberately deferred** to
+    the Practical High Availability release — it was judged not yet warranted for the single-instance
+    topology and is better designed alongside multi-node aggregation.
+
+> **v0.11.0 also delivered beyond the minimum scope above:** a hosted-service integration lane,
+> fault-injection/recovery tests, workload-fairness (per-user concurrency) caps, and an in-place
+> N→N+1 versioned-upgrade drill (which pulls forward the first part of Operator Tooling → Phase 4;
+> the `Test-PreRelease.ps1` wiring for that drill remains with Operator Tooling).
 
 ---
 
-### v0.12.0 — Operator Tooling
+### Operator Tooling
 *Exposes supported operator workflows via CLI commands to move away from manual runbooks.*
 
 #### TODOs:
@@ -78,7 +92,7 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-### v0.13.0 — Practical High Availability
+### Practical High Availability
 *Enables horizontal scaling of Portal and Orchestrator nodes behind a load balancer with PostgreSQL state and shared artifact storage.*
 
 #### TODOs:
@@ -102,11 +116,18 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
   - Heart-beat node capacity (CPU/memory utilization) to prevent overloaded nodes from claiming new leases, and implement a quarantine policy for failing jobs to prevent cascade failures across the cluster.
 - [ ] **Phase 5: Rolling Deployment Certification**
   - Verify "expand/migrate/contract" database migrations for rolling upgrades.
-  - Run automated dual-node tests to prove failover recovery and task reclamation.
+  - Run Portal and Orchestrator nodes as separate OS processes against PostgreSQL and shared artifact
+    storage; prove simultaneous claims, cancellation, permission changes, restart recovery, conflicting
+    administration, failover recovery, and task reclamation without relying on in-process proxies.
+  - Add deterministic chaos scenarios for process termination between cross-resource steps, database
+    and storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
+  - Verify lease loss cancels local work and fencing tokens reject every stale writer after a partition.
+  - Certify mixed interactive, scheduled, refresh, and subscription workloads under load, including
+    per-user/per-group quotas, queue fairness, administrative overrides, and node-capacity-aware claims.
 
 ---
 
-### v0.14.0 — Governance Core
+### Governance Core
 *Enforces centralized security policy, named secret references, and remote audit delivery across all hosts (CLI, IDE, Portal).*
 
 #### TODOs:
@@ -130,7 +151,7 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-### v0.15.0 — Enterprise Identity & Approvals
+### Enterprise Identity & Approvals
 *Integrates with enterprise OpenID Connect (OIDC) providers and adds human-in-the-loop approval workflows.*
 
 #### TODOs:
@@ -149,7 +170,7 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-### v0.16.0 — Departmental Isolation
+### Departmental Isolation
 *Supports multiple isolated environments (dev/test/prod, or different departments) without the complexity of shared-table multitenancy.*
 
 #### TODOs:

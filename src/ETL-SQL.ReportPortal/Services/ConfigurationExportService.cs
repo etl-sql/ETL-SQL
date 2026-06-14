@@ -32,7 +32,12 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         "favorites and saved views (personal state)"
     ];
 
-    public async Task<ExportResult> GenerateAsync(CancellationToken ct = default)
+    public Task<ExportResult> GenerateAsync(CancellationToken ct = default) =>
+        GenerateAsync(null, ct);
+
+    public async Task<ExportResult> GenerateAsync(
+        string? targetOrchestratorAlias,
+        CancellationToken ct = default)
     {
         var emitted = new List<string>();
         var skipped = new List<string>();
@@ -196,56 +201,80 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 skipped.Add($"subscription '{label}': FORMAT {s.Format} has no scripted CREATE SUBSCRIPTION form yet");
                 continue;
             }
-            if (s.DeliverOnRefresh || string.IsNullOrWhiteSpace(s.Schedule))
+            if (!s.DeliverOnRefresh && string.IsNullOrWhiteSpace(s.Schedule))
             {
-                skipped.Add($"subscription '{label}': deliver-on-refresh subscriptions are not yet scriptable");
+                skipped.Add($"subscription '{label}': no schedule was stored");
                 continue;
             }
-            if (s.Recipients.Contains(';') || s.Recipients.Contains(','))
+            var recipients = SplitRecipients(s.Recipients);
+            if (recipients.Count == 0)
             {
-                skipped.Add($"subscription '{label}': multiple recipients require one CREATE SUBSCRIPTION per recipient");
+                skipped.Add($"subscription '{label}': no valid recipient was stored");
                 continue;
             }
 
-            body.AppendLine($"    CREATE SUBSCRIPTION {Q(label)}");
-            body.AppendLine($"        FOR REPORT {Q($"{s.Report.Folder!.Path}/{s.Report.Name}")}");
-            body.AppendLine($"        DELIVER TO {Q(s.Recipients)}");
-            body.AppendLine($"        SCHEDULE {Q(s.Schedule!)}");
-            body.AppendLine($"        FORMAT {s.Format.ToString().ToUpperInvariant()}");
-            body.Append($"        AT {s.SmtpAlias}");
-            var parameters = DeserializeParameters(s.ParametersJson);
-            if (parameters is { Count: > 0 })
+            foreach (var recipient in recipients)
             {
-                body.AppendLine();
-                body.AppendLine("        PARAMETERS (");
-                body.AppendLine(string.Join(",\n", parameters.Select(p => $"            @{p.Key} = {Q(p.Value)}")));
-                body.Append("        )");
+                var exportedName = recipients.Count == 1 ? label : $"{label} [{recipient}]";
+                body.AppendLine($"    CREATE SUBSCRIPTION {Q(exportedName)}");
+                body.AppendLine($"        FOR REPORT {Q($"{s.Report.Folder!.Path}/{s.Report.Name}")}");
+                body.AppendLine($"        DELIVER TO {Q(recipient)}");
+                if (s.DeliverOnRefresh)
+                    body.AppendLine("        ON REFRESH");
+                else
+                    body.AppendLine($"        SCHEDULE {Q(s.Schedule!)}");
+                body.AppendLine($"        FORMAT {s.Format.ToString().ToUpperInvariant()}");
+                body.Append($"        AT {s.SmtpAlias}");
+                var parameters = DeserializeParameters(s.ParametersJson);
+                if (parameters is { Count: > 0 })
+                {
+                    body.AppendLine();
+                    body.AppendLine("        PARAMETERS (");
+                    body.AppendLine(string.Join(",\n", parameters.Select(p => $"            @{p.Key} = {Q(p.Value)}")));
+                    body.Append("        )");
+                }
+                if (!s.IsActive) body.Append(" DISABLE");
+                body.AppendLine(";");
             }
-            body.AppendLine(";");
-            if (!s.IsActive)
-                skipped.Add($"subscription '{label}': exported, but it is currently DISABLED — disable it again after import (ALTER SUBSCRIPTION <id> SET DISABLE)");
         }
         emitted.Add($"{subscriptions.Count} subscription(s) considered");
 
         // ── Alerts (definition-only metadata, P0.5) ──────────────────────────
         var alerts = await db.ReportAlerts.AsNoTracking()
-            .Include(a => a.Report)
+            .Include(a => a.Report).ThenInclude(r => r.Folder)
             .OrderBy(a => a.Report.Name).ThenBy(a => a.Name)
             .ToListAsync(ct);
         AppendSection(body, "Alerts (definition-only metadata)");
         foreach (var a in alerts)
         {
-            body.Append($"    CREATE ALERT {Q(a.Name)} FOR REPORT {Q(a.Report.Name)} WHEN VISUAL {Q(a.VisualName)} {a.Operator} {a.Threshold}");
+            var reportPath = $"{a.Report.Folder!.Path}/{a.Report.Name}";
+            body.Append($"    CREATE ALERT {Q(a.Name)} FOR REPORT {Q(reportPath)} WHEN VISUAL {Q(a.VisualName)} {a.Operator} {a.Threshold}");
             if (!string.IsNullOrWhiteSpace(a.Recipient)) body.Append($" DELIVER TO {Q(a.Recipient)}");
             if (!string.IsNullOrWhiteSpace(a.SmtpAlias)) body.Append($" AT {a.SmtpAlias}");
+            if (!a.IsActive) body.Append(" DISABLE");
             body.AppendLine(";");
         }
         emitted.Add($"{alerts.Count} alert(s)");
 
-        // ── Scheduled refresh jobs: need an Orchestrator connection alias at import ─
-        var refreshJobs = await db.DatasetJobs.AsNoTracking().Include(j => j.Report).ToListAsync(ct);
+        // ── Scheduled refresh jobs ────────────────────────────────────────────
+        var refreshJobs = await db.DatasetJobs.AsNoTracking()
+            .Include(j => j.Report).ThenInclude(r => r.Folder)
+            .OrderBy(j => j.Report.Folder!.Path).ThenBy(j => j.Report.Name)
+            .ToListAsync(ct);
+        AppendSection(body, "Scheduled report refresh jobs");
         foreach (var j in refreshJobs)
-            skipped.Add($"refresh job for report '{j.Report.Name}': re-create with CREATE REFRESH JOB FOR REPORT {Q(j.Report.Name)} SCHEDULE '<cron>' AT <orchestrator-alias>");
+        {
+            if (string.IsNullOrWhiteSpace(targetOrchestratorAlias))
+            {
+                skipped.Add(
+                    $"refresh job for report '{j.Report.Name}': export again with a target Orchestrator alias");
+                continue;
+            }
+            body.AppendLine(
+                $"    CREATE REFRESH JOB FOR REPORT {Q($"{j.Report.Folder!.Path}/{j.Report.Name}")} " +
+                $"SCHEDULE {Q(j.RefreshInterval)} AT {targetOrchestratorAlias};");
+        }
+        emitted.Add($"{(string.IsNullOrWhiteSpace(targetOrchestratorAlias) ? 0 : refreshJobs.Count)} refresh job(s)");
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");
 
@@ -347,6 +376,12 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             return null;
         }
     }
+
+    private static List<string> SplitRecipients(string recipients) =>
+        recipients.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>Single-quoted ETL-SQL string literal with embedded quotes doubled.</summary>
     private static string Q(string value) => $"'{value.Replace("'", "''")}'";

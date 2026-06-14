@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.ReportPortal.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -58,6 +61,37 @@ public sealed class ConfigurationExportTests
             description = "Export test report",
             scriptPath
         }));
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.SingleAsync(r => r.Name == $"Export Report {suffix}");
+            var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
+            db.Subscriptions.Add(new Subscription
+            {
+                ReportId = report.Id,
+                UserId = admin.Id,
+                Name = $"Paused Refresh {suffix}",
+                DeliverOnRefresh = true,
+                Format = SubscriptionFormat.PDF,
+                SmtpAlias = $"exp_smtp_{suffix}",
+                Recipients = "zeta@test.local; alpha@test.local",
+                ParametersJson = """{"region":"North"}""",
+                IsActive = false
+            });
+            db.ReportAlerts.Add(new ReportAlert
+            {
+                ReportId = report.Id,
+                OwnerId = admin.Id,
+                Name = $"Paused Alert {suffix}",
+                VisualName = "Revenue",
+                Operator = ">",
+                Threshold = 100,
+                Recipient = "ops@test.local",
+                SmtpAlias = $"exp_smtp_{suffix}",
+                IsActive = false
+            });
+            await db.SaveChangesAsync();
+        }
 
         var response = await SendAsync(client, HttpMethod.Get,
             "/api/admin/configuration/export", adminToken, null);
@@ -74,6 +108,15 @@ public sealed class ConfigurationExportTests
         Assert.Contains($"CREATE SMTP CONNECTION 'exp_smtp_{suffix}'", script);
         Assert.Contains($"PASSWORD = '${{SMTP_EXP_SMTP_{suffix.ToUpperInvariant()}_PASSWORD}}'", script);
         Assert.Contains($"PUBLISH REPORT 'Export Report {suffix}'", script);
+        Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [alpha@test.local]'", script);
+        Assert.Contains($"CREATE SUBSCRIPTION 'Paused Refresh {suffix} [zeta@test.local]'", script);
+        Assert.Contains("ON REFRESH", script);
+        Assert.Contains("@region = 'North'", script);
+        Assert.Contains(") DISABLE;", script);
+        Assert.Contains(
+            $"CREATE ALERT 'Paused Alert {suffix}' FOR REPORT '/exp_folder_{suffix}/Export Report {suffix}'",
+            script);
+        Assert.Contains($"AT exp_smtp_{suffix} DISABLE;", script);
         Assert.Contains("REQUIRED SECRETS", script);
         Assert.Contains("Export summary", script);
         Assert.Contains("Runtime-only (never exported as configuration):", script);

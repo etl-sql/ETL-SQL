@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
-/// P2.3 subscription delivery idempotency and failure modes. Deliveries are claimed in the durable
-/// <see cref="SubscriptionDelivery"/> ledger keyed on (subscription, trigger), giving at-most-once
-/// delivery per scheduler completion; failure outcomes are isolated and observable in the ledger.
+/// Subscription delivery idempotency and failure modes. Deliveries are claimed in the durable
+/// <see cref="SubscriptionDelivery"/> ledger keyed on (subscription, trigger, recipient key),
+/// giving at-most-once delivery per recipient and scheduler completion.
 /// </summary>
 [Trait("Category", "Portal")]
 public sealed class SubscriptionDeliveryLedgerTests
@@ -38,7 +38,11 @@ public sealed class SubscriptionDeliveryLedgerTests
         PortalDbContext Db, SubscriptionDeliveryService Service, int SubscriptionId, string Suffix);
 
     private static async Task<Harness> SeedAsync(
-        IServiceScope scope, ConfigurableRunner runner, string? smtpAlias = null, bool ownerActive = true)
+        IServiceScope scope,
+        ConfigurableRunner runner,
+        string? smtpAlias = null,
+        bool ownerActive = true,
+        string recipients = "recipient@test.local")
     {
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
@@ -87,7 +91,7 @@ public sealed class SubscriptionDeliveryLedgerTests
             UserId = owner.Id,
             Format = SubscriptionFormat.CSV,
             SmtpAlias = smtpAlias ?? alias,
-            Recipients = "recipient@test.local",
+            Recipients = recipients,
             IsActive = true
         };
         db.Subscriptions.Add(subscription);
@@ -230,5 +234,99 @@ public sealed class SubscriptionDeliveryLedgerTests
         var healthyLedger = await healthy.Db.SubscriptionDeliveries
             .SingleAsync(d => d.SubscriptionId == healthy.SubscriptionId);
         Assert.Equal("Delivered", healthyLedger.Outcome);
+    }
+
+    [Fact]
+    public async Task MixedValidAndInvalidRecipients_AreIsolated()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = ConfigurableRunner.Succeeds();
+        var h = await SeedAsync(
+            scope,
+            runner,
+            recipients: "GOOD@test.local; not-an-address; second@test.local");
+
+        var result = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-mixed");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Failed, result.Outcome);
+        Assert.Equal(2, runner.CallCount);
+        var rows = await h.Db.SubscriptionDeliveries
+            .Where(d => d.SubscriptionId == h.SubscriptionId)
+            .ToListAsync();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(2, rows.Count(row => row.Outcome == "Delivered"));
+        Assert.Single(rows, row => row.Outcome == "Failed");
+        Assert.Contains(rows, row => row.Recipients == "good@test.local");
+        Assert.Contains(rows, row => row.Recipients == "second@test.local");
+        Assert.All(rows, row => Assert.False(string.IsNullOrWhiteSpace(row.RecipientKey)));
+    }
+
+    [Fact]
+    public async Task PartialSmtpRejection_DoesNotBlockOtherRecipients()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = new ConfigurableRunner(call =>
+            call == 1
+                ? (false, "SMTP rejected rejected@test.local.")
+                : (true, null));
+        var h = await SeedAsync(
+            scope,
+            runner,
+            recipients: "rejected@test.local; accepted@test.local");
+
+        var result = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-partial");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Failed, result.Outcome);
+        Assert.Equal(2, runner.CallCount);
+        var rows = await h.Db.SubscriptionDeliveries
+            .Where(d => d.SubscriptionId == h.SubscriptionId)
+            .OrderBy(d => d.Id)
+            .ToListAsync();
+        Assert.Equal(["Failed", "Delivered"], rows.Select(row => row.Outcome));
+        Assert.DoesNotContain("rejected@test.local", rows[0].Detail, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DuplicateTrigger_IsSuppressedForEveryRecipient()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = ConfigurableRunner.Succeeds();
+        var h = await SeedAsync(
+            scope,
+            runner,
+            recipients: "one@test.local; two@test.local");
+
+        var first = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-multi");
+        var duplicate = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-multi");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Delivered, first.Outcome);
+        Assert.Equal(SubscriptionDeliveryOutcome.Skipped, duplicate.Outcome);
+        Assert.Equal(2, runner.CallCount);
+        Assert.Equal(2, await h.Db.SubscriptionDeliveries.CountAsync(
+            row => row.SubscriptionId == h.SubscriptionId));
+    }
+
+    [Fact]
+    public async Task UnknownOutcome_CanRetryOnANewTrigger()
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var runner = new ConfigurableRunner(call =>
+            call == 1
+                ? throw new InvalidOperationException("connection reset mid-send")
+                : (true, null));
+        var h = await SeedAsync(scope, runner);
+
+        var unknown = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-unknown");
+        var retry = await h.Service.DeliverAsync(h.SubscriptionId, "trigger-retry");
+
+        Assert.Equal(SubscriptionDeliveryOutcome.Failed, unknown.Outcome);
+        Assert.Equal(SubscriptionDeliveryOutcome.Delivered, retry.Outcome);
+        Assert.Equal(2, runner.CallCount);
+        Assert.Equal(2, await h.Db.SubscriptionDeliveries.CountAsync(
+            row => row.SubscriptionId == h.SubscriptionId));
     }
 }

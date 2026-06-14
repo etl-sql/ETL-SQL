@@ -678,15 +678,41 @@ namespace ETL_SQL.Connectors.ReportPortal
         private async Task CreateAlertAsync(CreatePortalAlertStatement stmt, IExecutionContext context)
         {
             var reportId = await LookupReportIdAsync(stmt.ReportName);
-            var json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/alerts", new
+            var request = new
             {
                 Name = stmt.Name,
                 VisualName = stmt.VisualName,
                 Operator = stmt.Operator,
                 Threshold = stmt.Threshold,
                 Recipient = stmt.Recipient,
-                SmtpAlias = stmt.SmtpAlias
-            });
+                SmtpAlias = stmt.SmtpAlias,
+                IsActive = stmt.IsActive
+            };
+            var existing = await TryLookupAlertAsync(reportId, stmt.Name);
+            JsonElement json;
+            if (existing is null)
+            {
+                json = await SendJsonAsync(HttpMethod.Post, $"api/reports/{reportId}/alerts", request);
+                if (!stmt.IsActive)
+                    json = await SendJsonAsync(
+                        HttpMethod.Put,
+                        $"api/reports/{reportId}/alerts/{TryGet(json, "id")}",
+                        request);
+            }
+            else if (AlertMatches(existing.Value, stmt))
+            {
+                json = existing.Value;
+                _logger.WriteLine(
+                    $"Alert '{stmt.Name}' for report '{stmt.ReportName}' already matches — skipped.",
+                    ConsoleColor.DarkGray);
+            }
+            else
+            {
+                json = await SendJsonAsync(
+                    HttpMethod.Put,
+                    $"api/reports/{reportId}/alerts/{TryGet(existing.Value, "id")}",
+                    request);
+            }
             await PublishJsonResultAsync(json, null, context);
         }
 
@@ -799,23 +825,60 @@ namespace ETL_SQL.Connectors.ReportPortal
                 throw new ExecutionException("Remote CREATE SUBSCRIPTION DELIVER TO GROUP is not supported by the portal API yet. Create per-recipient subscriptions.");
 
             var reportId = await LookupReportIdAsync(stmt.ReportPath);
-            var req = new
+            var parameters = BuildParameterDictionary(stmt.Parameters);
+            var schedule = stmt.OnRefresh ? "Daily" : stmt.Schedule;
+            var createRequest = new
             {
                 ReportId = reportId,
                 Name = stmt.Name,
-                Schedule = stmt.OnRefresh ? "Daily" : stmt.Schedule,
+                Schedule = schedule,
                 Format = FormatSubscription(stmt.Format),
                 SmtpAlias = stmt.SmtpAlias,
                 RecipientEmail = stmt.Recipient,
                 AtTime = (string?)null,
-                Parameters = BuildParameterDictionary(stmt.Parameters)
+                Parameters = parameters
             };
-            var json = await SendJsonAsync(HttpMethod.Post, "api/subscriptions", req);
+            var existing = await TryLookupSubscriptionAsync(reportId, stmt.Name, stmt.Recipient);
+            JsonElement json;
+            if (existing is null)
+            {
+                json = await SendJsonAsync(HttpMethod.Post, "api/subscriptions", createRequest);
+                if (stmt.OnRefresh || !stmt.IsActive)
+                {
+                    json = await SendJsonAsync(HttpMethod.Put, $"api/subscriptions/{TryGet(json, "id")}", new
+                    {
+                        Schedule = schedule,
+                        DeliverOnRefresh = stmt.OnRefresh,
+                        Format = FormatSubscription(stmt.Format),
+                        SmtpAlias = stmt.SmtpAlias,
+                        Recipients = stmt.Recipient,
+                        IsActive = stmt.IsActive,
+                        Parameters = parameters
+                    });
+                }
+            }
+            else if (SubscriptionMatches(existing.Value, stmt, schedule, parameters))
+            {
+                json = existing.Value;
+                _logger.WriteLine(
+                    $"Subscription '{stmt.Name ?? stmt.ReportPath}' already matches — skipped.",
+                    ConsoleColor.DarkGray);
+            }
+            else
+            {
+                json = await SendJsonAsync(HttpMethod.Put, $"api/subscriptions/{TryGet(existing.Value, "id")}", new
+                {
+                    Name = stmt.Name,
+                    Schedule = schedule,
+                    DeliverOnRefresh = stmt.OnRefresh,
+                    Format = FormatSubscription(stmt.Format),
+                    SmtpAlias = stmt.SmtpAlias,
+                    Recipients = stmt.Recipient,
+                    IsActive = stmt.IsActive,
+                    Parameters = parameters
+                });
+            }
             await PublishJsonResultAsync(json, null, context);
-
-            if (stmt.OnRefresh)
-                await CallAsync(HttpMethod.Put, $"api/subscriptions/{TryGet(json, "id")}", new { DeliverOnRefresh = true },
-                    $"Subscription '{stmt.Name ?? stmt.ReportPath}' set to deliver on refresh.");
         }
 
         private async Task AlterSubscriptionAsync(AlterPortalSubscriptionStatement stmt, IExecutionContext context)
@@ -988,6 +1051,36 @@ namespace ETL_SQL.Connectors.ReportPortal
                             : $"WHAT IF: would publish report '{s.ReportName}' to '{s.FolderPath}'.";
                     }
 
+                case CreatePortalAlertStatement s:
+                    {
+                        var reportId = await LookupReportIdAsync(s.ReportName);
+                        var existing = await TryLookupAlertAsync(reportId, s.Name);
+                        return existing is null
+                            ? $"WHAT IF: would create alert '{s.Name}' for report '{s.ReportName}'."
+                            : AlertMatches(existing.Value, s)
+                                ? $"WHAT IF: alert '{s.Name}' for report '{s.ReportName}' already matches — would skip."
+                                : $"WHAT IF: would update alert '{s.Name}' for report '{s.ReportName}'.";
+                    }
+
+                case CreatePortalSubscriptionStatement s:
+                    {
+                        if (s.Format == PortalSubscriptionFormat.Both)
+                            throw new ExecutionException(
+                                "Remote CREATE SUBSCRIPTION FORMAT BOTH is not supported by the portal API yet.");
+                        if (s.IsGroup)
+                            throw new ExecutionException(
+                                "Remote CREATE SUBSCRIPTION DELIVER TO GROUP is not supported by the portal API yet.");
+                        var reportId = await LookupReportIdAsync(s.ReportPath);
+                        var existing = await TryLookupSubscriptionAsync(reportId, s.Name, s.Recipient);
+                        var schedule = s.OnRefresh ? "Daily" : s.Schedule;
+                        var parameters = BuildParameterDictionary(s.Parameters);
+                        return existing is null
+                            ? $"WHAT IF: would create subscription '{s.Name ?? s.ReportPath}' for '{s.Recipient}'."
+                            : SubscriptionMatches(existing.Value, s, schedule, parameters)
+                                ? $"WHAT IF: subscription '{s.Name ?? s.ReportPath}' for '{s.Recipient}' already matches — would skip."
+                                : $"WHAT IF: would update subscription '{s.Name ?? s.ReportPath}' for '{s.Recipient}'.";
+                    }
+
                 case AlterPortalUserStatement s:
                     return await TryLookupUserIdAsync(s.Username) is not null
                         ? $"WHAT IF: would update user '{s.Username}'."
@@ -1033,6 +1126,103 @@ namespace ETL_SQL.Connectors.ReportPortal
                 u.TryGetProperty("username", out var v) &&
                 v.GetString()?.Equals(username, StringComparison.OrdinalIgnoreCase) == true);
             return user.ValueKind == JsonValueKind.Undefined ? null : user.GetProperty("id").GetInt32();
+        }
+
+        private async Task<JsonElement?> TryLookupAlertAsync(int reportId, string name)
+        {
+            var response = await SendJsonAsync(HttpMethod.Get, $"api/reports/{reportId}/alerts", null);
+            if (response.ValueKind != JsonValueKind.Array)
+                return null;
+            foreach (var alert in response.EnumerateArray())
+            {
+                if (GetString(alert, "name")?.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+                    return alert.Clone();
+            }
+            return null;
+        }
+
+        private async Task<JsonElement?> TryLookupSubscriptionAsync(
+            int reportId,
+            string? name,
+            string recipient)
+        {
+            var response = await SendJsonAsync(HttpMethod.Get, "api/subscriptions", null);
+            if (response.ValueKind != JsonValueKind.Array)
+                return null;
+            foreach (var subscription in response.EnumerateArray())
+            {
+                if (GetInt32(subscription, "reportId") != reportId)
+                    continue;
+                var existingName = GetString(subscription, "name");
+                var nameMatches = name is null
+                    ? string.IsNullOrWhiteSpace(existingName)
+                      && GetString(subscription, "recipients")?.Equals(
+                          recipient, StringComparison.OrdinalIgnoreCase) == true
+                    : existingName?.Equals(name, StringComparison.OrdinalIgnoreCase) == true;
+                if (nameMatches)
+                    return subscription.Clone();
+            }
+            return null;
+        }
+
+        private static bool AlertMatches(JsonElement alert, CreatePortalAlertStatement stmt) =>
+            GetString(alert, "visualName")?.Equals(stmt.VisualName, StringComparison.OrdinalIgnoreCase) == true
+            && GetString(alert, "operator") == stmt.Operator
+            && GetDecimal(alert, "threshold") == stmt.Threshold
+            && StringEquals(GetString(alert, "recipient"), stmt.Recipient)
+            && StringEquals(GetString(alert, "smtpAlias"), stmt.SmtpAlias)
+            && GetBoolean(alert, "isActive") == stmt.IsActive;
+
+        private static bool SubscriptionMatches(
+            JsonElement subscription,
+            CreatePortalSubscriptionStatement stmt,
+            string? schedule,
+            Dictionary<string, string> parameters)
+        {
+            var existingParameters = GetStringDictionary(subscription, "parameters");
+            return StringEquals(GetString(subscription, "schedule"), schedule)
+                && GetBoolean(subscription, "deliverOnRefresh") == stmt.OnRefresh
+                && GetString(subscription, "format")?.Equals(
+                    FormatSubscription(stmt.Format), StringComparison.OrdinalIgnoreCase) == true
+                && StringEquals(GetString(subscription, "smtpAlias"), stmt.SmtpAlias)
+                && StringEquals(GetString(subscription, "recipients"), stmt.Recipient)
+                && GetBoolean(subscription, "isActive") == stmt.IsActive
+                && existingParameters.Count == parameters.Count
+                && existingParameters.All(pair =>
+                    parameters.TryGetValue(pair.Key, out var value) && value == pair.Value);
+        }
+
+        private static bool StringEquals(string? left, string? right) =>
+            string.Equals(left ?? "", right ?? "", StringComparison.OrdinalIgnoreCase);
+
+        private static string? GetString(JsonElement element, string property) =>
+            element.TryGetProperty(property, out var value) && value.ValueKind != JsonValueKind.Null
+                ? value.GetString()
+                : null;
+
+        private static int? GetInt32(JsonElement element, string property) =>
+            element.TryGetProperty(property, out var value) && value.TryGetInt32(out var result)
+                ? result
+                : null;
+
+        private static decimal? GetDecimal(JsonElement element, string property) =>
+            element.TryGetProperty(property, out var value) && value.TryGetDecimal(out var result)
+                ? result
+                : null;
+
+        private static bool GetBoolean(JsonElement element, string property) =>
+            element.TryGetProperty(property, out var value) &&
+            value.ValueKind is JsonValueKind.True or JsonValueKind.False &&
+            value.GetBoolean();
+
+        private static Dictionary<string, string> GetStringDictionary(JsonElement element, string property)
+        {
+            if (!element.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Object)
+                return new(StringComparer.OrdinalIgnoreCase);
+            return value.EnumerateObject().ToDictionary(
+                item => item.Name,
+                item => item.Value.GetString() ?? "",
+                StringComparer.OrdinalIgnoreCase);
         }
 
         private async Task<int> LookupGroupIdAsync(string name) =>
@@ -1403,7 +1593,10 @@ namespace ETL_SQL.Connectors.ReportPortal
         }
 
         private static Dictionary<string, string> BuildParameterDictionary(IReadOnlyList<SubscriptionParameter> parameters) =>
-            parameters.ToDictionary(p => p.Name, p => p.Value, StringComparer.OrdinalIgnoreCase);
+            parameters.ToDictionary(
+                p => p.Name.TrimStart('@'),
+                p => p.Value,
+                StringComparer.OrdinalIgnoreCase);
 
         private static string FormatSubscription(PortalSubscriptionFormat format) => format switch
         {

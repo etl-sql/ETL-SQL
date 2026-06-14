@@ -19,6 +19,7 @@ This folder contains design records, implementation plans, and historical roadma
 | [Source_Boundary_Migration_Plan.md](Source_Boundary_Migration_Plan.md) | Implemented migration record with remaining boundary guidance | Keep; eventually convert remaining guidance into architecture docs |
 | [Connector_Upgrade_Strategy.md](Connector_Upgrade_Strategy.md) | Implemented modernization note | Keep as design history; current syntax and contracts live in connector reference, architecture, and standards |
 | [ScriptSecurity_Strategy.md](ScriptSecurity_Strategy.md) | Security design rationale | Keep; cross-check against `SECURITY.md` before releases |
+| [Enterprise_Platform_Strategy.md](Enterprise_Platform_Strategy.md) | Active umbrella strategy for progressive deployment, enterprise authority, governance, HA, and isolation | Keep aligned with `ROADMAP.md`; move shipped mechanics into architecture docs |
 | [FuzzyMatching_Strategy.md](FuzzyMatching_Strategy.md) | Mostly shipped design note with one deferred area | Keep; make Phase 5 explicitly post-0.7 or move it to backlog |
 | [DataLake_Connectors_Strategy.md](DataLake_Connectors_Strategy.md) | Mixed shipped capability and future data-lake direction | Header now marks the split; keep shipped connector facts in reference/architecture |
 | [Query_Execution_Efficiency_Strategy.md](Query_Execution_Efficiency_Strategy.md) | Active performance strategy | Keep; use benchmark results and phased implementation notes to drive v0.8 query execution work |

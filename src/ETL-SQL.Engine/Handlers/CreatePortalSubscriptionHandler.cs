@@ -36,7 +36,7 @@ namespace ETL_SQL.Engine.Handlers
                 AtTime: null,
                 LastRun: null,
                 NextRun: null,
-                IsEnabled: true,
+                IsEnabled: stmt.IsActive,
                 MaxRetries: 3,
                 RetryDelaySeconds: config?.GetValue<int>("Portal:SubscriptionRetryDelaySeconds") ?? 60);
 

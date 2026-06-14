@@ -122,8 +122,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<SubscriptionDelivery>(e =>
         {
-            // At-most-once per scheduler completion: one delivery row per (subscription, trigger).
-            e.HasIndex(x => new { x.SubscriptionId, x.TriggerKey }).IsUnique();
+            // At-most-once per recipient and scheduler completion.
+            e.HasIndex(x => new { x.SubscriptionId, x.TriggerKey, x.RecipientKey }).IsUnique();
             e.HasIndex(x => x.DeliveryId);
         });
 

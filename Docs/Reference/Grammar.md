@@ -2843,7 +2843,8 @@ EXECUTE portal BEGIN
     CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
         WHEN VISUAL 'Revenue' >= 1000
         [DELIVER TO 'ops@example.com']
-        [AT smtp];
+        [AT smtp]
+        [ENABLE | DISABLE];
     SHOW ALERTS FOR REPORT 'Monthly Sales' [INTO #alerts];
     DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
 
@@ -2918,7 +2919,8 @@ EXECUTE portal BEGIN
             @start  = 'D-1',
             @end    = 'D',
             @region = 'All'
-        );
+        )
+        [ENABLE | DISABLE];
 
     -- Note: DELIVER TO GROUP and FORMAT BOTH are valid syntax and parse correctly,
     -- but the REPORTPORTAL connector currently rejects them at runtime. Use

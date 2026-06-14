@@ -719,8 +719,12 @@ namespace ETL_SQL.Core.Parser.Components
             }
             if (Match(TokenType.AT))
                 smtpAlias = Advance().Value;
+            var isActive = true;
+            if (Match(TokenType.DISABLE)) isActive = false;
+            else Match(TokenType.ENABLE);
             Match(TokenType.SEMICOLON);
-            return new CreatePortalAlertStatement(report, name, visual, op == "<>" ? "!=" : op, threshold, recipient, smtpAlias)
+            return new CreatePortalAlertStatement(
+                report, name, visual, op == "<>" ? "!=" : op, threshold, recipient, smtpAlias, isActive)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -849,10 +853,13 @@ namespace ETL_SQL.Core.Parser.Components
             string smtpAlias = Advance().Value;
 
             var parameters = ParseSubscriptionParameters();
+            var isActive = true;
+            if (Match(TokenType.DISABLE)) isActive = false;
+            else Match(TokenType.ENABLE);
 
             Match(TokenType.SEMICOLON);
             return new CreatePortalSubscriptionStatement(
-                reportPath, recipient, isGroup, schedule, onRefresh, format, smtpAlias, name, parameters)
+                reportPath, recipient, isGroup, schedule, onRefresh, format, smtpAlias, name, parameters, isActive)
             { Line = start.Line, Column = start.Column };
         }
 

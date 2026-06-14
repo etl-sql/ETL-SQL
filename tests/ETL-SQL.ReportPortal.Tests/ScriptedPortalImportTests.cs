@@ -149,4 +149,104 @@ public sealed class ScriptedPortalImportTests
             () => connector.ExecuteAdminStatementAsync(stmt, ctx));
         Assert.Contains("group", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task SubscriptionAndAlert_ReplayIsIdempotent_AndUpdatesByNaturalKey()
+    {
+        using var factory = new PortalWebFactory();
+        var connector = await ConnectAsAdminAsync(factory);
+        var context = new LiteralEvalContext();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var reportName = $"Import Report {suffix}";
+        var reportPath = $"/import_{suffix}/{reportName}";
+        var subscriptionName = $"Import Subscription {suffix}";
+        var alertName = $"Import Alert {suffix}";
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+            var adminId = await db.Users
+                .Where(user => user.UserName == "admin")
+                .Select(user => user.Id)
+                .SingleAsync();
+            var folder = new Folder
+            {
+                Name = $"import_{suffix}",
+                Path = $"/import_{suffix}",
+                OwnerId = adminId
+            };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            db.Reports.Add(new Report
+            {
+                FolderId = folder.Id,
+                Name = reportName,
+                ScriptPath = Path.Combine(config.ScriptRootPath, $"import_{suffix}.rptsql"),
+                CreatedBy = adminId
+            });
+            db.SmtpConnections.Add(new SmtpConnection
+            {
+                Alias = $"smtp_{suffix}",
+                Host = "smtp.test.local",
+                Port = 2525,
+                FromAddress = "reports@test.local",
+                UseSsl = false
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var subscription = new CreatePortalSubscriptionStatement(
+            reportPath,
+            "recipient@test.local",
+            false,
+            "Daily",
+            false,
+            PortalSubscriptionFormat.Pdf,
+            $"smtp_{suffix}",
+            subscriptionName,
+            [new SubscriptionParameter("@region", "North")],
+            IsActive: false);
+        var alert = new CreatePortalAlertStatement(
+            reportPath,
+            alertName,
+            "Revenue",
+            ">=",
+            1000m,
+            "recipient@test.local",
+            $"smtp_{suffix}",
+            IsActive: false);
+
+        foreach (var _ in Enumerable.Range(0, 2))
+        {
+            await connector.ExecuteAdminStatementAsync(subscription, context);
+            await connector.ExecuteAdminStatementAsync(alert, context);
+        }
+
+        var subscriptionUpdate = subscription with
+        {
+            Recipient = "updated-recipient@test.local",
+            Schedule = "Weekly",
+            Parameters = [new SubscriptionParameter("@region", "South")],
+            IsActive = true
+        };
+        var alertUpdate = alert with { Threshold = 2000m, IsActive = true };
+        Assert.Contains("would update", await connector.PlanAdminStatementAsync(subscriptionUpdate, context));
+        Assert.Contains("would update", await connector.PlanAdminStatementAsync(alertUpdate, context));
+        await connector.ExecuteAdminStatementAsync(subscriptionUpdate, context);
+        await connector.ExecuteAdminStatementAsync(alertUpdate, context);
+        Assert.Contains("would skip", await connector.PlanAdminStatementAsync(subscriptionUpdate, context));
+        Assert.Contains("would skip", await connector.PlanAdminStatementAsync(alertUpdate, context));
+
+        using var verifyScope = factory.Services.CreateScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var storedSubscription = await verifyDb.Subscriptions.SingleAsync(value => value.Name == subscriptionName);
+        var storedAlert = await verifyDb.ReportAlerts.SingleAsync(value => value.Name == alertName);
+        Assert.Equal("Weekly", storedSubscription.Schedule);
+        Assert.Equal("updated-recipient@test.local", storedSubscription.Recipients);
+        Assert.True(storedSubscription.IsActive);
+        Assert.Contains("South", storedSubscription.ParametersJson);
+        Assert.Equal(2000m, storedAlert.Threshold);
+        Assert.True(storedAlert.IsActive);
+    }
 }

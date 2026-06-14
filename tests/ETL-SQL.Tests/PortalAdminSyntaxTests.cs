@@ -307,6 +307,13 @@ namespace ETL_SQL.Tests
             Assert.Equal(1000m, alert.Threshold);
             Assert.Equal("ops@example.com", alert.Recipient);
             Assert.Equal("smtp", alert.SmtpAlias);
+
+            var disabledAlertScript = TestHelpers.Parse(
+                "CREATE ALERT 'Disabled Alert' FOR REPORT 'Monthly Sales' " +
+                "WHEN VISUAL 'Revenue' >= 1000 AT smtp DISABLE;");
+            var disabledAlert = Assert.IsType<CreatePortalAlertStatement>(
+                Assert.Single(disabledAlertScript.Statements));
+            Assert.False(disabledAlert.IsActive);
         }
 
         [Fact]

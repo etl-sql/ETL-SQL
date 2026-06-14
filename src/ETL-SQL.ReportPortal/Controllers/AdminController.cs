@@ -1237,9 +1237,10 @@ public class AdminController(
     /// are emitted as ${...} placeholders and unsupported resources are listed in the summary.</summary>
     [HttpGet("configuration/export")]
     public async Task<IActionResult> ExportConfiguration(
-        [FromServices] ConfigurationExportService exporter)
+        [FromServices] ConfigurationExportService exporter,
+        [FromQuery] string? orchestratorAlias = null)
     {
-        var export = await exporter.GenerateAsync(HttpContext.RequestAborted);
+        var export = await exporter.GenerateAsync(orchestratorAlias, HttpContext.RequestAborted);
         await audit.LogAsync(CurrentUserId, "EXPORT_PORTAL_CONFIGURATION", "System", null,
             $"{export.RequiredSecrets.Count} secret placeholder(s), {export.Skipped.Count} skipped item(s), " +
             $"{export.ContentManifest.Count} content item(s)");

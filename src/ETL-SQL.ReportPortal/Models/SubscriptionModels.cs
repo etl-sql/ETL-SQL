@@ -76,3 +76,8 @@ public record UpdateSmtpRequest(
     string? Password,
     string? FromAddress,
     bool? UseSsl);
+
+public record CreateRefreshJobRequest(
+    string ReportName,
+    string Schedule,
+    string OrchestratorAlias);

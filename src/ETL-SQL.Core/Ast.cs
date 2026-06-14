@@ -2411,7 +2411,15 @@ namespace ETL_SQL.Core
 
     public record DropPortalSavedViewStatement(string ReportName, string Name) : Statement;
 
-    public record CreatePortalAlertStatement(string ReportName, string Name, string VisualName, string Operator, decimal Threshold, string? Recipient, string? SmtpAlias) : Statement;
+    public record CreatePortalAlertStatement(
+        string ReportName,
+        string Name,
+        string VisualName,
+        string Operator,
+        decimal Threshold,
+        string? Recipient,
+        string? SmtpAlias,
+        bool IsActive = true) : Statement;
 
     public record DropPortalAlertStatement(string ReportName, string Name) : Statement;
 
@@ -2440,7 +2448,8 @@ namespace ETL_SQL.Core
         PortalSubscriptionFormat Format,
         string SmtpAlias,
         string? Name,
-        IReadOnlyList<SubscriptionParameter> Parameters) : Statement;
+        IReadOnlyList<SubscriptionParameter> Parameters,
+        bool IsActive = true) : Statement;
 
     /// <summary>
     /// ALTER SUBSCRIPTION &lt;id&gt; SET ...

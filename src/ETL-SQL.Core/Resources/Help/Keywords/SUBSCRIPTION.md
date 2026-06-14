@@ -6,7 +6,8 @@ CREATE SUBSCRIPTION ['<name>']
   SCHEDULE '<cron>'
 FORMAT PDF|CSV|BOTH
   AT <smtp-alias>
-  [ PARAMETERS (@param = 'value', ...) ];
+  [ PARAMETERS (@param = 'value', ...) ]
+  [ ENABLE | DISABLE ];
 
 ALTER SUBSCRIPTION <id> SET
   SCHEDULE = '<cron>' | FORMAT = PDF|CSV|BOTH | SMTP = '<smtp-alias>' | ENABLE | DISABLE | PARAMETERS (...);
