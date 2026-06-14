@@ -74,10 +74,10 @@ Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
 
-// ── EF Core / SQLite ──────────────────────────────────────────────────────────
+// ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);
 builder.Services.AddDbContext<PortalDbContext>(opt =>
-    opt.UseSqlite($"Data Source={dbPath}"));
+    PortalDatabase.Configure(opt, portalConfig));
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>

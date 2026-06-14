@@ -71,6 +71,7 @@ projects. License values are taken from local package metadata when available.
 | MySqlConnector | MIT | MySQL and MariaDB connector support. |
 | Neo4j.Driver | Apache-2.0 | Neo4j connector support. |
 | Npgsql | PostgreSQL License | PostgreSQL connector support. |
+| Npgsql.EntityFrameworkCore.PostgreSQL | PostgreSQL License | PostgreSQL EF Core provider for portal state (HA deployments). |
 | OmniSharp.Extensions.LanguageServer | package license file | Language server protocol support. |
 | Oracle.ManagedDataAccess.Core | package license file | Oracle connector support. Review Oracle redistribution terms before release. |
 | Parquet.Net | MIT | Parquet connector support. |

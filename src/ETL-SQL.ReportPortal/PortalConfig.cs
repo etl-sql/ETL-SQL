@@ -3,6 +3,7 @@ namespace ETL_SQL.ReportPortal;
 public class PortalConfig
 {
     public string DatabasePath { get; set; } = "./portal.db";
+    public PortalDatabaseConfig Database { get; set; } = new();
     public string ScriptRootPath { get; set; } = "./Reports";
     public string SnapshotDirectory { get; set; } = "./Snapshots";
     public string MapRootPath { get; set; } = "./data/maps";
@@ -18,6 +19,17 @@ public class PortalConfig
     public PortalSecurityConfig Security { get; set; } = new();
     public PortalRateLimitConfig RateLimit { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
+}
+
+public class PortalDatabaseConfig
+{
+    /// <summary>EF Core provider for the portal state store: "Sqlite" (default) or "Postgres".
+    /// Postgres is for shared multi-node (Practical High Availability) deployments.</summary>
+    public string Provider { get; set; } = "Sqlite";
+
+    /// <summary>Explicit connection string. When unset, SQLite derives one from
+    /// <see cref="PortalConfig.DatabasePath"/>; Postgres requires this to be set.</summary>
+    public string? ConnectionString { get; set; }
 }
 
 public class AuditConfig

@@ -29,6 +29,7 @@
     <PackageVersion Include="MySqlConnector" Version="2.6.0" />
     <PackageVersion Include="Neo4j.Driver" Version="5.26.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
     <PackageVersion Include="Oracle.ManagedDataAccess.Core" Version="23.26.200" />
     <PackageVersion Include="Parquet.Net" Version="6.0.3" />
     <PackageVersion Include="PgpCore" Version="7.1.0" />
