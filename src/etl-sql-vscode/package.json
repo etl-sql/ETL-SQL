@@ -2,7 +2,7 @@
   "name": "etl-sql-vscode",
   "displayName": "ETL-SQL Tools",
   "description": "SQL-like scripting for multi-source data pipelines. Run scripts against MSSQL, Postgres, Snowflake, BigQuery, SFTP, REST APIs, flat files, and more — with IntelliSense, linting, live results, and interactive report authoring.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "etl-sql",
   "license": "Apache-2.0",
   "author": "Charles Clemens <etlsqlsoftware@gmail.com>",
