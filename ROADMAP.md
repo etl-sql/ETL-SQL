@@ -75,17 +75,17 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 *Exposes supported operator workflows via CLI commands to move away from manual runbooks.*
 
 #### TODOs:
-- [ ] **Phase 1: System Diagnostics**
+- [x] **Phase 1: System Diagnostics**
   - Implement `etl-sql admin doctor` for local environment configuration and smoke verification.
   - Implement `etl-sql admin support-bundle` to redact credentials and export system config, health, logs, and database metrics.
   - Implement `etl-sql init` to scaffold a starter configuration, generate a first `.etlsql` script, and print a pointer to the User Manual for new users who prefer CLI onboarding over reading documentation first.
-- [ ] **Phase 2: Backup and Disaster Recovery**
+- [x] **Phase 2: Backup and Disaster Recovery**
   - Implement `etl-sql admin backup` to package configuration, database state, and files.
   - Enforce split-custody recovery by ensuring decryption and Data Protection keys are backed up separately from database state.
   - Implement `etl-sql admin restore --validate` to verify catalog and key versions before restoring.
-- [ ] **Phase 3: Database Migrations**
+- [x] **Phase 3: Database Migrations**
   - Implement automatic database schema migrations for SQLite upon engine/portal startup or upgrade.
-- [ ] **Phase 4: N→N+1 Upgrade Validation**
+- [x] **Phase 4: N→N+1 Upgrade Validation**
   - Seed a portal on the prior release version, upgrade in place to the current release, and verify that permissions, jobs, subscriptions, datasets, and audit history are intact.
   - Distinguish this from a clean restore drill — the upgrade path must apply EF migrations on top of a live production-shaped database, not a fresh empty one.
   - Add this drill as a named phase in `Test-PreRelease.ps1` so it runs before every release tag.
