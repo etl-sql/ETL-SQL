@@ -95,6 +95,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Default local correctness lane across engine, language server, and portal." })
+    $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
     $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
 
     if ($IncludeSlt) {
@@ -579,6 +580,14 @@ try {
     Invoke-LoggedPhase "Fast lane" `
         ".\scripts\test-lane.ps1 -Lane fast -Configuration $Configuration -NoRestore -NoBuild" `
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\test-lane.ps1" "-Lane" "fast" "-Configuration" $Configuration "-NoRestore" "-NoBuild" } `
+        $previousPhaseMap $fingerprint $results
+
+    # Explicit release gate: prove the in-place N->N+1 upgrade drill on its own so it can never be
+    # silently lost inside the broad fast lane. (UpgradePathDrillTests is Category=Portal, so the fast
+    # lane also exercises it; this named phase makes the upgrade gate visible and independently logged.)
+    Invoke-LoggedPhase "N->N+1 upgrade-path drill" `
+        "dotnet test tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj --filter FullyQualifiedName~UpgradePathDrillTests --configuration $Configuration --no-restore --no-build" `
+        { & dotnet test "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" $Configuration "--no-restore" "--no-build" } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Sample scripts" `

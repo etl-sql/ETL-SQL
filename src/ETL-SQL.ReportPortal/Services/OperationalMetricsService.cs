@@ -27,6 +27,10 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
         long SnapshotStorageBytes,
         int ActiveSubscriptions,
         int SmtpConnections,
+        int AppliedMigrations,
+        int PendingMigrations,
+        string? LastAppliedMigration,
+        bool SchemaUpToDate,
         DateTime GeneratedAt,
         int WindowHours);
 
@@ -50,6 +54,11 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
         var activeSubscriptions = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
         var smtpConnections = await db.SmtpConnections.CountAsync(ct);
 
+        // Schema migration status: an operator can confirm the catalog is fully migrated after an
+        // upgrade (PendingMigrations == 0) without shell access.
+        var appliedMigrations = (await db.Database.GetAppliedMigrationsAsync(ct)).ToList();
+        var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).ToList();
+
         return new OperationalMetrics(
             activeExecutions,
             queuedExecutions,
@@ -64,6 +73,10 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
             DirectorySizeBytes(config.SnapshotDirectory),
             activeSubscriptions,
             smtpConnections,
+            appliedMigrations.Count,
+            pendingMigrations.Count,
+            appliedMigrations.LastOrDefault(),
+            pendingMigrations.Count == 0,
             DateTime.UtcNow,
             (int)FailureWindow.TotalHours);
     }

@@ -57,7 +57,7 @@ namespace ETL_SQL
 
 
                 // Start scheduler only for interactive/daemon modes, not for one-shot script execution
-                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "doctor" || args[0] == "purge");
+                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "doctor" || args[0] == "purge" || args[0] == "admin" || args[0] == "init");
                 if (!isOneShot)
                 {
                     try

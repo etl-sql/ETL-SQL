@@ -112,6 +112,16 @@ namespace ETL_SQL.App
                 return await RunDoctor(ctx, logger);
             }
 
+            if (ctx.Command == "admin-support-bundle")
+            {
+                return await SupportBundleBuilder.RunAsync(ctx, logger);
+            }
+
+            if (ctx.Command == "init")
+            {
+                return await InitScaffolder.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);
@@ -709,7 +719,7 @@ namespace ETL_SQL.App
             return 1;
         }
 
-        private static async Task<int> RunDoctor(CliContext ctx, ILogger logger)
+        internal static async Task<int> RunDoctor(CliContext ctx, ILogger logger)
         {
             bool isJson = ctx.IsJsonMode;
             bool isStrict = ctx.DoctorStrict;

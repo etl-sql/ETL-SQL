@@ -6,9 +6,109 @@ release begins.
 
 ---
 
-## Active Items
+## Operator Tooling
 
-No active items. Move the next actionable roadmap phase here when development begins.
+> Status: **active.**
+> Goal: replace manual operator runbooks with first-class, supported CLI commands. An administrator
+> should be able to diagnose, bundle support data, back up, restore, upgrade, and onboard from the
+> command line without hand-editing files or following a wiki page.
+>
+> Priority convention: **P1** the supported operator path that must exist and be safe before the
+> capability can be claimed; **P2** verification, hardening, and ergonomics around that path.
+>
+> Verified-against-code baseline (2026-06-13):
+> - `etl-sql doctor` already exists (top-level, `--profile quick|full`, `--json`, `--strict`) in
+>   `EngineRunner.RunDoctor` — substantial environment + smoke coverage already shipped.
+> - Portal already auto-applies EF migrations on startup (`PortalDbContext.Database.Migrate()` in
+>   `src/ETL-SQL.ReportPortal/Program.cs`); Orchestrator SQLite store self-migrates via its
+>   `ALTER TABLE ADD COLUMN` sweep in `SQLiteJobHistoryStore.InitializeAsync`.
+> - The N→N+1 in-place upgrade **drill** already exists (`UpgradePathDrillTests`, shipped in v0.11.0);
+>   only the release-gate wiring is outstanding.
+
+### Phase 1 — System Diagnostics
+
+- [x] **P1.1 Introduce an `etl-sql admin` command group and route `doctor` under it.**
+  Add an `admin` parent command. Expose `admin doctor`, `admin support-bundle`, and (Phase 2)
+  `admin backup`/`admin restore` as subcommands. Keep the existing top-level `etl-sql doctor`
+  working as a backward-compatible alias (it is special-cased in `Program.cs` and used by IDEs).
+  *(done)* `CliOrchestrator` now has an `admin` command group; `BuildDoctorCommand` mints a fresh
+  doctor `Command` for both the top-level alias and `admin doctor` (a System.CommandLine `Command`
+  cannot have two parents). `admin doctor` dispatches to the same `"doctor"` handler — full parity.
+  `Program.cs` treats `admin` and `init` as one-shot (no scheduler). Tests:
+  `CliOrchestratorTests.CliOrchestrator_AdminDoctorRoutesToDoctorCommand`.
+- [x] **P1.2 Implement `etl-sql admin support-bundle`.**
+  Produce a single redacted archive an administrator can hand to support: system/runtime config,
+  the `doctor` health snapshot, recent logs, and database metrics. **Redact all credentials** before
+  anything is written.
+  *(done)* New `SupportBundleBuilder` writes a `.zip` containing `manifest.json`, `doctor-health.json`
+  (captured from the full `doctor` JSON snapshot), `config-redacted.json`, `database-metrics.json`
+  (Portal/Orchestrator DB file path/size/mtime), and recent `logs/`. The recursive JSON redactor
+  masks secret-keyed values, fully masks string leaves inside secret containers (`PreviousSecrets`,
+  `PreviousAtRestKeys`, `ConnectionStrings`), masks credentials embedded in connection-string values,
+  and **leaves non-secret knobs visible** (numbers/bools, `*Version`/`*Note`/`*Limit`/`*Seconds`
+  suffixes) for diagnostics. Default output is a timestamped zip in the cwd; `--output` overrides.
+  Tests: `OperatorToolingTests` (marker secret never appears; knobs preserved; embedded-credential
+  masking; empty-secret preservation). **DB metrics are file-level only** (no SQLite dependency added);
+  row-count/migration-version surfacing is deferred to Phase 3 (P2.3).
+- [x] **P1.3 Implement `etl-sql init`.**
+  Scaffold a starter configuration + first script, idempotent and safe to re-run.
+  *(done)* New `InitScaffolder` writes `appsettings.json` (minimal valid config + freshly generated
+  256-bit JWT secret, no connector creds) and `hello.etlsql` (queries built-in `MOCKDB`, needs no
+  external DB). Idempotent: skips existing files unless `--force`; reports created/skipped and prints
+  next-steps (run script, `admin doctor`, User Manual). Tests: `OperatorToolingTests`
+  (create + generated JWT, no-clobber idempotency, `--force` regenerates a fresh secret).
+- [x] **P2.1 Tests + docs for Phase 1.**
+  *(done)* 8 new `OperatorToolingTests` + 3 new `CliOrchestratorTests` (19 in the filtered run, all
+  green). Documented in `Docs/Administrators_Guide.md` §10 (admin doctor alias) and a new §11
+  (`init`, `admin support-bundle` with the redaction contract), and in the CLI `ShowAdvancedHelp`
+  table. **Verified manually**: `init` scaffolds + the generated `hello.etlsql` runs; `admin doctor`
+  renders; `admin support-bundle` produces a valid zip with redacted secrets.
+
+### Phase 2 — Backup and Disaster Recovery
+
+- [ ] **P1.4 Implement `etl-sql admin backup`.**
+  Package configuration, database state (Portal + Orchestrator, WAL-checkpointed), and files (scripts,
+  snapshots, datasets) into a portable backup. Reuse the proven shape from `BackupRestoreDrillTests`.
+- [ ] **P1.5 Enforce split-custody key handling.**
+  Back up Data Protection / dataset-at-rest decryption keys **separately** from database state so a
+  single leaked artifact cannot both read and decrypt. Document the two-artifact recovery contract.
+- [ ] **P1.6 Implement `etl-sql admin restore --validate`.**
+  Verify catalog and key versions before restoring; fail closed on version mismatch. Restore into a
+  clean location and surface the absolute-path caveat for dataset caches (admin guide §6.5).
+- [ ] **P2.2 Backup/restore drill + docs.**
+  Promote the existing `BackupRestoreDrillTests` shape to exercise the real CLI commands end to end;
+  document the operator procedure and the split-custody recovery steps.
+
+### Phase 3 — Database Migrations
+
+- [x] **P1.7 Confirm and formalize automatic SQLite migrations on startup/upgrade.**
+  *(done)* Verified both already run on startup/upgrade (Portal `Database.Migrate()`; Orchestrator
+  `ALTER TABLE` sweep). Formalized the Portal startup block (`Program.cs`): it now logs the **pending
+  migration set before applying** and a success line after (`PortalDatabaseMigration` logger), and
+  **fails fast** — a migration exception is logged `Critical` with the restore-from-backup guidance and
+  rethrown so the host never serves requests against a half-migrated catalog.
+- [x] **P2.3 Migration status surface + tests.**
+  *(done)* `OperationalMetricsService` (admin `GET /api/admin/metrics/operational`) now reports
+  `appliedMigrations`, `pendingMigrations`, `lastAppliedMigration`, and `schemaUpToDate` so an operator
+  confirms a full upgrade (`pendingMigrations: 0`) without shell access — documented in the portal admin
+  guide §6.7. (Portal migration status is surfaced by the Portal, not the CLI `doctor`, because the App
+  process does not reference `PortalDbContext`; the support-bundle's file-level DB metrics remain.) New
+  `MigrationConvergenceTests` proves a **fresh** DB and an **out-of-date** DB (seeded at the previous
+  release) both converge to HEAD on `MigrateAsync` with `pendingMigrations` reported as 0.
+
+### Phase 4 — N→N+1 Upgrade Validation
+
+- [x] **P1.8 Wire the in-place upgrade drill into `Test-PreRelease.ps1`.**
+  *(done)* Added a dedicated **"N→N+1 upgrade-path drill"** phase (in both `Get-PlannedPreReleasePhases`
+  for `-Explain` and the execution block, right after the Fast lane) that runs
+  `dotnet test ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests`. The fast
+  lane already exercises it (it is `Category=Portal`), but the named phase makes the upgrade gate
+  visible and independently logged so it can never be silently lost. Verified: the phase shows in
+  `-Explain`, and the filter selects + passes the 2 drill tests.
+- [x] **P2.4 Document the supported upgrade + rollback procedure.**
+  *(done)* The full procedure already lives in `ReportPortal_Administrators_Guide.md` §6.5 "Versioned
+  Upgrades and Rollback" (forward-only migration; rollback = restore-from-backup, not down-migration).
+  Added `Administrators_Guide.md` §11.3 cross-linking it and naming the release-gate drill phase.
 
 ---
 
@@ -16,11 +116,6 @@ No active items. Move the next actionable roadmap phase here when development be
 
 - The non-Docker Portal run passed **226 tests** on June 14, 2026.
 - The documentation, parser, and portal syntax verification run passed **60 tests**.
-- The clean-server bootstrap now reconstructs reports, dataset metadata/grants, refresh jobs,
-  subscriptions, and alerts and remains unchanged after a second replay.
-- Subscription delivery is isolated and deduplicated per normalized recipient and trigger.
-- The full Portal test project also attempted 28 Docker-backed SMTP, Orchestrator, and LDAP
-  integration tests; those could not run because Docker was unavailable on the test host.
 - True dual-node/process, network-partition, disk-pressure, clock-skew, and distributed workload
   fairness certification belongs to the Practical High Availability phase in `ROADMAP.md`, because
   v0.11.0 intentionally supports one active Portal process per SQLite database.

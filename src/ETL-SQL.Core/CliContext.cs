@@ -55,5 +55,12 @@ namespace ETL_SQL.Core
         // extract-spec command
         public string? ExtractInput { get; set; }
         public string? ExtractOutput { get; set; }
+
+        // admin support-bundle command
+        public string? BundleOutput { get; set; }
+
+        // init command
+        public string? InitDirectory { get; set; }
+        public bool InitForce { get; set; }
     }
 }

@@ -155,6 +155,21 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ExactlyOne,
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> BundleOutputOption = new("--output", new[] { "-o" })
+        {
+            Description = "Destination path for the support bundle archive (default: timestamped .zip in the working directory).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Argument<string?> InitDirectoryArg = new("directory")
+        {
+            Description = "Target directory to scaffold into (default: current directory).",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        private static readonly Option<bool> InitForceOption = new("--force", new[] { "-f" })
+        {
+            Description = "Overwrite existing files if they are already present."
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -235,13 +250,7 @@ namespace ETL_SQL.App
             uiCommand.Add(oldSubcommand);
 
             // 7. DOCTOR Command (Health Check)
-            var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment")
-            {
-                DoctorStrictOption,
-                DoctorProfileOption,
-                JsonOption,
-            };
-            doctorCommand.SetAction(context => Dispatch(context, "doctor", handler));
+            var doctorCommand = BuildDoctorCommand(handler);
 
             // 8. CONFIG Command
             var configCommand = new Command("config", "Manage application configuration");
@@ -286,6 +295,24 @@ namespace ETL_SQL.App
             };
             extractSpecCommand.SetAction(context => Dispatch(context, "extract-spec", handler));
 
+            // 13. ADMIN Command group — supported operator workflows (doctor, support-bundle, backup, restore)
+            var adminCommand = new Command("admin", "Operator and administration commands");
+            adminCommand.Add(BuildDoctorCommand(handler));
+            var supportBundleCommand = new Command("support-bundle", "Collect a redacted support archive (config, health, logs, database metrics)")
+            {
+                BundleOutputOption,
+            };
+            supportBundleCommand.SetAction(context => Dispatch(context, "admin-support-bundle", handler));
+            adminCommand.Add(supportBundleCommand);
+
+            // 14. INIT Command — scaffold a starter configuration and first script for CLI-first onboarding
+            var initCommand = new Command("init", "Scaffold a starter configuration and first ETL-SQL script for new users")
+            {
+                InitDirectoryArg,
+                InitForceOption,
+            };
+            initCommand.SetAction(context => Dispatch(context, "init", handler));
+
             rootCommand.Add(runCommand);
             rootCommand.Add(testCommand);
             rootCommand.Add(encryptCommand);
@@ -299,8 +326,24 @@ namespace ETL_SQL.App
             rootCommand.Add(purgeCommand);
             rootCommand.Add(genScriptCommand);
             rootCommand.Add(extractSpecCommand);
+            rootCommand.Add(adminCommand);
+            rootCommand.Add(initCommand);
 
             return rootCommand;
+        }
+
+        // Builds a fresh Doctor command instance. A System.CommandLine Command cannot be attached to
+        // two parents, so we mint a new one for both the top-level alias and the `admin` group.
+        private static Command BuildDoctorCommand(Func<CliContext, Task<int>> handler)
+        {
+            var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment")
+            {
+                DoctorStrictOption,
+                DoctorProfileOption,
+                JsonOption,
+            };
+            doctorCommand.SetAction(context => Dispatch(context, "doctor", handler));
+            return doctorCommand;
         }
 
         private static async Task<int> Dispatch(ParseResult res, string commandName, Func<CliContext, Task<int>> handler)
@@ -385,6 +428,16 @@ namespace ETL_SQL.App
                 cliContext.ExtractInput = res.GetValue(ExtractInputOption);
                 cliContext.ExtractOutput = res.GetValue(ExtractOutputOption);
             }
+            else if (commandName == "admin-support-bundle")
+            {
+                cliContext.BundleOutput = res.GetValue(BundleOutputOption);
+            }
+            else if (commandName == "init")
+            {
+                var dir = res.GetValue(InitDirectoryArg);
+                cliContext.InitDirectory = string.IsNullOrWhiteSpace(dir) ? null : dir.Trim('"', '\'', ' ');
+                cliContext.InitForce = res.GetValue(InitForceOption);
+            }
 
             var sessionOptVal = res.GetValue(SessionOption);
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -435,6 +488,9 @@ namespace ETL_SQL.App
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
             table.AddRow("notices", "Show third-party notices and dependency credits.");
+            table.AddRow($"init [blue]{Markup.Escape("[directory]")}[/]", "Scaffold a starter appsettings.json and first ETL-SQL script (CLI-first onboarding).");
+            table.AddRow("admin doctor", "System health check (alias of top-level 'doctor'). Use --profile full for deep checks.");
+            table.AddRow("admin support-bundle", "Collect a redacted support archive (config, health, logs, DB metrics).");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");

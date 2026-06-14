@@ -327,7 +327,34 @@ ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-    db.Database.Migrate();
+    var migrationLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("PortalDatabaseMigration");
+    try
+    {
+        // Forward-only, automatic on startup/upgrade. Log the applied set so an operator can confirm
+        // exactly which schema migrations ran during an upgrade.
+        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+        if (pending.Count == 0)
+        {
+            migrationLogger.LogInformation("Portal database schema is up to date; no migrations to apply.");
+        }
+        else
+        {
+            migrationLogger.LogInformation(
+                "Applying {Count} pending portal database migration(s): {Migrations}",
+                pending.Count, string.Join(", ", pending));
+            await db.Database.MigrateAsync();
+            migrationLogger.LogInformation("Portal database migrations applied successfully.");
+        }
+    }
+    catch (Exception migrationEx)
+    {
+        // Fail fast: never serve requests against a half-migrated catalog.
+        migrationLogger.LogCritical(migrationEx,
+            "Portal database migration failed. The portal will not start. Restore from your pre-upgrade " +
+            "backup (rollback is restore-from-backup, not a down-migration) and retry.");
+        throw;
+    }
     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
     await DatasetStorageMaintenance.ReconcileAsync(
         db,

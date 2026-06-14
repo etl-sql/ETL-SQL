@@ -99,6 +99,58 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("quick", capturedContext.DoctorProfile);
         }
 
+        [Fact]
+        public async Task CliOrchestrator_AdminDoctorRoutesToDoctorCommand()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[] { "admin", "doctor", "--profile", "full" }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("doctor", capturedContext!.Command);
+            Assert.Equal("full", capturedContext.DoctorProfile);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminSupportBundleParsesOutput()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[] { "admin", "support-bundle", "--output", "bundle.zip" }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-support-bundle", capturedContext!.Command);
+            Assert.Equal("bundle.zip", capturedContext.BundleOutput);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_InitParsesDirectoryAndForce()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[] { "init", "workspace", "--force" }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("init", capturedContext!.Command);
+            Assert.Equal("workspace", capturedContext.InitDirectory);
+            Assert.True(capturedContext.InitForce);
+        }
+
         [Theory]
         [InlineData(false, false, false, 0)]
         [InlineData(false, false, true, 0)]

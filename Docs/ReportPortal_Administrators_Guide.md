@@ -668,8 +668,11 @@ returns a point-in-time snapshot for a multi-user deployment: `activeExecutions`
 execution and subscription-delivery counts and failure counts over the last 24 hours (the failure
 rate denominators), and `datasetStorageBytes`/`snapshotStorageBytes` for disk-usage monitoring. The
 execution and delivery figures come from the durable `PortalExecutionJobs` and subscription-delivery
-ledgers, so they survive a restart. The `/health` endpoint's `execution` check also reports the
-single-instance topology and active execution count for liveness probes.
+ledgers, so they survive a restart. It also reports database **schema migration status** —
+`appliedMigrations`, `pendingMigrations`, `lastAppliedMigration`, and `schemaUpToDate` — so after an
+in-place upgrade an operator can confirm the catalog migrated fully (`pendingMigrations: 0`) without
+shell access. The `/health` endpoint's `execution` check also reports the single-instance topology and
+active execution count for liveness probes.
 
 ### 6.8 Report Dependencies
 

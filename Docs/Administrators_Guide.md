@@ -409,7 +409,7 @@ For report catalog, user, group, ACL, subscription, snapshot, and export operati
 
 ## 10. Environment Validation with `etl-sql doctor`
 
-The `etl-sql doctor` command is a built-in health check that validates the most common setup problems before you begin using the environment.
+The `etl-sql doctor` command is a built-in health check that validates the most common setup problems before you begin using the environment. It is also available as **`etl-sql admin doctor`** — the same check under the `admin` command group, alongside `admin support-bundle` (§11.2). The top-level `etl-sql doctor` spelling is retained for backward compatibility and IDE integration; both accept the same `--profile`, `--strict`, and `--json` options.
 
 ### Quick check (default)
 
@@ -463,3 +463,75 @@ etl-sql doctor --profile full --strict --json
 - Add `etl-sql doctor --strict` to the service startup validation in your CI/CD pipeline.
 - Use `etl-sql doctor --json` to feed a monitoring system that alerts on WARN/FAIL status.
 - See the [Production Readiness Checklist](ReportPortal_Administrators_Guide.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
+
+---
+
+## 11. Operator CLI Commands
+
+These commands replace manual operator runbooks with supported, repeatable CLI workflows.
+
+### 11.1 First-time onboarding — `etl-sql init`
+
+Scaffolds a starter workspace so a new operator can run something immediately without reading the
+full documentation first:
+
+```bash
+# Scaffold into the current directory
+etl-sql init
+
+# Or into a named directory
+etl-sql init my-workspace
+```
+
+It writes two files:
+
+- **`appsettings.json`** — a minimal, valid starter configuration with safe defaults and a freshly
+  generated Portal JWT secret (so the portal can start without a separate `config setup-jwt` step).
+  No connector credentials are emitted.
+- **`hello.etlsql`** — a first runnable script that queries the built-in `MOCKDB` sample connector,
+  so it works with no external database.
+
+`init` is **idempotent**: it never overwrites an existing file unless you pass `--force`. Re-running
+it reports which files were created and which were skipped. After scaffolding it prints the next
+steps (run the script, run `admin doctor`, read the User Manual).
+
+### 11.2 Support archives — `etl-sql admin support-bundle`
+
+Collects a single redacted archive an administrator can hand to support:
+
+```bash
+# Write a timestamped etl-sql-support-YYYYMMDD-HHMMSS.zip into the working directory
+etl-sql admin support-bundle
+
+# Or choose the output path
+etl-sql admin support-bundle --output C:\temp\bundle.zip
+```
+
+The archive contains:
+
+- **`manifest.json`** — bundle metadata (generated time, tool version, OS, .NET runtime, host).
+- **`doctor-health.json`** — a full `doctor` health snapshot in machine-readable form.
+- **`config-redacted.json`** — your `appsettings.json` with **all credentials redacted**.
+- **`database-metrics.json`** — Portal/Orchestrator database file paths, sizes, and last-write times.
+- **`logs/`** — the most recent application and script log files.
+
+**Redaction contract:** every credential is masked (`***REDACTED***`) before anything is written —
+passwords, JWT/at-rest/API keys, connection strings, tokens, and credentials embedded inside
+connection-string values. Non-secret configuration knobs (timeouts, limits, key *versions*, feature
+flags) remain visible for diagnostics. Empty secret fields are kept as empty so you can see whether a
+value was configured. Always review a bundle before sharing it.
+
+### 11.3 Upgrading in place
+
+ETL-SQL applies pending database schema migrations automatically on startup — the Portal runs EF Core
+migrations against `portal.db`, and the Orchestrator store adds any missing `etlsql.db` columns when it
+initializes. Both are **forward-only**: an in-place N→N+1 upgrade preserves authentication, folder
+permissions, jobs, subscriptions, datasets (and their at-rest key version), and audit history.
+
+The full in-place upgrade procedure, the post-upgrade verification checklist, and the supported
+rollback path (**restore-from-backup, not a down-migration**) are documented in
+[ReportPortal_Administrators_Guide.md §6.5 → "Versioned Upgrades and Rollback"](ReportPortal_Administrators_Guide.md#versioned-upgrades-and-rollback).
+
+This upgrade path is gated before every release tag by the **"N→N+1 upgrade-path drill"** phase in
+`scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over
+populated data, and asserts continuity.
