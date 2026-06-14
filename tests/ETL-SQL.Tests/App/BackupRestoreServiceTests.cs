@@ -185,6 +185,23 @@ namespace ETL_SQL.Tests.CliCommands
         }
 
         [Fact]
+        public async Task Backup_WritesKeysArchiveWithOwnerOnlyPermissionsOnUnix()
+        {
+            var outDir = Path.Combine(_root, "out");
+            await BackupRestoreService.BackupCoreAsync(Config(), _source, outDir, NullLogger.Instance);
+            var (_, keysZip) = FindArchives(outDir);
+
+            // Owner-only file permissions are a Unix concept; on Windows ACL inheritance covers it.
+            if (OperatingSystem.IsWindows()) return;
+
+            var mode = File.GetUnixFileMode(keysZip);
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
+            // No group/other access to the plaintext-secret-bearing keys archive.
+            Assert.False(mode.HasFlag(UnixFileMode.GroupRead));
+            Assert.False(mode.HasFlag(UnixFileMode.OtherRead));
+        }
+
+        [Fact]
         public void SplitConfigSecrets_BlanksSecretsAndCapturesByDottedPath()
         {
             var path = Path.Combine(_source, "appsettings.json");

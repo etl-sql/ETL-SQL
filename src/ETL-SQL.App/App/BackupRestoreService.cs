@@ -55,9 +55,13 @@ namespace ETL_SQL.App
             var dataZip = Path.Combine(outputDir, $"etl-sql-backup-{stamp}.zip");
             var keysZip = Path.Combine(outputDir, $"etl-sql-keys-{stamp}.zip");
 
-            var staging = Path.Combine(Path.GetTempPath(), $"etl-sql-backup-{backupId}");
+            // Stage under a per-user secure root with owner-only (0700) permissions so the staged key
+            // ring and plaintext secrets are never readable by other local users during the backup.
+            var staging = Path.Combine(SecureTempRoot(), $"etl-sql-backup-{backupId}");
             var dataStage = Path.Combine(staging, "data");
             var keysStage = Path.Combine(staging, "keys");
+            Directory.CreateDirectory(staging);
+            RestrictToOwner(staging, isDirectory: true);
             Directory.CreateDirectory(dataStage);
             Directory.CreateDirectory(keysStage);
 
@@ -89,8 +93,10 @@ namespace ETL_SQL.App
                 // ── Keys archive: Data Protection key ring + the stripped secrets ──────
                 var dpRing = Path.Combine(Path.GetDirectoryName(portalDb) ?? baseDir, DpKeyRingDirName);
                 int dpKeyFiles = CopyTree(dpRing, Path.Combine(keysStage, DpKeyRingDirName), keysStage).Count();
-                await File.WriteAllTextAsync(Path.Combine(keysStage, SecretsName),
+                var secretsPath = Path.Combine(keysStage, SecretsName);
+                await File.WriteAllTextAsync(secretsPath,
                     new JsonObject(secrets.Select(kv => new KeyValuePair<string, JsonNode?>(kv.Key, kv.Value))).ToJsonString(JsonOpts));
+                RestrictToOwner(secretsPath, isDirectory: false);
 
                 var atRestVersion = config["Portal:Dataset:AtRestKeyVersion"];
                 var keysManifest = new JsonObject
@@ -125,6 +131,10 @@ namespace ETL_SQL.App
                 if (File.Exists(keysZip)) File.Delete(keysZip);
                 ZipFile.CreateFromDirectory(dataStage, dataZip, CompressionLevel.Optimal, includeBaseDirectory: false);
                 ZipFile.CreateFromDirectory(keysStage, keysZip, CompressionLevel.Optimal, includeBaseDirectory: false);
+                // The output archives carry sensitive material (the data archive holds the databases;
+                // the keys archive holds plaintext secrets) — restrict both to the owner.
+                RestrictToOwner(dataZip, isDirectory: false);
+                RestrictToOwner(keysZip, isDirectory: false);
 
                 logger.WriteLine($"Backup complete (backup id {backupId}).", ConsoleColor.Green);
                 logger.WriteLine($"  Data archive: {dataZip}", ConsoleColor.Gray);
@@ -159,12 +169,16 @@ namespace ETL_SQL.App
             if (!File.Exists(dataZip)) { logger.WriteLine($"Data archive not found: {dataZip}", ConsoleColor.Red); return 1; }
             if (!File.Exists(keysZip)) { logger.WriteLine($"Keys archive not found: {keysZip}", ConsoleColor.Red); return 1; }
 
-            var work = Path.Combine(Path.GetTempPath(), $"etl-sql-restore-{Guid.NewGuid():N}");
+            // Extract under a per-user secure root with owner-only (0700) permissions; the keys archive
+            // expands to plaintext secrets + the key ring, which must not be readable by other users.
+            var work = Path.Combine(SecureTempRoot(), $"etl-sql-restore-{Guid.NewGuid():N}");
             var dataExtract = Path.Combine(work, "data");
             var keysExtract = Path.Combine(work, "keys");
 
             try
             {
+                Directory.CreateDirectory(work);
+                RestrictToOwner(work, isDirectory: true);
                 ZipFile.ExtractToDirectory(dataZip, dataExtract);
                 ZipFile.ExtractToDirectory(keysZip, keysExtract);
 
@@ -203,10 +217,15 @@ namespace ETL_SQL.App
                 CopyTree(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target).Count();
                 CopyTree(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target).Count();
 
+                var restoredConfig = Path.Combine(target, "appsettings.json");
                 await MergeConfigAsync(
                     Path.Combine(dataExtract, "appsettings.json"),
                     Path.Combine(keysExtract, SecretsName),
-                    Path.Combine(target, "appsettings.json"));
+                    restoredConfig);
+                // The merged config has the plaintext secrets re-injected — restrict it to the owner.
+                RestrictToOwner(restoredConfig, isDirectory: false);
+                // Likewise the restored Data Protection key ring.
+                RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
 
                 logger.WriteLine($"Restore complete into: {target}", ConsoleColor.Green);
                 logger.WriteLine("Next steps:", ConsoleColor.Cyan);
@@ -449,6 +468,38 @@ namespace ETL_SQL.App
             {
                 return null; // no history table / unreadable — recorded as unknown
             }
+        }
+
+        /// <summary>
+        /// A per-user staging root (under LocalApplicationData), restricted to the owner, preferred over
+        /// the shared system temp directory for staging credential-bearing backup artifacts.
+        /// </summary>
+        private static string SecureTempRoot()
+        {
+            var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            var root = string.IsNullOrWhiteSpace(local)
+                ? Path.Combine(Path.GetTempPath(), "ETL-SQL", "tmp")
+                : Path.Combine(local, "ETL-SQL", "tmp");
+            Directory.CreateDirectory(root);
+            RestrictToOwner(root, isDirectory: true);
+            return root;
+        }
+
+        /// <summary>
+        /// Restricts a file/directory to owner-only access (0600/0700) on Unix. No-op on Windows, where
+        /// LocalApplicationData and the chosen output paths already inherit user-scoped ACLs.
+        /// </summary>
+        private static void RestrictToOwner(string path, bool isDirectory)
+        {
+            if (OperatingSystem.IsWindows()) return;
+            try
+            {
+                var mode = isDirectory
+                    ? UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                    : UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                File.SetUnixFileMode(path, mode);
+            }
+            catch { /* best-effort hardening; never fail the operation over a chmod */ }
         }
 
         private static void TryDeleteDir(string dir)
