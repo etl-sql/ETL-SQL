@@ -107,6 +107,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
+    print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
@@ -516,6 +517,12 @@ run_phase "Dotnet restore" \
 run_phase "Dotnet build" \
     "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" \
     dotnet build "ETL-SQL.slnx" "--configuration" "$CONFIGURATION" "--no-restore"
+
+# Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally
+# (a fast static check) before the long test lanes run.
+run_phase "Format verify" \
+    "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore" \
+    dotnet format "ETL-SQL.slnx" "--verify-no-changes" "--no-restore"
 
 run_phase "Smoke lane" \
     "./scripts/test-lane.sh --lane smoke --configuration $CONFIGURATION --no-restore --no-build" \
