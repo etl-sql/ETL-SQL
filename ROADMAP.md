@@ -13,13 +13,15 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams:
 
-1. **v0.11.0 (Active):** Hardening multi-user standalone correctness and script-first recovery.
-2. ** Operator Tooling (doctor, backup, restore, support-bundle).
-3. ** Practical High Availability (PostgreSQL state and shared storage).
-4. ** Introducing Governance Core (Org policy and secure audit outbox).
-5. ** Integrating Enterprise Identity (OIDC and approval workflows).
-6. ** Enforcing Departmental Isolation (Repeatable isolated container deployments).
-7. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
+> **Shipped — v0.11.0:** multi-user standalone hardening, script-first recovery, and the operator-tooling
+> CLI (doctor, support-bundle, init, split-custody backup/restore, automatic migrations, and the N→N+1
+> upgrade-path release gate). See `CHANGELOG.md`.
+
+1. **Practical High Availability (Next):** PostgreSQL state and shared storage.
+2. **Governance Core:** Org policy and secure audit outbox.
+3. **Enterprise Identity:** OIDC and approval workflows.
+4. **Departmental Isolation:** Repeatable isolated container deployments.
+5. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
 
 ---
 
@@ -40,59 +42,7 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ## Release Sequence & Incremental TODOs
 
-### Active Phase: v0.11.0 — Standalone Hardening & Recovery
-*Focuses on multi-user correctness, script-first recovery, and establishing a stable single-server benchmark.*
-
-#### TODOs:
-- [x] **Phase 1: Multi-User Correctness**
-  - Fix folder and asset ownership lifecycle (resolve `Folder.OwnerId` permission gaps).
-  - Make audit recording a transactional operation contract to prevent un-audited state mutations.
-- [x] **Phase 2: Script-First Reconstruction**
-  - Implement `EXPORT PORTAL CONFIGURATION` to export all users, folders, ACLs, and jobs as a versioned, idempotent `.etlsql` bootstrap script.
-  - Exclude all credentials, keys, and cached dataset values from the configuration export (use env/secret placeholders).
-  - Implement dry-run/validation behavior (`SET WHAT_IF ON`) during configuration imports.
-  - Verify full portal round-trip reconstruction on clean database initialization, including
-    reports, dataset metadata/grants, target-aliased refresh jobs, subscriptions, and alerts.
-  - Isolate subscription delivery and durable deduplication per normalized recipient.
-- [x] **Phase 3: Verification & Observability**
-  - Implement independent-service/shared-connection tests to verify SQLite job and delivery
-    coordination for the supported single-Portal topology.
-  - Add subscription delivery outbox and idempotency tests.
-  - Automate a complete backup and restore validation drill.
-  - Expose operational metrics (queue depth, active executions, failure rates, dataset/snapshot
-    disk usage) via an admin metrics endpoint. **OpenTelemetry export was deliberately deferred** to
-    the Practical High Availability release — it was judged not yet warranted for the single-instance
-    topology and is better designed alongside multi-node aggregation.
-
-> **v0.11.0 also delivered beyond the minimum scope above:** a hosted-service integration lane,
-> fault-injection/recovery tests, workload-fairness (per-user concurrency) caps, and an in-place
-> N→N+1 versioned-upgrade drill (which pulls forward the first part of Operator Tooling → Phase 4;
-> the `Test-PreRelease.ps1` wiring for that drill remains with Operator Tooling).
-
----
-
-### Operator Tooling
-*Exposes supported operator workflows via CLI commands to move away from manual runbooks.*
-
-#### TODOs:
-- [x] **Phase 1: System Diagnostics**
-  - Implement `etl-sql admin doctor` for local environment configuration and smoke verification.
-  - Implement `etl-sql admin support-bundle` to redact credentials and export system config, health, logs, and database metrics.
-  - Implement `etl-sql init` to scaffold a starter configuration, generate a first `.etlsql` script, and print a pointer to the User Manual for new users who prefer CLI onboarding over reading documentation first.
-- [x] **Phase 2: Backup and Disaster Recovery**
-  - Implement `etl-sql admin backup` to package configuration, database state, and files.
-  - Enforce split-custody recovery by ensuring decryption and Data Protection keys are backed up separately from database state.
-  - Implement `etl-sql admin restore --validate` to verify catalog and key versions before restoring.
-- [x] **Phase 3: Database Migrations**
-  - Implement automatic database schema migrations for SQLite upon engine/portal startup or upgrade.
-- [x] **Phase 4: N→N+1 Upgrade Validation**
-  - Seed a portal on the prior release version, upgrade in place to the current release, and verify that permissions, jobs, subscriptions, datasets, and audit history are intact.
-  - Distinguish this from a clean restore drill — the upgrade path must apply EF migrations on top of a live production-shaped database, not a fresh empty one.
-  - Add this drill as a named phase in `Test-PreRelease.ps1` so it runs before every release tag.
-
----
-
-### Practical High Availability
+### Active Phase: Practical High Availability
 *Enables horizontal scaling of Portal and Orchestrator nodes behind a load balancer with PostgreSQL state and shared artifact storage.*
 
 #### TODOs:
