@@ -49,8 +49,10 @@ release begins.
   and **leaves non-secret knobs visible** (numbers/bools, `*Version`/`*Note`/`*Limit`/`*Seconds`
   suffixes) for diagnostics. Default output is a timestamped zip in the cwd; `--output` overrides.
   Tests: `OperatorToolingTests` (marker secret never appears; knobs preserved; embedded-credential
-  masking; empty-secret preservation). **DB metrics are file-level only** (no SQLite dependency added);
-  row-count/migration-version surfacing is deferred to Phase 3 (P2.3).
+  masking; empty-secret preservation). **The support-bundle's DB metrics are file-level only** (path/
+  size/mtime — the bundle does not open SQLite); row-count/migration-version surfacing is deferred to
+  Phase 3 (P2.3). (Phase 2's backup later added `Microsoft.Data.Sqlite` to the App project for a
+  read-only catalog-version read, but the support bundle does not use it.)
 - [x] **P1.3 Implement `etl-sql init`.**
   Scaffold a starter configuration + first script, idempotent and safe to re-run.
   *(done)* New `InitScaffolder` writes `appsettings.json` (minimal valid config + freshly generated
