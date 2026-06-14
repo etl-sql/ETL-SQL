@@ -1,4 +1,4 @@
-﻿# XMLFOREST
+# XMLFOREST
 Constructs an XML forest (a sequence of XML elements) from the provided arguments.
 
 **Category:** XML
@@ -18,3 +18,6 @@ SELECT XMLFOREST('John' AS FirstName, 'Doe' AS LastName); -- â†’ '<FirstNam
 
 ## See Also
 - Related: [XMLELEMENT](XMLELEMENT.md), [XMLATTRIBUTES](XMLATTRIBUTES.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

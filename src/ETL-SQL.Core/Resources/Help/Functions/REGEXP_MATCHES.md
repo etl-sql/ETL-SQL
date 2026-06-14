@@ -1,4 +1,4 @@
-﻿# REGEXP_MATCHES
+# REGEXP_MATCHES
 Table-valued function that returns a table of all regex matches in a string.
 
 **Category:** Regex
@@ -18,3 +18,6 @@ SELECT * FROM REGEXP_MATCHES('apple, banana, cherry', '\w+');
 
 ## See Also
 - Related: [REGEXP_SUBSTR](REGEXP_SUBSTR.md), [REGEXP_SPLIT_TO_TABLE](REGEXP_SPLIT_TO_TABLE.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

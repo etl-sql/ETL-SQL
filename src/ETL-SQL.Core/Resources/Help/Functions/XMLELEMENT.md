@@ -1,4 +1,4 @@
-﻿# XMLELEMENT
+# XMLELEMENT
 Constructs an XML element with the specified name, optional attributes, and element content.
 
 **Category:** XML
@@ -16,3 +16,6 @@ SELECT XMLELEMENT('Emp', XMLATTRIBUTES('true' AS active), 'Jane');
 
 ## See Also
 - Related: [XMLATTRIBUTES](XMLATTRIBUTES.md), [XMLFOREST](XMLFOREST.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

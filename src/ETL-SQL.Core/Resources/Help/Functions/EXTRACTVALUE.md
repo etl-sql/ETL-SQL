@@ -1,4 +1,4 @@
-﻿# EXTRACTVALUE
+# EXTRACTVALUE
 Extracts a scalar value from an XML string using an XPath expression. Alias for XMLVALUE.
 
 **Category:** XML
@@ -15,3 +15,6 @@ SELECT EXTRACTVALUE('<user><name>Alice</name></user>', '/user/name'); -- â†�
 
 ## See Also
 - Related: [XMLVALUE](XMLVALUE.md), [XMLQUERY](XMLQUERY.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

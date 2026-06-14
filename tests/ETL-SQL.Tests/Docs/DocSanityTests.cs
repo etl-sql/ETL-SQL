@@ -164,17 +164,36 @@ namespace ETL_SQL.Tests.Docs
             Assert.True(File.Exists(syntaxIndexPath), $"Missing: {syntaxIndexPath}");
 
             var missing = new List<string>();
+            int helpColumnIndex = -1;
+
             foreach (var (line, lineNo) in File.ReadLines(syntaxIndexPath).Select((line, i) => (line, i + 1)))
             {
-                if (!line.StartsWith('|') || line.Contains(":---") || line.Contains("Help File"))
+                if (!line.StartsWith('|'))
+                {
+                    helpColumnIndex = -1;
+                    continue;
+                }
+
+                if (line.Contains(":---"))
                     continue;
 
                 var cells = line.Split('|').Select(c => c.Trim()).ToArray();
-                if (cells.Length < 5)
+
+                if (line.Contains("Help File", StringComparison.OrdinalIgnoreCase) || line.Contains("Help", StringComparison.OrdinalIgnoreCase))
+                {
+                    helpColumnIndex = Array.FindIndex(cells, c => 
+                        c.Equals("Help File", StringComparison.OrdinalIgnoreCase) || 
+                        c.Equals("Help", StringComparison.OrdinalIgnoreCase) || 
+                        c.Equals("Help File/Docs", StringComparison.OrdinalIgnoreCase) || 
+                        c.Equals("Help File / Docs", StringComparison.OrdinalIgnoreCase));
+                    continue;
+                }
+
+                if (helpColumnIndex == -1 || helpColumnIndex >= cells.Length)
                     continue;
 
-                var helpCell = cells[4];
-                if (helpCell == "-" || helpCell.Equals("N/A", StringComparison.OrdinalIgnoreCase))
+                var helpCell = cells[helpColumnIndex];
+                if (string.IsNullOrEmpty(helpCell) || helpCell == "-" || helpCell.Equals("N/A", StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 foreach (Match match in Regex.Matches(helpCell, @"\]\(([^)#]+)(?:#[^)]+)?\)"))

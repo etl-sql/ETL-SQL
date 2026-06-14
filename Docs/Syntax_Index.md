@@ -665,7 +665,7 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 
 Options available when creating or altering engine and report objects.
 
-### 6.1 CREATE CONNECTION
+### 7.1 CREATE CONNECTION
 ```sql
 CREATE CONNECTION name AS <Provider>( ... )
 ```
@@ -686,7 +686,7 @@ CREATE CONNECTION name AS <Provider>( ... )
 | `PASSPHRASE` | Keyfile decryption password | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 | `SSL_MODE` | Postgres SSL behavior | [Data_Connectors.md](../Docs/Reference/Data_Connectors.md) |
 
-### 6.2 CREATE TABLE
+### 7.2 CREATE TABLE
 ```sql
 CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 ```
@@ -700,7 +700,7 @@ CREATE TABLE name ( col type [OPTIONS], ... ) [WITH ( ... )]
 | `DEFAULT expr` | Column | Default value expression |
 | `REFERENCES tbl(col)`| Column/Table | Foreign key constraint |
 
-### 6.3 CREATE JOB
+### 7.3 CREATE JOB
 ```sql
 CREATE JOB name ON SCHEDULE EVERY n unit [AT 'time'] [WITH (option = value, ...)] AS statement
 ```
@@ -710,7 +710,7 @@ CREATE JOB name ON SCHEDULE EVERY n unit [AT 'time'] [WITH (option = value, ...)
 | `RETRY_DELAY` | 30 | Delay between retries in seconds (integer) |
 | `RETRY_DELAY_SECONDS` | 30 | Alias for RETRY_DELAY |
 
-### 6.4 CREATE SSH_KEY_PAIR / PGP_KEY_PAIR
+### 7.4 CREATE SSH_KEY_PAIR / PGP_KEY_PAIR
 ```sql
 CREATE SSH_KEY_PAIR name WITH ( ... )
 ```
@@ -722,7 +722,7 @@ CREATE SSH_KEY_PAIR name WITH ( ... )
 | `IDENTITY` | NULL | PGP User ID |
 | `COMMENT` | NULL | Metadata comment |
 
-### 6.5 CREATE DATASET
+### 7.5 CREATE DATASET
 ```sql
 CREATE DATASET &name [OPTIONS] AS SELECT ...
 ```
@@ -736,7 +736,7 @@ CREATE DATASET &name [OPTIONS] AS SELECT ...
 | `KEYFILE` | `KEYFILE = '...'` | Encryption key path |
 | `ACCESS` | `ACCESS = PUBLIC/PRIVATE` | Portal visibility level |
 
-### 6.6 CREATE VISUAL / BUTTON
+### 7.6 CREATE VISUAL / BUTTON
 ```sql
 CREATE VISUAL name AS <Type> ( ... )
 ```
@@ -782,7 +782,7 @@ Common `OPTIONS` keys for report visuals:
 | `DELTA_FORMAT` | `CARD` | .NET format string | Numeric format for the delta display |
 | `DELTA_LABEL` | `CARD` | String | Label shown next to the delta |
 
-### 6.7 CREATE PAGE / CONTAINER
+### 7.7 CREATE PAGE / CONTAINER
 ```sql
 CREATE PAGE name AS DASHBOARD|PAGINATED ( ... )
 CREATE CONTAINER name AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER|LAYER ( ... )
@@ -802,7 +802,7 @@ CREATE CONTAINER name AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER|
 | `PAGINATED` | Page mode | Stages prompt changes until an `APPLY_PARAMETERS` run |
 | `LAYER` | Container type | Stacks mapped visuals/containers in the same region; use `STYLE (Z_INDEX = n)` for explicit ordering |
 
-### 6.8 CREATE NAVIGATION
+### 7.8 CREATE NAVIGATION
 ```sql
 CREATE NAVIGATION name AS <Type> ( ... )
 ```
@@ -1067,31 +1067,31 @@ Combine result sets from multiple `SELECT` statements.
 
 Standard clauses available within a `SELECT` statement.
 
-| Clause | Description | Documentation |
-| :--- | :--- | :--- |
-| `DISTINCT` | Returns only unique rows | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `TOP (n)` | Limits results (MSSQL style) | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `LIMIT n` | Limits results (Postgres style) | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `OFFSET n` | Skips first N rows | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](../Docs/Reference/Grammar.md#53-top--limit--offset-fetch) |
-| `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](../Docs/Reference/Grammar.md#54-values-table-constructor) |
-| `GROUP BY` | Aggregates rows by column values | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ORDER BY` | Sorts the final result set | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md) |
-| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `QUALIFY` | Filters results of window functions | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ILIKE` | Case-insensitive pattern match | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `~` / `~*` | Regex match / case-insensitive regex match | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `CASE` | Start of conditional expression | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `WHEN / THEN` | Conditional branch | [Grammar.md](../Docs/Reference/Grammar.md) |
-| `ELSE / END` | Fallback and termination of CASE | [Grammar.md](../Docs/Reference/Grammar.md) |
+| Clause | Description | Documentation | Help File |
+| :--- | :--- | :--- | :--- |
+| `DISTINCT` | Returns only unique rows | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `TOP (n)` | Limits results (MSSQL style) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `LIMIT n` | Limits results (Postgres style) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `OFFSET n` | Skips first N rows | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](../Docs/Reference/Grammar.md#53-top--limit--offset-fetch) | - |
+| `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](../Docs/Reference/Grammar.md#54-values-table-constructor) | - |
+| `GROUP BY` | Aggregates rows by column values | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ORDER BY` | Sorts the final result set | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `QUALIFY` | Filters results of window functions | [Grammar.md](../Docs/Reference/Grammar.md#511-qualify-filter-window-results) | [QUALIFY.md](../src/ETL-SQL.Core/Resources/Help/Keywords/QUALIFY.md) |
+| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](../Docs/Reference/Grammar.md#5101-filter-conditional-aggregation) | [FILTER.md](../src/ETL-SQL.Core/Resources/Help/Keywords/FILTER.md) |
+| `ILIKE` | Case-insensitive pattern match | [Grammar.md](../Docs/Reference/Grammar.md#8-logical-operators-filter-predicates) | [ILIKE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/ILIKE.md) |
+| `~` / `~*` | Regex match / case-insensitive regex match | [Grammar.md](../Docs/Reference/Grammar.md#8-logical-operators-filter-predicates) | - |
+| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `CASE` | Start of conditional expression | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
+| `WHEN / THEN` | Conditional branch | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
+| `ELSE / END` | Fallback and termination of CASE | [Grammar.md](../Docs/Reference/Grammar.md) | [CASE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CASE.md) |
 
 ---
 
@@ -1099,11 +1099,11 @@ Standard clauses available within a `SELECT` statement.
 
 Operators that transform the shape of a table in the `FROM` clause.
 
-| Operator | Syntax | Description |
-| :--- | :--- | :--- |
-| `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns |
-| `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows |
-| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences |
+| Operator | Syntax | Description | Documentation | Help File |
+| :--- | :--- | :--- | :--- | :--- |
+| `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns | [Grammar.md](../Docs/Reference/Grammar.md#58-pivot--unpivot) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [Grammar.md](../Docs/Reference/Grammar.md#58-pivot--unpivot) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
 
 ---
 
@@ -1144,11 +1144,11 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 ---
 
 <!-- BEGIN GENERATED CANONICAL TOKEN INDEX -->
-## 18. Canonical Token Inventory
+## 19. Canonical Token Inventory
 
 > Generated from `src/ETL-SQL.Core/Common/LanguageMetadata.cs`. Run `node ./scripts/generate-syntax-index.js` after adding, removing, or renaming language tokens.
 
-### 18.1 DML Keywords
+### 19.1 DML Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1194,7 +1194,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VALUES` | DML | Canonical language token |
 | `WHERE` | DML | Canonical language token |
 
-### 18.2 DDL Keywords
+### 19.2 DDL Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1244,7 +1244,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VIEWS` | DDL | Canonical language token |
 | `VISUAL` | DDL | Canonical language token |
 
-### 18.3 Control Flow Keywords
+### 19.3 Control Flow Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1274,7 +1274,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `WHEN` | Control Flow | Canonical language token |
 | `WHILE` | Control Flow | Canonical language token |
 
-### 18.4 Join Keywords
+### 19.4 Join Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1293,7 +1293,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `RIGHT` | Join | Canonical language token |
 | `UNION` | Join | Canonical language token |
 
-### 18.5 Operator Keywords
+### 19.5 Operator Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1309,7 +1309,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `NULL` | Operator | Canonical language token |
 | `OR` | Operator | Canonical language token |
 
-### 18.6 Settings & Engine Configuration Keywords
+### 19.6 Settings & Engine Configuration Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1352,7 +1352,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `WHAT_IF` | Settings & Engine Configuration | Canonical language token |
 | `WINDOW_SPILL_THRESHOLD` | Settings & Engine Configuration | Canonical language token |
 
-### 18.7 File & Directory Operations Keywords
+### 19.7 File & Directory Operations Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1385,7 +1385,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `RENAME_FILE` | File & Directory Operations | Canonical language token |
 | `ROOT` | File & Directory Operations | Canonical language token |
 
-### 18.8 Data Formatting & File Connector Options Keywords
+### 19.8 Data Formatting & File Connector Options Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1417,7 +1417,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `UTF16` | Data Formatting & File Connector Options | Canonical language token |
 | `WITHOUT_ARRAY_WRAPPER` | Data Formatting & File Connector Options | Canonical language token |
 
-### 18.9 Security & Secrets Keywords
+### 19.9 Security & Secrets Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1431,7 +1431,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `SHOW_PASSWORD` | Security & Secrets | Canonical language token |
 | `SHOW_SECRETS` | Security & Secrets | Canonical language token |
 
-### 18.10 Reporting & Visuals Keywords
+### 19.10 Reporting & Visuals Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1535,7 +1535,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VISIBLE` | Reporting & Visuals | Canonical language token |
 | `WATERFALL` | Reporting & Visuals | Canonical language token |
 
-### 18.11 Date & Time Keywords
+### 19.11 Date & Time Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1551,7 +1551,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `SYSDATE` | Date & Time | Canonical language token |
 | `YEAR` | Date & Time | Canonical language token |
 
-### 18.12 Email Operations Keywords
+### 19.12 Email Operations Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1567,7 +1567,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `SMTP` | Email Operations | Canonical language token |
 | `SUBJECT` | Email Operations | Canonical language token |
 
-### 18.13 Script & Job Execution Keywords
+### 19.13 Script & Job Execution Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1594,7 +1594,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `WAIT` | Script & Job Execution | Canonical language token |
 | `WAITFOR` | Script & Job Execution | Canonical language token |
 
-### 18.14 Portal Administration Keywords
+### 19.14 Portal Administration Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1634,7 +1634,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VIEW` | Portal Administration | Canonical language token |
 | `VIEWS` | Portal Administration | Canonical language token |
 
-### 18.15 XML, JSON & Query Modifiers Keywords
+### 19.15 XML, JSON & Query Modifiers Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1676,7 +1676,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `WITHIN` | XML, JSON & Query Modifiers | Canonical language token |
 | `ZONE` | XML, JSON & Query Modifiers | Canonical language token |
 
-### 18.16 General Keywords
+### 19.16 General Keywords
 
 | Token | Family | Notes |
 | :--- | :--- | :--- |
@@ -1773,7 +1773,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VERIFY` | General | Canonical language token |
 | `ZONES` | General | Canonical language token |
 
-### 18.17 Connector Types
+### 19.17 Connector Types
 
 | Token | Group | Notes |
 | :--- | :--- | :--- |
@@ -1807,7 +1807,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `SQLITE` | Connector | Canonical connector token |
 | `XML` | Connector | Canonical connector token |
 
-### 18.18 Built-in Functions
+### 19.18 Built-in Functions
 
 | Token | Group | Notes |
 | :--- | :--- | :--- |
@@ -1989,7 +1989,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `XMLTABLE` | Function | Canonical built-in function |
 | `XMLVALUE` | Function | Canonical built-in function |
 
-### 18.19 Data Types
+### 19.19 Data Types
 
 | Token | Group | Notes |
 | :--- | :--- | :--- |
@@ -2048,7 +2048,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VECTOR` | Type | Canonical data type token |
 | `XML` | Type | Canonical data type token |
 
-### 18.20 Standard Tags
+### 19.20 Standard Tags
 
 | Token | Group | Notes |
 | :--- | :--- | :--- |
@@ -2079,3 +2079,4 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `@trusted` | Tag | Standard governance tag |
 | `@unit` | Tag | Standard governance tag |
 <!-- END GENERATED CANONICAL TOKEN INDEX -->
+

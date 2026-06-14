@@ -1,4 +1,4 @@
-﻿# GET_TAGS
+# GET_TAGS
 Table-valued function that returns a table of metadata tag names defined on a table or column.
 
 **Category:** Lineage & Metadata
@@ -18,3 +18,6 @@ SELECT * FROM GET_TAGS('Customers', 'SSN');
 
 ## See Also
 - Related: [GET_TAG_VALUE](GET_TAG_VALUE.md), [HAS_TAG](HAS_TAG.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

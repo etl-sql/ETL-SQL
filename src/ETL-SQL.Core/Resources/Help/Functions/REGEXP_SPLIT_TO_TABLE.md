@@ -1,4 +1,4 @@
-﻿# REGEXP_SPLIT_TO_TABLE
+# REGEXP_SPLIT_TO_TABLE
 Table-valued function that splits a string into a table using a regular expression separator.
 
 **Category:** Regex
@@ -18,3 +18,6 @@ SELECT * FROM REGEXP_SPLIT_TO_TABLE('a, b; c', '[,;]\s*');
 
 ## See Also
 - Related: [STRING_SPLIT](STRING_SPLIT.md), [REGEXP_MATCHES](REGEXP_MATCHES.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

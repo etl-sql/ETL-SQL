@@ -1,4 +1,4 @@
-﻿# JSON_TABLE
+# JSON_TABLE
 Table-valued function that projects a tabular schema from nested JSON rows.
 
 **Category:** JSON
@@ -16,3 +16,6 @@ SELECT * FROM JSON_TABLE('[{"id":1},{"id":2}]', '$' COLUMNS (id INT PATH '$.id')
 
 ## See Also
 - Related: [OPENJSON](OPENJSON.md), [JSON_QUERY](JSON_QUERY.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

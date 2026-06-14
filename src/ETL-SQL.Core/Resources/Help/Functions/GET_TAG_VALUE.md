@@ -1,4 +1,4 @@
-﻿# GET_TAG_VALUE
+# GET_TAG_VALUE
 Retrieves the metadata tag value assigned to a specific table or column.
 
 **Category:** Lineage & Metadata
@@ -25,3 +25,6 @@ SELECT GET_TAG_VALUE('Customers', 'SSN', 'PII_LEVEL'); -- â†’ 'High'
 
 ## See Also
 - Related: [GET_TAGS](GET_TAGS.md), [HAS_TAG](HAS_TAG.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

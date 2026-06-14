@@ -1,4 +1,4 @@
-﻿# DATETIMEOFFSETSFROMPARTS
+# DATETIMEOFFSETSFROMPARTS
 Constructs a DATETIMEOFFSET value from individual date, time, and timezone offset components.
 
 **Category:** Date & Time
@@ -18,3 +18,6 @@ SELECT DATETIMEOFFSETSFROMPARTS(2026, 6, 12, 14, 30, 0, 0, -5, 0, 0); -- â†�
 
 ## See Also
 - Related: [DATETIMEFROMPARTS](DATETIMEFROMPARTS.md), [TIMEFROMPARTS](TIMEFROMPARTS.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

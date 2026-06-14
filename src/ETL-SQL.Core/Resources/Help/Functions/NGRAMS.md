@@ -1,4 +1,4 @@
-﻿# NGRAMS
+# NGRAMS
 Table-valued function that returns a table of N-character grams from a string. Used with UNNEST for inverted-index blocking.
 
 **Category:** Fuzzy Matching
@@ -24,3 +24,6 @@ SELECT * FROM NGRAMS('hello', 2); -- â†’ 'he', 'el', 'll', 'lo'
 
 ## See Also
 - Related: [NGRAM_TOKENS](NGRAM_TOKENS.md), [SIMILARITY](SIMILARITY.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

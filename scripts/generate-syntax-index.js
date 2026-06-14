@@ -175,7 +175,7 @@ function renderGeneratedSection(data) {
   }
 
   const parts = [
-    '## 18. Canonical Token Inventory',
+    '## 19. Canonical Token Inventory',
     '',
     '> Generated from `src/ETL-SQL.Core/Common/LanguageMetadata.cs`. Run `node ./scripts/generate-syntax-index.js` after adding, removing, or renaming language tokens.',
     ''
@@ -184,7 +184,7 @@ function renderGeneratedSection(data) {
   let nextIndex = 1;
   for (const [label, tokens] of families) {
     const sortedTokens = [...tokens].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
-    parts.push(`### 18.${nextIndex} ${label}`);
+    parts.push(`### 19.${nextIndex} ${label}`);
     parts.push('');
     parts.push('| Token | Family | Notes |');
     parts.push('| :--- | :--- | :--- |');
@@ -202,7 +202,7 @@ function renderGeneratedSection(data) {
 
   for (const [title, tokens, family, note] of sections) {
     const sortedTokens = [...tokens].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
-    parts.push(`### 18.${nextIndex} ${title}`);
+    parts.push(`### 19.${nextIndex} ${title}`);
     parts.push('');
     parts.push('| Token | Group | Notes |');
     parts.push('| :--- | :--- | :--- |');

@@ -1,4 +1,4 @@
-﻿# DMETAPHONE_ALT
+# DMETAPHONE_ALT
 Returns the alternate Double Metaphone phonetic key for a string.
 
 **Category:** Fuzzy Matching
@@ -23,3 +23,6 @@ SELECT DMETAPHONE_ALT('Schmidt'); -- â†’ 'XMT'
 
 ## See Also
 - Related: [DMETAPHONE](DMETAPHONE.md), [METAPHONE](METAPHONE.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

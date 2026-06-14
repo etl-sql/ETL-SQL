@@ -1,4 +1,4 @@
-﻿# JSON_OBJECT
+# JSON_OBJECT
 Constructs a JSON object string from a list of key-value pairs.
 
 **Category:** JSON
@@ -18,3 +18,6 @@ SELECT JSON_OBJECT('name', 'Alice', 'active', true); -- â†’ '{"name":"Alice
 
 ## See Also
 - Related: [JSON_ARRAY](JSON_ARRAY.md), [JSON_VALUE](JSON_VALUE.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

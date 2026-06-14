@@ -1,4 +1,4 @@
-﻿# DATALENGTH
+# DATALENGTH
 Returns the number of bytes used to represent an expression.
 
 **Category:** String / System
@@ -18,3 +18,6 @@ SELECT DATALENGTH('hello'); -- â†’ 5 (ASCII/UTF8)
 
 ## See Also
 - Related: [LEN](LEN.md), [CHAR_LENGTH](CHAR_LENGTH.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

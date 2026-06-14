@@ -1,4 +1,4 @@
-﻿# XMLTABLE
+# XMLTABLE
 Table-valued function that projects rows from XML data using XPath expressions.
 
 **Category:** XML
@@ -16,3 +16,6 @@ SELECT * FROM XMLTABLE('<root><row><id>1</id><name>A</name></row></root>', '/roo
 
 ## See Also
 - Related: [XMLVALUE](XMLVALUE.md), [XMLQUERY](XMLQUERY.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

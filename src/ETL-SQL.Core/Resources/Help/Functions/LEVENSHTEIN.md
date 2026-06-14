@@ -1,4 +1,4 @@
-﻿# LEVENSHTEIN
+# LEVENSHTEIN
 Computes the Levenshtein distance (edit distance) between two strings.
 
 **Category:** Fuzzy Matching
@@ -18,3 +18,6 @@ SELECT LEVENSHTEIN('kitten', 'sitting'); -- â†’ 3
 
 ## See Also
 - Related: [SIMILARITY](SIMILARITY.md), [SOUNDEX](SOUNDEX.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

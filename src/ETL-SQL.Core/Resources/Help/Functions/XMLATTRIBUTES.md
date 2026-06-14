@@ -1,4 +1,4 @@
-﻿# XMLATTRIBUTES
+# XMLATTRIBUTES
 Generates XML attributes from the provided name-value expressions. Used inside XMLELEMENT.
 
 **Category:** XML
@@ -16,3 +16,6 @@ SELECT XMLELEMENT('Customer', XMLATTRIBUTES('123' AS id), 'John Doe');
 
 ## See Also
 - Related: [XMLELEMENT](XMLELEMENT.md), [XMLFOREST](XMLFOREST.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

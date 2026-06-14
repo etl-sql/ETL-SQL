@@ -1,4 +1,4 @@
-﻿# SYSDATE
+# SYSDATE
 Returns the current date and time of the system hosting the ETL-SQL engine. Oracle compatibility alias.
 
 **Category:** Date & Time
@@ -18,3 +18,6 @@ SELECT SYSDATE(); -- â†’ '2026-06-12 19:32:14'
 
 ## See Also
 - Related: [GETDATE](GETDATE.md), [NOW](NOW.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

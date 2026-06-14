@@ -1,4 +1,4 @@
-﻿# RELDATE
+# RELDATE
 Resolves a relative date expression string into a standard DATETIME value.
 
 **Category:** Date & Time
@@ -23,3 +23,6 @@ SELECT RELDATE('D-7'); -- â†’ Seven days ago
 
 ## See Also
 - Related: [GETDATE](GETDATE.md), [NOW](NOW.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

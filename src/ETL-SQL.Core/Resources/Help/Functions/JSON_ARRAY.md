@@ -1,4 +1,4 @@
-﻿# JSON_ARRAY
+# JSON_ARRAY
 Constructs a JSON array string from a list of values.
 
 **Category:** JSON
@@ -18,3 +18,6 @@ SELECT JSON_ARRAY(10, 'sales', true); -- â†’ '[10, "sales", true]'
 
 ## See Also
 - Related: [JSON_OBJECT](JSON_OBJECT.md), [JSON_VALUE](JSON_VALUE.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)

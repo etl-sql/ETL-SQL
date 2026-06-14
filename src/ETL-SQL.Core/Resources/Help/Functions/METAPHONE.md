@@ -1,4 +1,4 @@
-﻿# METAPHONE
+# METAPHONE
 Returns the English phonetic code (Metaphone key) of a string.
 
 **Category:** Fuzzy Matching
@@ -23,3 +23,6 @@ SELECT METAPHONE('Jackson'); -- â†’ 'JKSN'
 
 ## See Also
 - Related: [SOUNDEX](SOUNDEX.md), [DMETAPHONE](DMETAPHONE.md)
+
+References:
+- [Standard Library](../../../../../Docs/Reference/Standard_Library.md)
