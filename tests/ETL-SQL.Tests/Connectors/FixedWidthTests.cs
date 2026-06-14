@@ -143,6 +143,90 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
+        public async Task TestFixedWidthWithIntegerPrecision()
+        {
+            string fwFile = "FWTest_IntPrecision.txt";
+            // ID: INT(5) => width = 6 (5 digits + 1 sign). Val: VARCHAR(10) => width = 10. Total line length = 16.
+            await File.WriteAllTextAsync(fwFile, "-12345Chuck     \n 12345Bob       ");
+
+            try
+            {
+                var schema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("ID", "INT(5)", false),
+                    new ColumnDefinition("Val", "VARCHAR(10)", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "FORMAT", "FIXED" },
+                    { "HEADER", "OFF" }
+                };
+
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options, schema);
+                var batches = await ds.ReadBatches().ToListAsync();
+
+                Assert.Single(batches);
+                Assert.Equal(2, batches[0].Rows.Count);
+
+                var row1 = batches[0].Rows[0];
+                Assert.Equal("-12345", row1["ID"]?.ToString());
+                Assert.Equal("Chuck", row1["Val"]?.ToString());
+
+                var row2 = batches[0].Rows[1];
+                Assert.Equal("12345", row2["ID"]?.ToString());
+                Assert.Equal("Bob", row2["Val"]?.ToString());
+
+                // Test write/export
+                string outFile = "FWTest_IntPrecision_Out.txt";
+                try
+                {
+                    var outDs = new FlatFileDataSource(SystemExecutionContext.Instance, outFile, options, schema);
+                    await outDs.WriteBatches(batches.ToAsyncEnumerable());
+
+                    var lines = await File.ReadAllLinesAsync(outFile);
+                    Assert.Equal(2, lines.Length);
+                    Assert.Equal("-12345Chuck     ", lines[0]);
+                    Assert.Equal("12345 Bob       ", lines[1]);
+                }
+                finally { if (File.Exists(outFile)) File.Delete(outFile); }
+            }
+            finally { if (File.Exists(fwFile)) File.Delete(fwFile); }
+        }
+
+        [Fact]
+        public async Task TestFixedWidthIntegerOverflow()
+        {
+            var schema = new List<ColumnDefinition>
+            {
+                new ColumnDefinition("ID", "INT(5)", false)
+            };
+
+            var options = new Dictionary<string, string>
+            {
+                { "FORMAT", "FIXED" },
+                { "HEADER", "OFF" }
+            };
+
+            var batch = new DataTable();
+            batch.SetColumns(new[] { "ID" });
+            
+            // 6 digits is overflow for INT(5) (ignoring negative sign)
+            var row = batch.NewRow();
+            row["ID"] = "-123456";
+            await batch.AddRowAsync(row);
+
+            string outFile = "FWTest_IntOverflow_Out.txt";
+            try
+            {
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, outFile, options, schema);
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() => ds.WriteBatches(new[] { batch }.ToAsyncEnumerable()));
+                Assert.Contains("exceeds the declared INT(5) field width", ex.Message);
+            }
+            finally { if (File.Exists(outFile)) File.Delete(outFile); }
+        }
+
+        [Fact]
         public async Task TestFixedWidthMissingTemplateThrows()
         {
             string fwFile = "FWTest_Fail.txt";

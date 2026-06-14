@@ -246,7 +246,8 @@ namespace ETL_SQL.Connectors.FlatFile
             if (!match.Success) return null;
 
             var baseType = match.Groups[1].Value;
-            var hasPrec = match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out var prec);
+            int prec = 0;
+            var hasPrec = match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out prec);
 
             // Priority 2: integer type with declared digit count — physical width = digits + 1 sign slot
             if (IsIntegerType(baseType) && hasPrec)

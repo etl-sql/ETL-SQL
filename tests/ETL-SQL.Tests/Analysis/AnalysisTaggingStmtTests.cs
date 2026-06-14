@@ -174,5 +174,33 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.Equal("TeamA", script.Metadata["owner"]);
             Assert.Equal("3.0", script.Metadata["version"]);
         }
+
+        [Fact]
+        public async Task CreateTable_SeedsInlineColumnTags()
+        {
+            var eval = NewEval();
+            var script = TestHelpers.Parse(@"
+                CREATE TABLE #tagged_table (
+                    Id INT NOT NULL PRIMARY KEY /*@d: The unique ID; @owner: sales*/,
+                    Name VARCHAR(100)           /*@pii: true*/
+                );
+                SHOW TAGS FOR TABLE #tagged_table COLUMN Id;
+            ");
+            await eval.Evaluate(script);
+
+            Assert.NotNull(eval.LastResult);
+            var idTags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            Assert.Contains("d", idTags.Keys);
+            Assert.Equal("The unique ID", idTags["d"]);
+            Assert.Contains("owner", idTags.Keys);
+            Assert.Equal("sales", idTags["owner"]);
+
+            var showNameTags = TestHelpers.Parse("SHOW TAGS FOR TABLE #tagged_table COLUMN Name;");
+            await eval.Evaluate(showNameTags);
+            Assert.NotNull(eval.LastResult);
+            var nameTags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            Assert.Contains("pii", nameTags.Keys);
+            Assert.Equal("true", nameTags["pii"]);
+        }
     }
 }
