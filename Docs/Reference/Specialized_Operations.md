@@ -364,9 +364,9 @@ ETL-SQL natively tracks the ancestry and lineage of every transformation via met
 
 ### 4.1 Applying Tags (Inline Comment Syntax)
 
-Tags are embedded directly in SQL using `/* @key: value; */` comment blocks.
+Tags are embedded directly in SQL using `/* @key: value; */` comment blocks. They are supported in two locations:
 
-**Column tags** — placed after a column expression in a `SELECT` list:
+**Column tags in a `SELECT` list** — placed after the column expression:
 ```sql
 SELECT
     UserId   /* @d: Internal user ID; @PII: true; */,
@@ -375,16 +375,45 @@ INTO #TaggedUsers
 FROM m.Users /* @sensitivity: high; */;
 ```
 
-**Fixed-width width declarations** (special tag for `FORMAT=FIXED` connectors):
+**Column tags in a `CREATE TABLE` definition** — placed after the data type. All standard tags are supported:
 ```sql
-CREATE TABLE #Layout (
-    ID   INT          /* @width: 5 */,
-    Name VARCHAR(20),           -- Width inferred from VARCHAR(20)
-    Code CHAR(3)
+CREATE TABLE #users (
+    UserId   INT          NOT NULL PRIMARY KEY /* @d: Internal user ID; @PII: true; */,
+    UserName VARCHAR(200)                      /* @d: Full display name; @owner: SecurityTeam; */,
+    Email    VARCHAR(200)                      /* @pii: true; @classification: confidential; */
 );
 ```
 
+Tags declared in `CREATE TABLE` are seeded into the lineage tracker at table creation time and inherit onto any column derived from this table in a later `SELECT`.
+
 `@d:` is the reserved description tag, displayed in IDE hover and lineage reports.
+
+#### Fixed-Width Layout Columns (`FORMAT=FIXED`)
+
+When a `CREATE TABLE` is used as a layout template for a `FORMAT=FIXED` flat-file connection, the engine needs a character width for each column. The resolution order is:
+
+| Form | Physical slot width | Use when |
+| :--- | :--- | :--- |
+| `CHAR(N)` / `VARCHAR(N)` | N characters | Character data — N is the exact field width |
+| `INT(N)` / `BIGINT(N)` etc. | N+1 characters | Integer data — N is the number of significant digit characters; the extra slot holds the sign, giving the range −(10ⁿ−1) to (10ⁿ−1) |
+| `/* @width: N */` | N characters (exact) | Any column where the type carries no natural length; N is the raw physical character count |
+
+```sql
+CREATE TABLE #Layout (
+    ID       INT(5),       -- 5 digits + 1 sign = 6-char slot; range -99999 to 99999
+    Amount   DECIMAL(9,2), -- 9-char slot (precision digits)
+    Code     CHAR(3),      -- 3-char slot (exact)
+    Name     VARCHAR(20),  -- 20-char slot (exact)
+    RawFlag  INT /* @width: 1 */  -- 1-char slot (explicit override, no sign padding)
+);
+```
+
+> [!NOTE]
+> `INT` without a precision parameter has no inherent length and will cause a "Width not defined" error. Use `INT(N)`, `CHAR(N)`, `VARCHAR(N)`, or `/* @width: N */` for every column in a `FORMAT=FIXED` layout.
+
+> [!TIP]
+> The overflow error for an integer field declares the range explicitly:
+> *"Row 1: Column 'ID' value '123456' exceeds the declared INT(5) field width (max 5 digits, range -99999 to 99999)"*
 
 ### 4.2 Script Metadata Headers
 Scripts can define global metadata in a comment block at the very top of the file. This metadata is captured by the engine and automatically recorded in every lineage entry produced by the script.

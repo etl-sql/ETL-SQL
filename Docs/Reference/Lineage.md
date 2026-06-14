@@ -51,9 +51,17 @@ ETL-SQL lineage is complete and accurate for everything the *script* does. The l
 
 ## Attaching Tags
 
-Tags are attached inline using `/* @tagname: value; */` comments placed immediately after a column reference or table reference in a SELECT statement.
+Tags are attached inline using `/* @tagname: value; */` comments in three contexts:
 
-### Column-Level Tags
+| Context | Where the comment goes | When tags become active |
+| :--- | :--- | :--- |
+| **SELECT column** | After a column expression in a SELECT list | Immediately at query execution |
+| **FROM table reference** | After the table name in a FROM clause | Immediately at query execution; applies to all columns read from that table |
+| **CREATE TABLE column** | After the data type in a column definition | When the table is created; inherited by any SELECT that reads from it |
+
+### SELECT Column Tags
+
+Place the tag immediately after the column expression (or its alias) in the SELECT list:
 
 ```sql
 SELECT
@@ -64,6 +72,22 @@ SELECT
 FROM #customers
 INTO #customer_report;
 ```
+
+### CREATE TABLE Column Tags
+
+Place the tag immediately after the data type in a `CREATE TABLE` column definition. All standard tags are supported — not just `@d`. The tags are seeded into the lineage tracker when the table is created, so they inherit onto any column derived from this table in a later SELECT.
+
+```sql
+CREATE TABLE #customers (
+    id          INT           NOT NULL PRIMARY KEY /*@d: Surrogate key; @nullable: false*/,
+    email       VARCHAR(200)  NOT NULL             /*@pii: true; @classification: confidential; @d: Primary contact email*/,
+    region      VARCHAR(50)                        /*@d: Sales region; @owner: sales_ops*/,
+    created_at  DATETIME                           /*@d: Row insert timestamp; @unit: UTC*/
+);
+```
+
+> [!NOTE]
+> Tags in `CREATE TABLE` behave identically to `CREATE TAG` — they are stored in the lineage tracker and visible to `SHOW TAGS`, `SHOW LINEAGE`, and `LINEAGE_TAG()` immediately after the statement executes. They do not require a separate `TAG ... WITH()` statement.
 
 ### Table-Level Tags
 

@@ -1602,14 +1602,25 @@ TRUNCATE TABLE staging.Daily_Import;
 ## 10. DDL (Data Definition Language)
 
 ### 10.1 `CREATE TABLE`
+
+Column definitions support inline `/* @tag: value; */` metadata comments placed after the data type (and after the column constraints). These tags are treated identically to `CREATE TAG` — they are seeded into the lineage tracker when the statement executes.
+
 ```sql
 CREATE TABLE #OrderItems (
-    OrderId    INT           IDENTITY PRIMARY KEY,
-    LineItem   INT           NOT NULL,
-    Amount     DECIMAL(18,2) NOT NULL CHECK(Amount >= 0),
-    Status     VARCHAR(20)   DEFAULT 'Pending',
-    CustomerId INT           REFERENCES Customers(Id),
+    OrderId    INT           IDENTITY PRIMARY KEY  /*@d: Surrogate key*/,
+    LineItem   INT           NOT NULL              /*@d: Line position within the order*/,
+    Amount     DECIMAL(18,2) NOT NULL CHECK(Amount >= 0) /*@unit: USD; @d: Line item gross amount*/,
+    Status     VARCHAR(20)   DEFAULT 'Pending'    /*@d: Fulfillment status; @example: Shipped*/,
+    CustomerId INT           REFERENCES Customers(Id) /*@d: FK to customer; @owner: sales_ops*/,
     CONSTRAINT UQ_Line UNIQUE (OrderId, LineItem)
+);
+```
+
+Tags may also be placed **before** column constraints, immediately after the data type:
+
+```sql
+CREATE TABLE #users (
+    Email VARCHAR(200) /*@pii: true; @classification: confidential*/ NOT NULL UNIQUE
 );
 ```
 

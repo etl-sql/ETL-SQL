@@ -46,7 +46,14 @@ namespace ETL_SQL.Connectors.FlatFile
         {
             public string Name { get; set; } = "";
             public int Start { get; set; }
+            /// <summary>Physical character width of the slot in the file.</summary>
             public int Length { get; set; }
+            /// <summary>
+            /// For integer types declared as INT(N), this is N — the number of significant
+            /// digit characters. The physical <see cref="Length"/> is N+1 to accommodate a
+            /// leading minus sign. Null for non-integer types.
+            /// </summary>
+            public int? DeclaredDigits { get; set; }
         }
 
         public string Path => _filePath;
@@ -202,13 +209,14 @@ namespace ETL_SQL.Connectors.FlatFile
                     {
                         int? width = GetWidthFromColumn(col);
                         if (!width.HasValue)
-                            throw new ExecutionException($"Width not defined for fixed-width column '{col.ColumnName}'. Use VARCHAR(N) or /* @width: N */.");
+                            throw new ExecutionException($"Width not defined for fixed-width column '{col.ColumnName}'. Use VARCHAR(N), CHAR(N), INT(N), or /* @width: N */.");
 
                         _fixedColumns.Add(new FixedWidthColumn
                         {
                             Name = col.ColumnName,
                             Start = currentStart,
-                            Length = width.Value
+                            Length = width.Value,
+                            DeclaredDigits = GetIntegerDeclaredDigits(col)
                         });
                         currentStart += width.Value;
                     }
@@ -218,17 +226,58 @@ namespace ETL_SQL.Connectors.FlatFile
             _encryption = new EncryptionOptions(options);
         }
 
-        private int? GetWidthFromColumn(ColumnDefinition col)
+        /// <summary>
+        /// Returns the physical character width for a column in a FORMAT=FIXED layout.
+        /// Resolution order:
+        ///   1. /* @width: N */ metadata tag — taken as-is (physical chars).
+        ///   2. Integer types with precision — INT(N), BIGINT(N), SMALLINT(N), TINYINT(N),
+        ///      INTEGER(N): returns N+1 (N digit characters + 1 sign character).
+        ///   3. Any other type with parenthesised length — VARCHAR(N), CHAR(N), DECIMAL(p,s),
+        ///      etc.: returns the first number in the parentheses as-is.
+        /// </summary>
+        private static int? GetWidthFromColumn(ColumnDefinition col)
         {
+            // Priority 1: explicit @width tag
             if (col.Metadata.TryGetValue("width", out var wStr) && int.TryParse(wStr, out var w))
                 return w;
 
-            var match = Regex.Match(col.DataType, @"\((\d+)\)");
-            if (match.Success && int.TryParse(match.Groups[1].Value, out var typeWidth))
-                return typeWidth;
+            var match = Regex.Match(col.DataType, @"^(\w+)(?:\((\d+)(?:,\d+)?\))?$",
+                RegexOptions.IgnoreCase);
+            if (!match.Success) return null;
+
+            var baseType = match.Groups[1].Value;
+            var hasPrec = match.Groups[2].Success && int.TryParse(match.Groups[2].Value, out var prec);
+
+            // Priority 2: integer type with declared digit count — physical width = digits + 1 sign slot
+            if (IsIntegerType(baseType) && hasPrec)
+                return prec + 1;
+
+            // Priority 3: any other sized type — use the length as-is
+            if (hasPrec)
+                return prec;
 
             return null;
         }
+
+        /// <summary>
+        /// If the column is an integer type declared with a precision (e.g. INT(5)), returns that
+        /// precision (the digit count). Returns null for all other types.
+        /// </summary>
+        private static int? GetIntegerDeclaredDigits(ColumnDefinition col)
+        {
+            var match = Regex.Match(col.DataType, @"^(\w+)\((\d+)\)$", RegexOptions.IgnoreCase);
+            if (match.Success && IsIntegerType(match.Groups[1].Value)
+                && int.TryParse(match.Groups[2].Value, out var digits))
+                return digits;
+            return null;
+        }
+
+        private static readonly HashSet<string> _integerTypeNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT"
+        };
+
+        private static bool IsIntegerType(string typeName) => _integerTypeNames.Contains(typeName);
 
         private string[] SplitFixedWidthLine(string line)
         {
@@ -585,15 +634,36 @@ namespace ETL_SQL.Connectors.FlatFile
                                 foreach (var col in _fixedColumns)
                                 {
                                     var raw = row[col.Name]?.ToString() ?? "";
-                                    if (raw.Length > col.Length)
+
+                                    // For integer columns declared as INT(N): overflow is defined by
+                                    // digit count (sign excluded) vs DeclaredDigits, giving a
+                                    // symmetric range of -(10^N - 1) to (10^N - 1).
+                                    // For all other column types: compare raw string length to the
+                                    // physical slot width as before.
+                                    bool isOverflow = col.DeclaredDigits.HasValue
+                                        ? (raw.TrimStart('-').Length > col.DeclaredDigits.Value)
+                                        : (raw.Length > col.Length);
+
+                                    if (isOverflow)
                                     {
                                         if (truncateEnabled)
                                         {
+                                            // Truncate to the physical slot (preserves sign if present)
                                             raw = raw.Substring(0, col.Length);
                                         }
                                         else
                                         {
-                                            var errMsg = $"Row {rowNum}: Column '{col.Name}' is trying to insert a string with length {raw.Length} into a {col.Length} character column (Value: '{raw}')";
+                                            string errMsg;
+                                            if (col.DeclaredDigits.HasValue)
+                                            {
+                                                long maxVal = (long)Math.Pow(10, col.DeclaredDigits.Value) - 1;
+                                                errMsg = $"Row {rowNum}: Column '{col.Name}' value '{raw}' exceeds the declared INT({col.DeclaredDigits.Value}) field width " +
+                                                         $"(max {col.DeclaredDigits.Value} digits, range -{maxVal} to {maxVal})";
+                                            }
+                                            else
+                                            {
+                                                errMsg = $"Row {rowNum}: Column '{col.Name}' is trying to insert a string with length {raw.Length} into a {col.Length} character column (Value: '{raw}')";
+                                            }
                                             if (skipErrorEnabled)
                                             {
                                                 raw = ""; // skip that column (pad with spaces)
