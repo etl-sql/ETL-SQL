@@ -366,10 +366,15 @@ Reproduce locally with `dotnet restore ETL-SQL.slnx` followed by `./scripts/Test
 
 ## 14. Security Contact
 
-To report a security vulnerability in ETL-SQL, open a confidential issue or contact the project maintainer directly. Do not post vulnerability details in public issues.
+To report a security vulnerability in ETL-SQL, please use one of these **private** channels — do **not** open a public issue or include vulnerability details in public discussions:
+
+- **GitHub private vulnerability reporting:** open a private report from the repository's **Security → Report a vulnerability** tab (GitHub Security Advisories).
+- **Email:** [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).
+
+Where possible, include a minimal reproduction, the affected version, and an impact assessment. You will receive an acknowledgement, and any fix will be coordinated privately before public disclosure.
 
 ---
 
 **Policy Version**: 0.11.0
-**Last Review Date**: 2026-05-18
+**Last Review Date**: 2026-06-14
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.
