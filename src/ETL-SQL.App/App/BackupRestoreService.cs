@@ -282,12 +282,20 @@ namespace ETL_SQL.App
             // File integrity: every listed file is present with a matching checksum.
             if (manifest["files"] is JsonArray fileArr)
             {
+                var rootResolved = Path.GetFullPath(dataExtract);
                 foreach (var node in fileArr.OfType<JsonObject>())
                 {
                     var rel = (string?)node["path"];
                     var expected = (string?)node["sha256"];
                     if (string.IsNullOrEmpty(rel)) continue;
-                    var full = Path.Combine(dataExtract, rel);
+                    var full = Path.GetFullPath(Path.Combine(dataExtract, rel));
+                    // Reject a tampered manifest whose path escapes the extracted archive root, so the
+                    // integrity check can never be coerced into reading a file outside the backup.
+                    if (!full.StartsWith(rootResolved + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                    {
+                        problems.Add($"unsafe manifest path (escapes archive root): {rel}");
+                        continue;
+                    }
                     if (!File.Exists(full)) { problems.Add($"missing file: {rel}"); continue; }
                     var actual = await Sha256Async(full);
                     if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))

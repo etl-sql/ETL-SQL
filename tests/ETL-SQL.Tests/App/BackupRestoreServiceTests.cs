@@ -202,6 +202,40 @@ namespace ETL_SQL.Tests.CliCommands
         }
 
         [Fact]
+        public async Task Restore_FailsClosed_OnTamperedManifestPathTraversal()
+        {
+            var outDir = Path.Combine(_root, "out");
+            await BackupRestoreService.BackupCoreAsync(Config(), _source, outDir, NullLogger.Instance);
+            var (dataZip, keysZip) = FindArchives(outDir);
+
+            // Tamper the data manifest with a path-traversal entry, then repackage the data archive.
+            var tampered = Path.Combine(_root, "tampered");
+            ZipFile.ExtractToDirectory(dataZip, tampered);
+            var manifestPath = Path.Combine(tampered, "backup-manifest.json");
+            var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!.AsObject();
+            manifest["files"]!.AsArray().Add(new JsonObject
+            {
+                ["path"] = "../../../../etc/passwd",
+                ["sha256"] = "deadbeef",
+                ["bytes"] = 0
+            });
+            File.WriteAllText(manifestPath, manifest.ToJsonString());
+            var tamperedZip = Path.Combine(_root, "tampered-data.zip");
+            ZipFile.CreateFromDirectory(tampered, tamperedZip);
+
+            var ctx = new CliContext
+            {
+                Command = "admin-restore",
+                RestoreFrom = tamperedZip,
+                RestoreKeys = keysZip,
+                RestoreValidateOnly = true
+            };
+
+            // The escaping manifest path must be rejected, not followed.
+            Assert.Equal(1, await BackupRestoreService.RestoreAsync(ctx, NullLogger.Instance));
+        }
+
+        [Fact]
         public void SplitConfigSecrets_BlanksSecretsAndCapturesByDottedPath()
         {
             var path = Path.Combine(_source, "appsettings.json");
