@@ -237,6 +237,66 @@ namespace ETL_SQL.Tests.App
         }
 
         [Fact]
+        public async Task Generate_FlatFileConnectorWithExcelFormat_ResolvesToExcelConnector()
+        {
+            var schemaPath = Path.Combine(_tempDir, "excel_source_schema.json");
+            var outputPath = Path.Combine(_tempDir, "excel_load.etlsql");
+
+            var jsonContent = @"
+{
+  ""pipeline_name"": ""excel_load"",
+  ""metadata"": {
+    ""description"": ""Load excel source"",
+    ""owner"": ""BI Team"",
+    ""classification"": ""internal""
+  },
+  ""source"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""EXCEL"",
+    ""path"": ""C:/Inbound/data.xlsx"",
+    ""sheet_name"": ""Locations_"",
+    ""has_header"": true
+  },
+  ""destination"": {
+    ""connector_type"": ""FLATFILE"",
+    ""format"": ""EXCEL"",
+    ""path"": ""target_folder"",
+    ""sheet_name"": ""Results""
+  },
+  ""schema"": [
+    {
+      ""column_name"": ""Id"",
+      ""type_family"": ""INT"",
+      ""nullable"": false
+    }
+  ]
+}";
+            await File.WriteAllTextAsync(schemaPath, jsonContent);
+
+            var result = await PipelineGenerator.Generate(schemaPath, outputPath, NullLogger.Instance);
+
+            Assert.Equal(0, result);
+            Assert.True(File.Exists(outputPath));
+
+            var code = await File.ReadAllTextAsync(outputPath);
+
+            // Assert source resolved to EXCEL connector
+            Assert.Contains("CREATE CONNECTION src_file AS EXCEL(", code);
+            Assert.Contains("PATH = 'C:/Inbound/data.xlsx'", code);
+            Assert.Contains("SHEET = 'Locations_'", code);
+            Assert.Contains("HEADER = ON", code);
+
+            // Assert destination resolved to EXCEL connector
+            Assert.Contains("CREATE CONNECTION target_dir AS DIRECTORY('target_folder');", code);
+            Assert.Contains("CREATE CONNECTION outbound_dest AS EXCEL(", code);
+            Assert.Contains("SHEET = 'Results'", code);
+            Assert.Contains("HEADER = ON", code);
+
+            var script = new Parser(new Lexer(code).Tokenize(), code).Parse();
+            Assert.Empty(script.Diagnostics);
+        }
+
+        [Fact]
         public async Task Generate_InvalidEvidenceMetadata_ReturnsError()
         {
             var schemaPath = Path.Combine(_tempDir, "invalid_evidence_schema.json");

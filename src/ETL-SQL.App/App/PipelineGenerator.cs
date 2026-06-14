@@ -298,7 +298,18 @@ namespace ETL_SQL.App
             sb.AppendLine();
 
             // 2. Variable declarations and date handling for target filename
-            var namingPattern = spec.Destination?.NamingPattern ?? $"{pipelineName}_output.csv";
+            var connType = spec.Destination?.ConnectorType ?? "FLATFILE";
+            var format = spec.Destination?.Format ?? "CSV";
+            var resolvedDestType = ResolveConnectorType(connType, format);
+
+            var defaultExt = "csv";
+            if (resolvedDestType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase)) defaultExt = "xlsx";
+            else if (resolvedDestType.Equals("JSON", StringComparison.OrdinalIgnoreCase)) defaultExt = "json";
+            else if (resolvedDestType.Equals("XML", StringComparison.OrdinalIgnoreCase)) defaultExt = "xml";
+            else if (resolvedDestType.Equals("PARQUET", StringComparison.OrdinalIgnoreCase)) defaultExt = "parquet";
+            else if (resolvedDestType.Equals("AVRO", StringComparison.OrdinalIgnoreCase)) defaultExt = "avro";
+
+            var namingPattern = spec.Destination?.NamingPattern ?? $"{pipelineName}_output.{defaultExt}";
             var hasDatePattern = namingPattern.Contains("{yyyy") || namingPattern.Contains("{HH");
 
             if (hasDatePattern)
@@ -331,40 +342,64 @@ namespace ETL_SQL.App
 
             // 3. Outbound Destination Connection
             sb.AppendLine("-- 3. OUTBOUND DESTINATION CONNECTION");
-            var connType = spec.Destination?.ConnectorType ?? "FLATFILE";
-            var format = spec.Destination?.Format ?? "CSV";
             var path = spec.Destination?.Path ?? "outbound_dir";
 
-            if (connType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
+            bool isFileDest = resolvedDestType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase)
+                              || resolvedDestType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase)
+                              || resolvedDestType.Equals("JSON", StringComparison.OrdinalIgnoreCase)
+                              || resolvedDestType.Equals("XML", StringComparison.OrdinalIgnoreCase)
+                              || resolvedDestType.Equals("PARQUET", StringComparison.OrdinalIgnoreCase)
+                              || resolvedDestType.Equals("AVRO", StringComparison.OrdinalIgnoreCase);
+
+            if (isFileDest)
             {
                 sb.AppendLine($"-- Base directory connection context (isolates physical drive paths)");
                 sb.AppendLine($"CREATE CONNECTION target_dir AS DIRECTORY('{path}');");
 
                 var fileRef = hasDatePattern ? "target_dir + '/' + @FileName" : $"target_dir + '/{namingPattern}'";
 
-                sb.AppendLine($"CREATE CONNECTION outbound_dest AS FLATFILE(");
-                sb.AppendLine($"    PATH = {fileRef},");
-                sb.AppendLine($"    FORMAT = '{format}',");
+                if (resolvedDestType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine($"CREATE CONNECTION outbound_dest AS FLATFILE(");
+                    sb.AppendLine($"    PATH = {fileRef},");
+                    sb.AppendLine($"    FORMAT = '{format}',");
 
-                var hasHeader = spec.Destination?.HasHeader ?? true;
-                sb.AppendLine($"    HAS_HEADER = {(hasHeader ? "TRUE" : "FALSE")},");
+                    var hasHeader = spec.Destination?.HasHeader ?? true;
+                    sb.AppendLine($"    HAS_HEADER = {(hasHeader ? "TRUE" : "FALSE")},");
 
-                var delim = spec.Destination?.Delimiter?.ToLower();
-                if (delim == "pipe")
-                    sb.AppendLine("    DELIMITER = '|',");
-                else if (delim == "tab")
-                    sb.AppendLine("    DELIMITER = '\\t',");
-                else if (delim == "comma")
-                    sb.AppendLine("    DELIMITER = ',',");
+                    var delim = spec.Destination?.Delimiter?.ToLower();
+                    if (delim == "pipe")
+                        sb.AppendLine("    DELIMITER = '|',");
+                    else if (delim == "tab")
+                        sb.AppendLine("    DELIMITER = '\\t',");
+                    else if (delim == "comma")
+                        sb.AppendLine("    DELIMITER = ',',");
 
-                var enc = spec.Destination?.Encoding ?? "UTF8";
-                sb.AppendLine($"    ENCODING = '{enc}'");
-                sb.AppendLine(");");
+                    var enc = spec.Destination?.Encoding ?? "UTF8";
+                    sb.AppendLine($"    ENCODING = '{enc}'");
+                    sb.AppendLine(");");
+                }
+                else if (resolvedDestType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase))
+                {
+                    sb.AppendLine($"CREATE CONNECTION outbound_dest AS EXCEL(");
+                    sb.AppendLine($"    PATH = {fileRef},");
+                    var sheetName = spec.Destination?.SheetName ?? "Sheet1";
+                    sb.AppendLine($"    SHEET = '{EscapeSqlString(sheetName)}',");
+                    var hasHeader = spec.Destination?.HasHeader ?? true;
+                    sb.AppendLine($"    HEADER = {(hasHeader ? "ON" : "OFF")}");
+                    sb.AppendLine(");");
+                }
+                else
+                {
+                    sb.AppendLine($"CREATE CONNECTION outbound_dest AS {resolvedDestType}(");
+                    sb.AppendLine($"    PATH = {fileRef}");
+                    sb.AppendLine(");");
+                }
             }
             else
             {
                 // Database connection template
-                sb.AppendLine($"-- CREATE CONNECTION outbound_dest AS {connType}(");
+                sb.AppendLine($"-- CREATE CONNECTION outbound_dest AS {resolvedDestType}(");
                 sb.AppendLine($"--     SERVER = '...',");
                 sb.AppendLine($"--     DATABASE = '...',");
                 sb.AppendLine($"--     TABLE = '{path}'");
@@ -648,12 +683,15 @@ namespace ETL_SQL.App
             }
 
             var connectorType = source.ConnectorType ?? "FLATFILE";
-            if (connectorType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
+            var format = source.Format ?? "CSV";
+            var resolvedType = ResolveConnectorType(connectorType, format);
+
+            if (resolvedType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
             {
                 var path = string.IsNullOrWhiteSpace(source.Path) ? "C:/Inbound/vendor_feed.csv" : source.Path;
                 sb.AppendLine("CREATE CONNECTION src_file AS FLATFILE(");
                 sb.AppendLine($"    PATH = '{EscapeSqlString(path)}',");
-                sb.AppendLine($"    FORMAT = '{EscapeSqlString(source.Format ?? "CSV")}',");
+                sb.AppendLine($"    FORMAT = '{EscapeSqlString(format)}',");
                 if (!string.IsNullOrWhiteSpace(source.Delimiter))
                     sb.AppendLine($"    DELIMITER = '{EscapeSqlString(ToDelimiterLiteral(source.Delimiter))}',");
                 if (source.HasHeader.HasValue)
@@ -664,13 +702,49 @@ namespace ETL_SQL.App
                 sb.AppendLine(");");
                 return;
             }
+            else if (resolvedType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = string.IsNullOrWhiteSpace(source.Path) ? "C:/Inbound/vendor_feed.xlsx" : source.Path;
+                sb.AppendLine("CREATE CONNECTION src_file AS EXCEL(");
+                sb.AppendLine($"    PATH = '{EscapeSqlString(path)}',");
+                if (!string.IsNullOrWhiteSpace(source.SheetName))
+                    sb.AppendLine($"    SHEET = '{EscapeSqlString(source.SheetName)}',");
+                var hasHeader = source.HasHeader ?? true;
+                sb.AppendLine($"    HEADER = {(hasHeader ? "ON" : "OFF")}");
+                sb.AppendLine(");");
+                return;
+            }
+            else if (resolvedType.Equals("JSON", StringComparison.OrdinalIgnoreCase)
+                     || resolvedType.Equals("XML", StringComparison.OrdinalIgnoreCase)
+                     || resolvedType.Equals("PARQUET", StringComparison.OrdinalIgnoreCase)
+                     || resolvedType.Equals("AVRO", StringComparison.OrdinalIgnoreCase))
+            {
+                var ext = resolvedType.ToLowerInvariant();
+                var path = string.IsNullOrWhiteSpace(source.Path) ? $"C:/Inbound/vendor_feed.{ext}" : source.Path;
+                sb.AppendLine($"CREATE CONNECTION src_file AS {resolvedType}(");
+                sb.AppendLine($"    PATH = '{EscapeSqlString(path)}'");
+                sb.AppendLine(");");
+                return;
+            }
 
-            sb.AppendLine($"CREATE CONNECTION src_db AS {connectorType}(SERVER='...', DATABASE='...', USER='...', PASSWORD='...');");
+            sb.AppendLine($"CREATE CONNECTION src_db AS {resolvedType}(SERVER='...', DATABASE='...', USER='...', PASSWORD='...');");
         }
 
         private static string GetSourceFromTemplate(SpecSource? source)
         {
-            if (source?.ConnectorType?.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase) == true)
+            if (source == null) return "FROM src_db.public.raw_table;";
+            var connectorType = source.ConnectorType ?? "FLATFILE";
+            var format = source.Format ?? "CSV";
+            var resolvedType = ResolveConnectorType(connectorType, format);
+
+            bool isFile = resolvedType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase)
+                          || resolvedType.Equals("EXCEL", StringComparison.OrdinalIgnoreCase)
+                          || resolvedType.Equals("JSON", StringComparison.OrdinalIgnoreCase)
+                          || resolvedType.Equals("XML", StringComparison.OrdinalIgnoreCase)
+                          || resolvedType.Equals("PARQUET", StringComparison.OrdinalIgnoreCase)
+                          || resolvedType.Equals("AVRO", StringComparison.OrdinalIgnoreCase);
+
+            if (isFile)
                 return "FROM src_file;";
 
             return "FROM src_db.public.raw_table;";
@@ -815,6 +889,25 @@ namespace ETL_SQL.App
 
             if (tagsList.Count == 0) return "";
             return $"/*{string.Join("; ", tagsList)}*/";
+        }
+
+        private static string ResolveConnectorType(string connectorType, string format)
+        {
+            if (connectorType.Equals("FLATFILE", StringComparison.OrdinalIgnoreCase))
+            {
+                var fmtUpper = format.ToUpperInvariant();
+                if (fmtUpper == "EXCEL" || fmtUpper == "XLSX" || fmtUpper == "XLS" || fmtUpper == "XLSM")
+                    return "EXCEL";
+                if (fmtUpper == "JSON")
+                    return "JSON";
+                if (fmtUpper == "XML")
+                    return "XML";
+                if (fmtUpper == "PARQUET")
+                    return "PARQUET";
+                if (fmtUpper == "AVRO")
+                    return "AVRO";
+            }
+            return connectorType;
         }
     }
 
@@ -1310,6 +1403,9 @@ namespace ETL_SQL.App
 
         [JsonPropertyName("has_header")]
         public bool? HasHeader { get; set; }
+
+        [JsonPropertyName("sheet_name")]
+        public string? SheetName { get; set; }
     }
 
     public class SpecColumn
