@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
+using ETL_SQL.Connectors.MockDb;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Docs
 {
@@ -94,6 +97,32 @@ namespace ETL_SQL.Tests.Docs
             Assert.True(failures.Count == 0,
                 $"General documentation SQL blocks that failed to parse ({failures.Count}):\n" +
                 string.Join("\n\n", failures));
+        }
+
+        [Fact]
+        public void CreateConnectionValidation_IsRobustToPollutedGlobalRegistry()
+        {
+            // Regression for the CI order-dependent failure: a sibling test class installs a reduced
+            // mock registry into the mutable static ConnectorRegistry.Instance. Documentation
+            // validation must resolve a complete registry from DI, so a polluted static must not make
+            // a real connector look "unknown". This deterministically reproduces the pollution that
+            // only surfaced under coverage test ordering, so the fast lane catches any regression.
+            var original = ConnectorRegistry.Instance;
+            try
+            {
+                ConnectorRegistry.Instance = new ConnectorRegistry(new List<IConnector> { new MockDbConnector() });
+
+                const string sql = "CREATE CONNECTION db AS POSTGRES(HOST='h', DATABASE='d');";
+                var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+                var failures = FindUnsupportedConnectionOptions("polluted-registry regression", 1, script).ToList();
+
+                Assert.DoesNotContain(failures, f => f.Contains("unknown connector", StringComparison.OrdinalIgnoreCase));
+            }
+            finally
+            {
+                ConnectorRegistry.Instance = original;
+            }
         }
 
         [Fact]
@@ -359,7 +388,12 @@ namespace ETL_SQL.Tests.Docs
 
         private static IEnumerable<string> FindUnsupportedConnectionOptions(string source, int blockNumber, Script script)
         {
-            var registry = ConnectorRegistry.Instance
+            // Resolve the full registry from the test service provider's DI singleton rather than the
+            // mutable static ConnectorRegistry.Instance. Other test classes reassign that static to a
+            // reduced mock registry (e.g. SuggestTests), so reading it made this test order-dependent —
+            // every real connector showed as "unknown" when it ran after the polluter (seen in CI under
+            // coverage ordering). The DI singleton is built from all connectors and is unaffected.
+            var registry = ETL_SQL.Program.ServiceProvider?.GetService<IConnectorRegistry>()
                 ?? throw new InvalidOperationException("Connector registry was not initialized for documentation tests.");
 
             foreach (var statement in EnumerateStatements(script.Statements))
