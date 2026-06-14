@@ -1066,6 +1066,15 @@ public class AdminController(
             .ToList());
     }
 
+    // ── Operational metrics (P2.8) ─────────────────────────────────────────────
+
+    /// <summary>Point-in-time operational snapshot: active/queued executions, recent execution and
+    /// delivery failure rates, and dataset/snapshot storage usage (admin-only).</summary>
+    [HttpGet("metrics/operational")]
+    public async Task<IActionResult> GetOperationalMetrics(
+        [FromServices] OperationalMetricsService metrics)
+        => Ok(await metrics.GetAsync(HttpContext.RequestAborted));
+
     // ── Usage metrics ────────────────────────────────────────────────────────
 
     [HttpGet("metrics/usage")]

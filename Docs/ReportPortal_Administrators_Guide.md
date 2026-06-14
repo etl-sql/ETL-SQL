@@ -632,6 +632,15 @@ Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS
 SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
 ```
 
+For live operational health (as opposed to longer-term usage), `GET /api/admin/metrics/operational`
+returns a point-in-time snapshot for a multi-user deployment: `activeExecutions` and
+`queuedExecutions` (queue depth), the configured `executionCap`/`perUserExecutionCap`, recent
+execution and subscription-delivery counts and failure counts over the last 24 hours (the failure
+rate denominators), and `datasetStorageBytes`/`snapshotStorageBytes` for disk-usage monitoring. The
+execution and delivery figures come from the durable `PortalExecutionJobs` and subscription-delivery
+ledgers, so they survive a restart. The `/health` endpoint's `execution` check also reports the
+single-instance topology and active execution count for liveness probes.
+
 ### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.

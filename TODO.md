@@ -273,8 +273,21 @@ release begins.
   rollback means after a partial migration. Seed a portal on release N, upgrade in place to N+1, and
   verify permissions, jobs, subscriptions, datasets, and audit continuity. Define and document the
   supported rollback procedure (restore-from-backup vs. down-migration).
-- [ ] **P2.8 Add operational observability for a multi-user deployment.**
+- [x] **P2.8 Add operational observability for a multi-user deployment.**
   P1.6 adds correlation IDs for audit only. An administrator running this for real users needs: active
   executions, queue depth, job/SMTP failure rates, and disk usage of dataset/snapshot storage — via
   expanded health checks or a metrics endpoint (OpenTelemetry if warranted). Extend the
   no-credentials-in-logs guarantee from a dataset-test-only scan to a portal-wide log-hygiene rule.
+  *(done — v0.11.0)* New `OperationalMetricsService` + admin-only `GET /api/admin/metrics/operational`
+  return a point-in-time snapshot: active vs queued executions (queue depth), the execution and
+  per-user caps, recent (24h) execution and subscription-delivery counts and failure counts (the
+  failure-rate denominators, sourced from the durable `PortalExecutionJobs` and `SubscriptionDelivery`
+  ledgers so they survive restart), dataset/snapshot disk usage, and active subscription/SMTP counts.
+  The existing `/health` `execution` check still reports topology + active count for liveness probes.
+  **Log hygiene generalized to a portal-wide rule** (SECURITY.md §9): credential-bearing error paths
+  sanitize secrets before they reach logs, persisted failure detail, or audit rows — enforced by a new
+  test (`OperationalObservabilityTests`) that drives a delivery failure whose error text echoes the
+  SMTP password and asserts it appears in none of the captured logs, the returned reason, the ledger
+  detail, or the audit record. Admin guide §6.7 documents the endpoint. **Residual:** OpenTelemetry
+  metrics/trace export was deemed not yet warranted for the single-instance topology; revisit with the
+  HA roadmap.

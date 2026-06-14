@@ -294,6 +294,8 @@ Portal audit guarantees and boundaries:
 - Audit retention is opt-in (`Portal:Audit:RetentionDays`; default keeps rows forever).
 - The audit table itself is mutable SQLite and is **not** tamper-proof. The supported enterprise posture is scheduled export/forwarding to external append-only storage; in-database tamper-evident hash chaining is an explicit non-goal for this release.
 
+**Log hygiene (portal-wide rule):** credential material must never reach log output, persisted failure detail, or audit records — including when a downstream error echoes a secret back (e.g. an SMTP server returning the password in an authentication error). Credential-bearing error paths sanitize the secret out before it is logged, persisted, or audited; the subscription delivery executor is the canonical case and is enforced by an automated test that drives a failure whose error text contains the SMTP password and asserts it appears in neither the captured logs, the returned reason, the delivery ledger detail, nor the audit row. Operational metrics (`GET /api/admin/metrics/operational`) expose active/queued executions, recent execution/delivery failure rates, and dataset/snapshot disk usage without exposing any secret.
+
 Recommended production posture: forward engine and portal logs to an external log sink with retention, access controls, and tamper-resistant storage.
 
 ---

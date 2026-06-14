@@ -221,6 +221,7 @@ builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCac
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 // Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time
 // reauthorization; persisted job scripts are credential-free triggers.
