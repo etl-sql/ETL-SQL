@@ -2980,6 +2980,15 @@ EXECUTE portal BEGIN
     SHUTDOWN PORTAL;
 
     -- =========================================================
+    -- PORTAL CONFIGURATION EXPORT
+    -- Admin-only. Exports all declarative configuration (groups, users,
+    -- memberships, folders, ACLs, SMTP connections, reports, dataset metadata,
+    -- subscriptions, alerts) to an idempotent bootstrap script.
+    -- Secrets are scrubbed and replaced with `${...}` placeholders.
+    -- =========================================================
+    EXPORT PORTAL CONFIGURATION TO 'portal_bootstrap.txt';
+
+    -- =========================================================
     -- PORTAL METADATA QUERIES
     -- Use the connection alias as a schema prefix.
     -- All standard SELECT clauses (WHERE, ORDER BY, JOIN, etc.) are supported.
