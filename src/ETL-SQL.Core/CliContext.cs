@@ -62,5 +62,14 @@ namespace ETL_SQL.Core
         // init command
         public string? InitDirectory { get; set; }
         public bool InitForce { get; set; }
+
+        // admin backup command
+        public string? BackupOutputDir { get; set; }
+
+        // admin restore command
+        public string? RestoreFrom { get; set; }
+        public string? RestoreKeys { get; set; }
+        public string? RestoreTo { get; set; }
+        public bool RestoreValidateOnly { get; set; }
     }
 }

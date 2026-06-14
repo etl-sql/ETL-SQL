@@ -122,6 +122,16 @@ namespace ETL_SQL.App
                 return await InitScaffolder.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-backup")
+            {
+                return await BackupRestoreService.BackupAsync(ctx, logger);
+            }
+
+            if (ctx.Command == "admin-restore")
+            {
+                return await BackupRestoreService.RestoreAsync(ctx, logger);
+            }
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);

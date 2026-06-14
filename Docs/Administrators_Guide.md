@@ -521,7 +521,49 @@ connection-string values. Non-secret configuration knobs (timeouts, limits, key 
 flags) remain visible for diagnostics. Empty secret fields are kept as empty so you can see whether a
 value was configured. Always review a bundle before sharing it.
 
-### 11.3 Upgrading in place
+### 11.3 Backup and restore — `etl-sql admin backup` / `restore`
+
+`etl-sql admin backup` packages the deployment into **two split-custody archives** so a single leaked
+artifact can neither read nor decrypt the data:
+
+```bash
+# Stop the portal/orchestrator first so no writes are in flight, then:
+etl-sql admin backup --output-dir D:\backups
+```
+
+- **`etl-sql-backup-<timestamp>.zip`** (data) — the Portal and Orchestrator SQLite databases (with
+  their `-wal`/`-shm` sidecars), report snapshots, published report scripts, cached dataset parquet,
+  map files, and an `appsettings.json` copy **with every secret value stripped out**. A
+  `backup-manifest.json` records a backup id, the tool version, the catalog migration version, and a
+  SHA-256 for every file.
+- **`etl-sql-keys-<timestamp>.zip`** (keys) — the ASP.NET Data Protection key ring (`.portal-keys/`)
+  and a `secrets.json` holding the stripped secrets (dataset at-rest key(s), JWT secret, etc.).
+
+The two archives share a backup id and must be **stored in separate custody**. The data archive's
+SMTP/Orchestrator secrets are Data-Protection-encrypted and its dataset caches are encrypted at rest —
+neither can be read without the keys archive.
+
+Restore validates before it writes, and **fails closed** on any mismatch:
+
+```bash
+# Verify integrity, key versions, and version compatibility WITHOUT writing anything
+etl-sql admin restore --from data.zip --keys keys.zip --validate
+
+# Restore into a clean directory once validation passes
+etl-sql admin restore --from data.zip --keys keys.zip --to D:\restore-target
+```
+
+Validation checks that the two archives are a matching pair (same backup id), that the data archive's
+at-rest key version is present in the keys archive, that every file matches its recorded checksum, and
+that the backup was **not** produced by a newer release than the restoring binary. Restore
+reconstructs the on-disk layout and re-injects the secrets into the restored `appsettings.json`; on the
+next portal start, pending migrations apply automatically. Dataset caches referenced by **absolute**
+path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
+[§6.5](ReportPortal_Administrators_Guide.md#versioned-upgrades-and-rollback).
+
+This is the auditable, supported alternative to the manual file-copy backup in §8.
+
+### 11.4 Upgrading in place
 
 ETL-SQL applies pending database schema migrations automatically on startup — the Portal runs EF Core
 migrations against `portal.db`, and the Orchestrator store adds any missing `etlsql.db` columns when it

@@ -1,0 +1,460 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Threading.Tasks;
+using ETL_SQL.Common;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ETL_SQL.App
+{
+    /// <summary>
+    /// Operator Tooling Phase 2: packages portal/orchestrator database state, content, and
+    /// configuration into a portable backup, and restores/validates it.
+    ///
+    /// Split custody (P1.5): the backup is produced as <b>two</b> archives so a single leaked artifact
+    /// can neither read nor decrypt the data. The <i>data</i> archive holds the databases (whose SMTP/
+    /// API secrets are Data-Protection-encrypted) and the encrypted dataset caches, plus a config copy
+    /// with all secret values stripped out. The <i>keys</i> archive holds the Data Protection key ring
+    /// and the stripped secrets (dataset at-rest key, JWT secret, etc.). Neither archive alone can
+    /// decrypt the other's protected material.
+    /// </summary>
+    internal static class BackupRestoreService
+    {
+        private const string DataManifestName = "backup-manifest.json";
+        private const string KeysManifestName = "keys-manifest.json";
+        private const string SecretsName = "secrets.json";
+        private const string DpKeyRingDirName = ".portal-keys";
+        private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true };
+
+        // ── Backup ────────────────────────────────────────────────────────────────
+
+        internal static Task<int> BackupAsync(CliContext ctx, ILogger logger)
+        {
+            var config = Program.ServiceProvider.GetService<IConfiguration>()
+                ?? new ConfigurationBuilder().Build();
+            var outputDir = string.IsNullOrWhiteSpace(ctx.BackupOutputDir)
+                ? Directory.GetCurrentDirectory()
+                : Path.GetFullPath(ctx.BackupOutputDir.Trim('"', '\'', ' '));
+            return BackupCoreAsync(config, AppContext.BaseDirectory, outputDir, logger);
+        }
+
+        /// <summary>Testable backup core: explicit config, install/base directory, and output directory.</summary>
+        internal static async Task<int> BackupCoreAsync(IConfiguration config, string baseDir, string outputDir, ILogger logger)
+        {
+            Directory.CreateDirectory(outputDir);
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var backupId = Guid.NewGuid().ToString("N");
+            var dataZip = Path.Combine(outputDir, $"etl-sql-backup-{stamp}.zip");
+            var keysZip = Path.Combine(outputDir, $"etl-sql-keys-{stamp}.zip");
+
+            var staging = Path.Combine(Path.GetTempPath(), $"etl-sql-backup-{backupId}");
+            var dataStage = Path.Combine(staging, "data");
+            var keysStage = Path.Combine(staging, "keys");
+            Directory.CreateDirectory(dataStage);
+            Directory.CreateDirectory(keysStage);
+
+            try
+            {
+                var portalDb = Resolve(config["Portal:DatabasePath"] ?? "./portal.db", baseDir);
+                var orchDb = Resolve(
+                    config["Portal:Orchestrator:DatabasePath"]
+                    ?? config["Orchestrator:HistoryDbPath"]
+                    ?? "./etlsql.db", baseDir);
+
+                var files = new List<BackupFile>();
+
+                // Databases (copy the .db plus -wal/-shm sidecars so a cold copy is consistent).
+                files.AddRange(CopySqliteSet(portalDb, Path.Combine(dataStage, "db"), "portal.db", dataStage));
+                files.AddRange(CopySqliteSet(orchDb, Path.Combine(dataStage, "db"), "etlsql.db", dataStage));
+
+                // Content directories.
+                files.AddRange(CopyTree(Resolve(config["Portal:SnapshotDirectory"] ?? "./Snapshots", baseDir), Path.Combine(dataStage, "content", "snapshots"), dataStage));
+                files.AddRange(CopyTree(Resolve(config["Portal:ScriptRootPath"] ?? "./Reports", baseDir), Path.Combine(dataStage, "content", "reports"), dataStage));
+                files.AddRange(CopyTree(Resolve(config["Portal:DatasetRootPath"] ?? "./data/datasets", baseDir), Path.Combine(dataStage, "content", "datasets"), dataStage));
+                files.AddRange(CopyTree(Resolve(config["Portal:MapRootPath"] ?? "./data/maps", baseDir), Path.Combine(dataStage, "content", "maps"), dataStage));
+
+                // Config, with secrets split out into the keys archive.
+                var (strippedConfig, secrets) = SplitConfigSecrets(Path.Combine(baseDir, "appsettings.json"));
+                await File.WriteAllTextAsync(Path.Combine(dataStage, "appsettings.json"), strippedConfig);
+                files.Add(await DescribeAsync(Path.Combine(dataStage, "appsettings.json"), dataStage));
+
+                // ── Keys archive: Data Protection key ring + the stripped secrets ──────
+                var dpRing = Path.Combine(Path.GetDirectoryName(portalDb) ?? baseDir, DpKeyRingDirName);
+                int dpKeyFiles = CopyTree(dpRing, Path.Combine(keysStage, DpKeyRingDirName), keysStage).Count();
+                await File.WriteAllTextAsync(Path.Combine(keysStage, SecretsName),
+                    new JsonObject(secrets.Select(kv => new KeyValuePair<string, JsonNode?>(kv.Key, kv.Value))).ToJsonString(JsonOpts));
+
+                var atRestVersion = config["Portal:Dataset:AtRestKeyVersion"];
+                var keysManifest = new JsonObject
+                {
+                    ["backupId"] = backupId,
+                    ["createdUtc"] = DateTime.UtcNow.ToString("o"),
+                    ["atRestKeyVersion"] = atRestVersion,
+                    ["secretCount"] = secrets.Count,
+                    ["dataProtectionKeyFiles"] = dpKeyFiles,
+                };
+                await File.WriteAllTextAsync(Path.Combine(keysStage, KeysManifestName), keysManifest.ToJsonString(JsonOpts));
+
+                // ── Data manifest ─────────────────────────────────────────────────────
+                var manifest = new JsonObject
+                {
+                    ["backupId"] = backupId,
+                    ["createdUtc"] = DateTime.UtcNow.ToString("o"),
+                    ["appVersion"] = AppVersion(),
+                    ["atRestKeyVersion"] = atRestVersion,
+                    ["catalogMigration"] = ReadCatalogMigration(portalDb),
+                    ["keysArchive"] = Path.GetFileName(keysZip),
+                    ["files"] = new JsonArray(files.Select(f => (JsonNode)new JsonObject
+                    {
+                        ["path"] = f.RelativePath,
+                        ["sha256"] = f.Sha256,
+                        ["bytes"] = f.Bytes,
+                    }).ToArray()),
+                };
+                await File.WriteAllTextAsync(Path.Combine(dataStage, DataManifestName), manifest.ToJsonString(JsonOpts));
+
+                if (File.Exists(dataZip)) File.Delete(dataZip);
+                if (File.Exists(keysZip)) File.Delete(keysZip);
+                ZipFile.CreateFromDirectory(dataStage, dataZip, CompressionLevel.Optimal, includeBaseDirectory: false);
+                ZipFile.CreateFromDirectory(keysStage, keysZip, CompressionLevel.Optimal, includeBaseDirectory: false);
+
+                logger.WriteLine($"Backup complete (backup id {backupId}).", ConsoleColor.Green);
+                logger.WriteLine($"  Data archive: {dataZip}", ConsoleColor.Gray);
+                logger.WriteLine($"  Keys archive: {keysZip}", ConsoleColor.Gray);
+                logger.WriteLine("Store the two archives in SEPARATE custody — the data archive cannot be", ConsoleColor.Yellow);
+                logger.WriteLine("decrypted without the keys archive. Keep both to restore.", ConsoleColor.Yellow);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                logger.WriteLine($"Backup failed: {ex.Message}", ConsoleColor.Red);
+                return 1;
+            }
+            finally
+            {
+                TryDeleteDir(staging);
+            }
+        }
+
+        // ── Restore / validate ──────────────────────────────────────────────────────
+
+        internal static async Task<int> RestoreAsync(CliContext ctx, ILogger logger)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.RestoreFrom) || string.IsNullOrWhiteSpace(ctx.RestoreKeys))
+            {
+                logger.WriteLine("Both --from <data.zip> and --keys <keys.zip> are required.", ConsoleColor.Red);
+                return 1;
+            }
+
+            var dataZip = Path.GetFullPath(ctx.RestoreFrom.Trim('"', '\'', ' '));
+            var keysZip = Path.GetFullPath(ctx.RestoreKeys.Trim('"', '\'', ' '));
+            if (!File.Exists(dataZip)) { logger.WriteLine($"Data archive not found: {dataZip}", ConsoleColor.Red); return 1; }
+            if (!File.Exists(keysZip)) { logger.WriteLine($"Keys archive not found: {keysZip}", ConsoleColor.Red); return 1; }
+
+            var work = Path.Combine(Path.GetTempPath(), $"etl-sql-restore-{Guid.NewGuid():N}");
+            var dataExtract = Path.Combine(work, "data");
+            var keysExtract = Path.Combine(work, "keys");
+
+            try
+            {
+                ZipFile.ExtractToDirectory(dataZip, dataExtract);
+                ZipFile.ExtractToDirectory(keysZip, keysExtract);
+
+                var problems = await ValidateAsync(dataExtract, keysExtract, logger);
+                if (problems.Count > 0)
+                {
+                    logger.WriteLine($"Validation FAILED ({problems.Count} problem(s)):", ConsoleColor.Red);
+                    foreach (var p in problems) logger.WriteLine($"  - {p}", ConsoleColor.Yellow);
+                    return 1;
+                }
+
+                logger.WriteLine("Validation passed: archive integrity, key versions, and app-version compatibility OK.", ConsoleColor.Green);
+
+                if (ctx.RestoreValidateOnly)
+                {
+                    logger.WriteLine("--validate specified: no files were written.", ConsoleColor.Gray);
+                    return 0;
+                }
+
+                if (string.IsNullOrWhiteSpace(ctx.RestoreTo))
+                {
+                    logger.WriteLine("--to <dir> is required to perform a restore (omit it only with --validate).", ConsoleColor.Red);
+                    return 1;
+                }
+
+                var target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
+                Directory.CreateDirectory(target);
+
+                // Materialize the restored layout: databases at the root, content under their dirs,
+                // the DP key ring beside the database, and secrets merged back into appsettings.json.
+                // The yielded manifest entries are not needed on restore (archiveRoot is irrelevant).
+                CopyTree(Path.Combine(dataExtract, "db"), target, target).Count();
+                CopyTree(Path.Combine(dataExtract, "content", "snapshots"), Path.Combine(target, "Snapshots"), target).Count();
+                CopyTree(Path.Combine(dataExtract, "content", "reports"), Path.Combine(target, "Reports"), target).Count();
+                CopyTree(Path.Combine(dataExtract, "content", "datasets"), Path.Combine(target, "data", "datasets"), target).Count();
+                CopyTree(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target).Count();
+                CopyTree(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target).Count();
+
+                await MergeConfigAsync(
+                    Path.Combine(dataExtract, "appsettings.json"),
+                    Path.Combine(keysExtract, SecretsName),
+                    Path.Combine(target, "appsettings.json"));
+
+                logger.WriteLine($"Restore complete into: {target}", ConsoleColor.Green);
+                logger.WriteLine("Next steps:", ConsoleColor.Cyan);
+                logger.WriteLine("  1. Point the portal/orchestrator at this directory (or copy it into place).", ConsoleColor.Gray);
+                logger.WriteLine("  2. Start the portal — pending migrations apply automatically on startup.", ConsoleColor.Gray);
+                logger.WriteLine("  3. Dataset caches referenced by ABSOLUTE path in the catalog must be restored to", ConsoleColor.Gray);
+                logger.WriteLine("     their original DatasetRootPath, or re-materialized (see admin guide §6.5).", ConsoleColor.Gray);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                logger.WriteLine($"Restore failed: {ex.Message}", ConsoleColor.Red);
+                return 1;
+            }
+            finally
+            {
+                TryDeleteDir(work);
+            }
+        }
+
+        /// <summary>Returns a list of validation problems; empty means the backup is restorable.</summary>
+        private static async Task<List<string>> ValidateAsync(string dataExtract, string keysExtract, ILogger logger)
+        {
+            var problems = new List<string>();
+
+            var manifestPath = Path.Combine(dataExtract, DataManifestName);
+            var keysManifestPath = Path.Combine(keysExtract, KeysManifestName);
+            if (!File.Exists(manifestPath)) { problems.Add($"{DataManifestName} missing from data archive."); return problems; }
+            if (!File.Exists(keysManifestPath)) { problems.Add($"{KeysManifestName} missing from keys archive."); return problems; }
+
+            JsonObject manifest, keysManifest;
+            try { manifest = JsonNode.Parse(await File.ReadAllTextAsync(manifestPath))!.AsObject(); }
+            catch (Exception ex) { problems.Add($"data manifest unreadable: {ex.Message}"); return problems; }
+            try { keysManifest = JsonNode.Parse(await File.ReadAllTextAsync(keysManifestPath))!.AsObject(); }
+            catch (Exception ex) { problems.Add($"keys manifest unreadable: {ex.Message}"); return problems; }
+
+            // Paired archives must share a backup id.
+            var dataId = (string?)manifest["backupId"];
+            var keysId = (string?)keysManifest["backupId"];
+            if (string.IsNullOrEmpty(dataId) || dataId != keysId)
+                problems.Add($"backup id mismatch: data='{dataId}' keys='{keysId}' (archives are not a matching pair).");
+
+            // App-version compatibility: never restore a backup made by a newer release.
+            var backupVersion = (string?)manifest["appVersion"];
+            if (Version.TryParse(backupVersion, out var bv) && Version.TryParse(AppVersion(), out var cur) && bv > cur)
+                problems.Add($"backup app version {bv} is newer than this binary {cur}; upgrade before restoring.");
+
+            // Key-version coverage: the data's at-rest key version must be present in the keys archive.
+            var dataAtRest = (string?)manifest["atRestKeyVersion"];
+            var keysAtRest = (string?)keysManifest["atRestKeyVersion"];
+            if (!string.IsNullOrEmpty(dataAtRest) && dataAtRest != keysAtRest)
+                problems.Add($"at-rest key version mismatch: data expects '{dataAtRest}', keys archive has '{keysAtRest}'.");
+
+            // File integrity: every listed file is present with a matching checksum.
+            if (manifest["files"] is JsonArray fileArr)
+            {
+                foreach (var node in fileArr.OfType<JsonObject>())
+                {
+                    var rel = (string?)node["path"];
+                    var expected = (string?)node["sha256"];
+                    if (string.IsNullOrEmpty(rel)) continue;
+                    var full = Path.Combine(dataExtract, rel);
+                    if (!File.Exists(full)) { problems.Add($"missing file: {rel}"); continue; }
+                    var actual = await Sha256Async(full);
+                    if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                        problems.Add($"checksum mismatch: {rel}");
+                }
+            }
+
+            logger.WriteLine(
+                $"Backup id {dataId}; created {(string?)manifest["createdUtc"]}; app version {backupVersion}; " +
+                $"catalog migration {(string?)manifest["catalogMigration"] ?? "(unknown)"}.", ConsoleColor.Gray);
+            return problems;
+        }
+
+        // ── Config secret split / merge ──────────────────────────────────────────────
+
+        /// <summary>
+        /// Splits secret values out of an appsettings.json: returns the config text with secrets blanked,
+        /// and a path→value map (dotted JSON path) of the removed secrets for the keys archive.
+        /// </summary>
+        internal static (string StrippedConfig, Dictionary<string, JsonNode?> Secrets) SplitConfigSecrets(string appSettingsPath)
+        {
+            var secrets = new Dictionary<string, JsonNode?>();
+            if (!File.Exists(appSettingsPath))
+                return ("{}", secrets);
+
+            var root = JsonNode.Parse(File.ReadAllText(appSettingsPath));
+            if (root != null) Strip(root, "", secrets);
+            return (root?.ToJsonString(JsonOpts) ?? "{}", secrets);
+
+            static void Strip(JsonNode node, string path, Dictionary<string, JsonNode?> sink)
+            {
+                if (node is not JsonObject obj) return;
+                foreach (var key in obj.Select(kv => kv.Key).ToList())
+                {
+                    var child = obj[key];
+                    var childPath = path.Length == 0 ? key : $"{path}.{key}";
+                    if (SupportBundleBuilder.IsSecretKey(key))
+                    {
+                        // Capture the original (string/array/object) and blank a string in place.
+                        if (child is JsonValue v && v.TryGetValue<string>(out var s))
+                        {
+                            if (string.IsNullOrEmpty(s)) continue; // nothing to move
+                            sink[childPath] = s;
+                            obj[key] = "";
+                        }
+                        else if (child is JsonArray || child is JsonObject)
+                        {
+                            sink[childPath] = child!.DeepClone();
+                            obj[key] = child is JsonArray ? new JsonArray() : new JsonObject();
+                        }
+                    }
+                    else if (child is JsonObject)
+                    {
+                        Strip(child, childPath, sink);
+                    }
+                }
+            }
+        }
+
+        private static async Task MergeConfigAsync(string strippedConfigPath, string secretsPath, string outPath)
+        {
+            var root = File.Exists(strippedConfigPath)
+                ? JsonNode.Parse(await File.ReadAllTextAsync(strippedConfigPath))
+                : new JsonObject();
+            root ??= new JsonObject();
+
+            if (File.Exists(secretsPath))
+            {
+                var secrets = JsonNode.Parse(await File.ReadAllTextAsync(secretsPath))?.AsObject();
+                if (secrets != null)
+                    foreach (var kv in secrets)
+                        SetByPath(root.AsObject(), kv.Key, kv.Value?.DeepClone());
+            }
+
+            await File.WriteAllTextAsync(outPath, root.ToJsonString(JsonOpts));
+
+            static void SetByPath(JsonObject root, string dottedPath, JsonNode? value)
+            {
+                var parts = dottedPath.Split('.');
+                var cur = root;
+                for (int i = 0; i < parts.Length - 1; i++)
+                {
+                    if (cur[parts[i]] is not JsonObject next)
+                    {
+                        next = new JsonObject();
+                        cur[parts[i]] = next;
+                    }
+                    cur = next;
+                }
+                cur[parts[^1]] = value;
+            }
+        }
+
+        // ── Helpers ─────────────────────────────────────────────────────────────────
+
+        private readonly record struct BackupFile(string RelativePath, string Sha256, long Bytes);
+
+        private static string Resolve(string p, string baseDir) =>
+            Path.GetFullPath(Path.IsPathRooted(p) ? p : Path.Combine(baseDir, p));
+
+        private static string AppVersion() =>
+            typeof(BackupRestoreService).Assembly.GetName().Version?.ToString() ?? "0.0.0.0";
+
+        /// <summary>Copies a SQLite db plus its -wal/-shm sidecars into <paramref name="destDir"/>.</summary>
+        private static IEnumerable<BackupFile> CopySqliteSet(string dbPath, string destDir, string destName, string archiveRoot)
+        {
+            foreach (var (suffix, name) in new[] { ("", destName), ("-wal", destName + "-wal"), ("-shm", destName + "-shm") })
+            {
+                var src = dbPath + suffix;
+                if (!File.Exists(src)) continue;
+                Directory.CreateDirectory(destDir);
+                var dest = Path.Combine(destDir, name);
+                File.Copy(src, dest, overwrite: true);
+                yield return Describe(dest, archiveRoot);
+            }
+        }
+
+        /// <summary>Recursively copies a directory tree; yields a manifest entry per file. No-op if absent.</summary>
+        private static IEnumerable<BackupFile> CopyTree(string sourceDir, string destDir, string archiveRoot)
+        {
+            if (string.IsNullOrWhiteSpace(sourceDir) || !Directory.Exists(sourceDir)) yield break;
+            var root = Path.GetFullPath(sourceDir);
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var rel = Path.GetRelativePath(root, file);
+                var dest = Path.Combine(destDir, rel);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(file, dest, overwrite: true);
+                yield return Describe(dest, archiveRoot);
+            }
+        }
+
+        /// <summary>A manifest entry whose path is recorded relative to the archive root, slash-normalized.</summary>
+        private static BackupFile Describe(string fullPath, string archiveRoot)
+        {
+            var fi = new FileInfo(fullPath);
+            return new BackupFile(RelativeForArchive(fullPath, archiveRoot), Sha256(fullPath), fi.Length);
+        }
+
+        private static async Task<BackupFile> DescribeAsync(string fullPath, string archiveRoot)
+        {
+            var fi = new FileInfo(fullPath);
+            return new BackupFile(RelativeForArchive(fullPath, archiveRoot), await Sha256Async(fullPath), fi.Length);
+        }
+
+        private static string RelativeForArchive(string fullPath, string archiveRoot) =>
+            Path.GetRelativePath(archiveRoot, fullPath).Replace('\\', '/');
+
+        private static string Sha256(string path)
+        {
+            using var sha = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            return Convert.ToHexString(sha.ComputeHash(stream));
+        }
+
+        private static async Task<string> Sha256Async(string path)
+        {
+            using var sha = SHA256.Create();
+            await using var stream = File.OpenRead(path);
+            return Convert.ToHexString(await sha.ComputeHashAsync(stream));
+        }
+
+        /// <summary>Reads the last applied EF migration id from a portal SQLite db (read-only).</summary>
+        private static string? ReadCatalogMigration(string portalDbPath)
+        {
+            if (!File.Exists(portalDbPath)) return null;
+            try
+            {
+                using var conn = new SqliteConnection(
+                    new SqliteConnectionStringBuilder { DataSource = portalDbPath, Mode = SqliteOpenMode.ReadOnly }.ToString());
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText =
+                    "SELECT MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC LIMIT 1";
+                return cmd.ExecuteScalar() as string;
+            }
+            catch
+            {
+                return null; // no history table / unreadable — recorded as unknown
+            }
+        }
+
+        private static void TryDeleteDir(string dir)
+        {
+            try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
+            catch { /* best-effort */ }
+        }
+    }
+}

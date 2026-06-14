@@ -170,6 +170,32 @@ namespace ETL_SQL.App
         {
             Description = "Overwrite existing files if they are already present."
         };
+        private static readonly Option<string?> BackupOutputDirOption = new("--output-dir", new[] { "-o" })
+        {
+            Description = "Directory to write the backup archives into (default: current directory).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> RestoreFromOption = new("--from", Array.Empty<string>())
+        {
+            Description = "Path to the data backup archive (etl-sql-backup-*.zip).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> RestoreKeysOption = new("--keys", Array.Empty<string>())
+        {
+            Description = "Path to the matching keys archive (etl-sql-keys-*.zip).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> RestoreToOption = new("--to", Array.Empty<string>())
+        {
+            Description = "Target directory to restore into (required unless --validate).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<bool> RestoreValidateOption = new("--validate", Array.Empty<string>())
+        {
+            Description = "Verify catalog and key versions and archive integrity without writing any files."
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -305,6 +331,23 @@ namespace ETL_SQL.App
             supportBundleCommand.SetAction(context => Dispatch(context, "admin-support-bundle", handler));
             adminCommand.Add(supportBundleCommand);
 
+            var backupCommand = new Command("backup", "Back up portal/orchestrator state into split-custody data and keys archives")
+            {
+                BackupOutputDirOption,
+            };
+            backupCommand.SetAction(context => Dispatch(context, "admin-backup", handler));
+            adminCommand.Add(backupCommand);
+
+            var restoreCommand = new Command("restore", "Validate and restore a backup (data + keys archives)")
+            {
+                RestoreFromOption,
+                RestoreKeysOption,
+                RestoreToOption,
+                RestoreValidateOption,
+            };
+            restoreCommand.SetAction(context => Dispatch(context, "admin-restore", handler));
+            adminCommand.Add(restoreCommand);
+
             // 14. INIT Command — scaffold a starter configuration and first script for CLI-first onboarding
             var initCommand = new Command("init", "Scaffold a starter configuration and first ETL-SQL script for new users")
             {
@@ -432,6 +475,17 @@ namespace ETL_SQL.App
             {
                 cliContext.BundleOutput = res.GetValue(BundleOutputOption);
             }
+            else if (commandName == "admin-backup")
+            {
+                cliContext.BackupOutputDir = res.GetValue(BackupOutputDirOption);
+            }
+            else if (commandName == "admin-restore")
+            {
+                cliContext.RestoreFrom = res.GetValue(RestoreFromOption);
+                cliContext.RestoreKeys = res.GetValue(RestoreKeysOption);
+                cliContext.RestoreTo = res.GetValue(RestoreToOption);
+                cliContext.RestoreValidateOnly = res.GetValue(RestoreValidateOption);
+            }
             else if (commandName == "init")
             {
                 var dir = res.GetValue(InitDirectoryArg);
@@ -491,6 +545,8 @@ namespace ETL_SQL.App
             table.AddRow($"init [blue]{Markup.Escape("[directory]")}[/]", "Scaffold a starter appsettings.json and first ETL-SQL script (CLI-first onboarding).");
             table.AddRow("admin doctor", "System health check (alias of top-level 'doctor'). Use --profile full for deep checks.");
             table.AddRow("admin support-bundle", "Collect a redacted support archive (config, health, logs, DB metrics).");
+            table.AddRow("admin backup", "Back up portal/orchestrator state into split-custody data + keys archives.");
+            table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir>).");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");

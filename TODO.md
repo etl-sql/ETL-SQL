@@ -66,18 +66,37 @@ release begins.
 
 ### Phase 2 — Backup and Disaster Recovery
 
-- [ ] **P1.4 Implement `etl-sql admin backup`.**
-  Package configuration, database state (Portal + Orchestrator, WAL-checkpointed), and files (scripts,
-  snapshots, datasets) into a portable backup. Reuse the proven shape from `BackupRestoreDrillTests`.
-- [ ] **P1.5 Enforce split-custody key handling.**
-  Back up Data Protection / dataset-at-rest decryption keys **separately** from database state so a
-  single leaked artifact cannot both read and decrypt. Document the two-artifact recovery contract.
-- [ ] **P1.6 Implement `etl-sql admin restore --validate`.**
-  Verify catalog and key versions before restoring; fail closed on version mismatch. Restore into a
-  clean location and surface the absolute-path caveat for dataset caches (admin guide §6.5).
-- [ ] **P2.2 Backup/restore drill + docs.**
-  Promote the existing `BackupRestoreDrillTests` shape to exercise the real CLI commands end to end;
-  document the operator procedure and the split-custody recovery steps.
+- [x] **P1.4 Implement `etl-sql admin backup`.**
+  *(done)* New `BackupRestoreService.BackupAsync`/`BackupCoreAsync` packages Portal + Orchestrator
+  SQLite databases (`.db` + `-wal`/`-shm` sidecars for a consistent cold copy), report snapshots,
+  published report scripts, cached dataset parquet, and map files into an `etl-sql-backup-<ts>.zip`,
+  with a `backup-manifest.json` recording a backup id, app version, catalog migration HEAD (read
+  read-only from `__EFMigrationsHistory` via `Microsoft.Data.Sqlite`), and a SHA-256 per file.
+  `--output-dir` overrides the destination. Paths resolve via the same config keys as
+  `DataPurgeService`.
+- [x] **P1.5 Enforce split-custody key handling.**
+  *(done)* Backup emits **two** archives sharing a backup id: the data archive above (config copy has
+  every secret value stripped) and `etl-sql-keys-<ts>.zip` holding the ASP.NET Data Protection key
+  ring (`.portal-keys/`) + a `secrets.json` of the stripped secrets (dataset at-rest key(s), JWT
+  secret, etc.). The data archive's SMTP/API secrets are Data-Protection-encrypted and its dataset
+  caches are encrypted at rest, so neither archive alone can decrypt the other's material. Secret
+  detection reuses `SupportBundleBuilder.IsSecretKey` (one source of truth). Documented in admin
+  guide §11.3.
+- [x] **P1.6 Implement `etl-sql admin restore --validate`.**
+  *(done)* `BackupRestoreService.RestoreAsync` always validates first and **fails closed**: matching
+  backup-id pair, at-rest key version present in the keys archive, every file matches its manifest
+  checksum, and the backup app version is not newer than the restoring binary. `--validate` is
+  verify-only (writes nothing); otherwise `--to <dir>` materializes the layout and re-injects secrets
+  into the restored `appsettings.json`. The dataset absolute-path caveat is surfaced in output and
+  admin guide §6.5/§11.3.
+- [x] **P2.2 Backup/restore drill + docs.**
+  *(done)* `BackupRestoreServiceTests` (fast lane) drives the real service: split (secrets only in the
+  keys archive), full round-trip (`--validate` then `--to`, secrets re-injected, layout materialized),
+  fail-closed on a mismatched archive pair, and `SplitConfigSecrets` path capture. CLI parsing covered
+  in `CliOrchestratorTests`. Manually verified `admin backup` + `admin restore --validate` end to end.
+  Operator procedure + split-custody contract documented in `Administrators_Guide.md` §11.3.
+  **Note:** added `Microsoft.Data.Sqlite` as a direct App dependency (already in CPM + a product dep via
+  Orchestrator — no new third-party license).
 
 ### Phase 3 — Database Migrations
 

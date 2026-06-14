@@ -151,6 +151,45 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(capturedContext.InitForce);
         }
 
+        [Fact]
+        public async Task CliOrchestrator_AdminBackupParsesOutputDir()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[] { "admin", "backup", "--output-dir", "D:/backups" }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-backup", capturedContext!.Command);
+            Assert.Equal("D:/backups", capturedContext.BackupOutputDir);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminRestoreParsesFromKeysToAndValidate()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(
+                new[] { "admin", "restore", "--from", "data.zip", "--keys", "keys.zip", "--to", "out", "--validate" },
+                null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-restore", capturedContext!.Command);
+            Assert.Equal("data.zip", capturedContext.RestoreFrom);
+            Assert.Equal("keys.zip", capturedContext.RestoreKeys);
+            Assert.Equal("out", capturedContext.RestoreTo);
+            Assert.True(capturedContext.RestoreValidateOnly);
+        }
+
         [Theory]
         [InlineData(false, false, false, 0)]
         [InlineData(false, false, true, 0)]

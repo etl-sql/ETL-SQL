@@ -39,6 +39,14 @@ namespace ETL_SQL.App
 
         private const string RedactedMarker = "***REDACTED***";
 
+        /// <summary>
+        /// True when a configuration key names a secret value (and is not an exempt metadata suffix
+        /// such as <c>AtRestKeyVersion</c>). Shared so the support-bundle redactor and the backup
+        /// config-secret splitter agree on what counts as a secret.
+        /// </summary>
+        internal static bool IsSecretKey(string key) =>
+            SecretKeyPattern.IsMatch(key) && !SecretKeyExemptPattern.IsMatch(key);
+
         internal static async Task<int> RunAsync(CliContext ctx, ILogger logger)
         {
             var outputPath = ResolveOutputPath(ctx.BundleOutput);
