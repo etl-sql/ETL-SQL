@@ -14,7 +14,9 @@
         <!-- Everything installs into a single flat folder (the 5 executables + one appsettings.json).
              Each sub-feature is turned off (Level 0) when its checkbox property is not "1". -->
         <Feature Id="ProductFeature" Title="ETL-SQL" Level="1" ConfigurableDirectory="INSTALLFOLDER" Display="expand">
-            <ComponentRef Id="LegalNotices" />
+            <ComponentRef Id="LicenseDoc" />
+            <ComponentRef Id="NoticeDoc" />
+            <ComponentRef Id="ThirdPartyNoticesDoc" />
             <Feature Id="Feature_SDK" Title="Client Tools" Level="1" Absent="allow" AllowAdvertise="no"
                      Description="CLI, Language Server, and Report CLI for developers (adds the install folder to PATH).">
                 <Condition Level="0"><![CDATA[INSTALL_SDK <> "1"]]></Condition>
@@ -60,10 +62,17 @@
         </ComponentGroup>
 
         <DirectoryRef Id="INSTALLFOLDER">
-            <Component Id="LegalNotices" Guid="*" Win64="yes">
+            <!-- One file per component: WiX auto-GUID (Guid="*") is only valid on a multi-file
+                 component when the keypath is a versioned PE file. These are unversioned markdown
+                 docs, so each gets its own single-file component (LGHT0367 otherwise). -->
+            <Component Id="LicenseDoc" Guid="*" Win64="yes">
                 <File Id="license_md" Source="..\..\LICENSE.md" KeyPath="yes" />
-                <File Id="notice_md" Source="..\..\NOTICE.md" />
-                <File Id="third_party_notices_md" Source="..\..\THIRD-PARTY-NOTICES.md" />
+            </Component>
+            <Component Id="NoticeDoc" Guid="*" Win64="yes">
+                <File Id="notice_md" Source="..\..\NOTICE.md" KeyPath="yes" />
+            </Component>
+            <Component Id="ThirdPartyNoticesDoc" Guid="*" Win64="yes">
+                <File Id="third_party_notices_md" Source="..\..\THIRD-PARTY-NOTICES.md" KeyPath="yes" />
             </Component>
 
             <!-- Single shared configuration file -->
