@@ -267,12 +267,33 @@ release begins.
   administrator bypass runs two admin jobs past a per-user cap of 1. Admin guide config table updated.
   **Residual:** per-*group* limits and cross-workload queue-fairness weighting (interactive vs scheduled
   vs subscription priority) are not implemented — per-user fairness + admin override is the shipped slice.
-- [ ] **P2.7 Test the versioned upgrade path, not just backup/restore.**
+- [x] **P2.7 Test the versioned upgrade path, not just backup/restore.**
   P2.5 drills restore into a clean location; nothing proves an N→N+1 upgrade: EF migrations applying
   over a live catalog, Orchestrator SQLite schema changes, parquet/key-version compatibility, and what
   rollback means after a partial migration. Seed a portal on release N, upgrade in place to N+1, and
   verify permissions, jobs, subscriptions, datasets, and audit continuity. Define and document the
   supported rollback procedure (restore-from-backup vs. down-migration).
+  *(done — v0.11.0)* New `UpgradePathDrillTests` (fast lane) proves the in-place upgrade that
+  backup/restore does not. **Portal catalog:** a `PortalDbContext` is migrated to **release N**
+  (`AddDurablePortalExecutionJobs`, the migration immediately before this release's two) via
+  `IMigrator.MigrateAsync`, then seeded on the old schema — a group, folder + `Manage` ACL, a durable
+  `PortalExecutionJob`, a dataset stamped `AtRestKeyVersion=v1`, and a raw-SQL audit row written
+  **without** the not-yet-existing `CorrelationId` column — and then migrated **in place to HEAD**
+  (`db.Database.MigrateAsync()`). The drill asserts continuity (membership/ACL still resolve through
+  `FolderPermissionService` to `Manage`, the execution job and dataset key-version survive) **and** the
+  newly-applied schema (the pre-upgrade audit row backfills `CorrelationId = NULL`; the new
+  `SubscriptionDeliveries` ledger table — absent at N — exists and is queryable; a fresh audit row can
+  carry a correlation id). **Orchestrator store:** a legacy `Jobs` table holding only the original
+  columns (no `MaxRetries`/`RetryDelaySeconds`/`ScriptHash`/`HashPolicy`/`Lease*`/`Version`) with a job
+  row is upgraded in place by `SQLiteJobHistoryStore.InitializeAsync` (its `ALTER TABLE ADD COLUMN`
+  sweep) — the legacy job reads back with the added columns defaulted, a second init is an idempotent
+  no-op, and a post-upgrade `SaveJobAsync` round-trips the new columns. **Rollback decision recorded
+  and documented (admin guide §6.5 "Versioned Upgrades and Rollback"):** forward migration is automatic
+  and forward-only; rollback is **restore-from-backup, not a down-migration** (a newer binary may have
+  written new-schema-shaped data), with the in-place upgrade procedure and post-upgrade verification
+  steps. **Boundary:** parquet/key-version *format* compatibility across releases is covered at the
+  schema/metadata level here and end-to-end by the P2.5 key-version read drill; true multi-binary
+  blue/green and down-grade rehearsal belong to a release-engineering harness.
 - [x] **P2.8 Add operational observability for a multi-user deployment.**
   P1.6 adds correlation IDs for audit only. An administrator running this for real users needs: active
   executions, queue depth, job/SMTP failure rates, and disk usage of dataset/snapshot storage — via

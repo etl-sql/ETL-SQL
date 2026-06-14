@@ -538,6 +538,36 @@ dataset metadata — verified by the automated backup/restore drill.
 > storage reconciliation will treat the moved file as an orphan. Everything else restores to a clean
 > location without path constraints.
 
+#### Versioned Upgrades and Rollback
+
+A backup/restore drill proves recovery into a *clean* location; upgrading a *live* deployment to a new
+release is a separate operation. On startup the portal runs any pending EF Core schema migrations
+against the existing `portal.db` (§2 startup sequence), and the Orchestrator store adds any missing
+`etlsql.db` columns in place when it initializes. Both are forward-only: an in-place upgrade preserves
+authentication, folder permissions, durable execution jobs, subscriptions, datasets and their at-rest
+key version, and audit history. New columns are added nullable/with defaults, so pre-upgrade rows
+remain valid (for example, audit rows written before correlation-id support read back with an empty
+correlation id). This is covered by an automated upgrade-path drill that seeds the previous release's
+schema, migrates forward over populated data, and asserts continuity.
+
+Procedure for an in-place upgrade:
+
+1. **Take a complete coordinated backup first** (the full set listed above, with matching secrets).
+   This backup *is* your rollback path.
+2. Stop the portal (and Orchestrator service) so no writes are in flight during migration.
+3. Deploy the new binaries and start the portal. Pending migrations apply automatically before it
+   serves requests; watch the startup log for the migration entries and any validation failure.
+4. Verify after startup: admin login, a representative protected report, a dataset read (confirms the
+   at-rest key still decrypts caches), and that scheduled subscriptions/jobs are still present.
+
+**Rollback is restore-from-backup, not a down-migration.** EF migrations ship `Down` methods, but
+reverting a partially-applied or completed upgrade by running them against production data is **not a
+supported recovery path** — a newer binary may already have written data shaped for the new schema. If
+an upgrade fails or must be reverted, redeploy the previous binaries and restore the pre-upgrade
+coordinated backup as one set. Because cache files are referenced by absolute path, restore
+`DatasetRootPath` to its original location (see the note above). Keep the pre-upgrade backup until the
+new release has been verified in production.
+
 To stamp existing unversioned datasets without changing the key:
 
 1. Configure the existing key and `AtRestKeyVersion`.
