@@ -19,9 +19,10 @@ release begins.
 > Verified-against-code baseline (2026-06-13):
 > - `etl-sql doctor` already exists (top-level, `--profile quick|full`, `--json`, `--strict`) in
 >   `EngineRunner.RunDoctor` — substantial environment + smoke coverage already shipped.
-> - Portal already auto-applies EF migrations on startup (`PortalDbContext.Database.Migrate()` in
->   `src/ETL-SQL.ReportPortal/Program.cs`); Orchestrator SQLite store self-migrates via its
->   `ALTER TABLE ADD COLUMN` sweep in `SQLiteJobHistoryStore.InitializeAsync`.
+> - Portal already auto-applies EF migrations on startup in `src/ETL-SQL.ReportPortal/Program.cs`
+>   (was `Database.Migrate()`; P1.7 changed it to `MigrateAsync()` with pending-set logging + fail-fast);
+>   Orchestrator SQLite store self-migrates via its `ALTER TABLE ADD COLUMN` sweep in
+>   `SQLiteJobHistoryStore.InitializeAsync`.
 > - The N→N+1 in-place upgrade **drill** already exists (`UpgradePathDrillTests`, shipped in v0.11.0);
 >   only the release-gate wiring is outstanding.
 
@@ -58,7 +59,7 @@ release begins.
   next-steps (run script, `admin doctor`, User Manual). Tests: `OperatorToolingTests`
   (create + generated JWT, no-clobber idempotency, `--force` regenerates a fresh secret).
 - [x] **P2.1 Tests + docs for Phase 1.**
-  *(done)* 8 new `OperatorToolingTests` + 3 new `CliOrchestratorTests` (19 in the filtered run, all
+  *(done)* 5 new `OperatorToolingTests` + 3 new `CliOrchestratorTests` (19 in the Phase-1 filtered run, all
   green). Documented in `Docs/Administrators_Guide.md` §10 (admin doctor alias) and a new §11
   (`init`, `admin support-bundle` with the redaction contract), and in the CLI `ShowAdvancedHelp`
   table. **Verified manually**: `init` scaffolds + the generated `hello.etlsql` runs; `admin doctor`
@@ -127,14 +128,17 @@ release begins.
 - [x] **P2.4 Document the supported upgrade + rollback procedure.**
   *(done)* The full procedure already lives in `ReportPortal_Administrators_Guide.md` §6.5 "Versioned
   Upgrades and Rollback" (forward-only migration; rollback = restore-from-backup, not down-migration).
-  Added `Administrators_Guide.md` §11.3 cross-linking it and naming the release-gate drill phase.
+  Added `Administrators_Guide.md` §11.4 cross-linking it and naming the release-gate drill phase.
 
 ---
 
 ## Verification Notes
 
-- The non-Docker Portal run passed **226 tests** on June 14, 2026.
-- The documentation, parser, and portal syntax verification run passed **60 tests**.
+- The non-Docker Portal run passed **226 tests** on June 14, 2026 (a pre–Operator Tooling snapshot;
+  Operator Tooling has since added Portal tests — e.g. `MigrationConvergenceTests` — so the current
+  count is higher; not re-run in full here).
+- The documentation, parser, and portal syntax verification run passed **60 tests** (pre–Operator
+  Tooling snapshot; not re-run here).
 - True dual-node/process, network-partition, disk-pressure, clock-skew, and distributed workload
   fairness certification belongs to the Practical High Availability phase in `ROADMAP.md`, because
   v0.11.0 intentionally supports one active Portal process per SQLite database.
