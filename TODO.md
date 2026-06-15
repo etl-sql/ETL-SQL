@@ -82,7 +82,18 @@ release begins.
 
 ### Phase 2 — Artifact Storage Abstraction
 
-- [ ] **P1.4 Create a unified storage-provider interface** for scripts, snapshots, cached datasets, and keys.
+- [x] **P1.4 Create a unified storage-provider interface** for scripts, snapshots, cached datasets, and keys.
+  *(done)* New `ETL_SQL.Core.Storage` contract: `IArtifactStorage` (provider-agnostic, async, stream-
+  based) over an `ArtifactArea` enum (Scripts/Snapshots/Datasets/Maps/Keys, each its own root) with
+  `ArtifactInfo` metadata. Operations were scoped from the actual filesystem calls in the Portal/Hosting
+  services (exists, read stream/bytes/text, **atomic** write, move staging→final, delete, enumerate by
+  prefix/recursion, stat) plus `LeaseLocalCopyAsync` for the path-based consumers (Parquet/Excel readers,
+  connectors) — local providers return the real path, remote ones materialize a temp copy and clean it
+  up on dispose; leasing is refused for the `Keys` area. Path normalization + traversal/absolute-path
+  rejection live in `ArtifactPath.Normalize` (first guardrail line; P1.6 hardens the resolved path).
+  Ships an `InMemoryArtifactStorage` reference implementation (executable spec + test double) with 14
+  contract tests (`InMemoryArtifactStorageTests`). Local + SMB/UNC providers and call-site migration are
+  P1.5; the `SecurityService`-backed guardrails are P1.6.
 - [ ] **P1.5 Implement Local and SMB/UNC shared storage providers** behind that interface.
 - [ ] **P1.6 Enforce path-traversal guardrails and script immutability at the storage boundary.**
   Extend the existing `SecurityService` path/immutability checks to the storage abstraction so every
