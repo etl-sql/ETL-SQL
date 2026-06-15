@@ -38,12 +38,26 @@ release begins.
 
 ### Phase 1 — PostgreSQL State Provider
 
-- [ ] **P1.1 Extract database-provider interfaces for Portal + Orchestrator state.**
-  Decouple from the hardcoded `UseSqlite`; allow SQLite (default) or PostgreSQL by configuration.
-  Resolve the two-store split (Gap #1): the Orchestrator's hand-written SQLite store needs a provider
-  strategy too, or to move onto the EF model.
-- [ ] **P1.2 Create EF Core migrations for PostgreSQL.**
-  Provider-agnostic model with Npgsql migrations alongside the SQLite ones; CI must build/migrate both.
+- [x] **P1.1 Extract database-provider interfaces for Portal + Orchestrator state.**
+  *(done)* Both state stores are now provider-selectable (SQLite default), removing the hardcoded
+  coupling. **Portal (EF):** new `ETL_SQL.Common.DatabaseProvider` enum + `PortalConfig.Database`
+  (Provider/ConnectionString); `PortalDatabase.Configure()` replaces both hardcoded `UseSqlite` sites
+  (`Program.cs` + the design-time factory, now `ETL_SQL_DB_PROVIDER`-aware for P1.2 migration
+  generation); added `Npgsql.EntityFrameworkCore.PostgreSQL` (+ refreshed `THIRD-PARTY-INVENTORY.md` /
+  `THIRD-PARTY-NOTICES.md`). **Orchestrator (hand-written):** new `IOrchestratorStoreFactory`
+  config-selects the provider and is the single construction seam — every production
+  `new SQLiteJobHistoryStore(...)` (`SubscriptionsController` ×4, `SubscriptionDeliveryStatusService`,
+  `SubscriptionScriptMaintenance`) now routes through it, and the DI singleton is provider-aware.
+  Postgres **fails closed** in both stores until P1.2. Tests: `OrchestratorStoreFactoryTests`; SQLite
+  behavior unchanged (228 Portal + 43 Orchestrator store/lease tests green).
+- [ ] **P1.2 Implement PostgreSQL for both stores (provider wired in P1.1; finish + verify here).**
+  **Portal:** generate a Postgres EF migrations set (`ETL_SQL_DB_PROVIDER=Postgres dotnet ef migrations
+  add … -o Data/Migrations/Postgres`) and select it by provider; CI builds/migrates both. **Orchestrator:**
+  port the 1150-line hand-written SQLite SQL in `SQLiteJobHistoryStore` to be provider-neutral — an
+  `IDbConnectionFactory` + a small `ISqlDialect` for the non-portable idioms (CREATE TABLE/serial,
+  `PRAGMA table_info` vs `information_schema`, `COLLATE NOCASE`, `INSERT OR REPLACE`) — then implement
+  the Npgsql path. Verify both end to end against a real Postgres via Testcontainers
+  (`Category=Integration`, needs Docker). Lift the P1.1 fail-closed guards once verified.
 - [ ] **P1.3 Implement `etl-sql admin migrate-database --from sqlite --to postgres --dry-run`.**
   Row-count verification and cutover checkpoints; fail closed on mismatch. Builds on the v0.11.0
   `etl-sql admin` command group.
