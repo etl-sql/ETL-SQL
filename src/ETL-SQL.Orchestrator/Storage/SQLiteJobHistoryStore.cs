@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -9,35 +10,24 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
-using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Orchestrator.Storage
 {
     /// <summary>
-    /// SQLite-backed implementation of the job history store, managing job definitions and execution logs.
+    /// Relational (provider-neutral) job history / bundle / lineage store. The connection, schema DDL,
+    /// and the few non-portable SQL constructs come from an <see cref="IOrchestratorStoreDialect"/>, so
+    /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
+    /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class SQLiteJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore
     {
-        private readonly string _connectionString;
+        private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
         private readonly System.Threading.SemaphoreSlim _initLock = new(1, 1);
 
-        /// <summary>
-        /// Returns the canonical global DB path in LocalApplicationData so all instances on the
-        /// same machine share the same job history regardless of their working directory.
-        /// </summary>
-        public static string DefaultDbPath()
+        public RelationalJobHistoryStore(IOrchestratorStoreDialect dialect)
         {
-            var dir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ETL-SQL");
-            Directory.CreateDirectory(dir);
-            return Path.Combine(dir, "etlsql.db");
-        }
-
-        public SQLiteJobHistoryStore(string? dbPath = null)
-        {
-            _connectionString = $"Data Source={dbPath ?? DefaultDbPath()}";
+            _dialect = dialect;
         }
 
         private async Task EnsureInitializedAsync()
@@ -54,7 +44,7 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 if (_initialized) return;
 
-                using var connection = new SqliteConnection(_connectionString);
+                using var connection = _dialect.CreateConnection();
                 await connection.OpenAsync();
 
                 var createJobsTable = @"
@@ -140,8 +130,14 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
+                var schema = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
+                // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
+                // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
+                // COLLATE NOCASE indexes/queries resolve.
+                schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
+
                 using var command = connection.CreateCommand();
-                command.CommandText = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
+                command.CommandText = _dialect.CollationDdl + schema;
                 await command.ExecuteNonQueryAsync();
 
                 // 8B-2: Schema migration — add resource tracking columns if missing
@@ -157,15 +153,9 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
-        private async Task EnsureJobColumnsExist(SqliteConnection connection)
+        private async Task EnsureJobColumnsExist(DbConnection connection)
         {
-            var columns = new List<string>();
-            using (var cmd = connection.CreateCommand())
-            {
-                cmd.CommandText = "PRAGMA table_info(Jobs);";
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
-            }
+            var columns = await _dialect.GetColumnNamesAsync(connection, "Jobs");
 
             if (!columns.Contains("MaxRetries"))
             {
@@ -217,15 +207,9 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
-        private async Task EnsureHistoryColumnsExist(SqliteConnection connection)
+        private async Task EnsureHistoryColumnsExist(DbConnection connection)
         {
-            var columns = new List<string>();
-            using (var cmd = connection.CreateCommand())
-            {
-                cmd.CommandText = "PRAGMA table_info(JobHistory);";
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
-            }
+            var columns = await _dialect.GetColumnNamesAsync(connection, "JobHistory");
 
             if (!columns.Contains("PeakMemoryBytes"))
             {
@@ -256,15 +240,9 @@ namespace ETL_SQL.Orchestrator.Storage
             }
         }
 
-        private async Task EnsureLineageHistoryColumnsExist(SqliteConnection connection)
+        private async Task EnsureLineageHistoryColumnsExist(DbConnection connection)
         {
-            var columns = new List<string>();
-            using (var cmd = connection.CreateCommand())
-            {
-                cmd.CommandText = "PRAGMA table_info(LineageHistory);";
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
-            }
+            var columns = await _dialect.GetColumnNamesAsync(connection, "LineageHistory");
 
             async Task AddColumn(string name, string ddl)
             {
@@ -286,14 +264,14 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task SaveJobAsync(JobDefinition job)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             // Upsert (not INSERT OR REPLACE): REPLACE deletes and reinserts the row, which would
             // silently clear an active execution lease whenever a job definition is re-saved.
             var sql = @"
                 INSERT INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy)
-                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay, $scriptHash, $hashPolicy)
+                VALUES (@name, @script, @interval, @unit, @atTime, @lastRun, @nextRun, @isEnabled, @maxRetries, @retryDelay, @scriptHash, @hashPolicy)
                 ON CONFLICT(Name) DO UPDATE SET
                     Script            = excluded.Script,
                     Interval          = excluded.Interval,
@@ -310,18 +288,18 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.Parameters.AddWithValue("$name", job.Name);
-            command.Parameters.AddWithValue("$script", job.Script);
-            command.Parameters.AddWithValue("$interval", job.Interval);
-            command.Parameters.AddWithValue("$unit", job.Unit);
-            command.Parameters.AddWithValue("$atTime", (object?)job.AtTime ?? DBNull.Value);
-            command.Parameters.AddWithValue("$lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
-            command.Parameters.AddWithValue("$nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
-            command.Parameters.AddWithValue("$isEnabled", job.IsEnabled ? 1 : 0);
-            command.Parameters.AddWithValue("$maxRetries", job.MaxRetries);
-            command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
-            command.Parameters.AddWithValue("$scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
-            command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
+            command.AddParam("@name", job.Name);
+            command.AddParam("@script", job.Script);
+            command.AddParam("@interval", job.Interval);
+            command.AddParam("@unit", job.Unit);
+            command.AddParam("@atTime", (object?)job.AtTime ?? DBNull.Value);
+            command.AddParam("@lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@isEnabled", job.IsEnabled ? 1 : 0);
+            command.AddParam("@maxRetries", job.MaxRetries);
+            command.AddParam("@retryDelay", job.RetryDelaySeconds);
+            command.AddParam("@scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
+            command.AddParam("@hashPolicy", job.HashPolicy);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -329,44 +307,44 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<bool> TrySaveJobAsync(JobDefinition job, long expectedVersion)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE Jobs SET
-                    Script = $script,
-                    Interval = $interval,
-                    Unit = $unit,
-                    AtTime = $atTime,
-                    LastRun = $lastRun,
-                    NextRun = $nextRun,
-                    IsEnabled = $isEnabled,
-                    MaxRetries = $maxRetries,
-                    RetryDelaySeconds = $retryDelay,
-                    ScriptHash = $scriptHash,
-                    HashPolicy = $hashPolicy,
+                    Script = @script,
+                    Interval = @interval,
+                    Unit = @unit,
+                    AtTime = @atTime,
+                    LastRun = @lastRun,
+                    NextRun = @nextRun,
+                    IsEnabled = @isEnabled,
+                    MaxRetries = @maxRetries,
+                    RetryDelaySeconds = @retryDelay,
+                    ScriptHash = @scriptHash,
+                    HashPolicy = @hashPolicy,
                     Version = Version + 1
-                WHERE Name = $name COLLATE NOCASE AND Version = $expectedVersion;";
+                WHERE Name = @name COLLATE NOCASE AND Version = @expectedVersion;";
             AddJobParameters(command, job);
-            command.Parameters.AddWithValue("$expectedVersion", expectedVersion);
+            command.AddParam("@expectedVersion", expectedVersion);
             return await command.ExecuteNonQueryAsync() == 1;
         }
 
-        private static void AddJobParameters(SqliteCommand command, JobDefinition job)
+        private static void AddJobParameters(DbCommand command, JobDefinition job)
         {
-            command.Parameters.AddWithValue("$name", job.Name);
-            command.Parameters.AddWithValue("$script", job.Script);
-            command.Parameters.AddWithValue("$interval", job.Interval);
-            command.Parameters.AddWithValue("$unit", job.Unit);
-            command.Parameters.AddWithValue("$atTime", (object?)job.AtTime ?? DBNull.Value);
-            command.Parameters.AddWithValue("$lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
-            command.Parameters.AddWithValue("$nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
-            command.Parameters.AddWithValue("$isEnabled", job.IsEnabled ? 1 : 0);
-            command.Parameters.AddWithValue("$maxRetries", job.MaxRetries);
-            command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
-            command.Parameters.AddWithValue("$scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
-            command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
+            command.AddParam("@name", job.Name);
+            command.AddParam("@script", job.Script);
+            command.AddParam("@interval", job.Interval);
+            command.AddParam("@unit", job.Unit);
+            command.AddParam("@atTime", (object?)job.AtTime ?? DBNull.Value);
+            command.AddParam("@lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@isEnabled", job.IsEnabled ? 1 : 0);
+            command.AddParam("@maxRetries", job.MaxRetries);
+            command.AddParam("@retryDelay", job.RetryDelaySeconds);
+            command.AddParam("@scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
+            command.AddParam("@hashPolicy", job.HashPolicy);
         }
 
         // ── Execution lease (P1.1) ────────────────────────────────────────────────
@@ -379,19 +357,19 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             var now = DateTime.UtcNow;
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE Jobs SET LeaseOwner = $owner, LeaseExpiresAt = $expires
-                WHERE Name = $name
-                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= $now);";
-            command.Parameters.AddWithValue("$owner", owner);
-            command.Parameters.AddWithValue("$expires", now.Add(duration).ToString("O"));
-            command.Parameters.AddWithValue("$name", jobName);
-            command.Parameters.AddWithValue("$now", now.ToString("O"));
+                UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires
+                WHERE Name = @name
+                  AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now);";
+            command.AddParam("@owner", owner);
+            command.AddParam("@expires", now.Add(duration).ToString("O"));
+            command.AddParam("@name", jobName);
+            command.AddParam("@now", now.ToString("O"));
 
             return await command.ExecuteNonQueryAsync() == 1;
         }
@@ -399,16 +377,16 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
-                UPDATE Jobs SET LeaseExpiresAt = $expires
-                WHERE Name = $name AND LeaseOwner = $owner;";
-            command.Parameters.AddWithValue("$expires", DateTime.UtcNow.Add(duration).ToString("O"));
-            command.Parameters.AddWithValue("$name", jobName);
-            command.Parameters.AddWithValue("$owner", owner);
+                UPDATE Jobs SET LeaseExpiresAt = @expires
+                WHERE Name = @name AND LeaseOwner = @owner;";
+            command.AddParam("@expires", DateTime.UtcNow.Add(duration).ToString("O"));
+            command.AddParam("@name", jobName);
+            command.AddParam("@owner", owner);
 
             return await command.ExecuteNonQueryAsync() == 1;
         }
@@ -416,15 +394,15 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task ReleaseJobLeaseAsync(string jobName, string owner)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
             command.CommandText = @"
                 UPDATE Jobs SET LeaseOwner = NULL, LeaseExpiresAt = NULL
-                WHERE Name = $name AND LeaseOwner = $owner;";
-            command.Parameters.AddWithValue("$name", jobName);
-            command.Parameters.AddWithValue("$owner", owner);
+                WHERE Name = @name AND LeaseOwner = @owner;";
+            command.AddParam("@name", jobName);
+            command.AddParam("@owner", owner);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -432,7 +410,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<JobDefinition>> GetActiveJobsAsync()
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             var sql = "SELECT * FROM Jobs WHERE IsEnabled = 1;";
@@ -451,7 +429,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<JobDefinition>> GetAllJobsAsync()
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
@@ -469,12 +447,12 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<JobDefinition?> GetJobAsync(string name)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var command = connection.CreateCommand();
             command.CommandText = "SELECT * FROM Jobs WHERE Name = @name COLLATE NOCASE LIMIT 1;";
-            command.Parameters.AddWithValue("@name", name);
+            command.AddParam("@name", name);
 
             using var reader = await command.ExecuteReaderAsync();
             if (!await reader.ReadAsync()) return null;
@@ -482,7 +460,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return ReadJob(reader);
         }
 
-        private static JobDefinition ReadJob(SqliteDataReader reader)
+        private static JobDefinition ReadJob(DbDataReader reader)
         {
             var lastRunOrdinal = reader.GetOrdinal("LastRun");
             var nextRunOrdinal = reader.GetOrdinal("NextRun");
@@ -509,24 +487,24 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task DeleteJobAsync(string name)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             using var transaction = connection.BeginTransaction();
             try
             {
-                var sql1 = "DELETE FROM Jobs WHERE Name = $name;";
+                var sql1 = "DELETE FROM Jobs WHERE Name = @name;";
                 using var command1 = connection.CreateCommand();
                 command1.CommandText = sql1;
                 command1.Transaction = transaction;
-                command1.Parameters.AddWithValue("$name", name);
+                command1.AddParam("@name", name);
                 await command1.ExecuteNonQueryAsync();
 
-                var sql2 = "DELETE FROM JobHistory WHERE JobName = $name;";
+                var sql2 = "DELETE FROM JobHistory WHERE JobName = @name;";
                 using var command2 = connection.CreateCommand();
                 command2.CommandText = sql2;
                 command2.Transaction = transaction;
-                command2.Parameters.AddWithValue("$name", name);
+                command2.AddParam("@name", name);
                 await command2.ExecuteNonQueryAsync();
 
                 await transaction.CommitAsync();
@@ -541,15 +519,15 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<bool> TryDeleteJobAsync(string name, long expectedVersion)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
 
             using var deleteJob = connection.CreateCommand();
             deleteJob.Transaction = transaction;
-            deleteJob.CommandText = "DELETE FROM Jobs WHERE Name = $name COLLATE NOCASE AND Version = $version;";
-            deleteJob.Parameters.AddWithValue("$name", name);
-            deleteJob.Parameters.AddWithValue("$version", expectedVersion);
+            deleteJob.CommandText = "DELETE FROM Jobs WHERE Name = @name COLLATE NOCASE AND Version = @version;";
+            deleteJob.AddParam("@name", name);
+            deleteJob.AddParam("@version", expectedVersion);
             if (await deleteJob.ExecuteNonQueryAsync() != 1)
             {
                 await transaction.RollbackAsync();
@@ -558,8 +536,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var deleteHistory = connection.CreateCommand();
             deleteHistory.Transaction = transaction;
-            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobName = $name;";
-            deleteHistory.Parameters.AddWithValue("$name", name);
+            deleteHistory.CommandText = "DELETE FROM JobHistory WHERE JobName = @name;";
+            deleteHistory.AddParam("@name", name);
             await deleteHistory.ExecuteNonQueryAsync();
             await transaction.CommitAsync();
             return true;
@@ -568,51 +546,53 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE Jobs SET LastRun = $lastRun, NextRun = $nextRun WHERE Name = $name;";
+            var sql = "UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun WHERE Name = @name;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.Parameters.AddWithValue("$name", name);
-            command.Parameters.AddWithValue("$lastRun", lastRun.ToString("O"));
-            command.Parameters.AddWithValue("$nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@name", name);
+            command.AddParam("@lastRun", lastRun.ToString("O"));
+            command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
             await command.ExecuteNonQueryAsync();
         }
 
         public async Task<long> LogJobStartAsync(string jobName)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "INSERT INTO JobHistory (JobName, StartTime, Status) VALUES ($name, $start, 'RUNNING'); SELECT last_insert_rowid();";
+            var sql = _dialect.InsertReturningId(
+                "INSERT INTO JobHistory (JobName, StartTime, Status) VALUES (@name, @start, 'RUNNING')", "Id");
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.Parameters.AddWithValue("$name", jobName);
-            command.Parameters.AddWithValue("$start", DateTime.Now.ToString("O"));
+            command.AddParam("@name", jobName);
+            command.AddParam("@start", DateTime.Now.ToString("O"));
 
-            return (long)(await command.ExecuteScalarAsync())!;
+            // SQLite's last_insert_rowid() returns long; Postgres RETURNING id returns int — normalize.
+            return Convert.ToInt64((await command.ExecuteScalarAsync())!);
         }
 
         public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var sql = "UPDATE JobHistory SET EndTime = $end, Status = $status, ErrorMessage = $err, RowsProcessed = $rows, PeakMemoryBytes = $mem, CpuTimeSeconds = $cpu, ScriptHashAtRunTime = $hash, HashMatched = $matched WHERE Id = $id;";
+            var sql = "UPDATE JobHistory SET EndTime = @end, Status = @status, ErrorMessage = @err, RowsProcessed = @rows, PeakMemoryBytes = @mem, CpuTimeSeconds = @cpu, ScriptHashAtRunTime = @hash, HashMatched = @matched WHERE Id = @id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            command.Parameters.AddWithValue("$id", entryId);
-            command.Parameters.AddWithValue("$end", DateTime.Now.ToString("O"));
-            command.Parameters.AddWithValue("$status", status);
-            command.Parameters.AddWithValue("$err", (object?)errorMessage ?? DBNull.Value);
-            command.Parameters.AddWithValue("$rows", rowsProcessed);
-            command.Parameters.AddWithValue("$mem", peakMemoryBytes);
-            command.Parameters.AddWithValue("$cpu", cpuTimeSeconds);
-            command.Parameters.AddWithValue("$hash", (object?)scriptHashAtRunTime ?? DBNull.Value);
-            command.Parameters.AddWithValue("$matched", hashMatched.HasValue ? (object)(hashMatched.Value ? 1 : 0) : DBNull.Value);
+            command.AddParam("@id", entryId);
+            command.AddParam("@end", DateTime.Now.ToString("O"));
+            command.AddParam("@status", status);
+            command.AddParam("@err", (object?)errorMessage ?? DBNull.Value);
+            command.AddParam("@rows", rowsProcessed);
+            command.AddParam("@mem", peakMemoryBytes);
+            command.AddParam("@cpu", cpuTimeSeconds);
+            command.AddParam("@hash", (object?)scriptHashAtRunTime ?? DBNull.Value);
+            command.AddParam("@matched", hashMatched.HasValue ? (object)(hashMatched.Value ? 1 : 0) : DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -620,17 +600,17 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             var sql = "SELECT * FROM JobHistory ";
-            if (jobName != null) sql += "WHERE JobName = $name ";
-            sql += "ORDER BY StartTime DESC LIMIT $limit;";
+            if (jobName != null) sql += "WHERE JobName = @name ";
+            sql += "ORDER BY StartTime DESC LIMIT @limit;";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
-            if (jobName != null) command.Parameters.AddWithValue("$name", jobName);
-            command.Parameters.AddWithValue("$limit", limit);
+            if (jobName != null) command.AddParam("@name", jobName);
+            command.AddParam("@limit", limit);
 
             var entries = new List<JobHistoryEntry>();
             using var reader = await command.ExecuteReaderAsync();
@@ -663,7 +643,7 @@ namespace ETL_SQL.Orchestrator.Storage
             var nextVersion = (latest?.Version ?? 0) + 1;
             var publishedAt = DateTime.Now;
 
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
             try
@@ -675,16 +655,16 @@ namespace ETL_SQL.Orchestrator.Storage
                         INSERT INTO BundleVersions
                             (BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description, EncryptionMode, EncryptionMetadata)
                         VALUES
-                            ($bundle, $version, $entry, $hash, $published, $publisher, $description, $mode, $metadata);";
-                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
-                    cmd.Parameters.AddWithValue("$version", nextVersion);
-                    cmd.Parameters.AddWithValue("$entry", NormalizeVirtualPath(request.EntryPath));
-                    cmd.Parameters.AddWithValue("$hash", request.ContentHash);
-                    cmd.Parameters.AddWithValue("$published", publishedAt.ToString("O"));
-                    cmd.Parameters.AddWithValue("$publisher", (object?)request.Publisher ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$description", (object?)request.Description ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$mode", request.EncryptionMode);
-                    cmd.Parameters.AddWithValue("$metadata", (object?)request.EncryptionMetadata ?? DBNull.Value);
+                            (@bundle, @version, @entry, @hash, @published, @publisher, @description, @mode, @metadata);";
+                    cmd.AddParam("@bundle", request.BundleName);
+                    cmd.AddParam("@version", nextVersion);
+                    cmd.AddParam("@entry", NormalizeVirtualPath(request.EntryPath));
+                    cmd.AddParam("@hash", request.ContentHash);
+                    cmd.AddParam("@published", publishedAt.ToString("O"));
+                    cmd.AddParam("@publisher", (object?)request.Publisher ?? DBNull.Value);
+                    cmd.AddParam("@description", (object?)request.Description ?? DBNull.Value);
+                    cmd.AddParam("@mode", request.EncryptionMode);
+                    cmd.AddParam("@metadata", (object?)request.EncryptionMetadata ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync();
                 }
 
@@ -696,14 +676,14 @@ namespace ETL_SQL.Orchestrator.Storage
                         INSERT INTO BundleFiles
                             (BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType)
                         VALUES
-                            ($bundle, $version, $path, $content, $hash, $size, $type);";
-                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
-                    cmd.Parameters.AddWithValue("$version", nextVersion);
-                    cmd.Parameters.AddWithValue("$path", NormalizeVirtualPath(file.VirtualPath));
-                    cmd.Parameters.AddWithValue("$content", file.Content);
-                    cmd.Parameters.AddWithValue("$hash", file.ContentHash);
-                    cmd.Parameters.AddWithValue("$size", file.SizeBytes);
-                    cmd.Parameters.AddWithValue("$type", file.ContentType);
+                            (@bundle, @version, @path, @content, @hash, @size, @type);";
+                    cmd.AddParam("@bundle", request.BundleName);
+                    cmd.AddParam("@version", nextVersion);
+                    cmd.AddParam("@path", NormalizeVirtualPath(file.VirtualPath));
+                    cmd.AddParam("@content", file.Content);
+                    cmd.AddParam("@hash", file.ContentHash);
+                    cmd.AddParam("@size", file.SizeBytes);
+                    cmd.AddParam("@type", file.ContentType);
                     await cmd.ExecuteNonQueryAsync();
                 }
 
@@ -712,14 +692,15 @@ namespace ETL_SQL.Orchestrator.Storage
                     using var cmd = connection.CreateCommand();
                     cmd.Transaction = transaction;
                     cmd.CommandText = @"
-                        INSERT OR IGNORE INTO BundleDependencies
+                        INSERT INTO BundleDependencies
                             (BundleName, Version, FromPath, ToPath)
                         VALUES
-                            ($bundle, $version, $from, $to);";
-                    cmd.Parameters.AddWithValue("$bundle", request.BundleName);
-                    cmd.Parameters.AddWithValue("$version", nextVersion);
-                    cmd.Parameters.AddWithValue("$from", NormalizeVirtualPath(dep.FromPath));
-                    cmd.Parameters.AddWithValue("$to", NormalizeVirtualPath(dep.ToPath));
+                            (@bundle, @version, @from, @to)
+                        ON CONFLICT DO NOTHING;";
+                    cmd.AddParam("@bundle", request.BundleName);
+                    cmd.AddParam("@version", nextVersion);
+                    cmd.AddParam("@from", NormalizeVirtualPath(dep.FromPath));
+                    cmd.AddParam("@to", NormalizeVirtualPath(dep.ToPath));
                     await cmd.ExecuteNonQueryAsync();
                 }
 
@@ -789,13 +770,13 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<BundleVersionInfo?> GetLatestVersionAsync(string bundleName)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE
+                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE
                                 ORDER BY Version DESC LIMIT 1;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.AddParam("@bundle", bundleName);
             using var reader = await cmd.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
         }
@@ -803,13 +784,13 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<BundleVersionInfo?> GetVersionAsync(string bundleName, int version)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version LIMIT 1;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
-            cmd.Parameters.AddWithValue("$version", version);
+                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version LIMIT 1;";
+            cmd.AddParam("@bundle", bundleName);
+            cmd.AddParam("@version", version);
             using var reader = await cmd.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadBundleVersion(reader) : null;
         }
@@ -817,16 +798,16 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<BundleFileInfo?> GetFileAsync(string bundleName, int version, string virtualPath)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
                                 FROM BundleFiles
-                                WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version AND VirtualPath = $path COLLATE NOCASE
+                                WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version AND VirtualPath = @path COLLATE NOCASE
                                 LIMIT 1;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
-            cmd.Parameters.AddWithValue("$version", version);
-            cmd.Parameters.AddWithValue("$path", NormalizeVirtualPath(virtualPath));
+            cmd.AddParam("@bundle", bundleName);
+            cmd.AddParam("@version", version);
+            cmd.AddParam("@path", NormalizeVirtualPath(virtualPath));
             using var reader = await cmd.ExecuteReaderAsync();
             return await reader.ReadAsync() ? ReadBundleFile(reader) : null;
         }
@@ -834,7 +815,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<BundleVersionInfo>> GetBundlesAsync()
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT bv.BundleName, bv.Version, bv.EntryPath, bv.ContentHash, bv.PublishedAt, bv.Publisher, bv.Description
@@ -849,27 +830,27 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<BundleVersionInfo>> GetVersionsAsync(string bundleName)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, EntryPath, ContentHash, PublishedAt, Publisher, Description
-                                FROM BundleVersions WHERE BundleName = $bundle COLLATE NOCASE
+                                FROM BundleVersions WHERE BundleName = @bundle COLLATE NOCASE
                                 ORDER BY Version DESC;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
+            cmd.AddParam("@bundle", bundleName);
             return await ReadBundleVersionsAsync(cmd);
         }
 
         public async Task<IEnumerable<BundleFileInfo>> GetFilesAsync(string bundleName, int version)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, VirtualPath, Content, ContentHash, SizeBytes, ContentType
-                                FROM BundleFiles WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version
+                                FROM BundleFiles WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version
                                 ORDER BY VirtualPath COLLATE NOCASE;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
-            cmd.Parameters.AddWithValue("$version", version);
+            cmd.AddParam("@bundle", bundleName);
+            cmd.AddParam("@version", version);
             var files = new List<BundleFileInfo>();
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync()) files.Add(ReadBundleFile(reader));
@@ -879,14 +860,14 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<BundleDependencyInfo>> GetDependenciesAsync(string bundleName, int version)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"SELECT BundleName, Version, FromPath, ToPath
-                                FROM BundleDependencies WHERE BundleName = $bundle COLLATE NOCASE AND Version = $version
+                                FROM BundleDependencies WHERE BundleName = @bundle COLLATE NOCASE AND Version = @version
                                 ORDER BY FromPath COLLATE NOCASE, ToPath COLLATE NOCASE;";
-            cmd.Parameters.AddWithValue("$bundle", bundleName);
-            cmd.Parameters.AddWithValue("$version", version);
+            cmd.AddParam("@bundle", bundleName);
+            cmd.AddParam("@version", version);
             var deps = new List<BundleDependencyInfo>();
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())
@@ -894,7 +875,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return deps;
         }
 
-        private static async Task<IEnumerable<BundleVersionInfo>> ReadBundleVersionsAsync(SqliteCommand cmd)
+        private static async Task<IEnumerable<BundleVersionInfo>> ReadBundleVersionsAsync(DbCommand cmd)
         {
             var versions = new List<BundleVersionInfo>();
             using var reader = await cmd.ExecuteReaderAsync();
@@ -902,7 +883,7 @@ namespace ETL_SQL.Orchestrator.Storage
             return versions;
         }
 
-        private static BundleVersionInfo ReadBundleVersion(SqliteDataReader reader) => new(
+        private static BundleVersionInfo ReadBundleVersion(DbDataReader reader) => new(
             reader.GetString(0),
             reader.GetInt32(1),
             reader.GetString(2),
@@ -911,7 +892,7 @@ namespace ETL_SQL.Orchestrator.Storage
             reader.IsDBNull(5) ? null : reader.GetString(5),
             reader.IsDBNull(6) ? null : reader.GetString(6));
 
-        private static BundleFileInfo ReadBundleFile(SqliteDataReader reader) => new(
+        private static BundleFileInfo ReadBundleFile(DbDataReader reader) => new(
             reader.GetString(0),
             reader.GetInt32(1),
             reader.GetString(2),
@@ -932,7 +913,7 @@ namespace ETL_SQL.Orchestrator.Storage
             var entriesList = entries.ToList();
             if (entriesList.Count == 0) return;
 
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var transaction = connection.BeginTransaction();
             try
@@ -946,23 +927,23 @@ namespace ETL_SQL.Orchestrator.Storage
                             (RunAt, JobName, ScriptPath, TargetTable, TargetColumn, SourceTables, SourceColumns, Operation, Tags, SourceFile, Line,
                              TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions)
                         VALUES
-                            ($runAt, $job, $script, $target, $col, $sources, $srcCols, $op, $tags, $file, $line,
-                             $tkind, $texpr, $fns, $derived);";
-                    cmd.Parameters.AddWithValue("$runAt", runAtStr);
-                    cmd.Parameters.AddWithValue("$job", (object?)jobName ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$script", (object?)scriptPath ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$target", entry.TargetTable);
-                    cmd.Parameters.AddWithValue("$col", (object?)entry.TargetColumn ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$sources", JsonSerializer.Serialize(entry.SourceTables));
-                    cmd.Parameters.AddWithValue("$srcCols", JsonSerializer.Serialize(entry.SourceColumns));
-                    cmd.Parameters.AddWithValue("$op", entry.Operation);
-                    cmd.Parameters.AddWithValue("$tags", JsonSerializer.Serialize(entry.Metadata));
-                    cmd.Parameters.AddWithValue("$file", (object?)entry.SourceFile ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$line", entry.Line);
-                    cmd.Parameters.AddWithValue("$tkind", entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? (object)DBNull.Value : entry.TransformationKind.ToString());
-                    cmd.Parameters.AddWithValue("$texpr", (object?)entry.TransformationExpression ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("$fns", JsonSerializer.Serialize(entry.FunctionsApplied ?? (IReadOnlyList<string>)System.Array.Empty<string>()));
-                    cmd.Parameters.AddWithValue("$derived", (object?)entry.DerivedFromDescriptions ?? DBNull.Value);
+                            (@runAt, @job, @script, @target, @col, @sources, @srcCols, @op, @tags, @file, @line,
+                             @tkind, @texpr, @fns, @derived);";
+                    cmd.AddParam("@runAt", runAtStr);
+                    cmd.AddParam("@job", (object?)jobName ?? DBNull.Value);
+                    cmd.AddParam("@script", (object?)scriptPath ?? DBNull.Value);
+                    cmd.AddParam("@target", entry.TargetTable);
+                    cmd.AddParam("@col", (object?)entry.TargetColumn ?? DBNull.Value);
+                    cmd.AddParam("@sources", JsonSerializer.Serialize(entry.SourceTables));
+                    cmd.AddParam("@srcCols", JsonSerializer.Serialize(entry.SourceColumns));
+                    cmd.AddParam("@op", entry.Operation);
+                    cmd.AddParam("@tags", JsonSerializer.Serialize(entry.Metadata));
+                    cmd.AddParam("@file", (object?)entry.SourceFile ?? DBNull.Value);
+                    cmd.AddParam("@line", entry.Line);
+                    cmd.AddParam("@tkind", entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? (object)DBNull.Value : entry.TransformationKind.ToString());
+                    cmd.AddParam("@texpr", (object?)entry.TransformationExpression ?? DBNull.Value);
+                    cmd.AddParam("@fns", JsonSerializer.Serialize(entry.FunctionsApplied ?? (IReadOnlyList<string>)System.Array.Empty<string>()));
+                    cmd.AddParam("@derived", (object?)entry.DerivedFromDescriptions ?? DBNull.Value);
                     await cmd.ExecuteNonQueryAsync();
                 }
                 await transaction.CommitAsync();
@@ -977,7 +958,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTableAsync(string tableName, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
@@ -985,11 +966,11 @@ namespace ETL_SQL.Orchestrator.Storage
                        SourceTables, Operation, Tags, SourceFile, Line,
                        SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
-                WHERE TargetTable = $table COLLATE NOCASE
+                WHERE TargetTable = @table COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
-                LIMIT $limit;";
-            cmd.Parameters.AddWithValue("$table", tableName);
-            cmd.Parameters.AddWithValue("$limit", limit);
+                LIMIT @limit;";
+            cmd.AddParam("@table", tableName);
+            cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
@@ -999,7 +980,7 @@ namespace ETL_SQL.Orchestrator.Storage
             if (tableNames.Count == 0) return Array.Empty<LineageHistoryEntry>();
 
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
 
@@ -1009,11 +990,11 @@ namespace ETL_SQL.Orchestrator.Storage
             var i = 0;
             foreach (var name in tableNames)
             {
-                var p = "$t" + i++;
+                var p = "@t" + i++;
                 paramNames.Add(p);
-                cmd.Parameters.AddWithValue(p, name);
+                cmd.AddParam(p, name);
             }
-            cmd.Parameters.AddWithValue("$limit", limitPerTable);
+            cmd.AddParam("@limit", limitPerTable);
             cmd.CommandText = $@"
                 SELECT Id, RunAt, JobName, ScriptPath, TargetTable, TargetColumn,
                        SourceTables, Operation, Tags, SourceFile, Line,
@@ -1025,7 +1006,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     FROM LineageHistory
                     WHERE TargetTable COLLATE NOCASE IN ({string.Join(", ", paramNames)})
                 )
-                WHERE _rn <= $limit
+                WHERE _rn <= @limit
                 ORDER BY RunAt DESC, Id DESC;";
             return await ReadLineageHistoryAsync(cmd);
         }
@@ -1033,7 +1014,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForTagAsync(string tagKey, string? tagValue = null, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             // Tags is stored as a JSON object. Use LIKE to find the key; refine with value if provided.
@@ -1045,18 +1026,18 @@ namespace ETL_SQL.Orchestrator.Storage
                        SourceTables, Operation, Tags, SourceFile, Line,
                        SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
-                WHERE Tags LIKE $pattern
+                WHERE Tags LIKE @pattern
                 ORDER BY RunAt DESC, Id DESC
-                LIMIT $limit;";
-            cmd.Parameters.AddWithValue("$pattern", pattern);
-            cmd.Parameters.AddWithValue("$limit", limit);
+                LIMIT @limit;";
+            cmd.AddParam("@pattern", pattern);
+            cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForJobAsync(string jobName, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
@@ -1064,18 +1045,18 @@ namespace ETL_SQL.Orchestrator.Storage
                        SourceTables, Operation, Tags, SourceFile, Line,
                        SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
-                WHERE JobName = $jobName COLLATE NOCASE
+                WHERE JobName = @jobName COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
-                LIMIT $limit;";
-            cmd.Parameters.AddWithValue("$jobName", jobName);
-            cmd.Parameters.AddWithValue("$limit", limit);
+                LIMIT @limit;";
+            cmd.AddParam("@jobName", jobName);
+            cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceAsync(string sourceName, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
@@ -1083,11 +1064,11 @@ namespace ETL_SQL.Orchestrator.Storage
                        SourceTables, Operation, Tags, SourceFile, Line,
                        SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
-                WHERE SourceTables LIKE $pattern
+                WHERE SourceTables LIKE @pattern
                 ORDER BY RunAt DESC, Id DESC
-                LIMIT $scanLimit;";
-            cmd.Parameters.AddWithValue("$pattern", $"%\"{sourceName}\"%");
-            cmd.Parameters.AddWithValue("$scanLimit", Math.Max(limit * 5, limit));
+                LIMIT @scanLimit;";
+            cmd.AddParam("@pattern", $"%\"{sourceName}\"%");
+            cmd.AddParam("@scanLimit", Math.Max(limit * 5, limit));
 
             return (await ReadLineageHistoryAsync(cmd))
                 .Where(e => e.SourceTables.Any(s => string.Equals(s, sourceName, StringComparison.OrdinalIgnoreCase)))
@@ -1098,7 +1079,7 @@ namespace ETL_SQL.Orchestrator.Storage
         public async Task<IEnumerable<LineageHistoryEntry>> GetHistoryForSourceFileAsync(string sourceFile, int limit = 100)
         {
             await EnsureInitializedAsync();
-            using var connection = new SqliteConnection(_connectionString);
+            using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var cmd = connection.CreateCommand();
             cmd.CommandText = @"
@@ -1106,16 +1087,16 @@ namespace ETL_SQL.Orchestrator.Storage
                        SourceTables, Operation, Tags, SourceFile, Line,
                        SourceColumns, TransformationKind, TransformationExpression, FunctionsApplied, DerivedFromDescriptions
                 FROM LineageHistory
-                WHERE SourceFile = $sourceFile COLLATE NOCASE
-                   OR ScriptPath = $sourceFile COLLATE NOCASE
+                WHERE SourceFile = @sourceFile COLLATE NOCASE
+                   OR ScriptPath = @sourceFile COLLATE NOCASE
                 ORDER BY RunAt DESC, Id DESC
-                LIMIT $limit;";
-            cmd.Parameters.AddWithValue("$sourceFile", sourceFile);
-            cmd.Parameters.AddWithValue("$limit", limit);
+                LIMIT @limit;";
+            cmd.AddParam("@sourceFile", sourceFile);
+            cmd.AddParam("@limit", limit);
             return await ReadLineageHistoryAsync(cmd);
         }
 
-        private static async Task<IEnumerable<LineageHistoryEntry>> ReadLineageHistoryAsync(SqliteCommand cmd)
+        private static async Task<IEnumerable<LineageHistoryEntry>> ReadLineageHistoryAsync(DbCommand cmd)
         {
             var results = new List<LineageHistoryEntry>();
             using var reader = await cmd.ExecuteReaderAsync();
@@ -1145,6 +1126,32 @@ namespace ETL_SQL.Orchestrator.Storage
                 ));
             }
             return results;
+        }
+    }
+
+    /// <summary>
+    /// SQLite entry point for the Orchestrator store — the default, fully-supported standalone backend.
+    /// A thin subclass over <see cref="RelationalJobHistoryStore"/> that wires the SQLite dialect, so
+    /// every existing <c>new SQLiteJobHistoryStore(path)</c> call site keeps working unchanged.
+    /// </summary>
+    public sealed class SQLiteJobHistoryStore : RelationalJobHistoryStore
+    {
+        public SQLiteJobHistoryStore(string? dbPath = null)
+            : base(new SqliteOrchestratorDialect($"Data Source={dbPath ?? DefaultDbPath()}"))
+        {
+        }
+
+        /// <summary>
+        /// Canonical global DB path in LocalApplicationData so all instances on the same machine share
+        /// the same job history regardless of their working directory.
+        /// </summary>
+        public static string DefaultDbPath()
+        {
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ETL-SQL");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "etlsql.db");
         }
     }
 }
