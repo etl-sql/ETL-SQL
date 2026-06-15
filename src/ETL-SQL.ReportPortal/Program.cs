@@ -74,6 +74,22 @@ Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
 
+// ── Artifact storage (provider configurable: Local default, SMB/UNC for HA) ──────
+// Maps each artifact area to its configured root; the Keys area is the Data Protection key ring
+// directory beside the portal database. Call sites migrate onto this seam incrementally (P1.5+).
+builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(_ =>
+    ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
+        portalConfig.Storage.Provider,
+        new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
+        {
+            [ETL_SQL.Core.Storage.ArtifactArea.Scripts] = portalConfig.ScriptRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = portalConfig.SnapshotDirectory,
+            [ETL_SQL.Core.Storage.ArtifactArea.Maps] = portalConfig.MapRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = portalConfig.DatasetRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Keys] =
+                Path.Combine(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!, ".portal-keys"),
+        }));
+
 // ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);
 builder.Services.AddDbContext<PortalDbContext>(opt =>

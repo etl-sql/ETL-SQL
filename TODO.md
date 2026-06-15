@@ -94,7 +94,18 @@ release begins.
   Ships an `InMemoryArtifactStorage` reference implementation (executable spec + test double) with 14
   contract tests (`InMemoryArtifactStorageTests`). Local + SMB/UNC providers and call-site migration are
   P1.5; the `SecurityService`-backed guardrails are P1.6.
-- [ ] **P1.5 Implement Local and SMB/UNC shared storage providers** behind that interface.
+- [x] **P1.5 Implement Local and SMB/UNC shared storage providers** behind that interface.
+  *(done)* `FileSystemArtifactStorage` is the shared System.IO engine (atomic write-temp-then-rename,
+  owner-only `Keys`, resolved-path re-check via `SafePath`, no-op local lease); `LocalArtifactStorage`
+  (default) and `SmbArtifactStorage` (UNC-root validation + fail-fast share reachability probe) are thin
+  subclasses, selected by `ArtifactStorageFactory` ("local"/"smb"). The contract tests were refactored
+  into a shared `ArtifactStorageContractTests` base run against **both** the in-memory reference and the
+  filesystem provider (42 storage tests green), plus factory/SMB-validation tests. Wired into Portal DI
+  as `IArtifactStorage` (config `Portal:Storage:Provider`, default Local; areas mapped to the existing
+  root paths + the `.portal-keys` ring) — registration is inert until resolved, so portal boot is
+  unchanged (52 portal config/integration tests green). **Call-site migration** off direct `File.*`/
+  `Directory.*` is intentionally deferred: it lands incrementally alongside P1.6, once the
+  `SecurityService`-backed guardrails are enforced at the storage boundary.
 - [ ] **P1.6 Enforce path-traversal guardrails and script immutability at the storage boundary.**
   Extend the existing `SecurityService` path/immutability checks to the storage abstraction so every
   provider inherits them (don't reimplement per provider).

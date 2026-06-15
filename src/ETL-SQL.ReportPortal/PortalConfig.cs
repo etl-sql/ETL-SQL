@@ -19,6 +19,17 @@ public class PortalConfig
     public PortalSecurityConfig Security { get; set; } = new();
     public PortalRateLimitConfig RateLimit { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
+    public PortalStorageConfig Storage { get; set; } = new();
+}
+
+public class PortalStorageConfig
+{
+    /// <summary>
+    /// Artifact-storage provider for scripts/snapshots/datasets/maps/keys: "Local" (default) or "Smb"
+    /// (shared UNC share for multi-node Practical High Availability deployments). When "Smb", the area
+    /// root paths (<see cref="PortalConfig.ScriptRootPath"/> etc.) must be UNC paths.
+    /// </summary>
+    public string Provider { get; set; } = "Local";
 }
 
 public class PortalDatabaseConfig
