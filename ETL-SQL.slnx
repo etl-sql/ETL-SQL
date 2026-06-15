@@ -16,6 +16,7 @@
     <Project Path="src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj" />
     <Project Path="src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj" />
     <Project Path="src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj" />
+    <Project Path="src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj" />
     <Project Path="src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj" />
     <Project Path="src/ETL-SQL.ReportRuntime/ETL-SQL.ReportRuntime.csproj" />
     <Project Path="src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj" />
