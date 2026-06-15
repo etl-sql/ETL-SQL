@@ -123,6 +123,9 @@ try
     // Hosted service (starts/stops SchedulerService with the host)
     builder.Services.AddHostedService<OrchestratorHostedService>();
 
+    // Cluster node heartbeat (P1.7): register this daemon in the shared node registry.
+    builder.Services.AddNodeHeartbeat("Orchestrator");
+
     builder.WebHost.ConfigureKestrel(options =>
     {
         var kestrelSection = builder.Configuration.GetSection("Kestrel");

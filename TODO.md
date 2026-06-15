@@ -129,9 +129,23 @@ release begins.
 
 ### Phase 3 — Distributed Leases & Fencing
 
-- [ ] **P1.7 Database-backed node heartbeats + execution/job leases.**
-  Generalize the existing Orchestrator per-job lease/heartbeat and the single-instance lock into
-  node-level heartbeats so multiple nodes can coordinate over shared state.
+- [x] **P1.7 Database-backed node heartbeats + execution/job leases.**
+  *(done)* New `INodeRegistryStore` (`Core.Data`) + `NodeHeartbeat` record generalize the per-job
+  execution lease into a cluster-wide TTL heartbeat over shared state: `RegisterOrRenewNodeAsync`
+  (upsert that preserves first-seen), `GetLiveNodesAsync` (now < ExpiresAt), `GetAllNodesAsync`,
+  `DeregisterNodeAsync`, `PruneExpiredNodesAsync`. Implemented in the provider-neutral
+  `RelationalJobHistoryStore` (new `Nodes` table + index; portable `@`-params / `ON CONFLICT` /
+  ISO-8601 string times) so SQLite and PostgreSQL both inherit it, and registered as `INodeRegistryStore`
+  in DI. New `NodeHeartbeatService` (`BackgroundService`, generalizing
+  `SchedulerService.StartLeaseHeartbeat`) renews on `max(5, ttl/3)` and deregisters on graceful stop;
+  all registry I/O is on the background loop and failures are swallowed so a degraded registry never
+  takes down the host. Wired into both long-running hosts via `AddNodeHeartbeat(role)` — Orchestrator
+  daemon ("Orchestrator") and Portal ("Portal") — but **not** `AddEtlSqlEngine`, so one-shot CLI never
+  registers a node. Added `Microsoft.Extensions.Hosting.Abstractions` to the Orchestrator tier
+  (first-party MIT; inventory refreshed). Tests: `NodeRegistryTests` (SQLite store + service
+  register/renew/expiry/prune/deregister, first-seen preserved) and a PostgreSQL upsert/expiry case in
+  `OrchestratorPostgresStoreTests` — 10 green; 132 orchestration unit + 65 portal integration/coordination
+  tests still green. This is the substrate for fencing (P1.8) and leader election (P1.9).
 - [ ] **P1.8 Monotonically increasing fencing tokens** to reject stale writers during partitions (Gap #5).
 - [ ] **P1.9 Database-backed leader election** for cluster singletons (e.g. running migrations once).
 

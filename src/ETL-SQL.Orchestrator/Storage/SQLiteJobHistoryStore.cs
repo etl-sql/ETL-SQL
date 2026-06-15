@@ -19,7 +19,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -130,7 +130,20 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
-                var schema = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable;
+                // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
+                // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.
+                var createNodesTable = @"
+                CREATE TABLE IF NOT EXISTS Nodes (
+                    NodeId TEXT PRIMARY KEY,
+                    Role TEXT NOT NULL,
+                    FirstSeenAt TEXT NOT NULL,
+                    LastHeartbeatAt TEXT NOT NULL,
+                    ExpiresAt TEXT NOT NULL,
+                    Metadata TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_nodes_expires ON Nodes(ExpiresAt);";
+
+                var schema = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable + createNodesTable;
                 // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                 // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                 // COLLATE NOCASE indexes/queries resolve.
@@ -406,6 +419,108 @@ namespace ETL_SQL.Orchestrator.Storage
 
             await command.ExecuteNonQueryAsync();
         }
+
+        // ── Node registry (P1.7) ──────────────────────────────────────────────────
+        // Times are UTC ISO-8601 ("O") strings, like the execution lease: lexically and chronologically
+        // ordered, and unambiguous across hosts in different time zones.
+
+        public async Task RegisterOrRenewNodeAsync(string nodeId, string role, TimeSpan ttl, string? metadata = null)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            var now = DateTime.UtcNow;
+            using var command = connection.CreateCommand();
+            // Upsert: a renewal preserves FirstSeenAt (only excluded.* for the mutable columns).
+            command.CommandText = @"
+                INSERT INTO Nodes (NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata)
+                VALUES (@id, @role, @now, @now, @expires, @meta)
+                ON CONFLICT(NodeId) DO UPDATE SET
+                    Role            = excluded.Role,
+                    LastHeartbeatAt = excluded.LastHeartbeatAt,
+                    ExpiresAt       = excluded.ExpiresAt,
+                    Metadata        = excluded.Metadata;";
+            command.AddParam("@id", nodeId);
+            command.AddParam("@role", role);
+            command.AddParam("@now", now.ToString("O"));
+            command.AddParam("@expires", now.Add(ttl).ToString("O"));
+            command.AddParam("@meta", (object?)metadata ?? DBNull.Value);
+
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<IReadOnlyList<NodeHeartbeat>> GetLiveNodesAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata
+                FROM Nodes WHERE ExpiresAt > @now ORDER BY Role, NodeId;";
+            command.AddParam("@now", DateTime.UtcNow.ToString("O"));
+            return await ReadNodesAsync(command);
+        }
+
+        public async Task<IReadOnlyList<NodeHeartbeat>> GetAllNodesAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                SELECT NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata
+                FROM Nodes ORDER BY Role, NodeId;";
+            return await ReadNodesAsync(command);
+        }
+
+        public async Task DeregisterNodeAsync(string nodeId)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM Nodes WHERE NodeId = @id;";
+            command.AddParam("@id", nodeId);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<int> PruneExpiredNodesAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM Nodes WHERE ExpiresAt <= @now;";
+            command.AddParam("@now", DateTime.UtcNow.ToString("O"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
+        private static async Task<IReadOnlyList<NodeHeartbeat>> ReadNodesAsync(DbCommand command)
+        {
+            var nodes = new List<NodeHeartbeat>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                nodes.Add(new NodeHeartbeat(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    ParseUtc(reader.GetString(2)),
+                    ParseUtc(reader.GetString(3)),
+                    ParseUtc(reader.GetString(4)),
+                    reader.IsDBNull(5) ? null : reader.GetString(5)));
+            }
+            return nodes;
+        }
+
+        private static DateTime ParseUtc(string iso) =>
+            DateTime.Parse(iso, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
 
         public async Task<IEnumerable<JobDefinition>> GetActiveJobsAsync()
         {

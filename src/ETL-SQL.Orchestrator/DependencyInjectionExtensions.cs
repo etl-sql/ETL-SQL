@@ -163,6 +163,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<INodeRegistryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();

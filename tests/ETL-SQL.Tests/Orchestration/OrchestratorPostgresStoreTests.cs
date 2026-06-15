@@ -79,6 +79,26 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task NodeRegistry_Heartbeat_Upsert_AndExpiry_OnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+
+            // Upsert: register then renew preserves first-seen and keeps a single row (ON CONFLICT path).
+            await store.RegisterOrRenewNodeAsync("pg-node", "Portal", TimeSpan.FromMinutes(5), "{\"v\":1}");
+            var first = Assert.Single(await store.GetLiveNodesAsync());
+            await store.RegisterOrRenewNodeAsync("pg-node", "Portal", TimeSpan.FromMinutes(5));
+            var renewed = Assert.Single(await store.GetLiveNodesAsync());
+            Assert.Equal(first.FirstSeenUtc, renewed.FirstSeenUtc);
+
+            // TTL expiry + prune behave the same on Postgres (ISO-8601 string comparison).
+            await store.RegisterOrRenewNodeAsync("pg-ttl", "Orchestrator", TimeSpan.FromMilliseconds(40));
+            await Task.Delay(120);
+            Assert.DoesNotContain(await store.GetLiveNodesAsync(), n => n.NodeId == "pg-ttl");
+            Assert.True(await store.PruneExpiredNodesAsync() >= 1);
+        }
+
+        [Fact]
         public async Task OptimisticConcurrency_And_ActiveJobs()
         {
             var store = NewStore();

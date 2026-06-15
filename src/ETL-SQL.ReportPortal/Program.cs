@@ -61,6 +61,11 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
 
+// Cluster node heartbeat (P1.7): register this Portal node in the shared node registry so the
+// cluster has a live view of all Portal/Orchestrator nodes over shared state.
+ETL_SQL.Orchestrator.Scheduling.NodeHeartbeatServiceCollectionExtensions.AddNodeHeartbeat(
+    builder.Services, "Portal");
+
 // JWT secret validation: registered as a hosted-service check so it fires AFTER
 // WebApplicationFactory has had a chance to inject test configuration.
 // A fatal startup error is raised via IHostApplicationLifetime if the secret is missing/short.
