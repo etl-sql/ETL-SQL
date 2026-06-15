@@ -17,9 +17,13 @@ namespace ETL_SQL.Tests.Orchestration
     /// </summary>
     public class OrchestratorStoreFactoryTests
     {
-        private static IConfiguration Config(string? provider) =>
+        private static IConfiguration Config(string? provider, string? connectionString = null) =>
             new ConfigurationBuilder()
-                .AddInMemoryCollection(new Dictionary<string, string?> { ["Orchestrator:Database:Provider"] = provider })
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Orchestrator:Database:Provider"] = provider,
+                    ["Orchestrator:Database:ConnectionString"] = connectionString
+                })
                 .Build();
 
         [Fact]
@@ -57,11 +61,21 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
-        public void Postgres_FailsClosed_UntilP12()
+        public void Postgres_WithoutConnectionString_FailsClosed()
         {
             var factory = new OrchestratorStoreFactory(Config("Postgres"));
-            var ex = Assert.Throws<NotSupportedException>(() => factory.Create("ignored"));
-            Assert.Contains("P1.2", ex.Message);
+            var ex = Assert.Throws<InvalidOperationException>(() => factory.Create("ignored"));
+            Assert.Contains("ConnectionString", ex.Message);
+        }
+
+        [Fact]
+        public void Postgres_WithConnectionString_BuildsStore()
+        {
+            // Construction does not open a connection, so a syntactically valid string suffices here;
+            // a live round-trip is covered by OrchestratorPostgresStoreTests (Testcontainers).
+            var factory = new OrchestratorStoreFactory(
+                Config("Postgres", "Host=localhost;Database=x;Username=u;Password=p"));
+            Assert.NotNull(factory.Create());
         }
 
         [Fact]

@@ -6,16 +6,17 @@ using Microsoft.Extensions.Configuration;
 namespace ETL_SQL.Orchestrator.Storage
 {
     /// <summary>
-    /// Creates the Orchestrator job/bundle/lineage store for a given database path, honoring the
-    /// configured database provider (<c>Orchestrator:Database:Provider</c>). Callers obtain a store
-    /// through this seam instead of constructing <see cref="SQLiteJobHistoryStore"/> directly, so the
-    /// provider can change (PostgreSQL, Practical HA P1.2) without touching every call site.
+    /// Creates the Orchestrator job/bundle/lineage store for the configured database provider
+    /// (<c>Orchestrator:Database:Provider</c>). Callers obtain a store through this seam instead of
+    /// constructing <see cref="SQLiteJobHistoryStore"/> directly, so the provider (SQLite default or
+    /// PostgreSQL) can change without touching every call site.
     /// </summary>
     public interface IOrchestratorStoreFactory
     {
         /// <summary>
-        /// Creates a job-history store for <paramref name="dbPath"/> (or the default path when null),
-        /// using the configured provider.
+        /// Creates a job-history store. For SQLite, <paramref name="dbPath"/> selects the database file
+        /// (default path when null); for PostgreSQL it is ignored — the connection comes from
+        /// <c>Orchestrator:Database:ConnectionString</c>.
         /// </summary>
         IJobHistoryStore Create(string? dbPath = null);
     }
@@ -24,18 +25,24 @@ namespace ETL_SQL.Orchestrator.Storage
     public sealed class OrchestratorStoreFactory : IOrchestratorStoreFactory
     {
         private readonly DatabaseProvider _provider;
+        private readonly string? _connectionString;
 
         public OrchestratorStoreFactory(IConfiguration configuration)
         {
             _provider = DatabaseProviderParser.Parse(configuration["Orchestrator:Database:Provider"]);
+            _connectionString = configuration["Orchestrator:Database:ConnectionString"];
         }
 
         public IJobHistoryStore Create(string? dbPath = null)
         {
             if (_provider == DatabaseProvider.Postgres)
-                throw new NotSupportedException(
-                    "The Orchestrator PostgreSQL state store is not yet available — its hand-written SQL " +
-                    "is ported and verified in Practical HA P1.2. Set Orchestrator:Database:Provider=Sqlite.");
+            {
+                var conn = _connectionString;
+                if (string.IsNullOrWhiteSpace(conn))
+                    throw new InvalidOperationException(
+                        "Orchestrator:Database:Provider=Postgres requires Orchestrator:Database:ConnectionString to be set.");
+                return new RelationalJobHistoryStore(new NpgsqlOrchestratorDialect(conn!));
+            }
 
             return new SQLiteJobHistoryStore(dbPath);
         }

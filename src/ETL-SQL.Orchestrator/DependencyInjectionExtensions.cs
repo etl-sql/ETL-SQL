@@ -154,23 +154,15 @@ namespace ETL_SQL.Orchestrator
             services.AddTransient<ETL_SQL.ReportBuilder.ExportReportStatementHandler>();
 
             // 4. Orchestration & Storage
-            // Provider is config-selected (Orchestrator:Database:Provider, default Sqlite). The
-            // PostgreSQL store is delivered in Practical HA P1.2; selecting it fails fast here.
+            // Provider is config-selected (Orchestrator:Database:Provider, default Sqlite); the store
+            // is built through the factory so SQLite and PostgreSQL share one registration.
             services.AddSingleton<IOrchestratorStoreFactory, OrchestratorStoreFactory>();
-            services.AddSingleton(sp =>
-            {
-                if (DatabaseProviderParser.Parse(configuration["Orchestrator:Database:Provider"])
-                    == DatabaseProvider.Postgres)
-                {
-                    throw new NotSupportedException(
-                        "The Orchestrator PostgreSQL state store is not yet available — it is delivered in " +
-                        "Practical HA P1.2. Set Orchestrator:Database:Provider=Sqlite.");
-                }
-                return new SQLiteJobHistoryStore(configuration["Orchestrator:DatabasePath"]);
-            });
-            services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
-            services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
-            services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton(sp => (RelationalJobHistoryStore)sp
+                .GetRequiredService<IOrchestratorStoreFactory>()
+                .Create(configuration["Orchestrator:DatabasePath"]));
+            services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
+            services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
