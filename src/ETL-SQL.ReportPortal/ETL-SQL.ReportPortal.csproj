@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.ReportPortal.Data\ETL-SQL.ReportPortal.Data.csproj" />
+    <!-- Postgres migration set loaded at runtime when the Postgres provider is selected. -->
+    <ProjectReference Include="..\ETL-SQL.ReportPortal.Migrations.Postgres\ETL-SQL.ReportPortal.Migrations.Postgres.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />

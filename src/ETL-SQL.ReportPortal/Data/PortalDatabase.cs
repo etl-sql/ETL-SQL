@@ -12,6 +12,10 @@ namespace ETL_SQL.ReportPortal.Data;
 /// </summary>
 public static class PortalDatabase
 {
+    /// <summary>Assembly holding the PostgreSQL migration set (the SQLite set lives in the Data
+    /// library, the default migrations assembly). Selected via MigrationsAssembly for Postgres.</summary>
+    public const string PostgresMigrationsAssembly = "ETL-SQL.ReportPortal.Migrations.Postgres";
+
     /// <summary>
     /// Configures <paramref name="builder"/> for the provider named in <paramref name="config"/>'s
     /// <c>Database</c> section. SQLite derives its connection from <see cref="PortalConfig.DatabasePath"/>
@@ -34,10 +38,7 @@ public static class PortalDatabase
                 if (string.IsNullOrWhiteSpace(pgConn))
                     throw new InvalidOperationException(
                         "Portal:Database:Provider=Postgres requires Portal:Database:ConnectionString to be set.");
-                // NOTE (P1.2): the migrations under Data/Migrations are SQLite-shaped. A PostgreSQL
-                // migrations set is generated and selected in P1.2; until then the provider is wired
-                // (connections work) but schema creation against Postgres is not yet available.
-                builder.UseNpgsql(pgConn!);
+                builder.UseNpgsql(pgConn!, npg => npg.MigrationsAssembly(PostgresMigrationsAssembly));
                 break;
 
             default:

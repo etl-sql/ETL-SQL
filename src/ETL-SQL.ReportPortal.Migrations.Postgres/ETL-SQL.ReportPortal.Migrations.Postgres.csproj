@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PostgreSQL EF Core migration set for PortalDbContext. References the Data library (which holds the
+    DbContext) — NOT the web app — so there is no project-reference cycle with ETL-SQL.ReportPortal.
+    The SQLite migration set lives in ETL-SQL.ReportPortal.Data; PortalDatabase selects this assembly
+    via MigrationsAssembly when the Postgres provider is configured.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.ReportPortal.Data\ETL-SQL.ReportPortal.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

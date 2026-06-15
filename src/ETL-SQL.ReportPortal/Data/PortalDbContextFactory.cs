@@ -21,7 +21,8 @@ public class PortalDbContextFactory : IDesignTimeDbContextFactory<PortalDbContex
             case DatabaseProvider.Postgres:
                 builder.UseNpgsql(
                     Environment.GetEnvironmentVariable("ETL_SQL_DB_CONNECTION")
-                    ?? "Host=localhost;Database=portal_design;Username=postgres;Password=postgres");
+                    ?? "Host=localhost;Database=portal_design;Username=postgres;Password=postgres",
+                    npg => npg.MigrationsAssembly(PortalDatabase.PostgresMigrationsAssembly));
                 break;
             default:
                 builder.UseSqlite("Data Source=portal-design.db");
