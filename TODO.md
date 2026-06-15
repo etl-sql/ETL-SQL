@@ -50,14 +50,19 @@ release begins.
   `SubscriptionScriptMaintenance`) now routes through it, and the DI singleton is provider-aware.
   Postgres **fails closed** in both stores until P1.2. Tests: `OrchestratorStoreFactoryTests`; SQLite
   behavior unchanged (228 Portal + 43 Orchestrator store/lease tests green).
-- [ ] **P1.2 Implement PostgreSQL for both stores (provider wired in P1.1; finish + verify here).**
-  **Portal:** generate a Postgres EF migrations set (`ETL_SQL_DB_PROVIDER=Postgres dotnet ef migrations
-  add … -o Data/Migrations/Postgres`) and select it by provider; CI builds/migrates both. **Orchestrator:**
-  port the 1150-line hand-written SQLite SQL in `SQLiteJobHistoryStore` to be provider-neutral — an
-  `IDbConnectionFactory` + a small `ISqlDialect` for the non-portable idioms (CREATE TABLE/serial,
-  `PRAGMA table_info` vs `information_schema`, `COLLATE NOCASE`, `INSERT OR REPLACE`) — then implement
-  the Npgsql path. Verify both end to end against a real Postgres via Testcontainers
-  (`Category=Integration`, needs Docker). Lift the P1.1 fail-closed guards once verified.
+- [x] **P1.2 Implement PostgreSQL for both stores (provider wired in P1.1; finished + verified here).**
+  *(done)* Both Portal and Orchestrator state stores now run on PostgreSQL, verified end to end against
+  a real Postgres via Testcontainers (`Category=Integration`). **Portal:** extracted the DbContext +
+  entities + SQLite migrations into a new `ETL-SQL.ReportPortal.Data` library (breaks the EF
+  multi-provider migrations cycle), added an `ETL-SQL.ReportPortal.Migrations.Postgres` assembly with a
+  generated Postgres `InitialCreate`, and `PortalDatabase` selects it via `MigrationsAssembly`
+  (`PortalPostgresProviderTests`). **Orchestrator:** refactored the 1150-line `SQLiteJobHistoryStore`
+  to a provider-neutral `RelationalJobHistoryStore` behind an `IOrchestratorStoreDialect`
+  (Sqlite/Npgsql); kept the SQL portable (`@`-params, `ON CONFLICT`, `COLLATE NOCASE` backed by a
+  Postgres `nocase` ICU collation) with only the divergent bits (autoincrement, column-existence sweep,
+  `RETURNING`) in the dialect; the factory + DI select the provider and the P1.1 fail-closed guards are
+  lifted (`OrchestratorPostgresStoreTests`). SQLite remains the default and unchanged throughout
+  (228 Portal + 127 Orchestration tests green).
 - [ ] **P1.3 Implement `etl-sql admin migrate-database --from sqlite --to postgres --dry-run`.**
   Row-count verification and cutover checkpoints; fail closed on mismatch. Builds on the v0.11.0
   `etl-sql admin` command group.
