@@ -5,6 +5,7 @@ namespace ETL_SQL.ReportPortal.Services;
 
 public class SubscriptionDeliveryStatusService(
     OrchestratorDbLocator dbLocator,
+    IOrchestratorStoreFactory orchestratorStoreFactory,
     ILogger<SubscriptionDeliveryStatusService> log)
 {
     public async Task<IReadOnlyList<JobHistoryEntry>> SynchronizeAsync(Subscription subscription, int limit = 100)
@@ -18,7 +19,7 @@ public class SubscriptionDeliveryStatusService(
         IReadOnlyList<JobHistoryEntry> history;
         try
         {
-            var store = new SQLiteJobHistoryStore(orchDbPath);
+            var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             var jobName = SubscriptionOrchestration.JobName(subscription.Id, subscription.Report?.Name);
             history = (await store.GetHistoryAsync(jobName, int.MaxValue)).ToList();

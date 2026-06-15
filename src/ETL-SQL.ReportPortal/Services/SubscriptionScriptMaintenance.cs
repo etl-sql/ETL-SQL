@@ -30,7 +30,8 @@ public static class SubscriptionScriptMaintenance
         PortalDbContext db,
         PortalConfig config,
         string? orchestratorDbPath,
-        ILogger logger)
+        ILogger logger,
+        IOrchestratorStoreFactory? storeFactory = null)
     {
         var subscriptions = await db.Subscriptions
             .Include(s => s.Report)
@@ -39,7 +40,7 @@ public static class SubscriptionScriptMaintenance
 
         await ReconcileScriptsAsync(db, config, subscriptions, logger);
         CleanSubscriptionDirectory(config, liveIds, logger);
-        await ReconcileOrchestratorJobsAsync(subscriptions, liveIds, orchestratorDbPath, logger);
+        await ReconcileOrchestratorJobsAsync(subscriptions, liveIds, orchestratorDbPath, logger, storeFactory);
     }
 
     // ── Scripts: trigger form, atomic writes, healed ScriptPath ──────────────────
@@ -136,7 +137,8 @@ public static class SubscriptionScriptMaintenance
         IReadOnlyList<Subscription> subscriptions,
         HashSet<int> liveIds,
         string? orchestratorDbPath,
-        ILogger logger)
+        ILogger logger,
+        IOrchestratorStoreFactory? storeFactory)
     {
         if (orchestratorDbPath is null || !File.Exists(orchestratorDbPath))
         {
@@ -144,11 +146,13 @@ public static class SubscriptionScriptMaintenance
             return;
         }
 
-        SQLiteJobHistoryStore store;
+        IJobHistoryStore store;
         List<JobDefinition> subscriptionJobs;
         try
         {
-            store = new SQLiteJobHistoryStore(orchestratorDbPath);
+            // Provider-aware when a factory is supplied (production); falls back to SQLite for
+            // callers that don't inject one (tests run against SQLite fixtures).
+            store = storeFactory?.Create(orchestratorDbPath) ?? new SQLiteJobHistoryStore(orchestratorDbPath);
             await store.InitializeAsync();
             subscriptionJobs = (await store.GetAllJobsAsync())
                 .Where(j => j.Name.StartsWith(
@@ -246,7 +250,7 @@ public static class SubscriptionScriptMaintenance
     }
 
     private static async Task TryDeleteJob(
-        SQLiteJobHistoryStore store, string jobName, ILogger logger, string description)
+        IJobHistoryStore store, string jobName, ILogger logger, string description)
     {
         try
         {

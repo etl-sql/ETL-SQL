@@ -17,6 +17,7 @@ public class SubscriptionsController(
     PortalDbContext db,
     PortalConfig config,
     OrchestratorDbLocator dbLocator,
+    IOrchestratorStoreFactory orchestratorStoreFactory,
     AuditService audit,
     SubscriptionDeliveryStatusService deliveryStatus,
     FolderPermissionService folderPermissions,
@@ -192,7 +193,7 @@ public class SubscriptionsController(
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null)
         {
-            var store = new SQLiteJobHistoryStore(orchDbPath);
+            var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             await store.SaveJobAsync(jobDef);
         }
@@ -261,7 +262,7 @@ public class SubscriptionsController(
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null && (scheduleChanged || req.IsActive.HasValue))
         {
-            var store = new SQLiteJobHistoryStore(orchDbPath);
+            var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
             var job = await store.GetJobAsync(jobName);
@@ -298,10 +299,10 @@ public class SubscriptionsController(
         if (items.Count == 0) return BadRequest(new { error = "Select at least one subscription." });
 
         var orchDbPath = dbLocator.Resolve();
-        SQLiteJobHistoryStore? store = null;
+        IJobHistoryStore? store = null;
         if (orchDbPath is not null)
         {
-            store = new SQLiteJobHistoryStore(orchDbPath);
+            store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
         }
 
@@ -382,7 +383,7 @@ public class SubscriptionsController(
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null)
         {
-            var store = new SQLiteJobHistoryStore(orchDbPath);
+            var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             await store.DeleteJobAsync(jobName);
         }

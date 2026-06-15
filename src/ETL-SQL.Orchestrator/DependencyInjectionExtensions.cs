@@ -154,8 +154,20 @@ namespace ETL_SQL.Orchestrator
             services.AddTransient<ETL_SQL.ReportBuilder.ExportReportStatementHandler>();
 
             // 4. Orchestration & Storage
-            services.AddSingleton(sp => new SQLiteJobHistoryStore(
-                configuration["Orchestrator:DatabasePath"]));
+            // Provider is config-selected (Orchestrator:Database:Provider, default Sqlite). The
+            // PostgreSQL store is delivered in Practical HA P1.2; selecting it fails fast here.
+            services.AddSingleton<IOrchestratorStoreFactory, OrchestratorStoreFactory>();
+            services.AddSingleton(sp =>
+            {
+                if (DatabaseProviderParser.Parse(configuration["Orchestrator:Database:Provider"])
+                    == DatabaseProvider.Postgres)
+                {
+                    throw new NotSupportedException(
+                        "The Orchestrator PostgreSQL state store is not yet available — it is delivered in " +
+                        "Practical HA P1.2. Set Orchestrator:Database:Provider=Sqlite.");
+                }
+                return new SQLiteJobHistoryStore(configuration["Orchestrator:DatabasePath"]);
+            });
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());

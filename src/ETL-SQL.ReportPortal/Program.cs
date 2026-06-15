@@ -369,7 +369,8 @@ using (var scope = app.Services.CreateScope())
         scope.ServiceProvider.GetRequiredService<PortalConfig>(),
         scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("SubscriptionScriptMaintenance"));
+            .CreateLogger("SubscriptionScriptMaintenance"),
+        scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
 
     // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
     // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
