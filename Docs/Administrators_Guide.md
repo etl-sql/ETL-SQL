@@ -577,3 +577,39 @@ rollback path (**restore-from-backup, not a down-migration**) are documented in
 This upgrade path is gated before every release tag by the **"N→N+1 upgrade-path drill"** phase in
 `scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over
 populated data, and asserts continuity.
+
+### 11.5 Migrating from SQLite to PostgreSQL — `etl-sql admin migrate-database`
+
+SQLite is the default, single-node store. To run multiple Portal/Orchestrator nodes behind a load
+balancer they must share **PostgreSQL**; `etl-sql admin migrate-database` copies your existing
+single-node state into a Postgres deployment.
+
+This is a **row copy, not a schema tool** — the target schema must already exist:
+
+1. Provision PostgreSQL and set the target connection strings in `appsettings.json`
+   (`Portal:Database:ConnectionString` and `Orchestrator:Database:ConnectionString`), but **leave each
+   `Provider` on `Sqlite`** for now so the running nodes still read the old data.
+2. Create the empty target schema: start the Portal once pointed at Postgres (it applies its EF
+   migrations automatically), and let the Orchestrator initialize its store. *(Or apply the Portal
+   migrations with `dotnet ef database update` against the Postgres connection.)*
+3. Stop the portal/orchestrator so no writes are in flight, then verify and migrate:
+
+```bash
+# Verify row counts and target-schema compatibility WITHOUT writing anything
+etl-sql admin migrate-database --from sqlite --to postgres --dry-run
+
+# Perform the copy (target tables are cleared and repopulated)
+etl-sql admin migrate-database --from sqlite --to postgres
+```
+
+The migrator reads the SQLite Portal and Orchestrator databases and copies every table into the
+configured Postgres. Because EF Core maps the same model to **different physical types per provider**
+(a `bool` is `INTEGER` in SQLite but `boolean` in Postgres; `DateTime`/`decimal`/`Guid` are `TEXT`
+versus `timestamp`/`numeric`/`uuid`), each value is **coerced to the target column's type**. Foreign-key
+enforcement is disabled for the load (`session_replication_role = replica`, which requires a
+**privileged role** — run as the database owner/superuser; the tool fails closed with a clear message
+otherwise), identity sequences are advanced past the copied keys, and **every table's row count is
+verified** on both sides. Any mismatch rolls the whole transaction back — the migration is
+all-or-nothing.
+
+Once the migration succeeds, switch each `Provider` from `Sqlite` to `Postgres` and restart to cut over.

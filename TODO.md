@@ -63,9 +63,20 @@ release begins.
   `RETURNING`) in the dialect; the factory + DI select the provider and the P1.1 fail-closed guards are
   lifted (`OrchestratorPostgresStoreTests`). SQLite remains the default and unchanged throughout
   (228 Portal + 127 Orchestration tests green).
-- [ ] **P1.3 Implement `etl-sql admin migrate-database --from sqlite --to postgres --dry-run`.**
-  Row-count verification and cutover checkpoints; fail closed on mismatch. Builds on the v0.11.0
-  `etl-sql admin` command group.
+- [x] **P1.3 Implement `etl-sql admin migrate-database --from sqlite --to postgres --dry-run`.**
+  *(done)* New `admin migrate-database` subcommand copies both the Portal and Orchestrator SQLite state
+  into the configured PostgreSQL deployment (`Portal:Database:ConnectionString` /
+  `Orchestrator:Database:ConnectionString` from P1.1/P1.2). Lean, provider-neutral ADO copier
+  (`DatabaseMigrationService`, App-only — no Portal reference): the target schema must pre-exist (Portal
+  via EF migrations, Orchestrator via `InitializeAsync`), so this is a row copy, not DDL. Because EF maps
+  the same model to different physical types per provider (bool→INTEGER vs `boolean`, DateTime/decimal/
+  Guid→TEXT vs `timestamp`/`numeric`/`uuid`), every value is **coerced to the target column type**; FK
+  ordering is bypassed for the load (`session_replication_role = replica`, fails closed with a clear
+  message on a non-privileged role); identity/serial sequences are resynced afterward; per-table
+  **row counts are verified** on both sides and any mismatch rolls the whole transaction back (fail
+  closed). `--dry-run` verifies counts + target-schema compatibility without writing. Tests:
+  `DatabaseMigrationServiceTests` (Category=Integration, Testcontainers) — type coercion + PK/sequence
+  preservation, dry-run writes nothing, missing-target fails closed. Builds on the v0.11.0 `admin` group.
 
 ### Phase 2 — Artifact Storage Abstraction
 

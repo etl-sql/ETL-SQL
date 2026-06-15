@@ -132,6 +132,11 @@ namespace ETL_SQL.App
                 return await BackupRestoreService.RestoreAsync(ctx, logger);
             }
 
+            if (ctx.Command == "admin-migrate-database")
+            {
+                return await DatabaseMigrationService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);

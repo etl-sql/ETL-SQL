@@ -196,6 +196,22 @@ namespace ETL_SQL.App
         {
             Description = "Verify catalog and key versions and archive integrity without writing any files."
         };
+        private static readonly Option<string?> MigrateFromOption = new("--from", Array.Empty<string>())
+        {
+            Description = "Source database provider (only 'sqlite' is supported).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => "sqlite"
+        };
+        private static readonly Option<string?> MigrateToOption = new("--to", Array.Empty<string>())
+        {
+            Description = "Target database provider (only 'postgres' is supported).",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => "postgres"
+        };
+        private static readonly Option<bool> MigrateDryRunOption = new("--dry-run", Array.Empty<string>())
+        {
+            Description = "Verify counts and target schema compatibility without writing any data."
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -348,6 +364,15 @@ namespace ETL_SQL.App
             restoreCommand.SetAction(context => Dispatch(context, "admin-restore", handler));
             adminCommand.Add(restoreCommand);
 
+            var migrateDbCommand = new Command("migrate-database", "Copy Portal/Orchestrator state from SQLite into the configured PostgreSQL deployment")
+            {
+                MigrateFromOption,
+                MigrateToOption,
+                MigrateDryRunOption,
+            };
+            migrateDbCommand.SetAction(context => Dispatch(context, "admin-migrate-database", handler));
+            adminCommand.Add(migrateDbCommand);
+
             // 14. INIT Command — scaffold a starter configuration and first script for CLI-first onboarding
             var initCommand = new Command("init", "Scaffold a starter configuration and first ETL-SQL script for new users")
             {
@@ -486,6 +511,12 @@ namespace ETL_SQL.App
                 cliContext.RestoreTo = res.GetValue(RestoreToOption);
                 cliContext.RestoreValidateOnly = res.GetValue(RestoreValidateOption);
             }
+            else if (commandName == "admin-migrate-database")
+            {
+                cliContext.MigrateFrom = res.GetValue(MigrateFromOption);
+                cliContext.MigrateTo = res.GetValue(MigrateToOption);
+                cliContext.MigrateDryRun = res.GetValue(MigrateDryRunOption);
+            }
             else if (commandName == "init")
             {
                 var dir = res.GetValue(InitDirectoryArg);
@@ -547,6 +578,7 @@ namespace ETL_SQL.App
             table.AddRow("admin support-bundle", "Collect a redacted support archive (config, health, logs, DB metrics).");
             table.AddRow("admin backup", "Back up portal/orchestrator state into split-custody data + keys archives.");
             table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir>).");
+            table.AddRow("admin migrate-database", "Copy SQLite Portal/Orchestrator state into the configured PostgreSQL (--dry-run to verify only).");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");

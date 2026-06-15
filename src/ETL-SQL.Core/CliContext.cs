@@ -71,5 +71,10 @@ namespace ETL_SQL.Core
         public string? RestoreKeys { get; set; }
         public string? RestoreTo { get; set; }
         public bool RestoreValidateOnly { get; set; }
+
+        // admin migrate-database command
+        public string? MigrateFrom { get; set; }
+        public string? MigrateTo { get; set; }
+        public bool MigrateDryRun { get; set; }
     }
 }
