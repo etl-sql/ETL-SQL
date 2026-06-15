@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
@@ -191,7 +192,7 @@ public class SubscriptionsController(
 
         var jobDef = SubscriptionOrchestration.BuildJobDefinition(sub, report.Name, scriptPath);
         var orchDbPath = dbLocator.Resolve();
-        if (orchDbPath is not null)
+        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
@@ -260,7 +261,8 @@ public class SubscriptionsController(
 
         // Sync the Orchestrator job if schedule or active state changed
         var orchDbPath = dbLocator.Resolve();
-        if (orchDbPath is not null && (scheduleChanged || req.IsActive.HasValue))
+        if ((orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
+            && (scheduleChanged || req.IsActive.HasValue))
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
@@ -300,7 +302,7 @@ public class SubscriptionsController(
 
         var orchDbPath = dbLocator.Resolve();
         IJobHistoryStore? store = null;
-        if (orchDbPath is not null)
+        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
         {
             store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
@@ -381,7 +383,7 @@ public class SubscriptionsController(
             return Forbid();
 
         var orchDbPath = dbLocator.Resolve();
-        if (orchDbPath is not null)
+        if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
         {
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();

@@ -68,11 +68,32 @@ namespace ETL_SQL.App
             var orchPg = config["Orchestrator:Database:ConnectionString"];
 
             bool dryRun = ctx.MigrateDryRun;
-            logger.WriteLine(
-                dryRun
-                    ? "DRY RUN — counts and target schema are verified, but no data is written."
-                    : "LIVE migration — target tables are CLEARED and repopulated from SQLite.",
-                dryRun ? ConsoleColor.Cyan : ConsoleColor.Yellow);
+            if (dryRun)
+            {
+                logger.WriteLine(
+                    "DRY RUN — counts, values, and target schema are verified, but no data is written.",
+                    ConsoleColor.Cyan);
+            }
+            else
+            {
+                logger.WriteLine(
+                    "PREFLIGHT — validating both stores before any target tables are cleared.",
+                    ConsoleColor.Cyan);
+                bool preflightOk = true;
+                preflightOk &= await MigrateStoreAsync("Portal", portalSqlite, portalPg, true, logger, ct);
+                preflightOk &= await MigrateStoreAsync("Orchestrator", orchSqlite, orchPg, true, logger, ct);
+                if (!preflightOk)
+                {
+                    logger.WriteLine(
+                        "Migration preflight FAILED — no target data was changed.",
+                        ConsoleColor.Red);
+                    return 1;
+                }
+
+                logger.WriteLine(
+                    "LIVE migration — target tables are CLEARED and repopulated from SQLite.",
+                    ConsoleColor.Yellow);
+            }
 
             bool ok = true;
             ok &= await MigrateStoreAsync("Portal", portalSqlite, portalPg, dryRun, logger, ct);
@@ -80,7 +101,10 @@ namespace ETL_SQL.App
 
             if (!ok)
             {
-                logger.WriteLine("Migration FAILED — see problems above. No partial state was committed.", ConsoleColor.Red);
+                logger.WriteLine(
+                    "Migration FAILED — each failing store was rolled back. A store committed before a later " +
+                    "store failed may already contain migrated data; fix the error and rerun the idempotent migration.",
+                    ConsoleColor.Red);
                 return 1;
             }
 
@@ -174,8 +198,9 @@ namespace ETL_SQL.App
             {
                 foreach (var table in Enumerable.Reverse(tables))
                 {
-                    if (!await TargetTableExistsAsync(dst, tx, table, ct)) continue;
-                    await ExecAsync(dst, tx, $"DELETE FROM {QuoteIdent(table)};", ct);
+                    var target = await GetPostgresTableAsync(dst, tx, table, ct);
+                    if (target is null) continue;
+                    await ExecAsync(dst, tx, $"DELETE FROM {QuoteIdent(target.Name)};", ct);
                 }
             }
 
@@ -183,8 +208,8 @@ namespace ETL_SQL.App
             {
                 ct.ThrowIfCancellationRequested();
 
-                var targetCols = await GetPostgresColumnsAsync(dst, tx, table, ct);
-                if (targetCols.Count == 0)
+                var target = await GetPostgresTableAsync(dst, tx, table, ct);
+                if (target is null)
                 {
                     logger.WriteLine(
                         $"[{label}] target table '{table}' is missing (apply the schema/migrations first). Failing closed.",
@@ -194,23 +219,50 @@ namespace ETL_SQL.App
                 }
 
                 var sourceCols = await GetSqliteColumnsAsync(src, table, ct);
-                // Copy only columns present on both sides; a target-only column (e.g. a new nullable
-                // field added by a later migration) is left to its default.
-                var cols = sourceCols.Where(c => targetCols.ContainsKey(c)).ToList();
+                var sourceColSet = sourceCols.ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var requiredMissing = target.Columns.Values
+                    .Where(c => !sourceColSet.Contains(c.Name)
+                        && !c.IsNullable
+                        && !c.HasDefault
+                        && !c.IsIdentity)
+                    .Select(c => c.Name)
+                    .ToList();
+                if (requiredMissing.Count > 0)
+                {
+                    logger.WriteLine(
+                        $"[{label}] table '{table}': source is missing required target column(s): " +
+                        $"{string.Join(", ", requiredMissing)}. Failing closed.",
+                        ConsoleColor.Red);
+                    ok = false;
+                    continue;
+                }
+
+                // Copy only columns present on both sides; target-only nullable/defaulted columns use
+                // the target schema's default.
+                var cols = sourceCols
+                    .Where(c => target.Columns.ContainsKey(c))
+                    .Select(c => new ColumnMapping(c, target.Columns[c]))
+                    .ToList();
                 if (cols.Count == 0)
                 {
                     logger.WriteLine($"[{label}] table '{table}': no overlapping columns; skipping.", ConsoleColor.Yellow);
+                    ok = false;
                     continue;
                 }
 
                 long sourceCount = await ScalarLongAsync(src, $"SELECT COUNT(*) FROM {QuoteIdent(table)};", ct);
 
-                if (!dryRun && sourceCount > 0)
-                    await CopyTableAsync(src, dst, tx!, table, cols, targetCols, ct);
+                if (sourceCount > 0)
+                {
+                    if (dryRun)
+                        await ValidateTableValuesAsync(src, table, cols, ct);
+                    else
+                        await CopyTableAsync(src, dst, tx!, table, target.Name, cols, ct);
+                }
 
                 long targetCount = dryRun
                     ? 0
-                    : await ScalarLongAsync(dst, tx, $"SELECT COUNT(*) FROM {QuoteIdent(table)};", ct);
+                    : await ScalarLongAsync(dst, tx, $"SELECT COUNT(*) FROM {QuoteIdent(target.Name)};", ct);
 
                 rows[table] = sourceCount;
 
@@ -249,17 +301,30 @@ namespace ETL_SQL.App
 
         // ── Per-table copy ───────────────────────────────────────────────────────────
 
+        private sealed record TargetColumn(
+            string Name,
+            string DataType,
+            bool IsNullable,
+            bool HasDefault,
+            bool IsIdentity);
+
+        private sealed record TargetTable(
+            string Name,
+            IReadOnlyDictionary<string, TargetColumn> Columns);
+
+        private sealed record ColumnMapping(string SourceName, TargetColumn Target);
+
         private static async Task CopyTableAsync(
-            SqliteConnection src, NpgsqlConnection dst, DbTransaction tx, string table,
-            List<string> cols, IReadOnlyDictionary<string, string> targetTypes, CancellationToken ct)
+            SqliteConnection src, NpgsqlConnection dst, DbTransaction tx, string sourceTable,
+            string targetTable, List<ColumnMapping> cols, CancellationToken ct)
         {
-            var colList = string.Join(", ", cols.Select(QuoteIdent));
+            var colList = string.Join(", ", cols.Select(c => QuoteIdent(c.Target.Name)));
             var paramList = string.Join(", ", cols.Select((_, i) => "$" + (i + 1)));
-            var insertSql = $"INSERT INTO {QuoteIdent(table)} ({colList}) VALUES ({paramList});";
+            var insertSql = $"INSERT INTO {QuoteIdent(targetTable)} ({colList}) VALUES ({paramList});";
 
             // Resolve each parameter's type from the target column up front: NpgsqlCommand.Prepare
             // requires every parameter to carry a type before the first row is seen.
-            var dbTypes = cols.Select(c => ResolveDbType(targetTypes[c])).ToArray();
+            var dbTypes = cols.Select(c => ResolveDbType(c.Target.DataType)).ToArray();
 
             await using var insert = new NpgsqlCommand(insertSql, dst, (NpgsqlTransaction)tx);
             foreach (var dbType in dbTypes)
@@ -267,7 +332,9 @@ namespace ETL_SQL.App
             await insert.PrepareAsync(ct);
 
             await using var read = src.CreateCommand();
-            read.CommandText = $"SELECT {string.Join(", ", cols.Select(QuoteIdent))} FROM {QuoteIdent(table)};";
+            read.CommandText =
+                $"SELECT {string.Join(", ", cols.Select(c => QuoteIdent(c.SourceName)))} " +
+                $"FROM {QuoteIdent(sourceTable)};";
             await using var reader = await read.ExecuteReaderAsync(ct);
 
             while (await reader.ReadAsync(ct))
@@ -278,6 +345,26 @@ namespace ETL_SQL.App
                     insert.Parameters[i].Value = raw is null ? DBNull.Value : CoerceValue(raw, dbTypes[i]);
                 }
                 await insert.ExecuteNonQueryAsync(ct);
+            }
+        }
+
+        private static async Task ValidateTableValuesAsync(
+            SqliteConnection src, string table, List<ColumnMapping> cols, CancellationToken ct)
+        {
+            var dbTypes = cols.Select(c => ResolveDbType(c.Target.DataType)).ToArray();
+            await using var read = src.CreateCommand();
+            read.CommandText =
+                $"SELECT {string.Join(", ", cols.Select(c => QuoteIdent(c.SourceName)))} " +
+                $"FROM {QuoteIdent(table)};";
+            await using var reader = await read.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                for (int i = 0; i < cols.Count; i++)
+                {
+                    if (!reader.IsDBNull(i))
+                        _ = CoerceValue(reader.GetValue(i), dbTypes[i]);
+                }
             }
         }
 
@@ -364,23 +451,31 @@ namespace ETL_SQL.App
             return cols;
         }
 
-        /// <summary>Maps target column name → PostgreSQL data_type (case-insensitive lookup).</summary>
-        private static async Task<Dictionary<string, string>> GetPostgresColumnsAsync(
+        /// <summary>Resolves the target's physical table/column names and column metadata.</summary>
+        private static async Task<TargetTable?> GetPostgresTableAsync(
             NpgsqlConnection dst, DbTransaction? tx, string table, CancellationToken ct)
         {
-            var cols = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var cols = new Dictionary<string, TargetColumn>(StringComparer.OrdinalIgnoreCase);
+            string? actualTable = null;
             await using var cmd = new NpgsqlCommand(
-                "SELECT column_name, data_type FROM information_schema.columns " +
+                "SELECT table_name, column_name, data_type, is_nullable, column_default, is_identity " +
+                "FROM information_schema.columns " +
                 "WHERE table_schema = current_schema() AND lower(table_name) = lower(@t);", dst, (NpgsqlTransaction?)tx);
             cmd.Parameters.AddWithValue("@t", table);
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
-                cols[reader.GetString(0)] = reader.GetString(1);
-            return cols;
+            {
+                actualTable ??= reader.GetString(0);
+                var column = new TargetColumn(
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3).Equals("YES", StringComparison.OrdinalIgnoreCase),
+                    !reader.IsDBNull(4),
+                    reader.GetString(5).Equals("YES", StringComparison.OrdinalIgnoreCase));
+                cols[column.Name] = column;
+            }
+            return actualTable is null ? null : new TargetTable(actualTable, cols);
         }
-
-        private static async Task<bool> TargetTableExistsAsync(NpgsqlConnection dst, DbTransaction? tx, string table, CancellationToken ct)
-            => (await GetPostgresColumnsAsync(dst, tx, table, ct)).Count > 0;
 
         /// <summary>
         /// Advances each table's identity/serial sequence past the max copied key, so post-cutover

@@ -3,6 +3,8 @@ using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
 using Npgsql;
 using Testcontainers.PostgreSql;
@@ -145,6 +147,70 @@ namespace ETL_SQL.Tests.Orchestration
                 _sqlitePath, _pg.GetConnectionString(), dryRun: false, NullLogger.Instance, "Test");
 
             Assert.False(result.Success);
+        }
+
+        [Fact]
+        public async Task Migrate_RealOrchestratorSchemas_MapsFoldedPostgresIdentifiers()
+        {
+            _sqlitePath = Path.Combine(Path.GetTempPath(), $"migrate_orch_{Guid.NewGuid():N}.db");
+            var source = new SQLiteJobHistoryStore(_sqlitePath);
+            await source.InitializeAsync();
+            await source.SaveJobAsync(new JobDefinition(
+                "nightly", "PRINT 'ok';", 1, "DAY", "01:00", null, null, true));
+            var historyId = await source.LogJobStartAsync("nightly");
+            await source.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: 7);
+
+            var target = new RelationalJobHistoryStore(
+                new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
+            await target.InitializeAsync();
+
+            var result = await DatabaseMigrationService.MigrateDatabaseAsync(
+                _sqlitePath, _pg.GetConnectionString(), dryRun: false, NullLogger.Instance, "Orchestrator");
+
+            Assert.True(result.Success);
+            Assert.Equal(1, result.RowsPerTable["Jobs"]);
+            Assert.NotNull(await target.GetJobAsync("nightly"));
+            var history = Assert.Single(await target.GetHistoryAsync("nightly"));
+            Assert.Equal(7, history.RowsProcessed);
+        }
+
+        [Fact]
+        public async Task DryRun_FailsWhenTargetHasRequiredColumnMissingFromSource()
+        {
+            await BuildSqliteSourceAsync();
+            await CreatePostgresSchemaAsync();
+
+            await using (var conn = new NpgsqlConnection(_pg.GetConnectionString()))
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"ALTER TABLE ""Widgets"" ADD COLUMN ""RequiredValue"" text NOT NULL;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            var result = await DatabaseMigrationService.MigrateDatabaseAsync(
+                _sqlitePath, _pg.GetConnectionString(), dryRun: true, NullLogger.Instance, "Test");
+
+            Assert.False(result.Success);
+        }
+
+        [Fact]
+        public async Task DryRun_ValidatesSourceValuesAgainstTargetTypes()
+        {
+            await BuildSqliteSourceAsync();
+            await CreatePostgresSchemaAsync();
+
+            await using (var conn = new SqliteConnection($"Data Source={_sqlitePath}"))
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = "UPDATE Widgets SET Ref = 'not-a-uuid' WHERE Id = 1;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            await Assert.ThrowsAsync<FormatException>(() =>
+                DatabaseMigrationService.MigrateDatabaseAsync(
+                    _sqlitePath, _pg.GetConnectionString(), dryRun: true, NullLogger.Instance, "Test"));
         }
     }
 }

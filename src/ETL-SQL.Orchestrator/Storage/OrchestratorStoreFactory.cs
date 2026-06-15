@@ -13,6 +13,9 @@ namespace ETL_SQL.Orchestrator.Storage
     /// </summary>
     public interface IOrchestratorStoreFactory
     {
+        /// <summary>The configured provider used by stores created by this factory.</summary>
+        DatabaseProvider Provider { get; }
+
         /// <summary>
         /// Creates a job-history store. For SQLite, <paramref name="dbPath"/> selects the database file
         /// (default path when null); for PostgreSQL it is ignored — the connection comes from
@@ -32,6 +35,8 @@ namespace ETL_SQL.Orchestrator.Storage
             _provider = DatabaseProviderParser.Parse(configuration["Orchestrator:Database:Provider"]);
             _connectionString = configuration["Orchestrator:Database:ConnectionString"];
         }
+
+        public DatabaseProvider Provider => _provider;
 
         public IJobHistoryStore Create(string? dbPath = null)
         {

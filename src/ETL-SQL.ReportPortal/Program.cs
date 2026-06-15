@@ -323,7 +323,7 @@ ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>
         .CreateLogger("ETL_SQL.Reporting.EChartsSsrRenderer")
         .LogWarning(ex, "{Message}", message);
 
-// Apply EF migrations and enable WAL mode on startup
+// Apply EF migrations and enable WAL mode for SQLite on startup.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -355,7 +355,8 @@ using (var scope = app.Services.CreateScope())
             "backup (rollback is restore-from-backup, not a down-migration) and retry.");
         throw;
     }
-    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+    if (db.Database.IsSqlite())
+        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
     await DatasetStorageMaintenance.ReconcileAsync(
         db,
         portalConfig,

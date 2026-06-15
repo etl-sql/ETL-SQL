@@ -31,7 +31,9 @@ namespace ETL_SQL.Orchestrator.Storage
         {
             var columns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = "SELECT column_name FROM information_schema.columns WHERE lower(table_name) = lower(@table);";
+            cmd.CommandText =
+                "SELECT column_name FROM information_schema.columns " +
+                "WHERE table_schema = current_schema() AND lower(table_name) = lower(@table);";
             cmd.AddParam("@table", table);
             using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) columns.Add(reader.GetString(0));

@@ -3,6 +3,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
+using DatabaseProvider = ETL_SQL.Common.DatabaseProvider;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -140,7 +141,8 @@ public static class SubscriptionScriptMaintenance
         ILogger logger,
         IOrchestratorStoreFactory? storeFactory)
     {
-        if (orchestratorDbPath is null || !File.Exists(orchestratorDbPath))
+        if ((storeFactory is null || storeFactory.Provider == DatabaseProvider.Sqlite)
+            && (orchestratorDbPath is null || !File.Exists(orchestratorDbPath)))
         {
             logger.LogDebug("Subscription job reconciliation skipped — Orchestrator DB unavailable.");
             return;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -75,6 +76,7 @@ namespace ETL_SQL.Tests.Orchestration
             // a live round-trip is covered by OrchestratorPostgresStoreTests (Testcontainers).
             var factory = new OrchestratorStoreFactory(
                 Config("Postgres", "Host=localhost;Database=x;Username=u;Password=p"));
+            Assert.Equal(DatabaseProvider.Postgres, factory.Provider);
             Assert.NotNull(factory.Create());
         }
 

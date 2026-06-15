@@ -1,5 +1,8 @@
 using System.Security.Claims;
 using System.Text;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
@@ -23,6 +26,7 @@ public class AdminController(
     SubscriptionDeliveryStatusService deliveryStatus,
     DatasetAtRestKeyRotationService datasetKeyRotation,
     OrchestratorDbLocator orchestratorDb,
+    IOrchestratorStoreFactory orchestratorStoreFactory,
     IHostApplicationLifetime lifetime) : ControllerBase
 {
     private int CurrentUserId =>
@@ -395,10 +399,10 @@ public class AdminController(
         if (subscriptions.Count > 0)
         {
             var orchDbPath = orchestratorDb.Resolve();
-            ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore? jobStore = null;
-            if (orchDbPath is not null)
+            IJobHistoryStore? jobStore = null;
+            if (orchestratorStoreFactory.Provider == DatabaseProvider.Postgres || orchDbPath is not null)
             {
-                jobStore = new ETL_SQL.Orchestrator.Storage.SQLiteJobHistoryStore(orchDbPath);
+                jobStore = orchestratorStoreFactory.Create(orchDbPath);
                 await jobStore.InitializeAsync();
             }
 

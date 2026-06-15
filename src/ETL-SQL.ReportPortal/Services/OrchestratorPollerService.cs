@@ -1,12 +1,12 @@
-using System.Globalization;
+using ETL_SQL.Common;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
 
 /// <summary>
-/// Background service that polls the Orchestrator's JobHistory SQLite table every
+/// Background service that polls the configured Orchestrator JobHistory store every
 /// Portal:Orchestrator:PollIntervalSeconds (default 60).
 /// Dataset-refresh completions invalidate the snapshot and queue a re-execution. Subscription
 /// trigger completions are routed through the trusted delivery executor.
@@ -14,6 +14,7 @@ namespace ETL_SQL.ReportPortal.Services;
 /// </summary>
 public class OrchestratorPollerService(
     OrchestratorDbLocator dbLocator,
+    IOrchestratorStoreFactory storeFactory,
     IServiceScopeFactory scopes,
     ExecutionJobService jobs,
     PortalConfig config,
@@ -35,7 +36,8 @@ public class OrchestratorPollerService(
     {
         var orchDbPath = dbLocator.Resolve();
 
-        if (orchDbPath is null || !File.Exists(orchDbPath))
+        if (storeFactory.Provider == DatabaseProvider.Sqlite
+            && (orchDbPath is null || !File.Exists(orchDbPath)))
         {
             log.LogDebug("OrchestratorPoller: Orchestrator DB not found at {Path} — degraded mode", orchDbPath);
             return;
@@ -45,8 +47,20 @@ public class OrchestratorPollerService(
         var pollUpperBound = DateTime.UtcNow;
         try
         {
-            completions = await QueryCompletionsAsync(
-                orchDbPath, _lastPollTime, pollUpperBound, ct);
+            var store = storeFactory.Create(orchDbPath);
+            await store.InitializeAsync();
+            completions = (await store.GetHistoryAsync(limit: int.MaxValue))
+                .Where(entry => string.Equals(
+                    entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                .Select(entry => (
+                    entry.JobName,
+                    EndTime: entry.EndTime?.ToUniversalTime()))
+                .Where(entry =>
+                    entry.EndTime > _lastPollTime
+                    && entry.EndTime <= pollUpperBound)
+                .OrderBy(entry => entry.EndTime)
+                .Select(entry => (entry.JobName, entry.EndTime!.Value))
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -137,42 +151,6 @@ public class OrchestratorPollerService(
         log.LogInformation(
             "OrchestratorPoller: subscription {SubscriptionId} completed with outcome {Outcome}",
             subscriptionId, result.Outcome);
-    }
-
-    private static async Task<List<(string JobName, DateTime EndTime)>> QueryCompletionsAsync(
-        string dbPath, DateTime since, DateTime through, CancellationToken ct)
-    {
-        var results = new List<(string, DateTime)>();
-        var cs = $"Data Source={dbPath};Mode=ReadOnly";
-
-        await using var conn = new SqliteConnection(cs);
-        await conn.OpenAsync(ct);
-
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            SELECT JobName, EndTime FROM JobHistory
-            WHERE Status = 'SUCCESS'
-              AND julianday(EndTime) > julianday($since)
-              AND julianday(EndTime) <= julianday($through)
-            ORDER BY EndTime ASC
-            """;
-        cmd.Parameters.AddWithValue("$since", since.ToString("o", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("$through", through.ToString("o", CultureInfo.InvariantCulture));
-
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        while (await reader.ReadAsync(ct))
-        {
-            var name = reader.GetString(0);
-            var endRaw = reader.GetString(1);
-            if (DateTime.TryParse(
-                    endRaw,
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.RoundtripKind,
-                    out var endTime))
-                results.Add((name, endTime));
-        }
-
-        return results;
     }
 
 }

@@ -73,10 +73,12 @@ release begins.
   Guid→TEXT vs `timestamp`/`numeric`/`uuid`), every value is **coerced to the target column type**; FK
   ordering is bypassed for the load (`session_replication_role = replica`, fails closed with a clear
   message on a non-privileged role); identity/serial sequences are resynced afterward; per-table
-  **row counts are verified** on both sides and any mismatch rolls the whole transaction back (fail
-  closed). `--dry-run` verifies counts + target-schema compatibility without writing. Tests:
+  **row counts are verified** on both sides and any mismatch rolls that store's whole transaction back
+  (fail closed). A live run preflights both stores before clearing either target. `--dry-run` verifies
+  counts, value coercion, and target-schema compatibility without writing. Tests:
   `DatabaseMigrationServiceTests` (Category=Integration, Testcontainers) — type coercion + PK/sequence
-  preservation, dry-run writes nothing, missing-target fails closed. Builds on the v0.11.0 `admin` group.
+  preservation, real Orchestrator identifier mapping, dry-run writes nothing, missing-target and
+  incompatible-schema failures close safely. Builds on the v0.11.0 `admin` group.
 
 ### Phase 2 — Artifact Storage Abstraction
 

@@ -1,3 +1,4 @@
+using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
@@ -11,7 +12,8 @@ public class SubscriptionDeliveryStatusService(
     public async Task<IReadOnlyList<JobHistoryEntry>> SynchronizeAsync(Subscription subscription, int limit = 100)
     {
         var orchDbPath = dbLocator.Resolve();
-        if (orchDbPath is null || !File.Exists(orchDbPath))
+        if (orchestratorStoreFactory.Provider == DatabaseProvider.Sqlite
+            && (orchDbPath is null || !File.Exists(orchDbPath)))
         {
             return [];
         }
