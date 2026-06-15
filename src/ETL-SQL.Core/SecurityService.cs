@@ -439,6 +439,29 @@ namespace ETL_SQL.Services
         }
 
         /// <summary>
+        /// True when the path's extension is a dangerous executable / code-signing type that must never
+        /// be written into managed storage (the never-bypassable <see cref="BlockedExtensions"/> blacklist).
+        /// Shared by <c>ETL_SQL.Core.Storage.GuardedArtifactStorage</c> so the artifact-storage boundary
+        /// and script file I/O enforce one list (P1.6).
+        /// </summary>
+        public bool IsDangerousExecutable(string path)
+        {
+            var ext = Path.GetExtension(path)?.ToLowerInvariant();
+            return !string.IsNullOrEmpty(ext) && BlockedExtensions.Contains(ext);
+        }
+
+        /// <summary>
+        /// True when the path's extension is an application-logic / script type subject to the script-
+        /// immutability guardrail (<see cref="BlockedWriteExtensions"/>). Such files are only legitimately
+        /// written to the Scripts artifact area; the storage boundary blocks them everywhere else (P1.6).
+        /// </summary>
+        public bool IsApplicationLogicFile(string path)
+        {
+            var ext = Path.GetExtension(path)?.ToLowerInvariant();
+            return !string.IsNullOrEmpty(ext) && BlockedWriteExtensions.Contains(ext);
+        }
+
+        /// <summary>
         /// Checks if an operation count or recursion depth exceeds the configured safety limits.
         /// </summary>
         /// <param name="type">The category of operation being counted (FileSystem or internal mock).</param>

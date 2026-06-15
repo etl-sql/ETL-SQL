@@ -76,9 +76,12 @@ Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
 
 // ── Artifact storage (provider configurable: Local default, SMB/UNC for HA) ──────
 // Maps each artifact area to its configured root; the Keys area is the Data Protection key ring
-// directory beside the portal database. Call sites migrate onto this seam incrementally (P1.5+).
-builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(_ =>
-    ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
+// directory beside the portal database. The provider is wrapped by GuardedArtifactStorage so the
+// SecurityService path-traversal / executable / script-immutability guardrails are enforced at the
+// single storage boundary (P1.6). Call sites migrate onto this seam incrementally.
+builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
+{
+    var inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
         portalConfig.Storage.Provider,
         new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
         {
@@ -88,7 +91,10 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(_ =>
             [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = portalConfig.DatasetRootPath,
             [ETL_SQL.Core.Storage.ArtifactArea.Keys] =
                 Path.Combine(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!, ".portal-keys"),
-        }));
+        });
+    var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
+    return new ETL_SQL.Core.Storage.GuardedArtifactStorage(inner, security);
+});
 
 // ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);

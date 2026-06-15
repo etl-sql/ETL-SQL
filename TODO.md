@@ -106,9 +106,26 @@ release begins.
   unchanged (52 portal config/integration tests green). **Call-site migration** off direct `File.*`/
   `Directory.*` is intentionally deferred: it lands incrementally alongside P1.6, once the
   `SecurityService`-backed guardrails are enforced at the storage boundary.
-- [ ] **P1.6 Enforce path-traversal guardrails and script immutability at the storage boundary.**
-  Extend the existing `SecurityService` path/immutability checks to the storage abstraction so every
-  provider inherits them (don't reimplement per provider).
+- [x] **P1.6 Enforce path-traversal guardrails and script immutability at the storage boundary.**
+  *(done)* New `GuardedArtifactStorage` decorator wraps **any** `IArtifactStorage` so every provider
+  inherits the guardrails at one chokepoint (not reimplemented per provider). It reuses
+  `SecurityService`'s extension lists as the single source of truth — exposed as new predicates
+  `IsDangerousExecutable` (the never-bypassable `BlockedExtensions` blacklist) and
+  `IsApplicationLogicFile` (`BlockedWriteExtensions`) — and adds the area-aware policy the artifact areas
+  need: **path traversal** rejected on every path (via `ArtifactPath.Normalize`); **no executables /
+  code-signing files** (`.exe/.dll/.bat/.pfx/…`) writable to *any* area; **script immutability** —
+  application-logic files (`.etlsql/.rptsql/.sql/.py/…`) writable only to the `Scripts` area, blocked in
+  snapshots/datasets/maps/keys. Reads/enumerate/delete pass through (normalized); only create/replace
+  (writes + a move's destination) are policy-checked. Wired into Portal DI so the configured provider is
+  always wrapped by the guard. Tests: `GuardedArtifactStorageTests` runs the full shared
+  `ArtifactStorageContractTests` (guard is transparent to legitimate ops) plus executable/logic-file/
+  move-destination enforcement (74 storage tests green; 52 portal config/integration green).
+  > **Follow-on (not a numbered phase): call-site migration.** Moving the ~43 direct `File.*`/
+  > `Directory.*` consumers onto `IArtifactStorage` is a larger, behavior-affecting refactor (the dataset
+  > catalog stores **absolute** `ParquetFilePath`s that backup/restore and maintenance read; migrating
+  > means switching to area-relative keys). It should be done incrementally per service with its own
+  > tests, not bundled into the guardrail work. The seam + guardrails are in place and DI-wired; consumers
+  > adopt it service by service.
 
 ### Phase 3 — Distributed Leases & Fencing
 
