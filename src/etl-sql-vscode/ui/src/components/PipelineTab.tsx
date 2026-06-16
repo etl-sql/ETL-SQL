@@ -272,7 +272,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
             <p className="text-[var(--muted)] italic px-1">No messages.</p>
           ) : (
             logs.map((msg, i) => (
-              <div key={i} className={msgLevelClass(msg.level)}>
+              <div key={i} className={`whitespace-pre-wrap ${msgLevelClass(msg.level)}`}>
                 {msg.text}
               </div>
             ))
