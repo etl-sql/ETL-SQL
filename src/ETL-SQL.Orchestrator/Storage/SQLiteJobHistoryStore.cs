@@ -19,7 +19,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -59,7 +59,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     IsEnabled INTEGER NOT NULL DEFAULT 1,
                     MaxRetries INTEGER NOT NULL DEFAULT 0,
                     RetryDelaySeconds INTEGER NOT NULL DEFAULT 30,
-                    Version INTEGER NOT NULL DEFAULT 1
+                    Version INTEGER NOT NULL DEFAULT 1,
+                    LeaseFenceToken INTEGER NOT NULL DEFAULT 0
                 );";
 
                 var createHistoryTable = @"
@@ -143,7 +144,18 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_nodes_expires ON Nodes(ExpiresAt);";
 
-                var schema = createJobsTable + createHistoryTable + createBundleTables + createLineageHistoryTable + createNodesTable;
+                // Write-epoch fencing for shared storage (P1.8): the highest fence token that has written
+                // each (Scope, EpochKey) resource, so a stale writer cannot overwrite a newer one.
+                var createWriteEpochsTable = @"
+                CREATE TABLE IF NOT EXISTS WriteEpochs (
+                    Scope TEXT NOT NULL,
+                    EpochKey TEXT NOT NULL,
+                    Epoch INTEGER NOT NULL,
+                    PRIMARY KEY (Scope, EpochKey)
+                );";
+
+                var schema = createJobsTable + createHistoryTable + createBundleTables
+                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable;
                 // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                 // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                 // COLLATE NOCASE indexes/queries resolve.
@@ -209,6 +221,13 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseExpiresAt TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("LeaseFenceToken"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN LeaseFenceToken INTEGER NOT NULL DEFAULT 0;";
                 await cmd.ExecuteNonQueryAsync();
             }
 
@@ -368,21 +387,72 @@ namespace ETL_SQL.Orchestrator.Storage
         // that share this database file (see the P3.1 topology decision).
 
         public async Task<bool> TryAcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
+            => await AcquireJobLeaseAsync(jobName, owner, duration) is not null;
+
+        public async Task<long?> AcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration)
         {
             await EnsureInitializedAsync();
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
             var now = DateTime.UtcNow;
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires
+            // A successful claim advances the fence token (a renewal, elsewhere, does not). The token is
+            // therefore strictly increasing across ownership changes, which is what fences out a stale
+            // owner that resumes after a partition.
+            using var claim = connection.CreateCommand();
+            claim.CommandText = @"
+                UPDATE Jobs SET LeaseOwner = @owner, LeaseExpiresAt = @expires, LeaseFenceToken = LeaseFenceToken + 1
                 WHERE Name = @name
                   AND (LeaseOwner IS NULL OR LeaseExpiresAt IS NULL OR LeaseExpiresAt <= @now);";
-            command.AddParam("@owner", owner);
-            command.AddParam("@expires", now.Add(duration).ToString("O"));
+            claim.AddParam("@owner", owner);
+            claim.AddParam("@expires", now.Add(duration).ToString("O"));
+            claim.AddParam("@name", jobName);
+            claim.AddParam("@now", now.ToString("O"));
+
+            if (await claim.ExecuteNonQueryAsync() != 1)
+                return null;
+
+            // We now own the row; read back the token we were granted.
+            using var read = connection.CreateCommand();
+            read.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Name = @name AND LeaseOwner = @owner;";
+            read.AddParam("@name", jobName);
+            read.AddParam("@owner", owner);
+            var token = await read.ExecuteScalarAsync();
+            return token is null or DBNull ? null : Convert.ToInt64(token);
+        }
+
+        public async Task<bool> ValidateFenceTokenAsync(string jobName, long fenceToken)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT LeaseFenceToken FROM Jobs WHERE Name = @name;";
             command.AddParam("@name", jobName);
-            command.AddParam("@now", now.ToString("O"));
+            var current = await command.ExecuteScalarAsync();
+            // A token is valid only if it is the latest issued — a newer acquisition would have advanced
+            // the stored token beyond the holder's.
+            return current is not (null or DBNull) && fenceToken >= Convert.ToInt64(current);
+        }
+
+        public async Task<bool> TryUpdateJobLastRunFencedAsync(string name, DateTime lastRun, DateTime? nextRun, long fenceToken)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            // The write carries the fence token: it lands only while the holder is still the current
+            // owner (token unchanged). If a newer owner has acquired the lease, the token moved and this
+            // UPDATE matches zero rows — the stale writer is fenced out.
+            command.CommandText = @"
+                UPDATE Jobs SET LastRun = @lastRun, NextRun = @nextRun
+                WHERE Name = @name AND LeaseFenceToken = @token;";
+            command.AddParam("@lastRun", lastRun.ToString("O"));
+            command.AddParam("@nextRun", (object?)nextRun?.ToString("O") ?? DBNull.Value);
+            command.AddParam("@name", name);
+            command.AddParam("@token", fenceToken);
 
             return await command.ExecuteNonQueryAsync() == 1;
         }
@@ -521,6 +591,43 @@ namespace ETL_SQL.Orchestrator.Storage
         private static DateTime ParseUtc(string iso) =>
             DateTime.Parse(iso, System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.RoundtripKind).ToUniversalTime();
+
+        // ── Write-epoch fencing for shared storage (P1.8) ─────────────────────────
+
+        public async Task<bool> TryClaimWriteEpochAsync(string scope, string key, long token)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            // Atomic compare-and-advance: the conflicting UPDATE only fires when the incoming token is at
+            // least the stored epoch, so a stale (lower) token leaves the row untouched and affects zero
+            // rows. The conditional ON CONFLICT ... WHERE is supported by both SQLite and PostgreSQL.
+            command.CommandText = @"
+                INSERT INTO WriteEpochs (Scope, EpochKey, Epoch) VALUES (@scope, @key, @token)
+                ON CONFLICT(Scope, EpochKey) DO UPDATE SET Epoch = excluded.Epoch
+                    WHERE excluded.Epoch >= WriteEpochs.Epoch;";
+            command.AddParam("@scope", scope);
+            command.AddParam("@key", key);
+            command.AddParam("@token", token);
+
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        public async Task<long> GetWriteEpochAsync(string scope, string key)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT Epoch FROM WriteEpochs WHERE Scope = @scope AND EpochKey = @key;";
+            command.AddParam("@scope", scope);
+            command.AddParam("@key", key);
+            var epoch = await command.ExecuteScalarAsync();
+            return epoch is null or DBNull ? 0 : Convert.ToInt64(epoch);
+        }
 
         public async Task<IEnumerable<JobDefinition>> GetActiveJobsAsync()
         {

@@ -171,10 +171,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var leaseDuration = TimeSpan.FromSeconds(
                 Math.Max(30, _configuration.GetValue<int>("Scheduler:JobLeaseSeconds", 600)));
 
-            bool leased;
+            long? fenceToken;
             try
             {
-                leased = await _store.TryAcquireJobLeaseAsync(job.Name, _leaseOwnerId, leaseDuration);
+                fenceToken = await _store.AcquireJobLeaseAsync(job.Name, _leaseOwnerId, leaseDuration);
             }
             catch (Exception ex)
             {
@@ -182,7 +182,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return;
             }
 
-            if (!leased)
+            if (fenceToken is null)
             {
                 _logger.LogDebug("Job {JobName} is leased by another scheduler instance — skipping.", job.Name);
                 return;
@@ -190,7 +190,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             try
             {
-                await ExecuteLeasedJobAsync(job, leaseDuration);
+                await ExecuteLeasedJobAsync(job, leaseDuration, fenceToken.Value);
             }
             finally
             {
@@ -206,7 +206,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
-        private async Task ExecuteLeasedJobAsync(JobDefinition job, TimeSpan leaseDuration)
+        private async Task ExecuteLeasedJobAsync(JobDefinition job, TimeSpan leaseDuration, long fenceToken)
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
@@ -229,7 +229,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             await _store.LogJobEndAsync(blockedId, "BLOCKED", mismatchMsg,
                                 scriptHashAtRunTime: currentHash, hashMatched: false);
                         var blockedNextRun = CalculateNextRun(job);
-                        try { await _store.UpdateJobLastRunAsync(job.Name, DateTime.Now, blockedNextRun); } catch { }
+                        try { await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, blockedNextRun, fenceToken); } catch { }
                         return;
                     }
                 }
@@ -341,7 +341,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var nextRun = CalculateNextRun(job);
             try
             {
-                await _store.UpdateJobLastRunAsync(job.Name, DateTime.Now, nextRun);
+                // Fenced write: if this node was paused past its lease and another instance took over the
+                // job (advancing the fence token), this update matches zero rows and we skip rescheduling
+                // rather than overwrite the new owner's state (P1.8).
+                if (!await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, nextRun, fenceToken))
+                    _logger.LogWarning(
+                        "Job {JobName}: skipped the last-run/next-run update — the execution lease was reclaimed " +
+                        "by another instance (fenced out, token {Token}).", job.Name, fenceToken);
             }
             catch (Exception ex)
             {

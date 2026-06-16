@@ -101,6 +101,15 @@ namespace ETL_SQL.Core.Data
         Task<bool> TryRenewJobLeaseAsync(string jobName, string owner, TimeSpan duration);
         Task ReleaseJobLeaseAsync(string jobName, string owner);
 
+        // Fencing tokens (P1.8). Each successful lease acquisition stamps the job with a strictly
+        // increasing fence token. A node that was paused/partitioned, lost its lease, and later resumes
+        // still holds an old token; the durable completion write (TryUpdateJobLastRunFenced) carries the
+        // token and the store rejects it because a newer owner has already advanced the token — so a
+        // stale writer can never clobber a newer one's scheduling state (Gap #5).
+        Task<long?> AcquireJobLeaseAsync(string jobName, string owner, TimeSpan duration);
+        Task<bool> ValidateFenceTokenAsync(string jobName, long fenceToken);
+        Task<bool> TryUpdateJobLastRunFencedAsync(string name, DateTime lastRun, DateTime? nextRun, long fenceToken);
+
         // History Management
         Task<long> LogJobStartAsync(string jobName);
         Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);

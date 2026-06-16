@@ -6,6 +6,34 @@ release begins.
 
 ---
 
+## Documentation Standards Backlog
+
+- [ ] Add `Docs/Standards/Engine_Coding_Standards.md` covering engine-source rules:
+  `IExecutionContext.ResolvePath()` before file I/O, injected `ILogger`, no `Logger.Instance`, no
+  `Console.WriteLine`, async I/O with `CancellationToken`, sanitized `ExecutionException` wrapping,
+  and AST nodes as `record` types.
+- [ ] Add `Docs/Standards/Language_Syntax_Standards.md` covering keyword casing, when to add a
+  keyword vs. a connector option, statement naming, AST/handler naming, option value conventions,
+  and parser compatibility rules.
+- [ ] Add `Docs/Standards/Breaking_Change_Standards.md` covering `// COMPAT_BREAK: x.y`,
+  `BREAKING_CHANGES.md`, required regression tests, high-risk parser/evaluator sites, and the
+  one-minor-version warning period for parser syntax removals.
+- [ ] Add `Docs/Standards/Third_Party_Dependency_Standards.md` covering the FOSS-only policy,
+  NuGet evaluation checklist, one-library-per-domain rule, license banner preservation, and required
+  updates to `THIRD-PARTY-NOTICES.md` / `THIRD-PARTY-INVENTORY.md`.
+- [ ] Add `Docs/Standards/Source_Boundary_Standards.md` promoting the current Core / Engine /
+  Connectors / Analysis / Reporting / ReportHosting / host-shell ownership guidance out of the
+  strategy migration plan.
+- [ ] Add `Docs/Standards/Report_Runtime_Asset_Standards.md` covering the canonical shared runtime
+  source under `src/ETL-SQL.ReportRuntime/Resources/Shared/`, generated host copies, required
+  `node .\scripts\sync-assets.js` / `-Check`, and UI sandbox verification.
+- [ ] Add `Docs/Standards/Script_Composition_Standards.md` for repo-authored ETL-SQL scripts:
+  `main.etlsql` orchestrators, `_environment.etlsql`, stage-script naming, contract comments,
+  shared `#temp` table expectations, shallow `RUN SCRIPT` nesting, and generated `.rptsql`
+  separation.
+
+---
+
 ## Practical High Availability
 
 > Status: **active (v0.12.0).**
@@ -166,8 +194,23 @@ release begins.
   register/renew/expiry/prune/deregister, first-seen preserved) and a PostgreSQL upsert/expiry case in
   `OrchestratorPostgresStoreTests` — 10 green; 132 orchestration unit + 65 portal integration/coordination
   tests still green. This is the substrate for fencing (P1.8) and leader election (P1.9).
-- [ ] **P1.8 Monotonically increasing fencing tokens** to reject stale writers during partitions (Gap #5).
-  *Ensure fencing is enforced on both database state writes and shared storage writes (SMB/UNC) via write-epoch checks.*
+- [x] **P1.8 Monotonically increasing fencing tokens** to reject stale writers during partitions (Gap #5).
+  *(done)* **Database state writes:** each successful job-lease acquisition stamps the job with a strictly
+  increasing fence token (new `LeaseFenceToken`; a renewal does not advance it). `AcquireJobLeaseAsync`
+  returns the token; the durable completion write `TryUpdateJobLastRunFencedAsync` carries it and the store
+  rejects it (zero rows) once a newer owner has advanced the token, so a paused-then-resumed node can't
+  clobber the newer owner's scheduling state. `SchedulerService` captures the token at acquire and uses the
+  fenced write (BLOCKED + normal next-run), logging when fenced out; `TryAcquireJobLeaseAsync` delegates to
+  the new acquire. **Shared storage writes (SMB/UNC):** since SMB/UNC has no native fencing, a new
+  DB-backed `IWriteEpochStore` makes the shared database the fencing authority — `TryClaimWriteEpochAsync`
+  is an atomic compare-and-advance (conditional `ON CONFLICT … DO UPDATE … WHERE`), and a new
+  `FencedArtifactStorage` decorator claims an artifact's write epoch (keyed by area+path, token from the
+  node's fence-token supplier) before every write/move-destination, throwing `FencedWriteException` on a
+  stale token. Both implemented portably in `RelationalJobHistoryStore` (new `LeaseFenceToken` + `WriteEpochs`
+  table) and registered in DI. Tests: `FencingTokenTests`, `WriteEpochFencingTests`
+  (CAS + decorator stale-writer/move-destination) + PostgreSQL fencing & write-epoch cases in
+  `OrchestratorPostgresStoreTests`; mock-based scheduler tests updated — 135 orchestration unit + 7 Postgres
+  integration + 51 portal integration green. Builds on the P1.7 lease/heartbeat substrate.
 - [ ] **P1.9 Database-backed leader election** for cluster singletons (e.g. running migrations once).
   *Prevent concurrent startup database schema / EF migrations when multiple Portal/Orchestrator nodes boot simultaneously.*
 

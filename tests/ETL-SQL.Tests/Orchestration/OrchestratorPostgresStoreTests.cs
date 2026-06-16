@@ -79,6 +79,36 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task FencingToken_AdvancesAndFencesStaleWriter_OnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+            await store.SaveJobAsync(Job("fence-job"));
+
+            var stale = await store.AcquireJobLeaseAsync("fence-job", "owner-A", TimeSpan.FromMilliseconds(40));
+            Assert.NotNull(stale);
+            await Task.Delay(120);
+            var fresh = await store.AcquireJobLeaseAsync("fence-job", "owner-B", TimeSpan.FromMinutes(5));
+            Assert.True(fresh!.Value > stale!.Value);
+
+            var nextRun = DateTime.UtcNow.AddHours(1);
+            Assert.False(await store.TryUpdateJobLastRunFencedAsync("fence-job", DateTime.UtcNow, nextRun, stale.Value));
+            Assert.True(await store.TryUpdateJobLastRunFencedAsync("fence-job", DateTime.UtcNow, nextRun, fresh.Value));
+        }
+
+        [Fact]
+        public async Task WriteEpoch_CompareAndAdvance_OnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+
+            Assert.True(await store.TryClaimWriteEpochAsync("artifact", "Datasets/pg.parquet", 5));
+            Assert.True(await store.TryClaimWriteEpochAsync("artifact", "Datasets/pg.parquet", 9)); // advance
+            Assert.False(await store.TryClaimWriteEpochAsync("artifact", "Datasets/pg.parquet", 8)); // stale
+            Assert.Equal(9, await store.GetWriteEpochAsync("artifact", "Datasets/pg.parquet"));
+        }
+
+        [Fact]
         public async Task NodeRegistry_Heartbeat_Upsert_AndExpiry_OnPostgres()
         {
             var store = NewStore();
