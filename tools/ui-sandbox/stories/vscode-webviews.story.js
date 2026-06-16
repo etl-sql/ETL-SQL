@@ -241,9 +241,9 @@ function renderDesigner(stage, ctx) {
     window.__INIT__ = ${initJson};
     window.__SANDBOX_STATE__ = ${stateJson};
 
-    function sanitizeName(name) {
-      if (!name) return 'visual1';
-      let safe = name.trim().replace(/[^a-zA-Z0-9_]/g, '_');
+    function sanitizeName(name, id) {
+      const input = name || id || 'visual1';
+      let safe = input.trim().replace(/[^a-zA-Z0-9_]/g, '_');
       if (!/^[a-zA-Z]/.test(safe)) safe = 'v_' + safe;
       return safe;
     }
@@ -257,7 +257,7 @@ function renderDesigner(stage, ctx) {
       const grid = Array.from({ length: maxRow }, () => Array(usedCols).fill('.'));
       
       for (const v of visuals) {
-        const slot = sanitizeName(v.name);
+        const slot = sanitizeName(v.name, v.id);
         const startRow = (v.gridRow || 1) - 1;
         const endRow = startRow + (v.gridRowSpan || 4);
         const startCol = (v.gridCol || 1) - 1;
@@ -282,7 +282,7 @@ function renderDesigner(stage, ctx) {
       for (const p of (state?.pages ?? [])) {
         out.push('');
         for (const v of (p.visuals ?? [])) {
-          const vName = sanitizeName(v.name);
+          const vName = sanitizeName(v.name, v.id);
           if (v.type === 'CONTAINER') {
             const containerType = v.options?.CONTAINER_TYPE || 'BOX';
             out.push('CREATE CONTAINER ' + vName + ' AS ' + containerType.toUpperCase() + ' (\\n    TITLE = \\'' + (v.title || '') + '\\',\\n);');
@@ -300,11 +300,11 @@ function renderDesigner(stage, ctx) {
         }
         const structure = buildStructure(p.visuals);
         const mapEntries = (p.visuals ?? []).map(v => {
-          const slot = sanitizeName(v.name);
-          return "            '" + slot + "' = " + sanitizeName(v.name);
+          const slot = sanitizeName(v.name, v.id);
+          return "            '" + slot + "' = " + sanitizeName(v.name, v.id);
         }).join(',\\n');
 
-        out.push('CREATE PAGE [' + sanitizeName(p.name) + '] AS DASHBOARD (\\n    LAYOUT (\\n        STRUCTURE = \\'' + structure + '\\',\\n        MAP (\\n' + mapEntries + '\\n        )\\n    )\\n);');
+        out.push('CREATE PAGE [' + sanitizeName(p.name, p.id) + '] AS DASHBOARD (\\n    LAYOUT (\\n        STRUCTURE = \\'' + structure + '\\',\\n        MAP (\\n' + mapEntries + '\\n        )\\n    )\\n);');
       }
       return out.join('\\n');
     }
