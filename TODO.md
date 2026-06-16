@@ -157,23 +157,21 @@ release begins.
 
   > **Review findings to fix before the HA storage claim:** Phase 2 completed the provider seam and
   > guardrail boundary, but the storage provider is not yet authoritative for runtime artifacts.
-  > - Data Protection keys still persist through `PersistKeysToFileSystem(.portal-keys)` in
-  >   `src/ETL-SQL.ReportPortal/Program.cs`, bypassing `IArtifactStorage`. In an SMB-backed HA
-  >   deployment, SMTP/orchestrator protected secrets can remain node-local unless key persistence is
-  >   moved behind shared storage or explicitly wired to the shared key-root.
-  > - Portal/Hosting consumers still mostly use direct `File.*` / `Directory.*` paths for scripts,
-  >   snapshots, datasets, maps, and maintenance flows. Examples: script save/upload in
+  > - **[RESOLVED]** ~~Data Protection keys persist through `PersistKeysToFileSystem(.portal-keys)`,
+  >   bypassing `IArtifactStorage`.~~ The key ring is now driven by `Portal:Storage:KeyRingPath` (defaults
+  >   to node-local `.portal-keys`); the DP key ring and the Keys artifact area share one configurable
+  >   root, so a multi-node deployment points every node at the same shared location.
+  > - **[IN PROGRESS]** Portal/Hosting consumers still mostly use direct `File.*` / `Directory.*` paths for
+  >   scripts, snapshots, datasets, maps, and maintenance flows. Examples: script save/upload in
   >   `ReportsController`, snapshot manifest writes in `ExecutionJobService`, dataset file paths in
   >   `DatasetRegistryService`, subscription script maintenance, and dataset cleanup/rotation. Migrate
   >   these incrementally to area-relative `IArtifactStorage` keys with focused tests.
-  > - `SmbArtifactStorage`'s reachability check allows startup when the UNC share root exists but the
-  >   configured area subdirectory does not, despite comments saying typoed roots should fail fast.
-  >   Decide whether missing area roots should be auto-created or rejected, then align code, tests, and
-  >   docs.
-  > - **Concurrent Startup Migration Collisions:** Multiple Portal/Orchestrator nodes starting up concurrently
-  >   against a single PostgreSQL database can collide on database/EF migrations. Needs leader election/lock on boot.
-  > - **Stale-Writer Collisions on Shared Storage:** Shared storage (SMB/UNC) lacks native write-fencing. A stale
-  >   node recovering from a GC pause can overwrite a newer snapshot file unless write-epochs/leasing is checked.
+  > - **[RESOLVED]** ~~`SmbArtifactStorage`'s reachability check allows startup when the UNC share root
+  >   exists but the area subdirectory does not.~~ The check now probes the **share** (`\\server\share`)
+  >   and fails fast only on an unreachable share; per-area subdirectories are created on demand by the
+  >   first write (same as the local provider), with code/comments/tests aligned.
+  > - **[RESOLVED in P1.9]** Concurrent Startup Migration Collisions — leader-elected migration lock.
+  > - **[RESOLVED in P1.8]** Stale-Writer Collisions on Shared Storage — DB-backed write-epoch fencing.
 
 ### Phase 3 — Distributed Leases & Fencing
 

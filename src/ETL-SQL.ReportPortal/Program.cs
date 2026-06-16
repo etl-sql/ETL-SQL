@@ -79,6 +79,13 @@ Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
 
+// Effective key-ring directory (Data Protection key ring + the Keys artifact area). Configurable so a
+// multi-node HA deployment can point every node at the SAME shared location; defaults to the node-local
+// .portal-keys beside the portal database. These two must agree so the key root is one place.
+var keyRingPath = string.IsNullOrWhiteSpace(portalConfig.Storage.KeyRingPath)
+    ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!, ".portal-keys")
+    : Path.GetFullPath(portalConfig.Storage.KeyRingPath);
+
 // ── Artifact storage (provider configurable: Local default, SMB/UNC for HA) ──────
 // Maps each artifact area to its configured root; the Keys area is the Data Protection key ring
 // directory beside the portal database. The provider is wrapped by GuardedArtifactStorage so the
@@ -94,8 +101,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
             [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = portalConfig.SnapshotDirectory,
             [ETL_SQL.Core.Storage.ArtifactArea.Maps] = portalConfig.MapRootPath,
             [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = portalConfig.DatasetRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Keys] =
-                Path.Combine(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!, ".portal-keys"),
+            [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keyRingPath,
         });
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
     return new ETL_SQL.Core.Storage.GuardedArtifactStorage(inner, security);
@@ -236,12 +242,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 builder.Services.AddMemoryCache();
-var dataProtectionPath = Path.Combine(
-    Path.GetDirectoryName(dbPath) ?? AppContext.BaseDirectory,
-    ".portal-keys");
-Directory.CreateDirectory(dataProtectionPath);
+// Persist the Data Protection key ring to the shared key-ring directory (see keyRingPath above). In a
+// multi-node HA deployment this must be a shared location so every node decrypts the same protected
+// secrets; SetApplicationName keeps the ring isolated to this app on a shared volume.
+Directory.CreateDirectory(keyRingPath);
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
     .SetApplicationName("ETL-SQL.ReportPortal");
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>();

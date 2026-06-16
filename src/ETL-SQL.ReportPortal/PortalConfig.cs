@@ -30,6 +30,15 @@ public class PortalStorageConfig
     /// root paths (<see cref="PortalConfig.ScriptRootPath"/> etc.) must be UNC paths.
     /// </summary>
     public string Provider { get; set; } = "Local";
+
+    /// <summary>
+    /// Directory for the ASP.NET Data Protection key ring and the Keys artifact area. When unset, defaults
+    /// to <c>.portal-keys</c> beside the portal database (node-local). For multi-node HA, point every node
+    /// at the <b>same shared</b> location (e.g. a UNC path) so the key ring is shared — otherwise
+    /// Data-Protection-encrypted secrets (SMTP/orchestrator credentials, auth cookies) written by one node
+    /// cannot be read by another.
+    /// </summary>
+    public string? KeyRingPath { get; set; }
 }
 
 public class PortalDatabaseConfig

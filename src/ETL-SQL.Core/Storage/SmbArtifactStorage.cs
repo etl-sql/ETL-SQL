@@ -13,33 +13,38 @@ namespace ETL_SQL.Core.Storage;
 /// <list type="bullet">
 ///   <item>roots must be UNC paths — a local path here is almost always a misconfiguration that would
 ///   silently de-share the deployment;</item>
-///   <item>an optional startup reachability check so a node <b>fails fast</b> if the share is offline
-///   or its credentials are wrong, rather than serving an empty store.</item>
+///   <item>an optional startup check that the <b>share</b> (<c>\\server\share</c>) is reachable so a
+///   node <b>fails fast</b> on an offline/unauthorized share rather than serving an empty store. The
+///   per-area subdirectories are created on demand by the first write (exactly like the local provider),
+///   so a missing area folder is not a startup error — only an unreachable share is.</item>
 /// </list>
 /// </summary>
 public sealed class SmbArtifactStorage : FileSystemArtifactStorage
 {
     /// <param name="roots">UNC root (<c>\\server\share\…</c>) for each area this provider serves.</param>
-    /// <param name="verifyReachable">When true, each distinct share root must be reachable at construction.</param>
+    /// <param name="verifyReachable">When true, each distinct share must be reachable at construction.</param>
     public SmbArtifactStorage(IReadOnlyDictionary<ArtifactArea, string> roots, bool verifyReachable = true)
         : base(Validate(roots))
     {
         if (!verifyReachable) return;
 
-        // Probe each distinct share so an offline/unauthorized share is caught at startup, not on the
-        // first request. We check the configured root's existence (creating it would mask a typo).
-        foreach (var root in roots.Values.Distinct(StringComparer.OrdinalIgnoreCase))
+        // Probe each distinct SHARE (the \\server\share component), not the area subdirectory: a missing
+        // area folder is created on the first write, but a wrong/offline server or share is a fatal
+        // misconfiguration we must catch at startup, not on the first request.
+        foreach (var share in roots.Values.Select(r => Path.GetPathRoot(r) ?? r)
+                                          .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             try
             {
-                if (!Directory.Exists(root) && !Directory.Exists(Path.GetPathRoot(root)!))
-                    throw new IOException($"SMB share is not reachable: {root}");
+                if (string.IsNullOrEmpty(share) || !Directory.Exists(share))
+                    throw new IOException($"SMB share is not reachable: {share}");
             }
             catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 throw new InvalidOperationException(
-                    $"SMB artifact storage cannot reach '{root}'. Verify the share is online and the " +
-                    "service account has access (mapped credentials / cmdkey).", ex);
+                    $"SMB artifact storage cannot reach share '{share}'. Verify the share is online and the " +
+                    "service account has access (mapped credentials / cmdkey). Area subdirectories under the " +
+                    "share are created on demand.", ex);
             }
         }
     }
