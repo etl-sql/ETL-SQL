@@ -61,7 +61,7 @@ try {
     
     # Package VSIX
     Write-Host "  Running vsce package..." -ForegroundColor Gray
-    npx @vscode/vsce package --target $VsixTarget --no-dependencies --out "etl-sql-vscode-$VsixTarget.vsix" | Out-Null
+    npx @vscode/vsce package --target $VsixTarget --out "etl-sql-vscode-$VsixTarget.vsix" | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "vsce package failed with exit code $LASTEXITCODE" }
     
     $VsixPath = Join-Path $ExtensionDir "etl-sql-vscode-$VsixTarget.vsix"

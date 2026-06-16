@@ -4,9 +4,9 @@ A free-text search input. The typed value is bound to a STRING variable via ACTI
 Mappings: none
 
 Options:
-  PLACEHOLDER = 'hint text'    — greyed-out text shown when the input is empty
-  DEFAULT     = 'initial text' — pre-populated value on load
-  DEBOUNCE    = n              — milliseconds to wait after keypress before firing (default 300)
+- **PLACEHOLDER = 'hint text'** — greyed-out text shown when the input is empty
+- **DEFAULT     = 'initial text'** — pre-populated value on load
+- **DEBOUNCE    = n** — milliseconds to wait after keypress before firing (default 300)
 
 Actions:
   ON_CHANGE = SET_PARAMETER(@variable, value)

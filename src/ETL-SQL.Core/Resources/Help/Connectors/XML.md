@@ -12,12 +12,12 @@ Syntax:
   );
 
 Options:
-  PATH       — file path (required)
-  ROOT_PATH  — XPath expression to the repeating row element (required for SELECT)
-  ENCODING   — character encoding (default UTF-8)
-  COMPRESS   — gzip compress/decompress (default OFF)
-  ENCRYPT    — AES encrypt/decrypt (default OFF)
-  PASSWORD   — passphrase for encryption
+- **PATH** — file path (required)
+- **ROOT_PATH** — XPath expression to the repeating row element (required for SELECT)
+- **ENCODING** — character encoding (default UTF-8)
+- **COMPRESS** — gzip compress/decompress (default OFF)
+- **ENCRYPT** — AES encrypt/decrypt (default OFF)
+- **PASSWORD** — passphrase for encryption
 
 ```sql
 CREATE CONNECTION OrderFeed AS XML(

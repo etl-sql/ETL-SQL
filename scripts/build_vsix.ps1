@@ -28,6 +28,22 @@ Pop-Location
 Copy-Item (Join-Path $PSScriptRoot "..\LICENSE.md") (Join-Path $ExtensionDir "LICENSE.md") -Force
 Copy-Item (Join-Path $PSScriptRoot "..\NOTICE.md") (Join-Path $ExtensionDir "NOTICE.md") -Force
 
+# 3.5 Publish C# Binaries to bundled bin/ directory for a self-contained VSIX
+Write-Host "Publishing self-contained C# binaries..." -ForegroundColor Gray
+$VsixBinDir = Join-Path $ExtensionDir "bin"
+if (!(Test-Path $VsixBinDir)) {
+    New-Item -ItemType Directory -Path $VsixBinDir | Out-Null
+}
+
+# Publish Main CLI
+dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.App\ETL-SQL.App.csproj") -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $VsixBinDir --nologo | Out-Null
+
+# Publish Language Server (LSP)
+dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.LanguageServer\ETL-SQL.LanguageServer.csproj") -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $VsixBinDir --nologo | Out-Null
+
+# Publish Report CLI
+dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportBuilder.CLI\ETL-SQL.ReportBuilder.CLI.csproj") -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $VsixBinDir --nologo | Out-Null
+
 # 4. Package VSIX
 Write-Host "Packaging VSIX..." -ForegroundColor Gray
 npx @vscode/vsce package --out $ReleaseRoot --no-git-tag-version $Version --allow-missing-repository

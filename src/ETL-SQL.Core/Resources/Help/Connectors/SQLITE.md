@@ -17,10 +17,10 @@ Aliases:
   SQLITE3
 
 Options:
-  DATABASE / PATH — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
-  PASSWORD        — encryption password (only supported if SQLCipher is linked natively on the host)
-  TIMEOUT_SECONDS — command/query execution timeout in seconds (default 30)
-  TABLE           — default table for unqualified SELECT/INSERT operations
+- **DATABASE / PATH** — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
+- **PASSWORD** — encryption password (only supported if SQLCipher is linked natively on the host)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
+- **TABLE** — default table for unqualified SELECT/INSERT operations
 
 ```sql
 -- Create an in-memory SQLite database connection

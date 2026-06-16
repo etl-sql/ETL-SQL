@@ -12,12 +12,12 @@ Syntax:
   );
 
 Options:
-  HOST        — SFTP server hostname or IP (required)
-  PORT        — SSH port (default 22)
-  USER        — SSH username (required)
-  PASSWORD    — password authentication
-  KEYFILE     — path to a private key file (PEM or PPK format)
-  PASSPHRASE  — passphrase protecting the private key
+- **HOST** — SFTP server hostname or IP (required)
+- **PORT** — SSH port (default 22)
+- **USER** — SSH username (required)
+- **PASSWORD** — password authentication
+- **KEYFILE** — path to a private key file (PEM or PPK format)
+- **PASSPHRASE** — passphrase protecting the private key
 
 ```sql
 CREATE CONNECTION PartnerSFTP AS SFTP(

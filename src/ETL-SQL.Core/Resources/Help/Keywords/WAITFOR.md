@@ -6,9 +6,9 @@ Syntax:
   WAITFOR CONDITION (<expression>) [TIMEOUT '<hh:mm:ss>'];
 
 Forms:
-  DELAY      — wait for the specified duration (hours:minutes:seconds)
-  TIME       — wait until the wall-clock reaches the given time today
-  CONDITION  — poll the expression; wait until it becomes TRUE, or until TIMEOUT elapses
+- **DELAY** — wait for the specified duration (hours:minutes:seconds)
+- **TIME** — wait until the wall-clock reaches the given time today
+- **CONDITION** — poll the expression; wait until it becomes TRUE, or until TIMEOUT elapses
 
 ```sql
 -- Wait 30 seconds between retries

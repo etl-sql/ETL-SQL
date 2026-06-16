@@ -2,9 +2,9 @@ Type: TRELLIS
 A small-multiples (faceted) chart that repeats the same chart type for each distinct value of a FACET column. All panels share layout and — by default — the same Y axis, making cross-facet comparisons honest.
 
 Mappings:
-  X     — category axis (BAR/LINE) or horizontal numeric axis (SCATTER) (required)
-  Y     — measure axis (required)
-  FACET — column whose unique values each produce one panel (required)
+- **X** — category axis (BAR/LINE) or horizontal numeric axis (SCATTER) (required)
+- **Y** — measure axis (required)
+- **FACET** — column whose unique values each produce one panel (required)
 
 Options:
   TITLE       = 'text'

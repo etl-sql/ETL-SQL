@@ -2,8 +2,8 @@
 Status of the most recent FOREACH or cursor fetch operation.
 
 Values:
-  0   — fetch succeeded; the current item is valid
-  -1  — end of the collection reached; no more items
+- **0** — fetch succeeded; the current item is valid
+- -1 — end of the collection reached; no more items
 
 ```sql
 FOREACH @row IN (SELECT id, name FROM #batch) BEGIN

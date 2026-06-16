@@ -4,15 +4,15 @@ A radial hierarchical chart where each ring represents a level of the hierarchy,
 Two mapping modes:
 
 Implicit hierarchy (level columns):
-  LEVEL1  — outermost ring category (required)
-  LEVEL2  — second ring (optional)
-  LEVEL3  — third ring (optional)
-  VALUE   — numeric measure (required)
+- **LEVEL1** — outermost ring category (required)
+- **LEVEL2** — second ring (optional)
+- **LEVEL3** — third ring (optional)
+- **VALUE** — numeric measure (required)
 
 Explicit parent-child:
-  LABEL   — node name; alias NAME accepted (required)
-  PARENT  — parent node name; empty or null marks a root node (required)
-  VALUE   — numeric measure (required)
+- **LABEL** — node name; alias NAME accepted (required)
+- **PARENT** — parent node name; empty or null marks a root node (required)
+- **VALUE** — numeric measure (required)
 
 Options:
   TITLE   = 'text'

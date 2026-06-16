@@ -8,8 +8,8 @@ Syntax:
   );
 
 Options:
-  PATH    — folder path (required)
-  CREATE  — create the directory if it does not exist (default OFF)
+- **PATH** — folder path (required)
+- **CREATE** — create the directory if it does not exist (default OFF)
 
 ```sql
 CREATE CONNECTION Exports AS DIRECTORY(

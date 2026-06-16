@@ -12,9 +12,9 @@ Syntax:
 The private key is written to output_path; the public key is written to output_path.pub.
 
 Options:
-  BITS        — key size in bits for RSA (default 2048; use 4096 for higher security)
-  ALGORITHM   — RSA (default) or ECDSA
-  PASSPHRASE  — passphrase to protect the private key (optional)
+- **BITS** — key size in bits for RSA (default 2048; use 4096 for higher security)
+- **ALGORITHM** — RSA (default) or ECDSA
+- **PASSPHRASE** — passphrase to protect the private key (optional)
 
 ```sql
 -- Generate a 4096-bit RSA key pair

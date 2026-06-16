@@ -1,0 +1,37 @@
+{
+  "Create Dashboard Page": {
+    "prefix": "dashboard",
+    "body": [
+      "CREATE PAGE ${1:PageName} AS DASHBOARD (",
+      "\tTITLE = '${2:Page Title}',",
+      "\tLAYOUT (",
+      "\t\tSTRUCTURE = '${3:A A / B C}',",
+      "\t\tMAP (",
+      "\t\t\t'${4:A}' = ${5:VisualName1},",
+      "\t\t\t'${6:B}' = ${7:VisualName2},",
+      "\t\t\t'${8:C}' = ${9:VisualName3}",
+      "\t\t),",
+      "\t\tGAP = '${10:1rem}'",
+      "\t)",
+      ");"
+    ],
+    "description": "Create a dashboard page with immediate visual updates."
+  },
+  "Create Paginated Page": {
+    "prefix": "paginated",
+    "body": [
+      "CREATE PAGE ${1:PageName} AS PAGINATED (",
+      "\tTITLE = '${2:Page Title}',",
+      "\tLAYOUT (",
+      "\t\tSTRUCTURE = '${3:A / B}',",
+      "\t\tMAP (",
+      "\t\t\t'${4:A}' = ${5:FiltersContainer},",
+      "\t\t\t'${6:B}' = ${7:ResultsTable}",
+      "\t\t),",
+      "\t\tGAP = '${8:1rem}'",
+      "\t)",
+      ");"
+    ],
+    "description": "Create a paginated report page that stages prompt changes."
+  }
+}

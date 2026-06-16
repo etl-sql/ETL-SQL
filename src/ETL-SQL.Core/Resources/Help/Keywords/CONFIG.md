@@ -8,8 +8,8 @@ Description:
   For security and compliance, sensitive credentials (such as PASSWORD, PWD, and KEYFILE) are redacted in the output.
 
 Columns Returned:
-  Option  — The name of the configuration option (e.g. HOST, DATABASE, USER, PORT)
-  Value   — The configured value (redacted with mask characters if sensitive)
+- **Option** — The name of the configuration option (e.g. HOST, DATABASE, USER, PORT)
+- **Value** — The configured value (redacted with mask characters if sensitive)
 
 Examples:
   -- Inspect the configuration of the SalesDB connection

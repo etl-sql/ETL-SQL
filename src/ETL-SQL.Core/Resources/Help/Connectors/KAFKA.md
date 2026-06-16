@@ -16,16 +16,16 @@ Syntax:
   );
 
 Options:
-  BOOTSTRAP_SERVERS            — comma-separated list of broker hosts (required)
-  TOPIC                       — default topic name (required)
-  GROUP_ID                    — consumer group identifier (default: 'etl-sql-group')
-  AUTO_OFFSET_RESET           — initial offset start: 'Earliest' or 'Latest' (default: 'Latest')
-  TIMEOUT_MS                  — poll wait timeout in milliseconds (default: 5000)
-  MAX_MESSAGES                — maximum messages to consume in a batch (default: 1000)
-  SASL_USERNAME               — credentials user name for authentication
-  SASL_PASSWORD               — credentials password for authentication
-  SASL_MECHANISM              — SASL mechanism: Plain, ScramSha256, or ScramSha512 (default: Plain)
-  SECURITY_PROTOCOL           — security protocol: Plaintext, SaslPlaintext, SaslSsl, or Ssl (default: Plaintext)
+- **BOOTSTRAP_SERVERS** — comma-separated list of broker hosts (required)
+- **TOPIC** — default topic name (required)
+- **GROUP_ID** — consumer group identifier (default: 'etl-sql-group')
+- **AUTO_OFFSET_RESET** — initial offset start: 'Earliest' or 'Latest' (default: 'Latest')
+- **TIMEOUT_MS** — poll wait timeout in milliseconds (default: 5000)
+- **MAX_MESSAGES** — maximum messages to consume in a batch (default: 1000)
+- **SASL_USERNAME** — credentials user name for authentication
+- **SASL_PASSWORD** — credentials password for authentication
+- **SASL_MECHANISM** — SASL mechanism: Plain, ScramSha256, or ScramSha512 (default: Plain)
+- **SECURITY_PROTOCOL** — security protocol: Plaintext, SaslPlaintext, SaslSsl, or Ssl (default: Plaintext)
 
 ### How Reading and Writing Works
 - **Reading (Consuming)**: Reads messages from the specified topic. Since Kafka is a continuous stream, the connector consumes in a batch-bounded mode, stopping when it reaches `MAX_MESSAGES` or after `TIMEOUT_MS` milliseconds of no new messages.

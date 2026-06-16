@@ -67,7 +67,7 @@ npm run compile > /dev/null
 
 echo "  Running vsce package..."
 VSIX_FILE="etl-sql-vscode-${VSIX_TARGET}.vsix"
-npx @vscode/vsce package --target "$VSIX_TARGET" --no-dependencies --out "$VSIX_FILE" > /dev/null
+npx @vscode/vsce package --target "$VSIX_TARGET" --out "$VSIX_FILE" > /dev/null
 
 if [[ -f "$EXTENSION_DIR/$VSIX_FILE" ]]; then
     echo "  VSIX created: $EXTENSION_DIR/$VSIX_FILE"

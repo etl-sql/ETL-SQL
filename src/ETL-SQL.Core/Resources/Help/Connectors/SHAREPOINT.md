@@ -13,16 +13,16 @@ Syntax:
   );
 
 Options:
-  URL               — SharePoint Site absolute URL (can also be passed as primary connection string)
-  AUTH_MODE         — Authentication type: ENTRA_ID, AD_WINDOWS, INTEGRATED, ADFS (default: INTEGRATED)
-  USER              — Domain username (for AD_WINDOWS / ADFS)
-  PASSWORD          — Account password (for AD_WINDOWS / ADFS)
-  DOMAIN            — Domain context (for AD_WINDOWS / ADFS)
-  TENANT_ID         — Entra ID Directory/Tenant ID (for ENTRA_ID)
-  CLIENT_ID         — Entra ID Application Client ID (for ENTRA_ID)
-  CLIENT_SECRET     — Entra ID Application Client Secret (for ENTRA_ID)
-  DOCUMENT_LIBRARY  — SharePoint Document Library name (default: 'Shared Documents')
-  LIST_NAME         — SharePoint List to bind by default for data queries
+- **URL** — SharePoint Site absolute URL (can also be passed as primary connection string)
+- **AUTH_MODE** — Authentication type: ENTRA_ID, AD_WINDOWS, INTEGRATED, ADFS (default: INTEGRATED)
+- **USER** — Domain username (for AD_WINDOWS / ADFS)
+- **PASSWORD** — Account password (for AD_WINDOWS / ADFS)
+- **DOMAIN** — Domain context (for AD_WINDOWS / ADFS)
+- **TENANT_ID** — Entra ID Directory/Tenant ID (for ENTRA_ID)
+- **CLIENT_ID** — Entra ID Application Client ID (for ENTRA_ID)
+- **CLIENT_SECRET** — Entra ID Application Client Secret (for ENTRA_ID)
+- **DOCUMENT_LIBRARY** — SharePoint Document Library name (default: 'Shared Documents')
+- **LIST_NAME** — SharePoint List to bind by default for data queries
 
 ```sql
 -- Connect using Entra ID OAuth

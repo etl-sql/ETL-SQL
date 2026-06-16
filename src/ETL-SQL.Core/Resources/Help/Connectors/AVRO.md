@@ -10,10 +10,10 @@ Syntax:
   );
 
 Options:
-  PATH         — file path to the Avro file (required)
-  SCHEMA_FILE  — path to an .avsc JSON schema file; used when the file has no embedded schema
-  ENCRYPT      — encrypt the output file (default OFF)
-  PASSWORD     — passphrase for encryption
+- **PATH** — file path to the Avro file (required)
+- **SCHEMA_FILE** — path to an .avsc JSON schema file; used when the file has no embedded schema
+- **ENCRYPT** — encrypt the output file (default OFF)
+- **PASSWORD** — passphrase for encryption
 
 ```sql
 CREATE CONNECTION Events AS AVRO(

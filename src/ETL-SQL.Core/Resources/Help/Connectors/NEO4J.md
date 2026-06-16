@@ -15,22 +15,22 @@ Aliases:
   NEO
 
 Options:
-  CONNECTION_STRING      — Connection URI (e.g., bolt://localhost:7687 or neo4j://...) (required unless host/port specified)
-  URI                    — Alias for CONNECTION_STRING
-  DATABASE               — Target database name (default: neo4j)
-  TIMEOUT_SECONDS        — Connection and query timeout limit in seconds (default: 30)
-  HOST                   — Hostname for the Neo4j instance (alternative to CONNECTION_STRING)
-  PORT                   — Port for the Neo4j instance (default: 7687)
-  PROTOCOL               — URI scheme when HOST/PORT are used (default: bolt)
-  KEY_COLUMNS            — Comma-separated properties used to MERGE nodes or relationships instead of always CREATE
-  FROM_LABEL             — Source node label for EDGE_<TYPE> writes that use _from_key
-  TO_LABEL               — Target node label for EDGE_<TYPE> writes that use _to_key
-  FROM_KEY_COLUMN        — Source node property matched against _from_key (default: id)
-  TO_KEY_COLUMN          — Target node property matched against _to_key (default: id)
-  SKIP_MISSING_ENDPOINTS — TRUE to skip edge rows with missing/unmatched endpoints (default: FALSE)
-  SCHEMA_SAMPLE_SIZE     — Rows sampled for virtual table schema discovery; 0 scans all rows (default: 1000)
-  USER                   — Database username
-  PASSWORD               — Database password
+- **CONNECTION_STRING** — Connection URI (e.g., bolt://localhost:7687 or neo4j://...) (required unless host/port specified)
+- **URI** — Alias for CONNECTION_STRING
+- **DATABASE** — Target database name (default: neo4j)
+- **TIMEOUT_SECONDS** — Connection and query timeout limit in seconds (default: 30)
+- **HOST** — Hostname for the Neo4j instance (alternative to CONNECTION_STRING)
+- **PORT** — Port for the Neo4j instance (default: 7687)
+- **PROTOCOL** — URI scheme when HOST/PORT are used (default: bolt)
+- **KEY_COLUMNS** — Comma-separated properties used to MERGE nodes or relationships instead of always CREATE
+- **FROM_LABEL** — Source node label for EDGE_<TYPE> writes that use _from_key
+- **TO_LABEL** — Target node label for EDGE_<TYPE> writes that use _to_key
+- **FROM_KEY_COLUMN** — Source node property matched against _from_key (default: id)
+- **TO_KEY_COLUMN** — Target node property matched against _to_key (default: id)
+- **SKIP_MISSING_ENDPOINTS** — TRUE to skip edge rows with missing/unmatched endpoints (default: FALSE)
+- **SCHEMA_SAMPLE_SIZE** — Rows sampled for virtual table schema discovery; 0 scans all rows (default: 1000)
+- **USER** — Database username
+- **PASSWORD** — Database password
 
 Credentials supplied with USER/PASSWORD are passed to the Neo4j driver as an auth token and are not embedded in the stored connection URI.
 

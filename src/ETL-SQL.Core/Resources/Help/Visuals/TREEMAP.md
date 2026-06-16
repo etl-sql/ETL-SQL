@@ -2,15 +2,15 @@ Type: TREEMAP
 Displays hierarchical data as nested rectangles sized by value. Good for showing part-to-whole relationships across many categories simultaneously.
 
 Mappings:
-  NAME    — category label for each tile
-  VALUE   — determines tile area (must be positive)
-  PARENT  — optional; enables hierarchy (parent category name, or empty for root)
-  COLOR   — optional; column used to colour tiles independently of size
+- **NAME** — category label for each tile
+- **VALUE** — determines tile area (must be positive)
+- **PARENT** — optional; enables hierarchy (parent category name, or empty for root)
+- **COLOR** — optional; column used to colour tiles independently of size
 
 Options:
-  COLORS       — colour range or discrete palette
-  SHOW_VALUES  = ON|OFF  — show value inside tile (default ON)
-  SHOW_PERCENT = ON|OFF  — show % of total inside tile (default OFF)
+- **COLORS** — colour range or discrete palette
+- **SHOW_VALUES  = ON|OFF** — show value inside tile (default ON)
+- **SHOW_PERCENT = ON|OFF** — show % of total inside tile (default OFF)
 
 ```sql
 -- Flat treemap (no hierarchy)

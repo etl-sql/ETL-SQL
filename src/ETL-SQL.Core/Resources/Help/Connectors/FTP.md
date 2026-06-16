@@ -11,12 +11,12 @@ Syntax:
   );
 
 Options:
-  HOST     — FTP server hostname or IP (required)
-  PORT     — port number (default 21; FTPS typically 990)
-  USER     — login username (required)
-  PASSWORD — login password (required)
-  USE_SSL  — use FTPS (FTP over TLS) (default OFF)
-  PASSIVE  — use passive mode (default ON)
+- **HOST** — FTP server hostname or IP (required)
+- **PORT** — port number (default 21; FTPS typically 990)
+- **USER** — login username (required)
+- **PASSWORD** — login password (required)
+- **USE_SSL** — use FTPS (FTP over TLS) (default OFF)
+- **PASSIVE** — use passive mode (default ON)
 
 ```sql
 CREATE CONNECTION DropzoneFTP AS FTP(

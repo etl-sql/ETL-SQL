@@ -13,15 +13,15 @@ Syntax:
   );
 
 Options:
-  SERVER             — server hostname, IP, or hostname\instance (required)
-  DATABASE           — target database name (required)
-  USER               — SQL login username (for SQL auth)
-  PASSWORD           — SQL login password
-  TRUSTED_CONNECTION — use Windows integrated authentication (default OFF)
-  CONNECT_TIMEOUT    — connection timeout in seconds (default 30)
-  TIMEOUT_SECONDS    — command/query execution timeout in seconds (default 30)
-  USE_SSL            — encrypt the connection (default ON for Azure SQL)
-  TABLE              — default table for unqualified INSERT/SELECT
+- **SERVER** — server hostname, IP, or hostname\instance (required)
+- **DATABASE** — target database name (required)
+- **USER** — SQL login username (for SQL auth)
+- **PASSWORD** — SQL login password
+- **TRUSTED_CONNECTION** — use Windows integrated authentication (default OFF)
+- **CONNECT_TIMEOUT** — connection timeout in seconds (default 30)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
+- **USE_SSL** — encrypt the connection (default ON for Azure SQL)
+- **TABLE** — default table for unqualified INSERT/SELECT
 
 ```sql
 CREATE CONNECTION SalesDB AS MSSQL(

@@ -2,13 +2,13 @@ Type: FUNNEL
 A stacked funnel chart showing stage-by-stage drop-off in a pipeline or conversion process. Stages are ordered by their VALUE descending (or by row order if values are equal).
 
 Mappings:
-  NAME    — stage label (e.g. 'Leads', 'Qualified', 'Closed')
-  VALUE   — count or metric at each stage
+- **NAME** — stage label (e.g. 'Leads', 'Qualified', 'Closed')
+- **VALUE** — count or metric at each stage
 
 Options:
-  SHOW_PERCENT = ON|OFF   — show conversion % between stages (default ON)
+- **SHOW_PERCENT = ON|OFF** — show conversion % between stages (default ON)
   ORIENTATION  = VERTICAL|HORIZONTAL  (default VERTICAL)
-  COLORS       — explicit colour list, one per stage
+- **COLORS** — explicit colour list, one per stage
 
 ```sql
 SELECT 'Leads'      AS stage, 5000 AS count UNION ALL

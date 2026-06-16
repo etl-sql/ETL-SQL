@@ -2,21 +2,25 @@
 
 Report-SQL extends ETL-SQL with components for building interactive dashboards — datasets, visuals, pages, navigation, containers, buttons, and styles.
 
-A report is a sequence of CREATE statements. The engine compiles them into a self-contained dashboard served via the Report Portal.
+A report is a sequence of `CREATE` statements. The engine compiles them into a self-contained dashboard served via the Report Portal.
 
-Key components:
-  DATASET     — shared cached data source
-  VISUAL      — a chart or control bound to a data source
-  PAGE        — a grid layout containing visuals, containers, and buttons
-  CONTAINER   — nested layout group within a page
-  NAVIGATION  — menu or tab strip linking pages
-  BUTTON      — interactive back / refresh / link button
-  STYLE       — reusable formatting theme
+## Key Components
 
-Canonical layout rules:
-  STRUCTURE uses CSS grid-template-areas text such as 'A A / B C'
-  MAP slots are quoted strings such as MAP ('A' = SalesBar)
-  Buttons use CREATE BUTTON ButtonName AS (...) and can be placed in MAP slots
+- **`DATASET`**: Shared cached data source.
+- **`VISUAL`**: A chart or control bound to a data source.
+- **`PAGE`**: A grid layout containing visuals, containers, and buttons.
+- **`CONTAINER`**: Nested layout group within a page.
+- **`NAVIGATION`**: Menu or tab strip linking pages.
+- **`BUTTON`**: Interactive back / refresh / link button.
+- **`STYLE`**: Reusable formatting theme.
+
+## Canonical Layout Rules
+
+- `STRUCTURE` uses CSS `grid-template-areas` text such as `'A A / B C'`.
+- `MAP` slots are quoted strings such as `MAP ('A' = SalesBar)`.
+- Buttons use `CREATE BUTTON ButtonName AS (...)` and can be placed in `MAP` slots.
+
+## Examples
 
 ```sql
 -- Minimal two-visual report with a slicer
@@ -53,8 +57,8 @@ CREATE PAGE Main AS DASHBOARD (
 );
 ```
 
-Use HELP REPORT <component> for details (e.g. HELP REPORT VISUAL, HELP REPORT PAGE).
-Use HELP VISUAL <type> for chart-specific options (e.g. HELP VISUAL BAR).
+Use `HELP REPORT <component>` for details (e.g. `HELP REPORT VISUAL`, `HELP REPORT PAGE`).  
+Use `HELP VISUAL <type>` for chart-specific options (e.g. `HELP VISUAL BAR`).
 
 References:
 - [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

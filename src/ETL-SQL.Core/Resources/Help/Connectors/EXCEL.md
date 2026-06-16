@@ -12,12 +12,12 @@ Syntax:
   );
 
 Options:
-  PATH      — workbook path (required)
-  SHEET     — worksheet name or index (default first sheet)
-  RANGE     — cell range to read/write (e.g. 'A1:F50' or a named range)
-  HEADER    — treat first row as column headers (default ON)
-  ENCRYPT   — encrypt the workbook on write (default OFF)
-  PASSWORD  — workbook password
+- **PATH** — workbook path (required)
+- **SHEET** — worksheet name or index (default first sheet)
+- **RANGE** — cell range to read/write (e.g. 'A1:F50' or a named range)
+- **HEADER** — treat first row as column headers (default ON)
+- **ENCRYPT** — encrypt the workbook on write (default OFF)
+- **PASSWORD** — workbook password
 
 ```sql
 CREATE CONNECTION Budget AS EXCEL(

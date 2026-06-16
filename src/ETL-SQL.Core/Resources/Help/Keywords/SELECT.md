@@ -12,9 +12,9 @@ Syntax:
     [OFFSET n ROWS FETCH NEXT n ROWS ONLY];
 
 Sources:
-  #temp_table              — in-memory working set
-  connection.schema.table  — qualified remote table
-  (subquery)               — inline subquery
+- **#temp_table** — in-memory working set
+- **connection.schema.table** — qualified remote table
+- **(subquery)** — inline subquery
 
 ```sql
 -- Load from a remote connection

@@ -11,14 +11,14 @@ Syntax:
   );
 
 Options:
-  HOST          — Oracle server hostname or IP (required unless using TNS_NAME)
-  PORT          — listener port (default 1521)
-  SERVICE_NAME  — Oracle service name
-  TNS_NAME      — TNS alias (alternative to HOST + PORT + SERVICE_NAME)
-  USER            — schema/user (required)
-  PASSWORD        — password (required)
-  TIMEOUT_SECONDS — command/query execution timeout in seconds (default 30)
-  TABLE           — default table for unqualified SELECT/INSERT
+- **HOST** — Oracle server hostname or IP (required unless using TNS_NAME)
+- **PORT** — listener port (default 1521)
+- **SERVICE_NAME** — Oracle service name
+- **TNS_NAME** — TNS alias (alternative to HOST + PORT + SERVICE_NAME)
+- **USER** — schema/user (required)
+- **PASSWORD** — password (required)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
+- **TABLE** — default table for unqualified SELECT/INSERT
 
 ```sql
 CREATE CONNECTION FinanceDB AS ORACLE(

@@ -12,14 +12,14 @@ Syntax:
   );
 
 Options:
-  HOST      — server hostname or IP (required)
-  PORT      — port number (default 5432)
-  DATABASE  — database name (required)
-  USER      — username (required)
-  PASSWORD  — password
-  SSL_MODE        — TLS mode (default Prefer)
-  TIMEOUT_SECONDS — command/query execution timeout in seconds (default 30)
-  TABLE           — default table for unqualified SELECT/INSERT
+- **HOST** — server hostname or IP (required)
+- **PORT** — port number (default 5432)
+- **DATABASE** — database name (required)
+- **USER** — username (required)
+- **PASSWORD** — password
+- **SSL_MODE** — TLS mode (default Prefer)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
+- **TABLE** — default table for unqualified SELECT/INSERT
 
 ```sql
 CREATE CONNECTION AppDB AS POSTGRES(

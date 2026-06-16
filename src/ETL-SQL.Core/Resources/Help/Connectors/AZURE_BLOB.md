@@ -15,11 +15,11 @@ Syntax:
   );
 
 Options:
-  ACCOUNT_NAME      — Azure Storage account name
-  ACCOUNT_KEY       — storage account key
-  CONTAINER         — blob container name (required)
-  CONNECTION_STRING — full connection string (alternative to ACCOUNT_NAME + ACCOUNT_KEY)
-  PREFIX            — blob name prefix filter when listing
+- **ACCOUNT_NAME** — Azure Storage account name
+- **ACCOUNT_KEY** — storage account key
+- **CONTAINER** — blob container name (required)
+- **CONNECTION_STRING** — full connection string (alternative to ACCOUNT_NAME + ACCOUNT_KEY)
+- **PREFIX** — blob name prefix filter when listing
 
 ```sql
 CREATE CONNECTION ReportBlobs AS AZURE_BLOB(

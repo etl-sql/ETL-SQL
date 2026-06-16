@@ -47,9 +47,9 @@ SELECT * FROM #perms;
 
 ## Notes
 - ACCESS levels control what a user or group can do within a folder:
-  - `READ` — view and open reports in the folder.
-  - `WRITE` — publish new reports and update existing ones in the folder.
-  - `ADMIN` — manage folder permissions (GRANT / REVOKE) and rename or move the folder.
+- - `READ` — view and open reports in the folder.
+- - `WRITE` — publish new reports and update existing ones in the folder.
+- - `ADMIN` — manage folder permissions (GRANT / REVOKE) and rename or move the folder.
 - Permissions are inherited by all sub-folders; a grant on `Finance` also applies to `Finance/Archive`.
 - A user's effective permission is the highest access level granted through any combination of user and group grants.
 - `REVOKE` removes a specific grant; if the user retains access through a group membership, they will still have access.

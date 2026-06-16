@@ -2,10 +2,10 @@ Type: BUBBLE
 A scatter chart where a third numeric column controls the radius of each circle, making it ideal for showing three-variable relationships simultaneously.
 
 Mappings:
-  X       — horizontal numeric axis (required)
-  Y       — vertical numeric axis (required)
-  SIZE    — numeric column controlling circle radius (optional; uniform size if omitted)
-  LABEL   — column shown in the tooltip
+- **X** — horizontal numeric axis (required)
+- **Y** — vertical numeric axis (required)
+- **SIZE** — numeric column controlling circle radius (optional; uniform size if omitted)
+- **LABEL** — column shown in the tooltip
 
 Options:
   TITLE   = 'text'

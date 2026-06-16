@@ -12,11 +12,11 @@ Syntax:
     );
 
 Options:
-  BATCH_SIZE      — rows per commit batch (default 1000)
-  MAX_ERRORS      — tolerated parse errors before aborting (default 0)
-  ERROR_LOG_PATH  — path to write rejected rows; omit to abort on first error
-  FIRST_ROW       — skip header or preamble rows (1-based)
-  LAST_ROW        — stop loading after this row number
+- **BATCH_SIZE** — rows per commit batch (default 1000)
+- **MAX_ERRORS** — tolerated parse errors before aborting (default 0)
+- **ERROR_LOG_PATH** — path to write rejected rows; omit to abort on first error
+- **FIRST_ROW** — skip header or preamble rows (1-based)
+- **LAST_ROW** — stop loading after this row number
 
 ```sql
 BULK INSERT dbo.StagedOrders FROM 'C:\data\orders_2024.csv'

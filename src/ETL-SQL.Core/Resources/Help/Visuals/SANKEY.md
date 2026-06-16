@@ -2,9 +2,9 @@ Type: SANKEY
 A flow diagram where values travel between source and destination nodes through weighted links. Ideal for budget allocations, supply chains, conversion funnels, and category-to-category revenue flows.
 
 Mappings:
-  SOURCE  — source node name; alias FROM accepted (required)
-  TARGET  — destination node name; alias TO accepted (required)
-  VALUE   — numeric flow magnitude (required)
+- **SOURCE** — source node name; alias FROM accepted (required)
+- **TARGET** — destination node name; alias TO accepted (required)
+- **VALUE** — numeric flow magnitude (required)
 
 Options:
   TITLE   = 'text'

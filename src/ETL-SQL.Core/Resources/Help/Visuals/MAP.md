@@ -2,34 +2,34 @@ Type: MAP
 A geographic chart that plots data onto a map. Two modes are available: CHOROPLETH (default) colours regions by a numeric value, and POINTS plots sized dots at latitude/longitude coordinates.
 
 Mappings (CHOROPLETH mode — default):
-  REGION  — column containing region names or FIPS codes (required)
-  VALUE   — numeric column controlling fill colour (optional)
+- **REGION** — column containing region names or FIPS codes (required)
+- **VALUE** — numeric column controlling fill colour (optional)
 
 Mappings (POINTS mode — set MODE = POINTS):
-  LON     — longitude column (required)
-  LAT     — latitude column (required)
-  VALUE   — numeric column controlling dot size (optional)
-  LABEL   — column shown in the tooltip
+- **LON** — longitude column (required)
+- **LAT** — latitude column (required)
+- **VALUE** — numeric column controlling dot size (optional)
+- **LABEL** — column shown in the tooltip
 
 Options (all modes):
-  MAP_NAME = 'key'      — built-in map to use (see table below)
-  MAP_FILE = 'path'     — path to a custom GeoJSON file (alternative to MAP_NAME)
+- **MAP_NAME = 'key'** — built-in map to use (see table below)
+- **MAP_FILE = 'path'** — path to a custom GeoJSON file (alternative to MAP_NAME)
   MODE     = CHOROPLETH | POINTS   (default: CHOROPLETH)
   TITLE    = 'text'
 
 Options (CHOROPLETH only):
-  COLOR_LOW    = '#hex'   — fill colour for the lowest value  (default: #e0f3f8)
-  COLOR_HIGH   = '#hex'   — fill colour for the highest value (default: #08306b)
-  SHOW_LABELS  = ON | OFF — render region name labels on the map (default: OFF)
-  MATCH_BY     = NAME | FIPS  — how REGION values are matched to map features (default: NAME)
+- **COLOR_LOW    = '#hex'** — fill colour for the lowest value  (default: #e0f3f8)
+- **COLOR_HIGH   = '#hex'** — fill colour for the highest value (default: #08306b)
+- **SHOW_LABELS  = ON | OFF** — render region name labels on the map (default: OFF)
+- **MATCH_BY     = NAME | FIPS** — how REGION values are matched to map features (default: NAME)
 
 Built-in map keys (MAP_NAME):
-  WORLD            — 177 countries (Natural Earth 110m)
-  US_STATES        — 50 states + DC
-  US_COUNTIES      — 3,221 US counties (Census 20m simplified)
-  MN_COUNTIES      — 87 Minnesota counties
-  CANADA_PROVINCES — 13 provinces and territories
-  EUROPE           — 39 European countries
+- **WORLD** — 177 countries (Natural Earth 110m)
+- **US_STATES** — 50 states + DC
+- **US_COUNTIES** — 3,221 US counties (Census 20m simplified)
+- **MN_COUNTIES** — 87 Minnesota counties
+- **CANADA_PROVINCES** — 13 provinces and territories
+- **EUROPE** — 39 European countries
 
 Matching notes:
   - By default regions match against the feature's 'name' property (e.g. "Minnesota", "Autauga").

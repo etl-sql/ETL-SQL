@@ -16,17 +16,17 @@ Syntax:
   );
 
 Options:
-  HOST           — LDAP/AD server hostname or IP (required)
-  PORT           — Connection port (default 389, or 636 for SSL)
-  USE_SSL        — Connect via secure LDAPS (default FALSE)
-  AUTH_MODE      — Bind method: NEGOTIATE, SIMPLE, INTEGRATED (default INTEGRATED)
-  USER           — User account name or bind DN (for SIMPLE / NEGOTIATE)
-  PASSWORD       — Binding password (for SIMPLE / NEGOTIATE)
-  DOMAIN         — Active Directory Domain name
-  BASE_DN        — Search base Distinguished Name
-  FILTER_CONTEXT — Built-in search scope: 'users', 'groups', or 'computers' (default 'users')
-  FILTER         — Raw LDAP filter override (bypasses automatic SQL parsing)
-  ATTRIBUTES     — Comma-separated AD attributes list to retrieve
+- **HOST** — LDAP/AD server hostname or IP (required)
+- **PORT** — Connection port (default 389, or 636 for SSL)
+- **USE_SSL** — Connect via secure LDAPS (default FALSE)
+- **AUTH_MODE** — Bind method: NEGOTIATE, SIMPLE, INTEGRATED (default INTEGRATED)
+- **USER** — User account name or bind DN (for SIMPLE / NEGOTIATE)
+- **PASSWORD** — Binding password (for SIMPLE / NEGOTIATE)
+- **DOMAIN** — Active Directory Domain name
+- **BASE_DN** — Search base Distinguished Name
+- **FILTER_CONTEXT** — Built-in search scope: 'users', 'groups', or 'computers' (default 'users')
+- **FILTER** — Raw LDAP filter override (bypasses automatic SQL parsing)
+- **ATTRIBUTES** — Comma-separated AD attributes list to retrieve
 
 ```sql
 CREATE CONNECTION ActiveDir AS ACTIVE_DIRECTORY(

@@ -12,9 +12,9 @@ Syntax:
 The private key is written to output_path; the public key is written to output_path.pub.
 
 Options:
-  BITS        — key size in bits (default 2048; 4096 recommended for high security)
-  IDENTITY    — the OpenPGP User ID identity string (required)
-  PASSPHRASE  — passphrase to protect the private key (optional)
+- **BITS** — key size in bits (default 2048; 4096 recommended for high security)
+- **IDENTITY** — the OpenPGP User ID identity string (required)
+- **PASSPHRASE** — passphrase to protect the private key (optional)
 
 ```sql
 -- Generate a 4096-bit PGP key pair

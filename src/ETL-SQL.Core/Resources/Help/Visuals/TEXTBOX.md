@@ -4,15 +4,15 @@ A single-line text input field. The typed value is bound to a STRING variable vi
 Mappings: none
 
 Properties:
-  LABEL_POSITION = TOP|LEFT|HIDDEN — position of the visual name label (default: TOP)
+- **LABEL_POSITION = TOP|LEFT|HIDDEN** — position of the visual name label (default: TOP)
 
 Options:
-  PLACEHOLDER = 'hint text'    — greyed-out text shown when the input is empty
-  DEFAULT     = 'initial text' — pre-populated value on load
+- **PLACEHOLDER = 'hint text'** — greyed-out text shown when the input is empty
+- **DEFAULT     = 'initial text'** — pre-populated value on load
 
 Actions:
   ON_CHANGE = SET_PARAMETER(@variable, value)
-              — fires when the user types or clears the field
+- **** — fires when the user types or clears the field
 
 ```sql
 DECLARE @user_filter STRING = '';

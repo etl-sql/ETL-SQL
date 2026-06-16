@@ -5,7 +5,7 @@ Use CONTENT to supply the markdown directly. DEFAULT is accepted as an alias for
 For dynamic text built from a query, use SOURCE with MAPPINGS (CONTENT = col) — the first row's value is rendered.
 
 Options:
-  MARKDOWN = ON|OFF   — render CONTENT as Markdown (default ON; set OFF for plain escaped text)
+- **MARKDOWN = ON|OFF** — render CONTENT as Markdown (default ON; set OFF for plain escaped text)
   ALIGN    = 'left'|'center'|'right'  (default 'left')
 
 Markdown features supported: headers (#/##/###), **bold**, *italic*, `inline code`,

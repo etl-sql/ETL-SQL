@@ -129,6 +129,12 @@
         "path": "./syntaxes/etlsql.tmLanguage.json"
       }
     ],
+    "snippets": [
+      {
+        "language": "etlsql",
+        "path": "./snippets/etlsql.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "ETL-SQL",
@@ -390,6 +396,9 @@
     "test:unit:watch": "vitest",
     "test:unit:coverage": "vitest run --coverage"
   },
+  "dependencies": {
+    "vscode-languageclient": "^10.0.0"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jsdom": "^28.0.1",
@@ -406,8 +415,7 @@
     "jsdom": "^29.0.2",
     "mocha": "^11.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.2",
-    "vscode-languageclient": "^10.0.0"
+    "vitest": "^4.1.2"
   },
   "overrides": {
     "serialize-javascript": ">=7.0.5",

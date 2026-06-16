@@ -13,13 +13,13 @@ Syntax:
   );
 
 Options:
-  DSN       — ODBC Data Source Name configured in the OS
-  DRIVER    — ODBC driver name (if not using a DSN)
-  SERVER    — server hostname
-  DATABASE  — database name
-  UID             — username
-  PASSWORD        — password
-  TIMEOUT_SECONDS — command/query execution timeout in seconds (default 30)
+- **DSN** — ODBC Data Source Name configured in the OS
+- **DRIVER** — ODBC driver name (if not using a DSN)
+- **SERVER** — server hostname
+- **DATABASE** — database name
+- **UID** — username
+- **PASSWORD** — password
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
 
 ```sql
 -- Using a pre-configured DSN

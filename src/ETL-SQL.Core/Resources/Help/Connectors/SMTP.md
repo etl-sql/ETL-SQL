@@ -12,12 +12,12 @@ Syntax:
   );
 
 Options:
-  HOST          — SMTP server hostname (required)
-  PORT          — SMTP port (default 587 for STARTTLS; 465 for SSL)
-  USERNAME      — authentication username
-  PASSWORD      — authentication password
-  USE_SSL       — use SSL/TLS (default ON)
-  DEFAULT_FROM  — default From address when not specified in SEND EMAIL
+- **HOST** — SMTP server hostname (required)
+- **PORT** — SMTP port (default 587 for STARTTLS; 465 for SSL)
+- **USERNAME** — authentication username
+- **PASSWORD** — authentication password
+- **USE_SSL** — use SSL/TLS (default ON)
+- **DEFAULT_FROM** — default From address when not specified in SEND EMAIL
 
 ```sql
 CREATE CONNECTION MailServer AS SMTP(

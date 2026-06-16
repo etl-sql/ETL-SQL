@@ -4,13 +4,13 @@ An interactive date-selection control. No SOURCE or data query is required. The 
 Mappings: none
 
 Options:
-  DEFAULT = 'YYYY-MM-DD'   — initial date (or omit for today)
-  MIN     = 'YYYY-MM-DD'   — earliest selectable date
-  MAX     = 'YYYY-MM-DD'   — latest selectable date (or 'TODAY')
+- **DEFAULT = 'YYYY-MM-DD'** — initial date (or omit for today)
+- **MIN     = 'YYYY-MM-DD'** — earliest selectable date
+- **MAX     = 'YYYY-MM-DD'** — latest selectable date (or 'TODAY')
 
 Actions:
   ON_CHANGE = SET_PARAMETER(@variable, value)
-              — fires when the user picks a date; passes ISO string to @variable
+- **** — fires when the user picks a date; passes ISO string to @variable
 
 ```sql
 -- Declare the variable the picker will drive

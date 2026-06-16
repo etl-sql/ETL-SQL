@@ -12,12 +12,12 @@ Syntax:
   );
 
 Options:
-  PATH       — file path (required)
-  ROOT_PATH  — JSONPath expression pointing to the array node (default '$' = root)
-  ENCODING   — file character encoding (default UTF-8)
-  COMPRESS   — gzip compress/decompress (default OFF)
-  ENCRYPT    — AES encrypt/decrypt (default OFF)
-  PASSWORD   — passphrase for encryption
+- **PATH** — file path (required)
+- **ROOT_PATH** — JSONPath expression pointing to the array node (default '$' = root)
+- **ENCODING** — file character encoding (default UTF-8)
+- **COMPRESS** — gzip compress/decompress (default OFF)
+- **ENCRYPT** — AES encrypt/decrypt (default OFF)
+- **PASSWORD** — passphrase for encryption
 
 ```sql
 CREATE CONNECTION ApiDump AS JSON(

@@ -7,20 +7,19 @@ Syntax — engine option:
   SET <OPTION> = ON | OFF | <value>;
 
 Engine options:
-  WHAT_IF = ON|OFF              — parse and plan without executing DML (default OFF)
-  PROFILING = ON|OFF            — collect per-statement timing; view with SHOW PROFILE
-  SHOW_SECRETS = ON|OFF         — display SENSITIVE values in output/log views (default OFF, alias: SHOW_PASSWORD)
+- **WHAT_IF = ON|OFF** — parse and plan without executing DML (default OFF)
+- **PROFILING = ON|OFF** — collect per-statement timing; view with SHOW PROFILE
+- **SHOW_SECRETS = ON|OFF** — display SENSITIVE values in output/log views (default OFF, alias: SHOW_PASSWORD)
   ALLOW_PLAINTEXT_SECRETS = ON|OFF
-                                — unsafe: allow plaintext secrets to remain in saved source
-  NO_SAVE_SENSITIVE = ON|OFF    — scrub sensitive literals from saved source
-  NO_SAVE_CONNECTION = ON|OFF   — replace CREATE CONNECTION details with placeholders
+- **** — unsafe: allow plaintext secrets to remain in saved source
+- **NO_SAVE_SENSITIVE = ON|OFF** — scrub sensitive literals from saved source
+- **NO_SAVE_CONNECTION = ON|OFF** — replace CREATE CONNECTION details with placeholders
   CONNECTION_ENCRYPTION = ON|OFF
-                                — encrypt CREATE CONNECTION target/options on save
-  BATCHSIZE = n                 — rows per remote fetch batch for SELECT ... FROM connection
-  WEEK_START_DAY = '<day>'      — anchor day for RELDATE week expressions (default Monday)
-                                   Valid: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
-  JOIN_SPILL_THRESHOLD = n      — row count before hash join spills to disk
-  SORT_SPILL_THRESHOLD = n      — row count before sort spills to disk
+- **** — encrypt CREATE CONNECTION target/options on save
+- **BATCHSIZE = n** — rows per remote fetch batch for SELECT ... FROM connection
+- **WEEK_START_DAY = '<day>'** — anchor day for RELDATE week expressions (default Monday) Valid: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+- **JOIN_SPILL_THRESHOLD = n** — row count before hash join spills to disk
+- **SORT_SPILL_THRESHOLD = n** — row count before sort spills to disk
 
 ```sql
 -- Variable assignment

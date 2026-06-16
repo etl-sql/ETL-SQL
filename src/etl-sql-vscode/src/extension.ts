@@ -192,14 +192,15 @@ export async function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine("Language Server disabled (not found or not configured).");
         vscode.window.showWarningMessage("ETL-SQL Language Server not found. Features like IntelliSense and Linting will be limited.");
     } else {
-        if (!await fileExists(serverPath)) {
+        const serverExists = await fileExists(serverPath);
+        if (!serverExists) {
             const msg = `Language Server executable not found at: ${serverPath}`;
             outputChannel.appendLine(`ERROR: ${msg}`);
             vscode.window.showErrorMessage(msg);
-            return;
         }
 
-        const serverOptions: ServerOptions = {
+        if (serverExists) {
+            const serverOptions: ServerOptions = {
             run: { command: serverPath, transport: TransportKind.stdio },
             debug: { command: serverPath, transport: TransportKind.stdio }
         };
@@ -259,6 +260,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 syncNotebookContext(e.document);
             }
         }));
+        }
     }
 
     // Register Commands

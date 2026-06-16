@@ -11,12 +11,11 @@ Syntax:
   );
 
 Options:
-  PROJECT_ID      — GCP project ID (required)
-  DATASET         — default dataset for unqualified table references
-  CREDENTIAL_FILE — path to a service account JSON key file
-                    (omit to use Application Default Credentials / Workload Identity)
-  LOCATION        — query location / region (e.g. US, EU, us-central1)
-  TIMEOUT_SECONDS — query execution timeout in seconds (default 1800)
+- **PROJECT_ID** — GCP project ID (required)
+- **DATASET** — default dataset for unqualified table references
+- **CREDENTIAL_FILE** — path to a service account JSON key file (omit to use Application Default Credentials / Workload Identity)
+- **LOCATION** — query location / region (e.g. US, EU, us-central1)
+- **TIMEOUT_SECONDS** — query execution timeout in seconds (default 1800)
 
 ```sql
 -- Service account authentication

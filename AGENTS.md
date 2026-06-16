@@ -218,6 +218,7 @@ Use this map to find the right document for any task.
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
 | Rules for touch the presentation layer | **[Standards/Presentation_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)** |
+| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Help_and_Snippet_Standards.md)** |
 | Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Engine_Upgrade_Strategy.md)** |
 
 ---
@@ -231,6 +232,30 @@ When you create or modify any documentation, follow these standards:
 - **Cookbook**: Prefer **self-contained lifecycle scripts** (Extract → Stage → Validate → Merge → Cleanup → Notify) over isolated snippets. Every recipe must be runnable as-is.
 - **Architecture docs**: Any interface contract shown must match the actual C# source. Cross-reference before writing.
 - **Grammar docs**: Every syntax form must have a minimal working example. Do not document syntax that the parser does not actually accept.
+
+### 7.1 Help Documents Formatting Standards
+
+Help documents located under `src/ETL-SQL.Core/Resources/Help/` are loaded dynamically by the engine and LSP server to serve hover tooltips and in-editor help. Because editor hover viewports are narrow and automatically collapse single-newline paragraphs, all help documents must adhere to these consistency rules:
+
+- **Title Header**: The file must start with a level-1 header `# TOPIC` matching the exact keyword or visual type (e.g., `# PAGE` or `# TABLE`).
+- **Description Paragraph**: A short, single-paragraph description immediately following the title header, explaining what the command or feature does.
+- **Syntax Block**: The statement syntax MUST be placed inside a code-fenced block ` ```sql ... ``` ` to prevent line collapsing and preserve structure, indentation, and casing.
+- **Lists and Options**: All lists of types, mappings, configuration options, or actions MUST be formatted as Markdown bullet points (`- **OptionName** — Description`).
+  - Never use raw leading-space indentation (e.g., `  PAGE_SIZE — rows per page`) as it collapses into a single paragraph in editor hover cards.
+  - Bold the option/parameter name (e.g., `- **PAGE_SIZE = n** — ...`).
+- **Examples**: Provide one or two clean, copy-pasteable example blocks using ` ```sql ... ``` ` to illustrate common use cases.
+- **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)`).
+
+### 7.2 Snippet Formatting Standards
+
+Snippet files located under `src/ETL-SQL.Core/Resources/Help/Snippets/` are used by the LSP server to generate autocomplete templates. They must adhere to this exact structure:
+
+- **Frontmatter**: Every snippet file must start with a YAML frontmatter delimited by `---` containing exactly:
+  - `trigger`: The autocomplete trigger keyword, which MUST start with a `$` (e.g., `trigger: $dataset`).
+  - `label`: A short visual title of what the snippet creates (e.g., `label: CREATE DATASET &name`).
+  - `description`: A brief description shown in the autocomplete suggestion list.
+- **Placeholder Syntax**: Use French quotation marks `«` and `»` around placeholder/tabstop names (e.g., `«VisualName»`, `«1h»`). These allow the editor to cycle through fields using `Tab`.
+- **Formatting**: Indent block statements using 2 spaces for SQL clauses, options, or mappings. Keep them clean, valid, and consistent with core syntax.
 
 ---
 

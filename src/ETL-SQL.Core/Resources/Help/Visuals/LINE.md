@@ -2,16 +2,16 @@ Type: LINE / AREA
 A line chart for trend and time-series data. Set AREA = ON to fill the region below the line. Multiple series are drawn when the SOURCE contains a COLOR grouping column or multiple Y-axis columns.
 
 Mappings:
-  X       — category or time axis (required)
-  Y       — metric to plot; list multiple columns for multi-series
-  COLOR   — column used to split rows into separate named series
+- **X** — category or time axis (required)
+- **Y** — metric to plot; list multiple columns for multi-series
+- **COLOR** — column used to split rows into separate named series
 
 Options:
-  SMOOTH  = ON|OFF  — Bezier-smoothed curves instead of straight segments (default OFF)
-  SYMBOLS = ON|OFF  — show data-point markers on the line (default OFF)
-  AREA    = ON|OFF  — fill the region below the line (default OFF)
-  STACKED = ON|OFF  — stack multiple series vertically (default OFF)
-  AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC — category-axis order; SOURCE preserves query order
+- **SMOOTH  = ON|OFF** — Bezier-smoothed curves instead of straight segments (default OFF)
+- **SYMBOLS = ON|OFF** — show data-point markers on the line (default OFF)
+- **AREA    = ON|OFF** — fill the region below the line (default OFF)
+- **STACKED = ON|OFF** — stack multiple series vertically (default OFF)
+- **AXIS_SORT = ASC|DESC|SOURCE|VALUE|VALUE_DESC** — category-axis order; SOURCE preserves query order
   TITLE   = 'text'
 
 ```sql

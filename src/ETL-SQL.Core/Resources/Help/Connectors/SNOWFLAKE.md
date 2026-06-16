@@ -12,19 +12,17 @@ Syntax:
   );
 
 Options:
-  HOST             — Snowflake account identifier or hostname (required). Accepts the short form
-                     (e.g. myorg-myaccount) or the full hostname ending in .snowflakecomputing.com
-  DATABASE         — target Snowflake database (required)
-  SCHEMA           — target schema (default PUBLIC)
-  WAREHOUSE        — virtual warehouse used for query execution (required for DML)
-  USERNAME         — Snowflake user name (required)
-  PASSWORD         — password for username/password authentication
-  PRIVATE_KEY_FILE — path to an RSA private key PEM file for key-pair JWT authentication
-                     (use instead of PASSWORD)
-  TIMEOUT_SECONDS  — command/query execution timeout in seconds (default 1800)
-  ACCOUNT          — explicit account name override; useful when connecting to a local emulator
-  PORT             — service port override; useful when connecting to a local emulator
-  PROTOCOL         — protocol override: https (default) or http; useful with local emulators
+- **HOST** — Snowflake account identifier or hostname (required). Accepts the short form (e.g. myorg-myaccount) or the full hostname ending in .snowflakecomputing.com
+- **DATABASE** — target Snowflake database (required)
+- **SCHEMA** — target schema (default PUBLIC)
+- **WAREHOUSE** — virtual warehouse used for query execution (required for DML)
+- **USERNAME** — Snowflake user name (required)
+- **PASSWORD** — password for username/password authentication
+- **PRIVATE_KEY_FILE** — path to an RSA private key PEM file for key-pair JWT authentication (use instead of PASSWORD)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 1800)
+- **ACCOUNT** — explicit account name override; useful when connecting to a local emulator
+- **PORT** — service port override; useful when connecting to a local emulator
+- **PROTOCOL** — protocol override: https (default) or http; useful with local emulators
 
 ```sql
 -- Username/password authentication

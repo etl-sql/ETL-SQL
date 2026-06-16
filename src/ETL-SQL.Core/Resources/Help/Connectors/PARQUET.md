@@ -10,10 +10,10 @@ Syntax:
   );
 
 Options:
-  PATH         — file path (required)
-  COMPRESSION  — output compression codec (default SNAPPY)
-  ENCRYPT      — AES encrypt/decrypt (default OFF)
-  PASSWORD     — passphrase for encryption
+- **PATH** — file path (required)
+- **COMPRESSION** — output compression codec (default SNAPPY)
+- **ENCRYPT** — AES encrypt/decrypt (default OFF)
+- **PASSWORD** — passphrase for encryption
 
 ```sql
 CREATE CONNECTION EventLog AS PARQUET(

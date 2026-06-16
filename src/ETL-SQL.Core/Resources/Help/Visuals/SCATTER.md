@@ -2,14 +2,14 @@ Type: SCATTER / BUBBLE
 A scatter plot for exploring correlations between two numeric dimensions. Add a SIZE mapping to render a bubble chart where point area encodes a third variable.
 
 Mappings:
-  X       — horizontal numeric axis (required)
-  Y       — vertical numeric axis (required)
-  SIZE    — numeric column controlling bubble radius (BUBBLE form)
-  COLOR   — column used to colour-code points by category
-  LABEL   — column shown as a tooltip or annotation label
+- **X** — horizontal numeric axis (required)
+- **Y** — vertical numeric axis (required)
+- **SIZE** — numeric column controlling bubble radius (BUBBLE form)
+- **COLOR** — column used to colour-code points by category
+- **LABEL** — column shown as a tooltip or annotation label
 
 Options:
-  SHOW_REGRESSION = ON|OFF  — overlay a linear regression line (default OFF)
+- **SHOW_REGRESSION = ON|OFF** — overlay a linear regression line (default OFF)
   TITLE           = 'text'
 
 ```sql

@@ -49,9 +49,9 @@ SELECT * FROM #users;
 
 ## Notes
 - ROLE values control portal access level:
-  - `VIEWER` — read-only access to reports the user has been granted permission to view.
-  - `AUTHOR` — can publish and manage reports in folders they have WRITE access to.
-  - `ADMIN` — full portal control, including user management and service administration.
+- - `VIEWER` — read-only access to reports the user has been granted permission to view.
+- - `AUTHOR` — can publish and manage reports in folders they have WRITE access to.
+- - `ADMIN` — full portal control, including user management and service administration.
 - `ALTER USER ... SET (ACTIVE = OFF)` suspends the account without deleting it; the user cannot log in but their permissions and settings are preserved.
 - `DISCONNECT USER` revokes all active refresh sessions immediately but does not invalidate authentication tokens.
 - `REVOKE TOKENS FOR USER` invalidates all authentication tokens, forcing the user to re-authenticate on their next request.

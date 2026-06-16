@@ -1,16 +1,23 @@
 # NAVIGATION
+
 Creates a menu or tab strip that links multiple report pages, providing user navigation between views.
 
-Syntax:
-  CREATE NAVIGATION <name> AS TAB | BUTTON | LINK (
-    ORIENTATION = HORIZONTAL | VERTICAL,
-    PAGES       = (<page1>, <page2>, ...)
-  );
+## Syntax
 
-Types:
-  TAB     — horizontal tab strip (default for dashboards)
-  BUTTON  — a row of navigation buttons
-  LINK    — inline text links
+```sql
+CREATE NAVIGATION <name> AS TAB | BUTTON | LINK (
+  ORIENTATION = HORIZONTAL | VERTICAL,
+  PAGES       = (<page1>, <page2>, ...)
+);
+```
+
+## Navigation Types
+
+- **`TAB`**: Horizontal tab strip (default for dashboards).
+- **`BUTTON`**: A row of navigation buttons.
+- **`LINK`**: Inline text links.
+
+## Examples
 
 ```sql
 CREATE PAGE Overview AS DASHBOARD (
@@ -29,7 +36,7 @@ CREATE NAVIGATION MainNav AS TAB (
 );
 ```
 
-The NAVIGATION component renders outside the page content area as a persistent menu. It is declared at the report level, not inside a page.
+The `NAVIGATION` component renders outside the page content area as a persistent menu. It is declared at the report level, not inside a page.
 
 References:
 - [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)

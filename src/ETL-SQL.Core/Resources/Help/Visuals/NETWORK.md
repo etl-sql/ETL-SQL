@@ -2,10 +2,10 @@ Type: NETWORK
 A force-directed graph showing relationships between entities. Nodes are auto-detected from the FROM and TO columns; edges connect them with optional weights. Useful for lineage graphs, collaboration networks, and co-occurrence analysis.
 
 Mappings:
-  FROM        — source node name (required)
-  TO          — destination node name (required)
-  VALUE       — edge weight; affects line thickness (optional)
-  NODE_GROUP  — category used for node coloring and legend; alias GROUP accepted (optional)
+- **FROM** — source node name (required)
+- **TO** — destination node name (required)
+- **VALUE** — edge weight; affects line thickness (optional)
+- **NODE_GROUP** — category used for node coloring and legend; alias GROUP accepted (optional)
 
 Options:
   TITLE     = 'text'

@@ -17,16 +17,16 @@ Aliases:
   MARIADB
 
 Options:
-  HOST / SERVER              — server hostname or IP (required)
-  PORT                       — port number (default 3306)
-  DATABASE                   — database name (required)
-  USER / UID                 — username (required)
-  PASSWORD / PWD             — password
-  SSL_MODE                   — TLS mode (default Preferred)
-  ALLOW_PUBLIC_KEY_RETRIEVAL — set to TRUE to allow RSA public key retrieval from server (default FALSE)
-  ALLOW_USER_VARIABLES       — set to TRUE to allow user variables like @var inside queries (default FALSE)
-  TIMEOUT_SECONDS            — command/query execution timeout in seconds (default 30)
-  TABLE                      — default table for unqualified SELECT/INSERT
+- **HOST / SERVER** — server hostname or IP (required)
+- **PORT** — port number (default 3306)
+- **DATABASE** — database name (required)
+- **USER / UID** — username (required)
+- **PASSWORD / PWD** — password
+- **SSL_MODE** — TLS mode (default Preferred)
+- **ALLOW_PUBLIC_KEY_RETRIEVAL** — set to TRUE to allow RSA public key retrieval from server (default FALSE)
+- **ALLOW_USER_VARIABLES** — set to TRUE to allow user variables like @var inside queries (default FALSE)
+- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
+- **TABLE** — default table for unqualified SELECT/INSERT
 
 ```sql
 CREATE CONNECTION AppDB AS MYSQL(

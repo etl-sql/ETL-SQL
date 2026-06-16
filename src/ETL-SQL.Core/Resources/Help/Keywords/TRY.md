@@ -9,8 +9,8 @@ Syntax:
   END CATCH;
 
 Inside the CATCH block:
-  @@ERROR          — integer error code
-  ERROR_MESSAGE()  — the error message string
+- **@@ERROR** — integer error code
+- **ERROR_MESSAGE()** — the error message string
 
 ```sql
 -- Basic error handling

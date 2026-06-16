@@ -6,9 +6,9 @@ Syntax:
   END;
 
 Where collection is:
-  @list_var       — a LIST-typed variable; @item binds to each element
-  #temp_table     — each row of the table; @item.column accesses fields
-  (SELECT ...)    — inline query; each result row binds to @item
+- **@list_var** — a LIST-typed variable; @item binds to each element
+- **#temp_table** — each row of the table; @item.column accesses fields
+- **(SELECT ...)** — inline query; each result row binds to @item
 
 ```sql
 -- Iterate a LIST variable

@@ -13,14 +13,14 @@ Aliases:
   MONGO
 
 Options:
-  CONNECTION_STRING      — Connection URI (e.g., mongodb://localhost:27017 or mongodb+srv://...) (required unless host/port specified)
-  DATABASE               — target database name (required)
-  COLLECTION             — target collection name
-  TIMEOUT_SECONDS        — connection and query timeout limit in seconds (default: 30)
-  HOST                   — hostname for the MongoDB instance (alternative to CONNECTION_STRING)
-  PORT                   — port for the MongoDB instance (default: 27017)
-  USER                   — database username (alternative to CONNECTION_STRING authentication)
-  PASSWORD               — database password (alternative to CONNECTION_STRING authentication)
+- **CONNECTION_STRING** — Connection URI (e.g., mongodb://localhost:27017 or mongodb+srv://...) (required unless host/port specified)
+- **DATABASE** — target database name (required)
+- **COLLECTION** — target collection name
+- **TIMEOUT_SECONDS** — connection and query timeout limit in seconds (default: 30)
+- **HOST** — hostname for the MongoDB instance (alternative to CONNECTION_STRING)
+- **PORT** — port for the MongoDB instance (default: 27017)
+- **USER** — database username (alternative to CONNECTION_STRING authentication)
+- **PASSWORD** — database password (alternative to CONNECTION_STRING authentication)
 
 ### Nested Document and Array Flattening
 MongoDB allows rich, hierarchical structures. When queried, this connector flattens nested BSON documents and BSON arrays to valid JSON strings in the output table, allowing standard ETL-SQL string/JSON functions to be run downstream.

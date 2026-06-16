@@ -14,16 +14,16 @@ Syntax:
   );
 
 Options:
-  PATH       — file path (required)
-  DELIMITER  — column separator character (default comma)
-  HEADER     — first row is a header row (default ON)
-  ENCODING   — file character encoding (default UTF-8)
-  FORMAT     — DELIMITED (default) or FIXED (fixed-width columns)
-  QUOTE_CHAR — character used to quote fields (default double-quote)
-  NULL_VALUE — string that represents NULL (e.g. 'NULL' or '')
-  COMPRESS   — gzip compress on write; auto-detect on read (default OFF)
-  ENCRYPT    — AES-encrypt on write; decrypt on read (default OFF)
-  PASSWORD   — passphrase for encryption
+- **PATH** — file path (required)
+- **DELIMITER** — column separator character (default comma)
+- **HEADER** — first row is a header row (default ON)
+- **ENCODING** — file character encoding (default UTF-8)
+- **FORMAT** — DELIMITED (default) or FIXED (fixed-width columns)
+- **QUOTE_CHAR** — character used to quote fields (default double-quote)
+- **NULL_VALUE** — string that represents NULL (e.g. 'NULL' or '')
+- **COMPRESS** — gzip compress on write; auto-detect on read (default OFF)
+- **ENCRYPT** — AES-encrypt on write; decrypt on read (default OFF)
+- **PASSWORD** — passphrase for encryption
 
 ```sql
 CREATE CONNECTION Orders AS FLATFILE(
