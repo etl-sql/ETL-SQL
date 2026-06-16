@@ -59,13 +59,24 @@ public class DesignerController : ControllerBase
         var datasets = ast.Statements.OfType<CreateDatasetStatement>()
             .Select((ds, i) => new DesignerDatasetDto(
                 $"ds_{i}",
-                ds.TempTableName,
+                NormalizeDatasetName(ds.TempTableName),
                 ds.SourceQuery.ToSql().Trim().TrimEnd(';')))
             .ToList();
 
-        // Index visuals by name
-        var visuals = ast.Statements.OfType<CreateVisualStatement>()
-            .ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
+        var elements = new Dictionary<string, DesignerVisualDto>(StringComparer.OrdinalIgnoreCase);
+        int idx = 0;
+        foreach (var v in ast.Statements.OfType<CreateVisualStatement>())
+        {
+            elements[v.Name] = VisualToDto(v, idx++, 1, 1, 12, 4);
+        }
+        foreach (var c in ast.Statements.OfType<CreateContainerStatement>())
+        {
+            elements[c.Name] = ContainerToDto(c, idx++);
+        }
+        foreach (var b in ast.Statements.OfType<CreateButtonStatement>())
+        {
+            elements[b.Name] = ButtonToDto(b, idx++);
+        }
 
         // Build pages
         var pages = new List<DesignerPageDto>();
@@ -77,18 +88,20 @@ public class DesignerController : ControllerBase
             var pageVisuals = new List<DesignerVisualDto>();
             int vidx = 0;
 
-            foreach (var (slot, visName) in stmt.SlotMap)
+            foreach (var (slot, elName) in stmt.SlotMap)
             {
-                if (!visuals.TryGetValue(visName, out var vis)) continue;
+                if (!elements.TryGetValue(elName, out var el)) continue;
                 var (col, row, colSpan, rowSpan) = FindSlotBounds(grid, slot);
-                pageVisuals.Add(VisualToDto(vis, vidx++, col, row, colSpan, rowSpan));
+                pageVisuals.Add(el with { GridCol = col, GridRow = row, GridColSpan = colSpan, GridRowSpan = rowSpan });
             }
 
             // Fallback: visuals referenced but not in SlotMap
             if (pageVisuals.Count == 0)
             {
-                foreach (var vis in visuals.Values)
-                    pageVisuals.Add(VisualToDto(vis, vidx++, 1, vidx, 12, 4));
+                foreach (var el in elements.Values)
+                {
+                    pageVisuals.Add(el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 });
+                }
             }
 
             pages.Add(new DesignerPageDto(
@@ -99,11 +112,11 @@ public class DesignerController : ControllerBase
         }
 
         // No pages but visuals exist — create synthetic page
-        if (pages.Count == 0 && visuals.Count > 0)
+        if (pages.Count == 0 && elements.Count > 0)
         {
-            int idx = 0;
-            var synth = visuals.Values.Select(v =>
-                VisualToDto(v, idx, 1, ++idx * 4 - 3, 12, 4)).ToList();
+            int vidx = 0;
+            var synth = elements.Values.Select(el =>
+                el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 }).ToList();
             pages.Add(new DesignerPageDto("p1", "Page 1", "Dashboard", synth));
         }
 
@@ -117,7 +130,7 @@ public class DesignerController : ControllerBase
             ? lit.Value?.ToString()
             : v.Title?.ToSql().Trim('\'', '"');
 
-        var dataset = v.Source.TempTableName;
+        var dataset = string.IsNullOrWhiteSpace(v.Source.TempTableName) ? null : NormalizeDatasetName(v.Source.TempTableName);
 
         var mappings = v.Mappings.ToDictionary(
             m => m.Role.ToUpper(),
@@ -138,6 +151,38 @@ public class DesignerController : ControllerBase
             dataset,
             mappings,
             options);
+    }
+
+    private static DesignerVisualDto ContainerToDto(CreateContainerStatement c, int idx)
+    {
+        var title = c.Title is LiteralExpression lit
+            ? lit.Value?.ToString()
+            : c.Title?.ToSql().Trim('\'', '"');
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["CONTAINER_TYPE"] = c.ContainerType
+        };
+        return new DesignerVisualDto(
+            $"v_{c.Name}_{idx}", c.Name, "CONTAINER",
+            1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
+    }
+
+    private static DesignerVisualDto ButtonToDto(CreateButtonStatement b, int idx)
+    {
+        var title = b.Title is LiteralExpression lit
+            ? lit.Value?.ToString()
+            : b.Title?.ToSql().Trim('\'', '"');
+        var options = b.Options.ToDictionary(
+            o => o.Key,
+            o => o.Value,
+            StringComparer.OrdinalIgnoreCase);
+        if (!options.ContainsKey("BUTTON_TYPE"))
+        {
+            options["BUTTON_TYPE"] = "REFRESH";
+        }
+        return new DesignerVisualDto(
+            $"v_{b.Name}_{idx}", b.Name, "BUTTON",
+            1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
     }
 
     private static List<List<string>> ParseStructure(string structure)
@@ -197,7 +242,7 @@ public class DesignerController : ControllerBase
 
             foreach (var v in visuals)
             {
-                sb.AppendLine(GenerateVisual(v));
+                sb.AppendLine(GenerateElement(v));
                 sb.AppendLine();
             }
 
@@ -233,28 +278,42 @@ public class DesignerController : ControllerBase
         return sb.ToString();
     }
 
-    private static string GenerateVisual(DesignerVisualDto v)
+    private static string GenerateElement(DesignerVisualDto v)
     {
         var sb = new StringBuilder();
         var name = SanitizeName(v.Name);
-        var type = v.Type.ToUpper();
-
-        sb.AppendLine($"CREATE VISUAL {name} AS {type} (");
-
-        if (!string.IsNullOrWhiteSpace(v.Title))
-            sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
-
-        if (!string.IsNullOrWhiteSpace(v.Dataset))
-            sb.AppendLine($"    SOURCE = {NormalizeDatasetName(v.Dataset)},");
-
-        var mappings = (v.Mappings ?? [])
-            .Where(m => !string.IsNullOrWhiteSpace(m.Value))
-            .Select(m => $"{m.Key.ToUpper()} = {m.Value}")
-            .ToList();
-        if (mappings.Count > 0)
-            sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
-
-        sb.Append(");");
+        if (string.Equals(v.Type, "CONTAINER", StringComparison.OrdinalIgnoreCase))
+        {
+            var containerType = v.Options.TryGetValue("CONTAINER_TYPE", out var ct) ? ct : "BOX";
+            sb.AppendLine($"CREATE CONTAINER {name} AS {containerType.ToUpper()} (");
+            if (!string.IsNullOrWhiteSpace(v.Title))
+                sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+            sb.Append(");");
+        }
+        else if (string.Equals(v.Type, "BUTTON", StringComparison.OrdinalIgnoreCase))
+        {
+            var buttonType = v.Options.TryGetValue("BUTTON_TYPE", out var bt) ? bt : "REFRESH";
+            sb.AppendLine($"CREATE BUTTON {name} AS (");
+            if (!string.IsNullOrWhiteSpace(v.Title))
+                sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+            sb.AppendLine($"    OPTIONS (BUTTON_TYPE = '{buttonType}'),");
+            sb.Append(");");
+        }
+        else
+        {
+            sb.AppendLine($"CREATE VISUAL {name} AS {v.Type.ToUpper()} (");
+            if (!string.IsNullOrWhiteSpace(v.Title))
+                sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+            if (!string.IsNullOrWhiteSpace(v.Dataset))
+                sb.AppendLine($"    SOURCE = {NormalizeDatasetName(v.Dataset)},");
+            var mappings = (v.Mappings ?? [])
+                .Where(m => !string.IsNullOrWhiteSpace(m.Value))
+                .Select(m => $"{m.Key.ToUpper()} = {m.Value}")
+                .ToList();
+            if (mappings.Count > 0)
+                sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
+            sb.Append(");");
+        }
         return sb.ToString().TrimEnd();
     }
 

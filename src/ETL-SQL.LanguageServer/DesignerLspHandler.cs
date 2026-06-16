@@ -83,12 +83,24 @@ namespace ETL_SQL.LSP
         {
             var datasets = ast.Statements.OfType<CreateDatasetStatement>()
                 .Select((ds, i) => new LspDesignDataset(
-                    $"ds_{i}", ds.TempTableName,
+                    $"ds_{i}", NormalizeDatasetName(ds.TempTableName),
                     ds.SourceQuery.ToSql().Trim().TrimEnd(';')))
                 .ToList();
 
-            var visuals = ast.Statements.OfType<CreateVisualStatement>()
-                .ToDictionary(v => v.Name, StringComparer.OrdinalIgnoreCase);
+            var elements = new Dictionary<string, LspDesignVisual>(StringComparer.OrdinalIgnoreCase);
+            int idx = 0;
+            foreach (var v in ast.Statements.OfType<CreateVisualStatement>())
+            {
+                elements[v.Name] = VisualToDto(v, idx++, 1, 1, 12, 4);
+            }
+            foreach (var c in ast.Statements.OfType<CreateContainerStatement>())
+            {
+                elements[c.Name] = ContainerToDto(c, idx++);
+            }
+            foreach (var b in ast.Statements.OfType<CreateButtonStatement>())
+            {
+                elements[b.Name] = ButtonToDto(b, idx++);
+            }
 
             var pages = new List<LspDesignPage>();
             int pageNum = 0;
@@ -98,23 +110,28 @@ namespace ETL_SQL.LSP
                 var grid = ParseStructure(stmt.Structure ?? ".");
                 var pageVisuals = new List<LspDesignVisual>();
                 int vidx = 0;
-                foreach (var (slot, visName) in stmt.SlotMap)
+                foreach (var (slot, elName) in stmt.SlotMap)
                 {
-                    if (!visuals.TryGetValue(visName, out var vis)) continue;
+                    if (!elements.TryGetValue(elName, out var el)) continue;
                     var (col, row, colSpan, rowSpan) = FindSlotBounds(grid, slot);
-                    pageVisuals.Add(VisualToDto(vis, vidx++, col, row, colSpan, rowSpan));
+                    pageVisuals.Add(el with { GridCol = col, GridRow = row, GridColSpan = colSpan, GridRowSpan = rowSpan });
                 }
                 if (pageVisuals.Count == 0)
-                    foreach (var vis in visuals.Values)
-                        pageVisuals.Add(VisualToDto(vis, vidx++, 1, vidx * 4 - 3, 12, 4));
+                {
+                    foreach (var el in elements.Values)
+                    {
+                        pageVisuals.Add(el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 });
+                    }
+                }
 
                 pages.Add(new LspDesignPage($"p{pageNum}", stmt.Name, stmt.PageMode.ToString(), pageVisuals));
             }
 
-            if (pages.Count == 0 && visuals.Count > 0)
+            if (pages.Count == 0 && elements.Count > 0)
             {
-                int idx = 0;
-                var synth = visuals.Values.Select(v => VisualToDto(v, idx, 1, ++idx * 4 - 3, 12, 4)).ToList();
+                int vidx = 0;
+                var synth = elements.Values.Select(el =>
+                    el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 }).ToList();
                 pages.Add(new LspDesignPage("p1", "Page 1", "Dashboard", synth));
             }
 
@@ -127,13 +144,44 @@ namespace ETL_SQL.LSP
             var title = v.Title is LiteralExpression lit
                 ? lit.Value?.ToString()
                 : v.Title?.ToSql().Trim('\'', '"');
+            var dataset = string.IsNullOrWhiteSpace(v.Source.TempTableName) ? null : NormalizeDatasetName(v.Source.TempTableName);
             var mappings = v.Mappings.ToDictionary(
                 m => m.Role.ToUpper(), m => m.Column, StringComparer.OrdinalIgnoreCase);
             var options = v.Options.ToDictionary(
                 o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
             return new LspDesignVisual(
                 $"v_{v.Name}_{idx}", v.Name, v.VisualType.ToString().ToUpper(),
-                col, row, colSpan, rowSpan, title, v.Source.TempTableName, mappings, options);
+                col, row, colSpan, rowSpan, title, dataset, mappings, options);
+        }
+
+        private static LspDesignVisual ContainerToDto(CreateContainerStatement c, int idx)
+        {
+            var title = c.Title is LiteralExpression lit
+                ? lit.Value?.ToString()
+                : c.Title?.ToSql().Trim('\'', '"');
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["CONTAINER_TYPE"] = c.ContainerType
+            };
+            return new LspDesignVisual(
+                $"v_{c.Name}_{idx}", c.Name, "CONTAINER",
+                1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
+        }
+
+        private static LspDesignVisual ButtonToDto(CreateButtonStatement b, int idx)
+        {
+            var title = b.Title is LiteralExpression lit
+                ? lit.Value?.ToString()
+                : b.Title?.ToSql().Trim('\'', '"');
+            var options = b.Options.ToDictionary(
+                o => o.Key, o => o.Value, StringComparer.OrdinalIgnoreCase);
+            if (!options.ContainsKey("BUTTON_TYPE"))
+            {
+                options["BUTTON_TYPE"] = "REFRESH";
+            }
+            return new LspDesignVisual(
+                $"v_{b.Name}_{idx}", b.Name, "BUTTON",
+                1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
         }
 
         private static List<List<string>> ParseStructure(string structure) =>
@@ -170,9 +218,9 @@ namespace ETL_SQL.LSP
 
             foreach (var ds in state.Datasets ?? new List<LspDesignDataset>())
             {
-                var name = SanitizeName(ds.Name);
+                var name = NormalizeDatasetName(ds.Name);
                 var query = string.IsNullOrWhiteSpace(ds.Query) ? "SELECT 1 AS Placeholder" : ds.Query.Trim().TrimEnd(';');
-                sb.AppendLine($"CREATE DATASET #{name} AS (");
+                sb.AppendLine($"CREATE DATASET {name} AS (");
                 sb.AppendLine($"  {query}");
                 sb.AppendLine($");");
                 sb.AppendLine();
@@ -188,7 +236,7 @@ namespace ETL_SQL.LSP
 
                 foreach (var v in visuals)
                 {
-                    sb.AppendLine(GenerateVisual(v));
+                    sb.AppendLine(GenerateElement(v));
                     sb.AppendLine();
                 }
 
@@ -204,7 +252,7 @@ namespace ETL_SQL.LSP
                     sb.AppendLine($"        MAP (");
                     for (int i = 0; i < visuals.Count; i++)
                     {
-                        var slot = SanitizeName(visuals[i].Name);
+                        var slot = SanitizeSlotName(visuals[i].Name);
                         var trail = i < visuals.Count - 1 ? "," : "";
                         sb.AppendLine($"            '{slot}' = {SanitizeName(visuals[i].Name)}{trail}");
                     }
@@ -222,22 +270,42 @@ namespace ETL_SQL.LSP
             return sb.ToString();
         }
 
-        private static string GenerateVisual(LspDesignVisual v)
+        private static string GenerateElement(LspDesignVisual v)
         {
             var sb = new StringBuilder();
             var name = SanitizeName(v.Name);
-            sb.AppendLine($"CREATE VISUAL {name} AS {v.Type.ToUpper()} (");
-            if (!string.IsNullOrWhiteSpace(v.Title))
-                sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
-            if (!string.IsNullOrWhiteSpace(v.Dataset))
-                sb.AppendLine($"    SOURCE = #{SanitizeName(v.Dataset)},");
-            var mappings = (v.Mappings ?? new Dictionary<string, string>())
-                .Where(m => !string.IsNullOrWhiteSpace(m.Value))
-                .Select(m => $"{m.Key.ToUpper()} = {m.Value}")
-                .ToList();
-            if (mappings.Count > 0)
-                sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
-            sb.Append(");");
+            if (string.Equals(v.Type, "CONTAINER", StringComparison.OrdinalIgnoreCase))
+            {
+                var containerType = v.Options.TryGetValue("CONTAINER_TYPE", out var ct) ? ct : "BOX";
+                sb.AppendLine($"CREATE CONTAINER {name} AS {containerType.ToUpper()} (");
+                if (!string.IsNullOrWhiteSpace(v.Title))
+                    sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+                sb.Append(");");
+            }
+            else if (string.Equals(v.Type, "BUTTON", StringComparison.OrdinalIgnoreCase))
+            {
+                var buttonType = v.Options.TryGetValue("BUTTON_TYPE", out var bt) ? bt : "REFRESH";
+                sb.AppendLine($"CREATE BUTTON {name} AS (");
+                if (!string.IsNullOrWhiteSpace(v.Title))
+                    sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+                sb.AppendLine($"    OPTIONS (BUTTON_TYPE = '{buttonType}'),");
+                sb.Append(");");
+            }
+            else
+            {
+                sb.AppendLine($"CREATE VISUAL {name} AS {v.Type.ToUpper()} (");
+                if (!string.IsNullOrWhiteSpace(v.Title))
+                    sb.AppendLine($"    TITLE = '{EscapeStr(v.Title)}',");
+                if (!string.IsNullOrWhiteSpace(v.Dataset))
+                    sb.AppendLine($"    SOURCE = {NormalizeDatasetName(v.Dataset)},");
+                var mappings = (v.Mappings ?? new Dictionary<string, string>())
+                    .Where(m => !string.IsNullOrWhiteSpace(m.Value))
+                    .Select(m => $"{m.Key.ToUpper()} = {m.Value}")
+                    .ToList();
+                if (mappings.Count > 0)
+                    sb.AppendLine($"    MAPPINGS ({string.Join(", ", mappings)}),");
+                sb.Append(");");
+            }
             return sb.ToString().TrimEnd();
         }
 
@@ -245,21 +313,32 @@ namespace ETL_SQL.LSP
         {
             if (visuals.Count == 0) return ".";
             int maxRow = visuals.Max(v => v.GridRow + v.GridRowSpan - 1);
-            var grid = new string[maxRow, GridCols];
+            int usedCols = Math.Min(GridCols, visuals.Max(v => v.GridCol + v.GridColSpan - 1));
+            var grid = new string[maxRow, usedCols];
             for (int r = 0; r < maxRow; r++)
-                for (int c = 0; c < GridCols; c++)
+                for (int c = 0; c < usedCols; c++)
                     grid[r, c] = ".";
             foreach (var v in visuals)
             {
-                var slot = SanitizeName(v.Name);
+                var slot = SanitizeSlotName(v.Name);
                 for (int r = v.GridRow - 1; r < v.GridRow - 1 + v.GridRowSpan && r < maxRow; r++)
-                    for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < GridCols; c++)
+                    for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < usedCols; c++)
                         grid[r, c] = slot;
             }
             var rows = Enumerable.Range(0, maxRow)
-                .Select(r => string.Join(" ", Enumerable.Range(0, GridCols).Select(c => grid[r, c])));
+                .Select(r => string.Join(" ", Enumerable.Range(0, usedCols).Select(c => grid[r, c])));
             return string.Join(" / ", rows);
         }
+
+        private static string NormalizeDatasetName(string name)
+        {
+            var trimmed = (name ?? "").Trim();
+            if (trimmed.StartsWith("&", StringComparison.Ordinal) || trimmed.StartsWith("#", StringComparison.Ordinal))
+                trimmed = trimmed[1..];
+            return "&" + SanitizeName(trimmed);
+        }
+
+        private static string SanitizeSlotName(string name) => SanitizeName(name);
 
         private static string SanitizeName(string name)
         {

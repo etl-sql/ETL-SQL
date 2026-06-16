@@ -20,30 +20,34 @@ Port in use? `-Port 8100`. Don't auto-open? `-NoOpen`.
 
 ## Stories
 
-| Story | Component | Notes |
+The sandbox currently hosts the following stories under `stories/`:
+
+| Story | ID | Component / UI Surface |
 |---|---|---|
-| DAG / lineage | `renderDag()` | pure — `window.echarts` + fixture graphs |
-| Script editor | `createScriptEditor()` | CodeMirror, loaded on demand; no server |
-| Report designer | `createDesigner()` | seeded `designState` + a **mock fetch** (`mockApi.js`) for `parse`/`generate`; save is bypassed via `onSaveScript` |
+| **DAG / Lineage** | `dag` | Dependency graphs using Apache ECharts (`renderDag()`) |
+| **Script Editor** | `script-editor` | Monaco/CodeMirror based query editor |
+| **Report Designer** | `designer` | Portal-based layout designer canvas (`createDesigner()`) |
+| **VS Code Webviews** | `vscode-webviews` | VS Code extension frames (Results panel, Report preview, Report designer) |
+| **Admin Catalog** | `admin-catalog` | Administration view catalog panels |
+| **Datasets Admin** | `datasets-admin` | Staged dataset status and storage manager |
+| **Lineage Catalog** | `lineage-catalog` | Asset inventory and search view with lineage chips |
+| **Lineage UI** | `lineage-ui` | Interactive visual pipelines and flow models |
+| **Subscription History** | `subscription-history` | Email/Slack report subscription logs and audits |
 
 ## Layout
 
 | File | Purpose |
 |---|---|
-| `index.html` | shell — sidebar + fixture picker + stage |
-| `sandbox.js` | mounts the selected story/fixture, cache-busts on reload |
-| `util.js` | `DESIGNER_JS` path + `importFresh()` (cache-busting dynamic import) |
-| `mockApi.js` | injectable fetch returning canned `/api/designer/*` responses |
-| `fixture.js` | DAG graph fixtures (Kitchen Sink, EDW, cross-script…) |
-| `stories/*.story.js` | one module per surface: `{ id, title, fixtures, mount() }` |
-| `serve.ps1` | tiny loopback static server (ES modules can't load over `file://`) |
+| `index.html` | UI shell containing the sidebar, story selection, fixture picker, and viewport stage |
+| `sandbox.js` | Mounts the selected story/fixture, injects CSS/JS, and handles cache-busting on reload |
+| `util.js` | Path resolver constants and `importFresh()` for dynamic module loading |
+| `mockApi.js` | Mock HTTP server stub intercepting frontend `/api/designer/*` requests |
+| `fixture.js` | Mock pipelines, datasets, layouts, and node graph fixtures |
+| `stories/*.story.js` | Modular visual component story scripts |
+| `serve.ps1` | A lightweight loopback static web server configuration |
 
 ## Adding a story
 
 Write `stories/<name>.story.js` default-exporting `{ id, title, subtitle, fixtures: [{id,label}], async mount(stage, fixtureId, ctx) → instance }`, then list it in `stories/index.js`. `mount` returns an object with optional `dispose()`/`resize()`. Use `ctx.stat(text)` for the header status line.
-
-## Not yet here (see TODO)
-- The lineage/dependencies modals live **inline** in the portal `index.html`; hosting them as stories needs extracting their render functions into modules first.
-- VS Code webview components.
 
 > Not shipped. Excluded from the build; safe to delete.

@@ -1188,11 +1188,39 @@ export function createDesigner(container, opts = {}) {
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
 
     // ── Visual type registry ──────────────────────────────────────────────────
-    const VTYPES = [
-        ['BAR','#3b82f6'],['LINE','#06b6d4'],['AREA','#0891b2'],['PIE','#8b5cf6'],
-        ['SCATTER','#6366f1'],['GAUGE','#a855f7'],['FUNNEL','#d946ef'],['TREEMAP','#ec4899'],
-        ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['SLICER','#f97316'],
+    const VCATEGORIES = [
+        {
+            name: 'Charts',
+            types: [
+                ['BAR','#3b82f6'],['LINE','#06b6d4'],['AREA','#0891b2'],['PIE','#8b5cf6'],
+                ['DONUT','#a855f7'],['HBAR','#6366f1'],['SCATTER','#6366f1'],['GAUGE','#a855f7'],
+                ['FUNNEL','#d946ef'],['TREEMAP','#ec4899'],['HEATMAP','#f43f5e'],['COMBO','#0ea5e9'],
+                ['BOXPLOT','#14b8a6'],['WATERFALL','#10b981'],['BUBBLE','#06b6d4'],['RADAR','#8b5cf6'],
+                ['CANDLESTICK','#f59e0b'],['MAP','#10b981'],['GANTT','#8b5cf6'],['SANKEY','#14b8a6'],
+                ['SUNBURST','#d946ef'],['NETWORK','#6366f1'],['TRELLIS','#64748b'],['MATRIX','#475569']
+            ]
+        },
+        {
+            name: 'Data & Content',
+            types: [
+                ['TABLE','#64748b'],['CARD','#10b981'],['TEXT','#f59e0b'],['IMAGE','#ec4899']
+            ]
+        },
+        {
+            name: 'Filters & Inputs',
+            types: [
+                ['SLICER','#f97316'],['MULTISELECT','#f97316'],['DATEPICKER','#e11d48'],['RELDATEPICKER','#e11d48'],
+                ['SLIDER','#f59e0b'],['SEARCH','#0ea5e9'],['CHECKBOX','#10b981'],['TEXTBOX','#64748b'],['NUMBERBOX','#64748b']
+            ]
+        },
+        {
+            name: 'Layout & Actions',
+            types: [
+                ['CONTAINER','#475569'],['BUTTON','#a855f7']
+            ]
+        }
     ];
+    const VTYPES = VCATEGORIES.flatMap(c => c.types);
     const VCOLOR = Object.fromEntries(VTYPES.map(([t, c]) => [t, c]));
     const ROLES  = ['X', 'Y', 'VALUE', 'CATEGORY', 'SERIES', 'LABEL', 'TOOLTIP'];
 
@@ -1245,11 +1273,22 @@ export function createDesigner(container, opts = {}) {
     // Sidebar
     const sidebar = document.createElement('div');
     sidebar.className = 'etlsql-designer-sidebar';
-    sidebar.innerHTML = `
-        <div class="etlsql-dsgn-section">
-            <div class="etlsql-dsgn-section-hdr">Add Visual</div>
-            <div class="etlsql-dsgn-palette" id="dsgn-palette"></div>
-        </div>
+    let sidebarHtml = '';
+    for (const cat of VCATEGORIES) {
+        sidebarHtml += `
+            <div class="etlsql-dsgn-section">
+                <div class="etlsql-dsgn-section-hdr">${cat.name}</div>
+                <div class="etlsql-dsgn-palette">
+                    ${cat.types.map(([type, color]) => `
+                        <button class="etlsql-dsgn-palette-btn" data-vtype="${type}" style="--vc: ${color}" title="Add ${type}">
+                            ${type}
+                        </button>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+    sidebarHtml += `
         <div class="etlsql-dsgn-section">
             <div class="etlsql-dsgn-section-hdr">
                 Datasets <button class="btn btn-xs" id="dsgn-add-ds">+</button>
@@ -1261,14 +1300,7 @@ export function createDesigner(container, opts = {}) {
             <div id="dsgn-tree"></div>
         </div>
     `;
-    for (const [type, color] of VTYPES) {
-        const btn = document.createElement('button');
-        btn.className = 'etlsql-dsgn-palette-btn';
-        btn.dataset.vtype = type;
-        btn.textContent = type;
-        btn.style.setProperty('--vc', color);
-        sidebar.querySelector('#dsgn-palette').appendChild(btn);
-    }
+    sidebar.innerHTML = sidebarHtml;
     root.appendChild(sidebar);
 
     // Canvas
@@ -1351,7 +1383,8 @@ export function createDesigner(container, opts = {}) {
             card.innerHTML = `
                 <div class="etlsql-dsgn-vcard-badge">${v.type}</div>
                 <div class="etlsql-dsgn-vcard-name">${esc(v.title || v.name)}</div>
-                <button class="etlsql-dsgn-vcard-del" data-del="${v.id}">✕</button>
+                <button class="etlsql-dsgn-vcard-del" data-del="${v.id}" title="Remove visual">✕</button>
+                <div class="etlsql-dsgn-vcard-resize" title="Drag to resize"></div>
             `;
             canvasGrid.appendChild(card);
         }
@@ -1387,6 +1420,81 @@ export function createDesigner(container, opts = {}) {
             propsPanel.innerHTML = '<p class="etlsql-dsgn-props-empty">Select a visual on the canvas to edit its properties.</p>';
             return;
         }
+
+        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
+
+        if (v.type === 'CONTAINER') {
+            const containerType = v.options?.CONTAINER_TYPE || 'BOX';
+            const ctypes = ['BOX', 'SCROLL', 'DRAWER', 'SIDEBAR', 'TABS', 'ACCORDION', 'MODAL', 'POPOVER'];
+            propsPanel.innerHTML = `
+                <div class="etlsql-dsgn-props-section">
+                    <div class="etlsql-dsgn-props-hdr">Properties</div>
+                    <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                    <label class="etlsql-dsgn-label">Container Type
+                        <select id="pp-container-type" class="form-control">
+                            ${ctypes.map(t => `<option${containerType === t ? ' selected' : ''}>${t}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
+                </div>
+                <div class="etlsql-dsgn-props-section">
+                    <div class="etlsql-dsgn-props-hdr">Grid Position</div>
+                    <div class="etlsql-dsgn-grid4">
+                        <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                        <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                        <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                        <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                    </div>
+                    <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Container</button>
+                </div>
+            `;
+            on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
+            on('#pp-container-type', e => { if(!v.options) v.options = {}; v.options.CONTAINER_TYPE = e.target.value; });
+            on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
+            on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
+            on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
+            on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
+            on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+            return;
+        }
+
+        if (v.type === 'BUTTON') {
+            const buttonType = v.options?.BUTTON_TYPE || 'REFRESH';
+            const btypes = ['REFRESH', 'BACK', 'HELP', 'SUBMIT', 'RESET', 'NAVIGATE', 'ACTION'];
+            propsPanel.innerHTML = `
+                <div class="etlsql-dsgn-props-section">
+                    <div class="etlsql-dsgn-props-hdr">Properties</div>
+                    <label class="etlsql-dsgn-label">Name<input id="pp-name" class="form-control" value="${esc(v.name)}"></label>
+                    <label class="etlsql-dsgn-label">Button Type
+                        <select id="pp-button-type" class="form-control">
+                            ${btypes.map(t => `<option${buttonType === t ? ' selected' : ''}>${t}</option>`).join('')}
+                        </select>
+                    </label>
+                    <label class="etlsql-dsgn-label">Title<input id="pp-title" class="form-control" value="${esc(v.title || '')}"></label>
+                </div>
+                <div class="etlsql-dsgn-props-section">
+                    <div class="etlsql-dsgn-props-hdr">Grid Position</div>
+                    <div class="etlsql-dsgn-grid4">
+                        <label>Col<input type="number" id="pp-col"   class="form-control" min="1" max="12" value="${v.gridCol || 1}"></label>
+                        <label>Row<input type="number" id="pp-row"   class="form-control" min="1"          value="${v.gridRow || 1}"></label>
+                        <label>W  <input type="number" id="pp-cspan" class="form-control" min="1" max="12" value="${v.gridColSpan || 12}"></label>
+                        <label>H  <input type="number" id="pp-rspan" class="form-control" min="1"          value="${v.gridRowSpan || 4}"></label>
+                    </div>
+                    <button class="btn btn-sm etlsql-dsgn-del-btn" id="pp-delete">Remove Button</button>
+                </div>
+            `;
+            on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
+            on('#pp-button-type', e => { if(!v.options) v.options = {}; v.options.BUTTON_TYPE = e.target.value; });
+            on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
+            on('#pp-col',   e => { v.gridCol     = +e.target.value || 1;  renderCanvas(); });
+            on('#pp-row',   e => { v.gridRow     = +e.target.value || 1;  renderCanvas(); });
+            on('#pp-cspan', e => { v.gridColSpan = +e.target.value || 12; renderCanvas(); });
+            on('#pp-rspan', e => { v.gridRowSpan = +e.target.value || 4;  renderCanvas(); });
+            propsPanel.querySelector('#pp-delete')?.addEventListener('click', () => deleteVisual(v.id));
+            return;
+        }
+
         const mappings = v.mappings || {};
         const dsOpts = state.datasets
             .map(d => `<option value="${esc(d.name)}"${v.dataset === d.name ? ' selected' : ''}>#${esc(d.name)}</option>`)
@@ -1428,7 +1536,6 @@ export function createDesigner(container, opts = {}) {
             </div>
         `;
 
-        const on = (sel, fn) => propsPanel.querySelector(sel)?.addEventListener('change', fn);
         on('#pp-name',  e => { v.name  = e.target.value; renderCanvas(); renderTree(); });
         on('#pp-type',  e => { v.type  = e.target.value; renderCanvas(); renderTree(); });
         on('#pp-title', e => { v.title = e.target.value; renderCanvas(); });
@@ -1480,7 +1587,7 @@ export function createDesigner(container, opts = {}) {
         const page = curPage();
         if (!page.visuals) page.visuals = [];
         const newId = uid();
-        page.visuals.push({
+        const visual = {
             id: newId,
             name: type.toLowerCase() + '_' + newId.slice(2),
             type,
@@ -1492,7 +1599,13 @@ export function createDesigner(container, opts = {}) {
             dataset: null,
             mappings: {},
             options: {},
-        });
+        };
+        if (type === 'CONTAINER') {
+            visual.options.CONTAINER_TYPE = 'BOX';
+        } else if (type === 'BUTTON') {
+            visual.options.BUTTON_TYPE = 'REFRESH';
+        }
+        page.visuals.push(visual);
         selVisualId = newId;
         renderCanvas();
         renderTree();
@@ -1612,10 +1725,113 @@ export function createDesigner(container, opts = {}) {
         if (tab) { pageIdx = +tab.dataset.idx; selVisualId = null; renderAll(); }
     });
 
-    sidebar.querySelector('#dsgn-palette').addEventListener('click', e => {
+    sidebar.addEventListener('click', e => {
         const btn = e.target.closest('.etlsql-dsgn-palette-btn');
         if (btn) addVisual(btn.dataset.vtype);
     });
+
+    // ── Drag & Resize Interaction ────────────────────────────────────────────
+    let isDragging = false;
+    let isResizing = false;
+    let activeId = null;
+    let startX = 0, startY = 0;
+    let startCol = 1, startRow = 1;
+    let startColSpan = 12, startRowSpan = 4;
+    let cardOffsetX = 0, cardOffsetY = 0;
+
+    canvasGrid.addEventListener('mousedown', e => {
+        const resizeHandle = e.target.closest('.etlsql-dsgn-vcard-resize');
+        const card = e.target.closest('.etlsql-dsgn-visual-card');
+        const delBtn = e.target.closest('[data-del]');
+
+        if (delBtn) return; // Delete visual handler manages this
+
+        if (card) {
+            const vid = card.dataset.vid;
+            const v = findVis(vid);
+            if (!v) return;
+
+            selectVisual(vid);
+
+            startX = e.clientX;
+            startY = e.clientY;
+            activeId = vid;
+            startCol = v.gridCol || 1;
+            startRow = v.gridRow || 1;
+            startColSpan = v.gridColSpan || 12;
+            startRowSpan = v.gridRowSpan || 4;
+
+            if (resizeHandle) {
+                isResizing = true;
+                e.preventDefault();
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            } else {
+                isDragging = true;
+                const rect = card.getBoundingClientRect();
+                cardOffsetX = e.clientX - rect.left;
+                cardOffsetY = e.clientY - rect.top;
+                e.preventDefault();
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            }
+        }
+    });
+
+    function handleMouseMove(e) {
+        if (!activeId) return;
+        const v = findVis(activeId);
+        if (!v) return;
+
+        const gridRect = canvasGrid.getBoundingClientRect();
+        const gridW = gridRect.width - 32;
+        const W_col = (gridW - 11 * 6) / 12;
+
+        if (isDragging) {
+            const cardX = e.clientX - gridRect.left - cardOffsetX - 16;
+            const cardY = e.clientY - gridRect.top - cardOffsetY - 16;
+
+            let newCol = Math.round(cardX / (W_col + 6)) + 1;
+            newCol = Math.max(1, Math.min(13 - startColSpan, newCol));
+
+            let newRow = Math.round(cardY / 66) + 1;
+            newRow = Math.max(1, newRow);
+
+            if (v.gridCol !== newCol || v.gridRow !== newRow) {
+                v.gridCol = newCol;
+                v.gridRow = newRow;
+                renderCanvas();
+                renderProps();
+            }
+        } else if (isResizing) {
+            const cardRightX = e.clientX - gridRect.left - 16;
+            const cardBottomY = e.clientY - gridRect.top - 16;
+
+            const cardLeftX = (startCol - 1) * (W_col + 6);
+            const cardTopY = (startRow - 1) * 66;
+
+            let newColSpan = Math.round((cardRightX - cardLeftX + 6) / (W_col + 6));
+            newColSpan = Math.max(1, Math.min(13 - startCol, newColSpan));
+
+            let newRowSpan = Math.round((cardBottomY - cardTopY + 6) / 66);
+            newRowSpan = Math.max(1, newRowSpan);
+
+            if (v.gridColSpan !== newColSpan || v.gridRowSpan !== newRowSpan) {
+                v.gridColSpan = newColSpan;
+                v.gridRowSpan = newRowSpan;
+                renderCanvas();
+                renderProps();
+            }
+        }
+    }
+
+    function handleMouseUp(e) {
+        isDragging = false;
+        isResizing = false;
+        activeId = null;
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+    }
 
     canvasGrid.addEventListener('click', e => {
         const del = e.target.closest('[data-del]');

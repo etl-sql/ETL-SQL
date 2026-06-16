@@ -50,7 +50,12 @@ if (-not $NoOpen) { Start-Process $entryUrl }
 
 try {
     while ($listener.IsListening) {
-        $ctx = $listener.GetContext()
+        $asyncResult = $listener.BeginGetContext($null, $null)
+        while (-not $asyncResult.IsCompleted -and $listener.IsListening) {
+            Start-Sleep -Milliseconds 100
+        }
+        if (-not $listener.IsListening) { break }
+        $ctx = $listener.EndGetContext($asyncResult)
         $req = $ctx.Request
         $res = $ctx.Response
         try {
