@@ -47,6 +47,50 @@ namespace ETL_SQL.Core.Formatting
         }
         public bool FormatMetadataTags { get; set; } = true;
 
+        public static FormatterOptions? LoadFromWorkspace(string? startFilePath)
+        {
+            if (string.IsNullOrEmpty(startFilePath)) return null;
+
+            try
+            {
+                string? currentDir = Path.GetDirectoryName(startFilePath);
+                while (!string.IsNullOrEmpty(currentDir))
+                {
+                    string configPath = Path.Combine(currentDir, ".etlsqlformat.json");
+                    if (File.Exists(configPath))
+                    {
+                        string json = File.ReadAllText(configPath);
+                        var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json, new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        if (loaded != null)
+                        {
+                            // Sync legacy setting with casing setting
+                            if (loaded.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase))
+                                loaded.UpperCaseKeywords = true;
+                            else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
+                                loaded.UpperCaseKeywords = false;
+                            
+                            // Sync comma placement setting with legacy setting
+                            if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
+                                loaded.LeadingCommas = true;
+                            else if (loaded.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))
+                                loaded.LeadingCommas = false;
+
+                            return loaded;
+                        }
+                    }
+                    currentDir = Path.GetDirectoryName(currentDir);
+                }
+            }
+            catch
+            {
+                // Fallback to null
+            }
+            return null;
+        }
+
         public static FormatterOptions LoadFromFile(string? startFilePath)
         {
             var options = new FormatterOptions();

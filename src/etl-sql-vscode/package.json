@@ -142,64 +142,64 @@
         "etlsql.executable.path": {
           "type": "string",
           "default": "",
-          "description": "Optional path or command for the ETL-SQL CLI executable. Leave empty to use the bundled executable, then PATH/build fallbacks."
+          "markdownDescription": "**(Advanced Override)** Path or command for a custom `ETL-SQL` CLI runner. Leave blank to automatically use the bundled executable or system `PATH` version (recommended)."
         },
         "etlsql.server.path": {
           "type": "string",
           "default": "",
-          "description": "Path to the ETL-SQL Language Server executable (ETL-SQL-LSP.exe)."
+          "markdownDescription": "**(Advanced Override)** Path to a custom `ETL-SQL` Language Server (LSP) executable (`ETL-SQL-LSP.exe`). Leave blank to automatically use the bundled/system version (recommended)."
         },
         "etlsql.report.executable.path": {
           "type": "string",
           "default": "",
-          "description": "Optional path or command for the ETL-SQL Report CLI executable. Leave empty to use the bundled executable, then build fallback."
+          "markdownDescription": "**(Advanced Override)** Path or command for a custom `ETL-SQL` Report CLI runner (`ETL-SQL-Report.exe`). Leave blank to automatically use the bundled/system version (recommended)."
         },
         "etlsql.report.autoOpenPreview": {
           "type": "boolean",
           "default": false,
-          "description": "Automatically open the Report Preview panel when opening an .rptsql file."
+          "markdownDescription": "Automatically open the interactive split-screen **Report Preview** pane when opening a `.rptsql` file."
         },
         "etlsql.portal.url": {
           "type": "string",
           "default": "",
-          "description": "Base URL of the ETL-SQL Report Portal (e.g. http://localhost:5001). Used by the Publish button in the report preview panel."
+          "markdownDescription": "The base URL of your hosted **ETL-SQL Report Portal** (e.g. `http://localhost:5001`). Used to publish dashboards directly from VS Code."
         },
         "etlsql.format.keywordCasing": {
           "type": "string",
           "enum": ["upper", "lower", "pascal", "preserve"],
           "default": "upper",
-          "description": "Casing style for SQL keywords."
+          "markdownDescription": "Casing style for SQL keywords. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.indentSize": {
           "type": "integer",
           "default": 4,
-          "description": "Number of spaces per tab level for formatting."
+          "markdownDescription": "Number of spaces per indentation level. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.commaPlacement": {
           "type": "string",
           "enum": ["trailing", "leading"],
           "default": "leading",
-          "description": "Position of list commas (trailing or leading)."
+          "markdownDescription": "Position of list commas (leading or trailing). *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.indentJoins": {
           "type": "boolean",
           "default": true,
-          "description": "Indent JOIN statements relative to FROM."
+          "markdownDescription": "Indent JOIN statements relative to the FROM clause. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.onClauseOnNewLine": {
           "type": "boolean",
           "default": false,
-          "description": "Place the ON clause of a JOIN on a new line."
+          "markdownDescription": "Place the ON clause of a JOIN statement on a new line. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.caseWhenThenNewLine": {
           "type": "boolean",
           "default": true,
-          "description": "Place the THEN clause of a CASE expression on a new line."
+          "markdownDescription": "Place the THEN clause of a CASE WHEN statement on a new line. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         },
         "etlsql.format.breakoutWindowFunctions": {
           "type": "boolean",
           "default": true,
-          "description": "Break out window function parameters (PARTITION BY, ORDER BY) onto new lines."
+          "markdownDescription": "Break out window function parameters (PARTITION BY, ORDER BY) onto separate lines. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
         }
       }
     },
