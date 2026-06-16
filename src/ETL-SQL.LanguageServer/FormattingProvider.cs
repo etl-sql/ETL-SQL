@@ -31,7 +31,15 @@ namespace ETL_SQL.LSP
             if (!_store.TryGetState(request.TextDocument.Uri, out var state))
                 return Task.FromResult<TextEditContainer?>(null);
 
-            var formatted = SqlFormatter.Format(state.Text);
+            string? filePath = null;
+            try
+            {
+                filePath = new System.Uri(request.TextDocument.Uri.ToString()).LocalPath;
+            }
+            catch { }
+
+            var options = FormatterOptions.LoadFromFile(filePath);
+            var formatted = SqlFormatter.Format(state.Text, options);
             var lines = state.Text.Split('\n');
             var endLine = lines.Length - 1;
             var endCol = lines[endLine].Length;

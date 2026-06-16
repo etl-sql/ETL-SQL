@@ -163,6 +163,43 @@
           "type": "string",
           "default": "",
           "description": "Base URL of the ETL-SQL Report Portal (e.g. http://localhost:5001). Used by the Publish button in the report preview panel."
+        },
+        "etlsql.format.keywordCasing": {
+          "type": "string",
+          "enum": ["upper", "lower", "pascal", "preserve"],
+          "default": "upper",
+          "description": "Casing style for SQL keywords."
+        },
+        "etlsql.format.indentSize": {
+          "type": "integer",
+          "default": 4,
+          "description": "Number of spaces per tab level for formatting."
+        },
+        "etlsql.format.commaPlacement": {
+          "type": "string",
+          "enum": ["trailing", "leading"],
+          "default": "trailing",
+          "description": "Position of list commas (trailing or leading)."
+        },
+        "etlsql.format.indentJoins": {
+          "type": "boolean",
+          "default": false,
+          "description": "Indent JOIN statements relative to FROM."
+        },
+        "etlsql.format.onClauseOnNewLine": {
+          "type": "boolean",
+          "default": true,
+          "description": "Place the ON clause of a JOIN on a new line."
+        },
+        "etlsql.format.caseWhenThenNewLine": {
+          "type": "boolean",
+          "default": false,
+          "description": "Place the THEN clause of a CASE expression on a new line."
+        },
+        "etlsql.format.breakoutWindowFunctions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Break out window function parameters (PARTITION BY, ORDER BY) onto new lines."
         }
       }
     },

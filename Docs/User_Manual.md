@@ -1026,6 +1026,10 @@ WHERE LastModified >= DATEADD(HOUR, -24, GETDATE());
 
 ### 10.1 Breaking Scripts into Modules
 
+ETL-SQL scripts can grow into many thousands of lines, especially when they include report layout, validation, and formatting. There is no normal line-count limit to optimize around. Split scripts when the boundary improves reviewability, reuse, or operational control.
+
+Use the top-level script as an **orchestrator**: it should declare the run parameters, load shared setup, and call stage scripts in the order the pipeline expects. Keep detailed extract, transform, validation, load, and delivery work in child scripts.
+
 ```sql
 -- orchestrator.etlsql
 DECLARE @env STRING INPUT = 'DEV';
@@ -1034,6 +1038,64 @@ RUN SCRIPT 'extract.etlsql'   WITH (@env = @env);
 RUN SCRIPT 'transform.etlsql' WITH (@env = @env);
 RUN SCRIPT 'load.etlsql'      WITH (@env = @env);
 ```
+
+Good reasons to split a script:
+
+- The stage has a clear responsibility, such as extract, normalize, validate, merge, report build, or cleanup.
+- The stage is reused by more than one pipeline or report.
+- The stage has a different operational lifecycle, such as a heavy transform that may be resumed or rerun independently.
+- The script is becoming hard to review in one sitting.
+- A generated or visual-heavy `.rptsql` file would drown out hand-maintained pipeline logic.
+
+Avoid splitting every tiny helper into its own file. ETL-SQL modules work best as **pipeline stages with contracts**, not as a large tree of small methods. Prefer a shallow project shape:
+
+```text
+nightly_load/
+  main.etlsql
+  _environment.etlsql
+  extract_orders.etlsql
+  normalize_orders.etlsql
+  validate_orders.etlsql
+  load_orders.etlsql
+  publish_dashboard.rptsql
+```
+
+Pass values through `RUN SCRIPT ... WITH (...)` when a child script needs explicit inputs or outputs:
+
+```sql
+-- main.etlsql
+DECLARE @env STRING INPUT = 'DEV';
+DECLARE @loadedRows INT = 0;
+
+RUN SCRIPT 'load_orders.etlsql'
+WITH (
+  @env = @env,
+  @loadedRows = @loadedRows OUTPUT
+);
+```
+
+Inside the child script, declare the contract near the top:
+
+```sql
+-- load_orders.etlsql
+-- Expects: #orders_clean(CustomerId, OrderId, OrderDate, Amount)
+-- Produces: @loadedRows OUTPUT
+DECLARE @env STRING INPUT = 'DEV';
+DECLARE @loadedRows INT OUTPUT = 0;
+
+MERGE INTO dw.Orders AS T
+USING #orders_clean AS S ON T.OrderId = S.OrderId
+WHEN MATCHED THEN UPDATE SET T.Amount = S.Amount
+WHEN NOT MATCHED THEN
+  INSERT (CustomerId, OrderId, OrderDate, Amount)
+  VALUES (S.CustomerId, S.OrderId, S.OrderDate, S.Amount);
+
+SET @loadedRows = (SELECT COUNT(*) FROM #orders_clean);
+```
+
+`RUN SCRIPT` executes in the same engine session, so child scripts can intentionally share `#temp` staging tables. Treat that as a contract: document the expected table name and columns at the top of the child script, and validate important assumptions with `ASSERT` or `EXPECT SCHEMA` before destructive loads.
+
+Keep `RUN SCRIPT` nesting shallow. A top-level orchestrator that calls stage scripts is easy to follow; long chains such as `main -> step1 -> step2 -> step3 -> ...` are harder to debug and can hit recursion guardrails. If a pipeline needs many stages, prefer one orchestrator that lists them in order.
 
 ### 10.2 Scheduling with CREATE JOB
 
