@@ -8,26 +8,26 @@ release begins.
 
 ## Documentation Standards Backlog
 
-- [ ] Add `Docs/Standards/Engine_Coding_Standards.md` covering engine-source rules:
+- [x] Add `Docs/Standards/Engine_Coding_Standards.md` covering engine-source rules:
   `IExecutionContext.ResolvePath()` before file I/O, injected `ILogger`, no `Logger.Instance`, no
   `Console.WriteLine`, async I/O with `CancellationToken`, sanitized `ExecutionException` wrapping,
   and AST nodes as `record` types.
-- [ ] Add `Docs/Standards/Language_Syntax_Standards.md` covering keyword casing, when to add a
+- [x] Add `Docs/Standards/Language_Syntax_Standards.md` covering keyword casing, when to add a
   keyword vs. a connector option, statement naming, AST/handler naming, option value conventions,
   and parser compatibility rules.
-- [ ] Add `Docs/Standards/Breaking_Change_Standards.md` covering `// COMPAT_BREAK: x.y`,
+- [x] Add `Docs/Standards/Breaking_Change_Standards.md` covering `// COMPAT_BREAK: x.y`,
   `BREAKING_CHANGES.md`, required regression tests, high-risk parser/evaluator sites, and the
   one-minor-version warning period for parser syntax removals.
-- [ ] Add `Docs/Standards/Third_Party_Dependency_Standards.md` covering the FOSS-only policy,
+- [x] Add `Docs/Standards/Third_Party_Dependency_Standards.md` covering the FOSS-only policy,
   NuGet evaluation checklist, one-library-per-domain rule, license banner preservation, and required
   updates to `THIRD-PARTY-NOTICES.md` / `THIRD-PARTY-INVENTORY.md`.
-- [ ] Add `Docs/Standards/Source_Boundary_Standards.md` promoting the current Core / Engine /
+- [x] Add `Docs/Standards/Source_Boundary_Standards.md` promoting the current Core / Engine /
   Connectors / Analysis / Reporting / ReportHosting / host-shell ownership guidance out of the
   strategy migration plan.
-- [ ] Add `Docs/Standards/Report_Runtime_Asset_Standards.md` covering the canonical shared runtime
+- [x] Add `Docs/Standards/Report_Runtime_Asset_Standards.md` covering the canonical shared runtime
   source under `src/ETL-SQL.ReportRuntime/Resources/Shared/`, generated host copies, required
   `node .\scripts\sync-assets.js` / `-Check`, and UI sandbox verification.
-- [ ] Add `Docs/Standards/Script_Composition_Standards.md` for repo-authored ETL-SQL scripts:
+- [x] Add `Docs/Standards/Script_Composition_Standards.md` for repo-authored ETL-SQL scripts:
   `main.etlsql` orchestrators, `_environment.etlsql`, stage-script naming, contract comments,
   shared `#temp` table expectations, shallow `RUN SCRIPT` nesting, and generated `.rptsql`
   separation.

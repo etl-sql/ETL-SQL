@@ -203,12 +203,13 @@ Use this map to find the right document for any task.
 | Connector options and authentication | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** |
 | Functions (string, date, math, regex, window) | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** |
 | File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
-| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** |
-| Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** |
+| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Lineage.md)** |
+| Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/RelativeDate_Parameters.md)** |
 | Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
 | Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
 | Sample script inventory (160+ scripts in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
+| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Script_Composition_Standards.md)** |
 
 ### Contributing Engine Code
 | Need | Document |
@@ -216,8 +217,14 @@ Use this map to find the right document for any task.
 | How connectors work internally | **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)** |
 | Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md)** |
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
+| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Engine_Coding_Standards.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
-| Rules for touch the presentation layer | **[Standards/Presentation_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)** |
+| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Language_Syntax_Standards.md)** |
+| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Breaking_Change_Standards.md)** |
+| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Third_Party_Dependency_Standards.md)** |
+| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Source_Boundary_Standards.md)** |
+| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Report_Runtime_Asset_Standards.md)** |
+| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)** |
 | Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Help_and_Snippet_Standards.md)** |
 | Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Engine_Upgrade_Strategy.md)** |
 
