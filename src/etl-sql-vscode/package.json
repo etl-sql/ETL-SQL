@@ -178,22 +178,22 @@
         "etlsql.format.commaPlacement": {
           "type": "string",
           "enum": ["trailing", "leading"],
-          "default": "trailing",
+          "default": "leading",
           "description": "Position of list commas (trailing or leading)."
         },
         "etlsql.format.indentJoins": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Indent JOIN statements relative to FROM."
         },
         "etlsql.format.onClauseOnNewLine": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Place the ON clause of a JOIN on a new line."
         },
         "etlsql.format.caseWhenThenNewLine": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "description": "Place the THEN clause of a CASE expression on a new line."
         },
         "etlsql.format.breakoutWindowFunctions": {

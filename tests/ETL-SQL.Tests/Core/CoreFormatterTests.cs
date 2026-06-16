@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Core
             string sql = "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id WHERE t1.val > 10";
             string formatted = SqlFormatter.Format(sql).Replace("\r\n", "\n");
 
-            Assert.Contains("\nJOIN", formatted);
+            Assert.Contains("\n    JOIN", formatted);
             Assert.Contains("\nWHERE", formatted);
         }
 
@@ -155,7 +155,7 @@ namespace ETL_SQL.Tests.Core
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             Assert.Contains("FROM (\n    SELECT\n        id,\n        name\n    FROM customers\n) c", formatted);
-            Assert.Contains("JOIN orders o\n    ON c.id = o.customer_id", formatted);
+            Assert.Contains("    JOIN orders o ON c.id = o.customer_id", formatted);
         }
 
         [Fact]
