@@ -66,6 +66,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 try
                 {
                     await _store.RegisterOrRenewNodeAsync(NodeId, Role, ttl, metadata);
+
+                    // Housekeeping: drop rows of nodes that died without deregistering, so the registry
+                    // doesn't grow unbounded with stale entries. It's an idempotent DELETE of already-
+                    // expired rows, so every node running it concurrently is harmless.
+                    var pruned = await _store.PruneExpiredNodesAsync();
+                    if (pruned > 0)
+                        _logger.LogDebug("Pruned {Count} expired node registry row(s).", pruned);
                 }
                 catch (Exception ex)
                 {

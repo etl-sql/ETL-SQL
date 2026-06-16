@@ -124,5 +124,34 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.DoesNotContain(await store.GetAllNodesAsync(), n => n.NodeId == service.NodeId);
         }
+
+        [Fact]
+        public async Task HeartbeatService_PrunesExpiredNodes_OnItsLoop()
+        {
+            var store = await NewStoreAsync();
+            // A node that died without deregistering, already past its TTL.
+            await store.RegisterOrRenewNodeAsync("dead-node", "Orchestrator", TimeSpan.FromMilliseconds(20));
+            await Task.Delay(60);
+            Assert.Contains(await store.GetAllNodesAsync(), n => n.NodeId == "dead-node");
+
+            var service = new NodeHeartbeatService(
+                store, new ConfigurationBuilder().Build(), NullLogger<NodeHeartbeatService>.Instance, "Portal");
+            await service.StartAsync(CancellationToken.None);
+            try
+            {
+                // The first heartbeat loop both registers this node and prunes the expired one.
+                var pruned = false;
+                for (var i = 0; i < 40 && !pruned; i++)
+                {
+                    pruned = !(await store.GetAllNodesAsync()).Any(n => n.NodeId == "dead-node");
+                    if (!pruned) await Task.Delay(25);
+                }
+                Assert.True(pruned, "Expected the heartbeat loop to prune the expired node row.");
+            }
+            finally
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
+        }
     }
 }
