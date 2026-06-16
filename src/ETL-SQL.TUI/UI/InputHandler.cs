@@ -495,16 +495,38 @@ namespace ETL_SQL.TUI.UI
             {
                 // Cycle: Pipeline+Messages → Results → Performance → Output → Variables → (repeat)
                 if (_renderer.ResultsVisible)
-                { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
+                {
+                    _renderer.ResultsVisible = false;
+                    _renderer.PerformanceVisible = true;
+                    _renderer.Focus = EditorFocus.Performance;
+                    _renderer.ShowStatus("View: Performance Metrics");
+                }
                 else if (_renderer.PerformanceVisible)
-                { _renderer.PerformanceVisible = false; _renderer.OutputVisible = true; _renderer.ShowStatus("View: Output"); }
+                {
+                    _renderer.PerformanceVisible = false;
+                    _renderer.OutputVisible = true;
+                    _renderer.Focus = EditorFocus.Output;
+                    _renderer.ShowStatus("View: Output");
+                }
                 else if (_renderer.OutputVisible)
-                { _renderer.OutputVisible = false; _renderer.VariablesVisible = true; _renderer.ShowStatus("View: Variables"); }
+                {
+                    _renderer.OutputVisible = false;
+                    _renderer.VariablesVisible = true;
+                    _renderer.Focus = EditorFocus.Variables;
+                    _renderer.ShowStatus("View: Variables");
+                }
                 else if (_renderer.VariablesVisible)
-                { _renderer.VariablesVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
+                {
+                    _renderer.VariablesVisible = false;
+                    _renderer.Focus = _renderer.ActiveLowerTab;
+                    _renderer.ShowStatus("View: Pipeline & Messages");
+                }
                 else
-                { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
-                _renderer.Focus = EditorFocus.Editor;
+                {
+                    _renderer.ResultsVisible = true;
+                    _renderer.Focus = EditorFocus.Results;
+                    _renderer.ShowStatus("View: Query Results");
+                }
                 _renderer.ForceFullRepaint();
                 return;
             }
@@ -821,6 +843,12 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.PageUp: _renderer.TreeScrollRow = Math.Max(0, _renderer.TreeScrollRow - 10); break;
                 case ConsoleKey.PageDown: _renderer.TreeScrollRow += 10; break;
                 case ConsoleKey.Home: _renderer.TreeScrollRow = 0; break;
+                case ConsoleKey.RightArrow:
+                    _renderer.Focus = EditorFocus.Messages;
+                    _renderer.ActiveLowerTab = EditorFocus.Messages;
+                    _renderer.ForceFullRepaint();
+                    _renderer.ShowStatus("Focus: Messages");
+                    break;
             }
         }
 
@@ -834,6 +862,12 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.PageDown: _renderer.MessageScrollRow += 10; break;
                 case ConsoleKey.Home: _renderer.MessageScrollRow = 0; break;
                 case ConsoleKey.End: _renderer.MessageScrollRow = 50000; break; // Clamp will handle it
+                case ConsoleKey.LeftArrow:
+                    _renderer.Focus = EditorFocus.ExecutionTree;
+                    _renderer.ActiveLowerTab = EditorFocus.ExecutionTree;
+                    _renderer.ForceFullRepaint();
+                    _renderer.ShowStatus("Focus: Pipeline Tree");
+                    break;
             }
         }
 

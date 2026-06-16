@@ -260,15 +260,32 @@ namespace ETL_SQL.TUI.UI
                 {
                     // MessageTree panel — independent scroll for each column
                     int innerRows = lowerAreaHeight - 3;
-                    // Since messages can now wrap into multiple lines, maxMsg is an estimate based on message count.
-                    // We use an 8x multiplier to account for long lines; MessageTreePanel handles exact clipping.
-                    int maxMsg = Math.Max(0, (evaluator.Messages.Count * 8) - innerRows);
+
+                    // Calculate tree column and message column content widths (exactly matching MessageTreePanel.Render)
+                    int treeColContent = Math.Min(44, Math.Max(18, (totalWidth - 6) * 35 / 100));
+                    int msgColWidth = totalWidth - treeColContent - 6;
+
+                    // Calculate the exact number of wrapped display lines
+                    int totalWrappedMsgLines = 0;
+                    foreach (var m in evaluator.Messages)
+                    {
+                        totalWrappedMsgLines += GetWrappedLineCount(m.Message, msgColWidth);
+                    }
+
+                    int maxMsg = Math.Max(0, totalWrappedMsgLines - innerRows);
                     int maxTree = Math.Max(0, evaluator.Telemetry.ExecutionTree.GetAllNodes().Count() - innerRows);
 
                     // Auto-scroll for messages: if new messages arrived and we were at the bottom, stay at the bottom.
                     if (evaluator.Messages.Count > _lastMessageCount)
                     {
-                        bool wasAtBottom = MessageScrollRow >= Math.Max(0, (_lastMessageCount * 8) - innerRows - 2);
+                        int prevWrappedMsgLines = 0;
+                        for (int i = 0; i < Math.Min(_lastMessageCount, evaluator.Messages.Count); i++)
+                        {
+                            prevWrappedMsgLines += GetWrappedLineCount(evaluator.Messages[i].Message, msgColWidth);
+                        }
+                        int prevMaxMsg = Math.Max(0, prevWrappedMsgLines - innerRows);
+                        bool wasAtBottom = MessageScrollRow >= prevMaxMsg - 2;
+
                         if (wasAtBottom || _lastMessageCount == 0)
                         {
                             MessageScrollRow = maxMsg;
@@ -1232,6 +1249,31 @@ namespace ETL_SQL.TUI.UI
                     }
                 }
             }
+        }
+
+        private static int GetWrappedLineCount(string text, int width)
+        {
+            if (width < 1) return 1;
+            int count = 0;
+            var lines = text.Split(new[] { "\n", "\r\n" }, StringSplitOptions.None);
+
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrEmpty(line))
+                {
+                    count++;
+                    continue;
+                }
+
+                int start = 0;
+                while (start < line.Length)
+                {
+                    int length = Math.Min(width, line.Length - start);
+                    count++;
+                    start += length;
+                }
+            }
+            return count;
         }
     }
 }
