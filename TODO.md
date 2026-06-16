@@ -161,11 +161,22 @@ release begins.
   >   bypassing `IArtifactStorage`.~~ The key ring is now driven by `Portal:Storage:KeyRingPath` (defaults
   >   to node-local `.portal-keys`); the DP key ring and the Keys artifact area share one configurable
   >   root, so a multi-node deployment points every node at the same shared location.
-  > - **[IN PROGRESS]** Portal/Hosting consumers still mostly use direct `File.*` / `Directory.*` paths for
-  >   scripts, snapshots, datasets, maps, and maintenance flows. Examples: script save/upload in
-  >   `ReportsController`, snapshot manifest writes in `ExecutionJobService`, dataset file paths in
-  >   `DatasetRegistryService`, subscription script maintenance, and dataset cleanup/rotation. Migrate
-  >   these incrementally to area-relative `IArtifactStorage` keys with focused tests.
+  > - **[IN PROGRESS]** Portal/Hosting consumers still mostly use direct `File.*` / `Directory.*` paths.
+  >   Migrating incrementally to area-relative `IArtifactStorage` keys, risk-ranked by stored-path model:
+  >   - **Maps — DONE.** `GET /api/maps/custom` reads via the Maps area; relative client paths, no stored
+  >     paths, so no data-model change. (Also fixed a latent bug: the storage singleton captured the
+  >     startup `PortalConfig` local instead of resolving it from DI, ignoring later overrides.)
+  >   - **Scripts — feasible, medium.** `ReportsController` stores **relative** `ScriptPath` against
+  >     `ScriptRootPath`, so keys map directly — but the surface is large (content reads ×4, hash/staleness
+  >     helper, the staged-write+backup+rollback save, upload, and `*.rptsql` listing) and the atomic-save
+  >     logic is delicate. Reads are easy; the save path needs care.
+  >   - **Snapshots — moderate.** `ExecutionJobService` writes snapshot HTML + manifest and stores
+  >     `ManifestPath`; needs the write + stored-path + read side migrated together.
+  >   - **Datasets — large, cross-tier.** Catalog stores **absolute** `ParquetFilePath` produced by
+  >     **Engine** handlers (Create/Publish/Refresh, a lower tier with no Portal reference), encrypted at
+  >     rest and read via decrypt-to-temp. Migrating means an absolute→relative data-model change touching
+  >     Engine + Portal + backup/restore **and a data migration for existing rows** — its own work item,
+  >     not a call swap. Needs explicit buy-in before starting.
   > - **[RESOLVED]** ~~`SmbArtifactStorage`'s reachability check allows startup when the UNC share root
   >   exists but the area subdirectory does not.~~ The check now probes the **share** (`\\server\share`)
   >   and fails fast only on an unreachable share; per-area subdirectories are created on demand by the
