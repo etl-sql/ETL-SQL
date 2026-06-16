@@ -58,14 +58,7 @@ public class ReportsController : ControllerBase
     /// or null if it escapes the configured script root. Reuses the existing within-root guard for the
     /// security check, so no catalog data migration is needed to route script I/O through the seam.
     /// </summary>
-    private string? ToScriptKey(string? scriptPath)
-    {
-        if (string.IsNullOrWhiteSpace(scriptPath) || string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
-            return null;
-        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolved))
-            return null;
-        return Path.GetRelativePath(Path.GetFullPath(portalConfig.ScriptRootPath), resolved).Replace('\\', '/');
-    }
+    private string? ToScriptKey(string? scriptPath) => PortalPathGuard.ToScriptKey(portalConfig, scriptPath);
 
     private async Task<bool> CreatorCanResolveAsync(
         int creatorId,

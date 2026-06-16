@@ -22,7 +22,8 @@ public class ExecutionController(
     SessionCache sessions,
     AuditService audit,
     PortalConfig portalConfig,
-    FolderPermissionService folderPermissions) : ControllerBase
+    FolderPermissionService folderPermissions,
+    ETL_SQL.Core.Storage.IArtifactStorage artifacts) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -100,7 +101,8 @@ public class ExecutionController(
         if (snapshot is null)
             return NotFound(new { error = "No snapshot available. Execute the report first." });
 
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+        var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
+        if (manifestKey is null)
             return Forbid();
 
         bool isStale = false;
@@ -108,9 +110,9 @@ public class ExecutionController(
             isStale = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > snapshot.BuiltAt;
 
         object? manifest = null;
-        if (includeManifest && System.IO.File.Exists(resolvedManifestPath))
+        if (includeManifest && await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
         {
-            var json = await System.IO.File.ReadAllTextAsync(resolvedManifestPath);
+            var json = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey);
             manifest = JsonDocument.Parse(json).RootElement;
         }
 
@@ -148,13 +150,14 @@ public class ExecutionController(
         if (snapshot is null)
             return NotFound(new { error = "No snapshot available." });
 
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+        var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
+        if (manifestKey is null)
             return Forbid();
 
-        if (!System.IO.File.Exists(resolvedManifestPath))
+        if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
             return NotFound(new { error = "No snapshot available." });
 
-        var json = await System.IO.File.ReadAllTextAsync(resolvedManifestPath);
+        var json = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey);
         return Content(json, "application/json");
     }
 
