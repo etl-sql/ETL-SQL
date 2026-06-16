@@ -43,6 +43,35 @@
         return null;
     }
 
+    function getDefaultTheme(manifest) {
+        if (manifest && manifest.theme) return manifest.theme;
+        if (document.body.classList.contains('vscode-dark')) return 'dark';
+        if (document.body.classList.contains('vscode-light')) return 'light';
+        return null;
+    }
+
+    function updateBodyTheme(manifest, activePageName) {
+        if (!manifest) return;
+        let activeTheme = null;
+        if (manifest.pages && activePageName) {
+            const page = manifest.pages.find(p => p.name === activePageName);
+            if (page) {
+                const reportStyles = manifest.styles || {};
+                const pageStyles = page.styles || {};
+                activeTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || null;
+            }
+        }
+        if (!activeTheme) {
+            activeTheme = getDefaultTheme(manifest);
+        }
+
+        if (activeTheme && activeTheme.toLowerCase() === 'dark') {
+            document.body.classList.add('theme-dark');
+        } else {
+            document.body.classList.remove('theme-dark');
+        }
+    }
+
     function getParam(params, name) {
         if (!params || !name) return undefined;
         const lookup = name.toLowerCase();
@@ -356,6 +385,17 @@
         const navDef = manifest.navigations && manifest.navigations.length > 0
             ? manifest.navigations[0] : null;
 
+        let activePageName = null;
+        if (manifest.pages && manifest.pages.length > 0) {
+            const firstVisible = manifest.pages.find(p => !p.isHidden);
+            const defaultPage = navDef
+                ? (navDef.defaultPage || (firstVisible && firstVisible.name))
+                : (firstVisible && firstVisible.name);
+            const requestedPage = (_lastActivePage || window.__INITIAL_PAGE__ || '').trim();
+            activePageName = (requestedPage && manifest.pages.some(p => p.name === requestedPage)) ? requestedPage : defaultPage;
+        }
+        updateBodyTheme(manifest, activePageName);
+
         if (manifest.pages && manifest.pages.length > 0) {
             const pageSections = {};
             const firstVisible = manifest.pages.find(p => !p.isHidden);
@@ -366,7 +406,7 @@
             manifest.pages.forEach(page => {
                 const reportStyles = manifest.styles || {};
                 const pageStyles = page.styles || {};
-                const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || manifest.theme || null;
+                const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || getDefaultTheme(manifest);
                 const section = renderPage(manifest, page, pageSections, pageTheme);
                 root.appendChild(section);
 
@@ -388,7 +428,7 @@
                 }
             }
         } else {
-            (manifest.visuals || []).forEach(v => renderVisual(root, v, manifest.theme, manifest));
+            (manifest.visuals || []).forEach(v => renderVisual(root, v, getDefaultTheme(manifest), manifest));
         }
 
         // Synchronize parameter values to any newly rendered controls
@@ -623,6 +663,8 @@
                 });
                 const target = pageSections[pageName];
                 if (target) target.style.display = 'block';
+
+                updateBodyTheme(manifest, pageName);
 
                 // Set active state BEFORE resize so it is never racing against
                 // event callbacks (e.g. ECharts force-layout rendering) that fire

@@ -34,6 +34,7 @@ function Assert-InstallerInputFiles {
         "ETL-SQL.exe",
         "ETL-SQL-LSP.exe",
         "ETL-SQL-Report.exe",
+        "ETL-SQL-Player.exe",
         "ETL-SQL-Service.exe",
         "ETL-SQL-Portal.exe"
     )
@@ -104,6 +105,7 @@ $Projects = @(
     "..\src\ETL-SQL.App\ETL-SQL.App.csproj",
     "..\src\ETL-SQL.LanguageServer\ETL-SQL.LanguageServer.csproj",
     "..\src\ETL-SQL.ReportBuilder.CLI\ETL-SQL.ReportBuilder.CLI.csproj",
+    "..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj",
     "..\src\ETL-SQL.Orchestrator.Service\ETL-SQL.Orchestrator.Service.csproj",
     "..\src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj"
 )
@@ -116,6 +118,14 @@ foreach ($Proj in $Projects) {
         Write-Error "dotnet publish failed for $Proj (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
     }
+}
+
+# Ensure appsettings.json is copied to the build directory
+$appsettingsSrc = Join-Path $PSScriptRoot "..\src\appsettings.json"
+$appsettingsDest = Join-Path $BuildDir "appsettings.json"
+if (Test-Path $appsettingsSrc) {
+    Write-Host "Copying appsettings.json to $BuildDir" -ForegroundColor Gray
+    Copy-Item $appsettingsSrc $appsettingsDest -Force
 }
 
 Assert-InstallerInputFiles -InputDir $BuildDir
@@ -136,7 +146,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" -arch x64
+    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" -arch x64 -ext WixUtilExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE
@@ -144,7 +154,7 @@ try {
 
     # 3. Link MSI
     Write-Host "Linking MSI package..." -ForegroundColor Gray
-    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension
+    & $WixToolset.Light Installer.wixobj wwwroot.wixobj -o "ETL-SQL-v$Version.msi" -ext WixUIExtension -ext WixUtilExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "light.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE

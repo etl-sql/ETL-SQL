@@ -26,6 +26,12 @@ $BundledBinDir = Join-Path $ExtensionDir "bin"
 
 Write-Host "Packaging VSIX for $VsixTarget..." -ForegroundColor Cyan
 
+# Stop running processes to avoid file locks
+Write-Host "  Stopping any running ETL-SQL processes..." -ForegroundColor Gray
+Stop-Process -Name "ETL-SQL" -ErrorAction SilentlyContinue
+Stop-Process -Name "ETL-SQL-LSP" -ErrorAction SilentlyContinue
+Stop-Process -Name "ETL-SQL-Report" -ErrorAction SilentlyContinue
+
 # 1. Prepare bin folder in extension
 if (Test-Path $BundledBinDir) { Remove-Item $BundledBinDir -Recurse -Force }
 New-Item -ItemType Directory -Path $BundledBinDir | Out-Null
@@ -35,7 +41,8 @@ $ExeSuffix = if ($Platform -eq "win-x64") { ".exe" } else { "" }
 $BinaryList = @(
     "ETL-SQL$ExeSuffix",
     "ETL-SQL-LSP$ExeSuffix",
-    "ETL-SQL-Report$ExeSuffix"
+    "ETL-SQL-Report$ExeSuffix",
+    "ETL-SQL-Player$ExeSuffix"
 )
 
 foreach ($Bin in $BinaryList) {

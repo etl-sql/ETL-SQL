@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  font-size: var(--vscode-font-size, 13px);
+
   /* VS Code Theme Mapping */
   --bg: var(--vscode-editor-background, #0b0b0f);
   --bg-darker: var(--vscode-sideBar-background, #050507);

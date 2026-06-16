@@ -13,6 +13,12 @@ VERSION=$(jq -r '.version' "$EXTENSION_DIR/package.json" 2>/dev/null || echo "0.
 
 echo "Building ETL-SQL VS Code Extension v$VERSION..."
 
+# Stop running processes to avoid file locks
+echo "  Stopping any running ETL-SQL processes..."
+pkill -f "ETL-SQL-LSP" || true
+pkill -f "ETL-SQL" || true
+pkill -f "ETL-SQL-Report" || true
+
 mkdir -p "$RELEASE_DIR"
 cd "$EXTENSION_DIR"
 
@@ -47,6 +53,7 @@ esac
 dotnet publish "$ROOT/src/ETL-SQL.App/ETL-SQL.App.csproj" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$VSIX_BIN_DIR" --nologo > /dev/null
 dotnet publish "$ROOT/src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$VSIX_BIN_DIR" --nologo > /dev/null
 dotnet publish "$ROOT/src/ETL-SQL.ReportBuilder.CLI/ETL-SQL.ReportBuilder.CLI.csproj" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$VSIX_BIN_DIR" --nologo > /dev/null
+dotnet publish "$ROOT/src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj" -c Release -r "$RID" --self-contained true -p:PublishSingleFile=true -o "$VSIX_BIN_DIR" --nologo > /dev/null
 
 # 4. Package VSIX
 echo "  Packaging VSIX..."

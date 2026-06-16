@@ -69,7 +69,11 @@ else
     }
 }
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
 // Resolve port: CLI arg > appsettings > default 0 (ephemeral). Port 0 = OS-assigned dynamic port.
 int port = portArg ?? builder.Configuration.GetValue<int>("ReportPlayer:Port", 0);

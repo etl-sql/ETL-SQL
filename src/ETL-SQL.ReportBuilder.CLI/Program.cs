@@ -358,22 +358,33 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             if (portArg.HasValue) playerArg += $" --port {portArg.Value}";
 
-            // Resolve the ReportPlayer project for dotnet run (development mode)
+            // Resolve the ReportPlayer project (development mode or production publish)
             var selfDir = AppContext.BaseDirectory;
-            var playerExe = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
-            var playerDll = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
-            var usePlayerExe = File.Exists(playerExe) || File.Exists(playerDll);
+            var playerExe = Path.Combine(selfDir, "ETL-SQL-Player.exe");
+            var playerDll = Path.Combine(selfDir, "ETL-SQL-Player.dll");
+            var fallbackExe = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
+            var fallbackDll = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
 
             string exe;
             string exeArgs;
-            if (usePlayerExe && File.Exists(playerDll))
+            if (File.Exists(playerDll))
             {
                 exe = "dotnet";
                 exeArgs = $"\"{playerDll}\" {playerArg}";
             }
-            else if (usePlayerExe && File.Exists(playerExe))
+            else if (File.Exists(playerExe))
             {
                 exe = playerExe;
+                exeArgs = playerArg;
+            }
+            else if (File.Exists(fallbackDll))
+            {
+                exe = "dotnet";
+                exeArgs = $"\"{fallbackDll}\" {playerArg}";
+            }
+            else if (File.Exists(fallbackExe))
+            {
+                exe = fallbackExe;
                 exeArgs = playerArg;
             }
             else
@@ -382,7 +393,7 @@ namespace ETL_SQL.ReportBuilder.CLI
                 var projectDir = Path.Combine(slnDir, "src", "ETL-SQL.ReportPlayer");
                 if (!Directory.Exists(projectDir))
                 {
-                    Console.Error.WriteLine($"error: Cannot locate ETL-SQL.ReportPlayer.");
+                    Console.Error.WriteLine($"error: Cannot locate ETL-SQL-Player.");
                     return 1;
                 }
                 exe = "dotnet";

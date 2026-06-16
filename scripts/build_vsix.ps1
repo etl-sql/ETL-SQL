@@ -7,6 +7,12 @@ $ReleaseRoot = Join-Path $PSScriptRoot "..\release\vsix"
 
 Write-Host "Building ETL-SQL VS Code Extension v$Version..." -ForegroundColor Cyan
 
+# Stop running processes to avoid file locks
+Write-Host "Stopping any running ETL-SQL processes..." -ForegroundColor Gray
+Stop-Process -Name "ETL-SQL" -ErrorAction SilentlyContinue
+Stop-Process -Name "ETL-SQL-LSP" -ErrorAction SilentlyContinue
+Stop-Process -Name "ETL-SQL-Report" -ErrorAction SilentlyContinue
+
 if (!(Test-Path $ReleaseRoot)) {
     New-Item -ItemType Directory -Path $ReleaseRoot | Out-Null
 }
@@ -43,6 +49,9 @@ dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.LanguageServer\ETL-SQL.L
 
 # Publish Report CLI
 dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportBuilder.CLI\ETL-SQL.ReportBuilder.CLI.csproj") -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $VsixBinDir --nologo | Out-Null
+
+# Publish Report Player
+dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj") -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o $VsixBinDir --nologo | Out-Null
 
 # 4. Package VSIX
 Write-Host "Packaging VSIX..." -ForegroundColor Gray

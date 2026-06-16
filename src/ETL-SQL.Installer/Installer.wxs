@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi" xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
     <Product Id="*" Name="ETL-SQL" Language="1033" Version="$(var.ProductVersion)" Manufacturer="Charles Clemens" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
         <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Platform="x64" />
+
+        <!-- Close running applications to avoid locked files during upgrade/install -->
+        <util:CloseApplication Id="CloseLSP" Target="ETL-SQL-LSP.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
+        <util:CloseApplication Id="CloseCLI" Target="ETL-SQL.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
+        <util:CloseApplication Id="CloseReport" Target="ETL-SQL-Report.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
+        <util:CloseApplication Id="ClosePlayer" Target="ETL-SQL-Player.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
+        <util:CloseApplication Id="CloseService" Target="ETL-SQL-Service.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
+        <util:CloseApplication Id="ClosePortal" Target="ETL-SQL-Portal.exe" CloseMessage="no" RebootPrompt="no" TerminateProcess="1" />
 
         <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
         <MediaTemplate EmbedCab="yes" />
@@ -58,6 +66,9 @@
             </Component>
             <Component Id="ETL_SQL_REPORT_EXE" Guid="*" Win64="yes">
                 <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" KeyPath="yes" />
+            </Component>
+            <Component Id="ETL_SQL_PLAYER_EXE" Guid="*" Win64="yes">
+                <File Source="publish\win-x64\bin\ETL-SQL-Player.exe" KeyPath="yes" />
             </Component>
         </ComponentGroup>
 

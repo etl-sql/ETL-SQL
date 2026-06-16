@@ -1580,13 +1580,18 @@ CREATE PAGE Main AS DASHBOARD (
 
         private static (string exe, string[] prefixArgs) FindReportPlayer()
         {
-            var exeName = OperatingSystem.IsWindows() ? "ETL-SQL.ReportPlayer.exe" : "ETL-SQL.ReportPlayer";
+            var exeName = OperatingSystem.IsWindows() ? "ETL-SQL-Player.exe" : "ETL-SQL-Player";
+            var fallbackName = OperatingSystem.IsWindows() ? "ETL-SQL.ReportPlayer.exe" : "ETL-SQL.ReportPlayer";
 
             // 1. Sibling executable (production install — both binaries in same directory)
             var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? "") ?? ".";
             var siblingExe = Path.Combine(exeDir, exeName);
             if (File.Exists(siblingExe))
                 return (siblingExe, Array.Empty<string>());
+
+            var fallbackSiblingExe = Path.Combine(exeDir, fallbackName);
+            if (File.Exists(fallbackSiblingExe))
+                return (fallbackSiblingExe, Array.Empty<string>());
 
             // 2. Dev mode — walk up from CWD to find the solution root, then use `dotnet run`
             var dir = Directory.GetCurrentDirectory();
@@ -1604,7 +1609,7 @@ CREATE PAGE Main AS DASHBOARD (
             }
 
             throw new InvalidOperationException(
-                "Could not locate ETL-SQL.ReportPlayer. Run from the solution root directory.");
+                "Could not locate ETL-SQL-Player. Run from the solution root directory.");
         }
     }
 }

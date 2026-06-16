@@ -308,7 +308,7 @@ export class ReplManager {
         }
     }
 
-    public stop() {
+    public async stopAsync(): Promise<void> {
         this._isRunning = false;
         // Reject any in-flight or queued commands so callers don't hang.
         if (this._currentHandler) {
@@ -327,9 +327,38 @@ export class ReplManager {
         this._process = undefined;
 
         if (p) {
-            p.stdin?.write(JSON.stringify({ Action: "exit" }) + "\r\n");
-            p.kill();
+            return new Promise<void>((resolve) => {
+                let resolved = false;
+                const done = () => {
+                    if (!resolved) {
+                        resolved = true;
+                        resolve();
+                    }
+                };
+                p.once('exit', done);
+                p.once('close', done);
+                p.once('error', done);
+
+                try {
+                    p.stdin?.write(JSON.stringify({ Action: "exit" }) + "\r\n");
+                } catch {
+                    // ignore
+                }
+
+                try {
+                    p.kill();
+                } catch {
+                    // ignore
+                }
+
+                // Safety fallback resolver in case exit/close events don't fire
+                setTimeout(done, 1000);
+            });
         }
+    }
+
+    public stop() {
+        void this.stopAsync();
     }
     
     public isRunning(): boolean {

@@ -28,6 +28,7 @@ let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
+let activeTerminals: vscode.Terminal[] = [];
 
 function syncNotebookContext(document: vscode.TextDocument) {
     if (!client) {
@@ -63,6 +64,10 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.setOutputChannel(outputChannel);
     outputChannel.appendLine("ETL-SQL extension activated.");
     
+    context.subscriptions.push(vscode.window.onDidCloseTerminal(t => {
+        activeTerminals = activeTerminals.filter(x => x !== t);
+    }));
+
     // Clean up temporary script files asynchronously on startup
     void cleanupTempFiles();
     
@@ -723,12 +728,45 @@ function getSessionId(document: vscode.TextDocument): string {
     return `vs_${hash}`;
 }
 
-export function deactivate(): Thenable<void> | undefined {
-    ReplManager.getInstance().stop();
-    if (!client) {
-        return undefined;
+function forceKillProcesses() {
+    try {
+        if (os.platform() === 'win32') {
+            cp.execSync('taskkill /F /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe', { stdio: 'ignore' });
+        } else {
+            cp.execSync('pkill -9 -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true', { stdio: 'ignore' });
+            cp.execSync('pkill -9 -x "ETL-SQL" || true', { stdio: 'ignore' });
+        }
+    } catch {
+        // Ignore errors (e.g. if processes are not running)
     }
-    return client.stop();
+}
+
+export async function deactivate(): Promise<void> {
+    // Force kill processes immediately to unlock files for VS Code's installer
+    forceKillProcesses();
+
+    try {
+        await ReplManager.getInstance().stopAsync();
+    } catch (err) {
+        outputChannel?.appendLine(`[Extension] Error stopping ReplManager: ${err}`);
+    }
+
+    for (const terminal of activeTerminals) {
+        try {
+            terminal.dispose();
+        } catch {
+            // ignore
+        }
+    }
+    activeTerminals = [];
+
+    if (client) {
+        try {
+            await client.stop();
+        } catch (err) {
+            outputChannel?.appendLine(`[Extension] Error stopping LSP client: ${err}`);
+        }
+    }
 }
 
 async function findInPath(command: string): Promise<string | undefined> {
@@ -826,6 +864,7 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
 
     const reportExe = getReportExecutablePath(context);
     const terminal = vscode.window.createTerminal(`ETL-SQL Report Server [${mode}]`);
+    activeTerminals.push(terminal);
     terminal.show();
 
     const args = [...reportExe.baseArgs, 'serve'];

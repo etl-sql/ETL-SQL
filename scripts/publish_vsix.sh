@@ -41,6 +41,12 @@ BUNDLED_BIN_DIR="$EXTENSION_DIR/bin"
 
 echo "Packaging VSIX for $VSIX_TARGET..."
 
+# Stop running processes to avoid file locks
+echo "  Stopping any running ETL-SQL processes..."
+pkill -f "ETL-SQL-LSP" || true
+pkill -f "ETL-SQL" || true
+pkill -f "ETL-SQL-Report" || true
+
 # 1. Prepare bin folder
 rm -rf "$BUNDLED_BIN_DIR"
 mkdir -p "$BUNDLED_BIN_DIR"
@@ -49,7 +55,7 @@ mkdir -p "$BUNDLED_BIN_DIR"
 EXE_SUFFIX=""
 [[ "$PLATFORM" == "win-x64" ]] && EXE_SUFFIX=".exe"
 
-for BIN in "ETL-SQL" "ETL-SQL-LSP" "ETL-SQL-Report"; do
+for BIN in "ETL-SQL" "ETL-SQL-LSP" "ETL-SQL-Report" "ETL-SQL-Player"; do
     SRC="$BIN_SOURCE_DIR/${BIN}${EXE_SUFFIX}"
     if [[ -f "$SRC" ]]; then
         echo "  Bundling ${BIN}${EXE_SUFFIX}"
