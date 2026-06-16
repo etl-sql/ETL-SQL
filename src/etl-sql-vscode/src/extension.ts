@@ -70,6 +70,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Clean up temporary script files asynchronously on startup
     void cleanupTempFiles();
+    void cleanupShadowDirectory(context);
     
     const config = vscode.workspace.getConfiguration('etlsql');
     ReplManager.getInstance().setOutputChannel(outputChannel);
@@ -170,9 +171,9 @@ export async function activate(context: vscode.ExtensionContext) {
         // 2. Try bundled path
         const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
         if (await fileExists(bundledServer)) {
-            serverPath = bundledServer;
+            serverPath = await shadowCopyExecutable(context, bundledServer);
             ensureExecutable(serverPath);
-            outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
+            outputChannel.appendLine(`Using bundled Language Server (shadow copied): ${serverPath}`);
         }
     }
 
@@ -699,8 +700,9 @@ async function getExecutablePath(context: vscode.ExtensionContext, config: vscod
     // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
     if (await fileExists(bundledPath)) {
-        ensureExecutable(bundledPath);
-        return bundledPath;
+        const shadowPath = await shadowCopyExecutable(context, bundledPath);
+        ensureExecutable(shadowPath);
+        return shadowPath;
     }
 
     // 3. Search in common build folders
@@ -991,6 +993,62 @@ async function exportNotebookToSql() {
         vscode.window.showInformationMessage(`Exported to: ${uri.fsPath}`);
         const doc = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(doc);
+    }
+}
+
+async function shadowCopyExecutable(context: vscode.ExtensionContext, srcPath: string): Promise<string> {
+    try {
+        const version = context.extension.packageJSON.version;
+        const tempDir = path.join(os.tmpdir(), 'etl-sql-shadow', version);
+        const destPath = path.join(tempDir, path.basename(srcPath));
+
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const srcStats = fs.statSync(srcPath);
+        let needsCopy = true;
+
+        if (fs.existsSync(destPath)) {
+            const destStats = fs.statSync(destPath);
+            if (srcStats.size === destStats.size) {
+                needsCopy = false;
+            }
+        }
+
+        if (needsCopy) {
+            outputChannel?.appendLine(`[Extension] Shadow copying executable to temp directory: ${destPath}`);
+            fs.copyFileSync(srcPath, destPath);
+            if (os.platform() !== 'win32') {
+                fs.chmodSync(destPath, 0o755);
+            }
+        }
+
+        return destPath;
+    } catch (err: any) {
+        outputChannel?.appendLine(`[Extension] Failed to shadow copy executable: ${err.message}. Using source path.`);
+        return srcPath;
+    }
+}
+
+async function cleanupShadowDirectory(context: vscode.ExtensionContext) {
+    try {
+        const currentVersion = context.extension.packageJSON.version;
+        const parentDir = path.join(os.tmpdir(), 'etl-sql-shadow');
+        if (!fs.existsSync(parentDir)) {
+            return;
+        }
+
+        const entries = await fs.promises.readdir(parentDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (entry.isDirectory() && entry.name !== currentVersion) {
+                const oldDir = path.join(parentDir, entry.name);
+                outputChannel?.appendLine(`[Extension] Cleaning up old shadow directory: ${oldDir}`);
+                await fs.promises.rm(oldDir, { recursive: true, force: true });
+            }
+        }
+    } catch (err: any) {
+        // ignore errors
     }
 }
 
