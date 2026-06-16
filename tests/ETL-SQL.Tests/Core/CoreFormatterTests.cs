@@ -200,5 +200,33 @@ namespace ETL_SQL.Tests.Core
                               "    );";
             Assert.Equal(expected, formatted);
         }
+
+        [Fact]
+        public void TestMetadataTagFormatting()
+        {
+            string sql = "SELECT id /* @d: The identity column; @pii; */, name FROM customers;";
+            var options = new FormatterOptions { FormatMetadataTags = true, LeadingCommas = false, CommaPlacement = "trailing" };
+            string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
+
+            string expected = "SELECT\n" +
+                              "    id\n" +
+                              "        /*\n" +
+                              "            @d: The identity column;\n" +
+                              "            @pii;\n" +
+                              "        */,\n" +
+                              "    name\n" +
+                              "FROM customers;";
+            Assert.Equal(expected, formatted);
+        }
+
+        [Fact]
+        public void TestMetadataTagFormattingDisabled()
+        {
+            string sql = "SELECT id /* @d: The identity column; @pii; */, name FROM customers;";
+            var options = new FormatterOptions { FormatMetadataTags = false, LeadingCommas = false, CommaPlacement = "trailing" };
+            string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
+
+            Assert.Contains("id /* @d: The identity column; @pii; */,", formatted);
+        }
     }
 }

@@ -25,6 +25,7 @@ namespace ETL_SQL.Core.Formatting
         public bool CaseWhenThenNewLine { get; set; } = false;
         public bool BreakoutWindowFunctions { get; set; } = true;
         public string CommaPlacement { get; set; } = "trailing"; // "trailing" or "leading"
+        public bool FormatMetadataTags { get; set; } = true;
 
         public static FormatterOptions LoadFromFile(string? startFilePath)
         {
@@ -143,6 +144,7 @@ namespace ETL_SQL.Core.Formatting
                     {
                         var formattedContent = FormatCaseStatements(content, options, baseIndentLevel);
                         formattedContent = FormatParentheses(formattedContent, options, baseIndentLevel);
+                        formattedContent = FormatMetadataComments(formattedContent, options, baseIndentLevel);
                         sb.AppendLine(baseIndent + formattedContent.Trim());
                     }
                     continue;
@@ -169,97 +171,148 @@ namespace ETL_SQL.Core.Formatting
             string currentClause = "START";
             var currentContent = new StringBuilder();
 
-            // Split by tokens but preserve separators
-            var tokens = Regex.Split(input, @"(\s+|[(),;])").Where(t => t.Length > 0).ToArray();
-
+            bool inSingleLineComment = false;
+            bool inMultiLineComment = false;
+            bool inString = false;
+            char stringChar = '\0';
             int parenthesisDepth = 0;
+
             int i = 0;
-            while (i < tokens.Length)
+            while (i < input.Length)
             {
-                string token = tokens[i];
-                if (string.IsNullOrWhiteSpace(token))
-                {
-                    currentContent.Append(token);
-                    i++;
-                    continue;
-                }
+                char c = input[i];
 
-                if (token == "(")
+                if (inSingleLineComment)
                 {
-                    parenthesisDepth++;
-                    currentContent.Append(token);
+                    currentContent.Append(c);
+                    if (c == '\n') inSingleLineComment = false;
                     i++;
                     continue;
                 }
-                else if (token == ")")
+                if (inMultiLineComment)
                 {
-                    parenthesisDepth = Math.Max(0, parenthesisDepth - 1);
-                    currentContent.Append(token);
-                    i++;
-                    continue;
-                }
-
-                // Only detect clause boundaries at depth 0
-                if (parenthesisDepth == 0)
-                {
-                    // Check for multi-word keywords first
-                    bool foundMulti = false;
-                    foreach (var kw in MultiWordKeywords)
+                    currentContent.Append(c);
+                    if (c == '*' && i + 1 < input.Length && input[i + 1] == '/')
                     {
-                        var kwParts = kw.Split(' ');
-                        bool match = true;
-                        int k = 0;
-                        int j = i;
-                        while (k < kwParts.Length && j < tokens.Length)
+                        inMultiLineComment = false;
+                        currentContent.Append('/');
+                        i += 2;
+                    }
+                    else
+                    {
+                        i++;
+                    }
+                    continue;
+                }
+                if (inString)
+                {
+                    currentContent.Append(c);
+                    if (c == stringChar)
+                    {
+                        if (c == '\'' && i + 1 < input.Length && input[i + 1] == '\'')
                         {
-                            if (string.IsNullOrWhiteSpace(tokens[j])) { j++; continue; }
-                            if (tokens[j] == "(" || tokens[j] == ")") { match = false; break; }
-                            if (!string.Equals(tokens[j].Trim(), kwParts[k], StringComparison.OrdinalIgnoreCase)) { match = false; break; }
-                            k++; j++;
+                            currentContent.Append('\'');
+                            i += 2;
                         }
-
-                        if (match && k == kwParts.Length)
+                        else
                         {
-                            clauses.Add((currentClause, currentContent.ToString().Trim()));
-                            
-                            // Preserve case or force normalize
-                            var matchedTokens = tokens.Skip(i).Take(j - i).Where(t => !string.IsNullOrWhiteSpace(t));
-                            currentClause = string.Join(" ", matchedTokens);
-                            
-                            currentContent.Clear();
-                            i = j;
-                            foundMulti = true;
-                            break;
+                            inString = false;
+                            i++;
                         }
                     }
-
-                    if (foundMulti) continue;
-
-                    string trimmedUpper = token.Trim().ToUpper();
-                    if (ClauseKeywords.Contains(trimmedUpper))
+                    else
                     {
+                        i++;
+                    }
+                    continue;
+                }
+
+                if (c == '-' && i + 1 < input.Length && input[i + 1] == '-')
+                {
+                    inSingleLineComment = true;
+                    currentContent.Append("--");
+                    i += 2;
+                    continue;
+                }
+                if (c == '/' && i + 1 < input.Length && input[i + 1] == '*')
+                {
+                    inMultiLineComment = true;
+                    currentContent.Append("/*");
+                    i += 2;
+                    continue;
+                }
+                if (c == '\'' || c == '"')
+                {
+                    inString = true;
+                    stringChar = c;
+                    currentContent.Append(c);
+                    i++;
+                    continue;
+                }
+
+                if (c == '(')
+                {
+                    parenthesisDepth++;
+                    currentContent.Append(c);
+                    i++;
+                    continue;
+                }
+                if (c == ')')
+                {
+                    parenthesisDepth = Math.Max(0, parenthesisDepth - 1);
+                    currentContent.Append(c);
+                    i++;
+                    continue;
+                }
+
+                if (parenthesisDepth == 0)
+                {
+                    if (c == ';')
+                    {
+                        currentContent.Append(c);
                         clauses.Add((currentClause, currentContent.ToString().Trim()));
-                        currentClause = token;
+                        currentClause = "START";
                         currentContent.Clear();
                         i++;
                         continue;
                     }
+
+                    bool foundKeyword = false;
+                    foreach (var kw in MultiWordKeywords)
+                    {
+                        if (IsWordAt(input, i, kw))
+                        {
+                            clauses.Add((currentClause, currentContent.ToString().Trim()));
+                            currentClause = kw;
+                            currentContent.Clear();
+                            i += kw.Length;
+                            foundKeyword = true;
+                            break;
+                        }
+                    }
+
+                    if (foundKeyword) continue;
+
+                    foreach (var kw in ClauseKeywords)
+                    {
+                        if (!kw.Contains(" ") && IsWordAt(input, i, kw))
+                        {
+                            clauses.Add((currentClause, currentContent.ToString().Trim()));
+                            currentClause = kw;
+                            currentContent.Clear();
+                            i += kw.Length;
+                            foundKeyword = true;
+                            break;
+                        }
+                    }
+
+                    if (foundKeyword) continue;
                 }
 
-                if (token == ";")
-                {
-                    currentContent.Append(token);
-                    clauses.Add((currentClause, currentContent.ToString().Trim()));
-                    currentClause = "START";
-                    currentContent.Clear();
-                    i++;
-                }
-                else
-                {
-                    currentContent.Append(token);
-                    i++;
-                }
+                currentContent.Append(c);
+                i++;
             }
+
             clauses.Add((currentClause, currentContent.ToString().Trim()));
             return clauses;
         }
@@ -319,6 +372,7 @@ namespace ETL_SQL.Core.Formatting
                 var remaining = string.Join(" ", words.Skip(idx));
                 remaining = FormatCaseStatements(remaining, options, baseIndentLevel + 1);
                 remaining = FormatParentheses(remaining, options, baseIndentLevel + 1);
+                remaining = FormatMetadataComments(remaining, options, baseIndentLevel + 1);
 
                 var columns = SplitByCommaOutsideParens(remaining);
 
@@ -354,6 +408,7 @@ namespace ETL_SQL.Core.Formatting
             {
                 string formattedContent = FormatCaseStatements(content, options, baseIndentLevel + 1);
                 formattedContent = FormatParentheses(formattedContent, options, baseIndentLevel + 1);
+                formattedContent = FormatMetadataComments(formattedContent, options, baseIndentLevel + 1);
 
                 string trimmedContent = formattedContent.Trim();
                 bool startsWithOneOne = Regex.IsMatch(trimmedContent, @"^1\s*=\s*1\b", RegexOptions.IgnoreCase);
@@ -412,6 +467,7 @@ namespace ETL_SQL.Core.Formatting
             {
                 string formattedContent = FormatCaseStatements(content, options, baseIndentLevel + 1);
                 formattedContent = FormatParentheses(formattedContent, options, baseIndentLevel + 1);
+                formattedContent = FormatMetadataComments(formattedContent, options, baseIndentLevel + 1);
 
                 int onIdx = formattedContent.IndexOf(" ON ", StringComparison.OrdinalIgnoreCase);
                 if (onIdx >= 0)
@@ -446,6 +502,7 @@ namespace ETL_SQL.Core.Formatting
                 {
                     string formattedContent = FormatCaseStatements(content, options, baseIndentLevel);
                     formattedContent = FormatParentheses(formattedContent, options, baseIndentLevel);
+                    formattedContent = FormatMetadataComments(formattedContent, options, baseIndentLevel);
 
                     if (options.RightAlignKeywords)
                     {
@@ -1059,6 +1116,79 @@ namespace ETL_SQL.Core.Formatting
             if (nextIndex < text.Length && (char.IsLetterOrDigit(text[nextIndex]) || text[nextIndex] == '_')) return false;
 
             return true;
+        }
+
+        private static string FormatMetadataComments(string text, FormatterOptions options, int currentIndentLevel)
+        {
+            if (string.IsNullOrEmpty(text) || !options.FormatMetadataTags) return text;
+
+            var sb = new StringBuilder();
+            int i = 0;
+            while (i < text.Length)
+            {
+                if (i + 2 <= text.Length && text.Substring(i, 2) == "/*")
+                {
+                    int endIdx = text.IndexOf("*/", i + 2);
+                    if (endIdx >= 0)
+                    {
+                        string commentInner = text.Substring(i + 2, endIdx - i - 2);
+                        
+                        if (Regex.IsMatch(commentInner, @"@[a-zA-Z0-9_]"))
+                        {
+                            var lines = commentInner.Split(new[] { '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                            var formattedLines = new List<string>();
+                            foreach (var line in lines)
+                            {
+                                var trimmedLine = line.Trim();
+                                if (string.IsNullOrEmpty(trimmedLine)) continue;
+                                if (trimmedLine.StartsWith("@"))
+                                {
+                                    formattedLines.Add(trimmedLine + ";");
+                                }
+                                else
+                                {
+                                    formattedLines.Add(trimmedLine);
+                                }
+                            }
+
+                            if (formattedLines.Count > 0)
+                            {
+                                string commentIndent = new string(' ', (currentIndentLevel + 1) * options.IndentSize);
+                                string innerIndent = new string(' ', (currentIndentLevel + 2) * options.IndentSize);
+
+                                string accumulated = sb.ToString();
+                                sb.Clear();
+                                sb.Append(accumulated.TrimEnd());
+
+                                if (sb.Length > 0)
+                                {
+                                    sb.AppendLine();
+                                    sb.Append(commentIndent);
+                                }
+                                else
+                                {
+                                    sb.Append(commentIndent);
+                                }
+
+                                sb.AppendLine("/*");
+                                foreach (var line in formattedLines)
+                                {
+                                    sb.AppendLine(innerIndent + line);
+                                }
+                                sb.Append(commentIndent + "*/");
+
+                                i = endIdx + 2;
+                                continue;
+                            }
+                        }
+                    }
+                }
+                
+                sb.Append(text[i]);
+                i++;
+            }
+
+            return sb.ToString();
         }
     }
 }

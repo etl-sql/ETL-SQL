@@ -1714,6 +1714,35 @@ ASSERT (SELECT COUNT(*) FROM #users) > 0, 'Expected at least one user';
 
 See [Architecture/VSCodeExtension.md](Architecture/VSCodeExtension.md) for implementation details and [Reference/Grammar.md](Reference/Grammar.md) for the syntax accepted by the language server.
 
+### 16.1 Query Formatting Configuration (`.etlsqlformat.json`)
+
+The ETL-SQL formatter (used in VS Code and the TUI editor) can be customized using a `.etlsqlformat.json` file. Place this file in the root of your workspace or project directory, and the formatter will automatically discover and apply it.
+
+Example `.etlsqlformat.json`:
+```json
+{
+  "keywordCasing": "upper",
+  "indentSize": 4,
+  "indentJoins": false,
+  "onClauseOnNewLine": true,
+  "caseWhenThenNewLine": false,
+  "breakoutWindowFunctions": true,
+  "commaPlacement": "trailing",
+  "formatMetadataTags": true
+}
+```
+
+#### Supported Configuration Options:
+
+- **`keywordCasing`** (`string`) — Case style for SQL keywords. Options: `"upper"`, `"lower"`, `"pascal"`, `"preserve"`. (Default: `"upper"`).
+- **`indentSize`** (`integer`) — Number of spaces per indentation level. (Default: `4`).
+- **`indentJoins`** (`boolean`) — If `true`, indents JOIN keywords by one level from the parent `FROM` clause. (Default: `false`).
+- **`onClauseOnNewLine`** (`boolean`) — If `true`, places the `ON` clause of joins on a new indented line. (Default: `true`).
+- **`caseWhenThenNewLine`** (`boolean`) — If `true`, breaks `THEN` statements to a new indented line below their matching `WHEN` clauses. (Default: `false`).
+- **`breakoutWindowFunctions`** (`boolean`) — If `true`, breaks long `OVER (PARTITION BY ... ORDER BY ...)` clauses into multiple indented lines. (Default: `true`).
+- **`commaPlacement`** (`string`) — Specifies where to place separating commas. Options: `"trailing"` (standard trailing commas) or `"leading"` (leading commas on newlines). (Default: `"trailing"`).
+- **`formatMetadataTags`** (`boolean`) — If `true`, formats data governance/lineage tag block comments (like `/* @d: description; @pii; */`) to place each tag on its own indented line inside the block comment. (Default: `true`).
+
 ---
 
 ## 17. Report-SQL Dashboards

@@ -106,6 +106,12 @@ Jobs__ExecutablePath=C:\Program Files\ETL-SQL\bin\ETL-SQL.exe
 
 Use environment variables or deployment-secret tooling for values that should not be written to disk in plaintext.
 
+### 3.1 Code Style & Formatting Configuration (`.etlsqlformat.json`)
+
+To enforce consistent SQL formatting styles across user workstations, administrators can place a `.etlsqlformat.json` configuration file in the root of shared script repository directories or VCS workspaces. The ETL-SQL formatter (integrated into the CLI, TUI, and language server) will recursively look up parent directories from the target script file to locate and load this configuration automatically.
+
+For the list of all formatting variables and configuration options (e.g. `keywordCasing`, `commaPlacement`, `formatMetadataTags`), see **Section 16.1 (Query Formatting Configuration)** in the [User Manual](User_Manual.md).
+
 ---
 
 ## 4. Security & Secret Management
