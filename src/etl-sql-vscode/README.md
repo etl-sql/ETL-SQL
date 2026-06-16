@@ -167,11 +167,18 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
-| `etlsql.executable.path` | `ETL-SQL.exe` | Path to the ETL-SQL runner. |
-| `etlsql.server.path` | *(Auto-detect)* | Path to the ETL-SQL LSP engine. |
-| `etlsql.report.executable.path` | `ETL-SQL-Report.exe` | Path to the Report CLI. |
-| `etlsql.report.autoOpenPreview` | `false` | Automatically open the Report Preview on file open. |
-| `etlsql.portal.url` | *(Blank)* | Root URL for Report Portal deployment. |
+| `etlsql.executable.path` | `""` | **(Advanced Override)** Path to custom `ETL-SQL` runner. Leave blank to auto-detect bundled or system `PATH` version. |
+| `etlsql.server.path` | `""` | **(Advanced Override)** Path to custom Language Server (`ETL-SQL-LSP.exe`). Leave blank to auto-detect bundled or system `PATH` version. |
+| `etlsql.report.executable.path` | `""` | **(Advanced Override)** Path to custom Report CLI (`ETL-SQL-Report.exe`). Leave blank to auto-detect bundled or system `PATH` version. |
+| `etlsql.report.autoOpenPreview` | `false` | Automatically open the Report Preview pane when opening a `.rptsql` file. |
+| `etlsql.portal.url` | `""` | The base URL of your hosted **ETL-SQL Report Portal** (used to publish reports). |
+| `etlsql.format.keywordCasing` | `"upper"` | Casing style for SQL keywords (`"upper"`, `"lower"`, `"pascal"`, `"preserve"`). |
+| `etlsql.format.indentSize` | `4` | Number of spaces per indentation level. |
+| `etlsql.format.commaPlacement` | `"leading"` | Position of list commas (`"leading"` or `"trailing"`). |
+| `etlsql.format.indentJoins` | `true` | Indent JOIN statements relative to the FROM clause. |
+| `etlsql.format.onClauseOnNewLine` | `false` | Place the ON clause of a JOIN statement on a new line. |
+| `etlsql.format.caseWhenThenNewLine` | `true` | Place the THEN clause of a CASE WHEN statement on a new line. |
+| `etlsql.format.breakoutWindowFunctions` | `true` | Break out window function parameters (PARTITION BY, ORDER BY) onto separate lines. |
 
 ### Supported File Formats
 
