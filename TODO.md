@@ -211,8 +211,21 @@ release begins.
   (CAS + decorator stale-writer/move-destination) + PostgreSQL fencing & write-epoch cases in
   `OrchestratorPostgresStoreTests`; mock-based scheduler tests updated — 135 orchestration unit + 7 Postgres
   integration + 51 portal integration green. Builds on the P1.7 lease/heartbeat substrate.
-- [ ] **P1.9 Database-backed leader election** for cluster singletons (e.g. running migrations once).
-  *Prevent concurrent startup database schema / EF migrations when multiple Portal/Orchestrator nodes boot simultaneously.*
+- [x] **P1.9 Database-backed leader election** for cluster singletons (e.g. running migrations once).
+  *(done)* New `IClusterLockStore` (Core.Data) — a TTL-leased named lock (= leader election; the holder is
+  the leader): `TryAcquireLockAsync` (atomic claim via conditional `ON CONFLICT … WHERE expired OR same
+  owner`), `TryRenewLockAsync`, `ReleaseLockAsync`, `GetLockHolderAsync`. Implemented portably in
+  `RelationalJobHistoryStore` (new `ClusterLocks` table) — which is a `CREATE TABLE IF NOT EXISTS` store,
+  so the lock exists **before** any node runs EF migrations (no chicken-and-egg). New `ClusterLock.
+  RunExclusiveAsync` helper block-acquires the lock (fail-fast `TimeoutException` past the wait window),
+  auto-renews on a background heartbeat so a long critical section can't let the lease lapse, runs the
+  action once, and always releases. **Wired into the Portal boot migration**: concurrent Portal nodes now
+  serialize through the `portal-db-migration` lock — the leader applies migrations while the others wait,
+  then find nothing pending and no-op, fixing the *Concurrent Startup Migration Collisions* review finding.
+  Tests: `ClusterLockTests` (single-holder/contention/expiry/renew/release, `RunExclusiveAsync` serializes
+  5 racing nodes to `maxConcurrent==1`, timeout when held throughout) + a PostgreSQL lock case in
+  `OrchestratorPostgresStoreTests` — 13 green; 55 portal integration (incl. upgrade-path + migration-
+  convergence drills) green. Builds on the P1.7/P1.8 coordination substrate.
 
 ### Phase 4 — Stateless Node Operation
 

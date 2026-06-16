@@ -358,21 +358,34 @@ using (var scope = app.Services.CreateScope())
         .CreateLogger("PortalDatabaseMigration");
     try
     {
-        // Forward-only, automatic on startup/upgrade. Log the applied set so an operator can confirm
-        // exactly which schema migrations ran during an upgrade.
-        var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        if (pending.Count == 0)
-        {
-            migrationLogger.LogInformation("Portal database schema is up to date; no migrations to apply.");
-        }
-        else
-        {
-            migrationLogger.LogInformation(
-                "Applying {Count} pending portal database migration(s): {Migrations}",
-                pending.Count, string.Join(", ", pending));
-            await db.Database.MigrateAsync();
-            migrationLogger.LogInformation("Portal database migrations applied successfully.");
-        }
+        // P1.9: serialize migrations cluster-wide. When several Portal nodes boot together against one
+        // shared database, a leader-elected lock ensures only one applies migrations at a time; the
+        // others wait, then find nothing pending and no-op — preventing concurrent-migration collisions.
+        var lockStore = scope.ServiceProvider.GetRequiredService<ETL_SQL.Core.Data.IClusterLockStore>();
+        var lockOwner = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+        await ETL_SQL.Orchestrator.Scheduling.ClusterLock.RunExclusiveAsync(
+            lockStore, "portal-db-migration", lockOwner,
+            criticalSection: async () =>
+            {
+                // Forward-only, automatic on startup/upgrade. Log the applied set so an operator can
+                // confirm exactly which schema migrations ran during an upgrade.
+                var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+                if (pending.Count == 0)
+                {
+                    migrationLogger.LogInformation("Portal database schema is up to date; no migrations to apply.");
+                }
+                else
+                {
+                    migrationLogger.LogInformation(
+                        "Applying {Count} pending portal database migration(s): {Migrations}",
+                        pending.Count, string.Join(", ", pending));
+                    await db.Database.MigrateAsync();
+                    migrationLogger.LogInformation("Portal database migrations applied successfully.");
+                }
+            },
+            logger: migrationLogger,
+            ttl: TimeSpan.FromMinutes(5),
+            maxWait: TimeSpan.FromMinutes(10));
     }
     catch (Exception migrationEx)
     {

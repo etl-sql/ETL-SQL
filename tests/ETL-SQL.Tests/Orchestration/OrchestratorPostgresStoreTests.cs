@@ -97,6 +97,25 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task ClusterLock_AcquireContendExpire_OnPostgres()
+        {
+            var store = NewStore();
+            await store.InitializeAsync();
+
+            Assert.True(await store.TryAcquireLockAsync("migrations", "node-A", TimeSpan.FromMinutes(5)));
+            Assert.False(await store.TryAcquireLockAsync("migrations", "node-B", TimeSpan.FromMinutes(5)));
+            Assert.Equal("node-A", await store.GetLockHolderAsync("migrations"));
+
+            await store.ReleaseLockAsync("migrations", "node-A");
+            Assert.True(await store.TryAcquireLockAsync("migrations", "node-B", TimeSpan.FromMinutes(5)));
+
+            // Expiry-based steal.
+            Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-A", TimeSpan.FromMilliseconds(40)));
+            await Task.Delay(120);
+            Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-B", TimeSpan.FromMinutes(5)));
+        }
+
+        [Fact]
         public async Task WriteEpoch_CompareAndAdvance_OnPostgres()
         {
             var store = NewStore();

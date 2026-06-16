@@ -19,7 +19,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -154,8 +154,18 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Scope, EpochKey)
                 );";
 
+                // Distributed locks / leader election (P1.9): one TTL-leased holder per named lock. Lives
+                // here (a CREATE-IF-NOT-EXISTS store) rather than the EF-migrated catalog so it exists
+                // before any node runs migrations.
+                var createClusterLocksTable = @"
+                CREATE TABLE IF NOT EXISTS ClusterLocks (
+                    LockName TEXT PRIMARY KEY,
+                    Owner TEXT NOT NULL,
+                    ExpiresAt TEXT NOT NULL
+                );";
+
                 var schema = createJobsTable + createHistoryTable + createBundleTables
-                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable;
+                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable;
                 // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                 // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                 // COLLATE NOCASE indexes/queries resolve.
@@ -627,6 +637,74 @@ namespace ETL_SQL.Orchestrator.Storage
             command.AddParam("@key", key);
             var epoch = await command.ExecuteScalarAsync();
             return epoch is null or DBNull ? 0 : Convert.ToInt64(epoch);
+        }
+
+        // ── Distributed locks / leader election (P1.9) ────────────────────────────
+
+        public async Task<bool> TryAcquireLockAsync(string lockName, string owner, TimeSpan ttl)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            var now = DateTime.UtcNow;
+            using var command = connection.CreateCommand();
+            // Claim on insert (free lock) or on conflict only when the existing lease has expired or we
+            // already own it. A live lock held by another owner leaves the row untouched (zero rows).
+            command.CommandText = @"
+                INSERT INTO ClusterLocks (LockName, Owner, ExpiresAt) VALUES (@name, @owner, @expires)
+                ON CONFLICT(LockName) DO UPDATE SET Owner = excluded.Owner, ExpiresAt = excluded.ExpiresAt
+                    WHERE ClusterLocks.ExpiresAt <= @now OR ClusterLocks.Owner = excluded.Owner;";
+            command.AddParam("@name", lockName);
+            command.AddParam("@owner", owner);
+            command.AddParam("@expires", now.Add(ttl).ToString("O"));
+            command.AddParam("@now", now.ToString("O"));
+
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        public async Task<bool> TryRenewLockAsync(string lockName, string owner, TimeSpan ttl)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                UPDATE ClusterLocks SET ExpiresAt = @expires
+                WHERE LockName = @name AND Owner = @owner;";
+            command.AddParam("@expires", DateTime.UtcNow.Add(ttl).ToString("O"));
+            command.AddParam("@name", lockName);
+            command.AddParam("@owner", owner);
+
+            return await command.ExecuteNonQueryAsync() == 1;
+        }
+
+        public async Task ReleaseLockAsync(string lockName, string owner)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM ClusterLocks WHERE LockName = @name AND Owner = @owner;";
+            command.AddParam("@name", lockName);
+            command.AddParam("@owner", owner);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<string?> GetLockHolderAsync(string lockName)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT Owner FROM ClusterLocks WHERE LockName = @name AND ExpiresAt > @now;";
+            command.AddParam("@name", lockName);
+            command.AddParam("@now", DateTime.UtcNow.ToString("O"));
+            var holder = await command.ExecuteScalarAsync();
+            return holder is null or DBNull ? null : (string)holder;
         }
 
         public async Task<IEnumerable<JobDefinition>> GetActiveJobsAsync()
