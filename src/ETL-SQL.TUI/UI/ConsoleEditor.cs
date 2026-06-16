@@ -1246,7 +1246,8 @@ namespace ETL_SQL.TUI.UI
         {
             var text = _buffer.GetText();
             SaveUndoState();
-            _buffer.Load(SqlFormatter.Format(text).Split('\n'));
+            var options = FormatterOptions.LoadFromFile(_filePath);
+            _buffer.Load(SqlFormatter.Format(text, options).Split('\n'));
             MarkDirty();
         }
 
