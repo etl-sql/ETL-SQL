@@ -52,6 +52,21 @@ public class ReportsController : ControllerBase
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
 
+    /// <summary>
+    /// Converts a stored <c>ScriptPath</c> — which may be absolute (older publish rows) or relative
+    /// (uploads) — into a Scripts-area-relative key for <see cref="ETL_SQL.Core.Storage.IArtifactStorage"/>,
+    /// or null if it escapes the configured script root. Reuses the existing within-root guard for the
+    /// security check, so no catalog data migration is needed to route script I/O through the seam.
+    /// </summary>
+    private string? ToScriptKey(string? scriptPath)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPath) || string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
+            return null;
+        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolved))
+            return null;
+        return Path.GetRelativePath(Path.GetFullPath(portalConfig.ScriptRootPath), resolved).Replace('\\', '/');
+    }
+
     private async Task<bool> CreatorCanResolveAsync(
         int creatorId,
         int folderId,
@@ -433,13 +448,14 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        var scriptKey = ToScriptKey(report.ScriptPath);
+        if (scriptKey is null)
             return Forbid();
 
-        if (!System.IO.File.Exists(resolvedScriptPath))
+        if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey))
             return Ok(new DagDto([], []));
 
-        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
+        var scriptText = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
         List<DagNodeDto> nodes = [];
         List<DagEdgeDto> edges = [];
 
@@ -1476,13 +1492,14 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+        var scriptKey = ToScriptKey(report.ScriptPath);
+        if (scriptKey is null)
             return Forbid();
 
-        if (!System.IO.File.Exists(resolvedScriptPath))
+        if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey))
             return Ok(Array.Empty<ReportParameterDto>());
 
-        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
+        var scriptText = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
         var tokens = new Lexer(scriptText).Tokenize();
         var parser = new CoreParser(tokens, scriptText);
         var script = parser.Parse();
@@ -1608,11 +1625,12 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Manage) return Forbid();
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved))
+        var scriptKey = ToScriptKey(report.ScriptPath);
+        if (scriptKey is null)
             return Forbid();
 
-        var text = System.IO.File.Exists(resolved)
-            ? await System.IO.File.ReadAllTextAsync(resolved)
+        var text = await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
+            ? await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
             : string.Empty;
         OptimisticConcurrency.SetETag(Response, report.Version);
         return Ok(new ScriptContentResponse(text, report.Version));
@@ -1636,49 +1654,50 @@ public class ReportsController : ControllerBase
         if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
             return OptimisticConcurrency.Conflict(this, ToDto(report, null));
 
-        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolved))
+        var scriptKey = ToScriptKey(report.ScriptPath);
+        if (scriptKey is null)
             return Forbid();
 
         var hash = "sha256:" + Convert.ToHexString(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
-        var directory = Path.GetDirectoryName(resolved)!;
-        Directory.CreateDirectory(directory);
-        var hadOriginal = System.IO.File.Exists(resolved);
-        var stagedPath = Path.Combine(directory, $".{Path.GetFileName(resolved)}.{Guid.NewGuid():N}.tmp");
-        var backupPath = Path.Combine(directory, $".{Path.GetFileName(resolved)}.{Guid.NewGuid():N}.bak");
-        await System.IO.File.WriteAllTextAsync(stagedPath, req.ScriptText, System.Text.Encoding.UTF8);
+
+        // Keep the prior content in memory as the rollback backup (scripts are small text files). The
+        // atomic IArtifactStorage write swaps the content in place; if the metadata commit fails we
+        // restore the old bytes (or delete a newly-created script), preserving the file↔DB coupling.
+        var hadOriginal = await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
+        var backup = hadOriginal
+            ? await artifacts.ReadAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
+            : null;
 
         await using var transaction = await db.Database.BeginTransactionAsync();
+        var wroteScript = false;
         try
         {
-            // Claim the catalog version before touching the published script. The open SQLite
-            // write transaction prevents another portal process from claiming the next version
-            // until the file swap and metadata commit complete.
+            // Claim the catalog version before touching the published script. The open write
+            // transaction prevents another portal process from claiming the next version until the
+            // content swap and metadata commit complete.
             await db.SaveChangesAsync();
 
-            if (hadOriginal)
-                System.IO.File.Move(resolved, backupPath);
-            System.IO.File.Move(stagedPath, resolved);
+            await artifacts.WriteAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey, req.ScriptText);
+            wroteScript = true;
 
             report.PublishedScriptHash = hash;
             report.ScriptLastModified = DateTime.UtcNow;
             report.UpdatedAt = DateTime.UtcNow;
             await db.SaveChangesAsync();
             await transaction.CommitAsync();
-            if (System.IO.File.Exists(backupPath))
-                System.IO.File.Delete(backupPath);
         }
         catch (DbUpdateConcurrencyException)
         {
             await transaction.RollbackAsync();
-            RestoreScriptBackup(resolved, stagedPath, backupPath, hadOriginal);
+            if (wroteScript) await RestoreScriptAsync(scriptKey, backup, hadOriginal);
             await db.Entry(report).ReloadAsync();
             return OptimisticConcurrency.Conflict(this, ToDto(report, null));
         }
         catch
         {
             await transaction.RollbackAsync();
-            RestoreScriptBackup(resolved, stagedPath, backupPath, hadOriginal);
+            if (wroteScript) await RestoreScriptAsync(scriptKey, backup, hadOriginal);
             throw;
         }
         await audit.LogAsync(CurrentUserId, "DESIGNER_SAVE", "Report", id.ToString(), report.Name);
@@ -1686,25 +1705,14 @@ public class ReportsController : ControllerBase
         return Ok(new { report.Version });
     }
 
-    private static void RestoreScriptBackup(
-        string resolved,
-        string stagedPath,
-        string backupPath,
-        bool hadOriginal)
+    /// <summary>Restores a script after a failed save: rewrite the prior bytes, or delete a file that
+    /// did not exist before this save.</summary>
+    private async Task RestoreScriptAsync(string scriptKey, byte[]? backup, bool hadOriginal)
     {
-        if (System.IO.File.Exists(backupPath))
-        {
-            if (System.IO.File.Exists(resolved))
-                System.IO.File.Delete(resolved);
-            System.IO.File.Move(backupPath, resolved);
-        }
-        else if (!hadOriginal && System.IO.File.Exists(resolved))
-        {
-            System.IO.File.Delete(resolved);
-        }
-
-        if (System.IO.File.Exists(stagedPath))
-            System.IO.File.Delete(stagedPath);
+        if (backup is not null)
+            await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey, backup);
+        else if (!hadOriginal)
+            await artifacts.DeleteAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
     }
 
     // ── POST /api/scripts/upload ──────────────────────────────────────────────
@@ -1728,34 +1736,26 @@ public class ReportsController : ControllerBase
         try { content = Convert.FromBase64String(req.ContentBase64); }
         catch { return BadRequest(new { error = "ContentBase64 is not valid base64." }); }
 
-        var root = portalConfig.ScriptRootPath;
-        if (string.IsNullOrWhiteSpace(root))
+        if (string.IsNullOrWhiteSpace(portalConfig.ScriptRootPath))
             return StatusCode(503, new { error = "ScriptRootPath is not configured on the portal." });
 
-        Directory.CreateDirectory(root);
-        var destination = System.IO.Path.Combine(root, req.Filename);
+        // Filename-only key (separators already rejected above); written through the guarded Scripts area.
+        await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, req.Filename, content);
 
-        await System.IO.File.WriteAllBytesAsync(destination, content);
-
-        var relativePath = System.IO.Path.GetRelativePath(root, destination).Replace('\\', '/');
-        return Ok(new UploadScriptResponse(relativePath));
+        return Ok(new UploadScriptResponse(req.Filename));
     }
 
     // ── GET /api/reports/available-scripts ───────────────────────────────────
 
     [HttpGet("reports/available-scripts")]
     [Authorize(Roles = "Admin,Publisher")]
-    public IActionResult GetAvailableScripts()
+    public async Task<IActionResult> GetAvailableScripts()
     {
-        var root = portalConfig.ScriptRootPath;
-        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
-            return Ok(Array.Empty<string>());
-
-        var files = Directory.GetFiles(root, "*.rptsql", SearchOption.AllDirectories)
-            .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
-            .OrderBy(f => f)
-            .ToList();
-
+        var files = new List<string>();
+        await foreach (var info in artifacts.EnumerateAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, recursive: true))
+            if (info.Path.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
+                files.Add(info.Path);
+        files.Sort(StringComparer.Ordinal);
         return Ok(files);
     }
 

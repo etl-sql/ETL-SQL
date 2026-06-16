@@ -2539,6 +2539,45 @@ CREATE VISUAL EdgeRows AS TABLE (
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
+    // ── 7b. Script storage (IArtifactStorage Scripts area) ────────────────────
+
+    [Fact]
+    public async Task UploadScript_LandsInScriptRoot_AndIsListed()
+    {
+        var token = await GetAdminTokenAsync();
+        var name = $"uploaded-{Guid.NewGuid():N}.rptsql";
+        var content = "-- uploaded report\nSELECT 1;";
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(content));
+
+        var up = await AuthPost(token, "/api/scripts/upload",
+            new { filename = name, contentBase64 = b64 });
+        Assert.Equal(HttpStatusCode.OK, up.StatusCode);
+
+        // Written through the guarded Scripts area → present at the configured script root.
+        Assert.True(File.Exists(Path.Combine(_factory.TempDir, "scripts", name)));
+
+        // …and enumerated by the migrated available-scripts listing.
+        var listed = await AuthGet(token, "/api/reports/available-scripts");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var files = await listed.Content.ReadFromJsonAsync<List<string>>(_json);
+        Assert.Contains(name, files!);
+    }
+
+    [Fact]
+    public async Task UploadScript_RejectsPathSeparatorsAndNonRptsql()
+    {
+        var token = await GetAdminTokenAsync();
+        var b64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("x"));
+
+        var traversal = await AuthPost(token, "/api/scripts/upload",
+            new { filename = "../evil.rptsql", contentBase64 = b64 });
+        Assert.Equal(HttpStatusCode.BadRequest, traversal.StatusCode);
+
+        var wrongType = await AuthPost(token, "/api/scripts/upload",
+            new { filename = "notes.txt", contentBase64 = b64 });
+        Assert.Equal(HttpStatusCode.BadRequest, wrongType.StatusCode);
+    }
+
     // ── 8. Operational hardening ──────────────────────────────────────────────
 
     [Fact]

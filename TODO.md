@@ -166,10 +166,17 @@ release begins.
   >   - **Maps — DONE.** `GET /api/maps/custom` reads via the Maps area; relative client paths, no stored
   >     paths, so no data-model change. (Also fixed a latent bug: the storage singleton captured the
   >     startup `PortalConfig` local instead of resolving it from DI, ignoring later overrides.)
-  >   - **Scripts — feasible, medium.** `ReportsController` stores **relative** `ScriptPath` against
-  >     `ScriptRootPath`, so keys map directly — but the surface is large (content reads ×4, hash/staleness
-  >     helper, the staged-write+backup+rollback save, upload, and `*.rptsql` listing) and the atomic-save
-  >     logic is delicate. Reads are easy; the save path needs care.
+  >   - **Scripts — DONE (ReportsController).** Stored `ScriptPath` is actually *inconsistent* (absolute
+  >     from publish, relative from upload), so a `ToScriptKey` helper normalizes either form to a
+  >     Scripts-area key (reusing the within-root guard) — **no catalog data migration needed**. Migrated:
+  >     script-content read/save (the staged-file+backup+move dance replaced by the atomic storage write +
+  >     an in-memory backup/restore that preserves the file↔DB transaction coupling), DAG + parameters
+  >     reads, upload, and the `*.rptsql` listing (now async via `EnumerateAsync`). Left on `File.*`: the
+  >     sync, pervasive `ToDto` staleness/hash hint (read-only, works on the shared root), and the
+  >     publish/validate flows that front the non-migrated `ReportScriptInspectionService` (absolute paths).
+  >     Tests: new upload round-trip + rejection tests; existing script-content versioning / DAG /
+  >     parameters / 230 standard-lane portal tests green. Remaining script readers outside the controller
+  >     (`ExecutionJobService`, `ReportScriptInspectionService`) still use `File.*` against the shared root.
   >   - **Snapshots — moderate.** `ExecutionJobService` writes snapshot HTML + manifest and stores
   >     `ManifestPath`; needs the write + stored-path + read side migrated together.
   >   - **Datasets — large, cross-tier.** Catalog stores **absolute** `ParquetFilePath` produced by
