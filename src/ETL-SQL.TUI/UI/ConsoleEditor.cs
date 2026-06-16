@@ -932,14 +932,20 @@ namespace ETL_SQL.TUI.UI
         private async Task<ConsoleKeyInfo?> ReadInputWindows()
         {
             IntPtr hStdin = GetStdHandle(STD_INPUT_HANDLE);
+            bool initialTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
 
             while (true)
             {
                 // While a script runs or a live-analysis pass is pending, wake periodically (even
                 // with no input) so the loop repaints execution/message/diagnostic updates;
                 // otherwise block until input arrives.
-                bool tick = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
-                if (WaitForSingleObject(hStdin, tick ? 80u : INFINITE) == WAIT_TIMEOUT)
+                bool currentTickState = _renderer.ExecutionRunning || _renderer.LiveAnalysisPending;
+                if (currentTickState != initialTickState)
+                {
+                    return null; // State changed (e.g. execution finished), repaint immediately
+                }
+
+                if (WaitForSingleObject(hStdin, currentTickState ? 80u : INFINITE) == WAIT_TIMEOUT)
                 {
                     return null;
                 }
