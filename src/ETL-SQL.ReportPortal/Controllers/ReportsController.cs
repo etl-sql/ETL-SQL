@@ -30,8 +30,9 @@ public class ReportsController : ControllerBase
     private readonly FolderPermissionService folderPermissions;
     private readonly ReportScriptInspectionService scriptInspection;
     private readonly IDatasetRegistry datasetRegistry;
+    private readonly ETL_SQL.Core.Storage.IArtifactStorage artifacts;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, IDatasetRegistry datasetRegistry)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts)
     {
         this.db = db;
         this.audit = audit;
@@ -40,6 +41,7 @@ public class ReportsController : ControllerBase
         this.folderPermissions = folderPermissions;
         this.scriptInspection = scriptInspection;
         this.datasetRegistry = datasetRegistry;
+        this.artifacts = artifacts;
     }
 
     private int CurrentUserId =>
@@ -1775,14 +1777,21 @@ public class ReportsController : ControllerBase
             return BadRequest(new { error = "Only .json and .geojson map files are supported." });
         }
 
-        if (!PortalPathGuard.TryResolveMap(portalConfig, path, out var resolved))
+        // Read through the artifact-storage seam (Maps area), which enforces the path-traversal guardrail
+        // (ArtifactPath.Normalize rejects '..'/absolute) so a shared/SMB-backed map root works uniformly.
+        try
+        {
+            if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Maps, path))
+                return NotFound(new { error = "Map file not found." });
+
+            var json = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Maps, path);
+            return Content(json, "application/geo+json");
+        }
+        catch (ArgumentException)
+        {
+            // Path escaped the area root (traversal) — same denial as the previous guard.
             return Forbid();
-
-        if (!System.IO.File.Exists(resolved))
-            return NotFound(new { error = "Map file not found." });
-
-        var json = await System.IO.File.ReadAllTextAsync(resolved);
-        return Content(json, "application/geo+json");
+        }
     }
 
 }

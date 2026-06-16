@@ -93,15 +93,21 @@ var keyRingPath = string.IsNullOrWhiteSpace(portalConfig.Storage.KeyRingPath)
 // single storage boundary (P1.6). Call sites migrate onto this seam incrementally.
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
 {
+    // Resolve PortalConfig from DI (not the startup-bound local) so any later override — e.g. a test
+    // host that replaces the PortalConfig singleton — drives the storage roots too.
+    var cfg = sp.GetRequiredService<PortalConfig>();
+    var keysRoot = string.IsNullOrWhiteSpace(cfg.Storage.KeyRingPath)
+        ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(cfg.DatabasePath))!, ".portal-keys")
+        : Path.GetFullPath(cfg.Storage.KeyRingPath);
     var inner = ETL_SQL.Core.Storage.ArtifactStorageFactory.Create(
-        portalConfig.Storage.Provider,
+        cfg.Storage.Provider,
         new Dictionary<ETL_SQL.Core.Storage.ArtifactArea, string>
         {
-            [ETL_SQL.Core.Storage.ArtifactArea.Scripts] = portalConfig.ScriptRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = portalConfig.SnapshotDirectory,
-            [ETL_SQL.Core.Storage.ArtifactArea.Maps] = portalConfig.MapRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = portalConfig.DatasetRootPath,
-            [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keyRingPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Scripts] = cfg.ScriptRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Snapshots] = cfg.SnapshotDirectory,
+            [ETL_SQL.Core.Storage.ArtifactArea.Maps] = cfg.MapRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = cfg.DatasetRootPath,
+            [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keysRoot,
         });
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
     return new ETL_SQL.Core.Storage.GuardedArtifactStorage(inner, security);
