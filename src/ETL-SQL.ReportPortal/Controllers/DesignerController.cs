@@ -259,9 +259,9 @@ public class DesignerController : ControllerBase
                 for (int i = 0; i < visuals.Count; i++)
                 {
                     var v = visuals[i];
-                    var slot = SanitizeSlotName(v.Name);
+                    var slot = SanitizeSlotName(v.Name, v.Id);
                     var trail = i < visuals.Count - 1 ? "," : "";
-                    sb.AppendLine($"            '{slot}' = {SanitizeName(v.Name)}{trail}");
+                    sb.AppendLine($"            '{slot}' = {SanitizeName(v.Name, v.Id)}{trail}");
                 }
                 sb.AppendLine($"        )");
                 sb.AppendLine($"    )");
@@ -281,7 +281,7 @@ public class DesignerController : ControllerBase
     private static string GenerateElement(DesignerVisualDto v)
     {
         var sb = new StringBuilder();
-        var name = SanitizeName(v.Name);
+        var name = SanitizeName(v.Name, v.Id);
         if (string.Equals(v.Type, "CONTAINER", StringComparison.OrdinalIgnoreCase))
         {
             var containerType = v.Options.TryGetValue("CONTAINER_TYPE", out var ct) ? ct : "BOX";
@@ -327,11 +327,11 @@ public class DesignerController : ControllerBase
         var grid = new string[maxRow, usedCols];
         for (int r = 0; r < maxRow; r++)
             for (int c = 0; c < usedCols; c++)
-                grid[r, c] = ".";
+        grid[r, c] = ".";
 
         foreach (var v in visuals)
         {
-            var slot = SanitizeSlotName(v.Name);
+            var slot = SanitizeSlotName(v.Name, v.Id);
             for (int r = v.GridRow - 1; r < v.GridRow - 1 + v.GridRowSpan && r < maxRow; r++)
                 for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < usedCols; c++)
                     grid[r, c] = slot;
@@ -342,10 +342,11 @@ public class DesignerController : ControllerBase
         return string.Join(" / ", rows);
     }
 
-    private static string SanitizeName(string name)
+    private static string SanitizeName(string name, string? fallback = null)
     {
-        if (string.IsNullOrWhiteSpace(name)) return "visual1";
-        var safe = Regex.Replace(name.Trim(), @"[^a-zA-Z0-9_]", "_");
+        var input = string.IsNullOrWhiteSpace(name) ? fallback : name;
+        if (string.IsNullOrWhiteSpace(input)) return "visual1";
+        var safe = Regex.Replace(input.Trim(), @"[^a-zA-Z0-9_]", "_");
         if (!char.IsLetter(safe[0])) safe = "v_" + safe;
         return safe;
     }
@@ -358,7 +359,7 @@ public class DesignerController : ControllerBase
         return "&" + SanitizeName(trimmed);
     }
 
-    private static string SanitizeSlotName(string name) => SanitizeName(name);
+    private static string SanitizeSlotName(string name, string fallback) => SanitizeName(name, fallback);
 
     private static string EscapeStr(string s) => s.Replace("'", "''");
 

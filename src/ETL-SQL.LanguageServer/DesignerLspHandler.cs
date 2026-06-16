@@ -252,9 +252,10 @@ namespace ETL_SQL.LSP
                     sb.AppendLine($"        MAP (");
                     for (int i = 0; i < visuals.Count; i++)
                     {
-                        var slot = SanitizeSlotName(visuals[i].Name);
+                        var v = visuals[i];
+                        var slot = SanitizeSlotName(v.Name, v.Id);
                         var trail = i < visuals.Count - 1 ? "," : "";
-                        sb.AppendLine($"            '{slot}' = {SanitizeName(visuals[i].Name)}{trail}");
+                        sb.AppendLine($"            '{slot}' = {SanitizeName(v.Name, v.Id)}{trail}");
                     }
                     sb.AppendLine($"        )");
                     sb.AppendLine($"    )");
@@ -273,7 +274,7 @@ namespace ETL_SQL.LSP
         private static string GenerateElement(LspDesignVisual v)
         {
             var sb = new StringBuilder();
-            var name = SanitizeName(v.Name);
+            var name = SanitizeName(v.Name, v.Id);
             if (string.Equals(v.Type, "CONTAINER", StringComparison.OrdinalIgnoreCase))
             {
                 var containerType = v.Options.TryGetValue("CONTAINER_TYPE", out var ct) ? ct : "BOX";
@@ -320,7 +321,7 @@ namespace ETL_SQL.LSP
                     grid[r, c] = ".";
             foreach (var v in visuals)
             {
-                var slot = SanitizeSlotName(v.Name);
+                var slot = SanitizeSlotName(v.Name, v.Id);
                 for (int r = v.GridRow - 1; r < v.GridRow - 1 + v.GridRowSpan && r < maxRow; r++)
                     for (int c = v.GridCol - 1; c < v.GridCol - 1 + v.GridColSpan && c < usedCols; c++)
                         grid[r, c] = slot;
@@ -338,12 +339,13 @@ namespace ETL_SQL.LSP
             return "&" + SanitizeName(trimmed);
         }
 
-        private static string SanitizeSlotName(string name) => SanitizeName(name);
+        private static string SanitizeSlotName(string name, string fallback) => SanitizeName(name, fallback);
 
-        private static string SanitizeName(string name)
+        private static string SanitizeName(string name, string? fallback = null)
         {
-            if (string.IsNullOrWhiteSpace(name)) return "visual1";
-            var safe = Regex.Replace(name.Trim(), @"[^a-zA-Z0-9_]", "_");
+            var input = string.IsNullOrWhiteSpace(name) ? fallback : name;
+            if (string.IsNullOrWhiteSpace(input)) return "visual1";
+            var safe = Regex.Replace(input.Trim(), @"[^a-zA-Z0-9_]", "_");
             return !char.IsLetter(safe[0]) ? "v_" + safe : safe;
         }
 
