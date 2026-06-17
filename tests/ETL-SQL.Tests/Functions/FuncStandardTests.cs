@@ -41,6 +41,46 @@ namespace ETL_SQL.Tests.Functions
         }
 
         [Fact]
+        public async Task TestRemoveHiddenCharacters()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            // Default: tab(9), CR(13), LF(10) each become a single standard space.
+            await AssertEval(ev, "REMOVE_HIDDEN_CHARACTERS(CONCAT('a', CHAR(9), 'b', CHAR(13), CHAR(10), 'c'))", "a b  c");
+            // Default: NBSP(160) -> space.
+            await AssertEval(ev, "REMOVE_HIDDEN_CHARACTERS(CONCAT('x', CHAR(160), 'y'))", "x y");
+            // Default: zero-width space(8203) is stripped entirely, not spaced.
+            await AssertEval(ev, "REMOVE_HIDDEN_CHARACTERS(CONCAT('x', CHAR(8203), 'y'))", "xy");
+            // Explicit list: only CR(13) is replaced with a space; the tab is left intact.
+            await AssertEval(ev, "REMOVE_HIDDEN_CHARACTERS(CONCAT('a', CHAR(13), 'b', CHAR(9), 'c'), CHAR(13))", "a b\tc");
+            // NULL in -> NULL out.
+            await AssertEval(ev, "REMOVE_HIDDEN_CHARACTERS(NULL)", null!);
+        }
+
+        [Fact]
+        public async Task TestRemoveHtmlCharacters()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            // Curly double quotes (8220/8221) -> straight ".
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(CONCAT(CHAR(8220), 'hi', CHAR(8221)))", "\"hi\"");
+            // Curly apostrophe (8217) -> straight ' (the most common comparison breaker).
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(CONCAT('it', CHAR(8217), 's'))", "it's");
+            // En dash (8211) and em dash (8212) -> hyphen.
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(CONCAT('a', CHAR(8211), 'b', CHAR(8212), 'c'))", "a-b-c");
+            // Ellipsis (8230) -> three dots.
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(CONCAT('wait', CHAR(8230)))", "wait...");
+            // NBSP(160) -> space, zero-width(8203) stripped.
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(CONCAT('a', CHAR(160), CHAR(8203), 'b'))", "a b");
+            // Literal HTML entities are decoded, then normalized: &nbsp; -> space, &mdash; -> -, &hellip; -> ...
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS('a&nbsp;b&mdash;c&hellip;')", "a b-c...");
+            // Named and numeric entities decode to straight ASCII: &amp; stays &, &#8217; -> '
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS('AT&amp;T it&#8217;s')", "AT&T it's");
+            // NULL in -> NULL out.
+            await AssertEval(ev, "REMOVE_HTML_CHARACTERS(NULL)", null!);
+        }
+
+        [Fact]
         public async Task TestMathFunctions()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

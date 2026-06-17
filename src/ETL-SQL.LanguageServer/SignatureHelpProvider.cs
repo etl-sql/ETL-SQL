@@ -45,6 +45,8 @@ namespace ETL_SQL.LSP
             { "CHARINDEX",    ("CHARINDEX(substring, string)",       "Returns the position of a substring.",                       new[] { "substring", "string" }) },
             { "INSTR",        ("INSTR(string, substring)",           "Returns the position of a substring.",                       new[] { "string", "substring" }) },
             { "REPLACE",      ("REPLACE(string, old, new)",          "Replaces occurrences of a substring.",                       new[] { "string", "old", "new" }) },
+            { "REMOVE_HIDDEN_CHARACTERS", ("REMOVE_HIDDEN_CHARACTERS(string [, char, ...])", "Replaces hidden whitespace chars (tab, newline, CR, NBSP, Unicode spaces) with a space and strips zero-width chars; pass specific chars to target only those.", new[] { "string", "char" }) },
+            { "REMOVE_HTML_CHARACTERS", ("REMOVE_HTML_CHARACTERS(string)", "Decodes HTML entities (&nbsp;, &mdash;, &#8217;), normalizes smart/typographic Unicode (curly quotes, dashes, ellipsis, NBSP) to ASCII, and strips zero-width chars.", new[] { "string" }) },
             { "INITCAP",      ("INITCAP(string)",                    "Capitalizes the first letter of each word.",                  new[] { "string" }) },
             { "FORMAT",       ("FORMAT(value, format [, culture])",  "Returns a value formatted with the specified format.",        new[] { "value", "format", "culture" }) },
             { "STUFF",        ("STUFF(string, start, length, replacement)", "Deletes a substring and inserts a new one.",           new[] { "string", "start", "length", "replacement" }) },

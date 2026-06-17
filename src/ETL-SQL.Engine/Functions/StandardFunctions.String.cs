@@ -35,6 +35,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("CHARINDEX", CharIndex, "CHARINDEX(sub, str): Returns the 1-based index of a substring within a string.");
             registry.RegisterWithHelp("INSTR", InStr, "INSTR(str, sub): Returns the 1-based index of a substring within a string.");
             registry.RegisterWithHelp("REPLACE", (args, ctx) => args.Count >= 3 ? args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : args[0], "REPLACE(str, old, new): Replaces occurrences of a substring.");
+            registry.RegisterWithHelp("REMOVE_HIDDEN_CHARACTERS", RemoveHiddenCharacters, "REMOVE_HIDDEN_CHARACTERS(str[, char1, char2, ...]): Cleans invisible/whitespace characters. With no extra args, replaces whitespace-class characters (tab, newline, carriage return, vertical tab, form feed, NBSP and other Unicode spaces) with a single standard space and strips zero-width characters (zero-width space/joiner, BOM, soft hyphen). Pass one or more literal strings to replace ONLY those with a space (e.g. CHAR(13), CHAR(10)).");
+            registry.RegisterWithHelp("REMOVE_HTML_CHARACTERS", RemoveHtmlCharacters, "REMOVE_HTML_CHARACTERS(str): Decodes literal HTML entities (e.g. &nbsp; &mdash; &#8217;), then normalizes typographic/\"smart\" Unicode characters to plain ASCII equivalents (curly quotes -> \" and ', en/em dashes -> -, ellipsis -> ..., bullet -> *, NBSP -> space) and strips zero-width characters. Fixes invisible mismatches that break string comparisons.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => args[0]?.ToString() == null ? null : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(args[0]!.ToString()!.ToLower()), "INITCAP(str): Capitalizes the first letter of each word.");
 
             registry.RegisterWithHelp("STUFF", Stuff, "STUFF(str, start, len, new_str): Replaces a portion of a string with another string.");
@@ -359,6 +361,117 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
             return (decimal)System.Text.RegularExpressions.Regex.Matches(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count;
+        }
+
+        // --- Hidden / typographic character cleanup --------------------------------------------------
+        // Code points are listed numerically (not as literals) so the source stays plain ASCII and the
+        // invisible characters themselves never appear in this file.
+
+        /// <summary>Whitespace-class code points that REMOVE_HIDDEN_CHARACTERS collapses to a single standard space.</summary>
+        private static readonly HashSet<char> HiddenWhitespaceChars = new(new[]
+        {
+            0x0009, // horizontal tab
+            0x000A, // line feed (newline)
+            0x000B, // vertical tab
+            0x000C, // form feed
+            0x000D, // carriage return
+            0x0085, // next line (NEL)
+            0x00A0, // no-break space (&nbsp;)
+            0x1680, // ogham space mark
+            0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, // en quad .. hair space
+            0x2028, // line separator
+            0x2029, // paragraph separator
+            0x202F, // narrow no-break space
+            0x205F, // medium mathematical space
+            0x3000, // ideographic space
+        }.Select(cp => (char)cp));
+
+        /// <summary>Zero-width / invisible formatting code points stripped entirely (replaced with nothing).</summary>
+        private static readonly HashSet<char> ZeroWidthChars = new(new[]
+        {
+            0x00AD, // soft hyphen
+            0x200B, // zero-width space
+            0x200C, // zero-width non-joiner
+            0x200D, // zero-width joiner
+            0x2060, // word joiner
+            0xFEFF, // zero-width no-break space / BOM
+        }.Select(cp => (char)cp));
+
+        /// <summary>Typographic ("smart") code points mapped to plain ASCII equivalents by REMOVE_HTML_CHARACTERS.</summary>
+        private static readonly Dictionary<char, string> HtmlCharReplacements = new()
+        {
+            // Double quotes
+            { (char)0x201C, "\"" }, // left double quotation mark
+            { (char)0x201D, "\"" }, // right double quotation mark
+            { (char)0x201E, "\"" }, // double low-9 quotation mark
+            { (char)0x201F, "\"" }, // double high-reversed-9 quotation mark
+            { (char)0x00AB, "\"" }, // left-pointing double angle quotation mark
+            { (char)0x00BB, "\"" }, // right-pointing double angle quotation mark
+            // Single quotes / apostrophes
+            { (char)0x2018, "'" },  // left single quotation mark
+            { (char)0x2019, "'" },  // right single quotation mark (the big offender in possessives)
+            { (char)0x201A, "'" },  // single low-9 quotation mark
+            { (char)0x201B, "'" },  // single high-reversed-9 quotation mark
+            { (char)0x2039, "'" },  // single left-pointing angle quotation mark
+            { (char)0x203A, "'" },  // single right-pointing angle quotation mark
+            { (char)0x00B4, "'" },  // acute accent
+            // Dashes
+            { (char)0x2013, "-" },  // en dash
+            { (char)0x2014, "-" },  // em dash
+            { (char)0x2015, "-" },  // horizontal bar
+            { (char)0x2212, "-" },  // minus sign
+            // Spaces
+            { (char)0x00A0, " " },  // no-break space
+            // Other common typographic characters
+            { (char)0x2026, "..." }, // horizontal ellipsis
+            { (char)0x2022, "*" },   // bullet
+            { (char)0x00B7, "*" },   // middle dot
+        };
+
+        private static object? RemoveHiddenCharacters(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count == 0 || args[0] == null) return null;
+            string s = args[0]!.ToString()!;
+
+            // Explicit character list: replace only the supplied literal strings with a standard space.
+            if (args.Count > 1)
+            {
+                for (int i = 1; i < args.Count; i++)
+                {
+                    string target = args[i]?.ToString() ?? "";
+                    if (target.Length == 0) continue;
+                    s = s.Replace(target, " ");
+                }
+                return s;
+            }
+
+            // Default: whitespace-class -> single space, zero-width -> stripped, everything else untouched.
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (ZeroWidthChars.Contains(c)) continue;
+                sb.Append(HiddenWhitespaceChars.Contains(c) ? ' ' : c);
+            }
+            return sb.ToString();
+        }
+
+        private static object? RemoveHtmlCharacters(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count == 0 || args[0] == null) return null;
+            string s = args[0]!.ToString()!;
+
+            // Decode literal HTML entities (named and numeric) to their characters first, so an
+            // embedded &mdash; / &nbsp; / &#8217; flows through the ASCII normalization below.
+            if (s.IndexOf('&') >= 0) s = System.Net.WebUtility.HtmlDecode(s);
+
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (ZeroWidthChars.Contains(c)) continue;
+                if (HtmlCharReplacements.TryGetValue(c, out var repl)) sb.Append(repl);
+                else sb.Append(c);
+            }
+            return sb.ToString();
         }
     }
 }

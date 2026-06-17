@@ -189,6 +189,8 @@ SELECT CAST('[0.1, 0.2]' AS VECTOR)    AS v;
 | :--- | :--- | :--- |
 | `TRANSLATE` | `TRANSLATE(str, from, to)` | Characters in `from` replaced by corresponding chars in `to` |
 | `REPLACE` | `REPLACE(str, search, new)` | All occurrences of `search` replaced |
+| `REMOVE_HIDDEN_CHARACTERS` | `REMOVE_HIDDEN_CHARACTERS(str [, char, ...])` | Whitespace-class characters (tab, newline, CR, vertical tab, form feed, NBSP and other Unicode spaces) collapsed to a single standard space, and zero-width characters (zero-width space/joiner, BOM, soft hyphen) stripped. Pass one or more characters to replace **only** those with a space (e.g. `CHAR(13)`, `CHAR(10)`). |
+| `REMOVE_HTML_CHARACTERS` | `REMOVE_HTML_CHARACTERS(str)` | Decodes literal HTML entities (`&nbsp;`, `&mdash;`, `&#8217;`, …), then normalizes typographic/"smart" Unicode to plain ASCII — curly quotes → `"` and `'`, en/em dashes → `-`, ellipsis → `...`, bullet → `*`, NBSP → space — and strips zero-width characters. Fixes invisible mismatches that break equality/joins. |
 | `STRING_ESCAPE` | `STRING_ESCAPE(text, type)` | Special chars escaped (e.g. `'json'`) |
 | `LEN` / `LENGTH` | `LEN(str)` | Character count of a string; item count of a list |
 | `CHARACTER_LENGTH` | `CHARACTER_LENGTH(str)` | ANSI-style character count |

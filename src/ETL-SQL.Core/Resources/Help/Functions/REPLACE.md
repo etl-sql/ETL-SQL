@@ -32,4 +32,4 @@ SELECT REPLACE(notes, CHAR(13), '');             -- strips carriage returns
 
 ## See Also
 - [Standard Library — §3.6 Translation & Escaping](../../../../../Docs/Reference/Standard_Library.md#36-translation--escaping)
-- Related: [`TRANSLATE`](TRANSLATE.md), [`REGEXP_REPLACE`](REGEXP_REPLACE.md), [`STUFF`](STUFF.md)
+- Related: [`TRANSLATE`](TRANSLATE.md), [`REGEXP_REPLACE`](REGEXP_REPLACE.md), [`STUFF`](STUFF.md), [`REMOVE_HIDDEN_CHARACTERS`](REMOVE_HIDDEN_CHARACTERS.md), [`REMOVE_HTML_CHARACTERS`](REMOVE_HTML_CHARACTERS.md)
