@@ -23,6 +23,7 @@ import * as logger from './logger';
 import { ensureExecutable } from './permissions';
 import { getTerminalCommand } from './terminalCommandBuilder';
 import { cleanupTempFiles } from './cleanupService';
+import { generateScriptFromSpec } from './generateScriptFromSpec';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -272,6 +273,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Register Commands
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportNotebook', () => {
         exportNotebookToSql();
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.generateScriptFromSpec', async (uri?: vscode.Uri) => {
+        const config = vscode.workspace.getConfiguration('etlsql');
+        const exePath = await getExecutablePath(context, config);
+        return generateScriptFromSpec(context, exePath, uri);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
@@ -685,7 +692,7 @@ async function warmupRepl(context: vscode.ExtensionContext, document: vscode.Tex
     ReplManager.getInstance().warmup(exePath, args);
 }
 
-async function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): Promise<string> {
+export async function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): Promise<string> {
     const exePath = (config.get<string>('executable.path') || '').trim();
     if (exePath) {
         return exePath;

@@ -19,3 +19,9 @@ export function logWebview(source: string, message: string, level: 'info' | 'war
         channel.appendLine(`${prefix} ${message}`);
     }
 }
+
+export function show() {
+    if (channel) {
+        channel.show();
+    }
+}

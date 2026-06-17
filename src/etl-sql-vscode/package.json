@@ -60,7 +60,8 @@
     "onCommand:etlsql.runSelection",
     "onCommand:etlsql.showLineage",
     "onCommand:etlsql.publishToPortal",
-    "onCommand:etlsql.exportNotebook"
+    "onCommand:etlsql.exportNotebook",
+    "onCommand:etlsql.generateScriptFromSpec"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -200,6 +201,27 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "Break out window function parameters (PARTITION BY, ORDER BY) onto separate lines. *Note: Ignored if a workspace `.etlsqlformat.json` configuration file is present.*"
+        },
+        "etlsql.ai.provider": {
+          "type": "string",
+          "enum": ["Gemini", "OpenAI", "Anthropic", "OpenRouter", "VS Code Chat Extensions (Copilot/Claude/etc.)", "Custom"],
+          "default": "Gemini",
+          "markdownDescription": "The AI provider to use for parsing specifications. Gemini and Anthropic support direct PDF analysis; OpenAI supports text files; VS Code Chat Extensions uses your installed VS Code chat model provider (no API key required)."
+        },
+        "etlsql.ai.apiKey": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "API Key for the selected AI provider. Not required if using VS Code Chat Extensions."
+        },
+        "etlsql.ai.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "The specific AI model to run (e.g. `gemini-1.5-flash`, `gpt-4o`, `claude-3-5-sonnet-latest`). If blank, standard defaults are used based on the provider."
+        },
+        "etlsql.ai.endpoint": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "**(Advanced)** Override the default API endpoint URL. Required when using `Custom` provider (e.g., local Ollama, LocalAI, or custom OpenAI gateway)."
         }
       }
     },
@@ -298,6 +320,10 @@
         "command": "etlsql.exportNotebook",
         "title": "ETL-SQL: Export Notebook to .etlsql",
         "icon": "$(export)"
+      },
+      {
+        "command": "etlsql.generateScriptFromSpec",
+        "title": "ETL-SQL: Generate Script from Spec"
       }
     ],
     "keybindings": [
@@ -399,6 +425,13 @@
           "command": "etlsql.copyConnection",
           "when": "view == etlsql-sidebar && viewItem == connection-script",
           "group": "inline"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "etlsql.generateScriptFromSpec",
+          "group": "etlsql",
+          "when": "resourceFilename =~ /\\.(pdf|xlsx|xls|csv|tsv|json|txt|docx|doc)$/i"
         }
       ],
       "etlsql.launchMenu": [
