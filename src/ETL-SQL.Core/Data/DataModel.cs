@@ -143,6 +143,14 @@ namespace ETL_SQL.Data
         private object?[]? _values;
         private Dictionary<string, object?>? _dynamicColumns;
         public TableSchema? Schema => _schema;
+
+        /// <summary>
+        /// A shared empty row with no schema or values. Use when an expression evaluator
+        /// requires a row context but no column bindings are needed (e.g., evaluating
+        /// literal start/end/step values in FOR loops, WHILE conditions, etc.).
+        /// </summary>
+        public static readonly Row Empty = new();
+
         public Row() { }
 
         public Row(TableSchema schema)

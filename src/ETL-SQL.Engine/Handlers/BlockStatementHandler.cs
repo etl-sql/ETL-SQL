@@ -15,6 +15,18 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (BlockStatement)statement;
 
+            // Build a label → index map once upfront so that GOTO resolution is O(1)
+            // instead of O(n) per throw. Only built when the block actually contains labels.
+            Dictionary<string, int>? labelIndex = null;
+            for (int k = 0; k < stmt.Statements.Count; k++)
+            {
+                if (stmt.Statements[k] is SectionLabelStatement lbl)
+                {
+                    labelIndex ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    labelIndex[lbl.LabelName] = k;
+                }
+            }
+
             for (int i = 0; i < stmt.Statements.Count; i++)
             {
                 var s = stmt.Statements[i];
@@ -24,25 +36,12 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 catch (GotoException gotoEx)
                 {
-                    int targetIdx = -1;
-                    for (int j = 0; j < stmt.Statements.Count; j++)
-                    {
-                        if (stmt.Statements[j] is SectionLabelStatement sls && sls.LabelName.Equals(gotoEx.LabelName, StringComparison.OrdinalIgnoreCase))
-                        {
-                            targetIdx = j;
-                            break;
-                        }
-                    }
-
-                    if (targetIdx >= 0)
+                    if (labelIndex != null && labelIndex.TryGetValue(gotoEx.LabelName, out int targetIdx))
                     {
                         i = targetIdx - 1; // -1 because loop increment will do i++
                         continue;
                     }
-                    else
-                    {
-                        throw;
-                    }
+                    throw;
                 }
             }
         }

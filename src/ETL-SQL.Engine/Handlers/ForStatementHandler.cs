@@ -23,9 +23,9 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ForStatement)statement;
 
-            var start = Convert.ToInt32(await context.EvaluateValue(stmt.StartValue, new Row()));
-            var end = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue, new Row()));
-            var step = stmt.StepValue != null ? Convert.ToInt32(await context.EvaluateValue(stmt.StepValue, new Row())) : 1;
+            var start = Convert.ToInt32(await context.EvaluateValue(stmt.StartValue, Row.Empty));
+            var end   = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue,   Row.Empty));
+            var step  = stmt.StepValue != null ? Convert.ToInt32(await context.EvaluateValue(stmt.StepValue, Row.Empty)) : 1;
 
             _logger.Debug("Starting FOR loop for {VariableName} from {Start} to {End} step {Step}", stmt.VariableName, start, end, step);
 

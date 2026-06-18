@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Analysis;
@@ -18,6 +19,15 @@ namespace ETL_SQL.Engine.Handlers
     {
         private readonly IBufferManager _bufferManager = bufferManager;
         public Type SupportedStatementType => typeof(ForeachStatement);
+
+        // Cache the DML/opaque-call analysis result for each unique ForeachStatement instance.
+        // ConditionalWeakTable uses weak references so cached entries are reclaimed with the AST.
+        private static readonly ConditionalWeakTable<ForeachStatement, DmlAnalysisResult> _dmlCache = new();
+
+        private sealed class DmlAnalysisResult
+        {
+            public bool IsDmlOrOpaque { get; init; }
+        }
 
         /// <summary>Executes the FOREACH statement, resolving the collection and iterating through its elements.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -42,9 +52,9 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // 3. Fallback: Full In-Memory Streaming Iteration (for non-pushdown sources or collections)
+            context.Telemetry.FetchStatus = 0;
             await foreach (var row in context.EvaluateStream(stmt.ListExpression, new Row()))
             {
-                context.Telemetry.FetchStatus = 0;
                 ProcessRow(row, iterVarName, stmt, context);
 
                 try
@@ -65,13 +75,18 @@ namespace ETL_SQL.Engine.Handlers
             var sel = subq.Query as SelectStatement;
             if (sel == null) return false;
 
-            var targetTable = sel.FromTable?.TableName;
-            var targetConn = sel.FromTable?.ConnectionName;
+            // Check the cached analysis — the body AST is immutable so the result never changes.
+            if (!_dmlCache.TryGetValue(stmt, out var cached))
+            {
+                var targetTable = sel.FromTable?.TableName;
+                var targetConn  = sel.FromTable?.ConnectionName;
+                var detector = new DmlDetector(targetTable, targetConn);
+                detector.Analyze(stmt.Body);
+                cached = new DmlAnalysisResult { IsDmlOrOpaque = detector.IsDmlDetected || detector.HasOpaqueCalls };
+                _dmlCache.AddOrUpdate(stmt, cached);
+            }
 
-            var detector = new DmlDetector(targetTable, targetConn);
-            detector.Analyze(stmt.Body);
-
-            if (detector.IsDmlDetected || detector.HasOpaqueCalls)
+            if (cached.IsDmlOrOpaque)
             {
                 context.Log($"Side effects or DML detected in FOREACH body. Using SAFE Paged Re-execution path.");
                 return true;
@@ -95,14 +110,15 @@ namespace ETL_SQL.Engine.Handlers
             // Request a streaming cursor slot from the BufferManager
             using (await _bufferManager.AcquireCursorAsync(context.SessionId ?? "DEFAULT", owner: this))
             {
-                context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
+                if (context.IsVerbose)
+                    context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
 
                 var compiled = context.CompileQuery(sel, db.Dialect);
                 await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                 {
+                    context.Telemetry.FetchStatus = 0; // set once per batch, not per row
                     foreach (var row in batch.Rows)
                     {
-                        context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
 
                         try
@@ -149,7 +165,8 @@ namespace ETL_SQL.Engine.Handlers
             int offset = 0;
             bool hasMore = true;
 
-            context.Log($"Starting SAFE-PATH Paged FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
+            if (context.IsVerbose)
+                context.Log($"Starting SAFE-PATH Paged FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
 
             while (hasMore)
             {
@@ -164,10 +181,10 @@ namespace ETL_SQL.Engine.Handlers
                 var compiled = context.CompileQuery(pagedQuery, db.Dialect);
                 await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                 {
+                    context.Telemetry.FetchStatus = 0; // set once per batch
                     foreach (var row in batch.Rows)
                     {
                         rowsInPage++;
-                        context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
 
                         try

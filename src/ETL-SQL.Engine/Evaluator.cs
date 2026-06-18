@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine
 
         private readonly Stack<Row> _outerRowStack = new();
         private readonly ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult> _subqueryCache;
-        private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
+        private readonly Dictionary<NodeReuseKey, ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
         private readonly ISpillStore _spillStore;
         private Action<string, string?, ConsoleColor>? _onMessageHandler;
@@ -986,7 +986,10 @@ namespace ETL_SQL.Engine
         public async Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default)
         {
             CancellationToken = cancellationToken;
-            cancellationToken.ThrowIfCancellationRequested();
+            // NOTE: ThrowIfCancellationRequested() is intentionally NOT called here for the hot-loop path.
+            // The outer batch loop (Evaluate) already checks before dispatching each statement.
+            // Callers that need an extra check (e.g., deeply nested recursive calls) may call it
+            // themselves. Removing the duplicate saves one volatile read per statement.
 
             // Update PreviousErrorNumber and reset LastError for the new statement
             // We skip this for internal/structural nodes that don't count as "atomic" statements for @@ERROR purposes
@@ -998,19 +1001,20 @@ namespace ETL_SQL.Engine
 
             var parentId = CurrentNodeId;
 
-            var nodeName = statement.GetType().Name.Replace("Statement", "");
-
-            // Refine node name for readability
-            if (statement is UsePasswordStatement) nodeName = "USE PASSWORD";
-            else if (statement is UseSetsStatement us) nodeName = $"USE SETS {us.Name}";
-            else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
-            else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
-
             ExecutionNode? node = null;
-            var cacheKey = (parentId, statement);
 
             if (Telemetry.TelemetryEnabled)
             {
+                // Build the node name only when telemetry is active — avoids a string alloc
+                // and 4 type-pattern checks on every statement dispatch in the common case.
+                var nodeName = statement.GetType().Name.Replace("Statement", "");
+                if (statement is UsePasswordStatement) nodeName = "USE PASSWORD";
+                else if (statement is UseSetsStatement us) nodeName = $"USE SETS {us.Name}";
+                else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
+                else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
+
+                var cacheKey = new NodeReuseKey(parentId, statement);
+
                 if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
                 {
                     node = existingNode;
@@ -1035,9 +1039,10 @@ namespace ETL_SQL.Engine
             }
 
             Stopwatch? sw = null;
-            long startRows = Telemetry.RowsProcessed;
+            long startRows = 0;
             if (IsVerbose || Telemetry.IsProfiling)
             {
+                startRows = Telemetry.RowsProcessed;
                 sw = Stopwatch.StartNew();
                 if (IsVerbose)
                 {
@@ -1070,7 +1075,6 @@ namespace ETL_SQL.Engine
                     LastError = new ErrorInfo(50000, ex.Message, 16, 1, statement.Line, null);
                     throw;
                 }
-
                 finally
                 {
                     if (node != null) node.EndTicks = Stopwatch.GetTimestamp();
@@ -1083,13 +1087,12 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"No handler registered for {statement.GetType().Name} at Line {statement.Line}");
             }
 
-            Telemetry.LastStatementRowsProcessed = Telemetry.RowsProcessed - startRows;
-
             if (sw != null)
             {
                 sw.Stop();
                 var elapsed = sw.ElapsedMilliseconds;
-                Telemetry.LastExecutionTimeMs = elapsed; // Track absolute last statement timing
+                Telemetry.LastStatementRowsProcessed = Telemetry.RowsProcessed - startRows;
+                Telemetry.LastExecutionTimeMs = elapsed;
                 _metricsReporter.ReportPostExecutionMetrics(statement, elapsed);
                 if (IsVerbose) _metricsReporter.ProvideTips(statement);
                 LastIndexUsedName = null;
@@ -1338,6 +1341,30 @@ namespace ETL_SQL.Engine
             Parameters?.Clear();
 
             _logger.Debug("[Evaluator] Session reset complete.");
+        }
+        /// <summary>
+        /// Struct key for _nodeReuseMap. Avoids boxing the nullable Guid that occurs with a
+        /// value-tuple containing Guid? as a dictionary key on every hot-loop statement dispatch.
+        /// </summary>
+        private readonly struct NodeReuseKey : IEquatable<NodeReuseKey>
+        {
+            private readonly Guid _parentId;
+            private readonly bool _hasParent;
+            private readonly int _stmtHash;
+
+            public NodeReuseKey(Guid? parentId, Statement stmt)
+            {
+                _hasParent = parentId.HasValue;
+                _parentId  = parentId.GetValueOrDefault();
+                _stmtHash  = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(stmt);
+            }
+
+            public bool Equals(NodeReuseKey other)
+                => _hasParent == other._hasParent && _parentId == other._parentId && _stmtHash == other._stmtHash;
+
+            public override bool Equals(object? obj) => obj is NodeReuseKey k && Equals(k);
+
+            public override int GetHashCode() => HashCode.Combine(_hasParent, _parentId, _stmtHash);
         }
     }
 }
