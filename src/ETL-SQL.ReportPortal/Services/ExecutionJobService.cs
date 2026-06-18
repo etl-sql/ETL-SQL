@@ -14,6 +14,8 @@ namespace ETL_SQL.ReportPortal.Services;
 
 public enum JobStatus { Pending, Running, Completed, Failed, Cancelled }
 
+internal enum ExecutionWorkloadKind { Interactive, Refresh }
+
 public record ExecutionJob(
     string Id,
     int ReportId,
@@ -46,7 +48,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private readonly ConcurrentDictionary<int, string> _activeRefreshes = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningJobCancellations = new();
     private readonly ConcurrentDictionary<string, string> _jobCancellationReasons = new();
-    private readonly SemaphoreSlim _gate;
+    private readonly WeightedExecutionAdmission _admission;
 
     /// <summary>Per-user concurrency limiters (workload fairness, P2.6). Keyed by user id; one
     /// gate per user with <c>MaxConcurrentExecutionsPerUser</c> permits.</summary>
@@ -84,8 +86,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _channel = channel;
         _artifacts = artifacts ?? CreateDefaultArtifactStorage(config);
         _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
-        _gate = new SemaphoreSlim(config.Resources.MaxConcurrentReportExecutions,
-                                       config.Resources.MaxConcurrentReportExecutions);
+        _admission = new WeightedExecutionAdmission(
+            config.Resources.MaxConcurrentReportExecutions,
+            config.Resources.InteractiveExecutionWeight,
+            config.Resources.RefreshExecutionWeight);
     }
 
     /// <summary>Terminal jobs stay queryable for this window, then are evicted so the
@@ -184,7 +188,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _jobs[jobId] = job;
         await PersistNewJobAsync(job, "Execution");
 
-        _ = RunJobAsync(job, scriptPath, parameters, CancellationToken.None);
+        _ = RunJobAsync(job, scriptPath, parameters, ExecutionWorkloadKind.Interactive, CancellationToken.None);
         return jobId;
     }
 
@@ -229,7 +233,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 ?? throw new InvalidOperationException("The active refresh claim could not be resolved.");
         }
 
-        _ = RunJobAsync(job, scriptPath, parameters: null, CancellationToken.None);
+        _ = RunJobAsync(job, scriptPath, parameters: null, ExecutionWorkloadKind.Refresh, CancellationToken.None);
         return jobId;
     }
 
@@ -237,6 +241,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         ExecutionJob job,
         string scriptPath,
         Dictionary<string, string>? parameters,
+        ExecutionWorkloadKind workloadKind,
         CancellationToken ct)
     {
         var timeout = TimeSpan.FromSeconds(_config.Resources.ExecutionTimeoutSeconds);
@@ -248,6 +253,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         // capped user queues without blocking the shared pool. Administrators are exempt.
         var userGate = job.IsAdministrator ? null : GetUserGate(job.UserId);
         var groupGates = new List<SemaphoreSlim>();
+        WeightedExecutionAdmission.Permit? executionPermit = null;
         try
         {
             await WaitForNodeCapacityAsync(job, cts.Token).ConfigureAwait(false);
@@ -262,10 +268,11 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 groupGates.Add(groupGate);
             }
 
-            await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
+            executionPermit = await _admission.AcquireAsync(workloadKind, cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            executionPermit?.Dispose();
             ReleaseGates(groupGates);
             userGate?.Release();
 
@@ -282,6 +289,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
         catch
         {
+            executionPermit?.Dispose();
             ReleaseGates(groupGates);
             userGate?.Release();
             throw;
@@ -474,7 +482,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 cts.Cancel();
             _runningJobCancellations.TryRemove(job.Id, out _);
             _jobCancellationReasons.TryRemove(job.Id, out _);
-            _gate.Release();
+            executionPermit?.Dispose();
             ReleaseGates(groupGates);
             userGate?.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
@@ -823,7 +831,6 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     public void Dispose()
     {
         CancelLocalRunningJobs("Execution service is shutting down.");
-        _gate.Dispose();
         foreach (var gate in _userGates.Values)
             gate.Dispose();
     }
@@ -845,4 +852,170 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath))!, ".portal-keys")
                 : Path.GetFullPath(config.Storage.KeyRingPath)
         });
+}
+
+internal sealed class WeightedExecutionAdmission
+{
+    private readonly object _sync = new();
+    private readonly Queue<Waiter> _interactive = new();
+    private readonly Queue<Waiter> _refresh = new();
+    private readonly ExecutionWorkloadKind[] _cycle;
+    private int _nextCycleIndex;
+    private int _available;
+
+    public WeightedExecutionAdmission(int maxConcurrent, int interactiveWeight, int refreshWeight)
+    {
+        _available = Math.Max(1, maxConcurrent);
+        var cycle = new List<ExecutionWorkloadKind>();
+        for (var i = 0; i < Math.Max(1, interactiveWeight); i++)
+            cycle.Add(ExecutionWorkloadKind.Interactive);
+        for (var i = 0; i < Math.Max(1, refreshWeight); i++)
+            cycle.Add(ExecutionWorkloadKind.Refresh);
+        _cycle = cycle.ToArray();
+    }
+
+    public async Task<Permit> AcquireAsync(ExecutionWorkloadKind kind, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        Waiter waiter;
+        List<Waiter> grants;
+
+        lock (_sync)
+        {
+            if (_available > 0 && !HasQueuedWorkLocked())
+            {
+                _available--;
+                return new Permit(this);
+            }
+
+            waiter = new Waiter(this);
+            QueueFor(kind).Enqueue(waiter);
+            grants = DispatchLocked();
+        }
+
+        GrantAll(grants);
+        using var registration = ct.Register(static state =>
+        {
+            var tuple = ((WeightedExecutionAdmission Admission, Waiter Waiter, CancellationToken Token))state!;
+            tuple.Admission.Cancel(tuple.Waiter, tuple.Token);
+        }, (this, waiter, ct));
+
+        return await waiter.Task.ConfigureAwait(false);
+    }
+
+    private void Release()
+    {
+        List<Waiter> grants;
+        lock (_sync)
+        {
+            _available++;
+            grants = DispatchLocked();
+        }
+
+        GrantAll(grants);
+    }
+
+    private void Cancel(Waiter waiter, CancellationToken ct)
+    {
+        List<Waiter> grants;
+        lock (_sync)
+        {
+            if (waiter.Granted)
+                return;
+
+            waiter.Cancelled = true;
+            waiter.TrySetCancelled(ct);
+            grants = DispatchLocked();
+        }
+
+        GrantAll(grants);
+    }
+
+    private List<Waiter> DispatchLocked()
+    {
+        var grants = new List<Waiter>();
+        while (_available > 0)
+        {
+            var waiter = DequeueNextLocked();
+            if (waiter is null)
+                break;
+            if (waiter.Cancelled)
+                continue;
+
+            waiter.Granted = true;
+            _available--;
+            grants.Add(waiter);
+        }
+
+        return grants;
+    }
+
+    private Waiter? DequeueNextLocked()
+    {
+        for (var i = 0; i < _cycle.Length; i++)
+        {
+            var kind = _cycle[_nextCycleIndex];
+            _nextCycleIndex = (_nextCycleIndex + 1) % _cycle.Length;
+            if (TryDequeueLiveLocked(kind, out var waiter))
+                return waiter;
+        }
+
+        return TryDequeueLiveLocked(ExecutionWorkloadKind.Interactive, out var interactive)
+            ? interactive
+            : TryDequeueLiveLocked(ExecutionWorkloadKind.Refresh, out var refresh)
+                ? refresh
+                : null;
+    }
+
+    private bool TryDequeueLiveLocked(ExecutionWorkloadKind kind, out Waiter? waiter)
+    {
+        var queue = QueueFor(kind);
+        while (queue.Count > 0)
+        {
+            waiter = queue.Dequeue();
+            if (!waiter.Cancelled)
+                return true;
+        }
+
+        waiter = null;
+        return false;
+    }
+
+    private bool HasQueuedWorkLocked() =>
+        _interactive.Any(value => !value.Cancelled)
+        || _refresh.Any(value => !value.Cancelled);
+
+    private Queue<Waiter> QueueFor(ExecutionWorkloadKind kind) =>
+        kind == ExecutionWorkloadKind.Interactive ? _interactive : _refresh;
+
+    private static void GrantAll(List<Waiter> grants)
+    {
+        foreach (var waiter in grants)
+            waiter.TrySetGranted();
+    }
+
+    private sealed class Waiter(WeightedExecutionAdmission owner)
+    {
+        private readonly TaskCompletionSource<Permit> _tcs =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public bool Cancelled { get; set; }
+        public bool Granted { get; set; }
+        public Task<Permit> Task => _tcs.Task;
+        public void TrySetGranted() => _tcs.TrySetResult(new Permit(owner));
+        public void TrySetCancelled(CancellationToken ct) => _tcs.TrySetCanceled(ct);
+    }
+
+    public sealed class Permit : IDisposable
+    {
+        private WeightedExecutionAdmission? _owner;
+
+        internal Permit(WeightedExecutionAdmission owner) => _owner = owner;
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?.Release();
+        }
+    }
 }

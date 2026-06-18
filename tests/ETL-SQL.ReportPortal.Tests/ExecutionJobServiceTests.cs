@@ -521,6 +521,34 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, otherRefresh);
     }
 
+    /// <summary>When the global pool is saturated, queued interactive and refresh work is admitted
+    /// by the configured weight cycle. With the default 2:1 weighting, two interactive jobs get the
+    /// next two turns before the queued refresh.</summary>
+    [Fact]
+    public async Task WeightedQueue_AdmitsInteractiveAndRefreshByConfiguredWeights()
+    {
+        var scriptPath = await HangScriptAsync();
+        var handler = new RecordingControlledCompletionHandler();
+        using var service = HangingService(
+            FairnessConfig(globalCap: 1, perUserCap: 4, timeoutSeconds: 10),
+            httpHandler: handler);
+
+        await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
+        await handler.WaitForSubmittedCountAsync(1);
+
+        var queuedRefresh = await service.EnqueueRefreshAsync(reportId: 2, userId: 7, scriptPath);
+        var firstInteractive = await service.EnqueueExecutionAsync(reportId: 3, userId: 8, scriptPath);
+        var secondInteractive = await service.EnqueueExecutionAsync(reportId: 4, userId: 9, scriptPath);
+
+        handler.ReleaseFirstJob();
+        await handler.WaitForSubmittedCountAsync(4, TimeSpan.FromSeconds(5));
+
+        Assert.Equal([1, 3, 4, 2], handler.SubmittedReportIds.Take(4).ToArray());
+        await WaitForTerminalAsync(service, queuedRefresh);
+        await WaitForTerminalAsync(service, firstInteractive);
+        await WaitForTerminalAsync(service, secondInteractive);
+    }
+
     /// <summary>An overloaded Portal node leaves work pending instead of consuming execution
     /// slots; once capacity recovers, the same queued job can start.</summary>
     [Fact]
@@ -600,13 +628,14 @@ public class ExecutionJobServiceTests : IDisposable
     private static ExecutionJobService HangingService(
         PortalConfig config,
         IServiceScopeFactory? scopeFactory = null,
-        INodeCapacityMonitor? capacityMonitor = null)
+        INodeCapacityMonitor? capacityMonitor = null,
+        HttpMessageHandler? httpHandler = null)
     {
         scopeFactory ??= new ServiceCollection().BuildServiceProvider()
             .GetRequiredService<IServiceScopeFactory>();
         var sessions = new SessionCache(config, scopeFactory, NullLogger<SessionCache>.Instance);
         var channel = new HttpJobChannelClient(
-            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            new HttpClient(httpHandler ?? new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
             NullLogger<HttpJobChannelClient>.Instance);
         return new ExecutionJobService(
             config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel,
@@ -703,6 +732,85 @@ public class ExecutionJobServiceTests : IDisposable
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new OperationCanceledException(cancellationToken);
+        }
+    }
+
+    private sealed class RecordingControlledCompletionHandler : HttpMessageHandler
+    {
+        private readonly object _sync = new();
+        private readonly List<int> _submittedReportIds = new();
+        private readonly TaskCompletionSource _releaseFirstJob =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _nextRemoteId;
+
+        public IReadOnlyList<int> SubmittedReportIds
+        {
+            get
+            {
+                lock (_sync)
+                    return _submittedReportIds.ToArray();
+            }
+        }
+
+        public async Task WaitForSubmittedCountAsync(int expected, TimeSpan? timeout = null)
+        {
+            var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(3));
+            while (DateTime.UtcNow < deadline)
+            {
+                lock (_sync)
+                {
+                    if (_submittedReportIds.Count >= expected)
+                        return;
+                }
+
+                await Task.Delay(25);
+            }
+
+            Assert.Fail($"Expected at least {expected} submitted job(s), saw {SubmittedReportIds.Count}.");
+        }
+
+        public void ReleaseFirstJob() => _releaseFirstJob.TrySetResult();
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/jobs")
+            {
+                var remoteId = Interlocked.Increment(ref _nextRemoteId);
+                var json = await request.Content!.ReadAsStringAsync(cancellationToken);
+                var match = System.Text.RegularExpressions.Regex.Match(json, @"""ReportId""\s*:\s*""(?<id>\d+)""");
+                if (match.Success)
+                {
+                    lock (_sync)
+                        _submittedReportIds.Add(int.Parse(match.Groups["id"].Value));
+                }
+
+                return new HttpResponseMessage(System.Net.HttpStatusCode.Accepted)
+                {
+                    Content = new StringContent(
+                        $$"""{"jobId":"remote-{{remoteId}}"}""",
+                        System.Text.Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            if (request.Method == HttpMethod.Get)
+            {
+                var jobId = request.RequestUri?.Segments.LastOrDefault()?.TrimEnd('/');
+                if (string.Equals(jobId, "remote-1", StringComparison.OrdinalIgnoreCase))
+                    await _releaseFirstJob.Task.WaitAsync(cancellationToken);
+
+                return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        $$"""{"jobId":"{{jobId}}","status":"Completed","rowsProcessed":0,"executionTimeMs":1}""",
+                        System.Text.Encoding.UTF8,
+                        "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
         }
     }
 }

@@ -354,10 +354,10 @@ release begins.
   a newer token and writes the shared artifact, node A is notified of lease loss and cancels local work,
   then node A's stale artifact write is rejected by `FencedArtifactStorage` while node B's content remains
   intact. Real network-partition chaos remains tracked by P2.4.
-- [ ] **P2.6 Certify mixed workloads under load:** interactive, scheduled, refresh, and subscription,
+- [x] **P2.6 Certify mixed workloads under load:** interactive, scheduled, refresh, and subscription,
   with per-user **and per-group** quotas, queue fairness, administrative overrides, and
   node-capacity-aware claims. (Per-user fairness shipped in v0.11.0; per-group + weighting are the residual.)
-  *(partial)* Portal execution jobs now support an opt-in `Portal:Resources:MaxConcurrentExecutionsPerGroup`
+  *(done)* Portal execution jobs now support an opt-in `Portal:Resources:MaxConcurrentExecutionsPerGroup`
   quota. Non-admin jobs acquire per-user, per-group, then global execution gates; admins bypass both
   user and group gates. Portal execution starts also honor node-capacity overload before consuming
   execution slots, matching the scheduler's capacity-aware lease-claim behavior. Tests cover user/group
@@ -367,6 +367,9 @@ release begins.
   durable store. Cross-node capacity claims now also include a due-job burst: two scheduler instances
   share one durable store, the overloaded node skips all lease claims, the healthy node claims and runs
   every job, and all leases are released afterward. Scheduled/subscription certification now includes
-  a burst of independent poller-like
-  delivery executors observing the same durable subscription completion, proving the ledger permits
-  exactly one delivery and suppresses duplicates. Remaining: queue weighting.
+  a burst of independent poller-like delivery executors observing the same durable subscription completion,
+  proving the ledger permits
+  exactly one delivery and suppresses duplicates. Queued interactive and refresh executions now pass
+  through a weighted admission controller (`InteractiveExecutionWeight`:`RefreshExecutionWeight`,
+  default `2:1`) before consuming global execution slots, with deterministic coverage proving queued
+  work is admitted by the configured cycle.

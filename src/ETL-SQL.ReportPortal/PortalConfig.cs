@@ -185,6 +185,14 @@ public class ResourcesConfig
     /// Administrators are exempt.</summary>
     public int MaxConcurrentExecutionsPerGroup { get; set; }
 
+    /// <summary>Weighted admission for queued interactive report executions. When global execution
+    /// slots are saturated, queued work is admitted using this weight against
+    /// <see cref="RefreshExecutionWeight"/>. Minimum effective value is 1.</summary>
+    public int InteractiveExecutionWeight { get; set; } = 2;
+
+    /// <summary>Weighted admission for queued refresh executions. Minimum effective value is 1.</summary>
+    public int RefreshExecutionWeight { get; set; } = 1;
+
     public int ExecutionTimeoutSeconds { get; set; } = 300;
     public int SessionCacheMaxSize { get; set; } = 50;
     public int SessionCacheTtlMinutes { get; set; } = 30;
