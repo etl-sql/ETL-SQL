@@ -1,4 +1,7 @@
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
@@ -296,6 +299,55 @@ public class ExecutionJobServiceTests : IDisposable
         var job = await service.GetAsync(jobId);
         Assert.Equal(JobStatus.Cancelled, job!.Status);
         Assert.Contains("lease", job.Error!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PartitionRecovery_CancelsLocalWork_AndFencesStaleArtifactWriter()
+    {
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(FairnessConfig(globalCap: 1, perUserCap: 1, timeoutSeconds: 30));
+        var jobId = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+        await WaitForRunningCountAsync(service, 1, jobId);
+
+        var store = new SQLiteJobHistoryStore(Path.Combine(_tempDir, "partition-fence.db"));
+        await store.InitializeAsync();
+        await store.SaveJobAsync(new JobDefinition(
+            "partition-job",
+            "SELECT 1;",
+            1,
+            "DAY",
+            "06:00",
+            null,
+            null,
+            true));
+
+        var staleToken = await store.AcquireJobLeaseAsync(
+            "partition-job", "node-a", TimeSpan.FromMilliseconds(40));
+        Assert.NotNull(staleToken);
+        await Task.Delay(120);
+        var freshToken = await store.AcquireJobLeaseAsync(
+            "partition-job", "node-b", TimeSpan.FromMinutes(5));
+        Assert.NotNull(freshToken);
+        Assert.True(freshToken > staleToken);
+
+        await service.OnNodeLeaseLostAsync(
+            "node-a",
+            "Portal",
+            "Simulated partition: node heartbeat lease expired.",
+            CancellationToken.None);
+        await WaitForTerminalAsync(service, jobId);
+        var job = await service.GetAsync(jobId);
+        Assert.Equal(JobStatus.Cancelled, job!.Status);
+        Assert.Contains("lease", job.Error!, StringComparison.OrdinalIgnoreCase);
+
+        var inner = new InMemoryArtifactStorage();
+        var freshWriter = new FencedArtifactStorage(inner, store, () => freshToken.Value);
+        await freshWriter.WriteAllTextAsync(ArtifactArea.Snapshots, "partition/report.json", "fresh");
+
+        var staleWriter = new FencedArtifactStorage(inner, store, () => staleToken.Value);
+        await Assert.ThrowsAsync<FencedWriteException>(() =>
+            staleWriter.WriteAllTextAsync(ArtifactArea.Snapshots, "partition/report.json", "stale"));
+        Assert.Equal("fresh", await inner.ReadAllTextAsync(ArtifactArea.Snapshots, "partition/report.json"));
     }
 
     private (PortalConfig Config, ServiceProvider Provider) CreatePersistentServices()

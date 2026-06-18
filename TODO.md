@@ -324,8 +324,13 @@ release begins.
 - [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)
-- [ ] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
+- [x] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
   tokens reject every stale writer after a partition heals.
+  *(done)* Added a deterministic partition-recovery proof that combines the Portal execution lease-loss
+  path with real shared-store fence tokens: node A gets a lease token, its lease expires, node B acquires
+  a newer token and writes the shared artifact, node A is notified of lease loss and cancels local work,
+  then node A's stale artifact write is rejected by `FencedArtifactStorage` while node B's content remains
+  intact. Real network-partition chaos remains tracked by P2.4.
 - [ ] **P2.6 Certify mixed workloads under load:** interactive, scheduled, refresh, and subscription,
   with per-user **and per-group** quotas, queue fairness, administrative overrides, and
   node-capacity-aware claims. (Per-user fairness shipped in v0.11.0; per-group + weighting are the residual.)
