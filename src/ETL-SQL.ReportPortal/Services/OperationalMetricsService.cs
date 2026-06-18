@@ -6,7 +6,7 @@ namespace ETL_SQL.ReportPortal.Services;
 /// <summary>
 /// P2.8: a point-in-time operational snapshot for a multi-user deployment — active executions and
 /// queue depth, recent execution and subscription-delivery failure rates (from the durable
-/// PortalExecutionJobs and SubscriptionDelivery ledgers), and dataset/snapshot storage usage on disk.
+/// PortalExecutionJobs and SubscriptionDelivery ledgers), and dataset/snapshot storage usage.
 /// </summary>
 public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig config)
 {
@@ -64,7 +64,7 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
             queuedExecutions,
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.MaxConcurrentExecutionsPerUser,
-            "single-active-instance",
+            "shared-state-ha",
             recentExecutions,
             recentExecutionFailures,
             recentDeliveries,

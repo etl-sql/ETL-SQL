@@ -60,6 +60,8 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
 builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
+builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
+    ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
 
 // Cluster node heartbeat (P1.7): register this Portal node in the shared node registry so the
 // cluster has a live view of all Portal/Orchestrator nodes over shared state.
@@ -88,9 +90,9 @@ var keyRingPath = string.IsNullOrWhiteSpace(portalConfig.Storage.KeyRingPath)
 
 // ── Artifact storage (provider configurable: Local default, SMB/UNC for HA) ──────
 // Maps each artifact area to its configured root; the Keys area is the Data Protection key ring
-// directory beside the portal database. The provider is wrapped by GuardedArtifactStorage so the
-// SecurityService path-traversal / executable / script-immutability guardrails are enforced at the
-// single storage boundary (P1.6). Call sites migrate onto this seam incrementally.
+// directory beside the portal database. Writes pass through FencedArtifactStorage (P1.8) and then the
+// outer GuardedArtifactStorage enforces SecurityService path-traversal / executable /
+// script-immutability guardrails before any epoch is stamped (P1.6).
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
 {
     // Resolve PortalConfig from DI (not the startup-bound local) so any later override — e.g. a test
@@ -109,8 +111,12 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
             [ETL_SQL.Core.Storage.ArtifactArea.Datasets] = cfg.DatasetRootPath,
             [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keysRoot,
         });
+    var epochs = sp.GetRequiredService<ETL_SQL.Core.Data.IWriteEpochStore>();
+    var tokenProvider = sp.GetRequiredService<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider>();
+    var fenced = new ETL_SQL.Core.Storage.FencedArtifactStorage(
+        inner, epochs, () => tokenProvider.CurrentToken);
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
-    return new ETL_SQL.Core.Storage.GuardedArtifactStorage(inner, security);
+    return new ETL_SQL.Core.Storage.GuardedArtifactStorage(fenced, security);
 });
 
 // ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────

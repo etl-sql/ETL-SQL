@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Text.Json;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
@@ -33,7 +35,7 @@ public record ExecutionJob(
 
 /// <summary>
 /// Manages async report-execution jobs.
-/// Each job runs the .rptsql script via DashboardService, saves the manifest to disk,
+/// Each job runs the .rptsql script via DashboardService, saves the manifest to artifact storage,
 /// and stores the ManifestPath in ReportSnapshots.
 /// Concurrency is capped by MaxConcurrentReportExecutions.
 /// </summary>
@@ -51,19 +53,27 @@ public class ExecutionJobService : IHostedService, IDisposable
     private readonly ILogger<ExecutionJobService> _log;
     private readonly SessionCache _sessions;
     private readonly IJobChannel _channel;
-    private readonly List<FileStream> _instanceLocks = [];
+    private readonly IArtifactStorage _artifacts;
+    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = null
+    };
+
     public ExecutionJobService(
         PortalConfig config,
         IServiceScopeFactory scopeFactory,
         ILogger<ExecutionJobService> log,
         SessionCache sessions,
-        IJobChannel channel)
+        IJobChannel channel,
+        IArtifactStorage? artifacts = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
         _log = log;
         _sessions = sessions;
         _channel = channel;
+        _artifacts = artifacts ?? CreateDefaultArtifactStorage(config);
         _gate = new SemaphoreSlim(config.Resources.MaxConcurrentReportExecutions,
                                        config.Resources.MaxConcurrentReportExecutions);
     }
@@ -226,10 +236,9 @@ public class ExecutionJobService : IHostedService, IDisposable
                 throw new UnauthorizedAccessException("Report script path is outside the configured script root.");
             scriptPath = resolvedScriptPath;
 
-            if (!PortalPathGuard.TryResolveSnapshot(
-                    _config,
-                    $"report_{job.ReportId}_{job.Id}.snapshot.json",
-                    out var manifestPath))
+            var manifestKey = $"report_{job.ReportId}_{job.Id}.snapshot.json";
+            var manifestPath = manifestKey;
+            if (PortalPathGuard.ToSnapshotKey(_config, manifestKey) != manifestKey)
                 throw new UnauthorizedAccessException("Snapshot path is outside the configured snapshot directory.");
 
             // Hash the script file at execution time for integrity tracking
@@ -268,10 +277,9 @@ public class ExecutionJobService : IHostedService, IDisposable
                             var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
                                 status.ReportManifestJson)
                                 ?? throw new InvalidOperationException("Remote orchestrator returned an invalid report manifest.");
-                            var store = new SnapshotStore();
-                            await store.SaveAsync(manifest, manifestPath);
+                            await SaveSnapshotManifestAsync(manifest, manifestKey, cts.Token);
                         }
-                        else if (!System.IO.File.Exists(manifestPath))
+                        else if (!await _artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey, cts.Token))
                         {
                             throw new InvalidOperationException(
                                 "Remote orchestrator completed the report without returning or writing a snapshot manifest.");
@@ -305,11 +313,7 @@ public class ExecutionJobService : IHostedService, IDisposable
                 var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
                 await PersistReportLineageAsync(job, scriptPath, svc.CurrentLineageTracker);
 
-                // Save manifest to portal's SnapshotDirectory.
-                Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
-
-                var store = new SnapshotStore();
-                await store.SaveAsync(manifest, manifestPath);
+                await SaveSnapshotManifestAsync(manifest, manifestKey, cts.Token);
             }
 
             // Persist to DB
@@ -408,40 +412,6 @@ public class ExecutionJobService : IHostedService, IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        var lockPaths = new[]
-        {
-            Path.Combine(Path.GetDirectoryName(Path.GetFullPath(_config.DatabasePath))!, "portal.instance.lock"),
-            Path.Combine(Path.GetFullPath(_config.ScriptRootPath), ".portal.instance.lock"),
-            Path.Combine(Path.GetFullPath(_config.SnapshotDirectory), ".portal.instance.lock"),
-            Path.Combine(Path.GetFullPath(_config.DatasetRootPath), ".portal.instance.lock")
-        }.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList();
-
-        try
-        {
-            // COMPAT_BREAK: 0.12
-            foreach (var lockPath in lockPaths)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(lockPath)!);
-                var instanceLock = new FileStream(
-                    lockPath,
-                    FileMode.OpenOrCreate,
-                    FileAccess.ReadWrite,
-                    FileShare.None);
-                lock (_instanceLocks)
-                {
-                    _instanceLocks.Add(instanceLock);
-                }
-            }
-        }
-        catch (IOException ex)
-        {
-            ReleaseInstanceLocks();
-            throw new InvalidOperationException(
-                "Another Report Portal instance is already using this portal database or storage root. "
-                + "The supported topology allows one active portal instance per database and storage root.",
-                ex);
-        }
-
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetService<PortalDbContext>();
         if (db is null)
@@ -484,25 +454,7 @@ public class ExecutionJobService : IHostedService, IDisposable
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
-    {
-        ReleaseInstanceLocks();
-        return Task.CompletedTask;
-    }
-
-    private void ReleaseInstanceLocks()
-    {
-        // StopAsync can run twice concurrently when the host disposes while a fatal startup
-        // validator's StopApplication() shutdown is in flight: take the locks atomically so
-        // each FileStream is disposed exactly once and no enumeration races the Clear().
-        FileStream[] taken;
-        lock (_instanceLocks)
-        {
-            taken = [.. _instanceLocks];
-            _instanceLocks.Clear();
-        }
-        foreach (var instanceLock in taken)
-            instanceLock.Dispose();
-    }
+        => Task.CompletedTask;
 
     private async Task PersistNewJobAsync(ExecutionJob job, string kind)
     {
@@ -618,13 +570,9 @@ public class ExecutionJobService : IHostedService, IDisposable
         {
             try
             {
-                if (!string.IsNullOrWhiteSpace(snapshot.ManifestPath)
-                    && PortalPathGuard.TryResolveSnapshot(
-                        _config, Path.GetFileName(snapshot.ManifestPath), out var resolved)
-                    && System.IO.File.Exists(resolved))
-                {
-                    System.IO.File.Delete(resolved);
-                }
+                var key = PortalPathGuard.ToSnapshotKey(_config, snapshot.ManifestPath);
+                if (key is not null)
+                    await _artifacts.DeleteAsync(ArtifactArea.Snapshots, key);
             }
             catch (Exception ex)
             {
@@ -675,9 +623,26 @@ public class ExecutionJobService : IHostedService, IDisposable
 
     public void Dispose()
     {
-        ReleaseInstanceLocks();
         _gate.Dispose();
         foreach (var gate in _userGates.Values)
             gate.Dispose();
     }
+
+    private Task SaveSnapshotManifestAsync(ReportManifest manifest, string manifestKey, CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(manifest, SnapshotJsonOptions);
+        return _artifacts.WriteAllTextAsync(ArtifactArea.Snapshots, manifestKey, json, ct: ct);
+    }
+
+    private static IArtifactStorage CreateDefaultArtifactStorage(PortalConfig config) =>
+        new LocalArtifactStorage(new Dictionary<ArtifactArea, string>
+        {
+            [ArtifactArea.Scripts] = config.ScriptRootPath,
+            [ArtifactArea.Snapshots] = config.SnapshotDirectory,
+            [ArtifactArea.Maps] = config.MapRootPath,
+            [ArtifactArea.Datasets] = config.DatasetRootPath,
+            [ArtifactArea.Keys] = string.IsNullOrWhiteSpace(config.Storage.KeyRingPath)
+                ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath))!, ".portal-keys")
+                : Path.GetFullPath(config.Storage.KeyRingPath)
+        });
 }

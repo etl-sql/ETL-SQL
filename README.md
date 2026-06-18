@@ -51,7 +51,7 @@ Runtime controls enforce path boundaries, protected-script immutability, encrypt
 
 ### VS Code Extension & Notebooks
 
-![VS Code demo](Docs/assets/vscode-demo.gif)
+![VS Code demo](Docs/assets/vscode-demo.mp4)
 
 *Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution · Lineage*
 

@@ -7,9 +7,9 @@ namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
 /// Hosted-service integration lane (P2.1). Unlike every other portal test, these run the real
-/// <c>IHostedService</c> pipeline inside the host: startup validators that stop the application,
-/// instance-lock acquisition, and the background maintenance/poll loops — all against the
-/// fixture's isolated temp-directory databases and, where time matters, a controlled clock.
+/// <c>IHostedService</c> pipeline inside the host: startup validators that stop the application and
+/// the background maintenance/poll loops — all against the fixture's isolated temp-directory databases
+/// and, where time matters, a controlled clock.
 /// </summary>
 [Trait("Category", "Portal")]
 public sealed class HostedServiceLaneTests
@@ -20,8 +20,7 @@ public sealed class HostedServiceLaneTests
 
     /// <summary>
     /// With valid configuration every hosted service starts: the host serves health checks,
-    /// the execution job service holds the single-instance lock files, and the shortened
-    /// poller/maintenance loops tick without destabilizing the host.
+    /// the shortened poller/maintenance loops tick without destabilizing the host.
     /// </summary>
     [Fact]
     public async Task ValidConfiguration_AllHostedServicesStart_HostStaysHealthy()
@@ -31,10 +30,6 @@ public sealed class HostedServiceLaneTests
 
         var first = await client.GetAsync("/health");
         Assert.True(first.IsSuccessStatusCode, $"initial /health returned {(int)first.StatusCode}");
-
-        // The execution job service acquired the per-storage-root instance locks at startup.
-        Assert.True(File.Exists(Path.Combine(factory.TempDir, "portal.instance.lock")),
-            "expected the portal instance lock file to be held");
 
         // Let the 1s poller and purge loops run a few iterations, then confirm the host survived.
         await Task.Delay(TimeSpan.FromSeconds(3));

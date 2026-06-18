@@ -9,13 +9,13 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
-/// P2.2 multi-instance coordination. The supported topology is one active portal per database
-/// (enforced by the instance lock — see <c>ExecutionJobServiceTests.StartAsync_RejectsSecondPortalInstance…</c>);
+/// P2.2 multi-instance coordination. The Portal now supports multiple processes over shared state
+/// (see <c>ExecutionJobServiceTests.StartAsync_AllowsMultiplePortalInstancesUsingSharedState</c>);
 /// the Orchestrator job lease proves two scheduler instances run a due job exactly once
-/// (<c>JobExecutionLeaseTests</c>). This suite closes the remaining gap: two independent subscription
-/// delivery executors — separate services with separate database connections, a faithful proxy for
-/// two poller processes — coordinating through the durable delivery ledger over one shared portal
-/// database, rather than through shared memory.
+/// (<c>JobExecutionLeaseTests</c>). This suite covers two independent subscription delivery executors —
+/// separate services with separate database connections, a faithful proxy for two poller processes —
+/// coordinating through the durable delivery ledger over one shared portal database, rather than through
+/// shared memory.
 /// </summary>
 [Trait("Category", "Portal")]
 public sealed class MultiInstanceCoordinationTests

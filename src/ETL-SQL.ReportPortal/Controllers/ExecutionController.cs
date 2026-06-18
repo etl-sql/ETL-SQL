@@ -330,7 +330,9 @@ public class ExecutionController(
             scriptPath,
             isAdministrator: IsAdmin);
 
-        // If session was just created and there is a snapshot, prime it from disk
+        // If session was just created and there is a snapshot, verify it is available from shared
+        // artifact storage. DashboardService doesn't expose a direct seed-from-manifest API, so
+        // the first real interaction still rebuilds; this check is only a cheap availability probe.
         // so the user doesn't wait for a full re-execution on parameter change.
         if (svc.IsStale())
         {
@@ -340,14 +342,10 @@ public class ExecutionController(
                 .FirstOrDefaultAsync();
 
             if (snapshot is not null
-                && PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath)
-                && System.IO.File.Exists(resolvedManifestPath))
+                && PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath) is { } manifestKey
+                && await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
             {
-                var store = new SnapshotStore();
-                var manifest = await store.LoadAsync(resolvedManifestPath);
-                // DashboardService doesn't expose a direct "seed from manifest" API, so
-                // if there's a saved snapshot we just let the first real interaction trigger
-                // a rebuild — the session will be warm after the first call.
+                // Snapshot exists in the shared storage backend.
             }
         }
 

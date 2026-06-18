@@ -1621,7 +1621,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 
 ### Reliability
 
-- [ ] **Required** — Run exactly one active Report Portal process for each portal SQLite database and script/snapshot/dataset storage root. The portal enforces this with `portal.instance.lock` beside the database and refuses a second instance. Horizontal portal replicas are not a supported topology.
+- [ ] **Required** — For single-node SQLite deployments, run one active Report Portal process per portal database. For HA deployments, configure every Portal node to use the same PostgreSQL database and shared artifact storage roots; startup singleton work is coordinated through the database-backed cluster lock.
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
 - [ ] **Required** — Treat a restart as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.
 - [ ] **Recommended** — Verify the `/health` endpoint returns `Healthy` before directing user traffic. Wire this endpoint into your load balancer or monitoring system.

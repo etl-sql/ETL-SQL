@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
@@ -16,7 +18,8 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class ExportController(
     PortalDbContext db,
     PortalConfig portalConfig,
-    AuditService audit) : ControllerBase
+    AuditService audit,
+    IArtifactStorage artifacts) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -56,14 +59,15 @@ public class ExportController(
         if (snapshot is null)
             return (null, "No snapshot available", false);
 
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+        var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
+        if (manifestKey is null)
             return (null, "Snapshot path is outside the configured snapshot directory", true);
 
-        if (!System.IO.File.Exists(resolvedManifestPath))
+        if (!await artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey))
             return (null, "No snapshot available", false);
 
-        var store = new SnapshotStore();
-        var manifest = await store.LoadAsync(resolvedManifestPath);
+        var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, manifestKey);
+        var manifest = JsonSerializer.Deserialize<ReportManifest>(json);
         return manifest is null ? (null, "Failed to load snapshot", false) : (manifest, null, false);
     }
 

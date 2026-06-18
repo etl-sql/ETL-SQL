@@ -148,7 +148,9 @@ GET /api/reports/{id}/snapshot — fetch completed snapshot JSON
 
 **Supported topology:** one active Report Portal process per portal SQLite database and
 script/snapshot/dataset storage root. `ExecutionJobService` holds an exclusive
-`portal.instance.lock` beside the database and fails startup if another process already owns it.
+Portal nodes are allowed to run concurrently when they share the configured database and artifact
+storage roots. Startup-critical singleton work, such as EF migrations, is serialized with the
+database-backed cluster lock instead of a node-local filesystem lock.
 The execution semaphore, interactive session cache, ASP.NET rate-limit partitions, and PDF quota
 are therefore intentionally process-local.
 

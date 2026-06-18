@@ -15,9 +15,9 @@ namespace ETL_SQL.Core.Storage;
 /// older than the latest writer's is rejected with <see cref="FencedWriteException"/>, and the byte write
 /// never happens. Reads, enumeration, deletion, and leasing pass through unfenced.
 ///
-/// <para>The fence token comes from <c>currentToken</c> — in a cluster this is the node's lease/heartbeat
-/// fence token, monotonically advanced whenever ownership changes, so a paused-then-resumed node always
-/// presents an older token than the node that superseded it.</para>
+/// <para>The fence token comes from <c>currentToken</c>. Portal hosts use a process-scoped startup token:
+/// a replacement process receives a newer token, and the shared database rejects writes from older
+/// paused processes after a newer writer has advanced an artifact epoch.</para>
 /// </summary>
 public sealed class FencedArtifactStorage : IArtifactStorage
 {

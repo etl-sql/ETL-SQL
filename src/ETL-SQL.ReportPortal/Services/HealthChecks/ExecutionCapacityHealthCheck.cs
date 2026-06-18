@@ -25,7 +25,7 @@ public class ExecutionCapacityHealthCheck(
         {
             ["execution_cap"] = cap,
             ["active_executions"] = activeExecutions,
-            ["portal_topology"] = "single-active-instance",
+            ["portal_topology"] = "shared-state-ha",
             ["smtp_connections"] = smtpCount,
             ["active_subscriptions"] = activeSubs
         };

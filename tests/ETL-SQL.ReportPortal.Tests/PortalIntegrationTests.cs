@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,20 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var status = body!["status"]?.GetValue<string>();
         Assert.True(status is "Healthy" or "Degraded",
             $"Expected Healthy or Degraded, got {status}");
+    }
+
+    [Fact]
+    public async Task ArtifactStorage_RejectsStaleWriterThroughPortalDi()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var epochs = scope.ServiceProvider.GetRequiredService<IWriteEpochStore>();
+        var storage = scope.ServiceProvider.GetRequiredService<IArtifactStorage>();
+
+        Assert.True(await epochs.TryClaimWriteEpochAsync(
+            "artifact", "Scripts/fenced.rptsql", long.MaxValue));
+
+        await Assert.ThrowsAsync<FencedWriteException>(() =>
+            storage.WriteAllTextAsync(ArtifactArea.Scripts, "fenced.rptsql", "SET REPORT TITLE = 'Stale';"));
     }
 
     // ── 2. Auth flow ───────────────────────────────────────────────────────────

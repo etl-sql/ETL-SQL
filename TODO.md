@@ -54,9 +54,11 @@ release begins.
 > - **No artifact-storage abstraction** — scripts, snapshots, cached datasets, and keys use direct
 >   filesystem paths (Gap #3). No `IStorageProvider`/`IArtifactStorage`.
 > - Coordination groundwork that exists and should be built on, not rebuilt: the Orchestrator durable
->   per-job lease + `StartLeaseHeartbeat` (`SchedulerService`), the single-active-Portal instance lock
->   (`ExecutionJobService`), and the cross-connection coordination tests from v0.11.0 P2.2. **Missing:**
->   fencing tokens (Gap #5), database-backed *node* heartbeats, and leader election.
+>   per-job lease + `StartLeaseHeartbeat` (`SchedulerService`) and the cross-connection coordination
+>   tests from v0.11.0 P2.2. The old single-active-Portal filesystem lock was removed in P1.10 after
+>   Portal snapshots moved to shared artifact storage and migrations were serialized by the DB-backed
+>   cluster lock. P1.7-P1.9 added database-backed node heartbeats, fencing tokens/write epochs, and
+>   leader election.
 > - `/health` exists on both the Portal (`AddHealthChecks` + `MapHealthChecks`) and the Orchestrator
 >   service; the lightweight LB-oriented `/healthz` (DB/storage/lease connectivity) does not.
 > - v0.11.0 explicitly **deferred to this phase**: true OS-process (not in-process proxy) coordination
@@ -195,7 +197,8 @@ release begins.
   >   and fails fast only on an unreachable share; per-area subdirectories are created on demand by the
   >   first write (same as the local provider), with code/comments/tests aligned.
   > - **[RESOLVED in P1.9]** Concurrent Startup Migration Collisions — leader-elected migration lock.
-  > - **[RESOLVED in P1.8]** Stale-Writer Collisions on Shared Storage — DB-backed write-epoch fencing.
+  > - **[RESOLVED in P1.8]** Stale-Writer Collisions on Shared Storage — DB-backed write-epoch fencing
+  >   is now active in the Portal `IArtifactStorage` pipeline, not just available as a decorator.
 
 ### Phase 3 — Distributed Leases & Fencing
 
@@ -226,13 +229,17 @@ release begins.
   the new acquire. **Shared storage writes (SMB/UNC):** since SMB/UNC has no native fencing, a new
   DB-backed `IWriteEpochStore` makes the shared database the fencing authority — `TryClaimWriteEpochAsync`
   is an atomic compare-and-advance (conditional `ON CONFLICT … DO UPDATE … WHERE`), and a new
-  `FencedArtifactStorage` decorator claims an artifact's write epoch (keyed by area+path, token from the
-  node's fence-token supplier) before every write/move-destination, throwing `FencedWriteException` on a
-  stale token. Both implemented portably in `RelationalJobHistoryStore` (new `LeaseFenceToken` + `WriteEpochs`
-  table) and registered in DI. Tests: `FencingTokenTests`, `WriteEpochFencingTests`
-  (CAS + decorator stale-writer/move-destination) + PostgreSQL fencing & write-epoch cases in
-  `OrchestratorPostgresStoreTests`; mock-based scheduler tests updated — 135 orchestration unit + 7 Postgres
-  integration + 51 portal integration green. Builds on the P1.7 lease/heartbeat substrate.
+  `FencedArtifactStorage` decorator claims an artifact's write epoch (keyed by area+path, using a process-
+  scoped Portal artifact-write fence token) before every write/move-destination, throwing
+  `FencedWriteException` on a stale token. Both implemented portably in `RelationalJobHistoryStore` (new
+  `LeaseFenceToken` + `WriteEpochs` table) and wired into the production Portal storage pipeline as
+  `GuardedArtifactStorage(FencedArtifactStorage(provider))`, so P1.6 security guardrails run before any
+  write epoch is stamped. Tests: `FencingTokenTests`, `WriteEpochFencingTests` (CAS + decorator
+  stale-writer/move-destination), `PortalIntegrationTests.ArtifactStorage_RejectsStaleWriterThroughPortalDi`
+  (production DI pipeline), plus PostgreSQL fencing & write-epoch cases in `OrchestratorPostgresStoreTests`;
+  mock-based scheduler tests updated — focused non-Postgres storage/fencing/heartbeat/cluster-lock tests
+  green locally; Postgres integration still requires Docker/Testcontainers. Builds on the P1.7
+  lease/heartbeat substrate.
 - [x] **P1.9 Database-backed leader election** for cluster singletons (e.g. running migrations once).
   *(done)* New `IClusterLockStore` (Core.Data) — a TTL-leased named lock (= leader election; the holder is
   the leader): `TryAcquireLockAsync` (atomic claim via conditional `ON CONFLICT … WHERE expired OR same
@@ -251,7 +258,22 @@ release begins.
 
 ### Phase 4 — Stateless Node Operation
 
-- [ ] **P1.10 Portal nodes read state and serve snapshots from PostgreSQL** (no node-local authoritative state).
+- [x] **P1.10 Portal nodes read state and serve snapshots from PostgreSQL** (no node-local authoritative state).
+  *(done)* Portal is no longer limited by node-local authoritative state for report execution status and
+  snapshots. Provider-selectable Portal state from P1.1/P1.2 is used for durable execution jobs and
+  snapshots; `ExecutionJobService` now writes report snapshot manifests through the configured
+  `IArtifactStorage` Snapshots area (therefore through P1.6 guardrails + P1.8 write fencing), stores the
+  area-relative manifest key for new rows, and keeps absolute/relative legacy rows readable via
+  `PortalPathGuard.ToSnapshotKey`. Remaining snapshot consumers that previously used raw
+  `SnapshotStore`/`File.*` (`ExportController`, `ReportScriptInspectionService`, session warm-up probes,
+  and retention pruning) now read/delete through `IArtifactStorage`. The old single-active Portal
+  filesystem instance lock (`portal.instance.lock`) was removed so multiple Portal processes can start
+  against the same shared database/storage; startup singleton work is already protected by the P1.9
+  cluster lock. Operational metadata now reports `shared-state-ha`. Tests: updated
+  `ExecutionJobServiceTests` (multi-instance startup + artifact-backed pruning), export/snapshot focused
+  Portal tests, hosted-service lane, and operational-observability tests green locally. Dataset cache files
+  remain the separate cross-tier migration called out in the Phase 2 follow-on and are not part of this
+  snapshot/state slice.
 - [ ] **P1.11 Load-balancer session affinity** for interactive IDE sessions.
 - [ ] **P1.12 Lease-loss cancels local work:** a partitioned node that loses its database lease
   immediately cancels its running jobs.

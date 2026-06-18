@@ -199,7 +199,7 @@ public class ExecutionJobServiceTests : IDisposable
 
     [Fact]
     [Trait("CompatBreak", "0.12")]
-    public async Task StartAsync_RejectsSecondPortalInstanceUsingSameDatabase()
+    public async Task StartAsync_AllowsMultiplePortalInstancesUsingSharedState()
     {
         var (config, provider) = CreatePersistentServices();
         await using var services = provider;
@@ -214,10 +214,9 @@ public class ExecutionJobServiceTests : IDisposable
             config, scopes, NullLogger<ExecutionJobService>.Instance, sessions, channel);
 
         await first.StartAsync(CancellationToken.None);
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => second.StartAsync(CancellationToken.None));
+        await second.StartAsync(CancellationToken.None);
 
-        Assert.Contains("one active portal instance", error.Message, StringComparison.OrdinalIgnoreCase);
+        await second.StopAsync(CancellationToken.None);
         await first.StopAsync(CancellationToken.None);
     }
 

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
@@ -11,7 +12,10 @@ using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Services;
 
-public class ReportScriptInspectionService(PortalConfig portalConfig, ILogger<ReportScriptInspectionService> logger)
+public class ReportScriptInspectionService(
+    PortalConfig portalConfig,
+    ILogger<ReportScriptInspectionService> logger,
+    IArtifactStorage artifacts)
 {
     public async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
     {
@@ -101,15 +105,16 @@ public class ReportScriptInspectionService(PortalConfig portalConfig, ILogger<Re
     public async Task<IReadOnlyList<ReportDependencyManifestDatasetDto>> ReadManifestDatasetsAsync(ReportSnapshot? snapshot)
     {
         if (snapshot is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+        var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
+        if (manifestKey is null)
             return Array.Empty<ReportDependencyManifestDatasetDto>();
-        if (!System.IO.File.Exists(resolvedManifestPath))
+        if (!await artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey))
             return Array.Empty<ReportDependencyManifestDatasetDto>();
 
         try
         {
-            await using var stream = System.IO.File.OpenRead(resolvedManifestPath);
-            var manifest = await JsonSerializer.DeserializeAsync<ReportManifest>(stream);
+            var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, manifestKey);
+            var manifest = JsonSerializer.Deserialize<ReportManifest>(json);
             if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
 
             return manifest.Datasets
@@ -123,7 +128,7 @@ public class ReportScriptInspectionService(PortalConfig portalConfig, ILogger<Re
         }
         catch (JsonException ex)
         {
-            logger.LogWarning(ex, "Failed to parse report manifest at {ManifestPath}", resolvedManifestPath);
+            logger.LogWarning(ex, "Failed to parse report manifest at {ManifestPath}", snapshot.ManifestPath);
             return Array.Empty<ReportDependencyManifestDatasetDto>();
         }
     }

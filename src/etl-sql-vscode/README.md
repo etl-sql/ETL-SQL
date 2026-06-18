@@ -6,13 +6,13 @@
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
-  <img src="https://img.shields.io/badge/ETL--SQL-v0.12.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
+  <img src="https://img.shields.io/badge/ETL--SQL-v0.11.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
   <img src="https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>
 
 ---
 
-> **Stop writing Python glue code. Stop fighting SSIS. Stop managing three tools to do one job.**
+> **Build cross-source data pipelines, governance, and dashboards without stitching together three separate tools.**
 >
 > ETL-SQL is a single SQL dialect that connects to anything, transforms everything, and delivers interactive dashboards — all in one script.
 
@@ -102,7 +102,7 @@ CREATE PAGE Overview AS DASHBOARD (
 
 ## See It In Action
 
-![ETL-SQL VS Code Extension Demo](https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/Docs/assets/vscode-demo.gif)
+![ETL-SQL VS Code Extension Demo](https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/Docs/assets/vscode-demo.mp4)
 
 *Schema autocomplete · inline diagnostics · REPL results console · live report preview · cell-by-cell notebook execution · data lineage*
 
@@ -160,7 +160,7 @@ END CATCH;
 
 ### Interactive Dashboard (`sales_report.rptsql`)
 
-Press **`F1` → `ETL-SQL: Open Report Preview`** to see this render live in your editor.
+Press **`F1` → `ETL-SQL: Preview Report`** to see this render live in your editor.
 
 ```sql
 SET REPORT TITLE       = 'Mock Sales Performance';
@@ -213,12 +213,12 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 - **F5 to Run** — execute the full script, or highlight any block and run just that selection.
 - **Interactive Results Grid** — sort, filter, and page through multi-result sets. Stack two result sets side-by-side with **Compare Mode** to diff them instantly.
 - **Step Profiling** — inspect per-statement execution time, memory peaks, and spill events in the results panel.
-- **Lineage Visualization** — view a bubble graph of data lineage for any executed script without leaving VS Code.
+- **Lineage-Aware Workflow** — inspect lineage metadata from executed scripts and use built-in lineage commands for audit output.
 
 ### 📊 See Your Dashboard Before You Ship It
 
 - **Live `.rptsql` Preview** — open a report file and watch the interactive dashboard render side-by-side with your code. Every save refreshes the preview.
-- **Full Interactivity in Preview** — slicers, date pickers, drill-downs, parameter overrides, and cross-highlighting all work in the preview pane — not just in a browser.
+- **Interactive Preview** — slicers, date pickers, drill-downs, parameter overrides, and cross-highlighting work in the preview pane.
 - **One-Click Export** — export your rendered report to PDF or Markdown directly from the preview panel.
 
 ### 📓 Notebooks for Iterative Development (`.etlnb`)
@@ -230,7 +230,7 @@ CREATE PAGE SalesDashboard AS DASHBOARD (
 ### 🔒 Security That Catches Mistakes Before You Ship Them
 
 - **Credentials Guard** — scans for plaintext passwords and API keys on every save and surfaces a warning immediately.
-- **One-Click Encryption** — converts any flagged plaintext secret into an `ENC:...` encrypted string using your session master key, right from the inline warning action.
+- **Save Policy Encryption** — applies the script save policy to convert flagged plaintext secrets into `ENC:...` encrypted values when requested.
 
 ### 🗂️ Metadata Explorer Sidebar
 
@@ -238,167 +238,19 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ---
 
-## 🏷️ Data Governance & Lineage — Built Into the Language
+## 🏷️ Data Governance & Lineage
 
-Most ETL tools treat governance as an afterthought — a separate catalog you populate after the fact. In ETL-SQL, governance metadata lives *in* the script itself, as inline tag comments that travel with the data through every transformation.
+ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
 
-### Inline Column Tags
-
-Tag any column inline using `/* @tag: value; */` comments. Tags are read by the engine at execution time, stored in the lineage tracker, and inherited automatically by derived columns:
-
-```sql
-SELECT
-    customer_id  /* @d: Unique customer identifier; @nullable: false */,
-    email        /* @pii; @classification: confidential; @d: Primary contact email */,
-    card_number  /* @pci; @classification: restricted; @d: Masked PAN */,
-    region       /* @d: Sales region; @owner: sales_ops */,
-    total_spend  /* @d: Lifetime spend in USD; @unit: USD */
-INTO #customers
-FROM crm.dbo.Customers;
-```
-
-The shorthand `/* @pii; */` with no value is equivalent to `/* @pii: true; */`.
-
-### Script-Level Metadata Headers
-
-Tag an entire script with ownership, environment, and scheduling intent at the top:
-
-```sql
--- @author: jane.smith;
--- @domain: Finance;
--- @environment: production;
--- @schedule: daily;
--- @description: Monthly revenue reconciliation pipeline;
-```
-
-### Tags Inherit Through Transformations Automatically
-
-If a source column is tagged `@pii`, every column derived from it carries that tag forward — through joins, aggregations, CASE expressions, and string operations — without you having to re-tag every step:
-
-```sql
--- email is tagged @pii at the source
-SELECT UPPER(email) AS email_upper   -- inherits @pii: true automatically
-FROM #customers;
-```
-
-Security tags (`@pii`, `@phi`, `@pci`, `@sensitive`) use **true-wins** inheritance: if *any* contributing source is tagged true, the output is tagged true. Classification uses **highest-tier wins**: restricted beats confidential beats internal.
-
-### Standard Tag Catalog
-
-| Domain | Tags |
-| :--- | :--- |
-| **Security & Privacy** | `@pii` · `@phi` · `@pci` · `@sensitive` · `@classification` · `@encrypted_at_rest` |
-| **Ownership** | `@owner` · `@domain` · `@steward` · `@contact` |
-| **Quality & Freshness** | `@quality` · `@freshness` · `@sla` · `@nullable` |
-| **Documentation** | `@d` · `@example` · `@unit` · `@format` |
-| **Traceability** | `@source_system` · `@source_table` · `@source_column` · `@load_pattern` |
-
-Custom tags are always allowed alongside the standard set.
-
-### Query Lineage as Data
-
-After a script runs, the full lineage graph is queryable inside the same session:
-
-```sql
--- Find every PII column that touched this pipeline
-SELECT DISTINCT target_table, target_column
-FROM LINEAGE_TAGS
-WHERE tag_name = 'pii' AND tag_value = 'true';
-
--- Find sensitive columns with no assigned owner
-SELECT s.target_table, s.target_column
-FROM LINEAGE_TAGS s
-WHERE s.tag_name IN ('pii', 'phi', 'pci') AND s.tag_value = 'true'
-  AND NOT EXISTS (
-      SELECT 1 FROM LINEAGE_TAGS o
-      WHERE o.target_table = s.target_table
-        AND o.target_column = s.target_column
-        AND o.tag_name = 'owner'
-  );
-```
-
-### Export for Compliance & Audit
-
-```sql
--- Human-readable Markdown with a Mermaid lineage graph
-SHOW LINEAGE FOR #final_output TO 'audit_lineage.md';
-
--- OpenLineage events — importable into DataHub, Marquez, Airflow, Collibra, Alation
-SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'audit_2026_Q2.jsonl';
-```
+After a script runs, lineage is queryable with `LINEAGE` / `LINEAGE_TAGS`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Lineage.md) for the full tag catalog and examples.
 
 ---
 
-## 🤖 AI-Assisted Script Generation — From Vendor Spec to Running Pipeline
+## 🤖 AI-Assisted Script Generation
 
-Every data team eventually receives a vendor spec: a PDF, Excel sheet, or Word doc describing a file format. Normally someone manually reads it, creates a table definition, writes the ETL script, and discovers the edge cases at 2 AM on the first load.
+Vendor file specs usually arrive as PDFs, spreadsheets, Word docs, or sample files. The extension can turn those specs into an ETL-SQL starter pipeline with schema definitions, validation gates, quarantine scaffolding, and governance tags.
 
-ETL-SQL has a better workflow.
-
-### ⚡ Integrated VS Code Workflow
-
-The extension integrates this entire workflow into a single-click editor experience. 
-
-#### 1. Configure Your AI Settings
-Configure your AI credentials in your VS Code settings (`settings.json`):
-```json
-{
-  "etlsql.ai.provider": "Gemini", // Gemini, Anthropic, OpenAI, OpenRouter, VS Code Chat Extensions (Copilot/Claude/etc.), or Custom
-  "etlsql.ai.apiKey": "YOUR_API_KEY", // API Key (Not required for VS Code Chat Extensions)
-  "etlsql.ai.model": "gemini-1.5-flash", // Optional: target model (or specify 'claude'/'gpt-4o' to target a local chat extension)
-  "etlsql.ai.endpoint": "" // Optional: custom endpoint URL
-}
-```
-
-> [!NOTE]
-> **No API Key Required for Chat Extensions**: If you select `VS Code Chat Extensions (Copilot/Claude/etc.)` as your provider, the extension queries the models provided by extensions already active in your editor (e.g. GitHub Copilot, local chat extensions). VS Code handles authentication for you—no API key needed! If you have multiple extensions active, write a keyword (e.g., `claude` or `gpt-4o`) in the `model` setting to select which model should handle the spec. Note that chat extensions only support text-based files (CSV, JSON, TXT). For binary formats like PDF or Excel sheets, use direct providers (Gemini or Anthropic) with an API key.
-
-#### 2. Run the Command
-1. Right-click any specification file (PDF, Excel, CSV, Word, JSON, TXT) in the VS Code File Explorer and select **ETL-SQL: Generate Script from Spec** (or open the Command Palette `Ctrl+Shift+P` and select it).
-2. If you select a PDF, the command will prompt you to optionally run `extract-spec` to trim administrative pages first, optimizing prompt token usage.
-3. The extension automatically loads the prompt instructions, transmits the spec to your configured AI provider, validates the response, runs `gen-script` under the hood, and asks where to save your new `.etlsql` script.
-4. The generated script opens instantly, ready for you to write your extraction query.
-
----
-
-### 🛠️ CLI Fallback (Headless / Manual Flow)
-
-For headless pipelines or local terminal usage, you can still run the underlying commands manually:
-
-**Step 1 — Run the extraction prompt**
-Paste the structured prompt instructions ([`data_spec_parser_instructions.md`](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/data_spec_parser_instructions.md)) along with your spec file into your AI assistant. The assistant returns a standardized JSON contract:
-
-```json
-{
-  "pipeline_name": "daily_vendor_feed",
-  "metadata": { "classification": "confidential", "owner": "data_team" },
-  "source": { "format": "CSV", "delimiter": "comma", "has_header": true },
-  "schema": [
-    { "column_name": "customer_id", "type_family": "INT",     "is_key": true,  "nullable": false },
-    { "column_name": "email",       "type_family": "VARCHAR", "max_length": 200, "tags": ["pii"], "validation_regex": "^[^@]+@[^@]+\\.[^@]+$" },
-    { "column_name": "amount",      "type_family": "DECIMAL", "precision": 10, "scale": 2 }
-  ]
-}
-```
-
-The AI automatically identifies PII/PHI/PCI columns, maps vendor type names to ETL-SQL types, extracts validation regex from format rules, and flags ambiguous fields with a `confidence` score.
-
-**Step 2 — Generate the script boilerplate**
-
-```bash
-etl-sql gen-script vendor_feed.json
-```
-
-The engine reads the JSON contract and produces an `.etlsql` script complete with:
-- Connection declarations for source and destination
-- `CREATE TABLE` with correct types, lengths, and nullability
-- Inline `/* @pii; @d: ... */` governance tags on every tagged column
-- `ASSERT` validation gates for non-nullable fields, regex patterns, and allowed values
-- A quarantine branch that routes bad rows aside instead of failing the whole batch
-- Lineage tags seeded from the spec's classification and ownership fields
-- Review notes embedded as comments wherever the AI's `confidence` was below threshold
-
-A first draft with schema validation, governance tags, and quarantine scaffolding — instead of a blank file.
+Configure `etlsql.ai.*`, then right-click a PDF, Excel, CSV, Word, JSON, or TXT spec and run **ETL-SQL: Generate Script from Spec**. The same workflow is available headlessly through the `gen-script` CLI flow. See [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Spec_Driven_Development.md) for provider setup, supported file types, and the JSON contract format.
 
 ---
 
@@ -427,7 +279,7 @@ Mix and match any of these freely within a single script.
 
 **1. Install This Extension**
 
-Install **ETL-SQL Developer Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine (`ETL-SQL.exe`), language server (`ETL-SQL-LSP.exe`), and report CLI (`ETL-SQL-Report.exe`) are included. No separate SDK download required.
+Install **ETL-SQL Tools** from the VS Code Marketplace. The VSIX bundles everything you need to start immediately — the engine (`ETL-SQL.exe`), language server (`ETL-SQL-LSP.exe`), and report CLI (`ETL-SQL-Report.exe`) are included. No separate SDK download required.
 
 **Want the full platform?** Download the optional extras from [github.com/etl-sql/ETL-SQL](https://github.com/etl-sql/ETL-SQL):
 - **Terminal IDE** (`ETL-SQL-TUI.exe`) — full-featured TUI editor with autocomplete and results grid for headless environments
@@ -471,6 +323,10 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | `etlsql.format.onClauseOnNewLine` | `false` | Place the ON clause of a JOIN on a new line. |
 | `etlsql.format.caseWhenThenNewLine` | `true` | Place THEN on a new line in CASE WHEN expressions. |
 | `etlsql.format.breakoutWindowFunctions` | `true` | Break PARTITION BY / ORDER BY onto separate lines in window functions. |
+| `etlsql.ai.provider` | `"Gemini"` | AI provider for spec-driven script generation. |
+| `etlsql.ai.apiKey` | `""` | API key for the selected AI provider. Not required for VS Code Chat Extensions. |
+| `etlsql.ai.model` | `""` | Optional model override for spec-driven script generation. |
+| `etlsql.ai.endpoint` | `""` | Optional custom endpoint for compatible providers. |
 
 ---
 

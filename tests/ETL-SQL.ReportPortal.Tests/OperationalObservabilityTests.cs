@@ -114,7 +114,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(256, m.SnapshotStorageBytes);
         Assert.Equal(2, m.ActiveSubscriptions);
         Assert.Equal(1, m.SmtpConnections);
-        Assert.Equal("single-active-instance", m.Topology);
+        Assert.Equal("shared-state-ha", m.Topology);
     }
 
     [Fact]
