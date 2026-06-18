@@ -67,8 +67,8 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, first);
         await WaitForTerminalAsync(service, second);
 
-        Assert.Null(await service.GetActiveRefreshJobIdAsync(1));
-        Assert.Null(await service.GetActiveRefreshJobIdAsync(2));
+        await WaitForNoActiveRefreshAsync(service, 1);
+        await WaitForNoActiveRefreshAsync(service, 2);
 
         // The debounce entry must be gone (a new job id is issued) and the gate must still
         // have capacity (the new job also runs to a terminal state instead of queueing forever).
@@ -391,6 +391,52 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, j2);
     }
 
+    /// <summary>With a per-group cap below the global cap, members of one busy group cannot
+    /// consume every slot — another group still gets one.</summary>
+    [Fact]
+    public async Task PerGroupLimit_OneGroupCannotStarveAnother()
+    {
+        var (config, provider) = await CreateGroupFairnessServicesAsync(globalCap: 2, perUserCap: 2, perGroupCap: 1);
+        await using var services = provider;
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(config, provider.GetRequiredService<IServiceScopeFactory>());
+
+        var sharedA = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+        var sharedB = await service.EnqueueExecutionAsync(reportId: 2, userId: 8, scriptPath);
+        var other = await service.EnqueueExecutionAsync(reportId: 3, userId: 9, scriptPath);
+
+        await WaitForRunningCountAsync(service, 2, sharedA, sharedB, other);
+
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(other))!.Status);
+        var sharedARunning = (await service.GetAsync(sharedA))!.Status == JobStatus.Running;
+        var sharedBRunning = (await service.GetAsync(sharedB))!.Status == JobStatus.Running;
+        Assert.True(sharedARunning ^ sharedBRunning, "the shared group should hold exactly one execution slot");
+
+        await WaitForTerminalAsync(service, sharedA);
+        await WaitForTerminalAsync(service, sharedB);
+        await WaitForTerminalAsync(service, other);
+    }
+
+    /// <summary>Administrators are exempt from both user and group caps.</summary>
+    [Fact]
+    public async Task Administrator_BypassesGroupLimit()
+    {
+        var (config, provider) = await CreateGroupFairnessServicesAsync(globalCap: 2, perUserCap: 1, perGroupCap: 1);
+        await using var services = provider;
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(config, provider.GetRequiredService<IServiceScopeFactory>());
+
+        var j1 = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath, isAdministrator: true);
+        var j2 = await service.EnqueueExecutionAsync(reportId: 2, userId: 7, scriptPath, isAdministrator: true);
+
+        await WaitForRunningCountAsync(service, 2, j1, j2);
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(j1))!.Status);
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(j2))!.Status);
+
+        await WaitForTerminalAsync(service, j1);
+        await WaitForTerminalAsync(service, j2);
+    }
+
     private async Task<string> HangScriptAsync()
     {
         var scriptPath = Path.Combine(_tempDir, "scripts", "report.rptsql");
@@ -398,7 +444,7 @@ public class ExecutionJobServiceTests : IDisposable
         return scriptPath;
     }
 
-    private PortalConfig FairnessConfig(int globalCap, int perUserCap, int timeoutSeconds = 2) => new()
+    private PortalConfig FairnessConfig(int globalCap, int perUserCap, int timeoutSeconds = 2, int perGroupCap = 0) => new()
     {
         DatabasePath = Path.Combine(_tempDir, "portal.db"),
         ScriptRootPath = Path.Combine(_tempDir, "scripts"),
@@ -408,13 +454,47 @@ public class ExecutionJobServiceTests : IDisposable
         {
             MaxConcurrentReportExecutions = globalCap,
             MaxConcurrentExecutionsPerUser = perUserCap,
+            MaxConcurrentExecutionsPerGroup = perGroupCap,
             ExecutionTimeoutSeconds = timeoutSeconds
         }
     };
 
-    private static ExecutionJobService HangingService(PortalConfig config)
+    private async Task<(PortalConfig Config, ServiceProvider Provider)> CreateGroupFairnessServicesAsync(
+        int globalCap,
+        int perUserCap,
+        int perGroupCap)
     {
-        var scopeFactory = new ServiceCollection().BuildServiceProvider()
+        var config = FairnessConfig(globalCap, perUserCap, timeoutSeconds: 2, perGroupCap: perGroupCap);
+        var services = new ServiceCollection()
+            .AddDbContext<PortalDbContext>(options =>
+                options.UseSqlite($"Data Source={config.DatabasePath}"))
+            .BuildServiceProvider();
+
+        await using var scope = services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var shared = new Group { Name = "shared-exec-group" };
+        var other = new Group { Name = "other-exec-group" };
+        db.Groups.AddRange(shared, other);
+        db.Users.AddRange(
+            new PortalUser { Id = 7, UserName = "shared-a", NormalizedUserName = "SHARED-A" },
+            new PortalUser { Id = 8, UserName = "shared-b", NormalizedUserName = "SHARED-B" },
+            new PortalUser { Id = 9, UserName = "other-a", NormalizedUserName = "OTHER-A" });
+        await db.SaveChangesAsync();
+
+        db.UserGroups.AddRange(
+            new UserGroup { UserId = 7, GroupId = shared.Id },
+            new UserGroup { UserId = 8, GroupId = shared.Id },
+            new UserGroup { UserId = 9, GroupId = other.Id });
+        await db.SaveChangesAsync();
+
+        return (config, services);
+    }
+
+    private static ExecutionJobService HangingService(PortalConfig config, IServiceScopeFactory? scopeFactory = null)
+    {
+        scopeFactory ??= new ServiceCollection().BuildServiceProvider()
             .GetRequiredService<IServiceScopeFactory>();
         var sessions = new SessionCache(config, scopeFactory, NullLogger<SessionCache>.Instance);
         var channel = new HttpJobChannelClient(
@@ -460,6 +540,20 @@ public class ExecutionJobServiceTests : IDisposable
         Assert.Fail(
             $"Job {jobId} did not reach a terminal state within 15s " +
             $"(status={(await service.GetAsync(jobId))?.Status}).");
+    }
+
+    private static async Task WaitForNoActiveRefreshAsync(ExecutionJobService service, int reportId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await service.GetActiveRefreshJobIdAsync(reportId) is null)
+                return;
+
+            await Task.Delay(25);
+        }
+
+        Assert.Null(await service.GetActiveRefreshJobIdAsync(reportId));
     }
 
     private sealed class NeverRespondingHandler : HttpMessageHandler

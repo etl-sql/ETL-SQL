@@ -179,6 +179,12 @@ public class ResourcesConfig
     /// Minimum effective value is 1.</summary>
     public int MaxConcurrentExecutionsPerUser { get; set; } = 2;
 
+    /// <summary>Workload fairness (P2.6): when greater than zero, the most shared execution
+    /// slots members of the same portal group may hold at once. Users in multiple groups must
+    /// satisfy every group quota; users with no groups are governed by the user/global gates.
+    /// Administrators are exempt.</summary>
+    public int MaxConcurrentExecutionsPerGroup { get; set; }
+
     public int ExecutionTimeoutSeconds { get; set; } = 300;
     public int SessionCacheMaxSize { get; set; } = 50;
     public int SessionCacheTtlMinutes { get; set; } = 30;

@@ -51,6 +51,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     /// <summary>Per-user concurrency limiters (workload fairness, P2.6). Keyed by user id; one
     /// gate per user with <c>MaxConcurrentExecutionsPerUser</c> permits.</summary>
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _userGates = new();
+
+    /// <summary>Per-group concurrency limiters (workload fairness, P2.6). A user in multiple
+    /// groups must acquire all group gates in sorted order before consuming a global slot.</summary>
+    private readonly ConcurrentDictionary<int, SemaphoreSlim> _groupGates = new();
     private readonly PortalConfig _config;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionJobService> _log;
@@ -199,22 +203,26 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         // shared slots. Acquire the per-user slot FIRST and without holding a global permit, so a
         // capped user queues without blocking the shared pool. Administrators are exempt.
         var userGate = job.IsAdministrator ? null : GetUserGate(job.UserId);
+        var groupGates = new List<SemaphoreSlim>();
         try
         {
             if (userGate is not null)
                 await userGate.WaitAsync(cts.Token).ConfigureAwait(false);
-            try
+
+            foreach (var groupId in await GetExecutionGroupIdsAsync(job, cts.Token).ConfigureAwait(false))
             {
-                await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
+                var groupGate = GetGroupGate(groupId);
+                await groupGate.WaitAsync(cts.Token).ConfigureAwait(false);
+                groupGates.Add(groupGate);
             }
-            catch
-            {
-                userGate?.Release();
-                throw;
-            }
+
+            await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
+            ReleaseGates(groupGates);
+            userGate?.Release();
+
             // Timed out while queued — no global permit was retained, so only the job
             // bookkeeping needs unwinding (the refresh debounce must clear).
             job.Status = JobStatus.Cancelled;
@@ -225,6 +233,12 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled while queued for an execution slot", job.Id);
             return;
+        }
+        catch
+        {
+            ReleaseGates(groupGates);
+            userGate?.Release();
+            throw;
         }
 
         _runningJobCancellations[job.Id] = cts;
@@ -407,6 +421,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _runningJobCancellations.TryRemove(job.Id, out _);
             _jobCancellationReasons.TryRemove(job.Id, out _);
             _gate.Release();
+            ReleaseGates(groupGates);
             userGate?.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
@@ -448,6 +463,38 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     {
         var limit = Math.Max(1, _config.Resources.MaxConcurrentExecutionsPerUser);
         return _userGates.GetOrAdd(userId, _ => new SemaphoreSlim(limit, limit));
+    }
+
+    private SemaphoreSlim GetGroupGate(int groupId)
+    {
+        var limit = Math.Max(1, _config.Resources.MaxConcurrentExecutionsPerGroup);
+        return _groupGates.GetOrAdd(groupId, _ => new SemaphoreSlim(limit, limit));
+    }
+
+    private async Task<IReadOnlyList<int>> GetExecutionGroupIdsAsync(ExecutionJob job, CancellationToken ct)
+    {
+        if (job.IsAdministrator || _config.Resources.MaxConcurrentExecutionsPerGroup <= 0)
+            return [];
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        if (db is null)
+            return [];
+
+        return await db.UserGroups
+            .AsNoTracking()
+            .Where(value => value.UserId == job.UserId)
+            .Select(value => value.GroupId)
+            .Distinct()
+            .OrderBy(value => value)
+            .ToListAsync(ct);
+    }
+
+    private static void ReleaseGates(List<SemaphoreSlim> gates)
+    {
+        for (var i = gates.Count - 1; i >= 0; i--)
+            gates[i].Release();
+        gates.Clear();
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

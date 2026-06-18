@@ -329,3 +329,8 @@ release begins.
 - [ ] **P2.6 Certify mixed workloads under load:** interactive, scheduled, refresh, and subscription,
   with per-user **and per-group** quotas, queue fairness, administrative overrides, and
   node-capacity-aware claims. (Per-user fairness shipped in v0.11.0; per-group + weighting are the residual.)
+  *(partial)* Portal execution jobs now support an opt-in `Portal:Resources:MaxConcurrentExecutionsPerGroup`
+  quota. Non-admin jobs acquire per-user, per-group, then global execution gates; admins bypass both
+  user and group gates. Tests cover group starvation prevention and admin override. Remaining: mixed
+  interactive/scheduled/refresh/subscription load certification, queue weighting, and cross-node
+  capacity-aware claims under load.
