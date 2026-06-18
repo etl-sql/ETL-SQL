@@ -104,6 +104,34 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.Contains(foldersAfterRestart, f => f.Id == created.Id && f.Path == created.Path);
     }
 
+    [Fact]
+    public async Task ConflictingFolderAdministration_ConvergesAcrossProcesses()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b");
+        _processes.Add(first);
+        _processes.Add(second);
+
+        await first.WaitForHealthzAsync();
+        await second.WaitForHealthzAsync();
+
+        using var client = new HttpClient();
+        var token = await BootstrapAdminTokenAsync(client, first);
+        var folderName = $"conflict-{Guid.NewGuid():N}";
+        var body = new { name = folderName, parentId = (int?)null };
+
+        var results = await Task.WhenAll(
+            SendJsonForStatusAsync(client, HttpMethod.Post, $"{first.BaseUrl}/api/folders", token, body),
+            SendJsonForStatusAsync(client, HttpMethod.Post, $"{second.BaseUrl}/api/folders", token, body));
+
+        Assert.Contains(HttpStatusCode.Created, results);
+        Assert.Contains(HttpStatusCode.Conflict, results);
+
+        var folders = await GetJsonAsync<List<FolderDto>>(client, $"{first.BaseUrl}/api/folders", token);
+        Assert.Single(folders, f => f.Path == $"/{folderName}");
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -220,6 +248,24 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         if (expected == HttpStatusCode.NoContent || response.Content.Headers.ContentLength == 0)
             return default!;
         return (await response.Content.ReadFromJsonAsync<T>(Json))!;
+    }
+
+    private static async Task<HttpStatusCode> SendJsonForStatusAsync(
+        HttpClient client,
+        HttpMethod method,
+        string url,
+        string? token,
+        object body)
+    {
+        using var request = new HttpRequestMessage(method, url)
+        {
+            Content = JsonContent.Create(body, options: Json)
+        };
+        if (!string.IsNullOrWhiteSpace(token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        using var response = await client.SendAsync(request);
+        return response.StatusCode;
     }
 
     private sealed record SharedRoots(

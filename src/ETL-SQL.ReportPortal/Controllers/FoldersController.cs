@@ -77,7 +77,16 @@ public class FoldersController(
             OwnerId = CurrentUserId
         };
         db.Folders.Add(folder);
-        await db.SaveChangesAsync();
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            if (await db.Folders.AsNoTracking().AnyAsync(f => f.Path == path))
+                return Conflict(new { error = $"Folder '{path}' already exists" });
+            throw;
+        }
         await audit.LogAsync(CurrentUserId, "CREATE_FOLDER", "Folder", folder.Id.ToString(), path);
 
         return CreatedAtAction(nameof(GetById), new { id = folder.Id },

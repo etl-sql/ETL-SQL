@@ -321,6 +321,11 @@ release begins.
 - [ ] **P2.3 True multi-OS-process tests** against PostgreSQL + shared storage (separate processes, not
   in-process proxies): simultaneous claims, cancellation, permission changes, restart recovery,
   conflicting administration, failover recovery, and task reclamation. (v0.11.0 deferred this here.)
+  *(partial)* Added a Docker/PostgreSQL-backed OS-process Portal harness that verifies two real Portal
+  processes can boot against one shared catalog/storage root, see each other's catalog writes, survive
+  a process restart, and converge a conflicting folder-admin race to one `201 Created` plus one
+  `409 Conflict`. Remaining: simultaneous execution claims, cancellation/failover recovery, permission
+  mutation races, and task reclamation.
 - [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)
