@@ -189,6 +189,72 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.Contains(entry.Permission, new[] { FolderPermission.Read, FolderPermission.Manage });
     }
 
+    [Fact]
+    public async Task SimultaneousRefreshClaims_ConvergeAcrossProcesses()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b");
+        _processes.Add(first);
+        _processes.Add(second);
+
+        await first.WaitForHealthzAsync();
+        await second.WaitForHealthzAsync();
+
+        var scriptPath = Path.Combine(shared.Scripts, $"claim-race-{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            WAITFOR DELAY '00:00:02';
+            CREATE VISUAL ClaimRace AS TABLE (
+                SOURCE = (SELECT 42 AS Value),
+                MAPPINGS (Value = Value)
+            );
+            """);
+
+        using var client = new HttpClient();
+        var token = await BootstrapAdminTokenAsync(client, first);
+        var folder = await SendJsonAsync<FolderDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/folders",
+            token,
+            new { name = $"claim-race-{Guid.NewGuid():N}", parentId = (int?)null },
+            HttpStatusCode.Created);
+        var report = await SendJsonAsync<ReportDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports",
+            token,
+            new
+            {
+                folderId = folder.Id,
+                name = $"Claim Race {Guid.NewGuid():N}",
+                description = "",
+                scriptPath
+            },
+            HttpStatusCode.Created);
+
+        var claims = await Task.WhenAll(
+            SendJsonAsync<RefreshDto>(
+                client,
+                HttpMethod.Post,
+                $"{first.BaseUrl}/api/reports/{report.Id}/refresh",
+                token,
+                new { },
+                HttpStatusCode.Accepted),
+            SendJsonAsync<RefreshDto>(
+                client,
+                HttpMethod.Post,
+                $"{second.BaseUrl}/api/reports/{report.Id}/refresh",
+                token,
+                new { },
+                HttpStatusCode.Accepted));
+
+        Assert.Equal(claims[0].JobId, claims[1].JobId);
+
+        var job = await GetJsonAsync<JobDto>(client, $"{first.BaseUrl}/api/jobs/{claims[0].JobId}", token);
+        Assert.Equal(claims[0].JobId, job.JobId);
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -338,6 +404,9 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     private sealed record HealthzResponse(string Status, Dictionary<string, string> Checks);
     private sealed record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt);
     private sealed record FolderDto(int Id, int? ParentId, string Name, string Path, List<FolderDto> Children, long Version);
+    private sealed record ReportDto(int Id, int FolderId, string Name);
+    private sealed record RefreshDto(string JobId, bool AlreadyRunning);
+    private sealed record JobDto(string JobId, string Status, string? Error);
     private sealed record GroupDto(
         int Id,
         string Name,
