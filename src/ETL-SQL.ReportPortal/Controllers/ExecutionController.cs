@@ -78,6 +78,30 @@ public class ExecutionController(
             job.ManifestPath, job.Error));
     }
 
+    [HttpDelete("jobs/{jobId}")]
+    public async Task<IActionResult> CancelJob(string jobId)
+    {
+        var job = await jobService.GetAsync(jobId);
+        if (job is null) return NotFound();
+        if (!IsAdmin && job.UserId != CurrentUserId) return Forbid();
+
+        var reason = $"Execution was cancelled by user {CurrentUserId}.";
+        var cancelled = await jobService.CancelAsync(jobId, reason);
+        if (!cancelled)
+        {
+            var current = await jobService.GetAsync(jobId);
+            return Conflict(new
+            {
+                jobId,
+                status = current?.Status.ToString() ?? "Unknown",
+                error = current?.Error
+            });
+        }
+
+        await audit.LogAsync(CurrentUserId, "CANCEL_EXECUTION_JOB", "ExecutionJob", jobId);
+        return Accepted(new { jobId, status = JobStatus.Cancelled.ToString() });
+    }
+
     // ── 2.2  GET /api/reports/{id}/snapshot ──────────────────────────────────
 
     [HttpGet("reports/{id:int}/snapshot")]

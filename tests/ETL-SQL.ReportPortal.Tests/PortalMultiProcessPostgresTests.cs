@@ -359,6 +359,77 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.False(recoveredRefresh.AlreadyRunning);
     }
 
+    [Fact]
+    public async Task CrossProcessCancellation_CancelsRunningRefresh()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b");
+        _processes.Add(first);
+        _processes.Add(second);
+
+        await first.WaitForHealthzAsync();
+        await second.WaitForHealthzAsync();
+
+        var scriptPath = Path.Combine(shared.Scripts, $"cancel-{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            WAITFOR DELAY '00:00:10';
+            CREATE VISUAL CancelRace AS TABLE (
+                SOURCE = (SELECT 9 AS Value),
+                MAPPINGS (Value = Value)
+            );
+            """);
+
+        using var client = new HttpClient();
+        var token = await BootstrapAdminTokenAsync(client, first);
+        var folder = await SendJsonAsync<FolderDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/folders",
+            token,
+            new { name = $"cancel-{Guid.NewGuid():N}", parentId = (int?)null },
+            HttpStatusCode.Created);
+        var report = await SendJsonAsync<ReportDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports",
+            token,
+            new
+            {
+                folderId = folder.Id,
+                name = $"Cancel Race {Guid.NewGuid():N}",
+                description = "",
+                scriptPath
+            },
+            HttpStatusCode.Created);
+
+        var refresh = await SendJsonAsync<RefreshDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports/{report.Id}/refresh",
+            token,
+            new { },
+            HttpStatusCode.Accepted);
+        await WaitForJobStatusAsync(client, first, token, refresh.JobId, "Running");
+
+        var cancelStatus = await SendForStatusAsync(
+            client,
+            HttpMethod.Delete,
+            $"{second.BaseUrl}/api/jobs/{refresh.JobId}",
+            token);
+        Assert.Equal(HttpStatusCode.Accepted, cancelStatus);
+
+        var cancelled = await WaitForJobStatusAsync(client, second, token, refresh.JobId, "Cancelled");
+        Assert.Contains("cancelled", cancelled.Error ?? "", StringComparison.OrdinalIgnoreCase);
+
+        var reportState = await GetJsonAsync<ReportDto>(
+            client,
+            $"{second.BaseUrl}/api/reports/{report.Id}",
+            token);
+        Assert.Equal("Cancelled", reportState.LastRefreshStatus);
+        Assert.Contains("cancelled", reportState.LastRefreshError ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -493,6 +564,20 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         if (ifMatchVersion is not null)
             request.Headers.TryAddWithoutValidation("If-Match", $"\"{ifMatchVersion.Value}\"");
+
+        using var response = await client.SendAsync(request);
+        return response.StatusCode;
+    }
+
+    private static async Task<HttpStatusCode> SendForStatusAsync(
+        HttpClient client,
+        HttpMethod method,
+        string url,
+        string? token)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        if (!string.IsNullOrWhiteSpace(token))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
         using var response = await client.SendAsync(request);
         return response.StatusCode;

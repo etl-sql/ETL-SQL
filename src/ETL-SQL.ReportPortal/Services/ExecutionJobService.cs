@@ -104,6 +104,47 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         return stored is null ? null : FromEntity(stored);
     }
 
+    public async Task<bool> CancelAsync(string jobId, string reason)
+    {
+        var now = DateTime.UtcNow;
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        if (db is null)
+            return false;
+
+        var stored = await db.PortalExecutionJobs.FindAsync(jobId);
+        if (stored is null)
+            return false;
+
+        if (stored.Status is "Completed" or "Failed" or "Cancelled")
+            return false;
+
+        stored.Status = JobStatus.Cancelled.ToString();
+        stored.CompletedAt = now;
+        stored.Error = reason;
+        await db.SaveChangesAsync();
+
+        if (_jobs.TryGetValue(jobId, out var local))
+        {
+            local.Status = JobStatus.Cancelled;
+            local.CompletedAt = now;
+            local.Error = reason;
+        }
+
+        if (_runningJobCancellations.TryGetValue(jobId, out var cts))
+        {
+            _jobCancellationReasons[jobId] = reason;
+            try { cts.Cancel(); } catch (ObjectDisposedException) { }
+        }
+
+        if (stored.Kind == "Refresh")
+        {
+            _activeRefreshes.TryRemove(new KeyValuePair<int, string>(stored.ReportId, stored.Id));
+            await UpdateReportRefreshStatusAsync(FromEntity(stored), "Cancelled", reason);
+        }
+        return true;
+    }
+
     private void EvictExpiredJobs()
     {
         var cutoff = DateTime.UtcNow - CompletedJobRetention;
@@ -246,9 +287,15 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             throw;
         }
 
-        _runningJobCancellations[job.Id] = cts;
+        Task? cancellationMonitor = null;
         try
         {
+            if (await ApplyPersistedCancellationAsync(job.Id, cts).ConfigureAwait(false))
+                throw new OperationCanceledException(cts.Token);
+
+            _runningJobCancellations[job.Id] = cts;
+            cancellationMonitor = MonitorPersistedCancellationAsync(job.Id, cts);
+
             job.Status = JobStatus.Running;
             job.StartedAt = DateTime.UtcNow;
             await PersistJobAsync(job);
@@ -423,6 +470,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
         finally
         {
+            if (!cts.IsCancellationRequested)
+                cts.Cancel();
             _runningJobCancellations.TryRemove(job.Id, out _);
             _jobCancellationReasons.TryRemove(job.Id, out _);
             _gate.Release();
@@ -430,6 +479,44 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             userGate?.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+
+        if (cancellationMonitor is not null)
+            await cancellationMonitor.ConfigureAwait(false);
+    }
+
+    private async Task MonitorPersistedCancellationAsync(string jobId, CancellationTokenSource cts)
+    {
+        try
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(250, cts.Token).ConfigureAwait(false);
+                if (await ApplyPersistedCancellationAsync(jobId, cts).ConfigureAwait(false))
+                    return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The local run finished or was cancelled through another path.
+        }
+    }
+
+    private async Task<bool> ApplyPersistedCancellationAsync(string jobId, CancellationTokenSource cts)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetService<PortalDbContext>();
+        if (db is null)
+            return false;
+
+        var stored = await db.PortalExecutionJobs.AsNoTracking()
+            .FirstOrDefaultAsync(value => value.Id == jobId, cts.Token)
+            .ConfigureAwait(false);
+        if (stored?.Status != JobStatus.Cancelled.ToString())
+            return false;
+
+        _jobCancellationReasons[jobId] = stored.Error ?? "Execution was cancelled.";
+        try { cts.Cancel(); } catch (ObjectDisposedException) { }
+        return true;
     }
 
     public Task OnNodeLeaseLostAsync(string nodeId, string role, string reason, CancellationToken ct)
