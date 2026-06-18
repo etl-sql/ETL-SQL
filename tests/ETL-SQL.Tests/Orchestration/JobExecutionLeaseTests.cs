@@ -146,7 +146,35 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(await _store.TryAcquireJobLeaseAsync("lease_once", "verifier", TimeSpan.FromMinutes(5)));
         }
 
-        private static SchedulerService BuildScheduler(IJobHistoryStore store, IScriptExecutor executor)
+        [Fact]
+        public async Task HealthySchedulerClaimsDueJobWhenPeerIsOverloaded()
+        {
+            await _store.InitializeAsync();
+            await _store.SaveJobAsync(MakeJob("capacity_claim"));
+            var job = (await _store.GetAllJobsAsync()).Single(j => j.Name == "capacity_claim");
+
+            var overloadedExecutor = new CountingExecutor();
+            var healthyExecutor = new CountingExecutor();
+            var overloadedScheduler = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                overloadedExecutor,
+                new FixedCapacityMonitor(isOverloaded: true));
+            var healthyScheduler = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                healthyExecutor,
+                new FixedCapacityMonitor(isOverloaded: false));
+
+            await InvokeExecuteJobAsync(overloadedScheduler, job);
+            await InvokeExecuteJobAsync(healthyScheduler, job);
+
+            Assert.Equal(0, overloadedExecutor.Count);
+            Assert.Equal(1, healthyExecutor.Count);
+        }
+
+        private static SchedulerService BuildScheduler(
+            IJobHistoryStore store,
+            IScriptExecutor executor,
+            INodeCapacityMonitor? capacityMonitor = null)
         {
             var services = new ServiceCollection();
             services.AddSingleton(executor);
@@ -166,7 +194,8 @@ namespace ETL_SQL.Tests.Orchestration
                 new Mock<ILogger<SchedulerService>>().Object,
                 throttle,
                 mockConfig.Object,
-                new Mock<ISessionStateManager>().Object);
+                new Mock<ISessionStateManager>().Object,
+                capacityMonitor);
         }
 
         private static Task InvokeExecuteJobAsync(SchedulerService service, JobDefinition job)
@@ -192,6 +221,19 @@ namespace ETL_SQL.Tests.Orchestration
                 await Task.Delay(150, cancellationToken);
                 return new ScriptExecutionResult(true, 1);
             }
+        }
+
+        private sealed class FixedCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor
+        {
+            public NodeCapacitySnapshot Capture() => new(
+                WorkingSetBytes: 128 * 1024 * 1024,
+                GcHeapBytes: 64 * 1024 * 1024,
+                TotalAvailableMemoryBytes: 1024L * 1024 * 1024,
+                MemoryLoadPercent: isOverloaded ? 99 : 10,
+                ProcessCpuPercent: isOverloaded ? 99 : 1,
+                ProcessorCount: Environment.ProcessorCount,
+                IsOverloaded: isOverloaded,
+                CapturedAtUtc: DateTime.UtcNow);
         }
     }
 }

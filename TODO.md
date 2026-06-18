@@ -354,5 +354,7 @@ release begins.
   user and group gates. Portal execution starts also honor node-capacity overload before consuming
   execution slots, matching the scheduler's capacity-aware lease-claim behavior. Tests cover user/group
   starvation prevention, admin override, overloaded nodes leaving queued work pending until capacity
-  recovers, and mixed interactive execution + refresh contention with refresh debounce active. Remaining:
-  scheduled/subscription load certification, queue weighting, and cross-node capacity-aware claims under load.
+  recovers, mixed interactive execution + refresh contention with refresh debounce active, and
+  cross-node scheduler claims where an overloaded node leaves a due job for a healthy peer sharing the
+  durable store. Remaining: scheduled/subscription load certification, queue weighting, and heavier
+  cross-node capacity-aware claims under load.
