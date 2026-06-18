@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -32,6 +33,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly IConfiguration _configuration;
         private readonly ILogger<NodeHeartbeatService> _logger;
         private readonly IReadOnlyList<INodeLeaseLossHandler> _leaseLossHandlers;
+        private readonly INodeCapacityMonitor _capacityMonitor;
 
         /// <summary>Stable, process-unique node id (machine:pid:guid), like the scheduler's lease owner id.</summary>
         public string NodeId { get; } =
@@ -45,13 +47,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
             IConfiguration configuration,
             ILogger<NodeHeartbeatService> logger,
             string role,
-            IEnumerable<INodeLeaseLossHandler>? leaseLossHandlers = null)
+            IEnumerable<INodeLeaseLossHandler>? leaseLossHandlers = null,
+            INodeCapacityMonitor? capacityMonitor = null)
         {
             _store = store;
             _configuration = configuration;
             _logger = logger;
             Role = role;
             _leaseLossHandlers = leaseLossHandlers?.ToList() ?? [];
+            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -65,12 +69,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             var interval = TimeSpan.FromSeconds(Math.Max(minIntervalSeconds, ttl.TotalSeconds / 3));
             var leaseExpiresAtUtc = DateTime.MinValue;
             var leaseLost = false;
-            var metadata = JsonSerializer.Serialize(new
-            {
-                machine = Environment.MachineName,
-                pid = Environment.ProcessId,
-                startedUtc = DateTime.UtcNow.ToString("O"),
-            });
+            var startedUtc = DateTime.UtcNow.ToString("O");
 
             _logger.LogInformation(
                 "Node heartbeat started: {NodeId} role={Role} ttl={Ttl}s interval={Interval}s.",
@@ -80,6 +79,24 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 try
                 {
+                    var capacity = _capacityMonitor.Capture();
+                    var metadata = JsonSerializer.Serialize(new
+                    {
+                        machine = Environment.MachineName,
+                        pid = Environment.ProcessId,
+                        startedUtc,
+                        capacity = new
+                        {
+                            capacity.WorkingSetBytes,
+                            capacity.GcHeapBytes,
+                            capacity.TotalAvailableMemoryBytes,
+                            capacity.MemoryLoadPercent,
+                            capacity.ProcessCpuPercent,
+                            capacity.ProcessorCount,
+                            capacity.IsOverloaded,
+                            capturedUtc = capacity.CapturedAtUtc.ToString("O")
+                        }
+                    });
                     await _store.RegisterOrRenewNodeAsync(NodeId, Role, ttl, metadata);
                     leaseExpiresAtUtc = DateTime.UtcNow.Add(ttl);
                     if (leaseLost)
@@ -162,12 +179,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// </summary>
         public static IServiceCollection AddNodeHeartbeat(this IServiceCollection services, string role)
         {
+            services.TryAddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddHostedService(sp => new NodeHeartbeatService(
                 sp.GetRequiredService<INodeRegistryStore>(),
                 sp.GetRequiredService<IConfiguration>(),
                 sp.GetRequiredService<ILogger<NodeHeartbeatService>>(),
                 role,
-                sp.GetServices<INodeLeaseLossHandler>()));
+                sp.GetServices<INodeLeaseLossHandler>(),
+                sp.GetRequiredService<INodeCapacityMonitor>()));
             return services;
         }
     }

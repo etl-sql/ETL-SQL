@@ -167,6 +167,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IWriteEpochStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IClusterLockStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
+            services.AddSingleton<INodeCapacityMonitor, NodeCapacityMonitor>();
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
             services.AddSingleton<IJobManager>(sp => sp.GetRequiredService<SchedulerService>());

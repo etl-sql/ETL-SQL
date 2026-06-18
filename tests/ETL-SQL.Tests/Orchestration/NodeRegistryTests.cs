@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
@@ -116,6 +117,11 @@ namespace ETL_SQL.Tests.Orchestration
                 }
                 Assert.NotNull(node);
                 Assert.Equal("Portal", node!.Role);
+                using var metadata = JsonDocument.Parse(node.Metadata!);
+                Assert.True(metadata.RootElement.TryGetProperty("capacity", out var capacity));
+                Assert.True(capacity.TryGetProperty("MemoryLoadPercent", out _));
+                Assert.True(capacity.TryGetProperty("ProcessCpuPercent", out _));
+                Assert.True(capacity.TryGetProperty("IsOverloaded", out _));
             }
             finally
             {

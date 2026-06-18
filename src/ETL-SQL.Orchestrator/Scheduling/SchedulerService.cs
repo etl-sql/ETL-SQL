@@ -28,6 +28,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly IConfiguration _configuration;
         private readonly JobThrottle _throttle;
         private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
+        private readonly INodeCapacityMonitor _capacityMonitor;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
 
@@ -38,7 +39,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
-            ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
+            ETL_SQL.Core.Execution.ISessionStateManager sessionManager,
+            INodeCapacityMonitor? capacityMonitor = null)
         {
             _serviceProvider = serviceProvider;
             _store = store;
@@ -46,6 +48,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _throttle = throttle;
             _configuration = configuration;
             _sessionManager = sessionManager;
+            _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         }
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
@@ -165,6 +168,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         private async Task ExecuteJobAsync(JobDefinition job)
         {
+            var capacity = _capacityMonitor.Capture();
+            if (capacity.IsOverloaded)
+            {
+                _logger.LogWarning(
+                    "Job {JobName}: skipping lease claim because this node is overloaded (CPU={Cpu:F1}%, memory={Memory:F1}%).",
+                    job.Name, capacity.ProcessCpuPercent, capacity.MemoryLoadPercent);
+                return;
+            }
+
             // P1.1: claim the per-job execution lease before doing anything observable. This is the
             // single choke point for both scheduled and manually triggered runs — another scheduler
             // instance holding the lease means this occurrence is already being executed elsewhere.
@@ -353,7 +365,48 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 _logger.LogError(ex, "Failed to update last run info for {JobName}.", job.Name);
             }
+
+            await QuarantineIfRepeatedlyFailingAsync(job);
         }
+
+        private async Task QuarantineIfRepeatedlyFailingAsync(JobDefinition job)
+        {
+            var threshold = _configuration.GetValue<int>("Scheduler:QuarantineFailureThreshold", 5);
+            if (threshold <= 0)
+                return;
+
+            IReadOnlyList<JobHistoryEntry> recent;
+            try
+            {
+                recent = (await _store.GetHistoryAsync(job.Name, threshold)).ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Job {JobName}: failed to evaluate quarantine policy.", job.Name);
+                return;
+            }
+
+            if (recent.Count < threshold
+                || recent.Any(entry => !IsFailureStatus(entry.Status)))
+                return;
+
+            var reason = $"Job quarantined after {threshold} consecutive failures.";
+            try
+            {
+                await _store.SaveJobAsync(job with { IsEnabled = false, NextRun = null });
+                var quarantineId = await _store.LogJobStartAsync(job.Name);
+                await _store.LogJobEndAsync(quarantineId, "QUARANTINED", reason);
+                _logger.LogError("Job {JobName}: {Reason}", job.Name, reason);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Job {JobName}: failed to quarantine repeatedly failing job.", job.Name);
+            }
+        }
+
+        private static bool IsFailureStatus(string status) =>
+            status.Equals("FAILURE", StringComparison.OrdinalIgnoreCase)
+            || status.Equals("FAILED", StringComparison.OrdinalIgnoreCase);
 
         private Task StartLeaseHeartbeat(string jobName, TimeSpan leaseDuration, CancellationTokenSource cycleCts)
         {

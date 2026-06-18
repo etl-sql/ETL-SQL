@@ -185,36 +185,43 @@ SchedulerService.Stop()
 
 ```
 ExecuteJobAsync(job):
-  0. store.TryAcquireJobLeaseAsync(job.Name, ownerId, leaseDuration)
+  0. capacityMonitor.Capture()
+       → overloaded node = skip this cycle without claiming the lease
+
+  1. store.TryAcquireJobLeaseAsync(job.Name, ownerId, leaseDuration)
        → single atomic UPDATE: claim succeeds only if the lease is free or expired
        → not acquired = another scheduler instance owns this occurrence → skip
        → a heartbeat task renews the lease at leaseDuration/3 for the whole run;
-         losing the lease cancels the run; the lease is released after step 7
+         losing the lease cancels the run; the lease is released after completion
 
-  1. store.LogJobStartAsync(job.Name)
+  2. store.LogJobStartAsync(job.Name)
        → INSERT INTO JobHistory (JobName, StartTime, Status='RUNNING')
        → returns historyId (autoincrement primary key)
 
-  2. throttle.AcquireAsync(job.Name)
+  3. throttle.AcquireAsync(job.Name)
        → waits on SemaphoreSlim if MaxConcurrentJobs cap is reached
        → returns IDisposable slot (auto-releases on dispose)
 
-  3. serviceProvider.CreateScope()
+  4. serviceProvider.CreateScope()
        → creates DI child scope for full resource isolation
 
-  4. scope.GetRequiredService<IScriptExecutor>()
+  5. scope.GetRequiredService<IScriptExecutor>()
        → resolves ScriptExecutorAdapter (default) or ProcessJobExecutor
           depending on ProcessJobExecutorOptions.UseProcessSpawning
 
-  5. executor.ExecuteTextAsync(job.Script)
+  6. executor.ExecuteTextAsync(job.Script)
        → ScriptExecutionResult { Success, RowsProcessed, ErrorMessage }
 
-  6. store.LogJobEndAsync(historyId, status, errorMessage, rowsProcessed)
+  7. store.LogJobEndAsync(historyId, status, errorMessage, rowsProcessed)
        → UPDATE JobHistory SET EndTime, Status, ErrorMessage, RowsProcessed
 
-  7. store.UpdateJobLastRunAsync(job.Name, now, nextRun)
+  8. store.UpdateJobLastRunAsync(job.Name, now, nextRun)
        → CalculateNextRun(job) based on Interval + Unit + AtTime
        → UPDATE Jobs SET LastRun, NextRun
+
+  9. quarantine policy
+       → if the most recent Scheduler:QuarantineFailureThreshold history rows are failures,
+         disable the job and write a QUARANTINED history row
 ```
 
 ### 3.3 `NextRun` calculation
@@ -233,7 +240,20 @@ When `AtTime` is set (e.g., `'22:00'`) and `Unit = DAY`, the next run is calcula
 
 Every run — scheduled or manually triggered — first claims a per-job lease stored in the `Jobs` row (`LeaseOwner`, `LeaseExpiresAt`, UTC ISO-8601). The claim is one atomic `UPDATE ... WHERE` lease-free-or-expired, riding SQLite's single-writer guarantee, so **two scheduler processes sharing one job DB produce exactly one execution per due occurrence**. The owner id is `machine:pid:guid`, unique per process start. A heartbeat renews the lease at one-third of `Scheduler:JobLeaseSeconds` (default 600s; floor 30s); if renewal fails because the lease expired and was reclaimed, the run cancels itself rather than risk a duplicate. A lease abandoned by a crash self-heals at expiry and the occurrence reruns — at-least-once semantics. Note the lease coordinates only processes sharing the same SQLite file; it is not a cross-host distributed lock (see the P3.1 topology decision in TODO.md).
 
-### 3.4 Concurrency metrics
+### 3.5 Node capacity and quarantine
+
+`NodeHeartbeatService` writes CPU and memory capacity metadata into the shared `Nodes.Metadata`
+JSON on every heartbeat: process working set, GC heap bytes, available memory, memory load percent,
+process CPU percent, processor count, and `IsOverloaded`. The scheduler uses the same
+`INodeCapacityMonitor` locally before it claims a job lease. If the node is overloaded, it skips
+the claim for that cycle so another healthy node can acquire the work.
+
+After each execution cycle, `SchedulerService` reads the latest history rows for the job. If the
+latest `Scheduler:QuarantineFailureThreshold` rows are all failures, the scheduler saves the job as
+disabled and appends a `QUARANTINED` history row. Set `Scheduler:QuarantineFailureThreshold` to `0`
+to disable automatic quarantine; the default is `5`.
+
+### 3.6 Concurrency metrics
 
 ```csharp
 JobThrottleMetrics metrics = schedulerService.GetMetrics();

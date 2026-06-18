@@ -296,9 +296,16 @@ release begins.
   shared snapshot artifact storage can be enumerated, and the node-registry/lease store can be read;
   any failure returns HTTP 503 with per-check status. Docs now direct load balancers to `/healthz`
   and keep `/health` for richer monitoring. Test: `Healthz_ReturnsOkWithLightweightDependencyChecks`.
-- [ ] **P2.1 Node-capacity heartbeats + quarantine policy.**
+- [x] **P2.1 Node-capacity heartbeats + quarantine policy.**
   Heartbeat CPU/memory so overloaded nodes don't claim new leases; quarantine repeatedly-failing jobs
   to prevent cascade failures.
+  *(done)* Added shared `INodeCapacityMonitor` / `NodeCapacityMonitor` and heartbeat metadata for
+  working set, GC heap, memory load, process CPU, processor count, and overload state. Scheduler
+  checks local capacity before `AcquireJobLeaseAsync`; overloaded nodes skip the lease claim so a
+  healthy node can take the work. Scheduler also applies `Scheduler:QuarantineFailureThreshold`
+  (default `5`, `0` disables) after each execution cycle: when the latest N history rows are all
+  failures, the job is saved disabled and a `QUARANTINED` history row is appended. Tests cover
+  heartbeat capacity metadata, overloaded-node lease suppression, and repeated-failure quarantine.
 
 ### Phase 5 — Rolling Deployment Certification
 

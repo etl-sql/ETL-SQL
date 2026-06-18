@@ -25,11 +25,17 @@ namespace ETL_SQL.Tests.Orchestration
         /// The service provider is wired so CreateScope() returns a scope containing the given executor.
         /// </summary>
         private static (SchedulerService service, Mock<IJobHistoryStore> store, Mock<IScriptExecutor> executor)
-            Build(IEnumerable<JobDefinition> jobs, ScriptExecutionResult result)
+            Build(
+                IEnumerable<JobDefinition> jobs,
+                ScriptExecutionResult result,
+                INodeCapacityMonitor? capacityMonitor = null,
+                Dictionary<string, string?>? config = null)
         {
             var mockStore = new Mock<IJobHistoryStore>();
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
+            mockStore.Setup(s => s.GetHistoryAsync(It.IsAny<string?>(), It.IsAny<int>()))
+                .ReturnsAsync(Array.Empty<JobHistoryEntry>());
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
             mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
             mockStore.Setup(s => s.AcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(1L);
@@ -44,10 +50,14 @@ namespace ETL_SQL.Tests.Orchestration
             mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
                         .ReturnsAsync(result);
 
-            return (BuildService(mockStore, mockExecutor), mockStore, mockExecutor);
+            return (BuildService(mockStore, mockExecutor, capacityMonitor, config), mockStore, mockExecutor);
         }
 
-        private static SchedulerService BuildService(Mock<IJobHistoryStore> mockStore, Mock<IScriptExecutor> mockExecutor)
+        private static SchedulerService BuildService(
+            Mock<IJobHistoryStore> mockStore,
+            Mock<IScriptExecutor> mockExecutor,
+            INodeCapacityMonitor? capacityMonitor = null,
+            Dictionary<string, string?>? config = null)
         {
             // IServiceProvider.CreateScope() is an extension that calls
             // GetRequiredService<IServiceScopeFactory>().CreateScope()
@@ -68,9 +78,9 @@ namespace ETL_SQL.Tests.Orchestration
             var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 4 });
             var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object);
 
-            var mockConfig = new Mock<IConfiguration>();
-            // Setup default values for intervals if needed by tests
-            mockConfig.Setup(c => c.GetSection(It.IsAny<string>())).Returns(new Mock<IConfigurationSection>().Object);
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(config ?? new Dictionary<string, string?>())
+                .Build();
 
             var mockSessLogger = new Mock<ETL_SQL.Common.ILogger>();
             var sessionManager = new Mock<ISessionStateManager>();
@@ -80,8 +90,9 @@ namespace ETL_SQL.Tests.Orchestration
                 mockStore.Object,
                 new Mock<ILogger<SchedulerService>>().Object,
                 throttle,
-                mockConfig.Object,
-                sessionManager.Object);
+                configuration,
+                sessionManager.Object,
+                capacityMonitor);
         }
 
         [Fact]
@@ -212,6 +223,71 @@ namespace ETL_SQL.Tests.Orchestration
 
             store.Verify(s => s.TryUpdateJobLastRunFencedAsync("UpdateJob", It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>()),
                 Times.AtLeastOnce());
+        }
+
+        [Fact]
+        public async Task OverloadedNode_DoesNotClaimLeaseOrRunJob()
+        {
+            var jobs = new[] { new JobDefinition("HotNodeJob", "SELECT 1;", 1, "HOUR", null, null, null) };
+            var overloaded = new FixedCapacityMonitor(isOverloaded: true);
+            var (service, store, executor) = Build(
+                jobs,
+                new ScriptExecutionResult(true, 0),
+                overloaded,
+                new Dictionary<string, string?> { ["Scheduler:SleepIntervalSeconds"] = "1" });
+
+            service.Start();
+            await Task.Delay(350);
+            service.Stop();
+
+            store.Verify(s => s.AcquireJobLeaseAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never());
+            executor.Verify(e => e.ExecuteTextAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()),
+                Times.Never());
+        }
+
+        [Fact]
+        public async Task RepeatedFailures_DisablesJobAsQuarantined()
+        {
+            var job = new JobDefinition("FlakyJob", "BAD SQL;", 1, "HOUR", null, null, null);
+            var (service, store, _) = Build(
+                [job],
+                new ScriptExecutionResult(false, 0, "Parse error"),
+                config: new Dictionary<string, string?>
+                {
+                    ["Scheduler:SleepIntervalSeconds"] = "1",
+                    ["Scheduler:QuarantineFailureThreshold"] = "2"
+                });
+            store.Setup(s => s.GetHistoryAsync("FlakyJob", 2))
+                .ReturnsAsync([
+                    new JobHistoryEntry(2, "FlakyJob", DateTime.Now, DateTime.Now, "FAILURE", "Parse error"),
+                    new JobHistoryEntry(1, "FlakyJob", DateTime.Now.AddMinutes(-1), DateTime.Now, "FAILURE", "Parse error")
+                ]);
+
+            service.Start();
+            await Task.Delay(450);
+            service.Stop();
+
+            store.Verify(s => s.SaveJobAsync(
+                It.Is<JobDefinition>(j => j.Name == "FlakyJob" && !j.IsEnabled)), Times.AtLeastOnce());
+            store.Verify(s => s.LogJobEndAsync(
+                It.IsAny<long>(), "QUARANTINED", It.Is<string>(m => m!.Contains("consecutive failures")),
+                It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()),
+                Times.AtLeastOnce());
+        }
+
+        private sealed class FixedCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor
+        {
+            public NodeCapacitySnapshot Capture() => new(
+                WorkingSetBytes: 128 * 1024 * 1024,
+                GcHeapBytes: 64 * 1024 * 1024,
+                TotalAvailableMemoryBytes: 1024L * 1024 * 1024,
+                MemoryLoadPercent: isOverloaded ? 99 : 10,
+                ProcessCpuPercent: isOverloaded ? 99 : 1,
+                ProcessorCount: Environment.ProcessorCount,
+                IsOverloaded: isOverloaded,
+                CapturedAtUtc: DateTime.UtcNow);
         }
     }
 }
