@@ -255,6 +255,72 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.Equal(claims[0].JobId, job.JobId);
     }
 
+    [Fact]
+    public async Task ProcessRestart_ReclaimsInterruptedRefreshJobAcrossProcesses()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        _processes.Add(first);
+
+        await first.WaitForHealthzAsync();
+
+        var scriptPath = Path.Combine(shared.Scripts, $"reclaim-{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            WAITFOR DELAY '00:00:10';
+            CREATE VISUAL ReclaimRace AS TABLE (
+                SOURCE = (SELECT 7 AS Value),
+                MAPPINGS (Value = Value)
+            );
+            """);
+
+        using var client = new HttpClient();
+        var token = await BootstrapAdminTokenAsync(client, first);
+        var folder = await SendJsonAsync<FolderDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/folders",
+            token,
+            new { name = $"reclaim-{Guid.NewGuid():N}", parentId = (int?)null },
+            HttpStatusCode.Created);
+        var report = await SendJsonAsync<ReportDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports",
+            token,
+            new
+            {
+                folderId = folder.Id,
+                name = $"Reclaim Race {Guid.NewGuid():N}",
+                description = "",
+                scriptPath
+            },
+            HttpStatusCode.Created);
+
+        var refresh = await SendJsonAsync<RefreshDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/reports/{report.Id}/refresh",
+            token,
+            new { },
+            HttpStatusCode.Accepted);
+
+        await first.DisposeAsync();
+
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b");
+        _processes.Add(second);
+        await second.WaitForHealthzAsync();
+
+        var reclaimed = await WaitForJobStatusAsync(client, second, token, refresh.JobId, "Cancelled");
+        Assert.Contains("interrupted", reclaimed.Error ?? "", StringComparison.OrdinalIgnoreCase);
+
+        var reportState = await GetJsonAsync<ReportDto>(
+            client,
+            $"{second.BaseUrl}/api/reports/{report.Id}",
+            token);
+        Assert.Equal("Cancelled", reportState.LastRefreshStatus);
+        Assert.Contains("interrupted", reportState.LastRefreshError ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -394,6 +460,28 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         return response.StatusCode;
     }
 
+    private static async Task<JobDto> WaitForJobStatusAsync(
+        HttpClient client,
+        PortalProcess process,
+        string token,
+        string jobId,
+        string expectedStatus)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        JobDto? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            last = await GetJsonAsync<JobDto>(client, $"{process.BaseUrl}/api/jobs/{jobId}", token);
+            if (string.Equals(last.Status, expectedStatus, StringComparison.OrdinalIgnoreCase))
+                return last;
+
+            await Task.Delay(250);
+        }
+
+        throw new TimeoutException(
+            $"Job {jobId} did not reach {expectedStatus}. Last status: {last?.Status ?? "<missing>"}");
+    }
+
     private sealed record SharedRoots(
         string Scripts,
         string Snapshots,
@@ -404,7 +492,12 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     private sealed record HealthzResponse(string Status, Dictionary<string, string> Checks);
     private sealed record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt);
     private sealed record FolderDto(int Id, int? ParentId, string Name, string Path, List<FolderDto> Children, long Version);
-    private sealed record ReportDto(int Id, int FolderId, string Name);
+    private sealed record ReportDto(
+        int Id,
+        int FolderId,
+        string Name,
+        string? LastRefreshStatus = null,
+        string? LastRefreshError = null);
     private sealed record RefreshDto(string JobId, bool AlreadyRunning);
     private sealed record JobDto(string JobId, string Status, string? Error);
     private sealed record GroupDto(

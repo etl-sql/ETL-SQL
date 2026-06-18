@@ -327,7 +327,9 @@ release begins.
   `409 Conflict`. The harness also covers a permission mutation race: two nodes concurrently grant
   different folder permissions with the same stale folder version, converging to one `200 OK`, one
   `409 Conflict`, and one durable ACL row. Simultaneous refresh claims across two processes now converge
-  to one shared durable job id. Remaining: cancellation/failover recovery and task reclamation.
+  to one shared durable job id. It also covers task reclamation after process termination: a refresh
+  accepted by one Portal process is reclaimed as `Cancelled` with interruption details when another
+  process starts against the same shared state. Remaining: cancellation/failover recovery.
 - [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)
