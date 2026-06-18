@@ -324,6 +324,10 @@ release begins.
 - [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)
+  *(partial)* Deterministic fast-lane coverage now includes dataset reconciliation after crash artifacts,
+  held-open orphan files, corrupt/unreadable Orchestrator DB degradation, and `/healthz` failing closed
+  when shared artifact storage is unavailable. Remaining: true process-kill windows, bounded clock-skew,
+  disk exhaustion/pressure, and network-partition chaos harnesses.
 - [x] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
   tokens reject every stale writer after a partition heals.
   *(done)* Added a deterministic partition-recovery proof that combines the Portal execution lease-loss

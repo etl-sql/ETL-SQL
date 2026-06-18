@@ -1,9 +1,15 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json.Nodes;
+using ETL_SQL.Core.Storage;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ETL_SQL.ReportPortal.Tests;
@@ -142,5 +148,111 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             factory.Services, new OrchestratorDbLocator(degradedConfig));
         var ex = await Record.ExceptionAsync(() => poller.PollAsync(CancellationToken.None));
         Assert.Null(ex);
+    }
+
+    /// <summary>
+    /// Storage unavailability must fail the load-balancer probe closed. The richer /health endpoint
+    /// is for operators; /healthz is the traffic gate and should return 503 as soon as shared
+    /// artifact storage cannot be enumerated.
+    /// </summary>
+    [Fact]
+    public async Task Healthz_ReturnsUnavailableWhenSharedStorageFails()
+    {
+        using var factory = new StorageOutagePortalFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/healthz");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>();
+        Assert.Equal("Unhealthy", body!["status"]!.GetValue<string>());
+        var checks = body["checks"]!.AsObject();
+        Assert.Equal("ok", checks["database"]!.GetValue<string>());
+        Assert.Equal(nameof(InvalidOperationException), checks["storage"]!.GetValue<string>());
+        Assert.Equal("ok", checks["lease"]!.GetValue<string>());
+    }
+
+    private sealed class StorageOutagePortalFactory : PortalWebFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IArtifactStorage>();
+                services.AddSingleton<IArtifactStorage, FailingEnumerateStorage>();
+            });
+        }
+    }
+
+    private sealed class FailingEnumerateStorage : IArtifactStorage
+    {
+        public Task<bool> ExistsAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task<ArtifactInfo?> GetInfoAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            Task.FromResult<ArtifactInfo?>(null);
+
+        public IAsyncEnumerable<ArtifactInfo> EnumerateAsync(
+            ArtifactArea area,
+            string? prefix = null,
+            bool recursive = true,
+            CancellationToken ct = default) =>
+            ThrowStorageUnavailableAsync();
+
+        private static async IAsyncEnumerable<ArtifactInfo> ThrowStorageUnavailableAsync()
+        {
+            await Task.Yield();
+            if (DateTime.UtcNow.Year > 0)
+                throw new InvalidOperationException("simulated shared storage outage");
+            yield break;
+        }
+
+        public Task<Stream> OpenReadAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            throw new FileNotFoundException(path);
+
+        public Task<byte[]> ReadAllBytesAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            throw new FileNotFoundException(path);
+
+        public Task<string> ReadAllTextAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            throw new FileNotFoundException(path);
+
+        public Task WriteAsync(
+            ArtifactArea area,
+            string path,
+            Stream content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated shared storage outage");
+
+        public Task WriteAllBytesAsync(
+            ArtifactArea area,
+            string path,
+            ReadOnlyMemory<byte> content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated shared storage outage");
+
+        public Task WriteAllTextAsync(
+            ArtifactArea area,
+            string path,
+            string content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated shared storage outage");
+
+        public Task<bool> DeleteAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task MoveAsync(
+            ArtifactArea area,
+            string sourcePath,
+            string destinationPath,
+            bool overwrite = false,
+            CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated shared storage outage");
+
+        public Task<IArtifactLease> LeaseLocalCopyAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            throw new InvalidOperationException("simulated shared storage outage");
     }
 }
