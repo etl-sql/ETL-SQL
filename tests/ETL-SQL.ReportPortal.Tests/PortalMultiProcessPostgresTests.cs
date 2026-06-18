@@ -87,6 +87,37 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DatabaseNetworkPartition_HealthzFailsClosedAndRecovers()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        _processes.Add(first);
+
+        await first.WaitForHealthzAsync();
+
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        await _pg.PauseAsync();
+        try
+        {
+            var degraded = await WaitForHealthzStatusAsync(
+                client,
+                first,
+                HttpStatusCode.ServiceUnavailable);
+
+            Assert.Equal("Unhealthy", degraded.Body.Status);
+            Assert.NotEqual("ok", degraded.Body.Checks["database"]);
+        }
+        finally
+        {
+            await _pg.UnpauseAsync();
+        }
+
+        var recovered = await WaitForHealthzStatusAsync(client, first, HttpStatusCode.OK);
+        Assert.Equal("Healthy", recovered.Body.Status);
+        Assert.Equal("ok", recovered.Body.Checks["database"]);
+    }
+
+    [Fact]
     public async Task CatalogWrites_AreVisibleAcrossProcesses_AndSurviveRestart()
     {
         var shared = CreateSharedRoots();
@@ -460,10 +491,10 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         env["ASPNETCORE_ENVIRONMENT"] = "Testing";
         env["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}";
         env["Portal__Database__Provider"] = "Postgres";
-        env["Portal__Database__ConnectionString"] = _pg.GetConnectionString();
+        env["Portal__Database__ConnectionString"] = WithFastFailureTimeouts(_pg.GetConnectionString());
         env["Portal__DatabasePath"] = Path.Combine(_root, $"{nodeName}.db");
         env["Orchestrator__Database__Provider"] = "Postgres";
-        env["Orchestrator__Database__ConnectionString"] = _pg.GetConnectionString();
+        env["Orchestrator__Database__ConnectionString"] = WithFastFailureTimeouts(_pg.GetConnectionString());
         env["Orchestrator__DatabasePath"] = Path.Combine(_root, $"{nodeName}.orchestrator.db");
         env["Portal__ScriptRootPath"] = shared.Scripts;
         env["Portal__SnapshotDirectory"] = shared.Snapshots;
@@ -481,6 +512,11 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
             ?? throw new InvalidOperationException("Failed to start Portal process.");
         return new PortalProcess(process, $"http://127.0.0.1:{port}");
     }
+
+    private static string WithFastFailureTimeouts(string connectionString) =>
+        connectionString.Contains("Timeout=", StringComparison.OrdinalIgnoreCase)
+            ? connectionString
+            : connectionString.TrimEnd(';') + ";Timeout=2;Command Timeout=2";
 
     private static int FreePort()
     {

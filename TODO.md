@@ -333,20 +333,21 @@ release begins.
   refresh instead of being blocked by stale active state. Explicit cross-process cancellation is covered
   by starting a refresh on one Portal process, cancelling it through a second process, and verifying the
   durable job and report refresh state converge to `Cancelled`.
-- [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
+- [x] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)
-  *(partial)* Deterministic fast-lane coverage now includes dataset reconciliation after crash artifacts,
+  *(done, fast/Docker-verified)* Deterministic fast-lane coverage now includes dataset reconciliation after crash artifacts,
   held-open orphan files, corrupt/unreadable Orchestrator DB degradation, and `/healthz` failing closed
   when shared artifact storage is unavailable. The Docker/PostgreSQL multi-process harness now also
-  stops the backing database and verifies `/healthz` fails closed with a non-ok database check. It also
-  covers disk-pressure-style snapshot write failure during execution, proving the job fails closed and
-  no snapshot row is inserted without a durable manifest. Orchestrator process-executor chaos now covers
-  both timeout-driven and caller-cancellation child-process kills plus startup orphan cleanup. Node
-  registry liveness now uses the shared database UTC clock for heartbeat expiry, live-node filtering,
-  and pruning, with a deterministic skewed-clock test proving process clock drift cannot extend or
-  prematurely expire node leases. Remaining: disk exhaustion/pressure at the filesystem/volume layer
-  and network-partition chaos harnesses.
+  stops the backing database and verifies `/healthz` fails closed with a non-ok database check, then
+  uses Docker pause/unpause to simulate a network partition and proves `/healthz` fails closed promptly
+  before recovering after the partition heals. It also covers disk-pressure-style snapshot write failure
+  during execution through a real filesystem-backed snapshot root failure, proving the job fails closed
+  and no snapshot row is inserted without a durable manifest. Orchestrator process-executor chaos now
+  covers both timeout-driven and caller-cancellation child-process kills plus startup orphan cleanup.
+  Node registry liveness now uses the shared database UTC clock for heartbeat expiry, live-node
+  filtering, and pruning, with a deterministic skewed-clock test proving process clock drift cannot
+  extend or prematurely expire node leases.
 - [x] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
   tokens reject every stale writer after a partition heals.
   *(done)* Added a deterministic partition-recovery proof that combines the Portal execution lease-loss

@@ -537,44 +537,33 @@ app.MapGet("/healthz", async (
     CancellationToken ct) =>
 {
     var checks = new Dictionary<string, string>();
+    var checkTimeout = TimeSpan.FromSeconds(2);
 
-    try
+    checks["database"] = await RunHealthzCheckAsync(async checkCt =>
     {
-        await using var scope = scopes.CreateAsyncScope();
+        using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        checks["database"] = await db.Database.CanConnectAsync(ct) ? "ok" : "unreachable";
-    }
-    catch (Exception ex)
-    {
-        checks["database"] = ex.GetType().Name;
-    }
+        return await db.Database.CanConnectAsync(checkCt) ? "ok" : "unreachable";
+    }, checkTimeout, ct);
 
-    try
+    checks["storage"] = await RunHealthzCheckAsync(async checkCt =>
     {
         await foreach (var _ in artifacts.EnumerateAsync(
             ETL_SQL.Core.Storage.ArtifactArea.Snapshots,
             prefix: null,
             recursive: false,
-            ct).WithCancellation(ct))
+            checkCt).WithCancellation(checkCt))
         {
             break;
         }
-        checks["storage"] = "ok";
-    }
-    catch (Exception ex)
-    {
-        checks["storage"] = ex.GetType().Name;
-    }
+        return "ok";
+    }, checkTimeout, ct);
 
-    try
+    checks["lease"] = await RunHealthzCheckAsync(async checkCt =>
     {
-        await nodes.GetLiveNodesAsync();
-        checks["lease"] = "ok";
-    }
-    catch (Exception ex)
-    {
-        checks["lease"] = ex.GetType().Name;
-    }
+        await nodes.GetLiveNodesAsync().WaitAsync(checkCt);
+        return "ok";
+    }, checkTimeout, ct);
 
     var healthy = checks.Values.All(value => value == "ok");
     return Results.Json(
@@ -670,6 +659,35 @@ static string? FindRepoFile(string fileName)
     }
 
     return null;
+}
+
+static async Task<string> RunHealthzCheckAsync(
+    Func<CancellationToken, Task<string>> check,
+    TimeSpan timeout,
+    CancellationToken requestCt)
+{
+    var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(requestCt);
+    var checkTask = Task.Run(() => check(timeoutCts.Token));
+    var completed = await Task.WhenAny(checkTask, Task.Delay(timeout, requestCt));
+    if (completed != checkTask)
+    {
+        try { timeoutCts.Cancel(); } catch { }
+        _ = checkTask.ContinueWith(_ => timeoutCts.Dispose(), TaskScheduler.Default);
+        return nameof(TimeoutException);
+    }
+
+    try
+    {
+        return await checkTask;
+    }
+    catch (Exception ex)
+    {
+        return ex.GetType().Name;
+    }
+    finally
+    {
+        timeoutCts.Dispose();
+    }
 }
 
 static RateLimitPartition<string> CreateFixedWindowPartition(

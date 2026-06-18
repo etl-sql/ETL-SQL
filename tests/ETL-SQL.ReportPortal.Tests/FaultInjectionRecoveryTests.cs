@@ -251,6 +251,79 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         Assert.Contains("disk pressure", reportState.LastRefreshError!, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Covers the same failure mode through the real filesystem-backed storage provider rather than a
+    /// fake storage seam: the snapshot root is a file, so the provider fails while creating the
+    /// destination directory on the backing volume.
+    /// </summary>
+    [Fact]
+    public async Task ExecutionSnapshotFilesystemFailure_FailsJobWithoutSnapshotRow()
+    {
+        var scriptRoot = Path.Combine(_root, "fs-scripts");
+        Directory.CreateDirectory(scriptRoot);
+        var snapshotRootFile = Path.Combine(_root, "snapshots-as-file");
+        await File.WriteAllTextAsync(snapshotRootFile, "not a directory");
+        var scriptPath = Path.Combine(scriptRoot, "fs_pressure.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Filesystem Pressure';");
+
+        var config = new PortalConfig
+        {
+            DatabasePath = Path.Combine(_root, "portal-fs-exec.db"),
+            ScriptRootPath = scriptRoot,
+            SnapshotDirectory = snapshotRootFile,
+            DatasetRootPath = Path.Combine(_root, "fs-datasets"),
+            MapRootPath = Path.Combine(_root, "fs-maps")
+        };
+        var services = new ServiceCollection()
+            .AddDbContext<PortalDbContext>(options =>
+                options.UseSqlite($"Data Source={config.DatabasePath}"))
+            .BuildServiceProvider();
+        await using var provider = services;
+
+        int reportId;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var folder = new Folder { Name = "filesystem", Path = "/filesystem", OwnerId = 1 };
+            var report = new Report
+            {
+                Folder = folder,
+                Name = "filesystem pressure",
+                ScriptPath = scriptPath,
+                CreatedBy = 1
+            };
+            db.AddRange(folder, report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        using var service = new ExecutionJobService(
+            config,
+            scopes,
+            NullLogger<ExecutionJobService>.Instance,
+            sessions,
+            new HttpJobChannelClient(
+                new HttpClient(new CompletedManifestHandler()) { BaseAddress = new Uri("http://orchestrator.test") },
+                NullLogger<HttpJobChannelClient>.Instance),
+            capacityMonitor: new HealthyCapacityMonitor());
+
+        var jobId = await service.EnqueueExecutionAsync(reportId, userId: 1, scriptPath);
+        await WaitForTerminalAsync(service, jobId);
+
+        var job = await service.GetAsync(jobId);
+        Assert.Equal(JobStatus.Failed, job!.Status);
+
+        await using var verifyScope = provider.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
+        var reportState = await verifyDb.Reports.FindAsync(reportId);
+        Assert.Equal("Failed", reportState!.LastRefreshStatus);
+        Assert.False(string.IsNullOrWhiteSpace(reportState.LastRefreshError));
+    }
+
     private sealed class StorageOutagePortalFactory : PortalWebFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
