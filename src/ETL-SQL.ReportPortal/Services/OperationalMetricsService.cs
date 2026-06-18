@@ -8,7 +8,10 @@ namespace ETL_SQL.ReportPortal.Services;
 /// queue depth, recent execution and subscription-delivery failure rates (from the durable
 /// PortalExecutionJobs and SubscriptionDelivery ledgers), and dataset/snapshot storage usage.
 /// </summary>
-public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig config)
+public sealed class OperationalMetricsService(
+    PortalDbContext db,
+    PortalConfig config,
+    PortalNodeIdentity? nodeIdentity = null)
 {
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
@@ -19,6 +22,8 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
         int ExecutionCap,
         int PerUserExecutionCap,
         string Topology,
+        string NodeId,
+        string AffinityCookieName,
         int RecentExecutions,
         int RecentExecutionFailures,
         int RecentDeliveries,
@@ -65,6 +70,8 @@ public sealed class OperationalMetricsService(PortalDbContext db, PortalConfig c
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.MaxConcurrentExecutionsPerUser,
             "shared-state-ha",
+            nodeIdentity?.NodeId ?? Environment.MachineName,
+            config.LoadBalancer.SessionAffinityCookieName,
             recentExecutions,
             recentExecutionFailures,
             recentDeliveries,

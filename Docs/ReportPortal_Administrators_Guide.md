@@ -106,6 +106,11 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       "SessionCacheTtlMinutes":        30,
       "SnapshotRetentionPerReport":    20
     },
+    "LoadBalancer": {
+      "SessionAffinityEnabled":       true,
+      "SessionAffinityCookieName":    "ETLSQL_PORTAL_AFFINITY",
+      "SessionAffinityCookieMinutes": 480
+    },
     "Jwt": {
       "Secret":            "",
       "ExpiryMinutes":     60,
@@ -152,6 +157,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Resources.SessionCacheMaxSize` | `50` | Maximum number of in-memory execution sessions cached for result streaming. |
 | `Resources.SessionCacheTtlMinutes` | `30` | How long an idle session is kept before eviction. |
 | `Resources.SnapshotRetentionPerReport` | `20` | Newest snapshots kept per report. After each successful execution, older snapshot rows and their manifest files are pruned (minimum effective value is 1). |
+| `LoadBalancer.SessionAffinityEnabled` | `true` | Emits a sticky-session cookie for load balancers. Keep enabled for multi-node deployments because interactive report sessions are process-local. |
+| `LoadBalancer.SessionAffinityCookieName` | `ETLSQL_PORTAL_AFFINITY` | Cookie name load balancers should use for Portal node affinity. |
+| `LoadBalancer.SessionAffinityCookieMinutes` | `480` | Sticky-session cookie lifetime in minutes. |
 | `Jwt.Secret` | *(required)* | HMAC-SHA256 signing secret. **Must be at least 32 characters.** The portal will refuse to start without it. |
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
@@ -1622,6 +1630,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 ### Reliability
 
 - [ ] **Required** — For single-node SQLite deployments, run one active Report Portal process per portal database. For HA deployments, configure every Portal node to use the same PostgreSQL database and shared artifact storage roots; startup singleton work is coordinated through the database-backed cluster lock.
+- [ ] **Required** — For load-balanced HA deployments, configure sticky sessions using the portal affinity cookie (`ETLSQL_PORTAL_AFFINITY` by default). Interactive report sessions are cached in memory on the node that created them.
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
 - [ ] **Required** — Treat a restart as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.
 - [ ] **Recommended** — Verify the `/health` endpoint returns `Healthy` before directing user traffic. Wire this endpoint into your load balancer or monitoring system.

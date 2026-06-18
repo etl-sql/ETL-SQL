@@ -100,7 +100,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         db.SmtpConnections.Add(new SmtpConnection { Alias = "a", Host = "h", Port = 25 });
         await db.SaveChangesAsync();
 
-        var m = await new OperationalMetricsService(db, config).GetAsync();
+        var node = new PortalNodeIdentity();
+        var m = await new OperationalMetricsService(db, config, node).GetAsync();
 
         Assert.Equal(1, m.ActiveExecutions);
         Assert.Equal(2, m.QueuedExecutions);
@@ -115,6 +116,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(2, m.ActiveSubscriptions);
         Assert.Equal(1, m.SmtpConnections);
         Assert.Equal("shared-state-ha", m.Topology);
+        Assert.Equal(node.NodeId, m.NodeId);
+        Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
     }
 
     [Fact]

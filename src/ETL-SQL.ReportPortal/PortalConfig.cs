@@ -20,6 +20,22 @@ public class PortalConfig
     public PortalRateLimitConfig RateLimit { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
     public PortalStorageConfig Storage { get; set; } = new();
+    public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
+}
+
+public class PortalLoadBalancerConfig
+{
+    /// <summary>
+    /// Emits a stable per-process cookie that load balancers can use for sticky routing. Keep enabled for
+    /// HA deployments because interactive report sessions are in-memory and intentionally node-local.
+    /// </summary>
+    public bool SessionAffinityEnabled { get; set; } = true;
+
+    /// <summary>Name of the affinity cookie emitted by every Portal node.</summary>
+    public string SessionAffinityCookieName { get; set; } = "ETLSQL_PORTAL_AFFINITY";
+
+    /// <summary>Cookie lifetime in minutes. Minimum effective value is 1.</summary>
+    public int SessionAffinityCookieMinutes { get; set; } = 480;
 }
 
 public class PortalStorageConfig

@@ -274,7 +274,13 @@ release begins.
   Portal tests, hosted-service lane, and operational-observability tests green locally. Dataset cache files
   remain the separate cross-tier migration called out in the Phase 2 follow-on and are not part of this
   snapshot/state slice.
-- [ ] **P1.11 Load-balancer session affinity** for interactive IDE sessions.
+- [x] **P1.11 Load-balancer session affinity** for interactive IDE sessions.
+  *(done)* Portal now emits a configurable sticky-session cookie (`ETLSQL_PORTAL_AFFINITY` by
+  default) with a process-stable node id so load balancers can keep interactive report traffic on
+  the node that owns the in-memory `SessionCache`. `/health` and operational metrics expose the
+  Portal node id and affinity cookie name for deployment validation. Docs now call out the
+  `Portal:LoadBalancer` settings and the production readiness requirement. Tests cover the emitted
+  affinity cookie, health response, operational metrics, and hosted-service lane.
 - [ ] **P1.12 Lease-loss cancels local work:** a partitioned node that loses its database lease
   immediately cancels its running jobs.
 - [ ] **P1.13 Lightweight `/healthz` endpoint** on Portal nodes checking database, storage, and lease

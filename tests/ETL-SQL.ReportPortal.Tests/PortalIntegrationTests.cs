@@ -65,6 +65,18 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
             storage.WriteAllTextAsync(ArtifactArea.Scripts, "fenced.rptsql", "SET REPORT TITLE = 'Stale';"));
     }
 
+    [Fact]
+    public async Task Health_EmitsLoadBalancerAffinityCookie()
+    {
+        var res = await _client.GetAsync("/health");
+
+        Assert.True(res.Headers.TryGetValues("Set-Cookie", out var values));
+        Assert.Contains(values, value =>
+            value.StartsWith("ETLSQL_PORTAL_AFFINITY=", StringComparison.Ordinal)
+            && value.Contains("HttpOnly", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("Path=/", StringComparison.OrdinalIgnoreCase));
+    }
+
     // ── 2. Auth flow ───────────────────────────────────────────────────────────
 
     [Fact]

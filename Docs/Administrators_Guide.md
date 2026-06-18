@@ -269,9 +269,18 @@ Do not delete bundle versions referenced by active or historical jobs unless the
     "ExecutionTimeoutSeconds": 300,
     "SessionCacheMaxSize": 50,
     "SessionCacheTtlMinutes": 30
+  },
+  "LoadBalancer": {
+    "SessionAffinityEnabled": true,
+    "SessionAffinityCookieName": "ETLSQL_PORTAL_AFFINITY",
+    "SessionAffinityCookieMinutes": 480
   }
 }
 ```
+
+In load-balanced Portal deployments, configure sticky sessions on the cookie named by
+`SessionAffinityCookieName`. Interactive report sessions are held in the node-local session cache,
+so requests for a live session should continue routing to the same Portal process.
 
 ### Orchestrator Job Execution
 

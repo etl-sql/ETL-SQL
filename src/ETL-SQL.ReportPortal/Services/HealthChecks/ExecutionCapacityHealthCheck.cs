@@ -6,6 +6,7 @@ namespace ETL_SQL.ReportPortal.Services.HealthChecks;
 
 public class ExecutionCapacityHealthCheck(
     PortalConfig config,
+    PortalNodeIdentity nodeIdentity,
     IServiceScopeFactory scopes) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -26,6 +27,8 @@ public class ExecutionCapacityHealthCheck(
             ["execution_cap"] = cap,
             ["active_executions"] = activeExecutions,
             ["portal_topology"] = "shared-state-ha",
+            ["portal_node_id"] = nodeIdentity.NodeId,
+            ["affinity_cookie"] = config.LoadBalancer.SessionAffinityCookieName,
             ["smtp_connections"] = smtpCount,
             ["active_subscriptions"] = activeSubs
         };

@@ -263,6 +263,7 @@ builder.Services.AddDataProtection()
     .SetApplicationName("ETL-SQL.ReportPortal");
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
@@ -451,6 +452,33 @@ app.Use(async (context, next) =>
 {
     context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     context.Response.Headers.Append("Pragma", "no-cache");
+    await next();
+});
+app.Use(async (context, next) =>
+{
+    var cfg = context.RequestServices.GetRequiredService<PortalConfig>();
+    if (cfg.LoadBalancer.SessionAffinityEnabled)
+    {
+        var node = context.RequestServices.GetRequiredService<ETL_SQL.ReportPortal.Services.PortalNodeIdentity>();
+        var name = string.IsNullOrWhiteSpace(cfg.LoadBalancer.SessionAffinityCookieName)
+            ? "ETLSQL_PORTAL_AFFINITY"
+            : cfg.LoadBalancer.SessionAffinityCookieName.Trim();
+        var maxAge = TimeSpan.FromMinutes(Math.Max(1, cfg.LoadBalancer.SessionAffinityCookieMinutes));
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Cookies.Append(name, node.NodeId, new CookieOptions
+            {
+                HttpOnly = true,
+                IsEssential = true,
+                MaxAge = maxAge,
+                Path = "/",
+                SameSite = SameSiteMode.Lax,
+                Secure = context.Request.IsHttps
+            });
+            return Task.CompletedTask;
+        });
+    }
+
     await next();
 });
 app.UseMiddleware<SecurityHeadersMiddleware>();

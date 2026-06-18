@@ -165,7 +165,9 @@ does not claim that vanished work completed successfully.
 active result streaming. It evicts idle sessions after `SessionCacheTtlMinutes` and enforces a max
 size of `SessionCacheMaxSize`. The cache is intentionally not persisted: after restart, the next
 interaction creates a new session from the report script/current snapshot rather than reporting a
-lost session as successful work.
+lost session as successful work. Load-balanced HA deployments must keep interactive report traffic
+sticky to one Portal node; the portal emits the `ETLSQL_PORTAL_AFFINITY` cookie by default so the
+load balancer can preserve affinity for those process-local sessions.
 
 ---
 
