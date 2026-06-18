@@ -338,8 +338,9 @@ release begins.
   held-open orphan files, corrupt/unreadable Orchestrator DB degradation, and `/healthz` failing closed
   when shared artifact storage is unavailable. It also covers disk-pressure-style snapshot write failure
   during execution, proving the job fails closed and no snapshot row is inserted without a durable
-  manifest. Remaining: true process-kill windows, bounded clock-skew, disk exhaustion/pressure at the
-  filesystem/volume layer, and network-partition chaos harnesses.
+  manifest. Orchestrator process-executor chaos now covers both timeout-driven and caller-cancellation
+  child-process kills plus startup orphan cleanup. Remaining: bounded clock-skew, disk
+  exhaustion/pressure at the filesystem/volume layer, and network-partition chaos harnesses.
 - [x] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
   tokens reject every stale writer after a partition heals.
   *(done)* Added a deterministic partition-recovery proof that combines the Portal execution lease-loss

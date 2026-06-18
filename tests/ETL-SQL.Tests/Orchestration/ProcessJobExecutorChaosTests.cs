@@ -49,6 +49,45 @@ public class ProcessJobExecutorChaosTests
     }
 
     [Fact]
+    public async Task CallerCancellation_KillsChildProcess_AndClearsActiveProcessTracking()
+    {
+        var tempDir = NewTempDir();
+        var pidStore = Path.Combine(tempDir, "child-pids.json");
+        var tracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
+        var (exePath, argumentsTemplate) = SleepCommand(seconds: 10);
+
+        var executor = new ProcessJobExecutor(
+            Options.Create(new ProcessJobExecutorOptions
+            {
+                ExecutablePath = exePath,
+                ArgumentsTemplate = argumentsTemplate,
+                TimeoutSeconds = 0
+            }),
+            tracker,
+            new Mock<ILogger<ProcessJobExecutor>>().Object);
+
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            var started = DateTime.UtcNow;
+            var result = await executor.ExecuteTextAsync(
+                "WAITFOR DELAY '00:00:10';",
+                cancellationToken: cts.Token,
+                jobName: "CallerCancelledChaosJob");
+
+            Assert.False(result.Success);
+            Assert.Contains("cancelled or timed out", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.True((DateTime.UtcNow - started).TotalSeconds < 8);
+            Assert.Equal(0, tracker.ActiveCount);
+            Assert.False(File.Exists(pidStore) && File.ReadAllText(pidStore).Contains("etlsql-job-", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            TryDelete(tempDir);
+        }
+    }
+
+    [Fact]
     public async Task CleanupOrphans_KillsPersistedChildProcess_FromPreviousRun()
     {
         var tempDir = NewTempDir();
