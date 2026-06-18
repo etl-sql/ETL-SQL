@@ -25,12 +25,12 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (AssertStatement)statement;
 
             _logger.Debug("Evaluating ASSERT condition");
-            if (!await context.EvaluateCondition(stmt.Condition, new Row()))
+            if (!await context.EvaluateCondition(stmt.Condition, Row.Empty))
             {
                 string message = "Assertion failed";
                 if (stmt.Message != null)
                 {
-                    var msgVal = await context.EvaluateValue(stmt.Message, new Row());
+                    var msgVal = await context.EvaluateValue(stmt.Message, Row.Empty);
                     message = msgVal?.ToString() ?? message;
                 }
 

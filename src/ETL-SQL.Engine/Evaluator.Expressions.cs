@@ -17,7 +17,7 @@ namespace ETL_SQL.Engine
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens, expression);
             var expr = parser.ParseExpression();
-            return await EvaluateValue(expr, context ?? new Row(), decryptSensitive);
+            return await EvaluateValue(expr, context ?? Row.Empty, decryptSensitive);
         }
 
         public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false)

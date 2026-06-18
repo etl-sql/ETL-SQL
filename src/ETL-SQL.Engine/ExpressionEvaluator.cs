@@ -604,7 +604,7 @@ namespace ETL_SQL.Engine
             // ANSI String length aliases
             if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
             {
-                var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? new Row(), decryptSensitive);
+                var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? Row.Empty, decryptSensitive);
                 if (val == null) return null;
                 var s = val.ToString() ?? "";
                 return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
@@ -624,7 +624,7 @@ namespace ETL_SQL.Engine
                 }
                 else
                 {
-                    args.Add(await EvaluateInternal(arg, context ?? new Row(), decryptSensitive));
+                    args.Add(await EvaluateInternal(arg, context ?? Row.Empty, decryptSensitive));
                 }
             }
 
@@ -640,7 +640,7 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"Aggregate function '{fn}' could not be resolved. Ensure it is used in a SELECT clause with grouping, or check if the query should have been pushed down.");
             }
 
-            return await _context.EvaluateUserDefinedFunction(f, args, context ?? new Row());
+            return await _context.EvaluateUserDefinedFunction(f, args, context ?? Row.Empty);
         }
 
         /// <summary>Evaluates the AT TIME ZONE expression.</summary>

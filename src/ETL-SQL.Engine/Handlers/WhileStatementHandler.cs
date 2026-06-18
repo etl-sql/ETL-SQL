@@ -28,7 +28,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (_logger.IsDebugEnabled)
                     _logger.Debug("Evaluating WHILE condition");
-                var conditionResult = await context.EvaluateValue(stmt.Condition, new Row());
+                var conditionResult = await context.EvaluateValue(stmt.Condition, Row.Empty);
                 bool condition = conditionResult is bool b && b;
 
                 if (!condition) break;

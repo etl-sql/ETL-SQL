@@ -841,6 +841,18 @@ namespace ETL_SQL.Engine
                     batchNum++;
                     if (batch.Count == 0) continue;
 
+                    // Build a label -> index map once upfront so that GOTO resolution is O(1)
+                    // instead of O(n) per throw. Only built when the batch actually contains labels.
+                    Dictionary<string, int>? labelIndex = null;
+                    for (int k = 0; k < batch.Count; k++)
+                    {
+                        if (batch[k] is SectionLabelStatement lbl)
+                        {
+                            labelIndex ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                            labelIndex[lbl.LabelName] = k;
+                        }
+                    }
+
                     try
                     {
                         for (int i = 0; i < batch.Count; i++)
@@ -868,17 +880,7 @@ namespace ETL_SQL.Engine
                             }
                             catch (GotoException gotoEx)
                             {
-                                int targetIdx = -1;
-                                for (int j = 0; j < batch.Count; j++)
-                                {
-                                    if (batch[j] is SectionLabelStatement sls && sls.LabelName.Equals(gotoEx.LabelName, StringComparison.OrdinalIgnoreCase))
-                                    {
-                                        targetIdx = j;
-                                        break;
-                                    }
-                                }
-
-                                if (targetIdx >= 0)
+                                if (labelIndex != null && labelIndex.TryGetValue(gotoEx.LabelName, out int targetIdx))
                                 {
                                     i = targetIdx - 1; // -1 because loop increment will do i++
                                     _logger.Debug("GOTO redirecting execution to label '{LabelName}'", gotoEx.LabelName);
