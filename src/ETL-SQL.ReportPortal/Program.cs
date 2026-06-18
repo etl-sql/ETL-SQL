@@ -527,6 +527,65 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 }).AllowAnonymous();
 
+// Lightweight load-balancer probe — intentionally narrower than /health. It checks only the
+// dependencies required for this node to safely accept traffic: portal DB, shared artifact storage,
+// and the node-registry/lease store.
+app.MapGet("/healthz", async (
+    IServiceScopeFactory scopes,
+    ETL_SQL.Core.Storage.IArtifactStorage artifacts,
+    ETL_SQL.Core.Data.INodeRegistryStore nodes,
+    CancellationToken ct) =>
+{
+    var checks = new Dictionary<string, string>();
+
+    try
+    {
+        await using var scope = scopes.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        checks["database"] = await db.Database.CanConnectAsync(ct) ? "ok" : "unreachable";
+    }
+    catch (Exception ex)
+    {
+        checks["database"] = ex.GetType().Name;
+    }
+
+    try
+    {
+        await foreach (var _ in artifacts.EnumerateAsync(
+            ETL_SQL.Core.Storage.ArtifactArea.Snapshots,
+            prefix: null,
+            recursive: false,
+            ct).WithCancellation(ct))
+        {
+            break;
+        }
+        checks["storage"] = "ok";
+    }
+    catch (Exception ex)
+    {
+        checks["storage"] = ex.GetType().Name;
+    }
+
+    try
+    {
+        await nodes.GetLiveNodesAsync();
+        checks["lease"] = "ok";
+    }
+    catch (Exception ex)
+    {
+        checks["lease"] = ex.GetType().Name;
+    }
+
+    var healthy = checks.Values.All(value => value == "ok");
+    return Results.Json(
+        new
+        {
+            status = healthy ? "Healthy" : "Unhealthy",
+            checks
+        },
+        statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
+
 app.MapGet("/third-party-notices", () =>
 {
     var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");

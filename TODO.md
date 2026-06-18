@@ -289,8 +289,13 @@ release begins.
   `CancellationTokenSource` in a bounded in-memory map and are cancelled with a lease-loss reason
   before another node can safely take over work. Tests cover heartbeat lease-loss notification,
   Portal job cancellation, the execution-service lane, and the hosted-service lane.
-- [ ] **P1.13 Lightweight `/healthz` endpoint** on Portal nodes checking database, storage, and lease
+- [x] **P1.13 Lightweight `/healthz` endpoint** on Portal nodes checking database, storage, and lease
   connectivity for load-balancer probes (distinct from the existing richer `/health`).
+  *(done)* Portal now maps anonymous `GET /healthz` separately from the ASP.NET health-check
+  pipeline. The endpoint returns HTTP 200 only when the portal database can connect, the configured
+  shared snapshot artifact storage can be enumerated, and the node-registry/lease store can be read;
+  any failure returns HTTP 503 with per-check status. Docs now direct load balancers to `/healthz`
+  and keep `/health` for richer monitoring. Test: `Healthz_ReturnsOkWithLightweightDependencyChecks`.
 - [ ] **P2.1 Node-capacity heartbeats + quarantine policy.**
   Heartbeat CPU/memory so overloaded nodes don't claim new leases; quarantine repeatedly-failing jobs
   to prevent cascade failures.

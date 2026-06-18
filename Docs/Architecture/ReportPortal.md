@@ -200,6 +200,10 @@ Three `IHealthCheck` implementations registered with `AddHealthChecks()`:
 
 The `/health` endpoint uses a custom `ResponseWriter` that serializes the `HealthReport` to a structured JSON document. It is mapped with `.AllowAnonymous()` so monitoring tools do not need a JWT.
 
+The `/healthz` endpoint is the lighter load-balancer probe. It bypasses the richer health-check
+pipeline and returns only database, artifact-storage, and node-registry lease-store connectivity as
+`ok`/failure values, with HTTP 503 when any of those required dependencies is unavailable.
+
 ---
 
 ## 8. Integration Testing Strategy

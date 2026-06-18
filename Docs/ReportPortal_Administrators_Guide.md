@@ -1288,7 +1288,12 @@ Service-control commands require an Admin user and are disabled by default. Enab
 The overall `status` is the worst of all individual checks: `Unhealthy` > `Degraded` > `Healthy`.
 
 > [!TIP]
-> Wire `GET /health` into your uptime monitor or load balancer health check. A `Degraded` response means the portal is functional but subscriptions may not fire. An `Unhealthy` response means the database is down and no API calls will succeed.
+> Wire `GET /health` into your uptime monitor or monitoring dashboard. A `Degraded` response means the portal is functional but subscriptions may not fire. An `Unhealthy` response means the database is down and no API calls will succeed.
+
+`GET /healthz` is the load-balancer-ready probe. It is anonymous and intentionally checks only the
+dependencies a Portal node needs to accept traffic safely: portal database connectivity, shared
+artifact storage readability, and node-registry/lease-store connectivity. It returns HTTP 200 with
+`"status": "Healthy"` when all three checks are `ok`, otherwise HTTP 503.
 
 ---
 
@@ -1633,7 +1638,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 - [ ] **Required** — For load-balanced HA deployments, configure sticky sessions using the portal affinity cookie (`ETLSQL_PORTAL_AFFINITY` by default). Interactive report sessions are cached in memory on the node that created them.
 - [ ] **Required** — Run the portal as a managed service (Windows Service or systemd unit) so it restarts automatically on host reboot or crash.
 - [ ] **Required** — Treat a restart or node heartbeat lease loss as cancellation of in-flight portal executions. Polling remains durable through `PortalExecutionJobs`; abandoned `Pending`/`Running` jobs return `Cancelled` with an interruption reason and must be submitted again.
-- [ ] **Recommended** — Verify the `/health` endpoint returns `Healthy` before directing user traffic. Wire this endpoint into your load balancer or monitoring system.
+- [ ] **Recommended** — Verify `/healthz` returns `Healthy` before directing user traffic. Use `/healthz` for load-balancer probes and `/health` for richer monitoring dashboards.
 - [ ] **Recommended** — If the Orchestrator is deployed separately, confirm `Portal:Orchestrator:ApiUrl` and both `ApiKey` values match. Verify the connection via the Admin → Orchestrator page.
 - [ ] **Recommended** — Configure SMTP for subscriptions. Test an outbound email from Admin → Connections before creating live subscriptions.
 
@@ -1641,7 +1646,7 @@ Use this checklist before promoting the Report Portal to a production or custome
 
 - [ ] **Recommended** — Enable structured logging (`Logging:LogLevel:Default` = `Information` minimum). Direct logs to a persistent file or log aggregator.
 - [ ] **Recommended** — Enable the audit log (`Portal:EnableAuditLog = true`) so report view, export, and subscription events are recorded.
-- [ ] **Recommended** — Set up a monitoring alert on the `/health` endpoint with a recovery window of ≤ 5 minutes.
+- [ ] **Recommended** — Set up monitoring alerts on `/health` and `/healthz` with a recovery window of ≤ 5 minutes.
 - [ ] **Recommended** — Review the Report History page after first production use to confirm snapshot refresh and subscription delivery are completing without errors.
 
 ### Operational Handoff

@@ -52,6 +52,22 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Healthz_ReturnsOkWithLightweightDependencyChecks()
+    {
+        var res = await _client.GetAsync("/healthz");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(body);
+        Assert.Equal("Healthy", body!["status"]?.GetValue<string>());
+        var checks = body["checks"]!.AsObject();
+        Assert.Equal("ok", checks["database"]?.GetValue<string>());
+        Assert.Equal("ok", checks["storage"]?.GetValue<string>());
+        Assert.Equal("ok", checks["lease"]?.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ArtifactStorage_RejectsStaleWriterThroughPortalDi()
     {
         using var scope = _factory.Services.CreateScope();
