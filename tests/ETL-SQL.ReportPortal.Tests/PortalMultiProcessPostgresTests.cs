@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Net.Sockets;
 using System.Text.Json;
 using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Data;
 using Testcontainers.PostgreSql;
 
 namespace ETL_SQL.ReportPortal.Tests;
@@ -132,6 +133,62 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         Assert.Single(folders, f => f.Path == $"/{folderName}");
     }
 
+    [Fact]
+    public async Task PermissionMutationRace_ConvergesAcrossProcesses()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        var second = StartPortal(shared, port: FreePort(), nodeName: "node-b");
+        _processes.Add(first);
+        _processes.Add(second);
+
+        await first.WaitForHealthzAsync();
+        await second.WaitForHealthzAsync();
+
+        using var client = new HttpClient();
+        var token = await BootstrapAdminTokenAsync(client, first);
+        var group = await SendJsonAsync<GroupDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/admin/groups",
+            token,
+            new { name = $"perm-race-{Guid.NewGuid():N}" },
+            HttpStatusCode.Created);
+        var folder = await SendJsonAsync<FolderDto>(
+            client,
+            HttpMethod.Post,
+            $"{first.BaseUrl}/api/folders",
+            token,
+            new { name = $"perm-race-{Guid.NewGuid():N}", parentId = (int?)null },
+            HttpStatusCode.Created);
+
+        var results = await Task.WhenAll(
+            SendJsonForStatusAsync(
+                client,
+                HttpMethod.Post,
+                $"{first.BaseUrl}/api/folders/{folder.Id}/acl",
+                token,
+                new { groupId = group.Id, permission = FolderPermission.Read },
+                ifMatchVersion: folder.Version),
+            SendJsonForStatusAsync(
+                client,
+                HttpMethod.Post,
+                $"{second.BaseUrl}/api/folders/{folder.Id}/acl",
+                token,
+                new { groupId = group.Id, permission = FolderPermission.Manage },
+                ifMatchVersion: folder.Version));
+
+        Assert.Contains(HttpStatusCode.OK, results);
+        Assert.Contains(HttpStatusCode.Conflict, results);
+
+        var acl = await GetJsonAsync<List<FolderAclDto>>(
+            client,
+            $"{second.BaseUrl}/api/folders/{folder.Id}/acl",
+            token);
+        var entry = Assert.Single(acl, value => value.GroupId == group.Id);
+        Assert.Contains(entry.Permission, new[] { FolderPermission.Read, FolderPermission.Manage });
+    }
+
     private SharedRoots CreateSharedRoots()
     {
         var shared = new SharedRoots(
@@ -255,7 +312,8 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         HttpMethod method,
         string url,
         string? token,
-        object body)
+        object body,
+        long? ifMatchVersion = null)
     {
         using var request = new HttpRequestMessage(method, url)
         {
@@ -263,6 +321,8 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
         };
         if (!string.IsNullOrWhiteSpace(token))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (ifMatchVersion is not null)
+            request.Headers.TryAddWithoutValidation("If-Match", $"\"{ifMatchVersion.Value}\"");
 
         using var response = await client.SendAsync(request);
         return response.StatusCode;
@@ -278,6 +338,15 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     private sealed record HealthzResponse(string Status, Dictionary<string, string> Checks);
     private sealed record LoginResponse(string Token, string RefreshToken, DateTime ExpiresAt);
     private sealed record FolderDto(int Id, int? ParentId, string Name, string Path, List<FolderDto> Children, long Version);
+    private sealed record GroupDto(
+        int Id,
+        string Name,
+        string? Description,
+        int MemberCount,
+        string Provider,
+        string? AdGroup,
+        long Version);
+    private sealed record FolderAclDto(int GroupId, string GroupName, FolderPermission Permission);
 
     private sealed class PortalProcess(Process process, string baseUrl) : IAsyncDisposable
     {
