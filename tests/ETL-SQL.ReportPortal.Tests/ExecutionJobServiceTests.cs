@@ -490,6 +490,37 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, j2);
     }
 
+    /// <summary>Interactive executions and refresh jobs share the same global pool and quota
+    /// gates: a busy group gets one slot, another group still gets one, and duplicate refresh
+    /// requests debounce to the existing refresh job instead of adding pressure to the queue.</summary>
+    [Fact]
+    public async Task MixedExecutionAndRefresh_RespectGroupQuotaAndRefreshDebounce()
+    {
+        var (config, provider) = await CreateGroupFairnessServicesAsync(globalCap: 2, perUserCap: 2, perGroupCap: 1);
+        await using var services = provider;
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(config, provider.GetRequiredService<IServiceScopeFactory>());
+
+        var sharedRefresh = await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
+        var duplicateRefresh = await service.EnqueueRefreshAsync(reportId: 1, userId: 7, scriptPath);
+        var sharedExecution = await service.EnqueueExecutionAsync(reportId: 2, userId: 8, scriptPath);
+        var otherRefresh = await service.EnqueueRefreshAsync(reportId: 3, userId: 9, scriptPath);
+
+        Assert.Equal(sharedRefresh, duplicateRefresh);
+
+        await WaitForRunningCountAsync(service, 2, sharedRefresh, sharedExecution, otherRefresh);
+
+        Assert.Equal(JobStatus.Running, (await service.GetAsync(otherRefresh))!.Status);
+        var sharedRefreshRunning = (await service.GetAsync(sharedRefresh))!.Status == JobStatus.Running;
+        var sharedExecutionRunning = (await service.GetAsync(sharedExecution))!.Status == JobStatus.Running;
+        Assert.True(sharedRefreshRunning ^ sharedExecutionRunning,
+            "the shared group should hold exactly one slot across refresh and execution work");
+
+        await WaitForTerminalAsync(service, sharedRefresh);
+        await WaitForTerminalAsync(service, sharedExecution);
+        await WaitForTerminalAsync(service, otherRefresh);
+    }
+
     /// <summary>An overloaded Portal node leaves work pending instead of consuming execution
     /// slots; once capacity recovers, the same queued job can start.</summary>
     [Fact]

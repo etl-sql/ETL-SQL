@@ -349,6 +349,6 @@ release begins.
   quota. Non-admin jobs acquire per-user, per-group, then global execution gates; admins bypass both
   user and group gates. Portal execution starts also honor node-capacity overload before consuming
   execution slots, matching the scheduler's capacity-aware lease-claim behavior. Tests cover user/group
-  starvation prevention, admin override, and overloaded nodes leaving queued work pending until capacity
-  recovers. Remaining: mixed interactive/scheduled/refresh/subscription load certification, queue
-  weighting, and cross-node capacity-aware claims under load.
+  starvation prevention, admin override, overloaded nodes leaving queued work pending until capacity
+  recovers, and mixed interactive execution + refresh contention with refresh debounce active. Remaining:
+  scheduled/subscription load certification, queue weighting, and cross-node capacity-aware claims under load.
