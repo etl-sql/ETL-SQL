@@ -161,6 +161,39 @@ public sealed class MultiInstanceCoordinationTests
         Assert.Equal(1, await db1.SubscriptionDeliveries.CountAsync(d => d.SubscriptionId == f.SubscriptionId));
     }
 
+    /// <summary>
+    /// A scheduler/poller burst can cause many nodes to observe the same durable completion at once.
+    /// The delivery ledger still permits exactly one recipient delivery.
+    /// </summary>
+    [Fact]
+    public async Task ConcurrentInstances_SameCompletionBurst_ExactlyOneDelivers()
+    {
+        using var factory = new PortalWebFactory();
+        using var _ = factory.CreateClient();
+        var f = await SeedAsync(factory, Guid.NewGuid().ToString("N")[..8]);
+
+        var instances = Enumerable.Range(0, 8)
+            .Select(_ => NewInstance(f))
+            .ToList();
+
+        try
+        {
+            var results = await Task.WhenAll(instances.Select(instance =>
+                instance.Service.DeliverAsync(f.SubscriptionId, "burst-T")));
+
+            Assert.Single(results, r => r.Outcome == SubscriptionDeliveryOutcome.Delivered);
+            Assert.Equal(7, results.Count(r => r.Outcome == SubscriptionDeliveryOutcome.Skipped));
+            Assert.Equal(1, instances.Sum(instance => instance.Runner.CallCount));
+            Assert.Equal(1, await instances[0].Db.SubscriptionDeliveries.CountAsync(
+                d => d.SubscriptionId == f.SubscriptionId));
+        }
+        finally
+        {
+            foreach (var instance in instances)
+                await instance.Db.DisposeAsync();
+        }
+    }
+
     /// <summary>Distinct completions are not falsely contended: each executor delivers its own.</summary>
     [Fact]
     public async Task ConcurrentInstances_DistinctCompletions_BothDeliver()

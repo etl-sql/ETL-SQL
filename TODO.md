@@ -357,5 +357,7 @@ release begins.
   starvation prevention, admin override, overloaded nodes leaving queued work pending until capacity
   recovers, mixed interactive execution + refresh contention with refresh debounce active, and
   cross-node scheduler claims where an overloaded node leaves a due job for a healthy peer sharing the
-  durable store. Remaining: scheduled/subscription load certification, queue weighting, and heavier
-  cross-node capacity-aware claims under load.
+  durable store. Scheduled/subscription certification now includes a burst of independent poller-like
+  delivery executors observing the same durable subscription completion, proving the ledger permits
+  exactly one delivery and suppresses duplicates. Remaining: queue weighting and heavier cross-node
+  capacity-aware claims under load.
