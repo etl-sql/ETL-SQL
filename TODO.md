@@ -163,8 +163,10 @@ release begins.
   >   bypassing `IArtifactStorage`.~~ The key ring is now driven by `Portal:Storage:KeyRingPath` (defaults
   >   to node-local `.portal-keys`); the DP key ring and the Keys artifact area share one configurable
   >   root, so a multi-node deployment points every node at the same shared location.
-  > - **[IN PROGRESS]** Portal/Hosting consumers still mostly use direct `File.*` / `Directory.*` paths.
-  >   Migrating incrementally to area-relative `IArtifactStorage` keys, risk-ranked by stored-path model:
+  > - **[DEFERRED FOLLOW-ON]** Some Portal/Hosting consumers still use direct `File.*` / `Directory.*`
+  >   paths where the stored model is absolute-path based or not yet storage-provider-owned. Migrating
+  >   the rest to area-relative `IArtifactStorage` keys is tracked as future storage-authority hardening,
+  >   risk-ranked by stored-path model:
   >   - **Maps — DONE.** `GET /api/maps/custom` reads via the Maps area; relative client paths, no stored
   >     paths, so no data-model change. (Also fixed a latent bug: the storage singleton captured the
   >     startup `PortalConfig` local instead of resolving it from DI, ignoring later overrides.)
@@ -179,14 +181,13 @@ release begins.
   >     Tests: new upload round-trip + rejection tests; existing script-content versioning / DAG /
   >     parameters / 230 standard-lane portal tests green. Remaining script readers outside the controller
   >     (`ExecutionJobService`, `ReportScriptInspectionService`) still use `File.*` against the shared root.
-  >   - **Snapshots — read side DONE.** `ExecutionController` snapshot view + raw-manifest endpoints now
+  >   - **Snapshots — DONE.** `ExecutionController` snapshot view + raw-manifest endpoints now
   >     read via the `IArtifactStorage` Snapshots area (shared `PortalPathGuard.ToSnapshotKey` normalizes the
   >     absolute-or-relative stored `ManifestPath`; `ToScriptKey` was lifted here too so both controllers
-  >     share one helper). **Write side remains** and is cross-service: the manifest write goes through
-  >     `SnapshotStore.SaveAsync(absolutePath)` in `ExecutionJobService`, the remote path has the
-  >     **Orchestrator** service writing the manifest independently (`JobApiEndpoints`), plus retention
-  >     pruning deletes — migrating writes means threading `IArtifactStorage` through those and is its own
-  >     slice. 230 standard-lane portal tests green.
+  >     share one helper). `ExecutionJobService` now writes manifests through the Snapshots area and
+  >     retention pruning deletes through the same storage provider. Remote orchestrator completion is
+  >     accepted only when it returns manifest JSON or the expected shared snapshot artifact exists.
+  >     Snapshot-focused portal tests and Docker-backed multi-process recovery tests are green.
   >   - **Datasets — large, cross-tier.** Catalog stores **absolute** `ParquetFilePath` produced by
   >     **Engine** handlers (Create/Publish/Refresh, a lower tier with no Portal reference), encrypted at
   >     rest and read via decrypt-to-temp. Migrating means an absolute→relative data-model change touching
