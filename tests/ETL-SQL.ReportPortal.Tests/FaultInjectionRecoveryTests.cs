@@ -1,8 +1,12 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
@@ -17,9 +21,10 @@ namespace ETL_SQL.ReportPortal.Tests;
 /// <summary>
 /// P2.4 fault injection and recovery: reconciliation is idempotent and preserves the last
 /// known-good state, tolerates a file it cannot delete (a busy/locked file) without crashing, and
-/// the Orchestrator poller degrades safely when its database is unavailable. Deterministic,
-/// fast-lane scenarios; non-deterministic faults (disk full, network partition, clock skew) belong
-/// to a separate chaos/integration harness and are tracked as residual.
+/// the Orchestrator poller degrades safely when its database is unavailable. It also covers
+/// disk-pressure-style snapshot write failures at the storage boundary. Deterministic, fast-lane
+/// scenarios; non-deterministic faults (true volume exhaustion, network partition, clock skew)
+/// belong to a separate chaos/integration harness and are tracked as residual.
 /// </summary>
 [Trait("Category", "Portal")]
 public sealed class FaultInjectionRecoveryTests : IDisposable
@@ -172,6 +177,80 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         Assert.Equal("ok", checks["lease"]!.GetValue<string>());
     }
 
+    /// <summary>
+    /// A disk-pressure style write failure while saving the report snapshot must fail closed:
+    /// the execution job is terminally failed, refresh status records the storage error, and no
+    /// ReportSnapshots row is inserted for a manifest that was never durably written.
+    /// </summary>
+    [Fact]
+    public async Task ExecutionSnapshotWriteFailure_FailsJobWithoutSnapshotRow()
+    {
+        var scriptRoot = Path.Combine(_root, "scripts");
+        var snapshotRoot = Path.Combine(_root, "snapshots");
+        Directory.CreateDirectory(scriptRoot);
+        Directory.CreateDirectory(snapshotRoot);
+        var scriptPath = Path.Combine(scriptRoot, "disk_pressure.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Disk Pressure';");
+
+        var config = new PortalConfig
+        {
+            DatabasePath = Path.Combine(_root, "portal-exec.db"),
+            ScriptRootPath = scriptRoot,
+            SnapshotDirectory = snapshotRoot,
+            DatasetRootPath = Path.Combine(_root, "datasets")
+        };
+        var services = new ServiceCollection()
+            .AddDbContext<PortalDbContext>(options =>
+                options.UseSqlite($"Data Source={config.DatabasePath}"))
+            .BuildServiceProvider();
+        await using var provider = services;
+
+        int reportId;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var folder = new Folder { Name = "fault", Path = "/fault", OwnerId = 1 };
+            var report = new Report
+            {
+                Folder = folder,
+                Name = "disk pressure",
+                ScriptPath = scriptPath,
+                CreatedBy = 1
+            };
+            db.AddRange(folder, report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        using var service = new ExecutionJobService(
+            config,
+            scopes,
+            NullLogger<ExecutionJobService>.Instance,
+            sessions,
+            new HttpJobChannelClient(
+                new HttpClient(new CompletedManifestHandler()) { BaseAddress = new Uri("http://orchestrator.test") },
+                NullLogger<HttpJobChannelClient>.Instance),
+            artifacts: new DiskPressureSnapshotStorage(),
+            capacityMonitor: new HealthyCapacityMonitor());
+
+        var jobId = await service.EnqueueExecutionAsync(reportId, userId: 1, scriptPath);
+        await WaitForTerminalAsync(service, jobId);
+
+        var job = await service.GetAsync(jobId);
+        Assert.Equal(JobStatus.Failed, job!.Status);
+        Assert.Contains("disk pressure", job.Error!, StringComparison.OrdinalIgnoreCase);
+
+        await using var verifyScope = provider.CreateAsyncScope();
+        var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
+        var reportState = await verifyDb.Reports.FindAsync(reportId);
+        Assert.Equal("Failed", reportState!.LastRefreshStatus);
+        Assert.Contains("disk pressure", reportState.LastRefreshError!, StringComparison.OrdinalIgnoreCase);
+    }
+
     private sealed class StorageOutagePortalFactory : PortalWebFactory
     {
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -254,5 +333,144 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
 
         public Task<IArtifactLease> LeaseLocalCopyAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
             throw new InvalidOperationException("simulated shared storage outage");
+    }
+
+    private sealed class DiskPressureSnapshotStorage : IArtifactStorage
+    {
+        private readonly InMemoryArtifactStorage _inner = new();
+
+        public Task<bool> ExistsAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.ExistsAsync(area, path, ct);
+
+        public Task<ArtifactInfo?> GetInfoAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.GetInfoAsync(area, path, ct);
+
+        public IAsyncEnumerable<ArtifactInfo> EnumerateAsync(
+            ArtifactArea area,
+            string? prefix = null,
+            bool recursive = true,
+            CancellationToken ct = default) =>
+            _inner.EnumerateAsync(area, prefix, recursive, ct);
+
+        public Task<Stream> OpenReadAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.OpenReadAsync(area, path, ct);
+
+        public Task<byte[]> ReadAllBytesAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.ReadAllBytesAsync(area, path, ct);
+
+        public Task<string> ReadAllTextAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.ReadAllTextAsync(area, path, ct);
+
+        public Task WriteAsync(
+            ArtifactArea area,
+            string path,
+            Stream content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            area == ArtifactArea.Snapshots
+                ? throw new IOException("simulated disk pressure while writing snapshot")
+                : _inner.WriteAsync(area, path, content, overwrite, ct);
+
+        public Task WriteAllBytesAsync(
+            ArtifactArea area,
+            string path,
+            ReadOnlyMemory<byte> content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            area == ArtifactArea.Snapshots
+                ? throw new IOException("simulated disk pressure while writing snapshot")
+                : _inner.WriteAllBytesAsync(area, path, content, overwrite, ct);
+
+        public Task WriteAllTextAsync(
+            ArtifactArea area,
+            string path,
+            string content,
+            bool overwrite = true,
+            CancellationToken ct = default) =>
+            area == ArtifactArea.Snapshots
+                ? throw new IOException("simulated disk pressure while writing snapshot")
+                : _inner.WriteAllTextAsync(area, path, content, overwrite, ct);
+
+        public Task<bool> DeleteAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.DeleteAsync(area, path, ct);
+
+        public Task MoveAsync(
+            ArtifactArea area,
+            string sourcePath,
+            string destinationPath,
+            bool overwrite = false,
+            CancellationToken ct = default) =>
+            area == ArtifactArea.Snapshots
+                ? throw new IOException("simulated disk pressure while writing snapshot")
+                : _inner.MoveAsync(area, sourcePath, destinationPath, overwrite, ct);
+
+        public Task<IArtifactLease> LeaseLocalCopyAsync(ArtifactArea area, string path, CancellationToken ct = default) =>
+            _inner.LeaseLocalCopyAsync(area, path, ct);
+    }
+
+    private sealed class CompletedManifestHandler : HttpMessageHandler
+    {
+        private readonly string _manifestJson = JsonSerializer.Serialize(new ReportManifest
+        {
+            Source = "remote",
+            BuiltAt = DateTime.UtcNow,
+            Title = "Disk Pressure"
+        });
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/jobs")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new { jobId = "completed-manifest-job" })
+                });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/jobs/completed-manifest-job")
+            {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new JobStatusResponse
+                    {
+                        JobId = "completed-manifest-job",
+                        Status = JobRunStatus.Completed,
+                        ReportManifestJson = _manifestJson
+                    })
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        }
+    }
+
+    private sealed class HealthyCapacityMonitor : INodeCapacityMonitor
+    {
+        public NodeCapacitySnapshot Capture() => new(
+            WorkingSetBytes: 1,
+            GcHeapBytes: 1,
+            TotalAvailableMemoryBytes: 100,
+            MemoryLoadPercent: 10,
+            ProcessCpuPercent: 10,
+            ProcessorCount: 1,
+            IsOverloaded: false,
+            CapturedAtUtc: DateTime.UtcNow);
+    }
+
+    private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var job = await service.GetAsync(jobId);
+            Assert.NotNull(job);
+            if (job.Status is JobStatus.Cancelled or JobStatus.Failed or JobStatus.Completed)
+                return;
+            await Task.Delay(25);
+        }
+
+        Assert.Fail($"Job {jobId} did not reach a terminal state within 10s.");
     }
 }
