@@ -16,6 +16,7 @@ using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.Tests.Integration.Connectors;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests
@@ -880,7 +881,7 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
         [Fact]
         public async Task Verify_Subscription_History_When_Orchestrator_Db_Is_Unavailable()
         {
-            using var portalFactory = new PortalWebFactory();
+            using var portalFactory = new FailingOrchestratorPortalFactory();
             var orchDbPath = Path.Combine(portalFactory.TempDir, "etlsql.db");
             File.Delete(orchDbPath);
             using var portalClient = portalFactory.CreateClient();
@@ -1062,6 +1063,39 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
                 Assert.Empty(await store.GetHistoryAsync(jobName, 10));
                 await Task.Delay(500);
             }
+        }
+    }
+
+    internal sealed class FailingOrchestratorPortalFactory : PortalWebFactory
+    {
+        protected override void ConfigureWebHost(Microsoft.AspNetCore.Hosting.IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services =>
+            {
+                // Create an isolated lock/epoch store so it doesn't touch the deleted etlsql.db
+                var lockDbPath = Path.Combine(TempDir, "lock.db");
+                var lockStore = new SQLiteJobHistoryStore(lockDbPath);
+                
+                services.RemoveAll<IClusterLockStore>();
+                services.AddSingleton<IClusterLockStore>(lockStore);
+                
+                services.RemoveAll<IWriteEpochStore>();
+                services.AddSingleton<IWriteEpochStore>(lockStore);
+
+                // Re-register the store factory to throw on Create(), simulating database outage
+                services.RemoveAll<IOrchestratorStoreFactory>();
+                services.AddSingleton<IOrchestratorStoreFactory, FailingOrchestratorStoreFactory>();
+            });
+        }
+    }
+
+    internal sealed class FailingOrchestratorStoreFactory : IOrchestratorStoreFactory
+    {
+        public ETL_SQL.Common.DatabaseProvider Provider => ETL_SQL.Common.DatabaseProvider.Sqlite;
+        public IJobHistoryStore Create(string? dbPath = null)
+        {
+            throw new Exception("Database connection failed (simulated outage).");
         }
     }
 }
