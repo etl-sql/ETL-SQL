@@ -329,7 +329,8 @@ release begins.
   `409 Conflict`, and one durable ACL row. Simultaneous refresh claims across two processes now converge
   to one shared durable job id. It also covers task reclamation after process termination: a refresh
   accepted by one Portal process is reclaimed as `Cancelled` with interruption details when another
-  process starts against the same shared state. Remaining: cancellation/failover recovery.
+  process starts against the same shared state, and that failover node can immediately accept a fresh
+  refresh instead of being blocked by stale active state. Remaining: explicit cross-process cancellation.
 - [ ] **P2.4 Deterministic chaos scenarios:** process termination between cross-resource steps,
   database/storage unavailability, network partition, disk exhaustion/pressure, and bounded clock skew.
   (v0.11.0 deferred disk-full / partition / clock-skew here.)

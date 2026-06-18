@@ -319,6 +319,23 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
             token);
         Assert.Equal("Cancelled", reportState.LastRefreshStatus);
         Assert.Contains("interrupted", reportState.LastRefreshError ?? "", StringComparison.OrdinalIgnoreCase);
+
+        await File.WriteAllTextAsync(scriptPath, """
+            CREATE VISUAL Recovered AS TABLE (
+                SOURCE = (SELECT 8 AS Value),
+                MAPPINGS (Value = Value)
+            );
+            """);
+
+        var recoveredRefresh = await SendJsonAsync<RefreshDto>(
+            client,
+            HttpMethod.Post,
+            $"{second.BaseUrl}/api/reports/{report.Id}/refresh",
+            token,
+            new { },
+            HttpStatusCode.Accepted);
+        Assert.NotEqual(refresh.JobId, recoveredRefresh.JobId);
+        Assert.False(recoveredRefresh.AlreadyRunning);
     }
 
     private SharedRoots CreateSharedRoots()
