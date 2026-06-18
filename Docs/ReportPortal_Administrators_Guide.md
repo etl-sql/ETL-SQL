@@ -558,6 +558,12 @@ remain valid (for example, audit rows written before correlation-id support read
 correlation id). This is covered by an automated upgrade-path drill that seeds the previous release's
 schema, migrates forward over populated data, and asserts continuity.
 
+Rolling upgrade migrations follow an expand/migrate/contract discipline. The automated
+`PortalMigrations_UpOperationsFollowRollingExpandContract` test rejects destructive `Up` operations
+such as table/column drops, table/column renames, existing-column alterations, or required columns
+without defaults. Destructive contract cleanup must be a later, explicit migration after all nodes
+are running binaries that no longer depend on the old shape.
+
 Procedure for an in-place upgrade:
 
 1. **Take a complete coordinated backup first** (the full set listed above, with matching secrets).

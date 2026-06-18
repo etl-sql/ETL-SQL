@@ -309,8 +309,15 @@ release begins.
 
 ### Phase 5 — Rolling Deployment Certification
 
-- [ ] **P2.2 Verify expand/migrate/contract migrations** for zero-downtime rolling upgrades (distinct
+- [x] **P2.2 Verify expand/migrate/contract migrations** for zero-downtime rolling upgrades (distinct
   from the in-place N→N+1 drill, which is single-node).
+  *(done)* `MigrationConvergenceTests` now includes
+  `PortalMigrations_UpOperationsFollowRollingExpandContract`, which inspects EF migration
+  `UpOperations` and fails on destructive rolling-upgrade operations: table/column drops,
+  table/column renames, existing-column alterations, or required columns added without defaults.
+  The previous-release convergence drill now uses the current penultimate migration dynamically
+  instead of a hard-coded migration name, so it continues to test N-1 → HEAD as migrations are added.
+  Existing upgrade-path drill still proves populated data survives migration to HEAD.
 - [ ] **P2.3 True multi-OS-process tests** against PostgreSQL + shared storage (separate processes, not
   in-process proxies): simultaneous claims, cancellation, permission changes, restart recovery,
   conflicting administration, failover recovery, and task reclamation. (v0.11.0 deferred this here.)

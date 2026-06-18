@@ -3,6 +3,7 @@ using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportPortal.Tests;
@@ -62,14 +63,22 @@ public sealed class MigrationConvergenceTests : IDisposable
     public async Task OutOfDateDatabase_AtPreviousRelease_ConvergesToHeadOnMigrate()
     {
         var options = Options("legacy.db");
+        string previousMigration;
+        await using (var probe = new PortalDbContext(options))
+        {
+            var migrations = probe.Database.GetMigrations().ToList();
+            Assert.True(migrations.Count >= 2, "Expected at least two migrations for an N-1 upgrade drill.");
+            previousMigration = migrations[^2];
+        }
 
-        // Bring the catalog to the previous release (the migration immediately before this release's two).
+        // Bring the catalog to the previous migration. This keeps the drill current as new migrations are
+        // added: N-1 must be able to roll forward to HEAD without a hand-maintained migration name.
         await using (var db = new PortalDbContext(options))
         {
             var migrator = db.GetInfrastructure().GetRequiredService<IMigrator>();
-            await migrator.MigrateAsync("AddDurablePortalExecutionJobs");
+            await migrator.MigrateAsync(previousMigration);
 
-            // The catalog is now out of date: this release's migrations are still pending.
+            // The catalog is now out of date: HEAD migrations are still pending.
             Assert.NotEmpty(await db.Database.GetPendingMigrationsAsync());
         }
 
@@ -84,5 +93,47 @@ public sealed class MigrationConvergenceTests : IDisposable
             Assert.True(m.SchemaUpToDate);
             Assert.Equal(0, m.PendingMigrations);
         }
+    }
+
+    [Fact]
+    public async Task PortalMigrations_UpOperationsFollowRollingExpandContract()
+    {
+        var options = Options("contract.db");
+        await using var db = new PortalDbContext(options);
+        var provider = db.Database.ProviderName ?? "Microsoft.EntityFrameworkCore.Sqlite";
+        var migrations = db.GetInfrastructure().GetRequiredService<IMigrationsAssembly>();
+
+        var violations = new List<string>();
+        foreach (var (id, typeInfo) in migrations.Migrations)
+        {
+            var migration = migrations.CreateMigration(typeInfo, provider);
+            foreach (var operation in migration.UpOperations)
+            {
+                if (IsRollingContractViolation(operation, out var reason))
+                    violations.Add($"{id}: {operation.GetType().Name} - {reason}");
+            }
+        }
+
+        Assert.Empty(violations);
+        Assert.NotEmpty(migrations.Migrations);
+    }
+
+    private static bool IsRollingContractViolation(MigrationOperation operation, out string reason)
+    {
+        reason = operation switch
+        {
+            DropTableOperation => "drops a table during Up",
+            DropColumnOperation => "drops a column during Up",
+            RenameTableOperation => "renames a table during Up",
+            RenameColumnOperation => "renames a column during Up",
+            AlterColumnOperation => "alters an existing column during Up",
+            AddColumnOperation add when !add.IsNullable
+                && add.DefaultValue is null
+                && string.IsNullOrWhiteSpace(add.DefaultValueSql)
+                && string.IsNullOrWhiteSpace(add.ComputedColumnSql)
+                => "adds a required column without a server/default value",
+            _ => ""
+        };
+        return reason.Length > 0;
     }
 }
