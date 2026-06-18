@@ -153,5 +153,76 @@ namespace ETL_SQL.Tests.Orchestration
                 await service.StopAsync(CancellationToken.None);
             }
         }
+
+        [Fact]
+        public async Task HeartbeatService_NotifiesHandlers_WhenLocalLeaseExpires()
+        {
+            var store = new FailingAfterFirstHeartbeatStore();
+            var handler = new CapturingLeaseLossHandler();
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Cluster:NodeHeartbeatSeconds"] = "1",
+                    ["Cluster:NodeHeartbeatMinimumSeconds"] = "1",
+                    ["Cluster:NodeHeartbeatMinimumIntervalSeconds"] = "1"
+                })
+                .Build();
+            var service = new NodeHeartbeatService(
+                store,
+                config,
+                NullLogger<NodeHeartbeatService>.Instance,
+                "Portal",
+                [handler]);
+
+            await service.StartAsync(CancellationToken.None);
+            try
+            {
+                var completed = await Task.WhenAny(handler.Lost.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+                Assert.Same(handler.Lost.Task, completed);
+                var loss = await handler.Lost.Task;
+                Assert.Equal(service.NodeId, loss.NodeId);
+                Assert.Equal("Portal", loss.Role);
+                Assert.Contains("expired", loss.Reason, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                await service.StopAsync(CancellationToken.None);
+            }
+        }
+
+        private sealed class FailingAfterFirstHeartbeatStore : INodeRegistryStore
+        {
+            private int _heartbeats;
+
+            public Task RegisterOrRenewNodeAsync(
+                string nodeId, string role, TimeSpan ttl, string? metadata = null)
+            {
+                if (Interlocked.Increment(ref _heartbeats) > 1)
+                    throw new InvalidOperationException("simulated registry partition");
+                return Task.CompletedTask;
+            }
+
+            public Task<IReadOnlyList<NodeHeartbeat>> GetLiveNodesAsync() =>
+                Task.FromResult<IReadOnlyList<NodeHeartbeat>>([]);
+
+            public Task<IReadOnlyList<NodeHeartbeat>> GetAllNodesAsync() =>
+                Task.FromResult<IReadOnlyList<NodeHeartbeat>>([]);
+
+            public Task DeregisterNodeAsync(string nodeId) => Task.CompletedTask;
+
+            public Task<int> PruneExpiredNodesAsync() => Task.FromResult(0);
+        }
+
+        private sealed class CapturingLeaseLossHandler : INodeLeaseLossHandler
+        {
+            public TaskCompletionSource<(string NodeId, string Role, string Reason)> Lost { get; } =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public Task OnNodeLeaseLostAsync(string nodeId, string role, string reason, CancellationToken ct)
+            {
+                Lost.TrySetResult((nodeId, role, reason));
+                return Task.CompletedTask;
+            }
+        }
     }
 }

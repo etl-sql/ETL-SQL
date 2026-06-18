@@ -277,6 +277,27 @@ public class ExecutionJobServiceTests : IDisposable
         await service.StopAsync(CancellationToken.None);
     }
 
+    [Fact]
+    public async Task NodeLeaseLoss_CancelsLocalRunningJobs()
+    {
+        var scriptPath = await HangScriptAsync();
+        using var service = HangingService(FairnessConfig(globalCap: 1, perUserCap: 1, timeoutSeconds: 30));
+
+        var jobId = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+        await WaitForRunningCountAsync(service, 1, jobId);
+
+        await service.OnNodeLeaseLostAsync(
+            "portal-node-a",
+            "Portal",
+            "Node heartbeat lease expired.",
+            CancellationToken.None);
+
+        await WaitForTerminalAsync(service, jobId);
+        var job = await service.GetAsync(jobId);
+        Assert.Equal(JobStatus.Cancelled, job!.Status);
+        Assert.Contains("lease", job.Error!, StringComparison.OrdinalIgnoreCase);
+    }
+
     private (PortalConfig Config, ServiceProvider Provider) CreatePersistentServices()
     {
         var config = new PortalConfig

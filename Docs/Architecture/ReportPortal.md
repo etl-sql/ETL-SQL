@@ -147,10 +147,10 @@ GET /api/reports/{id}/snapshot — fetch completed snapshot JSON
 ```
 
 **Supported topology:** one active Report Portal process per portal SQLite database and
-script/snapshot/dataset storage root. `ExecutionJobService` holds an exclusive
-Portal nodes are allowed to run concurrently when they share the configured database and artifact
-storage roots. Startup-critical singleton work, such as EF migrations, is serialized with the
-database-backed cluster lock instead of a node-local filesystem lock.
+script/snapshot/dataset storage root. Portal nodes are allowed to run concurrently when they share
+the configured database and artifact storage roots. Startup-critical singleton work, such as EF
+migrations, is serialized with the database-backed cluster lock instead of a node-local filesystem
+lock.
 The execution semaphore, interactive session cache, ASP.NET rate-limit partitions, and PDF quota
 are therefore intentionally process-local.
 
@@ -159,7 +159,10 @@ are therefore intentionally process-local.
 also written to `PortalExecutionJobs`, so `GET /api/jobs/{jobId}` remains meaningful after a
 restart. A filtered unique index permits only one `Pending`/`Running` refresh per report. Startup
 marks abandoned jobs and report refresh status as `Cancelled` with an interruption reason; it
-does not claim that vanished work completed successfully.
+does not claim that vanished work completed successfully. While the process is live, the cluster
+node heartbeat is also treated as a local-work lease: if heartbeat renewal fails long enough for
+this node's registry lease to expire, `ExecutionJobService` cancels every locally running execution
+before another node can safely take over work.
 
 **`SessionCache`** is a singleton hosted service that holds in-memory execution sessions for
 active result streaming. It evicts idle sessions after `SessionCacheTtlMinutes` and enforces a max

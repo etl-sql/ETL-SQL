@@ -281,8 +281,14 @@ release begins.
   Portal node id and affinity cookie name for deployment validation. Docs now call out the
   `Portal:LoadBalancer` settings and the production readiness requirement. Tests cover the emitted
   affinity cookie, health response, operational metrics, and hosted-service lane.
-- [ ] **P1.12 Lease-loss cancels local work:** a partitioned node that loses its database lease
+- [x] **P1.12 Lease-loss cancels local work:** a partitioned node that loses its database lease
   immediately cancels its running jobs.
+  *(done)* `NodeHeartbeatService` now tracks the locally renewed node-registry lease expiry and
+  notifies `INodeLeaseLossHandler` implementations once renewal failures last past that expiry.
+  Portal registers `ExecutionJobService` as a handler; running local jobs keep their
+  `CancellationTokenSource` in a bounded in-memory map and are cancelled with a lease-loss reason
+  before another node can safely take over work. Tests cover heartbeat lease-loss notification,
+  Portal job cancellation, the execution-service lane, and the hosted-service lane.
 - [ ] **P1.13 Lightweight `/healthz` endpoint** on Portal nodes checking database, storage, and lease
   connectivity for load-balancer probes (distinct from the existing richer `/health`).
 - [ ] **P2.1 Node-capacity heartbeats + quarantine policy.**

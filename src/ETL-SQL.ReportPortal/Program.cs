@@ -326,6 +326,8 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionSe
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.ExecutionJobService>();
+builder.Services.AddSingleton<ETL_SQL.Orchestrator.Scheduling.INodeLeaseLossHandler>(
+    sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPollerService>();
 

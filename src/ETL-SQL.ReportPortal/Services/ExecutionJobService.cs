@@ -5,6 +5,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
@@ -39,10 +40,12 @@ public record ExecutionJob(
 /// and stores the ManifestPath in ReportSnapshots.
 /// Concurrency is capped by MaxConcurrentReportExecutions.
 /// </summary>
-public class ExecutionJobService : IHostedService, IDisposable
+public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDisposable
 {
     private readonly ConcurrentDictionary<string, ExecutionJob> _jobs = new();
     private readonly ConcurrentDictionary<int, string> _activeRefreshes = new();
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningJobCancellations = new();
+    private readonly ConcurrentDictionary<string, string> _jobCancellationReasons = new();
     private readonly SemaphoreSlim _gate;
 
     /// <summary>Per-user concurrency limiters (workload fairness, P2.6). Keyed by user id; one
@@ -224,6 +227,7 @@ public class ExecutionJobService : IHostedService, IDisposable
             return;
         }
 
+        _runningJobCancellations[job.Id] = cts;
         try
         {
             job.Status = JobStatus.Running;
@@ -381,7 +385,9 @@ public class ExecutionJobService : IHostedService, IDisposable
         {
             job.Status = JobStatus.Cancelled;
             job.CompletedAt = DateTime.UtcNow;
-            job.Error = "Execution timed out or was cancelled";
+            job.Error = _jobCancellationReasons.TryRemove(job.Id, out var reason)
+                ? reason
+                : "Execution timed out or was cancelled";
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
@@ -398,10 +404,44 @@ public class ExecutionJobService : IHostedService, IDisposable
         }
         finally
         {
+            _runningJobCancellations.TryRemove(job.Id, out _);
+            _jobCancellationReasons.TryRemove(job.Id, out _);
             _gate.Release();
             userGate?.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+    }
+
+    public Task OnNodeLeaseLostAsync(string nodeId, string role, string reason, CancellationToken ct)
+    {
+        var cancelled = CancelLocalRunningJobs(
+            $"Portal node lease was lost ({nodeId}, role={role}): {reason}");
+        if (cancelled > 0)
+            _log.LogError("Cancelled {Count} local execution job(s) after node lease loss.", cancelled);
+        return Task.CompletedTask;
+    }
+
+    internal int CancelLocalRunningJobs(string reason)
+    {
+        var cancelled = 0;
+        foreach (var (jobId, cts) in _runningJobCancellations)
+        {
+            if (cts.IsCancellationRequested)
+                continue;
+
+            _jobCancellationReasons[jobId] = reason;
+            try
+            {
+                cts.Cancel();
+                cancelled++;
+            }
+            catch (ObjectDisposedException)
+            {
+                _jobCancellationReasons.TryRemove(jobId, out _);
+            }
+        }
+
+        return cancelled;
     }
 
     private SemaphoreSlim GetUserGate(int userId)
@@ -623,6 +663,7 @@ public class ExecutionJobService : IHostedService, IDisposable
 
     public void Dispose()
     {
+        CancelLocalRunningJobs("Execution service is shutting down.");
         _gate.Dispose();
         foreach (var gate in _userGates.Values)
             gate.Dispose();
