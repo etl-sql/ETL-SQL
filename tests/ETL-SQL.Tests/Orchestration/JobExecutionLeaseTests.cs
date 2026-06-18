@@ -171,6 +171,41 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(1, healthyExecutor.Count);
         }
 
+        [Fact]
+        public async Task HealthySchedulerClaimsDueJobBurstWhenPeerIsOverloaded()
+        {
+            await _store.InitializeAsync();
+            const int jobCount = 12;
+            for (var i = 0; i < jobCount; i++)
+                await _store.SaveJobAsync(MakeJob($"capacity_burst_{i:00}"));
+
+            var jobs = await _store.GetAllJobsAsync();
+            var overloadedExecutor = new CountingExecutor();
+            var healthyExecutor = new CountingExecutor();
+            var overloadedScheduler = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                overloadedExecutor,
+                new FixedCapacityMonitor(isOverloaded: true));
+            var healthyScheduler = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                healthyExecutor,
+                new FixedCapacityMonitor(isOverloaded: false));
+
+            await Task.WhenAll(jobs.Select(job => Task.WhenAll(
+                InvokeExecuteJobAsync(overloadedScheduler, job),
+                InvokeExecuteJobAsync(healthyScheduler, job))));
+
+            Assert.Equal(0, overloadedExecutor.Count);
+            Assert.Equal(jobCount, healthyExecutor.Count);
+            foreach (var job in jobs)
+            {
+                Assert.True(await _store.TryAcquireJobLeaseAsync(
+                    job.Name,
+                    $"verifier-{job.Name}",
+                    TimeSpan.FromMinutes(5)));
+            }
+        }
+
         private static SchedulerService BuildScheduler(
             IJobHistoryStore store,
             IScriptExecutor executor,
