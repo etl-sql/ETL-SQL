@@ -342,9 +342,11 @@ release begins.
   stops the backing database and verifies `/healthz` fails closed with a non-ok database check. It also
   covers disk-pressure-style snapshot write failure during execution, proving the job fails closed and
   no snapshot row is inserted without a durable manifest. Orchestrator process-executor chaos now covers
-  both timeout-driven and caller-cancellation child-process kills plus startup orphan cleanup. Remaining:
-  bounded clock-skew, disk exhaustion/pressure at the filesystem/volume layer, and network-partition
-  chaos harnesses.
+  both timeout-driven and caller-cancellation child-process kills plus startup orphan cleanup. Node
+  registry liveness now uses the shared database UTC clock for heartbeat expiry, live-node filtering,
+  and pruning, with a deterministic skewed-clock test proving process clock drift cannot extend or
+  prematurely expire node leases. Remaining: disk exhaustion/pressure at the filesystem/volume layer
+  and network-partition chaos harnesses.
 - [x] **P2.5 Prove lease-loss + fencing under partition:** lease loss cancels local work and fencing
   tokens reject every stale writer after a partition heals.
   *(done)* Added a deterministic partition-recovery proof that combines the Portal execution lease-loss

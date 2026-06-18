@@ -35,6 +35,9 @@ namespace ETL_SQL.Orchestrator.Storage
         /// <summary>Column definition for an auto-incrementing integer primary key (the <c>Id</c> column).</summary>
         string AutoIncrementPrimaryKey { get; }
 
+        /// <summary>Provider SQL that returns the current UTC timestamp from the database clock.</summary>
+        string UtcNowSql { get; }
+
         /// <summary>Returns the existing column names of <paramref name="table"/> (for the additive
         /// ALTER-TABLE schema-migration sweep). SQLite uses <c>PRAGMA table_info</c>; PostgreSQL uses
         /// <c>information_schema.columns</c>.</summary>

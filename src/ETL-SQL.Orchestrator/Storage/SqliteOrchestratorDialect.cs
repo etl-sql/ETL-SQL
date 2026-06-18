@@ -24,6 +24,8 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public string AutoIncrementPrimaryKey => "INTEGER PRIMARY KEY AUTOINCREMENT";
 
+        public string UtcNowSql => "SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now');";
+
         public async Task<HashSet<string>> GetColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default)
         {
             // Case-insensitive so the additive column sweep works identically across providers

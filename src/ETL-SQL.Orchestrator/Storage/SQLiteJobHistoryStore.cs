@@ -555,7 +555,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
 
-            var now = DateTime.UtcNow;
+            var now = await GetDatabaseUtcNowAsync(connection);
             using var command = connection.CreateCommand();
             // Upsert: a renewal preserves FirstSeenAt (only excluded.* for the mutable columns).
             command.CommandText = @"
@@ -585,7 +585,7 @@ namespace ETL_SQL.Orchestrator.Storage
             command.CommandText = @"
                 SELECT NodeId, Role, FirstSeenAt, LastHeartbeatAt, ExpiresAt, Metadata
                 FROM Nodes WHERE ExpiresAt > @now ORDER BY Role, NodeId;";
-            command.AddParam("@now", DateTime.UtcNow.ToString("O"));
+            command.AddParam("@now", (await GetDatabaseUtcNowAsync(connection)).ToString("O"));
             return await ReadNodesAsync(command);
         }
 
@@ -622,8 +622,22 @@ namespace ETL_SQL.Orchestrator.Storage
 
             using var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM Nodes WHERE ExpiresAt <= @now;";
-            command.AddParam("@now", DateTime.UtcNow.ToString("O"));
+            command.AddParam("@now", (await GetDatabaseUtcNowAsync(connection)).ToString("O"));
             return await command.ExecuteNonQueryAsync();
+        }
+
+        private async Task<DateTime> GetDatabaseUtcNowAsync(DbConnection connection)
+        {
+            using var command = connection.CreateCommand();
+            command.CommandText = _dialect.UtcNowSql;
+            var value = await command.ExecuteScalarAsync();
+            return value switch
+            {
+                DateTimeOffset dto => dto.UtcDateTime,
+                DateTime dt => dt.Kind == DateTimeKind.Utc ? dt : DateTime.SpecifyKind(dt, DateTimeKind.Utc),
+                string text => ParseUtc(text),
+                _ => DateTime.UtcNow
+            };
         }
 
         private static async Task<IReadOnlyList<NodeHeartbeat>> ReadNodesAsync(DbCommand command)

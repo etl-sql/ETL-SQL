@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Data.Common;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -70,6 +72,34 @@ namespace ETL_SQL.Tests.Orchestration
 
             Assert.Equal(1, await store.PruneExpiredNodesAsync());
             Assert.Empty(await store.GetAllNodesAsync());
+        }
+
+        [Fact]
+        public async Task NodeRegistry_UsesSharedDatabaseClock_ForHeartbeatExpiryAndPruning()
+        {
+            var databaseUtc = new DateTime(2035, 01, 02, 03, 04, 05, DateTimeKind.Utc);
+            var store = new RelationalJobHistoryStore(
+                new FixedClockSqliteDialect($"Data Source={_dbPath}", databaseUtc));
+            await store.InitializeAsync();
+
+            await store.RegisterOrRenewNodeAsync("skew-node", "Portal", TimeSpan.FromSeconds(45));
+
+            var node = Assert.Single(await store.GetLiveNodesAsync());
+            Assert.Equal(databaseUtc, node.LastHeartbeatUtc);
+            Assert.Equal(databaseUtc.AddSeconds(45), node.ExpiresAtUtc);
+
+            await using var connection = new SqliteConnection($"Data Source={_dbPath}");
+            await connection.OpenAsync();
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "UPDATE Nodes SET ExpiresAt = @expires WHERE NodeId = @id;";
+                command.AddParam("@expires", databaseUtc.AddSeconds(-1).ToString("O"));
+                command.AddParam("@id", "skew-node");
+                await command.ExecuteNonQueryAsync();
+            }
+
+            Assert.Empty(await store.GetLiveNodesAsync());
+            Assert.Equal(1, await store.PruneExpiredNodesAsync());
         }
 
         [Fact]
@@ -229,6 +259,39 @@ namespace ETL_SQL.Tests.Orchestration
                 Lost.TrySetResult((nodeId, role, reason));
                 return Task.CompletedTask;
             }
+        }
+
+        private sealed class FixedClockSqliteDialect : IOrchestratorStoreDialect
+        {
+            private readonly SqliteOrchestratorDialect _inner;
+            private readonly DateTime _utcNow;
+
+            public FixedClockSqliteDialect(string connectionString, DateTime utcNow)
+            {
+                _inner = new SqliteOrchestratorDialect(connectionString);
+                _utcNow = utcNow;
+            }
+
+            public DbConnection CreateConnection() => _inner.CreateConnection();
+
+            public string CollationDdl => _inner.CollationDdl;
+
+            public string SchemaInitializationLockSql => _inner.SchemaInitializationLockSql;
+
+            public string SchemaInitializationUnlockSql => _inner.SchemaInitializationUnlockSql;
+
+            public string AutoIncrementPrimaryKey => _inner.AutoIncrementPrimaryKey;
+
+            public string UtcNowSql => $"SELECT '{_utcNow:O}';";
+
+            public Task<HashSet<string>> GetColumnNamesAsync(
+                DbConnection connection,
+                string table,
+                CancellationToken ct = default) =>
+                _inner.GetColumnNamesAsync(connection, table, ct);
+
+            public string InsertReturningId(string insertWithoutSemicolon, string idColumn) =>
+                _inner.InsertReturningId(insertWithoutSemicolon, idColumn);
         }
     }
 }
