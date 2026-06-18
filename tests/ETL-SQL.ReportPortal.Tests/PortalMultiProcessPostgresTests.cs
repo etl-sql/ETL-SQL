@@ -66,6 +66,27 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DatabaseOutage_HealthzFailsClosed()
+    {
+        var shared = CreateSharedRoots();
+        var first = StartPortal(shared, port: FreePort(), nodeName: "node-a");
+        _processes.Add(first);
+
+        await first.WaitForHealthzAsync();
+
+        using var client = new HttpClient();
+        await _pg.StopAsync();
+
+        var degraded = await WaitForHealthzStatusAsync(
+            client,
+            first,
+            HttpStatusCode.ServiceUnavailable);
+
+        Assert.Equal("Unhealthy", degraded.Body.Status);
+        Assert.NotEqual("ok", degraded.Body.Checks["database"]);
+    }
+
+    [Fact]
     public async Task CatalogWrites_AreVisibleAcrossProcesses_AndSurviveRestart()
     {
         var shared = CreateSharedRoots();
@@ -475,6 +496,28 @@ public sealed class PortalMultiProcessPostgresTests : IAsyncLifetime
 
         using var response = await client.SendAsync(request);
         return response.StatusCode;
+    }
+
+    private static async Task<(HttpStatusCode StatusCode, HealthzResponse Body)> WaitForHealthzStatusAsync(
+        HttpClient client,
+        PortalProcess process,
+        HttpStatusCode expectedStatus)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        (HttpStatusCode StatusCode, HealthzResponse Body)? last = null;
+        while (DateTime.UtcNow < deadline)
+        {
+            using var response = await client.GetAsync($"{process.BaseUrl}/healthz");
+            var body = (await response.Content.ReadFromJsonAsync<HealthzResponse>(Json))!;
+            last = (response.StatusCode, body);
+            if (response.StatusCode == expectedStatus)
+                return last.Value;
+
+            await Task.Delay(250);
+        }
+
+        throw new TimeoutException(
+            $"Healthz did not reach {expectedStatus}. Last status: {last?.StatusCode.ToString() ?? "<none>"}");
     }
 
     private static async Task<JobDto> WaitForJobStatusAsync(
