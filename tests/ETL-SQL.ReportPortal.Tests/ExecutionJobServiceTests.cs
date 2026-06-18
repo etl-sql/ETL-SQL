@@ -1,6 +1,7 @@
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
@@ -489,6 +490,27 @@ public class ExecutionJobServiceTests : IDisposable
         await WaitForTerminalAsync(service, j2);
     }
 
+    /// <summary>An overloaded Portal node leaves work pending instead of consuming execution
+    /// slots; once capacity recovers, the same queued job can start.</summary>
+    [Fact]
+    public async Task OverloadedNode_WaitsBeforeStartingExecution()
+    {
+        var scriptPath = await HangScriptAsync();
+        var capacity = new MutableCapacityMonitor(isOverloaded: true);
+        using var service = HangingService(
+            FairnessConfig(globalCap: 1, perUserCap: 1, timeoutSeconds: 4),
+            capacityMonitor: capacity);
+
+        var jobId = await service.EnqueueExecutionAsync(reportId: 1, userId: 7, scriptPath);
+
+        await AssertStatusForAsync(service, jobId, JobStatus.Pending, TimeSpan.FromMilliseconds(600));
+
+        capacity.IsOverloaded = false;
+        await WaitForRunningCountAsync(service, 1, jobId);
+
+        await WaitForTerminalAsync(service, jobId);
+    }
+
     private async Task<string> HangScriptAsync()
     {
         var scriptPath = Path.Combine(_tempDir, "scripts", "report.rptsql");
@@ -544,7 +566,10 @@ public class ExecutionJobServiceTests : IDisposable
         return (config, services);
     }
 
-    private static ExecutionJobService HangingService(PortalConfig config, IServiceScopeFactory? scopeFactory = null)
+    private static ExecutionJobService HangingService(
+        PortalConfig config,
+        IServiceScopeFactory? scopeFactory = null,
+        INodeCapacityMonitor? capacityMonitor = null)
     {
         scopeFactory ??= new ServiceCollection().BuildServiceProvider()
             .GetRequiredService<IServiceScopeFactory>();
@@ -553,7 +578,8 @@ public class ExecutionJobServiceTests : IDisposable
             new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
             NullLogger<HttpJobChannelClient>.Instance);
         return new ExecutionJobService(
-            config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+            config, scopeFactory, NullLogger<ExecutionJobService>.Instance, sessions, channel,
+            capacityMonitor: capacityMonitor ?? new MutableCapacityMonitor(isOverloaded: false));
     }
 
     private static async Task<int> RunningCountAsync(ExecutionJobService service, params string[] jobIds)
@@ -606,6 +632,37 @@ public class ExecutionJobServiceTests : IDisposable
         }
 
         Assert.Null(await service.GetActiveRefreshJobIdAsync(reportId));
+    }
+
+    private static async Task AssertStatusForAsync(
+        ExecutionJobService service,
+        string jobId,
+        JobStatus expected,
+        TimeSpan duration)
+    {
+        var deadline = DateTime.UtcNow + duration;
+        while (DateTime.UtcNow < deadline)
+        {
+            var job = await service.GetAsync(jobId);
+            Assert.NotNull(job);
+            Assert.Equal(expected, job.Status);
+            await Task.Delay(25);
+        }
+    }
+
+    private sealed class MutableCapacityMonitor(bool isOverloaded) : INodeCapacityMonitor
+    {
+        public bool IsOverloaded { get; set; } = isOverloaded;
+
+        public NodeCapacitySnapshot Capture() => new(
+            WorkingSetBytes: 1,
+            GcHeapBytes: 1,
+            TotalAvailableMemoryBytes: 100,
+            MemoryLoadPercent: IsOverloaded ? 96 : 10,
+            ProcessCpuPercent: IsOverloaded ? 96 : 10,
+            ProcessorCount: 1,
+            IsOverloaded: IsOverloaded,
+            CapturedAtUtc: DateTime.UtcNow);
     }
 
     private sealed class NeverRespondingHandler : HttpMessageHandler

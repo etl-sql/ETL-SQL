@@ -345,6 +345,8 @@ release begins.
   node-capacity-aware claims. (Per-user fairness shipped in v0.11.0; per-group + weighting are the residual.)
   *(partial)* Portal execution jobs now support an opt-in `Portal:Resources:MaxConcurrentExecutionsPerGroup`
   quota. Non-admin jobs acquire per-user, per-group, then global execution gates; admins bypass both
-  user and group gates. Tests cover group starvation prevention and admin override. Remaining: mixed
-  interactive/scheduled/refresh/subscription load certification, queue weighting, and cross-node
-  capacity-aware claims under load.
+  user and group gates. Portal execution starts also honor node-capacity overload before consuming
+  execution slots, matching the scheduler's capacity-aware lease-claim behavior. Tests cover user/group
+  starvation prevention, admin override, and overloaded nodes leaving queued work pending until capacity
+  recovers. Remaining: mixed interactive/scheduled/refresh/subscription load certification, queue
+  weighting, and cross-node capacity-aware claims under load.

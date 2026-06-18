@@ -61,6 +61,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private readonly SessionCache _sessions;
     private readonly IJobChannel _channel;
     private readonly IArtifactStorage _artifacts;
+    private readonly INodeCapacityMonitor _capacityMonitor;
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
     {
         WriteIndented = true,
@@ -73,7 +74,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         ILogger<ExecutionJobService> log,
         SessionCache sessions,
         IJobChannel channel,
-        IArtifactStorage? artifacts = null)
+        IArtifactStorage? artifacts = null,
+        INodeCapacityMonitor? capacityMonitor = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
@@ -81,6 +83,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _sessions = sessions;
         _channel = channel;
         _artifacts = artifacts ?? CreateDefaultArtifactStorage(config);
+        _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         _gate = new SemaphoreSlim(config.Resources.MaxConcurrentReportExecutions,
                                        config.Resources.MaxConcurrentReportExecutions);
     }
@@ -206,6 +209,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         var groupGates = new List<SemaphoreSlim>();
         try
         {
+            await WaitForNodeCapacityAsync(job, cts.Token).ConfigureAwait(false);
+
             if (userGate is not null)
                 await userGate.WaitAsync(cts.Token).ConfigureAwait(false);
 
@@ -495,6 +500,26 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         for (var i = gates.Count - 1; i >= 0; i--)
             gates[i].Release();
         gates.Clear();
+    }
+
+    private async Task WaitForNodeCapacityAsync(ExecutionJob job, CancellationToken ct)
+    {
+        var logged = false;
+        while (true)
+        {
+            var capacity = _capacityMonitor.Capture();
+            if (!capacity.IsOverloaded)
+                return;
+
+            if (!logged)
+            {
+                _log.LogWarning(
+                    "Execution job {JobId}: waiting because this portal node is overloaded (CPU={Cpu:F1}%, memory={Memory:F1}%).",
+                    job.Id, capacity.ProcessCpuPercent, capacity.MemoryLoadPercent);
+                logged = true;
+            }
+            await Task.Delay(250, ct).ConfigureAwait(false);
+        }
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
