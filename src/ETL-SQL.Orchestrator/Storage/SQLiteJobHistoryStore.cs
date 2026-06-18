@@ -46,8 +46,11 @@ namespace ETL_SQL.Orchestrator.Storage
 
                 using var connection = _dialect.CreateConnection();
                 await connection.OpenAsync();
+                await ExecuteOptionalSqlAsync(connection, _dialect.SchemaInitializationLockSql);
 
-                var createJobsTable = @"
+                try
+                {
+                    var createJobsTable = @"
                 CREATE TABLE IF NOT EXISTS Jobs (
                     Name TEXT PRIMARY KEY,
                     Script TEXT NOT NULL,
@@ -171,14 +174,21 @@ namespace ETL_SQL.Orchestrator.Storage
                 // COLLATE NOCASE indexes/queries resolve.
                 schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
 
-                using var command = connection.CreateCommand();
-                command.CommandText = _dialect.CollationDdl + schema;
-                await command.ExecuteNonQueryAsync();
+                    await EnsureCollationExistsAsync(connection);
 
-                // 8B-2: Schema migration — add resource tracking columns if missing
-                await EnsureHistoryColumnsExist(connection);
-                await EnsureJobColumnsExist(connection);
-                await EnsureLineageHistoryColumnsExist(connection);
+                    using var command = connection.CreateCommand();
+                    command.CommandText = schema;
+                    await command.ExecuteNonQueryAsync();
+
+                    // 8B-2: Schema migration — add resource tracking columns if missing
+                    await EnsureHistoryColumnsExist(connection);
+                    await EnsureJobColumnsExist(connection);
+                    await EnsureLineageHistoryColumnsExist(connection);
+                }
+                finally
+                {
+                    await ExecuteOptionalSqlAsync(connection, _dialect.SchemaInitializationUnlockSql);
+                }
 
                 _initialized = true;
             }
@@ -186,6 +196,41 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 _initLock.Release();
             }
+        }
+
+        private static async Task ExecuteOptionalSqlAsync(DbConnection connection, string sql)
+        {
+            if (string.IsNullOrWhiteSpace(sql))
+                return;
+
+            using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        private async Task EnsureCollationExistsAsync(DbConnection connection)
+        {
+            if (string.IsNullOrWhiteSpace(_dialect.CollationDdl))
+                return;
+
+            try
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = _dialect.CollationDdl;
+                await command.ExecuteNonQueryAsync();
+            }
+            catch (DbException ex) when (IsDuplicateObjectRace(ex))
+            {
+                // PostgreSQL's CREATE COLLATION IF NOT EXISTS can still race before the
+                // catalog row is visible to another concurrent startup process. Treat the
+                // duplicate as success; the winning process created the required collation.
+            }
+        }
+
+        private static bool IsDuplicateObjectRace(DbException ex)
+        {
+            var sqlState = ex.GetType().GetProperty("SqlState")?.GetValue(ex) as string;
+            return string.Equals(sqlState, "23505", StringComparison.Ordinal);
         }
 
         private async Task EnsureJobColumnsExist(DbConnection connection)

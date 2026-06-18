@@ -18,6 +18,10 @@ namespace ETL_SQL.Orchestrator.Storage
         // SQLite's COLLATE NOCASE is built in — nothing to create.
         public string CollationDdl => string.Empty;
 
+        public string SchemaInitializationLockSql => string.Empty;
+
+        public string SchemaInitializationUnlockSql => string.Empty;
+
         public string AutoIncrementPrimaryKey => "INTEGER PRIMARY KEY AUTOINCREMENT";
 
         public async Task<HashSet<string>> GetColumnNamesAsync(DbConnection connection, string table, CancellationToken ct = default)

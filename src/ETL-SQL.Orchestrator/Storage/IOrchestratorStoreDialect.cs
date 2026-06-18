@@ -23,6 +23,15 @@ namespace ETL_SQL.Orchestrator.Storage
         /// </summary>
         string CollationDdl { get; }
 
+        /// <summary>
+        /// Optional provider-specific SQL that serializes schema bootstrap before the cluster-lock
+        /// table itself exists. Empty when provider DDL is already safe for concurrent startup.
+        /// </summary>
+        string SchemaInitializationLockSql { get; }
+
+        /// <summary>Companion unlock SQL for <see cref="SchemaInitializationLockSql"/>.</summary>
+        string SchemaInitializationUnlockSql { get; }
+
         /// <summary>Column definition for an auto-incrementing integer primary key (the <c>Id</c> column).</summary>
         string AutoIncrementPrimaryKey { get; }
 
