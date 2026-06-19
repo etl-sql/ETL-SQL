@@ -22,6 +22,17 @@ ETL-SQL is **not** a traditional SQL engine. It is an **orchestration conductor*
 
 **The Golden Rule**: Data always flows *through* the engine. When you move data from Postgres to a CSV, you typically stage it in an engine `#temp` table first — this is where `WHERE` filters, `REGEX`, `HASHBYTES`, and lineage tagging happen. The remote engines only receive simple SQL they understand natively.
 
+### 1.0 Product Positioning — Keep This Front and Center
+
+When writing user-facing docs, examples, READMEs, release notes, or onboarding material, make the differentiators explicit:
+
+- **Script-first** — pipelines, reports, jobs, validation, and governance metadata are plain-text `.etlsql` / `.rptsql` artifacts.
+- **Source-control friendly** — changes are diffable, reviewable, testable, packageable, and runnable in CLI, VS Code, notebooks, Orchestrator, Report Portal, and CI/CD.
+- **The T is back in ETL** — transformation, validation, masking, fuzzy matching, enrichment, lineage tagging, and quality gates can happen before loading or publishing.
+- **ELT tradeoffs without ELT lock-in** — compatible work can push down to databases, but cross-source work stays portable instead of being trapped in one warehouse dialect or split across Python, schedulers, and BI designer files.
+- **Lineage and tags are native** — lineage metadata follows data through transformations into reports and can be queried, diagrammed, or exported.
+- **Zero-trust operations** — path boundaries, script immutability, encrypted secrets, `SECRET:name` references, `WHAT_IF`, audit, and governance policies are part of the execution model.
+
 ### 1.1 Engine Context vs. Remote Context
 
 | Context | What runs here | Examples |
@@ -46,6 +57,7 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
 | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
 | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
+| **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
 
 Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
@@ -89,6 +101,22 @@ Key syntax facts:
 - **MULTISELECT** requires a `SOURCE` clause for its option list
 - **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
 - **Portal administration is script-first** inside `EXECUTE portal BEGIN...END`: use commands such as `PUBLISH REPORT`, `CREATE SUBSCRIPTION`, `REFRESH REPORT`, `FAVORITE REPORT`, `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW CATALOG SEARCH`, `SHOW EFFECTIVE PERMISSIONS`, `SHOW PORTAL USAGE METRICS`, `VALIDATE REPORT SCRIPT`, `CREATE SHARE LINK`, `CREATE EMBED TOKEN`, `CREATE SAVED VIEW`, and `CREATE ALERT`.
+
+---
+
+## 2.2 Enterprise Operations Key Facts
+
+The platform now includes shipped enterprise operations features. When generating scripts, editing server code, or writing docs, do not assume ETL-SQL is single-node or SQLite-only.
+
+- **Practical High Availability is shipped**: Report Portal and Orchestrator support shared PostgreSQL state, shared Portal artifact roots, node heartbeats, lease fencing, leader election, node-capacity heartbeats, health probes, and load-balancer session affinity.
+- **Single-node defaults remain SQLite/local storage**. Multi-node HA requires `Portal:Database:Provider=Postgres`, `Orchestrator:Database:Provider=Postgres`, shared Portal storage roots (`Smb`/UNC), a shared Data Protection key ring, and identical JWT/orchestrator/dataset keys across Portal nodes.
+- **Interactive report sessions are node-local**. HA deployments must use sticky routing on `ETLSQL_PORTAL_AFFINITY` or the configured `Portal:LoadBalancer:SessionAffinityCookieName`.
+- **Load balancers should probe `GET /healthz`** for Portal node readiness. Use `GET /health` for richer monitoring. Orchestrator API routes require `X-Orchestrator-Key`; unauthenticated network-reachable Orchestrator startup is rejected.
+- **Lease fencing matters**. Scheduled jobs, refreshes, shared artifact writes, and migration/singleton work use database-backed leases/fencing. Do not replace these with node-local locks or in-memory ownership.
+- **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
+- **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
+
+For production configuration details, use **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Enterprise_Platform_Strategy.md)**.
 
 ---
 
@@ -188,7 +216,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 20 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
+For 26 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
 
 ---
 
@@ -207,9 +235,13 @@ Use this map to find the right document for any task.
 | Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/RelativeDate_Parameters.md)** |
 | Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
 | Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
-| Sample script inventory (160+ scripts in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
+| Sample script inventory (290+ files in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Script_Composition_Standards.md)** |
+| Production install, HA, Governance Core, OIDC | **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** |
+| Portal user/admin operations | **[ReportPortal_Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/ReportPortal_Administrators_Guide.md)** |
+| Orchestrator job operations | **[Orchestrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Orchestrators_Guide.md)** |
+| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Enterprise_Platform_Strategy.md)** |
 
 ### Contributing Engine Code
 | Need | Document |
@@ -217,6 +249,8 @@ Use this map to find the right document for any task.
 | How connectors work internally | **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)** |
 | Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md)** |
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
+| Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md)** |
+| Report Portal auth, HA topology, API, health checks | **[Architecture/ReportPortal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md)** |
 | C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Engine_Coding_Standards.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
 | Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Language_Syntax_Standards.md)** |

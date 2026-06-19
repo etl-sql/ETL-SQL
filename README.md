@@ -4,7 +4,7 @@
   <img src="Docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
 </p>
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.11.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.12.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 [![Build Status](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml)
@@ -14,6 +14,8 @@ ETL-SQL is a SQL-first automation engine for moving, transforming, validating, s
 Use ETL-SQL when you want SQL to be the orchestration language, not just the query language.
 
 ## Why ETL-SQL?
+
+ETL-SQL is built around a simple idea: keep the **T** in the middle of ETL without giving up the portability, reviewability, and operational discipline that made ELT attractive. Data can still land in warehouses when that is the right destination, but transformation does not have to be trapped inside one warehouse engine or spread across Python scripts, schedulers, BI designer files, and undocumented handoffs.
 
 ### SQL Is the Orchestration Language
 
@@ -27,17 +29,24 @@ A pipeline can extract, transform, validate, load, and then declare its report i
 
 ### Script-First and Source-Control Native
 
-Pipelines and dashboards are reviewable text instead of opaque designer files. The same script can run headlessly, in the terminal IDE, in VS Code or notebooks, through Orchestrator, or as part of CI/CD.
+Pipelines and dashboards are reviewable text instead of opaque designer files. The same script can run headlessly, in the terminal IDE, in VS Code or notebooks, through Orchestrator, or as part of CI/CD. Changes can be diffed, reviewed, tested, packaged, and rolled back with the same source-control workflow used for application code.
 
 ### Security and Lineage in the Execution Model
 
 Runtime controls enforce path boundaries, protected-script immutability, encrypted credential handling, and limits on file operations. `SECRET` variables reduce credential lifetime, while `SET WHAT_IF ON` provides a dry-run path for side-effecting operations. Lineage metadata can follow data from source operations through transformations and into report assets.
+
+### Why Not Just ELT?
+
+ELT is attractive because it centralizes execution in a warehouse, but it often leaves hard problems outside the model: file drops, SFTP, APIs, cross-system validation, operational recovery, governance metadata, dashboards, and source-controlled review. ETL-SQL keeps those concerns in one script while still allowing database pushdown where it is correct and useful.
 
 ### Standout Capabilities
 
 | Capability | What it adds |
 | :--- | :--- |
 | Cross-source staging | Join, cleanse, validate, and enrich data from unrelated systems in engine-managed `#temp` tables. |
+| Transform-centered ETL | Stage data before load so validation, masking, enrichment, dedupe, lineage tagging, and quality gates happen before downstream systems are mutated. |
+| Source-control native pipelines | Plain-text `.etlsql` and `.rptsql` files are diffable, reviewable, testable, and runnable unchanged in CLI, VS Code, notebooks, Orchestrator, and CI/CD. |
+| Built-in lineage and tags | Attach metadata where transformations happen, then query, diagram, or export lineage instead of reconstructing it after the fact. |
 | Report-SQL | Define data preparation and interactive dashboards together in a `.rptsql` file. |
 | Resumable sessions | Use labels, `--session`, and `--resume` to continue checkpointed workflows after a failure. |
 | Fuzzy matching | Use `FUZZY JOIN`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and related engine functions. |
@@ -345,11 +354,11 @@ We make no claim that it is perfect — if you hit a bug, please [open an issue]
 
 ## Release Build
 
-Maintainers can run the release script to validate, package, and publish the 0.11.0 artifacts:
+Maintainers can run the release script to validate, package, and publish the 0.12.0 artifacts:
 
 ```powershell
 .\scripts\Test-PreRelease.ps1
-.\scripts\Master-Release.ps1 -Version "0.11.0"
+.\scripts\Master-Release.ps1 -Version "0.12.0"
 ```
 
 ---

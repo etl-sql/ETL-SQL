@@ -453,16 +453,13 @@ namespace ETL_SQL.Engine
             // Link Telemetry to registry components if needed, or initialized via registry.Initialize
             Telemetry.IsProfiling = _options.IsProfiling;
 
-            if (!functionRegistry.IsRegistered("GETDATE"))
-            {
-                Functions.StandardFunctions.Register(functionRegistry);
-                Functions.FileFunctions.Register(functionRegistry);
-                Functions.LineageFunctions.Register(functionRegistry);
-                Functions.RegexFunctions.Register(functionRegistry);
-                Functions.JsonFunctions.Register(functionRegistry);
-                Functions.XmlFunctions.Register(functionRegistry);
-                Functions.FuzzyFunctions.Register(functionRegistry);
-            }
+            Functions.StandardFunctions.Register(functionRegistry);
+            Functions.FileFunctions.Register(functionRegistry);
+            Functions.LineageFunctions.Register(functionRegistry);
+            Functions.RegexFunctions.Register(functionRegistry);
+            Functions.JsonFunctions.Register(functionRegistry);
+            Functions.XmlFunctions.Register(functionRegistry);
+            Functions.FuzzyFunctions.Register(functionRegistry);
             LanguageHelpService.Initialize(languageHelp);
 
             foreach (var h in handlers)

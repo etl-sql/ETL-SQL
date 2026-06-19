@@ -5,6 +5,14 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 > [!TIP]
 > **Stuck on something specific?** Use the table of contents below to jump directly to the section you need. For a searchable list of errors and gotchas, see the [FAQ](FAQ.md). For connector-specific syntax, see [Data_Connectors.md](Reference/Data_Connectors.md).
 
+## What Makes ETL-SQL Different
+
+ETL-SQL is script-first data orchestration. Pipelines, reports, schedules, validation, and governance metadata live in plain-text `.etlsql` and `.rptsql` files that can be reviewed, diffed, tested, packaged, and run from the CLI, VS Code, notebooks, Report Portal, Orchestrator, or CI/CD.
+
+The engine puts the **T** back in the middle of ETL. Instead of loading everything first and hoping every downstream transformation fits one warehouse dialect, ETL-SQL stages data in engine-managed `#temp` tables where validation, masking, enrichment, fuzzy matching, lineage tags, and quality gates can run before rows are written to their destination. Compatible database work can still be pushed down, but cross-source work stays portable and explicit.
+
+Lineage is part of the workflow rather than an after-the-fact reconstruction. Tags and transformation metadata can travel with rows and columns through joins, aggregations, reports, OpenLineage exports, and Mermaid diagrams.
+
 ## Contents
 
 0. [First Hour Walkthrough](#first-hour-walkthrough)
