@@ -28,16 +28,16 @@ namespace ETL_SQL.Engine.Services
             }
         }
 
-        public Task<bool> SpillAsync()
+        public async Task<bool> SpillAsync()
         {
             if (_context.SubqueryCache.Count > 0)
             {
-                _context.SubqueryCache.Clear();
+                await _context.SubqueryCache.ClearAsync();
                 _logger.Warning("Evaluator spilled: Subquery cache cleared to reclaim memory.");
-                return Task.FromResult(true);
+                return true;
             }
 
-            return Task.FromResult(false);
+            return false;
         }
 
         public string SpillToken => $"Session_{_context.SessionId}";

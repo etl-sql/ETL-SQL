@@ -425,7 +425,7 @@ namespace ETL_SQL.Engine
             _options = options ?? new EvaluatorOptions { MaxSmtpEmailsPerScript = _securityService.MaxSmtpEmailsPerScript };
             _registry = registry ?? new EvaluatorComponentRegistry();
             _subqueryCache = new ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult>(_options.SubqueryCacheSize);
-            _subqueryCache.OnEvicted = async (val) =>
+            _subqueryCache.OnEvictedAsync = async (val) =>
             {
                 try { await val.DisposeAsync(); } catch { }
             };
@@ -758,7 +758,7 @@ namespace ETL_SQL.Engine
                 _smtpEmailsSentThisScript = 0;
                 // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
                 _expressionEvaluator.ClearCaches();
-                _subqueryCache.Clear();
+                await _subqueryCache.ClearAsync();
                 foreach (var src in _localSources.Values)
                     try { await src.DisposeAsync(); } catch { }
                 _localSources.Clear();

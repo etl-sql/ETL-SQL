@@ -28,11 +28,15 @@ namespace ETL_SQL.Engine
         private static readonly ConcurrentDictionary<(Type, string), MemberInfo?> _reflectionCache = new();
         private readonly ConcurrentDictionary<Statement, List<string>> _outerRefCache = new();
         private readonly ConcurrentDictionary<(TableSchema?, string), string?> _identifierCache = new();
+        private readonly ConcurrentDictionary<FunctionCallExpression, FunctionLookupKeys> _functionKeyCache = new();
+
+        private readonly record struct FunctionLookupKeys(string WindowKey, string AggregateKey);
 
         public void ClearCaches()
         {
             _outerRefCache.Clear();
             _identifierCache.Clear();
+            _functionKeyCache.Clear();
         }
 
         public ExpressionEvaluator(IExecutionContext context)
@@ -594,13 +598,13 @@ namespace ETL_SQL.Engine
         {
             if (f.Window != null)
             {
-                var winKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
-                return context.HasColumn(winKey) ? context[winKey] : null;
+                var keys = GetFunctionLookupKeys(f);
+                return context.HasColumn(keys.WindowKey) ? context[keys.WindowKey] : null;
             }
 
             // Check for pre-calculated aggregate results (used in HAVING clause)
-            var aggKey = $"AGG_{f.ToSql().ToUpperInvariant()}";
-            if (context != null && context.TryGetValue(aggKey, out var aggVal)) return aggVal;
+            var aggregateKey = GetFunctionLookupKeys(f).AggregateKey;
+            if (context != null && context.TryGetValue(aggregateKey, out var aggVal)) return aggVal;
 
             var fn = f.FunctionName.ToUpperInvariant();
 
@@ -638,7 +642,7 @@ namespace ETL_SQL.Engine
             if (fn == "CURRENT_DATE") return DateTime.Today;
             if (fn == "CURRENT_TIME") return DateTime.Now.TimeOfDay;
 
-            var args = new List<object?>();
+            var args = new List<object?>(f.Arguments.Count);
             for (int i = 0; i < f.Arguments.Count; i++)
             {
                 var arg = f.Arguments[i];
@@ -665,6 +669,15 @@ namespace ETL_SQL.Engine
             }
 
             return await _context.EvaluateUserDefinedFunction(f, args, context ?? Row.Empty);
+        }
+
+        private FunctionLookupKeys GetFunctionLookupKeys(FunctionCallExpression f)
+        {
+            return _functionKeyCache.GetOrAdd(f, static expr =>
+            {
+                var normalized = expr.ToSql().ToUpperInvariant();
+                return new FunctionLookupKeys($"WINDOW_{normalized}", $"AGG_{normalized}");
+            });
         }
 
         /// <summary>Evaluates the AT TIME ZONE expression.</summary>
@@ -738,7 +751,7 @@ namespace ETL_SQL.Engine
                 _context.OuterRowStack.Pop();
             }
 
-            _context.SubqueryCache.Set(cacheKey, new SubqueryResult(result));
+            await _context.SubqueryCache.SetAsync(cacheKey, new SubqueryResult(result));
             return result;
         }
 
@@ -856,7 +869,7 @@ namespace ETL_SQL.Engine
             {
                 await FlushSpillBatchAsync();
                 finalResult = new SubqueryResult(spillStore);
-                _context.SubqueryCache.Set(cacheKey, finalResult);
+                await _context.SubqueryCache.SetAsync(cacheKey, finalResult);
                 await foreach (var batch in spillStore.ReadBatches())
                 {
                     foreach (var row in batch.Rows) yield return row[0];
@@ -865,7 +878,7 @@ namespace ETL_SQL.Engine
             else
             {
                 finalResult = new SubqueryResult(inSet ?? new HashSet<object?>());
-                _context.SubqueryCache.Set(cacheKey, finalResult);
+                await _context.SubqueryCache.SetAsync(cacheKey, finalResult);
                 foreach (var val in finalResult.InSet!) yield return val;
             }
         }
@@ -916,7 +929,7 @@ namespace ETL_SQL.Engine
                 _context.OuterRowStack.Pop();
             }
 
-            _context.SubqueryCache.Set(cacheKey, new SubqueryResult(found));
+            await _context.SubqueryCache.SetAsync(cacheKey, new SubqueryResult(found));
             return found;
         }
 
