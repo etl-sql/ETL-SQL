@@ -69,6 +69,7 @@ public sealed class OidcController(
         if (!string.IsNullOrEmpty(error))
         {
             log.LogWarning("OIDC provider returned error {Error}", error);
+            await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, $"OIDC provider returned error: {error}");
             return Redirect("/login.html?error=sso_failed");
         }
 
@@ -76,7 +77,9 @@ public sealed class OidcController(
         if (flow is null || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(state)
             || !CryptoEquals(state, flow.State))
         {
+            // A missing/forged flow or mismatched state is a tampering/CSRF signal — audit it.
             log.LogWarning("OIDC callback rejected: missing/invalid flow state");
+            await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC callback state validation failed.");
             return Redirect("/login.html?error=sso_failed");
         }
 
@@ -89,28 +92,43 @@ public sealed class OidcController(
         catch (OidcAuthenticationException ex)
         {
             log.LogWarning(ex, "OIDC authentication failed");
-            await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC authentication failed.");
+            await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, "OIDC authentication failed: " + ex.Message);
             return Redirect("/login.html?error=sso_failed");
         }
 
+        if (result.Refused)
+            return Redirect("/login.html?error=sso_failed");
         if (result.Disabled || result.Session is null)
             return Redirect("/login.html?error=account_disabled");
 
-        return Redirect(BuildSuccessRedirect(result.Session));
+        // Hand the session to the SPA via a server-rendered page (tokens in a JSON data-island read
+        // by a same-origin script), never the URL — so the long-lived refresh token does not land in
+        // browser history or referrers. Cache-Control: no-store is already applied globally.
+        return Content(BuildHandoffPage(result.Session), "text/html; charset=utf-8");
     }
 
     private string BuildRedirectUri() =>
         $"{Request.Scheme}://{Request.Host}{config.Identity.Oidc.CallbackPath}";
 
-    private string BuildSuccessRedirect(OidcSession session)
+    private string BuildHandoffPage(OidcSession session)
     {
-        // SPA handoff via URL fragment: the fragment is not sent to servers or written to most
-        // access logs, and the SPA stores the tokens exactly as it does after a password login.
-        var fragment =
-            $"access_token={Uri.EscapeDataString(session.AccessToken)}" +
-            $"&refresh_token={Uri.EscapeDataString(session.RefreshToken)}" +
-            $"&expires_at={Uri.EscapeDataString(session.ExpiresAt.ToString("O"))}";
-        return $"{config.Identity.Oidc.PostLoginRedirectPath}#{fragment}";
+        // Tokens travel in a non-executable JSON data-island, read by the same-origin module
+        // /js/sso-complete.js (CSP allows script-src 'self'). System.Text.Json escapes the values;
+        // JWT/base64 tokens contain no '<', so they cannot break out of the script element.
+        var payload = JsonSerializer.Serialize(new
+        {
+            token = session.AccessToken,
+            refreshToken = session.RefreshToken,
+            expiresAt = session.ExpiresAt.ToString("O"),
+            redirect = config.Identity.Oidc.PostLoginRedirectPath
+        }, Json);
+
+        return "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">" +
+               "<title>Signing in…</title></head><body>" +
+               "<p>Signing in…</p>" +
+               $"<script type=\"application/json\" id=\"sso-data\">{payload}</script>" +
+               "<script type=\"module\" src=\"/js/sso-complete.js\"></script>" +
+               "</body></html>";
     }
 
     private FlowState? ReadFlow(string? cookie)

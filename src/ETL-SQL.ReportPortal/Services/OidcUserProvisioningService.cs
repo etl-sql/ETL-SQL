@@ -25,19 +25,32 @@ public sealed class OidcUserProvisioningService(
 {
     public const string ProviderName = "OIDC";
 
-    /// <summary>Outcome of provisioning. <see cref="Session"/> is null when the account is disabled.</summary>
-    public sealed record Result(OidcSession? Session, bool Disabled, int? UserId);
+    /// <summary>Outcome of provisioning. <see cref="Session"/> is null when the login was not
+    /// completed: <see cref="Disabled"/> for a portal-disabled account, <see cref="Refused"/> when a
+    /// federated login is rejected because the username belongs to a non-OIDC account.</summary>
+    public sealed record Result(OidcSession? Session, bool Disabled, bool Refused, int? UserId);
 
     public async Task<Result> SignInAsync(OidcIdentity identity, CancellationToken ct = default)
     {
         var user = await userManager.FindByNameAsync(identity.Username);
+
+        // Provider binding (prevents account takeover via provider confusion): a federated login may
+        // only attach to an OIDC account. If the username already belongs to a Local or LDAP account,
+        // refuse — an IdP that can mint preferred_username='admin' must not be able to seize the
+        // local admin. (Matches the LDAP path, which authenticates only Provider=="LDAP" users.)
+        if (user is not null && !string.Equals(user.Provider, ProviderName, StringComparison.Ordinal))
+        {
+            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(),
+                $"OIDC login refused: username belongs to a {user.Provider} account.");
+            return new Result(null, Disabled: false, Refused: true, user.Id);
+        }
 
         // A portal-disabled account stays disabled; the IdP must not resurrect it.
         if (user is not null && !user.IsActive)
         {
             await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(),
                 "Account is disabled.");
-            return new Result(null, Disabled: true, user.Id);
+            return new Result(null, Disabled: true, Refused: false, user.Id);
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -64,10 +77,18 @@ public sealed class OidcUserProvisioningService(
                 await userManager.UpdateAsync(user);
             }
 
-            var membershipChanged = await SyncGroupsAsync(user, identity.Groups, ct);
+            var sync = await SyncGroupsAsync(user, identity.Groups, ct);
             await db.SaveChangesAsync(ct);
-            if (membershipChanged)
+            if (sync.Changed)
+            {
+                // Rotate the security stamp + revoke refresh tokens so no privilege survives a claim
+                // change in an already-issued token.
                 await securitySessions.InvalidateUserAsync(user.Id);
+                // A privilege reduction (group removed) also revokes anonymous share/embed links the
+                // user created, so access granted through the lost group cannot persist anonymously.
+                if (sync.Removed)
+                    await securitySessions.RevokeAnonymousCapabilitiesAsync([user.Id], ct);
+            }
 
             await transaction.CommitAsync(ct);
         }
@@ -79,14 +100,20 @@ public sealed class OidcUserProvisioningService(
 
         var session = await IssueSessionAsync(user, ct);
         await auditService.LogAsync(user.Id, "LOGIN", "User", user.Id.ToString(), "OIDC");
-        return new Result(session, Disabled: false, user.Id);
+        return new Result(session, Disabled: false, Refused: false, user.Id);
+    }
+
+    private readonly record struct GroupSyncResult(bool Added, bool Removed)
+    {
+        public bool Changed => Added || Removed;
     }
 
     /// <summary>Deterministically reconciles the user's OIDC-provider group memberships against the
-    /// token's group claims: adds matched groups, removes those no longer claimed. Returns whether
-    /// anything changed (so callers can invalidate cached security state). Matching by group
-    /// <c>AdGroup</c> (when set) else <c>Name</c>, case-insensitive.</summary>
-    private async Task<bool> SyncGroupsAsync(PortalUser user, IReadOnlyList<string> claimedGroups, CancellationToken ct)
+    /// token's group claims: adds matched groups, removes those no longer claimed. Idempotent — an
+    /// unchanged claim set yields no writes. Only OIDC-provider groups are touched, so local and LDAP
+    /// memberships are preserved. Matching by group <c>AdGroup</c> (when set) else <c>Name</c>,
+    /// case-insensitive.</summary>
+    private async Task<GroupSyncResult> SyncGroupsAsync(PortalUser user, IReadOnlyList<string> claimedGroups, CancellationToken ct)
     {
         var oidcGroups = await db.Groups.Where(g => g.Provider == ProviderName).ToListAsync(ct);
         var matchingGroupIds = oidcGroups
@@ -106,7 +133,7 @@ public sealed class OidcUserProvisioningService(
         if (toRemove.Count > 0) db.UserGroups.RemoveRange(toRemove);
         foreach (var groupId in toAdd) db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = groupId });
 
-        return toRemove.Count > 0 || toAdd.Count > 0;
+        return new GroupSyncResult(Added: toAdd.Count > 0, Removed: toRemove.Count > 0);
     }
 
     private async Task<OidcSession> IssueSessionAsync(PortalUser user, CancellationToken ct)

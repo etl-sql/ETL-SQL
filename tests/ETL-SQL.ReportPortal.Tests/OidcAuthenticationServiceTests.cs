@@ -89,6 +89,27 @@ public sealed class OidcAuthenticationServiceTests
     }
 
     [Fact]
+    public async Task Complete_MissingRequiredClaim_Throws()
+    {
+        // Token is otherwise valid but omits the mandated 'email' claim.
+        var idToken = CreateIdToken(nonce: "n", subject: "u", username: "u", email: null, groups: []);
+        var service = NewService(new StubHandler(idToken), requiredClaims: ["email"]);
+
+        await Assert.ThrowsAsync<OidcAuthenticationException>(
+            () => service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n"));
+    }
+
+    [Fact]
+    public async Task Complete_RequiredClaimPresent_Succeeds()
+    {
+        var idToken = CreateIdToken(nonce: "n", subject: "u", username: "u", email: "u@example.com", groups: []);
+        var service = NewService(new StubHandler(idToken), requiredClaims: ["email"]);
+
+        var identity = await service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n");
+        Assert.Equal("u@example.com", identity.Email);
+    }
+
+    [Fact]
     public async Task Complete_TokenEndpointFailure_Throws()
     {
         var service = NewService(new StubHandler(statusCode: HttpStatusCode.BadRequest));
@@ -97,7 +118,7 @@ public sealed class OidcAuthenticationServiceTests
             () => service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n"));
     }
 
-    private static OidcAuthenticationService NewService(StubHandler handler)
+    private static OidcAuthenticationService NewService(StubHandler handler, string[]? requiredClaims = null)
     {
         var config = new PortalConfig
         {
@@ -111,7 +132,8 @@ public sealed class OidcAuthenticationServiceTests
                     ClientSecret = "secret",
                     GroupClaimTypes = ["groups"],
                     UsernameClaimType = "preferred_username",
-                    EmailClaimType = "email"
+                    EmailClaimType = "email",
+                    RequiredClaims = requiredClaims ?? []
                 }
             }
         };

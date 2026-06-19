@@ -64,8 +64,10 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
         var callback = await client.GetAsync(
             $"/api/auth/oidc/callback?code=test-code&state={StubOidcAuthenticationService.State}");
 
-        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
-        var (accessToken, refreshToken) = ParseTokenFragment(callback.Headers.Location!);
+        // Success renders a hand-off page (tokens in a JSON data-island), never the URL.
+        Assert.Equal(HttpStatusCode.OK, callback.StatusCode);
+        Assert.Equal("text/html", callback.Content.Headers.ContentType!.MediaType);
+        var (accessToken, refreshToken) = await ParseHandoffTokensAsync(callback);
         Assert.False(string.IsNullOrEmpty(accessToken));
         Assert.False(string.IsNullOrEmpty(refreshToken));
 
@@ -132,6 +134,29 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
 
         Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
         Assert.Contains("error=account_disabled", callback.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task Callback_RefusesToAttachToNonOidcAccount()
+    {
+        // Provider-confusion guard: an IdP identity whose username matches the local 'admin' account
+        // must NOT mint a session for it. The federated login is refused and audited.
+        _factory.Stub.Identity = new OidcIdentity("attacker-sub", "admin", "admin@evil.test", []);
+
+        var client = NoRedirectClient();
+        await client.GetAsync("/api/auth/oidc/login");
+        var callback = await client.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Contains("error=sso_failed", callback.Headers.Location!.ToString());
+
+        // The local admin account is untouched (still Provider=Local), and the refusal is audited.
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
+        Assert.Equal("Local", admin.Provider);
+        Assert.True(await db.AuditLogs.AnyAsync(a =>
+            a.Action == "LOGIN_FAILED" && a.UserId == admin.Id && a.Detail!.Contains("OIDC login refused")));
     }
 
     [Fact]
@@ -208,15 +233,15 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
     }
 
-    private static (string AccessToken, string RefreshToken) ParseTokenFragment(Uri location)
+    private static async Task<(string AccessToken, string RefreshToken)> ParseHandoffTokensAsync(HttpResponseMessage res)
     {
-        var fragment = location.IsAbsoluteUri ? location.Fragment : location.OriginalString;
-        var hash = fragment.IndexOf('#');
-        if (hash >= 0) fragment = fragment[(hash + 1)..];
-        var pairs = fragment.Split('&', StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Split('=', 2))
-            .ToDictionary(p => p[0], p => Uri.UnescapeDataString(p.Length > 1 ? p[1] : ""));
-        return (pairs.GetValueOrDefault("access_token", ""), pairs.GetValueOrDefault("refresh_token", ""));
+        var html = await res.Content.ReadAsStringAsync();
+        const string open = "<script type=\"application/json\" id=\"sso-data\">";
+        var start = html.IndexOf(open, StringComparison.Ordinal) + open.Length;
+        var end = html.IndexOf("</script>", start, StringComparison.Ordinal);
+        using var doc = System.Text.Json.JsonDocument.Parse(html[start..end]);
+        var root = doc.RootElement;
+        return (root.GetProperty("token").GetString()!, root.GetProperty("refreshToken").GetString()!);
     }
 
     public sealed class OidcPortalWebFactory : PortalWebFactory

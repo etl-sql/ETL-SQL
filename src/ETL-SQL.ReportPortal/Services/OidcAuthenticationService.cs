@@ -182,6 +182,11 @@ public sealed class OidcAuthenticationService(
         var subject = identity.FindFirst("sub")?.Value
             ?? throw new OidcAuthenticationException("id_token did not contain a subject (sub) claim.");
 
+        // Required-claims policy: fail closed if the provider omitted a claim the deployment mandates.
+        foreach (var required in _cfg.RequiredClaims ?? [])
+            if (!string.IsNullOrEmpty(required) && identity.FindFirst(required) is null)
+                throw new OidcAuthenticationException($"id_token is missing required claim '{required}'.");
+
         var username = FirstClaim(identity, _cfg.UsernameClaimType)
             ?? FirstClaim(identity, "preferred_username")
             ?? subject;

@@ -142,7 +142,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
         "TenantId": "",
         "Scopes": [ "openid", "profile", "email" ],
         "CallbackPath": "/api/auth/oidc/callback",
-        "PostLoginRedirectPath": "/login.html",
+        "PostLoginRedirectPath": "/index.html",
         "GroupClaimTypes": [ "groups", "roles" ],
         "UsernameClaimType": "preferred_username",
         "EmailClaimType": "email",
@@ -203,8 +203,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Identity.Oidc.ClientSecret` | *(empty)* | Confidential client secret for the authorization-code exchange. Used verbatim — supply it via the `Portal__Identity__Oidc__ClientSecret` environment variable or a protected configuration source, not in committed files. |
 | `Identity.Oidc.Scopes` | `openid`, `profile`, `email` | Scopes requested at authorization time. `openid` is required and added automatically. |
 | `Identity.Oidc.CallbackPath` | `/api/auth/oidc/callback` | Absolute path the provider redirects back to. Register `https://<portal-host>/api/auth/oidc/callback` as a redirect URI with the provider. |
-| `Identity.Oidc.PostLoginRedirectPath` | `/login.html` | Page the callback hands the session to (in the URL fragment). The portal's login page stores the tokens and forwards to the app; change it only to a page that processes the SSO token fragment. |
+| `Identity.Oidc.PostLoginRedirectPath` | `/index.html` | App page the user lands on after a successful federated login. The callback renders a hand-off page that stores the session (tokens are never placed in the URL) and forwards here. |
 | `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Token claims (in priority order) mapped into portal groups for folder and dataset ACLs. Match a portal group by its `AdGroup` (or `Name`); membership is reconciled on every login. |
+| `Identity.Oidc.RequiredClaims` | *(empty)* | Claim types that must be present in a validated id_token (beyond `sub`). Login fails closed if any is missing — use to mandate, for example, `email` or a tenant claim. |
 | `Identity.Oidc.UsernameClaimType` | `preferred_username` | Claim used as the portal username (falls back to `preferred_username` then `sub`). |
 | `Identity.Oidc.EmailClaimType` | `email` | Claim used as the user's email address. |
 | `Identity.Oidc.ClockSkewSeconds` | `60` | Allowed clock skew when validating id_token lifetime. |

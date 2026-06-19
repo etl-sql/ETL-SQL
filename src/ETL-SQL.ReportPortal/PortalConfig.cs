@@ -224,11 +224,10 @@ public class OidcIdentityConfig
     /// registered as a redirect URI with the provider and begin with '/'.</summary>
     public string CallbackPath { get; set; } = "/api/auth/oidc/callback";
 
-    /// <summary>Relative path the callback redirects to after a successful federated login, handing
-    /// off the portal session in the URL fragment (#access_token,&amp;refresh_token,&amp;expires_at).
-    /// Defaults to the portal's own login page, which stores the tokens and forwards to the app; point
-    /// it elsewhere only at a page that processes the SSO token fragment. Must begin with '/'.</summary>
-    public string PostLoginRedirectPath { get; set; } = "/login.html";
+    /// <summary>Relative path the app lands on after a successful federated login. The callback
+    /// renders a hand-off page that stores the portal session (tokens are never put in the URL) and
+    /// then forwards here. Must begin with '/'.</summary>
+    public string PostLoginRedirectPath { get; set; } = "/index.html";
 
     /// <summary>Token claims, in priority order, that carry group/role membership for portal group sync.</summary>
     public string[] GroupClaimTypes { get; set; } = ["groups", "roles"];
@@ -241,6 +240,10 @@ public class OidcIdentityConfig
 
     /// <summary>Additional accepted token audiences beyond <see cref="ClientId"/>.</summary>
     public string[] AdditionalAudiences { get; set; } = [];
+
+    /// <summary>Claim types that must be present in a validated id_token (beyond the always-required
+    /// <c>sub</c>); authentication fails closed if any is missing. Empty by default.</summary>
+    public string[] RequiredClaims { get; set; } = [];
 
     /// <summary>Allowed clock skew (seconds) when validating id_token lifetime. Minimum effective value is 0.</summary>
     public int ClockSkewSeconds { get; set; } = 60;

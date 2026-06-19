@@ -41,10 +41,29 @@ release begins.
   group add/stale-remove sync, local fallback, and disabled-OIDC 404; service tests certify the token
   crypto/validation paths. No new third-party dependency (uses IdentityModel already present via
   JwtBearer).
-- [ ] **P1.3 Validate OIDC claims and issuer/audience policy** including required claims, token
+- [x] **P1.3 Validate OIDC claims and issuer/audience policy** including required claims, token
   lifetime, clock skew, failed validation handling, and audit coverage for authentication failures.
-- [ ] **P1.4 Map OIDC group claims dynamically to Portal groups** with deterministic membership sync,
+  *(done)* id_token validation enforces issuer, audience (ClientId + AdditionalAudiences), lifetime
+  with configurable `ClockSkewSeconds`, JWKS signature, and nonce binding; added a configurable
+  `RequiredClaims` policy that fails closed when a mandated claim is absent. All failures throw a
+  single `OidcAuthenticationException` the callback turns into a redirect, and every failure path is
+  audited (`LOGIN_FAILED` with reason): provider error, state/CSRF mismatch, token/claim validation,
+  provider-confusion refusal, and disabled account. Service tests cover wrong audience, expired token,
+  bad signature, nonce mismatch, token-endpoint failure, and required-claim present/absent.
+  Security fix folded in: federated logins are now bound to OIDC accounts only — an IdP identity whose
+  username matches a Local/LDAP account is refused (prevents account takeover via provider confusion).
+- [x] **P1.4 Map OIDC group claims dynamically to Portal groups** with deterministic membership sync,
   stale membership removal, and no privilege retention after claim changes.
+  *(done)* `OidcUserProvisioningService.SyncGroupsAsync` reconciles only Provider="OIDC" groups
+  against the token's group claims (match by `AdGroup` else `Name`): idempotent (unchanged claims =
+  no writes), adds newly-claimed groups, removes unclaimed ones, and never touches Local/LDAP
+  memberships. On any change the user's session is invalidated (security stamp rotated + refresh
+  tokens revoked) so privileges in already-issued tokens cannot persist; on a privilege reduction the
+  user's anonymous share/embed links are revoked too. Integration tests certify add, deterministic
+  stale removal, and that the membership change drives invalidation.
+  Security fix folded in: the federated session is handed to the SPA via a server-rendered page with a
+  JSON data-island read by a same-origin script — tokens (incl. the refresh token) are no longer
+  placed in the URL fragment/browser history.
 - [ ] **P1.5 Document MFA and conditional-access posture** so administrators know ETL-SQL delegates
   MFA and conditional access enforcement to the identity provider.
 - [ ] **P2.1 Add operational diagnostics for OIDC** including a redacted configuration check, useful
