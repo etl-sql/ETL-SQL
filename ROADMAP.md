@@ -16,22 +16,25 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 > **Shipped — v0.11.0:** multi-user standalone hardening, script-first recovery, and the operator-tooling
 > CLI (doctor, support-bundle, init, split-custody backup/restore, automatic migrations, and the N→N+1
 > upgrade-path release gate). See `CHANGELOG.md`.
+>
+> **Shipped — v0.12.0:** Practical High Availability: PostgreSQL shared state, shared artifact storage,
+> node heartbeats, lease fencing, leader election, load-balancer health probes/session affinity, and
+> Docker-backed multi-process certification.
 
-1. **Practical High Availability (Next):** PostgreSQL state and shared storage.
-2. **Governance Core:** Org policy and secure audit outbox.
-3. **Enterprise Identity:** OIDC and approval workflows.
-4. **Departmental Isolation:** Repeatable isolated container deployments.
-5. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
+1. **Governance Core (Next):** Org policy, named secret references, and secure audit outbox.
+2. **Enterprise Identity:** OIDC and approval workflows.
+3. **Departmental Isolation:** Repeatable isolated container deployments.
+4. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
 
 ---
 
 ## Architectural Gaps to Address
 
-1. **State Isolation:** Portal uses EF Core/SQLite while Orchestrator uses a separate hand-written SQLite store.
-2. **Database Hardcoding:** Portal database selection is hardcoded to SQLite and lacks a migration strategy.
-3. **Storage Boundary:** Scripts, cached datasets, and snapshots use direct filesystem paths rather than an abstraction.
+1. **State Isolation:** *(addressed in v0.12.0)* Portal and Orchestrator state are provider-selectable and support shared PostgreSQL.
+2. **Database Hardcoding:** *(addressed in v0.12.0)* Portal database selection supports SQLite/PostgreSQL and SQLite-to-PostgreSQL migration.
+3. **Storage Boundary:** *(partially addressed in v0.12.0)* Shared artifact storage, guardrails, and snapshot writes are provider-backed; dataset cache path migration remains a demand-driven hardening follow-on.
 4. **Local Limits:** Caches, interactive sessions, and rate-limiting are process-local.
-5. **Lease Fencing:** Orchestrator leases lack fencing tokens to reject stale writers.
+5. **Lease Fencing:** *(addressed in v0.12.0)* Job completion and shared artifact writes use fencing tokens/write epochs.
 6. **Tooling Runbooks:** Backup, restore, and upgrade rely on manual runbooks rather than CLI commands.
 7. **Secrets Handling:** SMTP, JWT, connectors, and scripts handle secrets in separate, fragmented ways.
 8. **Audit Outbox:** Auditing lacks a transactional outbox to guarantee delivery to remote SIEMs.
@@ -42,29 +45,29 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ## Release Sequence & Incremental TODOs
 
-### Active Phase: Practical High Availability
+### Shipped Phase: Practical High Availability
 *Enables horizontal scaling of Portal and Orchestrator nodes behind a load balancer with PostgreSQL state and shared artifact storage.*
 
 #### TODOs:
-- [ ] **Phase 1: PostgreSQL State Provider**
+- [x] **Phase 1: PostgreSQL State Provider**
   - Extract database provider interfaces for the Portal/Orchestrator state.
   - Create EF Core migrations for PostgreSQL.
   - Implement `etl-sql admin migrate-database --from sqlite --to postgres --dry-run` with row verification and cutover checkpoints.
-- [ ] **Phase 2: Artifact Storage Abstraction**
+- [x] **Phase 2: Artifact Storage Abstraction**
   - Create a unified storage provider interface for scripts, snapshots, cached datasets, and keys.
   - Implement Local and SMB/UNC shared storage providers.
   - Enforce path-traversal guardrails and script immutability checks at the storage boundary.
-- [ ] **Phase 3: Distributed Leases & Fencing**
+- [x] **Phase 3: Distributed Leases & Fencing**
   - Implement database-backed node heartbeats and execution/job leases.
   - Implement monotonically increasing fencing tokens to reject stale writers during network partitions.
   - Add database-backed leader election for running singletons (e.g. database migrations).
-- [ ] **Phase 4: Stateless Node Operation**
+- [x] **Phase 4: Stateless Node Operation**
   - Configure Portal nodes to read state and serve snapshots from PostgreSQL.
   - Support load-balancer session affinity for interactive IDE sessions.
   - Ensure a node partition immediately cancels local running jobs if it loses its database lease.
   - Implement a lightweight `/healthz` HTTP endpoint on Portal nodes to check database, storage, and lease connectivity for load-balancer health checks.
   - Heart-beat node capacity (CPU/memory utilization) to prevent overloaded nodes from claiming new leases, and implement a quarantine policy for failing jobs to prevent cascade failures across the cluster.
-- [ ] **Phase 5: Rolling Deployment Certification**
+- [x] **Phase 5: Rolling Deployment Certification**
   - Verify "expand/migrate/contract" database migrations for rolling upgrades.
   - Run Portal and Orchestrator nodes as separate OS processes against PostgreSQL and shared artifact
     storage; prove simultaneous claims, cancellation, permission changes, restart recovery, conflicting
@@ -77,8 +80,8 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-### Governance Core
-*Enforces centralized security policy, named secret references, and remote audit delivery across all hosts (CLI, IDE, Portal).*
+### Active Phase: Governance Core
+*Enforces centralized security policy, named secret references, and remote audit delivery across all hosts (CLI, IDE, Portal, and Orchestrator).*
 
 #### TODOs:
 - [ ] **Phase 1: Typed Policy Registry**

@@ -33,7 +33,7 @@ To get the Report Portal running in under 5 minutes:
 3. **Configure Paths**: Verify `ScriptRootPath` points to your `.rptsql` files (defaults to `./Reports`).
 4. **Launch**: Run `./ETL-SQL-Portal`.
 5. **Admin Login**:
-   - URL: `http://localhost:5001`
+   - URL: `http://localhost:5000`
    - User: `admin`
    - Temp Password: the value of `Portal__FirstRun__AdminPassword` if you configured one; otherwise a
      randomly generated password printed once to the startup log (look for the `Portal.FirstRun` category).
@@ -44,14 +44,17 @@ To get the Report Portal running in under 5 minutes:
 
 ## 1. Deployment
 
-The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses a local **SQLite** database and serves both the REST API and the static web UI from the same process.
+The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses **SQLite** by
+default for single-node deployments and **PostgreSQL** for load-balanced HA deployments. It serves
+both the REST API and the static web UI from the same process.
 
 ### 1.1 Prerequisites
 
 - .NET 10 Runtime
 - Write access to the directories configured for the database, report scripts, and snapshots
 - Network access to any data sources the report scripts query
-- (Optional) ETL-SQL Orchestrator Service running on the same host or accessible via its SQLite path, for background dataset refresh
+- (Optional) ETL-SQL Orchestrator Service running on the same host or reachable through its HTTP API,
+  for background dataset refresh and scheduled report/subscription work
 
 ### 1.2 Windows (NSSM)
 
@@ -96,11 +99,24 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 {
   "Portal": {
     "DatabasePath":    "./portal.db",
+    "Database": {
+      "Provider": "Sqlite",
+      "ConnectionString": ""
+    },
     "ScriptRootPath":  "./Reports",
     "SnapshotDirectory": "./Snapshots",
+    "DatasetRootPath": "./data/datasets",
+    "MapRootPath": "./data/maps",
+    "Storage": {
+      "Provider": "Local",
+      "KeyRingPath": ""
+    },
     "Resources": {
       "MaxConcurrentReportExecutions": 4,
       "MaxConcurrentExecutionsPerUser": 2,
+      "MaxConcurrentExecutionsPerGroup": 0,
+      "InteractiveExecutionWeight": 2,
+      "RefreshExecutionWeight": 1,
       "ExecutionTimeoutSeconds":       300,
       "SessionCacheMaxSize":           50,
       "SessionCacheTtlMinutes":        30,
@@ -149,10 +165,19 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `DatabasePath` | `./portal.db` | Path to the SQLite database file. Relative to the app working directory. |
+| `Database.Provider` | `Sqlite` | State provider. Use `Postgres` for HA deployments with multiple Portal nodes. |
+| `Database.ConnectionString` | *(empty)* | PostgreSQL connection string when `Database.Provider = Postgres`. |
 | `ScriptRootPath` | `./Reports` | Root directory for `.rptsql` script files. All script paths are validated to stay within this directory. |
 | `SnapshotDirectory` | `./Snapshots` | Where report snapshot files are stored. |
+| `DatasetRootPath` | `./data/datasets` | Root for Portal-managed cached dataset files. |
+| `MapRootPath` | `./data/maps` | Root for map assets used by reports. |
+| `Storage.Provider` | `Local` | Artifact provider. Use `Smb`/`Unc` with UNC roots for shared HA storage. |
+| `Storage.KeyRingPath` | `.portal-keys` beside the database | Data Protection key-ring path. In HA, every Portal node must share the same path. |
 | `Resources.MaxConcurrentReportExecutions` | `4` | How many report execution jobs can run simultaneously. |
 | `Resources.MaxConcurrentExecutionsPerUser` | `2` | Workload fairness: the most of the shared execution slots a single non-administrator may hold at once, so one user flooding the queue cannot starve everyone else. Keep it below `MaxConcurrentReportExecutions`; administrators are exempt. |
+| `Resources.MaxConcurrentExecutionsPerGroup` | `0` | Optional per-group execution quota. `0` disables the group gate; administrators are exempt. |
+| `Resources.InteractiveExecutionWeight` | `2` | Weighted queue admission for queued interactive executions. |
+| `Resources.RefreshExecutionWeight` | `1` | Weighted queue admission for queued refresh executions. |
 | `Resources.ExecutionTimeoutSeconds` | `300` | Per-execution timeout. Jobs exceeding this are cancelled. |
 | `Resources.SessionCacheMaxSize` | `50` | Maximum number of in-memory execution sessions cached for result streaming. |
 | `Resources.SessionCacheTtlMinutes` | `30` | How long an idle session is kept before eviction. |
@@ -187,11 +212,30 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 
 ---
 
+### 2.1 HA Configuration Summary
+
+For a load-balanced Portal fleet:
+
+- Set `Portal:Database:Provider = Postgres` and the same `Portal:Database:ConnectionString` on every
+  Portal node.
+- Set `Portal:Storage:Provider = Smb` or `Unc`, and point `ScriptRootPath`, `SnapshotDirectory`,
+  `DatasetRootPath`, `MapRootPath`, and `Storage.KeyRingPath` at shared UNC paths.
+- Keep `Portal:Jwt:Secret`, `Portal:Dataset:AtRestKey`, and `Portal:Orchestrator:ApiKey` identical
+  across Portal nodes.
+- Configure the load balancer for sticky sessions using `LoadBalancer.SessionAffinityCookieName`
+  (`ETLSQL_PORTAL_AFFINITY` by default).
+- Use `GET /healthz` for load-balancer probes. It fails closed with HTTP 503 when PostgreSQL,
+  shared snapshot storage, or the node-registry/lease store is unavailable.
+
+The full HA setup and SQLite-to-PostgreSQL migration procedure is in
+[Administrators_Guide.md §6.1](Administrators_Guide.md#61-practical-high-availability-configuration)
+and [§11.5](Administrators_Guide.md#115-migrating-from-sqlite-to-postgresql--etl-sql-admin-migrate-database).
+
 ## 3. First-Run Setup
 
 On first start the portal:
 
-1. Runs any pending EF Core migrations, creating the SQLite schema.
+1. Runs any pending EF Core migrations, creating the configured Portal database schema.
 2. Creates the three default roles: `Admin`, `Publisher`, `Viewer`.
 3. If no `admin` user exists, creates one with username `admin` and `MustChangePassword = true`. The
    temporary password comes from `Portal:FirstRun:AdminPassword` (or the `Portal__FirstRun__AdminPassword`
@@ -511,8 +555,8 @@ Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files.
 Production portals require `Portal:Dataset:AtRestKey`, a base64 value decoding to at least 32 bytes.
 Generate it with a cryptographically secure random generator, store it in the portal's secret manager,
 and set a non-secret `Portal:Dataset:AtRestKeyVersion` such as `2026-01`. Back up the key, its version,
-`portal.db`, and the dataset directory together. Restoring only the database/files without the matching
-key makes the caches unreadable.
+the Portal database, and the dataset directory together. Restoring only the database/files without the
+matching key makes the caches unreadable.
 
 `Portal:Dataset:AllowMachineFallback=true` is supported only for deliberate development/standalone use.
 It creates host-bound caches that cannot be restored on another host.
@@ -526,19 +570,20 @@ cannot be resolved. The only exception is an empty current key with
 For backup and restore:
 
 1. Stop writes or take a coordinated snapshot.
-2. Back up `portal.db`, `Portal:DatasetRootPath`, the current key/version, all configured previous
-   key/version pairs, and `LegacyAtRestKeyVersion`.
+2. Back up the Portal database, `Portal:DatasetRootPath`, the current key/version, all configured
+   previous key/version pairs, and `LegacyAtRestKeyVersion`.
 3. Restore those items as one set. Do not start the portal with only the database or dataset directory.
 4. Start the portal and verify dataset reads before retiring the backup.
 5. A restore with the wrong key must fail cleanly; restore the matching secret rather than changing
    metadata or attempting to regenerate the key.
 
-A **complete** portal backup is one coordinated set: `portal.db`, the Orchestrator database
-(`etlsql.db`), `Portal:ScriptRootPath`, `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, the
-Data Protection key ring, and the configuration (JWT secret, dataset at-rest key/versions,
-Orchestrator API key). Restored together with the matching secrets, a clean-location restore
-preserves authentication, folder permissions, Orchestrator jobs, subscriptions, audit history, and
-dataset metadata — verified by the automated backup/restore drill.
+A **complete** portal backup is one coordinated set: the Portal database, the Orchestrator database,
+`Portal:ScriptRootPath`, `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, the Data Protection key
+ring, and the configuration (JWT secret, dataset at-rest key/versions, Orchestrator API key). In
+single-node deployments those databases are usually `portal.db` and `etlsql.db`; in HA deployments
+they are PostgreSQL backups taken with the shared artifact roots. Restored together with the matching
+secrets, a clean-location restore preserves authentication, folder permissions, Orchestrator jobs,
+subscriptions, audit history, and dataset metadata — verified by the automated backup/restore drill.
 
 > **Dataset cache files are referenced by absolute path in the catalog.** Restore
 > `Portal:DatasetRootPath` to its **original absolute path** (or rewrite the catalog paths) — a
@@ -550,8 +595,8 @@ dataset metadata — verified by the automated backup/restore drill.
 
 A backup/restore drill proves recovery into a *clean* location; upgrading a *live* deployment to a new
 release is a separate operation. On startup the portal runs any pending EF Core schema migrations
-against the existing `portal.db` (§2 startup sequence), and the Orchestrator store adds any missing
-`etlsql.db` columns in place when it initializes. Both are forward-only: an in-place upgrade preserves
+against the configured Portal database (§2 startup sequence), and the Orchestrator store adds any
+missing columns in place when it initializes. Both are forward-only: an in-place upgrade preserves
 authentication, folder permissions, durable execution jobs, subscriptions, datasets and their at-rest
 key version, and audit history. New columns are added nullable/with defaults, so pre-upgrade rows
 remain valid (for example, audit rows written before correlation-id support read back with an empty
@@ -1287,7 +1332,7 @@ Service-control commands require an Admin user and are disabled by default. Enab
 
 | Check | Healthy | Degraded | Unhealthy |
 | :--- | :--- | :--- | :--- |
-| `db` | SQLite reachable | — | Cannot connect to database |
+| `db` | Configured Portal database reachable | — | Cannot connect to database |
 | `orchestrator` | Orchestrator DB found | Orchestrator DB not found | — |
 | `execution` | Capacity available | Slots nearing cap | — |
 
@@ -1338,7 +1383,7 @@ Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV
 
 - **Mutations and their audit rows commit together.** Security-sensitive changes (user role/active/password/token changes, user deletion and ownership transfer, group membership, folder and dataset ACLs, dataset metadata/move/delete, SMTP definitions, share-link/embed-token revocation, subscription delivery outcomes) write their audit row in the same database transaction as the change itself: the operation cannot succeed without its durable audit event, and a rejected or conflicted operation leaves no audit row behind. Informational events (views, exports, logins, denials) remain independent best-effort records.
 - **Retention is opt-in.** By default every audit row is kept forever. Set `Portal:Audit:RetentionDays` to enable a daily sweep that deletes rows older than the window (`Portal:Audit:PurgeIntervalSeconds` tunes the cadence). Export or forward rows you must keep **before** enabling retention.
-- **The audit table is not tamper-proof — by design.** It lives in the writable portal SQLite database, so an attacker (or administrator) with file access can alter it. The supported enterprise posture is to **export or forward audit data to external append-only storage on a schedule** (the CSV endpoint, or log forwarding per the security guide) and treat the in-portal table as the operational view. Tamper-evident hash chaining inside the portal database is a deliberate non-goal for this release (see `ROADMAP.md`).
+- **The audit table is not tamper-proof — by design.** It lives in the writable portal database, so an attacker (or administrator) with database access can alter it. The supported enterprise posture is to **export or forward audit data to external append-only storage on a schedule** (the CSV endpoint, or log forwarding per the security guide) and treat the in-portal table as the operational view. Tamper-evident hash chaining inside the portal database is a deliberate non-goal for this release (see `ROADMAP.md`).
 
 ---
 
@@ -1449,7 +1494,8 @@ environment variables or the deployment secret provider. The shared `AddSecureCo
 also accepts machine-bound `ENC:` values. Do not commit plaintext production values to
 `appsettings.json`.
 
-The portal persists its ASP.NET Data Protection key ring in `.portal-keys` beside `portal.db`.
+The portal persists its ASP.NET Data Protection key ring in `Portal:Storage:KeyRingPath`, defaulting
+to `.portal-keys` beside the single-node portal database.
 Admin-entered Orchestrator API keys in `portal-orchestrator.json` are protected by that ring. Back up
 `.portal-keys` with the portal database; losing it makes protected SMTP and Orchestrator values
 unreadable. Legacy sidecars containing plaintext `ApiKey` are automatically rewritten with
@@ -1634,8 +1680,8 @@ Use this checklist before promoting the Report Portal to a production or custome
 ### Data and Storage
 
 - [ ] **Required** — Confirm `Portal:DatabasePath` points to a persistent location that survives service restarts and OS reboots (not a temp directory or container ephemeral layer).
-- [ ] **Required** — Confirm `Portal:SnapshotRoot` and `Portal:ReportDataRoot` are writable and on a volume with sufficient capacity for report snapshots and dataset exports.
-- [ ] **Recommended** — Schedule regular backups of the portal SQLite database and the snapshot/data directories.
+- [ ] **Required** — Confirm `Portal:SnapshotDirectory`, `Portal:DatasetRootPath`, `Portal:MapRootPath`, and `Portal:ScriptRootPath` are writable and on volumes with sufficient capacity.
+- [ ] **Recommended** — Schedule regular backups of the Portal database, Orchestrator database, Data Protection key ring, and snapshot/script/dataset/map roots. For HA, back up PostgreSQL and shared storage as one coordinated recovery set.
 - [ ] **Recommended** — Set `Portal:MaxSnapshotAgeDays` to automatically clean up expired snapshots.
 
 ### Reliability

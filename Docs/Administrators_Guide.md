@@ -14,7 +14,12 @@ ETL-SQL can be deployed as workstation tooling, server services, or both.
 | Orchestrator Service | Background scheduler and job execution service | Application server |
 | Report Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
 
-The Orchestrator and Report Portal may run on the same host or on separate hosts. In separate-host deployments, configure the portal with the orchestrator API URL and shared API key. Use [Operations/Capacity_Planning.md](Operations/Capacity_Planning.md) when deciding whether to start shared or split the services.
+The Orchestrator and Report Portal may run on the same host, on separate hosts, or as multiple
+load-balanced nodes. Single-node deployments use SQLite by default. Practical High Availability
+deployments use shared PostgreSQL state plus shared Portal artifact roots; configure the portal with
+the orchestrator API URL and shared API key when the services are split. Use
+[Operations/Capacity_Planning.md](Operations/Capacity_Planning.md) when deciding whether to start
+shared or split the services.
 
 ---
 
@@ -76,7 +81,8 @@ Before exposing the services to users:
 2. Set an orchestrator API key if the management API is reachable beyond a loopback-only or isolated internal network.
 3. Configure HTTPS certificates or place the services behind a TLS-terminating reverse proxy.
 4. Set script, snapshot, dataset, and map root directories to dedicated service-owned folders.
-5. Confirm backup coverage for portal and orchestrator SQLite databases.
+5. Confirm backup coverage for portal/orchestrator state and artifact roots: SQLite files for
+   single-node deployments, or PostgreSQL backups plus shared storage snapshots for HA deployments.
 6. Run a simple `MOCKDB` script and a sample report from the service account context.
 
 ---
@@ -94,11 +100,15 @@ Common environment-variable overrides use .NET's double-underscore convention:
 
 ```text
 Portal__DatabasePath=C:\ETL-SQL\data\portal.db
+Portal__Database__Provider=Sqlite
 Portal__ScriptRootPath=C:\ETL-SQL\scripts
 Portal__SnapshotDirectory=C:\ETL-SQL\snapshots
 Portal__Orchestrator__ApiUrl=https://orchestrator.example.com:5003
 Portal__Orchestrator__ApiKey=your-shared-secret
+Portal__Storage__Provider=Local
+Portal__Storage__KeyRingPath=C:\ETL-SQL\data\.portal-keys
 Orchestrator__ApiKey=your-shared-secret
+Orchestrator__Database__Provider=Sqlite
 Orchestrator__ScriptRoot=C:\ETL-SQL\scripts
 Jobs__UseProcessSpawning=true
 Jobs__ExecutablePath=C:\Program Files\ETL-SQL\bin\ETL-SQL.exe
@@ -229,19 +239,101 @@ Leave `SameHost = false` for separate-server deployments.
 
 ---
 
-## 6. Portal Data Roots
+## 6. Portal State and Data Roots
 
 The Report Portal constrains filesystem access to configured roots. Set these to service-owned directories rather than broad user folders:
 
 | Setting | Purpose | Default in code |
 | :--- | :--- | :--- |
 | `Portal:DatabasePath` | Portal SQLite database | `./portal.db` |
+| `Portal:Database:Provider` | Portal state provider: `Sqlite` or `Postgres` | `Sqlite` |
+| `Portal:Database:ConnectionString` | Portal PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 | `Portal:ScriptRootPath` | Report and job script browser root | `./Reports` |
 | `Portal:SnapshotDirectory` | Report snapshot output | `./Snapshots` |
 | `Portal:DatasetRootPath` | Dataset files managed by the portal | `./data/datasets` |
 | `Portal:MapRootPath` | Map assets used by reports | `./data/maps` |
+| `Portal:Storage:Provider` | Artifact provider: `Local` or `Smb`/`Unc` | `Local` |
+| `Portal:Storage:KeyRingPath` | ASP.NET Data Protection key ring and Keys artifact root | `.portal-keys` beside the portal DB |
+| `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
+| `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 
 The portal rejects script, snapshot, map, and dataset paths that resolve outside their configured roots.
+
+### 6.1 Practical High Availability Configuration
+
+For a load-balanced HA deployment, every Portal and Orchestrator node must point at the same
+PostgreSQL database deployment. Every Portal node must also point at the same shared artifact roots and
+the same Data Protection key ring. The supported shared filesystem provider is `Smb`/UNC.
+
+Example Portal node configuration:
+
+```json
+{
+  "Portal": {
+    "Database": {
+      "Provider": "Postgres",
+      "ConnectionString": "Host=pg-ha.internal;Database=etlsql_portal;Username=etl_portal;Password=..."
+    },
+    "Storage": {
+      "Provider": "Smb",
+      "KeyRingPath": "\\\\fileserver\\etlsql\\keys"
+    },
+    "ScriptRootPath": "\\\\fileserver\\etlsql\\reports",
+    "SnapshotDirectory": "\\\\fileserver\\etlsql\\snapshots",
+    "DatasetRootPath": "\\\\fileserver\\etlsql\\datasets",
+    "MapRootPath": "\\\\fileserver\\etlsql\\maps",
+    "LoadBalancer": {
+      "SessionAffinityEnabled": true,
+      "SessionAffinityCookieName": "ETLSQL_PORTAL_AFFINITY",
+      "SessionAffinityCookieMinutes": 480
+    },
+    "Orchestrator": {
+      "ApiUrl": "https://orchestrator-vip.example.com:5003",
+      "ApiKey": "your-shared-secret"
+    }
+  }
+}
+```
+
+Example Orchestrator node configuration:
+
+```json
+{
+  "Orchestrator": {
+    "ApiKey": "your-shared-secret",
+    "Database": {
+      "Provider": "Postgres",
+      "ConnectionString": "Host=pg-ha.internal;Database=etlsql_orchestrator;Username=etl_orch;Password=..."
+    },
+    "ScriptRoot": "\\\\fileserver\\etlsql\\scripts"
+  },
+  "Jobs": {
+    "UseProcessSpawning": true,
+    "ExecutablePath": "C:\\Program Files\\ETL-SQL\\bin\\ETL-SQL.exe"
+  },
+  "Scheduler": {
+    "QuarantineFailureThreshold": 5
+  },
+  "Cluster": {
+    "NodeHeartbeatSeconds": 30
+  }
+}
+```
+
+Operational requirements:
+
+- Use sticky routing on the `ETLSQL_PORTAL_AFFINITY` cookie, or the configured
+  `Portal:LoadBalancer:SessionAffinityCookieName`, because interactive sessions are node-local.
+- Point load balancer health checks at `GET /healthz`. It returns HTTP 200 only when the Portal can
+  reach PostgreSQL, shared snapshot storage, and the node-registry/lease store. Use `GET /health` for
+  richer monitoring.
+- Keep `Portal:Jwt:Secret`, `Portal:Dataset:AtRestKey`, `Portal:Storage:KeyRingPath`, and
+  `Portal:Orchestrator:ApiKey` identical across Portal nodes.
+- Run Portal and Orchestrator under service identities that can read/write the configured PostgreSQL
+  databases and shared storage roots. For SMB/UNC roots, use a domain identity or managed service
+  account with explicit share and NTFS permissions.
+- Back up PostgreSQL and the shared artifact roots as one coordinated recovery set. The HA state is no
+  longer represented by only `portal.db` and `etlsql.db` files.
 
 ---
 
@@ -251,7 +343,8 @@ Use resource settings to keep one report or job from consuming the whole host.
 
 ### Orchestrator Lockbox Bundles
 
-Published Orchestrator bundles are stored in the Orchestrator SQLite database as immutable versions. Back up the database together with any configured lockbox key material.
+Published Orchestrator bundles are stored in the configured Orchestrator database as immutable versions.
+Back up the database together with any configured lockbox key material.
 
 | Mode | Operational note |
 |---|---|
@@ -266,6 +359,10 @@ Do not delete bundle versions referenced by active or historical jobs unless the
 "Portal": {
   "Resources": {
     "MaxConcurrentReportExecutions": 4,
+    "MaxConcurrentExecutionsPerUser": 2,
+    "MaxConcurrentExecutionsPerGroup": 0,
+    "InteractiveExecutionWeight": 2,
+    "RefreshExecutionWeight": 1,
     "ExecutionTimeoutSeconds": 300,
     "SessionCacheMaxSize": 50,
     "SessionCacheTtlMinutes": 30
@@ -546,11 +643,11 @@ artifact can neither read nor decrypt the data:
 etl-sql admin backup --output-dir D:\backups
 ```
 
-- **`etl-sql-backup-<timestamp>.zip`** (data) — the Portal and Orchestrator SQLite databases (with
-  their `-wal`/`-shm` sidecars), report snapshots, published report scripts, cached dataset parquet,
-  map files, and an `appsettings.json` copy **with every secret value stripped out**. A
-  `backup-manifest.json` records a backup id, the tool version, the catalog migration version, and a
-  SHA-256 for every file.
+- **`etl-sql-backup-<timestamp>.zip`** (data) — for single-node SQLite deployments, the Portal and
+  Orchestrator SQLite databases (with their `-wal`/`-shm` sidecars), report snapshots, published
+  report scripts, cached dataset parquet, map files, and an `appsettings.json` copy **with every
+  secret value stripped out**. A `backup-manifest.json` records a backup id, the tool version, the
+  catalog migration version, and a SHA-256 for every file.
 - **`etl-sql-keys-<timestamp>.zip`** (keys) — the ASP.NET Data Protection key ring (`.portal-keys/`)
   and a `secrets.json` holding the stripped secrets (dataset at-rest key(s), JWT secret, etc.).
 
@@ -576,14 +673,16 @@ next portal start, pending migrations apply automatically. Dataset caches refere
 path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
 [§6.5](ReportPortal_Administrators_Guide.md#versioned-upgrades-and-rollback).
 
-This is the auditable, supported alternative to the manual file-copy backup in §8.
+This is the auditable, supported alternative to the manual file-copy backup in §8 for single-node
+deployments. In HA deployments, back up PostgreSQL with your database backup tooling and snapshot the
+shared artifact roots/key ring as one coordinated recovery set.
 
 ### 11.4 Upgrading in place
 
 ETL-SQL applies pending database schema migrations automatically on startup — the Portal runs EF Core
-migrations against `portal.db`, and the Orchestrator store adds any missing `etlsql.db` columns when it
-initializes. Both are **forward-only**: an in-place N→N+1 upgrade preserves authentication, folder
-permissions, jobs, subscriptions, datasets (and their at-rest key version), and audit history.
+migrations against the configured Portal database, and the Orchestrator store adds any missing columns
+when it initializes. Both are **forward-only**: an in-place N→N+1 upgrade preserves authentication,
+folder permissions, jobs, subscriptions, datasets (and their at-rest key version), and audit history.
 
 The full in-place upgrade procedure, the post-upgrade verification checklist, and the supported
 rollback path (**restore-from-backup, not a down-migration**) are documented in
@@ -628,3 +727,5 @@ verified** on both sides. Any mismatch rolls the whole transaction back — the 
 all-or-nothing.
 
 Once the migration succeeds, switch each `Provider` from `Sqlite` to `Postgres` and restart to cut over.
+After cutover, configure every Portal node with the same shared artifact roots and key-ring path,
+configure load-balancer affinity, and verify `GET /healthz` on each node before sending user traffic.
