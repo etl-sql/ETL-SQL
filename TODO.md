@@ -50,7 +50,12 @@ release begins.
   guardrails. The schema parser accepts JSON with comments/trailing commas, validates versioned
   documents, rejects duplicate/invalid entries, and maps document sections back to central policy
   keys for later source loading and enforcement.
-- [ ] **P1.5 Support policy sources** from local OS-protected configuration and HTTPS endpoints.
+- [x] **P1.5 Support policy sources** from local OS-protected configuration and HTTPS endpoints.
+  *(done)* Added organization policy source abstractions for local protected JSON files and HTTPS
+  endpoints. Local sources require fully qualified paths and an OS protection validator; the default
+  validator rejects broad writable ACLs on Windows and group/other-writable modes on Unix. HTTPS
+  sources reject non-HTTPS URIs, validate loaded v1.0 policy documents, and can be combined through
+  a loader/factory that falls back across configured sources.
 - [ ] **P1.6 Implement offline policy cache windows** with fail-secure behavior when a policy
   expires or cannot be validated.
 
