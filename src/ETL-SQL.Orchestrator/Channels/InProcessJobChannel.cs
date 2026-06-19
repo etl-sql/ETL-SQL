@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Common;
 using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Orchestrator.Channels
@@ -88,8 +89,9 @@ namespace ETL_SQL.Orchestrator.Channels
             catch (Exception ex)
             {
                 entry.Status = JobRunStatus.Failed;
-                entry.ErrorMessage = ex.Message;
-                _logger.LogError(ex, "InProcess job {JobId} failed", entry.JobId);
+                entry.ErrorMessage = SecretRedactor.Redact(ex.Message);
+                _logger.LogError("InProcess job {JobId} failed: {Message}. StackTrace: {Stack}",
+                    entry.JobId, entry.ErrorMessage, SecretRedactor.Redact(ex.StackTrace));
             }
             finally
             {

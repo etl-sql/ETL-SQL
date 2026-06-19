@@ -81,8 +81,15 @@ release begins.
   only for sensitive connector option keys or sensitive fields inside connection strings, plus full
   target-string secret references. The engine DI now registers a configurable secret provider from
   `Governance:Secrets:*`/`Secrets:*` settings.
-- [ ] **P1.9 Block raw secret values from logs, diagnostics, audit rows, support bundles, and
+- [x] **P1.9 Block raw secret values from logs, diagnostics, audit rows, support bundles, and
   dashboards**, including policy tests for common connector and report workflows.
+  *(done)* Added a shared Core `SecretRedactor` and routed diagnostics, execution exceptions,
+  Core logger sinks, connector configuration display, result JSON/XML/table formatting, portal
+  audit rows, report execution errors/parameters, and orchestrator job status/history errors
+  through it. Common secret shapes now mask `PASSWORD`/`PWD`, API keys, bearer tokens, named
+  `SECRET:` references, protected `ENC:`/`DPAPI:`/`MACHINE:` values, client/account keys, SAS
+  tokens, passphrases, and SASL credentials. Tests cover connector config redaction, diagnostics
+  and execution exceptions, result serialization redaction, and portal audit persistence.
 
 ### Phase 4 - Durable Audit Outbox
 

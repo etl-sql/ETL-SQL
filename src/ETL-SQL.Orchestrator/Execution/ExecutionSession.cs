@@ -125,8 +125,9 @@ namespace ETL_SQL.Orchestrator.Execution
             }
             catch (Exception ex)
             {
-                _logger.Error("Execution failed: {ErrorMessage}", ex, ex.Message);
-                result.Diagnostics.Add(new Diagnostic(ex.Message, 0, 0, DiagnosticSeverity.Error));
+                var safeMessage = SecretRedactor.Redact(ex.Message) ?? string.Empty;
+                _logger.Error("Execution failed: {ErrorMessage}", ex, safeMessage);
+                result.Diagnostics.Add(new Diagnostic(safeMessage, 0, 0, DiagnosticSeverity.Error));
                 result.Success = false;
             }
             finally

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Xml.Linq;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
@@ -101,17 +102,11 @@ namespace ETL_SQL.Data
             {
                 foreach (var kv in Options)
                 {
-                    bool isSensitive = kv.Key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("API_KEY", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase) ||
-                                      kv.Value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
-
-                    config[kv.Key] = isSensitive ? "********" : kv.Value;
+                    config[kv.Key] = SecretRedactor.IsSensitiveKey(kv.Key)
+                        || kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase)
+                        || SecretRedactor.LooksSensitiveValue(kv.Value)
+                        ? SecretRedactor.Mask
+                        : SecretRedactor.Redact(kv.Value) ?? string.Empty;
                 }
             }
             return config;

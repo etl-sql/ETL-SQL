@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Xml.Linq;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Common;
 using Spectre.Console;
 
 namespace ETL_SQL.Engine
@@ -48,8 +49,7 @@ namespace ETL_SQL.Engine
             {
                 var values = batch.ColumnNames.Select(c =>
                 {
-                    var val = row[c];
-                    if (val is string s && s.StartsWith("ENC:")) return "ENC:********";
+                    var val = SecretRedactor.RedactValue(c, row[c]);
                     return Markup.Escape(val?.ToString() ?? "NULL");
                 }).ToArray();
                 table.AddRow(values);
@@ -87,7 +87,7 @@ namespace ETL_SQL.Engine
                 rows = batch.Rows.Select(r =>
                 {
                     var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var col in batch.ColumnNames) dict[col] = r[col];
+                    foreach (var col in batch.ColumnNames) dict[col] = SecretRedactor.RedactValue(col, r[col]);
                     return dict;
                 }).ToList()
             };
@@ -107,8 +107,9 @@ namespace ETL_SQL.Engine
                 {
                     if (!includeNulls && kv.Value == null) continue;
                     string safeKey = kv.Key.Trim('[', ']');
-                    if (mode == ForMode.PATH && safeKey.Contains(".")) AddToNestedDict(dict, safeKey, kv.Value);
-                    else dict[safeKey] = kv.Value;
+                    var safeValue = SecretRedactor.RedactValue(safeKey, kv.Value);
+                    if (mode == ForMode.PATH && safeKey.Contains(".")) AddToNestedDict(dict, safeKey, safeValue);
+                    else dict[safeKey] = safeValue;
                 }
                 list.Add(dict);
             }
@@ -171,7 +172,7 @@ namespace ETL_SQL.Engine
                 foreach (var kv in row.Columns)
                 {
                     string safeKey = kv.Key.Trim('[', ']');
-                    object? val = kv.Value;
+                    object? val = SecretRedactor.RedactValue(safeKey, kv.Value);
 
                     if (val == null)
                     {

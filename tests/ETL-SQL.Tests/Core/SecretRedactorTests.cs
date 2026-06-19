@@ -1,0 +1,58 @@
+using System.Text.Json;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
+
+namespace ETL_SQL.Tests.Core;
+
+public sealed class SecretRedactorTests
+{
+    [Fact]
+    public void Redact_MasksCommonSecretShapes()
+    {
+        var text = "PASSWORD='p@ss'; API_KEY=abc123; Authorization: Bearer token-123; " +
+                   "{\"client_secret\":\"super-secret\",\"account_key\":\"acct\"}; " +
+                   "value=ENC:abc123==; ref=SECRET:prod/db/password";
+
+        var redacted = SecretRedactor.Redact(text)!;
+
+        Assert.DoesNotContain("p@ss", redacted);
+        Assert.DoesNotContain("abc123", redacted);
+        Assert.DoesNotContain("token-123", redacted);
+        Assert.DoesNotContain("super-secret", redacted);
+        Assert.DoesNotContain("acct", redacted);
+        Assert.DoesNotContain("prod/db/password", redacted);
+        Assert.Contains("PASSWORD='********'", redacted);
+        Assert.Contains("AUTHORIZATION", redacted, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SECRET:********", redacted);
+    }
+
+    [Fact]
+    public void DiagnosticsAndExecutionExceptions_RedactMessages()
+    {
+        var diagnostic = new Diagnostic("Connection failed PASSWORD=cleartext TOKEN=raw", 1, 1);
+        var exception = new ExecutionException("Provider said CLIENT_SECRET=cleartext");
+
+        Assert.DoesNotContain("cleartext", diagnostic.Message);
+        Assert.DoesNotContain("raw", diagnostic.Message);
+        Assert.DoesNotContain("cleartext", exception.Message);
+    }
+
+    [Fact]
+    public void RedactValue_MasksSensitiveColumnsBeforeSerialization()
+    {
+        var data = new Dictionary<string, object?>
+        {
+            ["UserName"] = "worker",
+            ["Password"] = "cleartext",
+            ["Message"] = "failed with sas_token=raw"
+        };
+
+        var safe = data.ToDictionary(kv => kv.Key, kv => SecretRedactor.RedactValue(kv.Key, kv.Value));
+        var json = JsonSerializer.Serialize(safe);
+
+        Assert.Contains("worker", json);
+        Assert.DoesNotContain("cleartext", json);
+        Assert.DoesNotContain("raw", json);
+        Assert.Contains(SecretRedactor.Mask, json);
+    }
+}

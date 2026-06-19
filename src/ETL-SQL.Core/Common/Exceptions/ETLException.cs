@@ -1,11 +1,12 @@
 using System;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Core.Common.Exceptions
 {
     public class ETLException : Exception
     {
-        public ETLException(string message) : base(message) { }
-        public ETLException(string message, Exception innerException) : base(message, innerException) { }
+        public ETLException(string message) : base(SecretRedactor.Redact(message) ?? string.Empty) { }
+        public ETLException(string message, Exception innerException) : base(SecretRedactor.Redact(message) ?? string.Empty, innerException) { }
     }
 
     public class SyntaxException : ETLException
@@ -23,16 +24,7 @@ namespace ETL_SQL.Core.Common.Exceptions
         private static string Sanitize(string message, int line, int column)
         {
             if (string.IsNullOrEmpty(message)) return $"at line {line}, col {column}";
-            var sanitized = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"ENC:[A-Za-z0-9+/=]+",
-                "ENC:********",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            sanitized = System.Text.RegularExpressions.Regex.Replace(
-                sanitized,
-                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?",
-                "$1=********",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var sanitized = SecretRedactor.Redact(message);
             return $"{sanitized} at line {line}, col {column}";
         }
     }

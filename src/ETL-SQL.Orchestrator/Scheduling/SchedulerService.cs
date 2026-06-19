@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Orchestrator.Execution;
@@ -302,11 +303,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         }
                         else
                         {
+                            var safeError = SecretRedactor.Redact(lastResult.ErrorMessage);
                             _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}",
-                                job.Name, attempt, maxAttempts, lastResult.ErrorMessage);
+                                job.Name, attempt, maxAttempts, safeError);
 
                             if (historyId > 0)
-                                await _store.LogJobEndAsync(historyId, "FAILURE", lastResult.ErrorMessage,
+                                await _store.LogJobEndAsync(historyId, "FAILURE", safeError,
                                     peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
                                     scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                         }
@@ -316,10 +318,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
                         if (historyId > 0)
                         {
-                            await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message,
+                            await _store.LogJobEndAsync(historyId, "FAILURE", SecretRedactor.Redact(ex.Message),
                                 scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                         }
-                        lastResult = new ScriptExecutionResult(false, 0, ex.Message);
+                        lastResult = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message));
                     }
 
                     if (attempt < maxAttempts)

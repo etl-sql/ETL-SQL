@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text.Json;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
@@ -125,14 +126,14 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
         stored.Status = JobStatus.Cancelled.ToString();
         stored.CompletedAt = now;
-        stored.Error = reason;
+        stored.Error = SecretRedactor.Redact(reason);
         await db.SaveChangesAsync();
 
         if (_jobs.TryGetValue(jobId, out var local))
         {
             local.Status = JobStatus.Cancelled;
             local.CompletedAt = now;
-            local.Error = reason;
+            local.Error = SecretRedactor.Redact(reason);
         }
 
         if (_runningJobCancellations.TryGetValue(jobId, out var cts))
@@ -415,7 +416,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 BuiltAt = DateTime.UtcNow,
                 BuiltBy = job.UserId,
                 ParametersJson = parameters is { Count: > 0 }
-                    ? System.Text.Json.JsonSerializer.Serialize(parameters)
+                    ? System.Text.Json.JsonSerializer.Serialize(
+                        parameters.ToDictionary(kv => kv.Key, kv => SecretRedactor.MaskIfSensitive(kv.Key, kv.Value)))
                     : null,
                 ScriptHashAtRunTime = runTimeHash,
                 HashMatched = hashMatched
@@ -470,11 +472,11 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             job.Status = JobStatus.Failed;
             job.CompletedAt = DateTime.UtcNow;
-            job.Error = ex.Message;
+            job.Error = SecretRedactor.Redact(ex.Message);
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
-            _log.LogError(ex, "Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
-                job.Id, ex.Message, ex.StackTrace);
+            _log.LogError("Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
+                job.Id, job.Error, SecretRedactor.Redact(ex.StackTrace));
         }
         finally
         {

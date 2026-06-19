@@ -6,6 +6,7 @@ using Serilog;
 using Serilog.Context;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Common
 {
@@ -105,10 +106,12 @@ namespace ETL_SQL.Common
             };
 
             // 1. Serilog structured write — named properties preserved in file/Seq sinks
-            var serilogArgs = args.Select(a => (object)(a ?? "<null>")).ToArray();
-            _appLogger?.Write(serilogLevel, ex, template, serilogArgs);
-            _scriptLogger?.Write(serilogLevel, ex, template, serilogArgs);
-            _testLogger?.Write(serilogLevel, ex, template, serilogArgs);
+            var safeTemplate = SecretRedactor.Redact(template) ?? string.Empty;
+            var safeArgs = args.Select(RedactLogArgument).ToArray();
+            var safeException = SecretRedactor.RedactException(ex);
+            _appLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
+            _scriptLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
+            _testLogger?.Write(serilogLevel, safeException, safeTemplate, safeArgs);
 
             // 2. MEL Bridge
             if (_msLogger != null)
@@ -120,13 +123,13 @@ namespace ETL_SQL.Common
                     LogLevel.Debug => Microsoft.Extensions.Logging.LogLevel.Debug,
                     _ => Microsoft.Extensions.Logging.LogLevel.Information
                 };
-                _msLogger.Log(msLevel, ex, ILogger.FormatArgs(template, args));
+                _msLogger.Log(msLevel, safeException, ILogger.FormatArgs(safeTemplate, safeArgs));
             }
 
             // 3. Console — format template and prefix SessionId when set
-            var consoleMessage = ILogger.FormatArgs(template, args);
+            var consoleMessage = ILogger.FormatArgs(safeTemplate, safeArgs);
             if (_sessionId.Value != null) consoleMessage = $"[{_sessionId.Value}] {consoleMessage}";
-            if (ex != null) consoleMessage += $"{Environment.NewLine}Exception: {ex.Message}";
+            if (safeException != null) consoleMessage += $"{Environment.NewLine}Exception: {safeException.Message}";
 
             if (((!IsSilent || level == LogLevel.Error) && !SuppressConsole) || (level == LogLevel.Error && !IsJsonMode))
             {
@@ -138,6 +141,14 @@ namespace ETL_SQL.Common
             // 4. UI Callback - pass current SessionId for filtering
             OnMessage?.Invoke(consoleMessage, _sessionId.Value, color);
 
+        }
+
+        private static object RedactLogArgument(object? arg)
+        {
+            if (arg is null) return "<null>";
+            if (arg is Exception ex) return (object?)SecretRedactor.RedactException(ex) ?? "<null>";
+            if (arg is string text) return SecretRedactor.Redact(text) ?? string.Empty;
+            return arg;
         }
 
         public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)

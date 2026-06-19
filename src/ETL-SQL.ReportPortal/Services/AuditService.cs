@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Common;
 using ETL_SQL.ReportPortal.Data;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -20,9 +21,9 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
             UserId = userId,
             Action = action,
             ResourceType = resourceType,
-            ResourceId = resourceId,
+            ResourceId = SecretRedactor.Redact(resourceId),
             Timestamp = DateTime.UtcNow,
-            Detail = detail,
+            Detail = SecretRedactor.Redact(detail),
             CorrelationId = correlationId ?? httpContext.HttpContext?.TraceIdentifier
         });
     }

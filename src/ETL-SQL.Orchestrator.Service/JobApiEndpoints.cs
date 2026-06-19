@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Handlers;
@@ -541,9 +542,9 @@ namespace ETL_SQL.Orchestrator.Service
             catch (Exception ex)
             {
                 entry.Status = JobRunStatus.Failed;
-                entry.ErrorMessage = ex.Message;
-                logger.LogError(ex, "Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}",
-                    entry.JobId, ex.Message, ex.StackTrace);
+                entry.ErrorMessage = SecretRedactor.Redact(ex.Message);
+                logger.LogError("Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}",
+                    entry.JobId, entry.ErrorMessage, SecretRedactor.Redact(ex.StackTrace));
             }
             finally
             {

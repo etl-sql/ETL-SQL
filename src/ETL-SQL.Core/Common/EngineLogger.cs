@@ -43,8 +43,10 @@ namespace ETL_SQL.Common
         private void WriteToConsole(string level, string message, ConsoleColor color, Exception? ex = null)
         {
             var sid = SessionId != null ? $" [{SessionId}]" : "";
-            string formattedMessage = $"[{level}] [{_category}]{sid} {message}";
-            if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
+            var safeMessage = ETL_SQL.Core.Common.SecretRedactor.Redact(message) ?? string.Empty;
+            var safeException = ETL_SQL.Core.Common.SecretRedactor.RedactException(ex);
+            string formattedMessage = $"[{level}] [{_category}]{sid} {safeMessage}";
+            if (safeException != null) formattedMessage += $"{Environment.NewLine}Exception: {safeException.Message}";
 
             // Prefer a wired-up subscriber (e.g. the DI logging sink) so output is not duplicated.
             if (OnMessage != null)
@@ -58,7 +60,7 @@ namespace ETL_SQL.Common
             // silently dropped. JSON mode still emits a structured frame for --json consumers.
             if (IsJsonMode)
             {
-                var msg = new { type = "message", level = level.ToLowerInvariant(), text = message };
+                var msg = new { type = "message", level = level.ToLowerInvariant(), text = safeMessage };
                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(msg));
                 return;
             }

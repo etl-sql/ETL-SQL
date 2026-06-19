@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Engine;
 
@@ -58,7 +59,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     }
                     catch (Exception ex)
                     {
-                        _logger.WriteLine($"[lineage catalog] Failed to persist lineage: {ex.Message}", ConsoleColor.DarkYellow);
+                        _logger.WriteLine($"[lineage catalog] Failed to persist lineage: {SecretRedactor.Redact(ex.Message)}", ConsoleColor.DarkYellow);
                     }
                 }
 
@@ -73,7 +74,7 @@ namespace ETL_SQL.Orchestrator.Execution
             {
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
-                return new ScriptExecutionResult(false, 0, ex.Message, process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                return new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message), process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
             }
         }
     }

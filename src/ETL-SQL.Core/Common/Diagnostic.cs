@@ -1,4 +1,3 @@
-using System;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Core.Common
@@ -39,18 +38,7 @@ namespace ETL_SQL.Core.Common
 
         private static string Sanitize(string message)
         {
-            if (string.IsNullOrEmpty(message)) return message;
-            var sanitized = System.Text.RegularExpressions.Regex.Replace(
-                message,
-                @"ENC:[A-Za-z0-9+/=]+",
-                "ENC:********",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            sanitized = System.Text.RegularExpressions.Regex.Replace(
-                sanitized,
-                @"(PASSWORD|PWD|SECRET|APIKEY|API_KEY|TOKEN|CREDENTIAL|PRIVATEKEY)\s*=\s*['""]?[^'""\s,;]+['""]?",
-                "$1=********",
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return sanitized;
+            return SecretRedactor.Redact(message) ?? message;
         }
     }
 }
