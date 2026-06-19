@@ -229,7 +229,10 @@ CREATE CONNECTION sales AS MSSQL(
 );
 
 CREATE CONNECTION warehouse AS POSTGRES(
-  CONNECTION_STRING = 'Host=pg01;Database=dw;Username=etl;Password=SECRET:dw_password'
+  HOST = 'pg01',
+  DATABASE = 'dw',
+  USER = 'etl',
+  PASSWORD = 'SECRET:dw_password'
 );
 ```
 
