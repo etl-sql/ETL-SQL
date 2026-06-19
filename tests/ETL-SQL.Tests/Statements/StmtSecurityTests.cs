@@ -2,6 +2,7 @@
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
@@ -70,13 +71,14 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
-        public async Task TestSetAllowPlaintextSecrets_SetsContext()
+        public async Task TestSetAllowPlaintextSecrets_EnforcesGovernancePolicy()
         {
             var eval = CreateEvaluator();
 
             var scriptOn = TestHelpers.Parse("SET ALLOW_PLAINTEXT_SECRETS = ON;");
-            await eval.Evaluate(scriptOn);
-            Assert.True(eval.AllowPlaintextSecrets);
+            var ex = await Assert.ThrowsAsync<ExecutionException>(() => eval.Evaluate(scriptOn));
+            Assert.Contains("Engine:AllowPlaintextSecrets", ex.Message);
+            Assert.False(eval.AllowPlaintextSecrets);
 
             var scriptOff = TestHelpers.Parse("SET ALLOW_PLAINTEXT_SECRETS OFF;");
             await eval.Evaluate(scriptOff);

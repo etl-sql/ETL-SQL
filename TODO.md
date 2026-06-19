@@ -34,8 +34,12 @@ release begins.
   `ConnectionEncryptionRule` now emits a central `Engine:AllowPlaintextSecrets` policy violation
   for plaintext connector secrets discovered from parsed `CreateConnectionStatement` AST nodes.
   Tests verify policy metadata propagation and that commented plaintext connection text is ignored.
-- [ ] **P1.3 Apply policy at compile/lint time and execution time** so bypassing the linter does
+- [x] **P1.3 Apply policy at compile/lint time and execution time** so bypassing the linter does
   not bypass runtime enforcement.
+  *(done)* Added `GovernancePolicyRule` to enforce central policy decisions against parsed AST
+  statements during lint/analysis, including nested blocks. Runtime execution now enforces the same
+  `Engine:AllowPlaintextSecrets` forbidden policy in `SetAllowPlaintextSecretsStatementHandler`, so
+  scripts cannot bypass the linter and enable plaintext secret persistence at execution time.
 
 ### Phase 2 - Organization Policy Documents
 
