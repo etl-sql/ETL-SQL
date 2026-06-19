@@ -23,6 +23,18 @@ public class AuthController(
     PortalConfig config,
     ILdapService ldapService) : ControllerBase
 {
+    /// <summary>Advertises the effective identity configuration so the login page can offer the right
+    /// affordances (e.g. an SSO button) without hardcoding deployment posture. Anonymous and
+    /// secret-free.</summary>
+    [HttpGet("providers")]
+    [AllowAnonymous]
+    public IActionResult Providers() => Ok(new
+    {
+        local = true,
+        oidcEnabled = config.Identity.Oidc.Enabled,
+        oidcLoginUrl = config.Identity.Oidc.Enabled ? "/api/auth/oidc/login" : null
+    });
+
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login([FromBody] LoginRequest req)
@@ -205,6 +217,12 @@ public class AuthController(
             if (user.Provider == "LDAP")
             {
                 return Unauthorized(new { error = "Invalid LDAP credentials" });
+            }
+
+            // Federated (OIDC) accounts have no local password; they must use the SSO flow.
+            if (user.Provider == "OIDC")
+            {
+                return Unauthorized(new { error = "Use single sign-on for this account" });
             }
 
             var result = await signInManager.CheckPasswordSignInAsync(user, req.Password, lockoutOnFailure: true);

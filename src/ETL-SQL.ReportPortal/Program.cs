@@ -291,6 +291,17 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionS
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
+
+// ── Federated OIDC login (Portal:Identity:Oidc) ───────────────────────────────
+// Discovery is a singleton so its ConfigurationManager caches the well-known doc/JWKS across
+// requests; the auth service and provisioning bridge mint the portal's own JWT/refresh session.
+builder.Services.AddHttpClient("oidc-discovery");
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.IOidcDiscoveryProvider>(sp =>
+    new ETL_SQL.ReportPortal.Services.OidcDiscoveryProvider(
+        portalConfig, sp.GetRequiredService<IHttpClientFactory>().CreateClient("oidc-discovery")));
+builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.IOidcAuthenticationService,
+    ETL_SQL.ReportPortal.Services.OidcAuthenticationService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OidcUserProvisioningService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorApiKeyProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
@@ -345,6 +356,9 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPoll
 
 // JWT secret validation (runs after WebApplicationFactory can inject test configuration)
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.JwtSecretValidationService>();
+
+// OIDC configuration validation: fail closed if Portal:Identity:Oidc is enabled but misconfigured.
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OidcConfigValidationService>();
 
 // Hourly purge of expired refresh tokens (revoked-but-live rows are kept for reuse detection)
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.RefreshTokenMaintenanceService>();

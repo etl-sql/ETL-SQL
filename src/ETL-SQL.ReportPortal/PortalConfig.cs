@@ -196,10 +196,54 @@ public class IdentityConfig
 
 public class OidcIdentityConfig
 {
+    /// <summary>Master switch for federated OIDC login. When false the portal behaves exactly as
+    /// before (Local/LDAP only) and OIDC endpoints report not-configured. Mirrors
+    /// <see cref="LdapIdentityConfig.Enabled"/> so identity providers are gated consistently.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>OIDC issuer / discovery authority (e.g. https://login.example.com/realms/etl).
+    /// Must be an absolute HTTPS URI; the provider's <c>/.well-known/openid-configuration</c> and
+    /// JWKS are resolved from it.</summary>
     public string? Authority { get; set; }
+
+    /// <summary>Confidential client identifier registered with the identity provider.</summary>
     public string? ClientId { get; set; }
+
+    /// <summary>Confidential client secret used for the authorization-code token exchange. Used
+    /// verbatim (like Portal:Jwt:Secret); supply it via the Portal__Identity__Oidc__ClientSecret
+    /// environment variable or a protected configuration source rather than committing it.</summary>
+    public string? ClientSecret { get; set; }
+
+    /// <summary>Optional tenant identifier for authority templating with multi-tenant providers.</summary>
     public string? TenantId { get; set; }
+
+    /// <summary>Scopes requested at authorization time. <c>openid</c> is required and added if missing.</summary>
+    public string[] Scopes { get; set; } = ["openid", "profile", "email"];
+
+    /// <summary>Absolute path the identity provider redirects back to after authentication. Must be
+    /// registered as a redirect URI with the provider and begin with '/'.</summary>
+    public string CallbackPath { get; set; } = "/api/auth/oidc/callback";
+
+    /// <summary>Relative path the callback redirects to after a successful federated login, handing
+    /// off the portal session in the URL fragment (#access_token,&amp;refresh_token,&amp;expires_at).
+    /// Defaults to the portal's own login page, which stores the tokens and forwards to the app; point
+    /// it elsewhere only at a page that processes the SSO token fragment. Must begin with '/'.</summary>
+    public string PostLoginRedirectPath { get; set; } = "/login.html";
+
+    /// <summary>Token claims, in priority order, that carry group/role membership for portal group sync.</summary>
     public string[] GroupClaimTypes { get; set; } = ["groups", "roles"];
+
+    /// <summary>Claim used as the portal username. Falls back to <c>preferred_username</c> then <c>sub</c>.</summary>
+    public string UsernameClaimType { get; set; } = "preferred_username";
+
+    /// <summary>Claim used as the user's email address.</summary>
+    public string EmailClaimType { get; set; } = "email";
+
+    /// <summary>Additional accepted token audiences beyond <see cref="ClientId"/>.</summary>
+    public string[] AdditionalAudiences { get; set; } = [];
+
+    /// <summary>Allowed clock skew (seconds) when validating id_token lifetime. Minimum effective value is 0.</summary>
+    public int ClockSkewSeconds { get; set; } = 60;
 }
 
 public class LdapIdentityConfig

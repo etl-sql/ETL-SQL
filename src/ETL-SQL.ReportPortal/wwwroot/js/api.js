@@ -89,6 +89,12 @@ function versionHeaders(version) {
 // ── Auth ───────────────────────────────────────────────────────────────────────
 
 export const authApi = {
+    // Effective identity configuration (anonymous) so the login page can offer SSO when enabled.
+    async providers() {
+        const res = await fetch('/api/auth/providers');
+        if (!res.ok) return { local: true, oidcEnabled: false };
+        return res.json();
+    },
     async login(username, password) {
         const res = await fetch('/api/auth/login', {
             method: 'POST',

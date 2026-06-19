@@ -26,6 +26,11 @@
       <input id="password" type="password" autocomplete="current-password">
 
       <button id="loginBtn" class="btn-primary" type="button">Sign In</button>
+
+      <div id="ssoSection" style="display:none">
+        <div class="sso-divider">or</div>
+        <a id="ssoBtn" class="btn-secondary" href="/api/auth/oidc/login">Sign in with SSO</a>
+      </div>
     </div>
 
     <!-- Change-password form (shown when MustChangePassword=true) -->
@@ -54,6 +59,27 @@ import { auth, authApi } from '/js/api.js';
 import { applyPortalBranding } from '/js/branding.js';
 
 applyPortalBranding();
+
+// ── Federated (OIDC) token hand-off ──────────────────────────────────────────────
+// The OIDC callback redirects here with the portal session in the URL fragment. Store the
+// tokens exactly as a password login would, scrub them from the address bar, and continue.
+const ssoHash = new URLSearchParams(window.location.hash.slice(1));
+const ssoAccessToken = ssoHash.get('access_token');
+if (ssoAccessToken) {
+  auth.setTokens(ssoAccessToken, ssoHash.get('refresh_token'));
+  history.replaceState(null, '', window.location.pathname);
+  window.location.href = '/index.html';
+}
+
+// Offer the SSO button only when the deployment has OIDC enabled.
+authApi.providers?.().then(p => {
+  if (p?.oidcEnabled) {
+    const sso = document.getElementById('ssoSection');
+    if (sso) sso.style.display = '';
+    const btn = document.getElementById('ssoBtn');
+    if (btn && p.oidcLoginUrl) btn.setAttribute('href', p.oidcLoginUrl);
+  }
+}).catch(() => { /* providers endpoint optional; default to local-only UI */ });
 
 // If bounced here because MustChangePassword was enforced mid-session,
 // show the change form immediately (user still holds a valid JWT).

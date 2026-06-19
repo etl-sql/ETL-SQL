@@ -135,10 +135,18 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     "Identity": {
       "Provider": "Local",
       "Oidc": {
+        "Enabled": false,
         "Authority": "",
         "ClientId": "",
+        "ClientSecret": "",
         "TenantId": "",
-        "GroupClaimTypes": [ "groups", "roles" ]
+        "Scopes": [ "openid", "profile", "email" ],
+        "CallbackPath": "/api/auth/oidc/callback",
+        "PostLoginRedirectPath": "/login.html",
+        "GroupClaimTypes": [ "groups", "roles" ],
+        "UsernameClaimType": "preferred_username",
+        "EmailClaimType": "email",
+        "ClockSkewSeconds": 60
       },
       "Ldap": {
         "Enabled": false,
@@ -189,9 +197,17 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
 | `Identity.Provider` | `Local` | Main authentication provider model (`Local` or `Oidc`). If LDAP is enabled, directory logins are supported alongside the selected main provider. |
-| `Identity.Oidc.Authority` | *(empty)* | OIDC authority URL, for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. |
-| `Identity.Oidc.ClientId` | *(empty)* | OIDC client/application id. |
-| `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Claims the portal will map into portal groups for folder and dataset ACLs. |
+| `Identity.Oidc.Enabled` | `false` | Master switch for federated OIDC login. When `true`, the portal validates the OIDC settings at startup and refuses to start if any are missing or unsafe. Local login keeps working alongside it. |
+| `Identity.Oidc.Authority` | *(empty)* | OIDC issuer/discovery URL (must be **HTTPS**), for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. The portal reads `/.well-known/openid-configuration` and JWKS from it. |
+| `Identity.Oidc.ClientId` | *(empty)* | OIDC client/application id registered with the provider. |
+| `Identity.Oidc.ClientSecret` | *(empty)* | Confidential client secret for the authorization-code exchange. Used verbatim — supply it via the `Portal__Identity__Oidc__ClientSecret` environment variable or a protected configuration source, not in committed files. |
+| `Identity.Oidc.Scopes` | `openid`, `profile`, `email` | Scopes requested at authorization time. `openid` is required and added automatically. |
+| `Identity.Oidc.CallbackPath` | `/api/auth/oidc/callback` | Absolute path the provider redirects back to. Register `https://<portal-host>/api/auth/oidc/callback` as a redirect URI with the provider. |
+| `Identity.Oidc.PostLoginRedirectPath` | `/login.html` | Page the callback hands the session to (in the URL fragment). The portal's login page stores the tokens and forwards to the app; change it only to a page that processes the SSO token fragment. |
+| `Identity.Oidc.GroupClaimTypes` | `groups`, `roles` | Token claims (in priority order) mapped into portal groups for folder and dataset ACLs. Match a portal group by its `AdGroup` (or `Name`); membership is reconciled on every login. |
+| `Identity.Oidc.UsernameClaimType` | `preferred_username` | Claim used as the portal username (falls back to `preferred_username` then `sub`). |
+| `Identity.Oidc.EmailClaimType` | `email` | Claim used as the user's email address. |
+| `Identity.Oidc.ClockSkewSeconds` | `60` | Allowed clock skew when validating id_token lifetime. |
 | `Identity.Ldap.Enabled` | `false` | Set to `true` to enable LDAP and Active Directory integration. |
 | `Identity.Ldap.Server` | `localhost` | The hostname or IP address of the LDAP/AD server. |
 | `Identity.Ldap.Port` | `389` | The server connection port (usually 389 for plain/STARTTLS, 636 for LDAPS/SSL). |
@@ -257,24 +273,43 @@ The user catalog is server-paged. Use the search box and status filter to narrow
 The portal supports integration with enterprise identity providers via two primary paths: **OpenID Connect (OIDC)** and **LDAP / Active Directory (AD)**.
 
 #### OpenID Connect (OIDC)
-Microsoft Entra ID is the reference provider. OIDC users will be provisioned into the portal identity store on first login, and configured OIDC group claims (`groups` or `roles`) will map to portal groups for ACL resolution.
+Microsoft Entra ID is the reference provider (Keycloak, Okta, Auth0, and any compliant provider work the same way). Federated login uses the **authorization-code flow with PKCE**: the portal redirects the browser to the provider, validates the returned `id_token` against the provider's JWKS (issuer, audience, lifetime, and a per-login nonce), then **bridges the identity to the portal's own JWT/refresh-token session** — exactly like a password or LDAP login. Users are provisioned into the portal identity store on first login, and the configured group claims map to portal groups for ACL resolution. Local login keeps working alongside OIDC, so administrators retain a break-glass path.
 
-To configure OIDC, update `appsettings.json` with the following configuration:
+**1. Register the portal as a confidential web application** with your identity provider and add the redirect URI:
+
+```
+https://<portal-host>/api/auth/oidc/callback
+```
+
+Record the client id and generate a client secret.
+
+**2. Configure `appsettings.json`** (supply the secret via the `Portal__Identity__Oidc__ClientSecret` environment variable in production):
 ```json
 {
   "Portal": {
     "Identity": {
       "Provider": "Oidc",
       "Oidc": {
+        "Enabled": true,
         "Authority": "https://login.microsoftonline.com/<tenant-id>/v2.0",
         "ClientId": "<application-client-id>",
+        "ClientSecret": "<client-secret>",
         "TenantId": "<tenant-id>",
+        "Scopes": [ "openid", "profile", "email" ],
         "GroupClaimTypes": [ "groups", "roles" ]
       }
     }
   }
 }
 ```
+
+When `Enabled` is `true` the portal validates this configuration at startup and **refuses to start** if `Authority` is missing or not HTTPS, `ClientId`/`ClientSecret` are missing, or `openid` is absent from `Scopes` — failing closed rather than serving broken authentication.
+
+**3. Map group claims to portal groups (optional).** Create portal groups with `Provider = "OIDC"` and set each group's `AdGroup` to the value the provider emits in the `groups`/`roles` claim (or leave `AdGroup` empty to match the group `Name`). Membership is reconciled deterministically on every login — claimed groups are added and unclaimed ones removed — so access follows the identity provider as claims change.
+
+**4. Sign in.** The login page shows a **Sign in with SSO** button when OIDC is enabled. The portal exposes the effective posture (anonymous) at `GET /api/auth/providers` so the page renders the right options.
+
+> **MFA and conditional access** are enforced by the identity provider, not the portal. Configure multi-factor authentication, device/location conditional access, and session lifetime in your IdP; the portal honors the result of that policy when it validates the `id_token`.
 
 #### LDAP / Active Directory (AD)
 LDAP bind authentication enables directory verification for user logins, auto-provisioning of user metadata (email, display name), automatic role assignments based on security groups, and dynamic synchronization of portal group memberships.
