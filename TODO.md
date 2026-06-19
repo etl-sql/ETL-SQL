@@ -17,8 +17,16 @@ release begins.
 
 ### Phase 1 - Typed Policy Registry
 
-- [ ] **P1.1 Create a central typed policy registry** for settings classified as Forbidden,
+- [x] **P1.1 Create a central typed policy registry** for settings classified as Forbidden,
   Allowed, Constrained, or Locked.
+  *(done)* Added `ETL_SQL.Core.Governance` with typed policy metadata
+  (`GovernancePolicyDefinition`, scope/classification/value-kind enums, and
+  `IGovernancePolicyRegistry`). The default registry seeds the existing governance surfaces:
+  secret persistence, path/host/env controls, execution limits, connector allowlists, secret provider
+  selection, and audit outbox knobs. Registered through `AddEtlSqlEngine` so CLI, TUI, Portal,
+  Orchestrator, and language-server hosts can consume the same catalog. Tests cover duplicate-key
+  rejection, environment-style key normalization, default classification coverage, pinned core keys,
+  and DI registration.
 - [ ] **P1.2 Enforce policy against parsed AST nodes** instead of text matching, with policy
   decisions attached to diagnostics.
 - [ ] **P1.3 Apply policy at compile/lint time and execution time** so bypassing the linter does

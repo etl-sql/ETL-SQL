@@ -1,0 +1,187 @@
+namespace ETL_SQL.Core.Governance;
+
+/// <inheritdoc />
+public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
+{
+    private readonly Dictionary<string, GovernancePolicyDefinition> _definitions =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyCollection<GovernancePolicyDefinition> Definitions =>
+        _definitions.Values
+            .OrderBy(definition => definition.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    public bool TryGet(string key, out GovernancePolicyDefinition definition) =>
+        _definitions.TryGetValue(GovernancePolicyDefinition.NormalizeKey(key), out definition!);
+
+    public GovernancePolicyDefinition GetRequired(string key) =>
+        TryGet(key, out var definition)
+            ? definition
+            : throw new KeyNotFoundException($"Governance policy '{key}' is not registered.");
+
+    public void Register(GovernancePolicyDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        if (!_definitions.TryAdd(definition.Key, definition))
+            throw new InvalidOperationException($"Governance policy '{definition.Key}' is already registered.");
+    }
+
+    public void RegisterRange(IEnumerable<GovernancePolicyDefinition> definitions)
+    {
+        foreach (var definition in definitions)
+            Register(definition);
+    }
+
+    public static GovernancePolicyRegistry CreateDefault()
+    {
+        var registry = new GovernancePolicyRegistry();
+        registry.RegisterRange(DefaultDefinitions());
+        return registry;
+    }
+
+    private static IEnumerable<GovernancePolicyDefinition> DefaultDefinitions()
+    {
+        yield return new(
+            "Engine:AllowPlaintextSecrets",
+            GovernancePolicyScope.Secret,
+            GovernancePolicyClassification.Forbidden,
+            GovernancePolicyValueKind.Boolean,
+            "Controls whether scripts may persist plaintext connector or credential material.",
+            defaultValue: false,
+            allowedValues: ["false"]);
+
+        yield return new(
+            "Engine:NoSaveSensitive",
+            GovernancePolicyScope.Secret,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Prevents sensitive values from being saved by lower-level hosts or scripts.",
+            defaultValue: false);
+
+        yield return new(
+            "Engine:NoSaveConnection",
+            GovernancePolicyScope.Secret,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Prevents full connection definitions from being saved by lower-level hosts or scripts.",
+            defaultValue: false);
+
+        yield return new(
+            "Engine:ConnectionEncryption",
+            GovernancePolicyScope.Secret,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Requires saved connection details to be encrypted when persistence is allowed.",
+            defaultValue: false);
+
+        yield return new(
+            "Security:PathProtectionMode",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Enum,
+            "Restricts filesystem access posture for script-driven file operations.",
+            defaultValue: "Restricted",
+            allowedValues: ["Restricted", "Defined"]);
+
+        yield return new(
+            "Security:ApprovedSafeZones",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.PathList,
+            "Directories explicitly approved for script file operations and elevated file-operation limits.");
+
+        yield return new(
+            "Security:AllowedHosts",
+            GovernancePolicyScope.Network,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.HostPatternList,
+            "Network host patterns that scripts and connectors may contact.",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
+            "Security:AllowedEnvVars",
+            GovernancePolicyScope.Security,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "Environment variable names that scripts may read through ENV().",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
+            "Security:MaxFileOperationsPerScript",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum file operations a script may perform without an approved override.",
+            defaultValue: 100,
+            minimumValue: 0);
+
+        yield return new(
+            "Security:MaxRecursiveNestingDepth",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum directory recursion depth permitted for script-driven file operations.",
+            defaultValue: 5,
+            minimumValue: 0);
+
+        yield return new(
+            "Security:MaxParallelDegree",
+            GovernancePolicyScope.Execution,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum script-requested parallel degree.",
+            defaultValue: 32,
+            minimumValue: 1);
+
+        yield return new(
+            "Security:MaxSmtpEmailsPerScript",
+            GovernancePolicyScope.Connector,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum SMTP messages one script may send.",
+            defaultValue: 100,
+            minimumValue: 0);
+
+        yield return new(
+            "Security:MaxStringResultSize",
+            GovernancePolicyScope.Engine,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Long,
+            "Maximum string result size materialized by script execution.",
+            defaultValue: 104_857_600L,
+            minimumValue: 0L);
+
+        yield return new(
+            "Connectors:AllowedTypes",
+            GovernancePolicyScope.Connector,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.ConnectorTypeList,
+            "Connector type tokens that organization policy permits.");
+
+        yield return new(
+            "Secrets:Provider",
+            GovernancePolicyScope.Secret,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Enum,
+            "Secret provider used to resolve named secret references.",
+            defaultValue: "Environment",
+            allowedValues: ["Environment", "OsSecretStore", "HttpsVault"]);
+
+        yield return new(
+            "Audit:RemoteDeliveryRequired",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Requires mutation paths to honor remote audit delivery fail-closed policy.",
+            defaultValue: false);
+
+        yield return new(
+            "Audit:OutboxMaxBytes",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Long,
+            "Maximum local durable audit outbox size before policy-specific backpressure is applied.",
+            minimumValue: 0L);
+    }
+}
+
