@@ -310,7 +310,16 @@ When `Enabled` is `true` the portal validates this configuration at startup and 
 
 **4. Sign in.** The login page shows a **Sign in with SSO** button when OIDC is enabled. The portal exposes the effective posture (anonymous) at `GET /api/auth/providers` so the page renders the right options.
 
-> **MFA and conditional access** are enforced by the identity provider, not the portal. Configure multi-factor authentication, device/location conditional access, and session lifetime in your IdP; the portal honors the result of that policy when it validates the `id_token`.
+##### MFA and conditional access
+ETL-SQL **delegates multi-factor authentication and conditional access entirely to the identity provider** — it does not implement its own MFA, device trust, or location/risk policies. Authentication strength is decided by the IdP during the authorization-code redirect; the portal only validates the resulting `id_token` and bridges it to a portal session. Practical implications:
+
+- **Configure MFA, conditional access, device compliance, and risk policies in the IdP** (for example Entra ID Conditional Access, Okta sign-on policies, Keycloak authentication flows). They apply to ETL-SQL automatically because every federated login goes through the provider.
+- **Session lifetime is governed at two layers.** The IdP controls how often a user must re-authenticate (and re-satisfy MFA/CA); the portal controls its own issued token lifetime via `Jwt.ExpiryMinutes` / `Jwt.RefreshExpiryDays`. Set the portal lifetimes no longer than your IdP session policy so re-evaluation happens on schedule.
+- **Step-up / claim requirements.** Use `Identity.Oidc.RequiredClaims` to mandate claims the IdP only emits after a policy is satisfied (for example an `acr`/`amr` or tenant claim); logins missing them are refused.
+- **Break-glass.** Local login remains available alongside OIDC, so a local administrator can still sign in if the IdP is unreachable. Keep at least one local admin account and protect it accordingly.
+
+##### Operational diagnostics
+Administrators can verify federated login health at `GET /api/auth/oidc/diagnostics` (Admin role). It returns the effective OIDC configuration **with the client secret reduced to a `clientSecretConfigured` flag**, the startup validation errors (if any), and a live discovery probe (issuer, endpoints, and JWKS signing-key count, or a redacted error when the provider is unreachable). Authentication failures — provider errors, state/nonce mismatches, token/claim validation failures, and refusals — are recorded in the audit log as `LOGIN_FAILED` with a reason.
 
 #### LDAP / Active Directory (AD)
 LDAP bind authentication enables directory verification for user logins, auto-provisioning of user metadata (email, display name), automatic role assignments based on security groups, and dynamic synchronization of portal group memberships.

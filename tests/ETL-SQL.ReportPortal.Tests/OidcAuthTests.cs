@@ -233,6 +233,120 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
     }
 
+    // ── P2.1 operational diagnostics ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Diagnostics_ReturnsRedactedConfig_AndProbesDiscovery()
+    {
+        // Mint an isolated admin token (MustChangePassword=false) so the shared first-run admin —
+        // which other tests log in as — is left untouched.
+        string jwt;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var userMgr = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.Identity.UserManager<PortalUser>>();
+            var tokens = scope.ServiceProvider.GetRequiredService<TokenService>();
+            var admin = new PortalUser
+            {
+                UserName = "oidcdiag_" + Guid.NewGuid().ToString("N")[..8],
+                Email = "diag@example.test",
+                IsActive = true,
+                MustChangePassword = false
+            };
+            Assert.True((await userMgr.CreateAsync(admin, "Diag@12345!")).Succeeded);
+            await userMgr.AddToRoleAsync(admin, "Admin");
+            jwt = tokens.GenerateJwt(admin, await userMgr.GetRolesAsync(admin));
+        }
+
+        using var req = new HttpRequestMessage(HttpMethod.Get, "/api/auth/oidc/diagnostics");
+        req.Headers.Authorization = new("Bearer", jwt);
+        var res = await _factory.CreateClient().SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("test-client-secret", body); // secret is never returned
+        using var json = System.Text.Json.JsonDocument.Parse(body);
+        var root = json.RootElement;
+        Assert.True(root.GetProperty("enabled").GetBoolean());
+        Assert.True(root.GetProperty("clientSecretConfigured").GetBoolean());
+        Assert.Equal("etl-portal", root.GetProperty("clientId").GetString());
+        // The discovery probe ran; the fake authority is unreachable, so it reports reachable=false.
+        Assert.False(root.GetProperty("discovery").GetProperty("reachable").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Diagnostics_RequiresAdmin()
+    {
+        var res = await NoRedirectClient().GetAsync("/api/auth/oidc/diagnostics");
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    // ── P2.2 recovery: unavailable IdP, session revocation on claim change ─────────
+
+    [Fact]
+    public async Task Callback_WhenProviderUnavailable_RedirectsToError_AndAudits()
+    {
+        _factory.Stub.Identity = new OidcIdentity("sub-x", "oidc_unavail", null, []);
+        _factory.Stub.ThrowOnComplete = true;
+        try
+        {
+            var client = NoRedirectClient();
+            await client.GetAsync("/api/auth/oidc/login");
+            var callback = await client.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+            Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+            Assert.Contains("error=sso_failed", callback.Headers.Location!.ToString());
+
+            using var scope = _factory.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.True(await db.AuditLogs.AnyAsync(a =>
+                a.Action == "LOGIN_FAILED" && a.Detail!.Contains("OIDC authentication failed")));
+        }
+        finally
+        {
+            _factory.Stub.ThrowOnComplete = false;
+        }
+    }
+
+    [Fact]
+    public async Task OldSession_IsRevoked_AfterGroupClaimChange()
+    {
+        var username = "oidcrevoke_" + Guid.NewGuid().ToString("N")[..8];
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.Groups.Add(new Group { Name = "Revoke_" + username, Provider = "OIDC", AdGroup = "revgrp" });
+            await db.SaveChangesAsync();
+        }
+
+        // Login while claiming the group.
+        _factory.Stub.Identity = new OidcIdentity("sub-" + username, username, null, ["revgrp"]);
+        var c1 = NoRedirectClient();
+        await c1.GetAsync("/api/auth/oidc/login");
+        var cb = await c1.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+        var (accessToken, refreshToken) = await ParseHandoffTokensAsync(cb);
+
+        // The session is live (a protected endpoint authenticates).
+        Assert.NotEqual(HttpStatusCode.Unauthorized, (await GetWithBearerAsync("/api/folders", accessToken)).StatusCode);
+
+        // A later login with the group claim dropped rotates the security stamp + revokes tokens.
+        _factory.Stub.Identity = new OidcIdentity("sub-" + username, username, null, []);
+        var c2 = NoRedirectClient();
+        await c2.GetAsync("/api/auth/oidc/login");
+        await c2.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        // No privilege retention: the old access token and refresh token are both rejected.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await GetWithBearerAsync("/api/folders", accessToken)).StatusCode);
+        var refreshRes = await _factory.CreateClient().PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(refreshToken));
+        Assert.Equal(HttpStatusCode.Unauthorized, refreshRes.StatusCode);
+    }
+
+    private async Task<HttpResponseMessage> GetWithBearerAsync(string path, string token)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, path);
+        req.Headers.Authorization = new("Bearer", token);
+        return await _factory.CreateClient().SendAsync(req);
+    }
+
     private static async Task<(string AccessToken, string RefreshToken)> ParseHandoffTokensAsync(HttpResponseMessage res)
     {
         var html = await res.Content.ReadAsStringAsync();
@@ -284,6 +398,9 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
 
         public OidcIdentity Identity { get; set; } = new("sub", "user", "user@example.com", []);
 
+        /// <summary>When set, CompleteAsync throws — simulates an unavailable IdP / failed token exchange.</summary>
+        public bool ThrowOnComplete { get; set; }
+
         public bool Enabled => true;
 
         public Task<OidcAuthorizationRequest> BuildAuthorizationRequestAsync(string redirectUri, CancellationToken ct = default) =>
@@ -292,6 +409,8 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
         public Task<OidcIdentity> CompleteAsync(
             string code, string codeVerifier, string redirectUri, string expectedNonce, CancellationToken ct = default)
         {
+            if (ThrowOnComplete)
+                throw new OidcAuthenticationException("Identity provider is unavailable.");
             Assert.Equal(Nonce, expectedNonce);   // controller must pass the flow nonce through
             Assert.Equal(Verifier, codeVerifier); // and the PKCE verifier from the flow cookie
             return Task.FromResult(Identity);

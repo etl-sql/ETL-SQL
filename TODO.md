@@ -64,13 +64,29 @@ release begins.
   Security fix folded in: the federated session is handed to the SPA via a server-rendered page with a
   JSON data-island read by a same-origin script — tokens (incl. the refresh token) are no longer
   placed in the URL fragment/browser history.
-- [ ] **P1.5 Document MFA and conditional-access posture** so administrators know ETL-SQL delegates
+- [x] **P1.5 Document MFA and conditional-access posture** so administrators know ETL-SQL delegates
   MFA and conditional access enforcement to the identity provider.
-- [ ] **P2.1 Add operational diagnostics for OIDC** including a redacted configuration check, useful
+  *(done)* Added an "MFA and conditional access" subsection to the Report Portal administrators guide:
+  ETL-SQL implements no MFA/device/risk policy of its own — authentication strength is decided by the
+  IdP during the redirect and the portal only validates the result. Documents configuring MFA/CA in
+  the IdP, the two-layer session lifetime (IdP session vs. portal `Jwt.Expiry*`), using `RequiredClaims`
+  for step-up/claim gating, and the local break-glass admin path.
+- [x] **P2.1 Add operational diagnostics for OIDC** including a redacted configuration check, useful
   admin-facing failure messages, and audit events for login/claim failures.
-- [ ] **P2.2 Certify OIDC recovery scenarios** covering unavailable identity providers, rotated
+  *(done)* Added admin-only `GET /api/auth/oidc/diagnostics`: returns the effective OIDC config with
+  the client secret reduced to a `clientSecretConfigured` flag, the startup validation errors, and a
+  live discovery reachability probe (issuer/endpoints/JWKS key count, or a redacted error). The
+  discovery client has a 10s timeout so the probe can't hang. Auth-failure audit (`LOGIN_FAILED` with
+  reason) was added in P1.3. Tests cover the redacted payload (secret never returned) and admin-only
+  authorization.
+- [x] **P2.2 Certify OIDC recovery scenarios** covering unavailable identity providers, rotated
   signing keys/JWKS cache behavior, changed group claims, disabled local users, and logout/session
   revocation.
+  *(done)* Recovery tests certify: unavailable IdP (discovery throws → `OidcAuthenticationException`;
+  callback redirects to error and audits), JWKS rotation (token signed with the new advertised key
+  validates; one signed with a retired key is rejected), changed group claims dropping membership, a
+  disabled account failing closed, and — the strong no-privilege-retention case — that after a group
+  claim change the previously issued access token and refresh token are both rejected.
 
 ---
 

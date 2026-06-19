@@ -295,7 +295,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.R
 // ── Federated OIDC login (Portal:Identity:Oidc) ───────────────────────────────
 // Discovery is a singleton so its ConfigurationManager caches the well-known doc/JWKS across
 // requests; the auth service and provisioning bridge mint the portal's own JWT/refresh session.
-builder.Services.AddHttpClient("oidc-discovery");
+builder.Services.AddHttpClient("oidc-discovery", c => c.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.IOidcDiscoveryProvider>(sp =>
     new ETL_SQL.ReportPortal.Services.OidcDiscoveryProvider(
         portalConfig, sp.GetRequiredService<IHttpClientFactory>().CreateClient("oidc-discovery")));

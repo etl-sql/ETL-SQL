@@ -118,7 +118,41 @@ public sealed class OidcAuthenticationServiceTests
             () => service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n"));
     }
 
-    private static OidcAuthenticationService NewService(StubHandler handler, string[]? requiredClaims = null)
+    [Fact]
+    public async Task Complete_TokenSignedWithRotatedKey_Succeeds()
+    {
+        // JWKS rotation: the IdP now signs with a new key; discovery advertises it, so it validates.
+        var newKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("rotated-oidc-key-also-at-least-32-bytes!!"));
+        var idToken = CreateIdToken(nonce: "n", subject: "u", username: "u", email: null, groups: [], signingKey: newKey);
+        var service = NewService(new StubHandler(idToken), discovery: new KeyedDiscovery(newKey));
+
+        var identity = await service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n");
+        Assert.Equal("u", identity.Subject);
+    }
+
+    [Fact]
+    public async Task Complete_TokenSignedWithRetiredKey_Throws()
+    {
+        // A token signed with a key no longer in the published JWKS (rotated out) must be rejected.
+        var retiredKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("retired-oidc-key-also-at-least-32-bytes!"));
+        var idToken = CreateIdToken(nonce: "n", subject: "u", username: "u", email: null, groups: [], signingKey: retiredKey);
+        var service = NewService(new StubHandler(idToken), discovery: new FakeDiscovery()); // JWKS has only the current key
+
+        await Assert.ThrowsAsync<OidcAuthenticationException>(
+            () => service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n"));
+    }
+
+    [Fact]
+    public async Task Complete_WhenDiscoveryUnavailable_Throws()
+    {
+        var service = NewService(new StubHandler("ignored"), discovery: new ThrowingDiscovery());
+
+        await Assert.ThrowsAsync<OidcAuthenticationException>(
+            () => service.CompleteAsync("code", "verifier", "https://portal.test/cb", "n"));
+    }
+
+    private static OidcAuthenticationService NewService(
+        StubHandler handler, string[]? requiredClaims = null, IOidcDiscoveryProvider? discovery = null)
     {
         var config = new PortalConfig
         {
@@ -137,12 +171,12 @@ public sealed class OidcAuthenticationServiceTests
                 }
             }
         };
-        return new OidcAuthenticationService(config, new HttpClient(handler), new FakeDiscovery());
+        return new OidcAuthenticationService(config, new HttpClient(handler), discovery ?? new FakeDiscovery());
     }
 
     private static string CreateIdToken(
         string nonce, string subject, string username, string? email, string[] groups,
-        string? audience = null, DateTime? notBefore = null, DateTime? expires = null)
+        string? audience = null, DateTime? notBefore = null, DateTime? expires = null, SecurityKey? signingKey = null)
     {
         var claims = new Dictionary<string, object>
         {
@@ -160,24 +194,39 @@ public sealed class OidcAuthenticationServiceTests
             Claims = claims,
             NotBefore = notBefore ?? DateTime.UtcNow.AddMinutes(-1),
             Expires = expires ?? DateTime.UtcNow.AddMinutes(5),
-            SigningCredentials = new SigningCredentials(SigningKey, SecurityAlgorithms.HmacSha256)
+            SigningCredentials = new SigningCredentials(signingKey ?? SigningKey, SecurityAlgorithms.HmacSha256)
         };
         return new JsonWebTokenHandler().CreateToken(descriptor);
     }
 
     private sealed class FakeDiscovery : IOidcDiscoveryProvider
     {
-        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken ct = default)
+        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken ct = default) =>
+            Task.FromResult(ConfigWith(SigningKey));
+    }
+
+    private sealed class KeyedDiscovery(SecurityKey key) : IOidcDiscoveryProvider
+    {
+        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken ct = default) =>
+            Task.FromResult(ConfigWith(key));
+    }
+
+    private sealed class ThrowingDiscovery : IOidcDiscoveryProvider
+    {
+        public Task<OpenIdConnectConfiguration> GetConfigurationAsync(CancellationToken ct = default) =>
+            throw new OidcAuthenticationException("OIDC discovery is unavailable.");
+    }
+
+    private static OpenIdConnectConfiguration ConfigWith(SecurityKey key)
+    {
+        var config = new OpenIdConnectConfiguration
         {
-            var config = new OpenIdConnectConfiguration
-            {
-                Issuer = Issuer,
-                AuthorizationEndpoint = Issuer + "/authorize",
-                TokenEndpoint = TokenEndpoint
-            };
-            config.SigningKeys.Add(SigningKey);
-            return Task.FromResult(config);
-        }
+            Issuer = Issuer,
+            AuthorizationEndpoint = Issuer + "/authorize",
+            TokenEndpoint = TokenEndpoint
+        };
+        config.SigningKeys.Add(key);
+        return config;
     }
 
     private sealed class StubHandler(string? idToken = null, HttpStatusCode statusCode = HttpStatusCode.OK)

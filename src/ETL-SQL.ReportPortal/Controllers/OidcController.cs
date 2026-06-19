@@ -1,4 +1,5 @@
 using System.Text.Json;
+using ETL_SQL.Core.Common;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -20,6 +21,7 @@ public sealed class OidcController(
     PortalConfig config,
     IOidcAuthenticationService oidc,
     OidcUserProvisioningService provisioning,
+    IOidcDiscoveryProvider discovery,
     IDataProtectionProvider dataProtection,
     AuditService auditService,
     ILogger<OidcController> log) : ControllerBase
@@ -29,6 +31,55 @@ public sealed class OidcController(
     private IDataProtector Protector => dataProtection.CreateProtector("ETL_SQL.ReportPortal.Oidc.LoginFlow.v1");
 
     private sealed record FlowState(string State, string Nonce, string CodeVerifier);
+
+    /// <summary>Admin-only OIDC diagnostics (P2.1): the effective configuration with the client
+    /// secret redacted to a presence flag, the startup validation errors, and a live discovery
+    /// reachability probe — so an operator can see why federated login is failing without reading
+    /// logs or exposing secrets.</summary>
+    [HttpGet("diagnostics")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Diagnostics(CancellationToken ct)
+    {
+        var o = config.Identity.Oidc;
+        return Ok(new
+        {
+            enabled = o.Enabled,
+            authority = o.Authority,
+            clientId = o.ClientId,
+            clientSecretConfigured = !string.IsNullOrEmpty(o.ClientSecret),
+            scopes = o.Scopes,
+            callbackPath = o.CallbackPath,
+            postLoginRedirectPath = o.PostLoginRedirectPath,
+            groupClaimTypes = o.GroupClaimTypes,
+            requiredClaims = o.RequiredClaims,
+            clockSkewSeconds = o.ClockSkewSeconds,
+            configErrors = OidcConfigValidationService.Validate(o).ToArray(),
+            discovery = await ProbeDiscoveryAsync(ct)
+        });
+    }
+
+    private async Task<object> ProbeDiscoveryAsync(CancellationToken ct)
+    {
+        if (!config.Identity.Oidc.Enabled)
+            return new { reachable = false, error = "OIDC is disabled." };
+        try
+        {
+            var c = await discovery.GetConfigurationAsync(ct);
+            return new
+            {
+                reachable = true,
+                issuer = c.Issuer,
+                authorizationEndpoint = c.AuthorizationEndpoint,
+                tokenEndpoint = c.TokenEndpoint,
+                signingKeyCount = c.SigningKeys.Count
+            };
+        }
+        catch (Exception ex)
+        {
+            log.LogWarning(ex, "OIDC discovery probe failed");
+            return new { reachable = false, error = SecretRedactor.Redact(ex.Message) };
+        }
+    }
 
     [HttpGet("login")]
     [AllowAnonymous]
