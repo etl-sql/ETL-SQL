@@ -74,8 +74,13 @@ release begins.
   HTTPS endpoints and supports bearer auth plus JSON `{ "value": "..." }` responses. Tests cover all
   providers, provider factory selection, protected-at-rest OS store values, and secret-name
   validation.
-- [ ] **P1.8 Add named secret reference syntax** such as `SECRET:sales_db_password` for connector
+- [x] **P1.8 Add named secret reference syntax** such as `SECRET:sales_db_password` for connector
   passwords and connection-string fields.
+  *(done)* Added `SECRET:name` resolution during `CREATE CONNECTION`, `CREATE OR ALTER CONNECTION`,
+  and `ALTER CONNECTION`. Secret references are expanded through the configured `ISecretProvider`
+  only for sensitive connector option keys or sensitive fields inside connection strings, plus full
+  target-string secret references. The engine DI now registers a configurable secret provider from
+  `Governance:Secrets:*`/`Secrets:*` settings.
 - [ ] **P1.9 Block raw secret values from logs, diagnostics, audit rows, support bundles, and
   dashboards**, including policy tests for common connector and report workflows.
 

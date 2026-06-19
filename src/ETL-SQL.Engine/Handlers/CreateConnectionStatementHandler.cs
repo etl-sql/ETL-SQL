@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers
@@ -15,11 +17,16 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the CREATE CONNECTION statement, registering new data sources in the execution context.
     /// Supports various connector types (SQL, File, specialized) and connection string interpolation.
     /// </summary>
-    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger, IConfiguration? config = null) : IStatementHandler
+    public class CreateConnectionStatementHandler(
+        IConnectorRegistry connectorRegistry,
+        ILogger logger,
+        IConfiguration? config = null,
+        ISecretProvider? secretProvider = null) : IStatementHandler
     {
         private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
         private readonly ILogger _logger = logger;
         private readonly IConfiguration? _config = config;
+        private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
 
 
         public Type SupportedStatementType => typeof(CreateConnectionStatement);
@@ -59,7 +66,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 if (stmt.TargetExpression != null)
-                    target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
+                    target = (await context.EvaluateValue(stmt.TargetExpression, new Row(), decryptSensitive: true))?.ToString() ?? "";
             }
             else
             {
@@ -89,6 +96,9 @@ namespace ETL_SQL.Engine.Handlers
                 target = context.DecryptValue(target);
             }
             target = Interpolate(target ?? "");
+            target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
+            if (options != null)
+                options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
 
             var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
             if (connector == null)

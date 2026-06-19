@@ -49,6 +49,24 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IGovernancePolicyRegistry>(_ => GovernancePolicyRegistry.CreateDefault());
+            services.AddSingleton<ISecretProvider>(_ =>
+            {
+                var options = new SecretProviderOptions
+                {
+                    Provider = configuration["Governance:Secrets:Provider"]
+                        ?? configuration["Secrets:Provider"]
+                        ?? "Environment",
+                    EnvironmentPrefix = configuration["Governance:Secrets:EnvironmentPrefix"]
+                        ?? configuration["Secrets:EnvironmentPrefix"],
+                    OsStoreRoot = configuration["Governance:Secrets:OsStoreRoot"]
+                        ?? configuration["Secrets:OsStoreRoot"],
+                    VaultEndpoint = configuration["Governance:Secrets:VaultEndpoint"]
+                        ?? configuration["Secrets:VaultEndpoint"],
+                    VaultBearerToken = configuration["Governance:Secrets:VaultBearerToken"]
+                        ?? configuration["Secrets:VaultBearerToken"]
+                };
+                return new SecretProviderFactory(new HttpClient()).Create(options);
+            });
 
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);

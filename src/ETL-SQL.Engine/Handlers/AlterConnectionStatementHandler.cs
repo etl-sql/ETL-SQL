@@ -6,7 +6,9 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -15,10 +17,14 @@ namespace ETL_SQL.Engine.Handlers
     /// Patches an existing connection: preserves all previous options and only overwrites
     /// the keys (and optionally the type / connection-string) supplied in the statement.
     /// </summary>
-    public class AlterConnectionStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger) : IStatementHandler
+    public class AlterConnectionStatementHandler(
+        IConnectorRegistry connectorRegistry,
+        ILogger logger,
+        ISecretProvider? secretProvider = null) : IStatementHandler
     {
         private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
         private readonly ILogger _logger = logger;
+        private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
 
         public Type SupportedStatementType => typeof(AlterConnectionStatement);
 
@@ -61,6 +67,8 @@ namespace ETL_SQL.Engine.Handlers
                 target = context.DecryptValue(target);
             }
             target = Interpolate(target ?? "");
+            target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
+            options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
 
             // Resolve path for file-based connectors
             if (FileConnectorTypes.Contains(connectionType ?? string.Empty))
