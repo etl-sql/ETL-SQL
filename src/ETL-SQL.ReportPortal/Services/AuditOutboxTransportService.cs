@@ -27,6 +27,7 @@ public sealed class AuditOutboxTransportService(
         {
             try
             {
+                await PruneAsync(stoppingToken);
                 await DrainOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -107,6 +108,92 @@ public sealed class AuditOutboxTransportService(
 
         await db.SaveChangesAsync(ct);
         return rows.Count;
+    }
+
+    /// <summary>
+    /// Local outbox disk-size safeguards and retention (P2.1). Purges Delivered rows past their
+    /// retention window, then — only when remote delivery is NOT mandatory — sheds the oldest rows
+    /// to keep the queue under <see cref="AuditConfig.OutboxMaxBytes"/> during an extended collector
+    /// outage. When delivery IS mandatory the queue is never silently trimmed: the fail-closed gate
+    /// (<see cref="AuditDeliveryGate"/>) blocks new mutations instead, so no audit event is dropped.
+    /// Returns the number of rows removed.
+    /// </summary>
+    public async Task<int> PruneAsync(CancellationToken ct = default)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var now = clock.GetUtcNow().UtcDateTime;
+        var removed = 0;
+
+        var retentionCutoff = now.AddMinutes(-Math.Max(1, config.Audit.OutboxDeliveredRetentionMinutes));
+        var purgedDelivered = await db.AuditOutboxMessages
+            .Where(x => x.Status == "Delivered" && x.DeliveredAt != null && x.DeliveredAt < retentionCutoff)
+            .ExecuteDeleteAsync(ct);
+        removed += purgedDelivered;
+        if (purgedDelivered > 0)
+            log.LogInformation(
+                "Purged {Count} delivered audit outbox rows older than {Minutes}m",
+                purgedDelivered, config.Audit.OutboxDeliveredRetentionMinutes);
+
+        if (config.Audit.OutboxMaxBytes <= 0)
+            return removed;
+
+        var totalBytes = await db.AuditOutboxMessages.SumAsync(x => (long)x.PayloadJson.Length, ct);
+        if (totalBytes < config.Audit.OutboxMaxBytes)
+            return removed;
+
+        if (config.Audit.RequireRemoteDelivery)
+        {
+            // Mandatory delivery: do not drop events — the fail-closed gate already stops new
+            // mutations. Surface the saturation for operators.
+            log.LogError(
+                "Audit outbox (~{Bytes} bytes) has reached the size cap ({Cap} bytes) while remote " +
+                "delivery is required; mutations are failing closed until the collector drains.",
+                totalBytes, config.Audit.OutboxMaxBytes);
+            return removed;
+        }
+
+        // Best-effort forwarding: shed the oldest rows (Delivered first, then Pending) to bound
+        // local disk use. Dropped Pending rows lose remote forwarding only — the durable AuditLog
+        // record remains.
+        log.LogWarning(
+            "Audit outbox (~{Bytes} bytes) exceeds the size cap ({Cap} bytes); shedding oldest rows " +
+            "to bound local disk use (remote delivery is not required).",
+            totalBytes, config.Audit.OutboxMaxBytes);
+
+        var shed = await ShedToCapAsync(db, totalBytes, ct);
+        removed += shed;
+        return removed;
+    }
+
+    private async Task<int> ShedToCapAsync(PortalDbContext db, long totalBytes, CancellationToken ct)
+    {
+        var cap = config.Audit.OutboxMaxBytes;
+        var shed = 0;
+        const int chunk = 500;
+
+        while (totalBytes >= cap)
+        {
+            // Prefer already-delivered rows, then the oldest remaining, so a sustained outage keeps
+            // the most recent events for the collector when it returns.
+            var batch = await db.AuditOutboxMessages
+                .OrderBy(x => x.Status == "Delivered" ? 0 : 1)
+                .ThenBy(x => x.Id)
+                .Take(chunk)
+                .Select(x => new { x.Id, Len = (long)x.PayloadJson.Length })
+                .ToListAsync(ct);
+            if (batch.Count == 0)
+                break;
+
+            var ids = batch.Select(b => b.Id).ToList();
+            await db.AuditOutboxMessages.Where(x => ids.Contains(x.Id)).ExecuteDeleteAsync(ct);
+            totalBytes -= batch.Sum(b => b.Len);
+            shed += batch.Count;
+        }
+
+        if (shed > 0)
+            log.LogWarning("Shed {Count} audit outbox rows to satisfy the {Cap}-byte size cap", shed, cap);
+        return shed;
     }
 
     private Uri GetEndpointOrThrow()

@@ -100,6 +100,40 @@ public class AuditConfig
 
     /// <summary>Seconds a node owns a claimed batch before another sweep may retry it.</summary>
     public int TransportLockSeconds { get; set; } = 120;
+
+    // ── Fail-closed mutation policy (governance Audit:RemoteDeliveryRequired) ──────
+
+    /// <summary>
+    /// When true, security-sensitive mutations are blocked (HTTP 503) once durable remote audit
+    /// delivery is judged unavailable: any delivery has terminally failed, the pending backlog
+    /// exceeds <see cref="FailClosedMaxPendingBacklog"/>, the oldest pending event is older than
+    /// <see cref="FailClosedMaxBacklogSeconds"/>, or the queued payload exceeds
+    /// <see cref="OutboxMaxBytes"/>. Defaults to false (local zero-trust default); set true only
+    /// when an HTTPS collector is configured and remote audit delivery is mandatory.
+    /// </summary>
+    public bool RequireRemoteDelivery { get; set; }
+
+    /// <summary>Fail-closed once this many undelivered (Pending) outbox rows accumulate. 0 disables this check.</summary>
+    public int FailClosedMaxPendingBacklog { get; set; } = 1000;
+
+    /// <summary>Fail-closed once the oldest undelivered event is older than this many seconds. 0 disables this check.</summary>
+    public int FailClosedMaxBacklogSeconds { get; set; } = 900;
+
+    // ── Local outbox disk-size safeguards and retention (governance Audit:OutboxMaxBytes) ──
+
+    /// <summary>
+    /// Approximate maximum size (in bytes, measured as the sum of queued payload lengths) the local
+    /// outbox may reach before safeguards apply. When <see cref="RequireRemoteDelivery"/> is on,
+    /// exceeding this fails new mutations closed; otherwise the transport sweep sheds the oldest
+    /// rows to stay under the cap. 0 (default) disables the size safeguard.
+    /// </summary>
+    public long OutboxMaxBytes { get; set; }
+
+    /// <summary>
+    /// Minutes a Delivered outbox row is retained (for collector-side dedup reconciliation) before
+    /// the transport sweep purges it. Minimum effective value is 1.
+    /// </summary>
+    public int OutboxDeliveredRetentionMinutes { get; set; } = 1440;
 }
 
 public class PortalRateLimitConfig

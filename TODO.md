@@ -110,9 +110,32 @@ release begins.
   to `Failed`. Configuration now covers endpoint, bearer token, batch size, sweep interval,
   timeout, max attempts, lock duration, and backlog warning threshold. Tests cover successful
   delivery, retry/backoff with terminal failure, and HTTPS-only endpoint enforcement.
-- [ ] **P1.12 Define and enforce fail-closed mutation policy** when required remote audit delivery
+- [x] **P1.12 Define and enforce fail-closed mutation policy** when required remote audit delivery
   is unavailable.
-- [ ] **P2.1 Add disk-size safeguards and retention controls** for the local outbox queue during
+  *(done)* Added `AuditFailClosedInterceptor`, a SaveChanges interceptor on `PortalDbContext` that
+  enforces the central `Audit:RemoteDeliveryRequired` policy at the one choke point every
+  security-sensitive mutation shares: the audit row staged into the same EF unit of work. When
+  `Portal:Audit:RequireRemoteDelivery` is on, `AuditDeliveryGate` blocks the commit (so the mutation
+  itself cannot succeed) once the local outbox shows the collector is unreachable — any terminally
+  Failed delivery, pending backlog at `FailClosedMaxPendingBacklog`, oldest pending event past
+  `FailClosedMaxBacklogSeconds`, or queued payload past `OutboxMaxBytes`. A single event during a
+  brief outage still commits; the default best-effort posture is unchanged. The block surfaces as
+  HTTP 503 (`AuditDeliveryUnavailableException` → middleware). Tests cover backlog/failed blocking,
+  first-event-allowed, and default-posture pass-through.
+- [x] **P2.1 Add disk-size safeguards and retention controls** for the local outbox queue during
   extended collector outages.
-- [ ] **P2.2 Certify governance recovery scenarios**: expired policy cache, unavailable policy
+  *(done)* The transport sweep now runs `PruneAsync` before each drain: it purges Delivered rows
+  past `OutboxDeliveredRetentionMinutes`, and — only when remote delivery is *not* mandatory — sheds
+  the oldest rows (Delivered first) to keep the queue under the `Audit:OutboxMaxBytes` cap, bounding
+  local disk use during a prolonged outage. When delivery *is* mandatory nothing is dropped: the
+  fail-closed gate stops new mutations instead, and saturation is logged for operators. Tests cover
+  retention purge, size-cap shedding when best-effort, and no-shed under mandatory delivery.
+- [x] **P2.2 Certify governance recovery scenarios**: expired policy cache, unavailable policy
   endpoint, unavailable audit collector, duplicate audit delivery, and secret-provider failure.
+  *(done)* Added `GovernanceRecoveryTests` (Core) certifying that an unavailable HTTPS policy
+  endpoint with no cache fails secure and that Environment/OS-store/HTTPS-vault secret providers
+  fail closed (error, never a blank secret) on missing/unreachable secrets; expired/fresh policy
+  cache recovery remains certified by `OrganizationPolicyCacheTests`. Added
+  `GovernanceRecoveryCertificationTests` (Portal) certifying the unavailable-collector fail-closed
+  mutation path, and an `AuditOutboxTransportTests` case certifying that a redelivery after a lost
+  "Delivered" commit resends the *same* `EventId` so the collector can deduplicate.

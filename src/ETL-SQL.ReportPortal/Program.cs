@@ -121,8 +121,14 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
 
 // ── EF Core (provider configurable: SQLite default, Postgres for HA) ────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);
-builder.Services.AddDbContext<PortalDbContext>(opt =>
-    PortalDatabase.Configure(opt, portalConfig));
+// The fail-closed audit interceptor (P1.12) blocks audited mutations when required remote audit
+// delivery is unavailable; it is a no-op unless Portal:Audit:RequireRemoteDelivery is set.
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.AuditFailClosedInterceptor>();
+builder.Services.AddDbContext<PortalDbContext>((sp, opt) =>
+{
+    PortalDatabase.Configure(opt, portalConfig);
+    opt.AddInterceptors(sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditFailClosedInterceptor>());
+});
 
 // ── Identity ──────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
@@ -461,6 +467,30 @@ app.Use(async (context, next) =>
     context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
     context.Response.Headers.Append("Pragma", "no-cache");
     await next();
+});
+// Fail-closed audit policy (P1.12): a blocked mutation surfaces as 503 Service Unavailable so the
+// client retries once the audit collector is reachable, rather than as an opaque 500.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (ETL_SQL.ReportPortal.Services.AuditDeliveryUnavailableException ex)
+    {
+        app.Logger.LogError(ex, "Mutation blocked by fail-closed audit delivery policy");
+        if (!context.Response.HasStarted)
+        {
+            context.Response.Clear();
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.Headers.RetryAfter = "30";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "audit_delivery_unavailable",
+                message = ex.Message
+            });
+        }
+    }
 });
 app.Use(async (context, next) =>
 {

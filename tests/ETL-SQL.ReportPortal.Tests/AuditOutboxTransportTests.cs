@@ -91,6 +91,143 @@ public sealed class AuditOutboxTransportTests : IDisposable
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.DrainOnceAsync());
     }
 
+    // ── P2.1 retention + disk-size safeguards ──────────────────────────────────────
+
+    [Fact]
+    public async Task PruneAsync_PurgesDeliveredRowsPastRetentionWindow()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var (provider, config) = await CreateProviderAsync("retention.db", handler);
+        config.Audit.OutboxDeliveredRetentionMinutes = 60;
+
+        var now = DateTime.UtcNow;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.AuditOutboxMessages.Add(NewRow("Delivered", deliveredAt: now.AddHours(-2)));   // stale → purged
+            db.AuditOutboxMessages.Add(NewRow("Delivered", deliveredAt: now.AddMinutes(-5))); // recent → kept
+            db.AuditOutboxMessages.Add(NewRow("Pending"));                                    // pending → kept
+            await db.SaveChangesAsync();
+        }
+
+        var service = NewService(provider, config, handler);
+        var removed = await service.PruneAsync();
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(1, removed);
+            Assert.Equal(0, await db.AuditOutboxMessages.CountAsync(x => x.Status == "Delivered" && x.DeliveredAt < now.AddHours(-1)));
+            Assert.Equal(2, await db.AuditOutboxMessages.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task PruneAsync_ShedsOldestRowsOverSizeCap_WhenDeliveryNotRequired()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var (provider, config) = await CreateProviderAsync("shed.db", handler);
+        config.Audit.RequireRemoteDelivery = false;
+        var payload = new string('x', 1000);
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            for (var i = 0; i < 10; i++)
+                db.AuditOutboxMessages.Add(NewRow("Pending", payload: payload));
+            await db.SaveChangesAsync();
+        }
+        config.Audit.OutboxMaxBytes = 5000; // ~10kB queued → must shed below 5kB
+
+        var service = NewService(provider, config, handler);
+        var removed = await service.PruneAsync();
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var remainingBytes = await db.AuditOutboxMessages.SumAsync(x => (long)x.PayloadJson.Length);
+            Assert.True(removed > 0);
+            Assert.True(remainingBytes < config.Audit.OutboxMaxBytes,
+                $"expected queue below {config.Audit.OutboxMaxBytes} bytes, got {remainingBytes}");
+        }
+    }
+
+    [Fact]
+    public async Task PruneAsync_NeverShedsRows_WhenRemoteDeliveryRequired()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var (provider, config) = await CreateProviderAsync("noshed.db", handler);
+        config.Audit.RequireRemoteDelivery = true;
+        config.Audit.OutboxMaxBytes = 100; // far below queued payload
+        var payload = new string('y', 500);
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.AuditOutboxMessages.Add(NewRow("Pending", payload: payload));
+            db.AuditOutboxMessages.Add(NewRow("Pending", payload: payload));
+            await db.SaveChangesAsync();
+        }
+
+        var service = NewService(provider, config, handler);
+        var removed = await service.PruneAsync();
+
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.Equal(0, removed);
+            Assert.Equal(2, await db.AuditOutboxMessages.CountAsync()); // mandatory delivery: nothing dropped
+        }
+    }
+
+    // ── P2.2 duplicate audit delivery (collector-side dedup key is stable) ──────────
+
+    [Fact]
+    public async Task Redelivery_AfterUncommittedMark_SendsSameEventId_ForCollectorDedup()
+    {
+        var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
+        var (provider, config) = await CreateProviderAsync("dedup.db", handler);
+        await SeedAuditAsync(provider);
+
+        var service = NewService(provider, config, handler);
+        await service.DrainOnceAsync();
+        var firstBody = handler.LastBody;
+
+        // Simulate a crash that delivered the batch but lost the "Delivered" commit: the row is
+        // still Pending, so the next sweep resends it. The collector must be able to dedup it.
+        string eventId;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var row = await db.AuditOutboxMessages.SingleAsync();
+            eventId = row.EventId;
+            row.Status = "Pending";
+            row.DeliveredAt = null;
+            row.LockedUntil = null;
+            await db.SaveChangesAsync();
+        }
+
+        await service.DrainOnceAsync();
+        var secondBody = handler.LastBody;
+
+        Assert.Contains(eventId, firstBody);
+        Assert.Contains(eventId, secondBody);
+    }
+
+    private static AuditOutboxMessage NewRow(string status, DateTime? deliveredAt = null, string? payload = null) =>
+        new()
+        {
+            Action = "CREATE_USER",
+            ResourceType = "User",
+            ResourceId = "42",
+            PayloadJson = payload is null ? "{\"action\":\"CREATE_USER\"}" : $"{{\"p\":\"{payload}\"}}",
+            Status = status,
+            DeliveredAt = deliveredAt,
+            OccurredAt = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
     private async Task<(ServiceProvider Provider, PortalConfig Config)> CreateProviderAsync(
         string dbName,
         CapturingHandler handler)
