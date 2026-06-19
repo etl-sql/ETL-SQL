@@ -14,12 +14,124 @@ namespace ETL_SQL.Engine.Services
     {
         private readonly ILogger _logger = logger;
 
+        private static readonly HashSet<string> LocalOnlyFunctions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "FILE_EXISTS", "DIRECTORY_EXISTS", "FILE_LIST", "DIRECTORY", "FILE_HASH", "FILE_SIZE", "FILE_MODIFIED",
+            "REMOTE_FILE_LIST", "REMOTE_FILE_EXISTS", "PATH_COMBINE", "PATH_FILENAME", "PATH_EXTENSION", "PATH_DIRECTORY",
+            "GET_JOB_STATE", "SET_JOB_STATE", "ENV", "CONNECTION_PROPERTY",
+            "ERROR_NUMBER", "ERROR_MESSAGE", "ERROR_SEVERITY", "ERROR_STATE", "ERROR_LINE",
+            "APPEND_TO_LIST", "ADD_TO_LIST", "REMOVE_FROM_LIST", "SORT_LIST",
+            "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG"
+        };
+
+        private bool ContainsLocalOnlyEngineFunctions(Expression? expr)
+        {
+            if (expr == null) return false;
+
+            if (expr is FunctionCallExpression f)
+            {
+                if (LocalOnlyFunctions.Contains(f.FunctionName)) return true;
+                if (f.Arguments.Any(ContainsLocalOnlyEngineFunctions)) return true;
+                if (f.Filter != null && ContainsLocalOnlyEngineFunctions(f.Filter)) return true;
+            }
+            else if (expr is BinaryExpression bin)
+            {
+                return ContainsLocalOnlyEngineFunctions(bin.Left) || ContainsLocalOnlyEngineFunctions(bin.Right);
+            }
+            else if (expr is CaseExpression c)
+            {
+                if (c.InputExpression != null && ContainsLocalOnlyEngineFunctions(c.InputExpression)) return true;
+                if (c.WhenClauses.Any(w => ContainsLocalOnlyEngineFunctions(w.Condition) || ContainsLocalOnlyEngineFunctions(w.Result))) return true;
+                if (c.ElseResult != null && ContainsLocalOnlyEngineFunctions(c.ElseResult)) return true;
+            }
+            else if (expr is InExpression inExp)
+            {
+                if (ContainsLocalOnlyEngineFunctions(inExp.Left)) return true;
+                if (inExp.Right != null && ContainsLocalOnlyEngineFunctions(inExp.Right)) return true;
+                if (inExp.Subquery != null && ContainsLocalOnlyEngineFunctions(inExp.Subquery)) return true;
+            }
+            else if (expr is BetweenExpression bet)
+            {
+                return ContainsLocalOnlyEngineFunctions(bet.Left) || 
+                       ContainsLocalOnlyEngineFunctions(bet.Start) || 
+                       ContainsLocalOnlyEngineFunctions(bet.End);
+            }
+            else if (expr is LikeExpression like)
+            {
+                return ContainsLocalOnlyEngineFunctions(like.Left) || 
+                       ContainsLocalOnlyEngineFunctions(like.Pattern) || 
+                       (like.EscapeChar != null && ContainsLocalOnlyEngineFunctions(like.EscapeChar));
+            }
+            else if (expr is ExistsExpression ex)
+            {
+                return ContainsLocalOnlyEngineFunctions(ex.Subquery);
+            }
+            else if (expr is UnaryExpression un)
+            {
+                return ContainsLocalOnlyEngineFunctions(un.Expression);
+            }
+            else if (expr is IsNullExpression nullExpr)
+            {
+                return ContainsLocalOnlyEngineFunctions(nullExpr.Expression);
+            }
+            else if (expr is ListExpression list)
+            {
+                return list.Items.Any(ContainsLocalOnlyEngineFunctions);
+            }
+            else if (expr is SubqueryExpression sub)
+            {
+                return ContainsLocalOnlyEngineFunctions(sub.Query);
+            }
+            else if (expr is AtTimeZoneExpression tz)
+            {
+                return ContainsLocalOnlyEngineFunctions(tz.Left) || ContainsLocalOnlyEngineFunctions(tz.TimeZone);
+            }
+            else if (expr is MemberAccessExpression ma)
+            {
+                return ContainsLocalOnlyEngineFunctions(ma.Expression);
+            }
+
+            return false;
+        }
+
+        private bool ContainsLocalOnlyEngineFunctions(Statement? stmt)
+        {
+            if (stmt == null) return false;
+            if (stmt is SelectStatement sel)
+            {
+                if (sel.Columns.Any(c => ContainsLocalOnlyEngineFunctions(c.Expression))) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.WhereClause)) return true;
+                if (sel.GroupBy != null && sel.GroupBy.Any(ContainsLocalOnlyEngineFunctions)) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.HavingClause)) return true;
+                if (sel.OrderBy != null && sel.OrderBy.Any(o => ContainsLocalOnlyEngineFunctions(o.Expression))) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.LimitCount)) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.Offset)) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.TopCount)) return true;
+                if (ContainsLocalOnlyEngineFunctions(sel.QualifyClause)) return true;
+                
+                if (sel.Joins != null)
+                {
+                    foreach (var join in sel.Joins)
+                    {
+                        if (ContainsLocalOnlyEngineFunctions(join.Condition)) return true;
+                        if (join.Table?.Subquery != null && ContainsLocalOnlyEngineFunctions(join.Table.Subquery)) return true;
+                    }
+                }
+            }
+            else if (stmt is SetOperationStatement setOp)
+            {
+                return ContainsLocalOnlyEngineFunctions(setOp.Left) || ContainsLocalOnlyEngineFunctions(setOp.Right);
+            }
+            return false;
+        }
+
         public bool IsPushdownPossible(SelectStatement stmt, IExecutionContext context, out string? connectionName)
         {
             connectionName = null;
-            if (stmt.FromTable == null) return false;
+            if (stmt.FromTable == null || stmt.FromTable.ConnectionName == null) return false;
+            if (stmt.GroupingSet != null) return false;
 
-            connectionName = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
+            connectionName = stmt.FromTable.ConnectionName;
             var targetConn = connectionName;
             bool allSameConn = (stmt.Joins == null || stmt.Joins.Count == 0) ||
                                stmt.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(targetConn, StringComparison.OrdinalIgnoreCase));
@@ -27,7 +139,7 @@ namespace ETL_SQL.Engine.Services
             if (!allSameConn) return false;
             if (!context.IsSqlPushdown(connectionName)) return false;
 
-            // Check for local engines (aggregation, window functions, distinct, join, subqueries)
+            // Check for window functions and subqueries which must be handled locally
             var aggregateEngine = new AggregateEngine(context, _logger);
             var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
             var subqueryAnalyzer = new SubqueryAnalyzer();
@@ -37,14 +149,30 @@ namespace ETL_SQL.Engine.Services
                                  HasSubqueries(stmt.HavingClause, subqueryAnalyzer) ||
                                  (stmt.Joins != null && stmt.Joins.Any(j => HasSubqueries(j.Condition, subqueryAnalyzer)));
 
-            bool localEngineRequired = hasSubqueries ||
-                                       stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) ||
-                                       stmt.GroupBy != null ||
-                                       stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
-                                       stmt.IsDistinct ||
-                                       (stmt.Joins != null && stmt.Joins.Count > 0);
+            bool hasWindowFunctions = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
 
-            return !localEngineRequired;
+            if (hasSubqueries || hasWindowFunctions) return false;
+
+            if (ContainsLocalOnlyEngineFunctions(stmt)) return false;
+
+            // Verify compilation
+            try
+            {
+                if (context.Connections.TryGetValue(connectionName, out var ds) && ds is IDatabaseSource db)
+                {
+                    context.CompileQuery(stmt, db.Dialect);
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+                return false;
+            }
+
+            return true;
         }
 
         private bool HasSubqueries(Expression? expr, SubqueryAnalyzer analyzer)

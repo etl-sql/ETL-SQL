@@ -60,9 +60,11 @@ namespace ETL_SQL.Engine
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
         private readonly IBufferManager? _bufferManager;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _pendingJobStateUpdates = new();
 
         public IDictionary<string, IDataSource> Connections => _connections;
         public IDictionary<string, IDataSource> LocalSources => _localSources;
+        public Dictionary<string, string> PendingJobStateUpdates => _pendingJobStateUpdates;
 
         private readonly VariableScopeManager _variableScopeManager;
         private readonly EvaluatorComponentRegistry _registry;
@@ -176,6 +178,7 @@ namespace ETL_SQL.Engine
         public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
         public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
         public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
+        public string? JobName { get => _options.JobName; set => _options.JobName = value; }
         public bool LineageImportCatalog { get => _options.LineageImportCatalog; set => _options.LineageImportCatalog = value; }
         public bool TruncateString { get => _options.TruncateString; set => _options.TruncateString = value; }
         public bool SkipError { get => _options.SkipError; set => _options.SkipError = value; }
@@ -450,13 +453,16 @@ namespace ETL_SQL.Engine
             // Link Telemetry to registry components if needed, or initialized via registry.Initialize
             Telemetry.IsProfiling = _options.IsProfiling;
 
-            Functions.StandardFunctions.Register(functionRegistry);
-            Functions.FileFunctions.Register(functionRegistry);
-            Functions.LineageFunctions.Register(functionRegistry);
-            Functions.RegexFunctions.Register(functionRegistry);
-            Functions.JsonFunctions.Register(functionRegistry);
-            Functions.XmlFunctions.Register(functionRegistry);
-            Functions.FuzzyFunctions.Register(functionRegistry);
+            if (!functionRegistry.IsRegistered("GETDATE"))
+            {
+                Functions.StandardFunctions.Register(functionRegistry);
+                Functions.FileFunctions.Register(functionRegistry);
+                Functions.LineageFunctions.Register(functionRegistry);
+                Functions.RegexFunctions.Register(functionRegistry);
+                Functions.JsonFunctions.Register(functionRegistry);
+                Functions.XmlFunctions.Register(functionRegistry);
+                Functions.FuzzyFunctions.Register(functionRegistry);
+            }
             LanguageHelpService.Initialize(languageHelp);
 
             foreach (var h in handlers)
@@ -911,7 +917,10 @@ namespace ETL_SQL.Engine
 
                 // Auto-export OpenLineage at top-level script completion
                 if (CurrentRecursiveDepth == 0)
+                {
                     await AutoExportOpenLineageAsync(cancellationToken);
+                    await CommitPendingJobStateAsync();
+                }
             }
             catch (ReturnException ex)
             {
@@ -938,6 +947,61 @@ namespace ETL_SQL.Engine
             LastResult?.Clear();
             LastResult = null;
         }
+
+        private async Task CommitPendingJobStateAsync()
+        {
+            if (PendingJobStateUpdates.Count == 0) return;
+
+            if (!string.IsNullOrEmpty(JobName))
+            {
+                var store = ServiceProvider.GetService(typeof(Core.Data.IJobHistoryStore)) as Core.Data.IJobHistoryStore;
+                if (store != null)
+                {
+                    foreach (var kv in PendingJobStateUpdates)
+                    {
+                        await store.SetJobStateAsync(JobName, kv.Key, kv.Value);
+                    }
+                }
+            }
+            else
+            {
+                CommitLocalJobState();
+            }
+            PendingJobStateUpdates.Clear();
+        }
+
+        private void CommitLocalJobState()
+        {
+            if (string.IsNullOrEmpty(CurrentScriptPath)) return;
+            try
+            {
+                var stateFile = System.IO.Path.ChangeExtension(CurrentScriptPath, ".etlstate");
+                var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (System.IO.File.Exists(stateFile))
+                {
+                    var text = System.IO.File.ReadAllText(stateFile);
+                    var existing = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(text);
+                    if (existing != null)
+                    {
+                        foreach (var kv in existing)
+                            dict[kv.Key] = kv.Value;
+                    }
+                }
+
+                foreach (var kv in PendingJobStateUpdates)
+                {
+                    dict[kv.Key] = kv.Value;
+                }
+
+                var json = System.Text.Json.JsonSerializer.Serialize(dict, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                System.IO.File.WriteAllText(stateFile, json);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Failed to commit local job state: " + ex.Message);
+            }
+        }
+
         public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState() => _variableScopeManager.GetGlobalState();
 
         private static List<List<Statement>> SplitIntoBatches(List<Statement> statements)
@@ -1186,12 +1250,12 @@ namespace ETL_SQL.Engine
         public object? ResolveIdentifier(string name, Row? row)
         {
             // 1. Try current row
-            if (row != null && row.Columns.TryGetValue(name, out var val)) return val;
+            if (row != null && row.TryGetValue(name, out var val)) return val;
 
             // 2. Try outer row stack (for correlated subqueries)
             foreach (var outer in _outerRowStack)
             {
-                if (outer != null && outer.Columns.TryGetValue(name, out var oval)) return oval;
+                if (outer != null && outer.TryGetValue(name, out var oval)) return oval;
             }
 
             // 3. Try variables

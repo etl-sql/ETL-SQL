@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Core.Common
 {
@@ -18,6 +20,7 @@ namespace ETL_SQL.Core.Common
         }
 
         public Action<TValue>? OnEvicted { get; set; }
+        public Func<TValue, ValueTask>? OnEvictedAsync { get; set; }
 
         public int Count => _map.Count;
         public IEnumerable<TValue> Values => System.Linq.Enumerable.Select(_list, n => n.value);
@@ -54,6 +57,25 @@ namespace ETL_SQL.Core.Common
             _map[key] = node;
         }
 
+        public async ValueTask SetAsync(TKey key, TValue value)
+        {
+            if (_map.TryGetValue(key, out var existing))
+            {
+                await InvokeEvictedAsync(existing.Value.value);
+                _list.Remove(existing);
+                _map.Remove(key);
+            }
+            else if (_map.Count >= _capacity)
+            {
+                var lru = _list.Last!;
+                await InvokeEvictedAsync(lru.Value.value);
+                _list.RemoveLast();
+                _map.Remove(lru.Value.key);
+            }
+            var node = _list.AddFirst((key, value));
+            _map[key] = node;
+        }
+
         public void Clear()
         {
             if (OnEvicted != null)
@@ -62,6 +84,23 @@ namespace ETL_SQL.Core.Common
             }
             _map.Clear();
             _list.Clear();
+        }
+
+        public async ValueTask ClearAsync()
+        {
+            if (OnEvicted != null || OnEvictedAsync != null)
+            {
+                foreach (var item in _list) await InvokeEvictedAsync(item.value);
+            }
+            _map.Clear();
+            _list.Clear();
+        }
+
+        private async ValueTask InvokeEvictedAsync(TValue value)
+        {
+            OnEvicted?.Invoke(value);
+            if (OnEvictedAsync != null)
+                await OnEvictedAsync(value);
         }
     }
 }

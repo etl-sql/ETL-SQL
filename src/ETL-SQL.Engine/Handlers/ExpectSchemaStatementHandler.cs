@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -28,13 +30,72 @@ namespace ETL_SQL.Engine.Handlers
 
             _logger.Debug($"EXPECT SCHEMA checking '{stmt.Target}'");
 
+            List<ExpectedSchemaColumn> expectedColumns;
+            if (stmt.SchemaPath != null)
+            {
+                var cleanPath = stmt.SchemaPath.Trim('\'', '"');
+                var resolvedPath = context.ResolvePath(cleanPath);
+                if (!File.Exists(resolvedPath))
+                {
+                    throw new ExecutionException($"EXPECT SCHEMA: JSON specification file not found at '{resolvedPath}'.");
+                }
+
+                try
+                {
+                    expectedColumns = new List<ExpectedSchemaColumn>();
+                    using var stream = File.OpenRead(resolvedPath);
+                    using var doc = JsonDocument.Parse(stream);
+                    if (doc.RootElement.TryGetProperty("schema", out var schemaProp) && schemaProp.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var colElem in schemaProp.EnumerateArray())
+                        {
+                            string colName = colElem.GetProperty("column_name").GetString() ?? "";
+                            string typeFamily = colElem.GetProperty("type_family").GetString() ?? "VARCHAR";
+                            
+                            string dataType = typeFamily;
+                            if (colElem.TryGetProperty("max_length", out var maxLenProp) && maxLenProp.ValueKind == JsonValueKind.Number)
+                            {
+                                dataType += $"({maxLenProp.GetInt32()})";
+                            }
+                            else if (colElem.TryGetProperty("precision", out var precProp) && precProp.ValueKind == JsonValueKind.Number)
+                            {
+                                int precision = precProp.GetInt32();
+                                int scale = colElem.TryGetProperty("scale", out var scaleProp) && scaleProp.ValueKind == JsonValueKind.Number ? scaleProp.GetInt32() : 0;
+                                dataType += $"({precision},{scale})";
+                            }
+
+                            bool nullable = colElem.TryGetProperty("nullable", out var nullProp) && nullProp.ValueKind == JsonValueKind.True;
+                            
+                            expectedColumns.Add(new ExpectedSchemaColumn 
+                            { 
+                                ColumnName = colName, 
+                                DataType = dataType, 
+                                NotNull = !nullable 
+                            });
+                        }
+                    }
+                    else
+                    {
+                        throw new ExecutionException($"EXPECT SCHEMA: JSON specification file at '{resolvedPath}' does not contain a valid 'schema' array.");
+                    }
+                }
+                catch (Exception ex) when (ex is not ExecutionException)
+                {
+                    throw new ExecutionException($"EXPECT SCHEMA: Failed to parse JSON specification file at '{resolvedPath}': {ex.Message}");
+                }
+            }
+            else
+            {
+                expectedColumns = stmt.Columns ?? new List<ExpectedSchemaColumn>();
+            }
+
             // Resolve the actual schema from the data source
             Dictionary<string, string> actual = await GetActualSchemaAsync(stmt.Target, context);
 
             // Build a diff
             var issues = new List<string>();
 
-            foreach (var expected in stmt.Columns)
+            foreach (var expected in expectedColumns)
             {
                 if (!actual.TryGetValue(expected.ColumnName, out var actualType))
                 {

@@ -81,32 +81,29 @@ release begins.
 
 ### Recommended Near-Term Engine Features
 
-- [ ] **P1.1 Job-scoped state persistence / incremental watermarking** — Implement
+- [x] **P1.1 Job-scoped state persistence / incremental watermarking** — Implement
   `GET_JOB_STATE()` and `SET_JOB_STATE()` primitives for scheduled and ad-hoc incremental loads.
   Persist state in the orchestrator store for scheduled jobs, supporting both SQLite and PostgreSQL
   HA deployments, and use a tightly scoped local `[script_name].etlstate` fallback only for CLI
   development runs. State updates should commit only after successful script completion so failed
   loads do not advance watermarks.
-- [ ] **P1.2 Pushdown aggregation for staged extracts** — Allow eligible `SELECT ... INTO #temp`
+  *(done)* Added `JobState` table to DB dialects, implemented `GetJobStateAsync` and `SetJobStateAsync` in
+  `RelationalJobHistoryStore` (shared SQLite and Postgres dialect backend), and registered standard system
+  functions in `StandardFunctions.System.cs`. Evaluator buffers pending state updates and commits them atomically
+  on successful top-level script completion. Local CLI developer runs fallback to sibling `[script_name].etlstate`
+  JSON files.
+- [x] **P1.2 Pushdown aggregation for staged extracts** — Allow eligible `SELECT ... INTO #temp`
   queries with `GROUP BY` and aggregate functions to execute on SQL connectors via `IDatabaseSource`
   and stream only grouped results back into the engine. This reduces source load, network transfer,
   and engine memory pressure for large SQL-backed extracts.
-- [ ] **P1.3 Cross-connection semi-join pushdown** — For joins between a small local `#temp` table
+  *(done)* Modified `IsPushdownPossible` in `PushdownEngine.cs` to allow single-source SQL SELECT queries with aggregates, GROUP BY, DISTINCT, and joins when they are fully pushable and dialect-compilable. Modified `SelectStatementHandler.cs` (SELECT INTO route) to route eligible queries through the streaming pushdown pipeline. Fixed query compiler in `QueryCompiler.cs` to compile `CAST` and `TRY_CAST` target types raw (not parameterized) as `CAST(expr AS type)`. Added unit and integration tests in `StmtPushdownTests.cs`.
+- [x] **P1.3 Cross-connection semi-join pushdown** — For joins between a small local `#temp` table
   and a large remote SQL table, push a bounded, parameterized key filter into the remote query when
   the join is a simple single-column equijoin. Start with conservative limits, dialect-specific
   parameter handling, clear `EXPLAIN` visibility, and a guaranteed fallback to normal engine joins.
-- [ ] **P1.4 JSON/spec-backed schema contract checks** — Extend the existing `EXPECT SCHEMA`
+  *(done)* Implemented `SemiJoinPushdownOptimizer.OptimizeAsync` in `ETL-SQL.Core` to detect joins between local temp tables (1-1000 rows) and remote SQL connections. It rewrites the join target table to a subquery containing an `IN` clause with the local key values. Modified `QueryCompiler.cs` to explicitly compile `InExpression` and `ListExpression` using parameterized variables (e.g. `@p0`, `@p1`, etc.) to leverage driver caching and prevent SQL injection. Modified `DataSourceManager.cs` to resolve subquery table references at the start of `ResolveDataSourceAsync` so they evaluate properly during execution. Integrated with `ExplainPlanBuilder` to display `[SEMI-JOIN PUSHDOWN ON ...]` and validated with a suite of unit tests in `StmtPushdownTests.cs`.
+- [x] **P1.4 JSON/spec-backed schema contract checks** — Extend the existing `EXPECT SCHEMA`
   capability to load expected columns/types from a reviewed JSON/spec contract when needed, rather
   than introducing a competing `ASSERT SCHEMA` syntax. Keep inline `EXPECT SCHEMA` as the canonical
   script-native form and preserve `ON DRIFT WARN` behavior.
-
-### Lower-Priority Backlog
-
-- [ ] **P2.1 Collection/list ergonomics review** — Do not add higher-order list functions unless a
-  concrete workflow still has excessive boilerplate after using `FILE_LIST()`, `REMOTE_FILE_LIST()`,
-  SQL filtering, `FOREACH`, `SORT_LIST`, `APPEND_TO_LIST`, and `REMOVE_FROM_LIST`. Prefer examples
-  and table-shaped workflows first.
-- [ ] **P2.2 Interactive debugging feasibility spike** — Investigate debugger hooks,
-  `IDebuggerController`, DAP integration, and TUI controls as a separate IDE/runtime investment.
-  Treat it as useful developer experience work, not as a prerequisite for solving incremental load,
-  schema drift, or large-query scaling pain points.
+  *(done)* Extended `EXPECT SCHEMA` to parse and execute using `FROM 'path/to/spec.json'`. Evaluator checks column name, type family, limits, and nullability properties from the `"schema"` JSON array and compares it to actual schema. Supports `ON DRIFT WARN` and enforces Zero-Trust path resolution using `context.ResolvePath()`. Fully covered with unit and integration tests.

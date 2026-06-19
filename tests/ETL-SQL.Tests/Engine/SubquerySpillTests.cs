@@ -111,6 +111,13 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(cached!.StreamData);
             Assert.Null(cached.InSet);
 
+            var spilledRowCount = 0;
+            await foreach (var batch in cached.StreamData!.ReadBatches())
+            {
+                spilledRowCount += batch.Rows.Count;
+            }
+            Assert.Equal(500, spilledRowCount);
+
             // Second execution (Cache Hit)
             var result2 = await _evaluator.ExpressionEvaluator.EvaluateInternal(inExpr, contextRow);
             Assert.True((bool)result2!);

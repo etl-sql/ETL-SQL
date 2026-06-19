@@ -290,31 +290,43 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.SCHEMA, "Expected SCHEMA after EXPECT");
             var target = ConsumeIdentifier("Expected table or connection name after EXPECT SCHEMA").Value;
 
-            Consume(TokenType.LPAREN, "Expected '(' after target name in EXPECT SCHEMA");
+            List<ExpectedSchemaColumn>? columns = null;
+            string? schemaPath = null;
 
-            var columns = new List<ExpectedSchemaColumn>();
-            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            if (Match(TokenType.LPAREN))
             {
-                var colName = ConsumeIdentifier("Expected column name").Value;
-                string dataType = "VARCHAR";
-                if (_parser.IsIdentifier(_parser.Current))
+                columns = new List<ExpectedSchemaColumn>();
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
-                    dataType = Advance().Value;
-                    if (Match(TokenType.LPAREN))
+                    var colName = ConsumeIdentifier("Expected column name").Value;
+                    string dataType = "VARCHAR";
+                    if (_parser.IsIdentifier(_parser.Current))
                     {
-                        dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value;
-                        if (Match(TokenType.COMMA))
-                            dataType += "," + Consume(TokenType.NUMBER, "Expected scale").Value;
-                        dataType += ")";
-                        Consume(TokenType.RPAREN, "Expected ')' after type length");
+                        dataType = Advance().Value;
+                        if (Match(TokenType.LPAREN))
+                        {
+                            dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value;
+                            if (Match(TokenType.COMMA))
+                                dataType += "," + Consume(TokenType.NUMBER, "Expected scale").Value;
+                            dataType += ")";
+                            Consume(TokenType.RPAREN, "Expected ')' after type length");
+                        }
                     }
+                    bool notNull = false;
+                    if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); notNull = true; }
+                    columns.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
+                    Match(TokenType.COMMA);
                 }
-                bool notNull = false;
-                if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); notNull = true; }
-                columns.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
-                Match(TokenType.COMMA);
+                Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA column list");
             }
-            Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA column list");
+            else if (Match(TokenType.FROM))
+            {
+                schemaPath = Consume(TokenType.STRING_LITERAL, "Expected JSON specification file path after FROM").Value;
+            }
+            else
+            {
+                throw new SyntaxException("Expected '(' or 'FROM' after target name in EXPECT SCHEMA", _parser.Current.Line, _parser.Current.Column);
+            }
 
             bool warnOnDrift = false;
             if (Match(TokenType.ON))
@@ -337,6 +349,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 Target = target,
                 Columns = columns,
+                SchemaPath = schemaPath,
                 WarnOnDrift = warnOnDrift,
                 Line = startToken.Line,
                 Column = startToken.Column

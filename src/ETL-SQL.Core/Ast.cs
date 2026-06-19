@@ -1269,7 +1269,8 @@ namespace ETL_SQL.Core
     public sealed record ExpectSchemaStatement : Statement
     {
         public required string Target { get; init; }
-        public required List<ExpectedSchemaColumn> Columns { get; init; }
+        public List<ExpectedSchemaColumn>? Columns { get; init; }
+        public string? SchemaPath { get; init; }
         public bool WarnOnDrift { get; init; }
     }
 

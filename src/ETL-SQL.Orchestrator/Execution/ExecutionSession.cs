@@ -48,7 +48,7 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger = logger;
         }
 
-        public async Task<ExecutionResult> ExecuteAsync(string source, CancellationToken cancellationToken = default)
+        public async Task<ExecutionResult> ExecuteAsync(string source, CancellationToken cancellationToken = default, string? jobName = null)
         {
             var result = new ExecutionResult();
             var timer = Stopwatch.StartNew();
@@ -106,6 +106,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.BatchSize = _ctx.BatchSize;
                 evaluator.IsVerbose = _ctx.IsVerbose;
                 evaluator.SessionId = _ctx.SessionId;
+                evaluator.JobName = jobName;
                 evaluator.Telemetry.IsProfiling = true;
                 evaluator.RedirectOutput = true;
 

@@ -366,6 +366,7 @@ namespace ETL_SQL.Core
         bool IsWhatIf { get; set; }
         bool LineageEnabled { get; set; }
         string? LineageNamespace { get; set; }
+        string? JobName { get; set; }
         bool LineageImportCatalog { get; set; }
         bool TruncateString { get; set; }
         bool SkipError { get; set; }
@@ -373,6 +374,7 @@ namespace ETL_SQL.Core
         bool DisplayExecuteTree { get; set; }
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         Guid? CurrentNodeId { get; set; }
+        Dictionary<string, string> PendingJobStateUpdates { get; }
 
         /// <summary>Standardizer for file/path security and runaway protection.</summary>
         ETL_SQL.Services.SecurityService SecurityService { get; }

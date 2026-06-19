@@ -522,5 +522,27 @@ namespace ETL_SQL.Tests.Orchestration
             var jobs = (await legacyStore.GetAllJobsAsync()).ToList();
             Assert.Single(jobs);
         }
+
+        [Fact]
+        public async Task JobState_GetAndSet_SavesCorrectly()
+        {
+            await _store.InitializeAsync();
+
+            // Set state
+            await _store.SetJobStateAsync("TestJob", "Watermark", "2026-06-19");
+
+            // Get state
+            var value = await _store.GetJobStateAsync("TestJob", "Watermark");
+            Assert.Equal("2026-06-19", value);
+
+            // Get state for non-existent key
+            var missing = await _store.GetJobStateAsync("TestJob", "NonExistentKey");
+            Assert.Null(missing);
+
+            // Overwrite state (upsert check)
+            await _store.SetJobStateAsync("TestJob", "Watermark", "2026-06-20");
+            var updated = await _store.GetJobStateAsync("TestJob", "Watermark");
+            Assert.Equal("2026-06-20", updated);
+        }
     }
 }

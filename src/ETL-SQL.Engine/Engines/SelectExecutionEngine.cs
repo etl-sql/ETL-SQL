@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Core.Planning;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -61,6 +62,7 @@ namespace ETL_SQL.Engine.Engines
             // Qualify bare identifiers (e.g. col → alias.col) so the predicate optimizer
             // can attribute each predicate to the correct source alias.
             stmt = await IdentifierQualifier.QualifyAsync(stmt, _context);
+            stmt = await SemiJoinPushdownOptimizer.OptimizeAsync(stmt, _context);
 
             // Logical optimizer: classify WHERE predicates by scope and promote eligible
             // CROSS JOIN → INNER JOIN rewrites (subsumes CrossJoinPredicatePushdown).

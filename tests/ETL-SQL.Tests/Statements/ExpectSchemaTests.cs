@@ -158,5 +158,113 @@ namespace ETL_SQL.Tests.Statements
                 ")));
             Assert.Contains("not found", ex.Message);
         }
+
+        // ── Parser FROM Clause ────────────────────────────────────────────────
+        [Fact]
+        public void ParsesExpectSchemaWithJsonSpec()
+        {
+            var script = Parse("EXPECT SCHEMA #data FROM 'TestData/Specs/customer_spec.json';");
+            Assert.Single(script.Statements);
+            var stmt = Assert.IsType<ExpectSchemaStatement>(script.Statements[0]);
+            Assert.Equal("#data", stmt.Target);
+            Assert.Null(stmt.Columns);
+            Assert.Equal("TestData/Specs/customer_spec.json", stmt.SchemaPath);
+            Assert.False(stmt.WarnOnDrift);
+        }
+
+        [Fact]
+        public void ParsesExpectSchemaWithJsonSpecAndOnDriftWarn()
+        {
+            var script = Parse("EXPECT SCHEMA #data FROM 'TestData/Specs/customer_spec.json' ON DRIFT WARN;");
+            var stmt = Assert.IsType<ExpectSchemaStatement>(script.Statements[0]);
+            Assert.True(stmt.WarnOnDrift);
+        }
+
+        // ── Execution FROM Clause ─────────────────────────────────────────────
+        private static string FindProjectRoot()
+        {
+            string currentDir = System.IO.Directory.GetCurrentDirectory();
+            while (currentDir != null && !System.IO.File.Exists(System.IO.Path.Combine(currentDir, "ETL-SQL.slnx")))
+                currentDir = System.IO.Directory.GetParent(currentDir)?.FullName;
+            return currentDir ?? System.IO.Directory.GetCurrentDirectory();
+        }
+
+        [Fact]
+        public async Task PassesWhenJsonSpecMatches()
+        {
+            var ev = GetEvaluator();
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+            
+            await ev.Evaluate(Parse($@"
+                CREATE TABLE #data (
+                    customer_id INT, 
+                    first_name VARCHAR(50), 
+                    last_name VARCHAR(50), 
+                    email VARCHAR(255), 
+                    signup_date DATE, 
+                    is_active BIT
+                );
+                EXPECT SCHEMA #data FROM '{specPath}';
+            "));
+        }
+
+        [Fact]
+        public async Task ThrowsOnMissingColumnWithJsonSpec()
+        {
+            var ev = GetEvaluator();
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+                await ev.Evaluate(Parse($@"
+                    CREATE TABLE #data (
+                        customer_id INT, 
+                        first_name VARCHAR(50)
+                    );
+                    EXPECT SCHEMA #data FROM '{specPath}';
+                ")));
+            Assert.Contains("MISSING", ex.Message);
+            Assert.Contains("last_name", ex.Message);
+        }
+
+        [Fact]
+        public async Task ThrowsOnTypeFamilyMismatchWithJsonSpec()
+        {
+            var ev = GetEvaluator();
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+
+            var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+                await ev.Evaluate(Parse($@"
+                    CREATE TABLE #data (
+                        customer_id VARCHAR, 
+                        first_name VARCHAR(50), 
+                        last_name VARCHAR(50), 
+                        email VARCHAR(255), 
+                        signup_date DATE, 
+                        is_active BIT
+                    );
+                    EXPECT SCHEMA #data FROM '{specPath}';
+                ")));
+            Assert.Contains("TYPE DRIFT", ex.Message);
+            Assert.Contains("customer_id", ex.Message);
+        }
+
+        [Fact]
+        public async Task WarnOnDriftWithJsonSpecLogsWarningInsteadOfThrowing()
+        {
+            var ev = GetEvaluator();
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+
+            await ev.Evaluate(Parse($@"
+                CREATE TABLE #data (
+                    customer_id VARCHAR, 
+                    first_name VARCHAR(50), 
+                    last_name VARCHAR(50), 
+                    email VARCHAR(255), 
+                    signup_date DATE, 
+                    is_active BIT
+                );
+                EXPECT SCHEMA #data FROM '{specPath}' ON DRIFT WARN;
+            "));
+        }
     }
 }

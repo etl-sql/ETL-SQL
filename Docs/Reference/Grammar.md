@@ -998,6 +998,7 @@ END CATCH
 ### 4.12 `EXPECT SCHEMA`
 Validates that a table or connection has the expected column names and type families.
 
+**Inline syntax:**
 ```sql
 EXPECT SCHEMA #staging (
     CustomerId INT,
@@ -1010,7 +1011,27 @@ EXPECT SCHEMA #staging (
     CustomerId INT,
     Name       VARCHAR
 ) ON DRIFT WARN;
+```
 
+**JSON contract specification-backed syntax:**
+```sql
+-- Validates columns and type families loaded from a reviewed JSON contract spec file
+EXPECT SCHEMA #staging FROM 'Specs/customer_spec.json';
+
+-- Warn instead of halting on drift
+EXPECT SCHEMA #staging FROM 'Specs/customer_spec.json' ON DRIFT WARN;
+```
+
+The JSON specification file must contain a top-level `"schema"` array of objects:
+- `column_name` — (string, required) Name of the column.
+- `type_family` — (string, required) Expected data type family (e.g., `VARCHAR`, `INT`, `DECIMAL`).
+- `nullable` — (boolean, optional) Set to `true` to allow null values, or `false` (default) to enforce NOT NULL.
+- `max_length` — (number, optional) Maximum character length for string fields.
+- `precision` — (number, optional) Precision for numeric fields.
+- `scale` — (number, optional) Scale for numeric fields.
+
+**Named connection checks:**
+```sql
 -- Also works against named connections
 EXPECT SCHEMA myConnection (
     OrderId   INT,

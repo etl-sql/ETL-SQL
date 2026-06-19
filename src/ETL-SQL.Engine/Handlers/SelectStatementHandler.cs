@@ -63,7 +63,16 @@ namespace ETL_SQL.Engine.Handlers
                 var destination = await context.ResolveDataSourceAsync(intoTable);
                 await destination.TruncateAsync();
 
-                var batches = EvaluateQuery(statement, context);
+                IAsyncEnumerable<DataTable> batches;
+                if (statement is SelectStatement selectQuery &&
+                    _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
+                {
+                    batches = _pushdownEngine.ExecuteStreamingPushdown(selectQuery with { IntoTable = null }, connName!, context);
+                }
+                else
+                {
+                    batches = EvaluateQuery(statement, context);
+                }
 
                 var targetCols = (await destination.GetColumnsAsync()).ToList();
                 if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);

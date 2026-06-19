@@ -429,9 +429,38 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `@@ROWCOUNT` | Number of rows processed by the last statement |
 | `@@FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
 | `@@DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
+| `GET_JOB_STATE(key)` | Returns the saved state value for the current script/job context |
+| `SET_JOB_STATE(key, val)` | Sets the saved state value for the current script/job context (committed on success) |
 
 > [!IMPORTANT]
 > **Security Guardrail (Zero-Trust):** To prevent unauthorized harvesting of host information, `ENV()` can only access environment variables explicitly authorized in the `SecurityService.AllowedEnvVars` allow-list. Accessing an unauthorized variable throws a `SecurityException`.
+
+### Incremental Load & Job State Functions
+
+#### `GET_JOB_STATE`
+- **Signature:** `GET_JOB_STATE(key)`
+- **Return Type:** `STRING` (or `NULL` if not set)
+- **Example:**
+```sql
+DECLARE @last_watermark VARCHAR = COALESCE(GET_JOB_STATE('last_loaded_id'), '0');
+
+SELECT * INTO #staging 
+FROM source.orders 
+WHERE order_id > @last_watermark;
+```
+
+#### `SET_JOB_STATE`
+- **Signature:** `SET_JOB_STATE(key, value)`
+- **Return Type:** `STRING` (returns the assigned value)
+- **Example:**
+```sql
+DECLARE @max_id INT = (SELECT MAX(order_id) FROM #staging);
+
+IF @max_id IS NOT NULL
+BEGIN
+    SET_JOB_STATE('last_loaded_id', CAST(@max_id AS VARCHAR));
+END
+```
 
 ---
 

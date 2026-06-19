@@ -251,20 +251,21 @@ Three conditions must all be true:
 
 SQL Server, Postgres, and Oracle connectors return `true`. FlatFile, JSON, XML, ODBC, and REST return `false`.
 
-### How SelectStatementHandler uses it (line 33)
+### Pushdown Aggregation & Streaming Pushdown for `INTO` Targets
 
-```csharp
-if (statement is SelectStatement selPush
-    && selPush.IntoTable == null
-    && context.IsSqlPushdown(selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName))
-{
-    // reconstruct SQL string, call ds.ExecuteRawSql(sql)
-}
-```
+When executing a `SELECT ... INTO #temp` statement, the engine optimizes the query by pushing down operations to the source SQL database whenever possible, rather than pulling raw tables and performing filters or aggregates in engine memory.
 
-The `INTO` clause check is important: even if the connection supports pushdown, the result must be captured into memory when routing to a `#temp` table. In that case the query is executed via `ExecuteRawSql` to stream rows in, which are then written to the `InMemoryDataSource`.
+The `SelectStatementHandler` leverages `PushdownEngine.IsPushdownPossible()` to determine if a query can be pushed down. If eligible, it compiles the query (with the `INTO` clause omitted) and executes a streaming pushdown via `_pushdownEngine.ExecuteStreamingPushdown()`. The remote database evaluates the filtering, aggregates, and joins natively, and only the final result set is streamed into the engine's local `#temp` table.
 
-When pushdown is not possible, the full table is read via `IDataSource.ReadBatches()` and the in-process query pipeline (filtering, aggregation, joins) runs inside the engine.
+This optimization applies to:
+- Single-source SQL queries with `GROUP BY` and aggregate functions.
+- Queries using `DISTINCT`, filtering, and compatible joins.
+
+If pushdown is not possible (e.g. referencing file sources or using non-pushable engine functions), the engine falls back to standard in-process evaluation, where raw partitions are read via `IDataSource.ReadBatches()` and processed in memory.
+
+### Cross-Connection Semi-Join Pushdown
+
+For joins between a small local `#temp` table (1-1000 rows) and a large remote SQL table, the optimizer (`SemiJoinPushdownOptimizer`) rewrites the remote query to push a parameterized key filter (using an `IN` clause) directly into the remote SQL engine. This prevents pulling the entire remote table into engine memory, while avoiding SQL injection and leveraging query cache via parameterized parameters (e.g. `@p0`, `@p1`). Detailed optimization steps are exposed in `EXPLAIN` output marked with `[SEMI-JOIN PUSHDOWN ON ...]`.
 
 ---
 

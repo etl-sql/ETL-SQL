@@ -49,6 +49,11 @@ namespace ETL_SQL.Engine.Services
         /// </summary>
         public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
         {
+            if (table.Subquery != null)
+            {
+                return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
+            }
+
             string name = table.ConnectionName ?? table.TableName;
             IDataSource? source = null;
 
@@ -73,10 +78,6 @@ namespace ETL_SQL.Engine.Services
                 // across statement boundaries within the session.
                 connections[name] = mem;
                 source = mem;
-            }
-            else if (table.Subquery != null)
-            {
-                return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
             }
             else if (table.ValuesRows != null)
             {

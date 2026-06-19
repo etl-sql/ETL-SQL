@@ -167,8 +167,17 @@ namespace ETL_SQL.Orchestrator.Storage
                     ExpiresAt TEXT NOT NULL
                 );";
 
+                var createJobStateTable = @"
+                CREATE TABLE IF NOT EXISTS JobState (
+                    JobName TEXT NOT NULL,
+                    StateKey TEXT NOT NULL,
+                    StateValue TEXT,
+                    UpdatedAt TEXT NOT NULL,
+                    PRIMARY KEY (JobName, StateKey)
+                );";
+
                 var schema = createJobsTable + createHistoryTable + createBundleTables
-                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable;
+                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable;
                 // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                 // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                 // COLLATE NOCASE indexes/queries resolve.
@@ -990,6 +999,42 @@ namespace ETL_SQL.Orchestrator.Storage
                 ));
             }
             return entries;
+        }
+
+        public async Task<string?> GetJobStateAsync(string jobName, string key)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT StateValue FROM JobState WHERE JobName = @jobName AND StateKey = @key;";
+            command.AddParam("@jobName", jobName);
+            command.AddParam("@key", key);
+
+            var result = await command.ExecuteScalarAsync();
+            return result == null || result == DBNull.Value ? null : (string?)result;
+        }
+
+        public async Task SetJobStateAsync(string jobName, string key, string? value)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT INTO JobState (JobName, StateKey, StateValue, UpdatedAt)
+                VALUES (@jobName, @key, @value, @updatedAt)
+                ON CONFLICT (JobName, StateKey)
+                DO UPDATE SET StateValue = EXCLUDED.StateValue, UpdatedAt = EXCLUDED.UpdatedAt;";
+
+            command.AddParam("@jobName", jobName);
+            command.AddParam("@key", key);
+            command.AddParam("@value", value);
+            command.AddParam("@updatedAt", DateTime.UtcNow.ToString("o"));
+
+            await command.ExecuteNonQueryAsync();
         }
 
         public async Task<BundleVersionInfo> PublishBundleAsync(BundlePublishRequest request)

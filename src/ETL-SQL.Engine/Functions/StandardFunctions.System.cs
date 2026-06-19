@@ -46,6 +46,61 @@ namespace ETL_SQL.Engine.Functions
             }, "ENV('VAR_NAME'): Returns the value of a host environment variable (subject to security allow-list).");
 
             registry.RegisterWithHelp("CONNECTION_PROPERTY", ConnectionProperty, "CONNECTION_PROPERTY(conn_name, prop_name): Returns the value of a connection property, masking sensitive properties.");
+
+            registry.RegisterWithHelp("GET_JOB_STATE", (args, ctx) =>
+            {
+                if (args.Count < 1) throw new ExecutionException("GET_JOB_STATE requires at least 1 argument (key)");
+                string? key = args[0]?.ToString();
+                if (string.IsNullOrEmpty(key)) return null;
+
+                if (!string.IsNullOrEmpty(ctx.JobName))
+                {
+                    var store = ctx.ServiceProvider.GetService(typeof(Core.Data.IJobHistoryStore)) as Core.Data.IJobHistoryStore;
+                    if (store != null)
+                    {
+                        return store.GetJobStateAsync(ctx.JobName, key).GetAwaiter().GetResult();
+                    }
+                }
+                else
+                {
+                    return GetLocalJobState(ctx, key);
+                }
+                return null;
+            }, "GET_JOB_STATE(key): Returns the saved state value for the current script/job execution context.");
+
+            registry.RegisterWithHelp("SET_JOB_STATE", (args, ctx) =>
+            {
+                if (args.Count < 2) throw new ExecutionException("SET_JOB_STATE requires 2 arguments (key, value)");
+                string? key = args[0]?.ToString();
+                string? value = args[1]?.ToString();
+                if (string.IsNullOrEmpty(key)) return null;
+
+                ctx.PendingJobStateUpdates[key] = value ?? "";
+                return value;
+            }, "SET_JOB_STATE(key, value): Sets the saved state value for the current script/job context (committed only on successful execution).");
+        }
+
+        private static string? GetLocalJobState(IExecutionContext ctx, string key)
+        {
+            if (string.IsNullOrEmpty(ctx.CurrentScriptPath)) return null;
+            try
+            {
+                var stateFile = System.IO.Path.ChangeExtension(ctx.CurrentScriptPath, ".etlstate");
+                if (System.IO.File.Exists(stateFile))
+                {
+                    var text = System.IO.File.ReadAllText(stateFile);
+                    var dict = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(text);
+                    if (dict != null && dict.TryGetValue(key, out var val))
+                    {
+                        return val;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ctx.Logger.Warning("Failed to read local job state: " + ex.Message);
+            }
+            return null;
         }
 
         private static object? AddToList(List<object?> args, IExecutionContext ctx)

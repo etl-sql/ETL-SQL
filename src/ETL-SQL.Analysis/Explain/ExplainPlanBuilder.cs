@@ -1,5 +1,6 @@
 using ETL_SQL.Core;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Planning;
 
 namespace ETL_SQL.Analysis.Explain
 {
@@ -11,6 +12,7 @@ namespace ETL_SQL.Analysis.Explain
 
             if (query is SelectStatement select)
             {
+                select = await SemiJoinPushdownOptimizer.OptimizeAsync(select, context);
                 await GenerateSelectPlan(select, plan, id, context, metrics);
             }
             else if (query is SetOperationStatement setOp)
@@ -66,6 +68,10 @@ namespace ETL_SQL.Analysis.Explain
 
                     var joinOp = isHash ? "Hash Join" : "Join";
                     var joinDetails = $"Type: {join.JoinType}, Table: {join.Table.ToSql()}, Condition: {join.Condition.ToSql()}";
+                    if (join.Table.Metadata != null && join.Table.Metadata.TryGetValue("SEMI_JOIN_PUSHDOWN", out var semijoinDetail))
+                    {
+                        joinDetails += $", {semijoinDetail}";
+                    }
 
                     if (joinSource is InMemoryDataSource memJoin)
                     {

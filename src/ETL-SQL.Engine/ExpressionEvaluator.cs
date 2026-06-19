@@ -62,38 +62,62 @@ namespace ETL_SQL.Engine
             return false;
         }
 
-        private object? ResolveIdentifier(string name, Row? context)
+        private bool TryResolveIdentifier(string name, Row? context, out object? value)
         {
-            if (name.StartsWith("@")) return _context.VarContext.GetVariable(name);
+            if (name.StartsWith("@"))
+            {
+                if (_context.VarContext.ContainsVariable(name))
+                {
+                    value = _context.VarContext.GetVariable(name);
+                    return true;
+                }
+                value = null;
+                return false;
+            }
 
             // 1. Check immediate context (with ambiguity check)
             if (context != null)
             {
-                // HasColumn check must precede the null check so a null column value in the
-                // inner scope is returned as null rather than leaking through to the outer scope.
-                if (context.HasColumn(name)) return context[name];
+                if (context.TryGetValue(name, out value)) return true;
                 var fb = ResolveIdentifierFallback(name, context);
-                if (fb != null) return fb;
+                if (fb != null)
+                {
+                    value = fb;
+                    return true;
+                }
             }
 
             // 2. Check outer scopes (exact match)
             foreach (var outer in _context.OuterRowStack)
             {
-                if (outer != null)
+                if (outer != null && outer.TryGetValue(name, out value))
                 {
-                    var outerVal = outer[name];
-                    if (outerVal != null || outer.HasColumn(name)) return outerVal;
+                    return true;
                 }
             }
 
             // 3. Fallback: search for column in outer scopes
             foreach (var outer in _context.OuterRowStack)
             {
-                var fb = ResolveIdentifierFallback(name, outer);
-                if (fb != null) return fb;
+                if (outer != null)
+                {
+                    var fb = ResolveIdentifierFallback(name, outer);
+                    if (fb != null)
+                    {
+                        value = fb;
+                        return true;
+                    }
+                }
             }
 
-            return null;
+            value = null;
+            return false;
+        }
+
+        private object? ResolveIdentifier(string name, Row? context)
+        {
+            TryResolveIdentifier(name, context, out var value);
+            return value;
         }
 
         /// <summary>
@@ -677,7 +701,7 @@ namespace ETL_SQL.Engine
                 _outerRefCache[query] = outerRefs;
             }
 
-            var captureValues = new List<object?>();
+            var captureValues = new List<object?>(outerRefs.Count);
             foreach (var or in outerRefs)
             {
                 // Only capture if it's actually an outer reference (resolvable in outer scope)
@@ -758,10 +782,38 @@ namespace ETL_SQL.Engine
 
             _context.Telemetry.SubqueryCacheMisses++;
 
-            // Materialize or Spill fully BEFORE yielding to ensure cache is populated
+            // Materialize or spill fully before yielding so the cache is populated.
+            // IN only needs the first projected value, so spilled cache rows use a
+            // compact single-column schema instead of copying the full subquery row.
             long rowCount = 0;
             var inSet = new HashSet<object?>(CanonicalEqualityComparer.Instance);
             InMemoryDataSource? spillStore = null;
+            DataTable? spillBatch = null;
+            var spillSchema = new TableSchema(new[] { "Value" });
+
+            async Task AddSpillValueAsync(object? value)
+            {
+                if (spillStore == null)
+                    throw new InvalidOperationException("Subquery spill store has not been initialized.");
+
+                spillBatch ??= new DataTable { Schema = spillSchema };
+                await spillBatch.AddRowAsync(new Row(spillSchema, new[] { value }));
+
+                if (spillBatch.Rows.Count >= _context.BatchSize)
+                {
+                    await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { spillBatch }), append: true);
+                    spillBatch = null;
+                }
+            }
+
+            async Task FlushSpillBatchAsync()
+            {
+                if (spillStore != null && spillBatch != null && spillBatch.Rows.Count > 0)
+                {
+                    await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { spillBatch }), append: true);
+                    spillBatch = null;
+                }
+            }
 
             _context.OuterRowStack.Push(context);
             try
@@ -775,20 +827,15 @@ namespace ETL_SQL.Engine
 
                         if (spillStore != null)
                         {
-                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { batch }));
+                            await AddSpillValueAsync(val);
                         }
                         else if (rowCount > _context.SubquerySpillThresholdRows)
                         {
                             spillStore = new InMemoryDataSource();
-                            spillStore.SetSchema(batch.Schema.ColumnNames.Select(c => new ColumnDefinition(c, "VARIANT", false)).ToList());
+                            spillStore.SetSchema(new[] { new ColumnDefinition("Value", "VARIANT", false) });
 
-                            var dt = new DataTable { Schema = new TableSchema(new[] { "Value" }) };
-                            foreach (var existing in inSet!) await dt.AddRowAsync(new Row(dt.Schema, new[] { existing }));
-                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { dt }));
-
-                            var currentBatch = new DataTable { Schema = batch.Schema };
-                            await currentBatch.AddRowAsync(row);
-                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { currentBatch }));
+                            foreach (var existing in inSet!) await AddSpillValueAsync(existing);
+                            await AddSpillValueAsync(val);
                             inSet = null;
                         }
                         else
@@ -807,6 +854,7 @@ namespace ETL_SQL.Engine
             SubqueryResult finalResult;
             if (spillStore != null)
             {
+                await FlushSpillBatchAsync();
                 finalResult = new SubqueryResult(spillStore);
                 _context.SubqueryCache.Set(cacheKey, finalResult);
                 await foreach (var batch in spillStore.ReadBatches())
@@ -994,8 +1042,7 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates an identifier (column name or special variable).</summary>
         private async ValueTask<object?> EvaluateIdentifier(IdentifierExpression id, Row context)
         {
-            var val = ResolveIdentifier(id.Name, context);
-            if (val != null || (context != null && context.HasColumn(id.Name))) return val;
+            if (TryResolveIdentifier(id.Name, context, out var val)) return val;
 
             // Docker Connection Strings
             if (id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))

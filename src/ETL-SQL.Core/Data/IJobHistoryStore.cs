@@ -114,5 +114,9 @@ namespace ETL_SQL.Core.Data
         Task<long> LogJobStartAsync(string jobName);
         Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);
         Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
+
+        // State Management
+        Task<string?> GetJobStateAsync(string jobName, string key);
+        Task SetJobStateAsync(string jobName, string key, string? value);
     }
 }

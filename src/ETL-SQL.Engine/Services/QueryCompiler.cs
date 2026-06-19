@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
@@ -69,6 +69,24 @@ namespace ETL_SQL.Engine.Services
             }
             if (e is FunctionCallExpression f)
             {
+                if (f.FunctionName.Equals("CAST", StringComparison.OrdinalIgnoreCase) ||
+                    f.FunctionName.Equals("TRY_CAST", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (f.Arguments.Count >= 2)
+                    {
+                        var castExpr = CompileExpressionInternal(f.Arguments[0], d);
+                        string typeStr = "";
+                        if (f.Arguments[1] is LiteralExpression litType)
+                        {
+                            typeStr = litType.Value?.ToString() ?? "";
+                        }
+                        else
+                        {
+                            typeStr = CompileExpressionInternal(f.Arguments[1], d);
+                        }
+                        return $"{f.FunctionName.ToUpperInvariant()}({castExpr} AS {typeStr})";
+                    }
+                }
                 var args = string.Join(", ", f.Arguments.Select(a => CompileExpressionInternal(a, d)));
                 return $"{f.FunctionName}({args})";
             }
@@ -79,7 +97,20 @@ namespace ETL_SQL.Engine.Services
                 _currentParams[pName] = val;
                 return pName;
             }
-            return e?.ToString() ?? "";
+            if (e is InExpression inExp)
+            {
+                var not = inExp.IsNot ? "NOT " : "";
+                if (inExp.Subquery != null)
+                {
+                    return $"{CompileExpressionInternal(inExp.Left, d)} {not}IN ({CompileQueryInternal(inExp.Subquery, d)})";
+                }
+                return $"{CompileExpressionInternal(inExp.Left, d)} {not}IN {CompileExpressionInternal(inExp.Right, d)}";
+            }
+            if (e is ListExpression list)
+            {
+                return "(" + string.Join(", ", list.Items.Select(item => CompileExpressionInternal(item, d))) + ")";
+            }
+            return e?.ToSql() ?? "";
         }
 
         /// <summary>

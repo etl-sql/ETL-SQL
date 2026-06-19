@@ -45,7 +45,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     _ctx.SessionId = sessionId;
 
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
-                var result = await session.ExecuteAsync(scriptText, cancellationToken);
+                var result = await session.ExecuteAsync(scriptText, cancellationToken, jobName);
                 LastEvaluator = session.LastEvaluator;
 
                 // Persist lineage to the cross-run catalog (fire-and-forget errors so they never fail the job)

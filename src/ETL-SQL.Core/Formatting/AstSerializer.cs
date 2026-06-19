@@ -92,6 +92,7 @@ namespace ETL_SQL.Core.Formatting
             MergeFilesStatement s => $"MERGE FILES {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.Header != null || s.Overwrite != null ? " WITH(" + string.Join(", ", new[] { s.Header != null ? $"HEADER={s.Header.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
             SyncDirectoryStatement s => $"SYNC DIRECTORY {s.Source.ToSql()} TO {s.Destination.ToSql()}" + (s.DeleteExtra != null || s.Overwrite != null || s.Recursive != null ? " WITH(" + string.Join(", ", new[] { s.DeleteExtra != null ? $"DELETE_EXTRA={s.DeleteExtra.ToSql()}" : null, s.Overwrite != null ? $"OVERWRITE={s.Overwrite.ToSql()}" : null, s.Recursive != null ? $"RECURSIVE={s.Recursive.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
             VerifyFileIntegrityStatement s => $"VERIFY FILE INTEGRITY {s.Source.ToSql()}" + (s.HashFile != null || s.ExpectedHash != null || s.Algorithm != null ? " WITH(" + string.Join(", ", new[] { s.HashFile != null ? $"HASH_FILE={s.HashFile.ToSql()}" : null, s.ExpectedHash != null ? $"EXPECTED_HASH={s.ExpectedHash.ToSql()}" : null, s.Algorithm != null ? $"ALGORITHM={s.Algorithm.ToSql()}" : null }.Where(x => x != null)) + ")" : "") + ";",
+            ExpectSchemaStatement s => FormatExpectSchema(s),
 
             // ── Docker ──
             DockerStatement s => s.Alias != null ? $"USE DOCKER({s.ImageName.ToSql()}) AS {s.Alias};" : $"USE DOCKER({s.ImageName.ToSql()});",
@@ -1051,6 +1052,21 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatExportScript(ExportScriptStatement s)
         {
             return $"EXPORT SCRIPT {s.SourcePath.ToSql()} TO {s.TargetPath.ToSql()};";
+        }
+
+        private static string FormatExpectSchema(ExpectSchemaStatement s)
+        {
+            var target = s.Target;
+            var drift = s.WarnOnDrift ? " ON DRIFT WARN" : "";
+            if (s.SchemaPath != null)
+            {
+                var cleanPath = s.SchemaPath.Trim('\'', '"');
+                return $"EXPECT SCHEMA {target} FROM '{cleanPath.Replace("'", "''")}'{drift};";
+            }
+            var cols = s.Columns != null
+                ? "(" + string.Join(", ", s.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.NotNull ? " NOT NULL" : "")}")) + ")"
+                : "()";
+            return $"EXPECT SCHEMA {target} {cols}{drift};";
         }
     }
 }

@@ -758,11 +758,11 @@ EXPECT SCHEMA #staging (
     Amount     DECIMAL(18,2)
 );
 
--- Warn instead of abort (script continues, but logs a yellow warning)
-EXPECT SCHEMA #staging (
-    CustomerId INT,
-    Name       VARCHAR
-) ON DRIFT WARN;
+-- Validate against a reviewed JSON specification contract file
+EXPECT SCHEMA #staging FROM 'Specs/customer_spec.json';
+
+-- Warn instead of abort (script continues, but logs a warning)
+EXPECT SCHEMA #staging FROM 'Specs/customer_spec.json' ON DRIFT WARN;
 ```
 
 ### 7.4 Truncation and Error Handling Configurations
