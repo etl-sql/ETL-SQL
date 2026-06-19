@@ -56,8 +56,13 @@ release begins.
   validator rejects broad writable ACLs on Windows and group/other-writable modes on Unix. HTTPS
   sources reject non-HTTPS URIs, validate loaded v1.0 policy documents, and can be combined through
   a loader/factory that falls back across configured sources.
-- [ ] **P1.6 Implement offline policy cache windows** with fail-secure behavior when a policy
+- [x] **P1.6 Implement offline policy cache windows** with fail-secure behavior when a policy
   expires or cannot be validated.
+  *(done)* Added cache-aware organization policy loading. Live policy loads now refresh a validated
+  cache entry; if all live sources fail, the loader may use the cached policy only while it remains
+  inside the configured offline window. Missing, invalid, disabled, or expired cache state fails
+  secure. A file cache store persists validated policy envelopes with protected-file validation on
+  read and owner-only Unix permissions on write.
 
 ### Phase 3 - Named Secret References
 
