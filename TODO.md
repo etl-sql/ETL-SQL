@@ -27,8 +27,13 @@ release begins.
   Orchestrator, and language-server hosts can consume the same catalog. Tests cover duplicate-key
   rejection, environment-style key normalization, default classification coverage, pinned core keys,
   and DI registration.
-- [ ] **P1.2 Enforce policy against parsed AST nodes** instead of text matching, with policy
+- [x] **P1.2 Enforce policy against parsed AST nodes** instead of text matching, with policy
   decisions attached to diagnostics.
+  *(done)* Added structured `GovernancePolicyDecision` metadata and threaded it through core
+  parser diagnostics, lint results, and neutral analysis diagnostics. The existing
+  `ConnectionEncryptionRule` now emits a central `Engine:AllowPlaintextSecrets` policy violation
+  for plaintext connector secrets discovered from parsed `CreateConnectionStatement` AST nodes.
+  Tests verify policy metadata propagation and that commented plaintext connection text is ignored.
 - [ ] **P1.3 Apply policy at compile/lint time and execution time** so bypassing the linter does
   not bypass runtime enforcement.
 

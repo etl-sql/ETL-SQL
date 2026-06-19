@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
@@ -38,6 +39,32 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Single(results);
             Assert.Equal("SEC-PLAIN-CONN", results.First().Code);
             Assert.Contains("plaintext password", results.First().Message);
+        }
+
+        [Fact]
+        public async Task ConnectionEncryptionRule_Attaches_GovernancePolicyDecision_To_Plaintext_Findings()
+        {
+            var sql = "CREATE CONNECTION c AS MSSQL(PASSWORD='secret');";
+            var script = Parse(sql);
+            var rule = new ConnectionEncryptionRule();
+            var result = Assert.Single(await rule.AnalyzeAsync(script, new TestLintContext()));
+
+            Assert.NotNull(result.PolicyDecision);
+            Assert.Equal("Engine:AllowPlaintextSecrets", result.PolicyDecision.PolicyKey);
+            Assert.Equal(GovernancePolicyClassification.Forbidden, result.PolicyDecision.Classification);
+            Assert.True(result.PolicyDecision.IsViolation);
+            Assert.Contains("connector option PASSWORD", result.PolicyDecision.Action);
+        }
+
+        [Fact]
+        public async Task ConnectionEncryptionRule_UsesParsedAst_NotCommentText()
+        {
+            var sql = "-- CREATE CONNECTION c AS MSSQL(PASSWORD='secret');";
+            var script = Parse(sql);
+            var rule = new ConnectionEncryptionRule();
+            var results = await rule.AnalyzeAsync(script, new TestLintContext());
+
+            Assert.Empty(results);
         }
 
         [Fact]

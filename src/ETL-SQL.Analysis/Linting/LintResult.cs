@@ -1,5 +1,7 @@
 namespace ETL_SQL.Analysis.Linting
 {
+    using ETL_SQL.Core.Governance;
+
     public enum LintSeverity
     {
         Info,
@@ -15,5 +17,6 @@ namespace ETL_SQL.Analysis.Linting
         public string Message { get; set; } = string.Empty;
         public int LineNumber { get; set; }
         public int ColumnNumber { get; set; }
+        public GovernancePolicyDecision? PolicyDecision { get; set; }
     }
 }

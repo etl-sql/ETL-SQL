@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Analysis.Linting.Rules
 {
@@ -11,6 +12,17 @@ namespace ETL_SQL.Analysis.Linting.Rules
     /// </summary>
     public class ConnectionEncryptionRule : ILintRule
     {
+        private readonly IGovernancePolicyRegistry _policies;
+
+        public ConnectionEncryptionRule() : this(null)
+        {
+        }
+
+        public ConnectionEncryptionRule(IGovernancePolicyRegistry? policies)
+        {
+            _policies = policies ?? GovernancePolicyRegistry.CreateDefault();
+        }
+
         public string Name => "ConnectionEncryption";
         public string Description => "Validates that a password or SSH key is provided when ENCRYPT=ON for file connections.";
 
@@ -136,7 +148,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         Severity = LintSeverity.Warning,
                         Message = $"Connection '{conn.ConnectionName}' contains a plaintext connection string. Use a Master Password to encrypt this for better security.",
                         LineNumber = conn.Line,
-                        ColumnNumber = conn.Column
+                        ColumnNumber = conn.Column,
+                        PolicyDecision = PlaintextSecretDecision("connection string target")
                     });
                     return;
                 }
@@ -163,12 +176,22 @@ namespace ETL_SQL.Analysis.Linting.Rules
                                 Severity = LintSeverity.Warning,
                                 Message = msg,
                                 LineNumber = conn.Line,
-                                ColumnNumber = conn.Column
+                                ColumnNumber = conn.Column,
+                                PolicyDecision = PlaintextSecretDecision($"connector option {key}")
                             });
                         }
                     }
                 }
             }
+        }
+
+        private GovernancePolicyDecision PlaintextSecretDecision(string action)
+        {
+            var policy = _policies.GetRequired("Engine:AllowPlaintextSecrets");
+            return GovernancePolicyDecision.Violation(
+                policy,
+                action,
+                "Plaintext connector secrets are forbidden by the central governance policy registry.");
         }
     }
 }

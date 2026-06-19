@@ -1,4 +1,5 @@
 using System;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Core.Common
 {
@@ -23,6 +24,7 @@ namespace ETL_SQL.Core.Common
         public DiagnosticSeverity Severity { get; set; } = DiagnosticSeverity.Error;
         public string? Code { get; set; }
         public string Source { get; set; } = "Parser";
+        public GovernancePolicyDecision? PolicyDecision { get; set; }
 
         public Diagnostic() { }
 

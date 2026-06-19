@@ -21,7 +21,8 @@ namespace ETL_SQL.Analysis.Diagnostics
                     diag.Severity,
                     diag.Message,
                     diag.Code,
-                    "ETL-SQL " + diag.Source);
+                    "ETL-SQL " + diag.Source,
+                    diag.PolicyDecision);
             }).ToList();
         }
 
@@ -40,7 +41,8 @@ namespace ETL_SQL.Analysis.Diagnostics
                     result.Severity == LintSeverity.Error ? CoreSeverity.Error : CoreSeverity.Warning,
                     result.Message,
                     result.Code ?? result.RuleName,
-                    "ETL-SQL Linter");
+                    "ETL-SQL Linter",
+                    result.PolicyDecision);
             }).ToList();
         }
 

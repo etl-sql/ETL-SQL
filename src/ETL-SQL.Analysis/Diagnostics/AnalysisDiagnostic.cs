@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Analysis.Diagnostics
 {
@@ -10,5 +11,6 @@ namespace ETL_SQL.Analysis.Diagnostics
         DiagnosticSeverity Severity,
         string Message,
         string? Code,
-        string Source);
+        string Source,
+        GovernancePolicyDecision? PolicyDecision = null);
 }
