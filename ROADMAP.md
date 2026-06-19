@@ -21,8 +21,8 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 > node heartbeats, lease fencing, leader election, load-balancer health probes/session affinity, and
 > Docker-backed multi-process certification.
 
-1. **Governance Core (Next):** Org policy, named secret references, and secure audit outbox.
-2. **Enterprise Identity:** OIDC and approval workflows.
+1. **Shipped — v0.13.0:** Governance Core: org policy, named secret references, and secure audit outbox.
+2. **Enterprise Identity (Next):** OIDC and approval workflows.
 3. **Departmental Isolation:** Repeatable isolated container deployments.
 4. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
 
@@ -80,23 +80,23 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-### Active Phase: Governance Core
+### Shipped Phase: Governance Core
 *Enforces centralized security policy, named secret references, and remote audit delivery across all hosts (CLI, IDE, Portal, and Orchestrator).*
 
 #### TODOs:
-- [ ] **Phase 1: Typed Policy Registry**
+- [x] **Phase 1: Typed Policy Registry**
   - Create a central registry of settings (Forbidden, Allowed, Constrained, Locked).
   - Enforce policy against parsed AST nodes rather than text matching.
   - Apply policy evaluations at compile/lint time and again at execution time.
-- [ ] **Phase 2: Organization Policy Documents**
+- [x] **Phase 2: Organization Policy Documents**
   - Implement versioned policy schemas specifying allowed connector types, filesystem roots, and remote executions.
   - Support fetching policies from local OS-protected configurations or HTTPS endpoints.
   - Configure offline cache periods, failing secure (no access) if a policy expires or cannot be validated.
-- [ ] **Phase 3: Named Secret References**
+- [x] **Phase 3: Named Secret References**
   - Implement `ISecretProvider` (Environment, OS Secret Store, HTTPS Vault).
   - Support syntax to reference secrets by logical name (`SECRET:sales_db_password`) in connection strings.
   - Block raw secret values from appearing in logs, diagnostics, or dashboards.
-- [ ] **Phase 4: Durable Audit Outbox**
+- [x] **Phase 4: Durable Audit Outbox**
   - Implement a transactional outbox table for audit events.
   - Create an HTTPS audit transporter supporting batching, retry, deduplication, and backpressure limits.
   - Define policy to fail closed (block mutations) when remote audit delivery is unavailable.
