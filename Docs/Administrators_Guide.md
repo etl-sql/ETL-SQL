@@ -177,6 +177,156 @@ old key after every caller has moved. The service compares fixed-length key dige
 > [!IMPORTANT]
 > **The Orchestrator refuses to start unauthenticated on a network-reachable address.** If `Orchestrator:ApiKey` is empty *and* the service binds to a non-loopback address (for example `http://*:5001` or `http://0.0.0.0:5001`), startup fails fast with an actionable error. Configure a key, or bind the service to loopback only (`http://127.0.0.1:5001`). An empty key is permitted **only** for loopback-only bindings, which is development/isolated-host behavior.
 
+### 4.4 Governance Core
+
+Governance Core centralizes three production controls:
+
+- **Typed policy enforcement** — policy violations are attached to lint diagnostics and enforced again at execution boundaries.
+- **Named secret references** — connector passwords and sensitive connection-string fields can use `SECRET:name` instead of raw secret values.
+- **Durable audit forwarding** — Portal security and mutation audit rows are staged in a transactional outbox and can be forwarded to an HTTPS collector, with optional fail-closed behavior.
+
+#### Named secret providers
+
+Configure the secret provider in `appsettings.json` or with environment variables under `Governance:Secrets:*`.
+The older `Secrets:*` prefix remains accepted as a compatibility fallback, but new deployments should use
+`Governance:Secrets:*`.
+
+```json
+{
+  "Governance": {
+    "Secrets": {
+      "Provider": "Environment",
+      "EnvironmentPrefix": "ETLSQL_SECRET_"
+    }
+  }
+}
+```
+
+Supported providers:
+
+| Provider | Required settings | Operational notes |
+| :--- | :--- | :--- |
+| `Environment` | Optional `EnvironmentPrefix` | Secret names are uppercased; `.` and `-` become `_`. With the prefix above, `SECRET:sales_db_password` resolves from `ETLSQL_SECRET_SALES_DB_PASSWORD`. |
+| `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. On Unix, secret files are written owner-read/write only. Back up the store with the host or service identity that can decrypt it. |
+| `HttpsVault` | `VaultEndpoint`; optional `VaultBearerToken` | The endpoint must be HTTPS. The provider requests `<VaultEndpoint>/<secret-name>` and accepts either a raw response body or JSON `{ "value": "secret" }`. |
+
+Environment-variable examples:
+
+```text
+Governance__Secrets__Provider=HttpsVault
+Governance__Secrets__VaultEndpoint=https://vault.example.com/etl-sql/secrets
+Governance__Secrets__VaultBearerToken=ENC:ENCRYPTED_TOKEN
+```
+
+Use named references in connector definitions:
+
+```sql
+CREATE CONNECTION sales AS MSSQL(
+  SERVER = 'sql01',
+  DATABASE = 'Sales',
+  USER = 'etl_worker',
+  PASSWORD = 'SECRET:sales_db_password'
+);
+
+CREATE CONNECTION warehouse AS POSTGRES(
+  CONNECTION_STRING = 'Host=pg01;Database=dw;Username=etl;Password=SECRET:dw_password'
+);
+```
+
+Only sensitive connector options and sensitive connection-string fields are expanded. Missing or unreachable
+secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an empty value.
+Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
+raw secret values and `SECRET:` references before persistence or display.
+
+#### Organization policy documents
+
+Governance policy documents use schema version `1.0`. Policy loaders accept local OS-protected JSON files and
+HTTPS endpoints, validate the document, and may use a protected offline cache only while it remains inside the
+configured offline window. If the live source cannot be loaded and the cache is missing, invalid, disabled, or
+expired, policy loading fails secure.
+
+```json
+{
+  "schemaVersion": "1.0",
+  "connectors": {
+    "allowedTypes": [ "MSSQL", "POSTGRES", "FLATFILE", "SFTP" ]
+  },
+  "filesystem": {
+    "approvedRoots": [ "C:\\ETL-SQL\\scripts", "C:\\ETL-SQL\\data" ]
+  },
+  "execution": {
+    "allowedModes": [ "Interactive", "Batch", "Scheduled" ],
+    "maxParallelDegree": 4,
+    "maxFileOperationsPerScript": 100
+  },
+  "remoteExecution": {
+    "mode": "TrustedOrchestrator",
+    "allowedHosts": []
+  },
+  "mutationGuardrails": {
+    "requireWhatIfForDestructiveStatements": true,
+    "requireTransactionForMutations": true,
+    "requireRemoteAuditForMutations": true
+  }
+}
+```
+
+Local policy files must use fully qualified paths and must not be writable by broad principals. On Windows, write
+access for `Everyone`, `Users`, or `Authenticated Users` is rejected. On Unix-like systems, group-writable or
+other-writable policy files are rejected. Remote policy sources must use HTTPS.
+
+#### Durable audit outbox and remote collectors
+
+Portal audit rows are written with a durable outbox row in the same database transaction. Configure remote
+forwarding under `Portal:Audit:*`:
+
+```json
+{
+  "Portal": {
+    "Audit": {
+      "TransportEndpoint": "https://siem.example.com/etl-sql/audit",
+      "TransportBearerToken": "ENC:ENCRYPTED_COLLECTOR_TOKEN",
+      "TransportBatchSize": 100,
+      "TransportIntervalSeconds": 30,
+      "TransportTimeoutSeconds": 10,
+      "TransportMaxAttempts": 8,
+      "TransportLockSeconds": 120,
+      "OutboxBackpressureLimit": 10000,
+      "OutboxMaxBytes": 104857600,
+      "OutboxDeliveredRetentionMinutes": 1440,
+      "RequireRemoteDelivery": true,
+      "FailClosedMaxPendingBacklog": 1000,
+      "FailClosedMaxBacklogSeconds": 900
+    }
+  }
+}
+```
+
+The collector endpoint must be HTTPS. Each POST body has an `events` array. Every event includes a stable
+`EventId`, audit metadata, and a redacted JSON payload; collectors should treat `EventId` as the deduplication key
+because a row may be resent after a crash or lost delivery acknowledgement. Any 2xx response marks the batch
+delivered. Non-2xx responses retry with exponential backoff until `TransportMaxAttempts`, then the row is marked
+`Failed`.
+
+`RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. When it is
+enabled, security-sensitive mutations are blocked with HTTP 503 once remote audit delivery is judged unavailable:
+any terminally failed outbox row, pending backlog over `FailClosedMaxPendingBacklog`, oldest pending row older than
+`FailClosedMaxBacklogSeconds`, or queued payload over `OutboxMaxBytes`. Leave it disabled unless an HTTPS collector
+is configured, monitored, and treated as mandatory infrastructure.
+
+When `RequireRemoteDelivery` is disabled, the outbox transport may shed old delivered rows and then oldest queued
+rows to keep local disk usage under `OutboxMaxBytes`; the durable local `AuditLog` rows remain. When
+`RequireRemoteDelivery` is enabled, ETL-SQL never drops queued remote-audit rows to satisfy the cap; it blocks new
+mutations until the collector drains the backlog.
+
+Operational checks:
+
+1. Configure the collector and verify it accepts HTTPS POSTs from every Portal node.
+2. Trigger a harmless audited action and confirm the collector receives an event with a stable `EventId`.
+3. Temporarily stop the collector and confirm pending outbox rows accumulate.
+4. If `RequireRemoteDelivery` is enabled, confirm mutations fail with HTTP 503 after the configured backlog, age, or size threshold.
+5. Restart the collector and confirm pending rows drain and mutations resume.
+
 ---
 
 ## 5. HTTPS & Network Configuration
