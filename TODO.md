@@ -101,8 +101,15 @@ release begins.
   unit of work, so security and mutation audit events commit atomically with their durable delivery
   record. SQLite and PostgreSQL migrations create the outbox table and delivery indexes; tests cover
   redacted payload persistence and migration convergence.
-- [ ] **P1.11 Create an HTTPS audit transporter** with batching, retry, deduplication, and
+- [x] **P1.11 Create an HTTPS audit transporter** with batching, retry, deduplication, and
   backpressure limits.
+  *(done)* Added a hosted audit outbox transporter that runs only when an HTTPS collector endpoint
+  is configured. It drains pending outbox rows in bounded batches, sends event envelopes keyed by
+  unique `EventId` values for collector-side deduplication, marks successful deliveries as
+  delivered, and applies exponential retry/backoff until the configured attempt limit moves a row
+  to `Failed`. Configuration now covers endpoint, bearer token, batch size, sweep interval,
+  timeout, max attempts, lock duration, and backlog warning threshold. Tests cover successful
+  delivery, retry/backoff with terminal failure, and HTTPS-only endpoint enforcement.
 - [ ] **P1.12 Define and enforce fail-closed mutation policy** when required remote audit delivery
   is unavailable.
 - [ ] **P2.1 Add disk-size safeguards and retention controls** for the local outbox queue during

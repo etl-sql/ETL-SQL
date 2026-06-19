@@ -76,6 +76,30 @@ public class AuditConfig
 
     /// <summary>Seconds between retention sweeps. Minimum effective value is 1.</summary>
     public int PurgeIntervalSeconds { get; set; } = 86400;
+
+    /// <summary>HTTPS collector endpoint for durable audit forwarding. Empty disables transport.</summary>
+    public string? TransportEndpoint { get; set; }
+
+    /// <summary>Bearer token sent to the collector. Keep unset when the collector uses mTLS or network ACLs.</summary>
+    public string? TransportBearerToken { get; set; }
+
+    /// <summary>Maximum outbox rows sent in one collector request.</summary>
+    public int TransportBatchSize { get; set; } = 100;
+
+    /// <summary>Seconds between outbox transport sweeps. Minimum effective value is 1.</summary>
+    public int TransportIntervalSeconds { get; set; } = 30;
+
+    /// <summary>HTTP request timeout in seconds. Minimum effective value is 1.</summary>
+    public int TransportTimeoutSeconds { get; set; } = 10;
+
+    /// <summary>Maximum delivery attempts before a row is marked Failed.</summary>
+    public int TransportMaxAttempts { get; set; } = 8;
+
+    /// <summary>Warn when pending rows exceed this limit. Fail-closed mutation policy is handled separately.</summary>
+    public int OutboxBackpressureLimit { get; set; } = 10000;
+
+    /// <summary>Seconds a node owns a claimed batch before another sweep may retry it.</summary>
+    public int TransportLockSeconds { get; set; } = 120;
 }
 
 public class PortalRateLimitConfig

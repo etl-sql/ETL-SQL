@@ -266,6 +266,10 @@ builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCac
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalNodeIdentity>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SecuritySessionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
+builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(Math.Max(1, portalConfig.Audit.TransportTimeoutSeconds));
+});
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
@@ -321,6 +325,8 @@ builder.Services.AddHttpContextAccessor();
 
 // Optional audit retention (Portal:Audit:RetentionDays; disabled by default).
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionService>();
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>());
 
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
