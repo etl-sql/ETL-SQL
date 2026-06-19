@@ -93,8 +93,14 @@ release begins.
 
 ### Phase 4 - Durable Audit Outbox
 
-- [ ] **P1.10 Implement a transactional audit outbox table** for security and mutation events that
+- [x] **P1.10 Implement a transactional audit outbox table** for security and mutation events that
   must survive process crashes.
+  *(done)* Added durable `AuditOutboxMessages` state to the portal database model with pending
+  delivery status, attempt/lock timestamps, redacted JSON payload, correlation metadata, and an
+  optional `AuditLog` link. `AuditService` now stages the audit row and outbox row in the same EF
+  unit of work, so security and mutation audit events commit atomically with their durable delivery
+  record. SQLite and PostgreSQL migrations create the outbox table and delivery indexes; tests cover
+  redacted payload persistence and migration convergence.
 - [ ] **P1.11 Create an HTTPS audit transporter** with batching, retry, deduplication, and
   backpressure limits.
 - [ ] **P1.12 Define and enforce fail-closed mutation policy** when required remote audit delivery

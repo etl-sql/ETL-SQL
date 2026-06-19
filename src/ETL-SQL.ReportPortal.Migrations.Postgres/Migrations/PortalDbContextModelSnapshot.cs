@@ -57,6 +57,81 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.AuditOutboxMessage", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AuditLogId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeliveredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EventId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResourceId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ResourceType")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuditLogId");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "NextAttemptAt");
+
+                    b.ToTable("AuditOutboxMessages");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>
                 {
                     b.Property<int>("Id")
@@ -1105,6 +1180,16 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.AuditOutboxMessage", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.AuditLog", "AuditLog")
+                        .WithMany("OutboxMessages")
+                        .HasForeignKey("AuditLogId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AuditLog");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Folder", null)
@@ -1393,6 +1478,11 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.AuditLog", b =>
+                {
+                    b.Navigation("OutboxMessages");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>

@@ -329,6 +329,31 @@ public class AuditLog
     /// <summary>Request trace identifier (HTTP) or operation id (background work) so every
     /// audit row can be tied back to the operation that produced it.</summary>
     public string? CorrelationId { get; set; }
+
+    public ICollection<AuditOutboxMessage> OutboxMessages { get; set; } = [];
+}
+
+public class AuditOutboxMessage
+{
+    public long Id { get; set; }
+    public string EventId { get; set; } = Guid.NewGuid().ToString("N");
+    public int? AuditLogId { get; set; }
+    public AuditLog? AuditLog { get; set; }
+    public int? UserId { get; set; }
+    public string Action { get; set; } = "";
+    public string? ResourceType { get; set; }
+    public string? ResourceId { get; set; }
+    public string? CorrelationId { get; set; }
+    public DateTime OccurredAt { get; set; } = DateTime.UtcNow;
+    public string PayloadJson { get; set; } = "{}";
+    public string Status { get; set; } = "Pending";
+    public int Attempts { get; set; }
+    public DateTime? NextAttemptAt { get; set; }
+    public DateTime? LockedUntil { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public string? LastError { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────

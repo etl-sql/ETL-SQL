@@ -20,6 +20,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<SubscriptionDelivery> SubscriptionDeliveries => Set<SubscriptionDelivery>();
     public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<AuditOutboxMessage> AuditOutboxMessages => Set<AuditOutboxMessage>();
     public DbSet<DatasetJob> DatasetJobs => Set<DatasetJob>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Dataset> Datasets => Set<Dataset>();
@@ -125,6 +126,17 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             // At-most-once per recipient and scheduler completion.
             e.HasIndex(x => new { x.SubscriptionId, x.TriggerKey, x.RecipientKey }).IsUnique();
             e.HasIndex(x => x.DeliveryId);
+        });
+
+        builder.Entity<AuditOutboxMessage>(e =>
+        {
+            e.HasIndex(x => x.EventId).IsUnique();
+            e.HasIndex(x => new { x.Status, x.NextAttemptAt });
+            e.HasIndex(x => x.AuditLogId);
+            e.HasOne(x => x.AuditLog)
+                .WithMany(x => x.OutboxMessages)
+                .HasForeignKey(x => x.AuditLogId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         builder.Entity<Group>(e =>
