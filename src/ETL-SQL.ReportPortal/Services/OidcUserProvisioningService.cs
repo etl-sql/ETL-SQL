@@ -32,18 +32,11 @@ public sealed class OidcUserProvisioningService(
 
     public async Task<Result> SignInAsync(OidcIdentity identity, CancellationToken ct = default)
     {
-        var user = await userManager.FindByNameAsync(identity.Username);
-
-        // Provider binding (prevents account takeover via provider confusion): a federated login may
-        // only attach to an OIDC account. If the username already belongs to a Local or LDAP account,
-        // refuse — an IdP that can mint preferred_username='admin' must not be able to seize the
-        // local admin. (Matches the LDAP path, which authenticates only Provider=="LDAP" users.)
-        if (user is not null && !string.Equals(user.Provider, ProviderName, StringComparison.Ordinal))
-        {
-            await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(),
-                $"OIDC login refused: username belongs to a {user.Provider} account.");
-            return new Result(null, Disabled: false, Refused: true, user.Id);
-        }
+        // Key federated accounts on the immutable provider subject (sub), not the mutable username:
+        // a renamed or reused preferred_username can neither create a duplicate nor seize another
+        // account. (Audits below run outside the transaction so they survive a refusal/rollback.)
+        var user = await db.Users.FirstOrDefaultAsync(
+            u => u.Provider == ProviderName && u.ExternalSubject == identity.Subject, ct);
 
         // A portal-disabled account stays disabled; the IdP must not resurrect it.
         if (user is not null && !user.IsActive)
@@ -51,6 +44,20 @@ public sealed class OidcUserProvisioningService(
             await auditService.LogAsync(user.Id, "LOGIN_FAILED", "User", user.Id.ToString(),
                 "Account is disabled.");
             return new Result(null, Disabled: true, Refused: false, user.Id);
+        }
+
+        // First login for this subject: the desired username must be free. If it already belongs to
+        // ANY account — Local, LDAP, or a different OIDC subject — refuse rather than attach, which
+        // is what blocks account takeover via provider confusion or username reuse.
+        if (user is null)
+        {
+            var existingByName = await userManager.FindByNameAsync(identity.Username);
+            if (existingByName is not null)
+            {
+                await auditService.LogAsync(existingByName.Id, "LOGIN_FAILED", "User", existingByName.Id.ToString(),
+                    $"OIDC login refused: username belongs to a {existingByName.Provider} account.");
+                return new Result(null, Disabled: false, Refused: true, existingByName.Id);
+            }
         }
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -64,17 +71,17 @@ public sealed class OidcUserProvisioningService(
                     Email = identity.Email,
                     IsActive = true,
                     MustChangePassword = false,
-                    Provider = ProviderName
+                    Provider = ProviderName,
+                    ExternalSubject = identity.Subject
                 };
                 var created = await userManager.CreateAsync(user);
                 if (!created.Succeeded)
                     throw new InvalidOperationException(
                         "Failed to provision OIDC user: " + string.Join("; ", created.Errors.Select(e => e.Description)));
             }
-            else if (!string.IsNullOrEmpty(identity.Email) && !string.Equals(user.Email, identity.Email, StringComparison.OrdinalIgnoreCase))
+            else
             {
-                user.Email = identity.Email;
-                await userManager.UpdateAsync(user);
+                await UpdateProfileAsync(user, identity);
             }
 
             var sync = await SyncGroupsAsync(user, identity.Groups, ct);
@@ -101,6 +108,25 @@ public sealed class OidcUserProvisioningService(
         var session = await IssueSessionAsync(user, ct);
         await auditService.LogAsync(user.Id, "LOGIN", "User", user.Id.ToString(), "OIDC");
         return new Result(session, Disabled: false, Refused: false, user.Id);
+    }
+
+    /// <summary>Refreshes a returning federated user's profile from the latest token: adopts a new
+    /// preferred_username when the IdP changed it and the name is still free (kept via the immutable
+    /// subject, so the account is stable either way), and updates the email.</summary>
+    private async Task UpdateProfileAsync(PortalUser user, OidcIdentity identity)
+    {
+        if (!string.Equals(user.UserName, identity.Username, StringComparison.Ordinal)
+            && await userManager.FindByNameAsync(identity.Username) is null)
+        {
+            await userManager.SetUserNameAsync(user, identity.Username);
+        }
+
+        if (!string.IsNullOrEmpty(identity.Email)
+            && !string.Equals(user.Email, identity.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            user.Email = identity.Email;
+            await userManager.UpdateAsync(user);
+        }
     }
 
     private readonly record struct GroupSyncResult(bool Added, bool Removed)

@@ -148,6 +148,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<PortalUser>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            // Federated accounts are looked up by their immutable provider subject.
+            e.HasIndex(x => new { x.Provider, x.ExternalSubject });
         });
 
         builder.Entity<Subscription>(e =>

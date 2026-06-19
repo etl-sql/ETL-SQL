@@ -436,6 +436,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<bool>("EmailConfirmed")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ExternalSubject")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("FirstName")
                         .HasColumnType("TEXT");
 
@@ -500,6 +503,8 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.HasIndex("NormalizedUserName")
                         .IsUnique()
                         .HasDatabaseName("UserNameIndex");
+
+                    b.HasIndex("Provider", "ExternalSubject");
 
                     b.ToTable("AspNetUsers", (string)null);
                 });

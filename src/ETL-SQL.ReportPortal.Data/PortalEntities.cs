@@ -19,6 +19,12 @@ public class PortalUser : IdentityUser<int>, IVersionedEntity
     public bool IsActive { get; set; } = true;
     public bool MustChangePassword { get; set; } = false;
     public string Provider { get; set; } = "Local";
+
+    /// <summary>Immutable subject identifier from the external identity provider (OIDC <c>sub</c>),
+    /// set only on federated accounts. Federated logins are keyed on this rather than the mutable
+    /// username, so an account cannot be hijacked by a reused or attacker-chosen <c>preferred_username</c>.</summary>
+    public string? ExternalSubject { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public long Version { get; set; } = 1;
 

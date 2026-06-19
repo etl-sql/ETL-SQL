@@ -160,6 +160,70 @@ public sealed class OidcAuthTests : IClassFixture<OidcAuthTests.OidcPortalWebFac
     }
 
     [Fact]
+    public async Task Callback_UsernameChangeAtIdp_KeepsSameAccount()
+    {
+        // Federated accounts are keyed on the immutable subject, so an IdP username change updates the
+        // existing account rather than creating a duplicate or detaching the user from their data.
+        var subject = "stable-sub-" + Guid.NewGuid().ToString("N")[..8];
+        var first = "oidcname1_" + Guid.NewGuid().ToString("N")[..6];
+        var second = "oidcname2_" + Guid.NewGuid().ToString("N")[..6];
+
+        _factory.Stub.Identity = new OidcIdentity(subject, first, null, []);
+        var c1 = NoRedirectClient();
+        await c1.GetAsync("/api/auth/oidc/login");
+        await c1.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        int userId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var u = await db.Users.SingleAsync(x => x.ExternalSubject == subject);
+            userId = u.Id;
+            Assert.Equal(first, u.UserName);
+        }
+
+        _factory.Stub.Identity = new OidcIdentity(subject, second, null, []);
+        var c2 = NoRedirectClient();
+        await c2.GetAsync("/api/auth/oidc/login");
+        await c2.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var users = await db.Users.Where(x => x.ExternalSubject == subject).ToListAsync();
+            Assert.Single(users);              // no duplicate account
+            Assert.Equal(userId, users[0].Id); // same identity
+            Assert.Equal(second, users[0].UserName); // username adopted
+        }
+    }
+
+    [Fact]
+    public async Task Callback_RefusesWhenUsernameTakenByDifferentSubject()
+    {
+        var shared = "oidcshared_" + Guid.NewGuid().ToString("N")[..8];
+
+        // Subject A provisions the username.
+        _factory.Stub.Identity = new OidcIdentity("subA-" + shared, shared, null, []);
+        var cA = NoRedirectClient();
+        await cA.GetAsync("/api/auth/oidc/login");
+        await cA.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        // Subject B claims the same username — must be refused (no takeover, no new account).
+        _factory.Stub.Identity = new OidcIdentity("subB-" + shared, shared, null, []);
+        var cB = NoRedirectClient();
+        await cB.GetAsync("/api/auth/oidc/login");
+        var callback = await cB.GetAsync($"/api/auth/oidc/callback?code=c&state={StubOidcAuthenticationService.State}");
+
+        Assert.Equal(HttpStatusCode.Redirect, callback.StatusCode);
+        Assert.Contains("error=sso_failed", callback.Headers.Location!.ToString());
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await db.Users.AnyAsync(x => x.ExternalSubject == "subB-" + shared));
+        Assert.Equal("subA-" + shared, (await db.Users.SingleAsync(x => x.UserName == shared)).ExternalSubject);
+    }
+
+    [Fact]
     public async Task Callback_SyncsGroupClaims_AddingAndRemoving()
     {
         var username = "oidcgrp_" + Guid.NewGuid().ToString("N")[..8];
