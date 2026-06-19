@@ -43,8 +43,13 @@ release begins.
 
 ### Phase 2 - Organization Policy Documents
 
-- [ ] **P1.4 Implement versioned organization policy schemas** for allowed connector types,
+- [x] **P1.4 Implement versioned organization policy schemas** for allowed connector types,
   filesystem roots, script execution modes, remote execution, and mutation guardrails.
+  *(done)* Added a typed v1.0 `OrganizationPolicyDocument` schema with connector allowlists,
+  approved filesystem roots, execution modes and limits, remote execution controls, and mutation
+  guardrails. The schema parser accepts JSON with comments/trailing commas, validates versioned
+  documents, rejects duplicate/invalid entries, and maps document sections back to central policy
+  keys for later source loading and enforcement.
 - [ ] **P1.5 Support policy sources** from local OS-protected configuration and HTTPS endpoints.
 - [ ] **P1.6 Implement offline policy cache windows** with fail-secure behavior when a policy
   expires or cannot be validated.
