@@ -1,8 +1,8 @@
 # ETL-SQL™ Product Roadmap
 
-This document outlines the future release sequence, feature specifications, and implementation phases for the ETL-SQL project.
+This document tracks the product backlog, sprint candidates, and release gates for ETL-SQL. It is intentionally backlog-first: version numbers describe shipped or target release packaging, not the priority order for every future feature.
 
-When development begins on a release, its next actionable phase is moved into `TODO.md` to be tracked as active tasks.
+When development begins on a backlog item, its next actionable phase is moved into `TODO.md` to be tracked as active sprint work.
 
 The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment promise are defined in
 [`Docs/Strategy/Enterprise_Platform_Strategy.md`](Docs/Strategy/Enterprise_Platform_Strategy.md).
@@ -11,20 +11,14 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ## Product Direction
 
-ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams:
+ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams. The current backlog is organized around product capabilities:
 
-> **Shipped — v0.11.0:** multi-user standalone hardening, script-first recovery, and the operator-tooling
-> CLI (doctor, support-bundle, init, split-custody backup/restore, automatic migrations, and the N→N+1
-> upgrade-path release gate). See `CHANGELOG.md`.
->
-> **Shipped — v0.12.0:** Practical High Availability: PostgreSQL shared state, shared artifact storage,
-> node heartbeats, lease fencing, leader election, load-balancer health probes/session affinity, and
-> Docker-backed multi-process certification.
+1. **Completed foundations:** multi-user standalone hardening, script-first recovery, operator tooling, Practical HA, and Governance Core.
+2. **Current sprint candidate:** Enterprise Identity and Approvals.
+3. **High-value backlog candidates:** Data Stewardship & Lineage Governance, Debugger & Interactive Troubleshooting, and Departmental Isolation.
+4. **v1.0.0 release gate:** stabilization, language freeze, distribution trust, and production release verification.
 
-1. **Shipped — v0.13.0:** Governance Core: org policy, named secret references, and secure audit outbox.
-2. **Enterprise Identity (Next):** OIDC and approval workflows.
-3. **Departmental Isolation:** Repeatable isolated container deployments.
-4. **v1.0.0 (Target):** Stable Production Release & Release Gates (Stabilization, language freeze, distribution trust).
+See `CHANGELOG.md` for the exact version where shipped work is packaged.
 
 ---
 
@@ -43,7 +37,79 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
 
 ---
 
-## Release Sequence & Incremental TODOs
+## Backlog Operating Model
+
+- `TODO.md` is the active sprint board.
+- `ROADMAP.md` is the product backlog and release-gate tracker.
+- Strategy documents under `Docs/Strategy/` hold the deeper rationale, scope, non-goals, and acceptance criteria for larger backlog items.
+- A backlog item can be promoted into the current sprint when its acceptance criteria are clear enough to implement and test.
+- A version can include multiple backlog items, part of a backlog item, or mostly stabilization work.
+
+---
+
+## Current Sprint Candidate
+
+### Enterprise Identity & Approvals
+*Integrates with enterprise OpenID Connect (OIDC) providers and adds human-in-the-loop approval workflows.*
+
+#### TODOs:
+- [ ] **Phase 1: Certified OIDC Authentication**
+  - Reconcile and certify OIDC login, logout, token refresh, and claim validation.
+  - Map OIDC group claims dynamically to Portal user groups.
+  - Support MFA and conditional access by delegating authentication entirely to the identity provider.
+- [ ] **Phase 2: Service Accounts**
+  - Implement non-interactive service account identities for scheduled CLI jobs and API access.
+  - Assign explicit OAuth scopes and rotation patterns.
+- [ ] **Phase 3: Approval Workflows (Four-Eyes)**
+  - Implement approval requests for critical actions (publishing reports, modifying production scheduled jobs).
+  - Enforce segregation of duties (a user cannot approve their own changes).
+  - Automatically re-evaluate and cancel pending/approved items if permissions or user status changes.
+  - Record all approval requests, comments, grants, and rejections in the Governance audit trail.
+
+---
+
+## Product Backlog
+
+### Data Stewardship & Lineage Governance
+*Turns captured lineage and tags into steward-facing workflow, certification, impact analysis, and tag-driven policy enforcement.*
+
+Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stewardship_Strategy.md)
+
+#### Candidate phases:
+- [ ] **Phase 1: Stewardship Catalog**
+  - Define governed tag metadata, validation, required scopes, aliases, and deprecation rules.
+  - Add queries and documentation for missing owner/steward/contact/classification/quality metadata.
+- [ ] **Phase 2: Portal Stewardship Views**
+  - Add searchable tag catalog, sensitive-data inventory, missing-owner views, stale lineage views, and per-steward queues.
+- [ ] **Phase 3: Certification & Review Workflow**
+  - Add review/certification state for datasets, reports, and key lineage targets.
+  - Audit certification decisions and keep export/import script-first.
+- [ ] **Phase 4: Tag-Driven Policy Enforcement**
+  - Extend Governance Core to block or warn based on lineage tags and classification metadata.
+- [ ] **Phase 5: Impact Analysis**
+  - Surface upstream/downstream impact for tables, columns, jobs, scripts, datasets, reports, subscriptions, owners, and stewards.
+- [ ] **Phase 6: Quality & Freshness Stewardship**
+  - Tie `EXPECT`/validation outcomes, freshness, SLA, and quality trends to lineage targets.
+- [ ] **Phase 7: External Catalog Sync**
+  - Add stable external IDs, conflict rules, and reconciliation reports for external catalog integration.
+
+### Debugger & Interactive Troubleshooting
+*Adds a script debugger for ETL-SQL pipelines without compromising script-first execution or zero-trust safety.*
+
+#### Candidate phases:
+- [ ] **Phase 1: Debug Protocol & Execution Hooks**
+  - Define breakpoints, step over/into/out, pause/resume, cancellation, and variable/temp-table inspection contracts.
+  - Ensure debug hooks do not change normal execution semantics.
+- [ ] **Phase 2: CLI/TUI Debug Experience**
+  - Add a local debugging flow for scripts with breakpoints, current statement context, variables, temp tables, and recent lineage entries.
+- [ ] **Phase 3: VS Code Debug Adapter**
+  - Add a VS Code debug adapter configuration that uses the same engine debug protocol.
+- [ ] **Phase 4: Portal/Orchestrator Guardrails**
+  - Define whether scheduled/Portal jobs can be debugged, who can attach, what is redacted, and how sessions are audited.
+
+---
+
+## Shipped Work & Release Gates
 
 ### Shipped Phase: Practical High Availability
 *Enables horizontal scaling of Portal and Orchestrator nodes behind a load balancer with PostgreSQL state and shared artifact storage.*
@@ -101,25 +167,6 @@ ETL-SQL grows through a progressive deployment model, optimized for a single mai
   - Create an HTTPS audit transporter supporting batching, retry, deduplication, and backpressure limits.
   - Define policy to fail closed (block mutations) when remote audit delivery is unavailable.
   - Implement disk-size safeguards (rotation/retention thresholds) for the local SQLite outbox queue during extended collector outages.
-
----
-
-### Enterprise Identity & Approvals
-*Integrates with enterprise OpenID Connect (OIDC) providers and adds human-in-the-loop approval workflows.*
-
-#### TODOs:
-- [ ] **Phase 1: Certified OIDC Authentication**
-  - Reconcile and certify OIDC login, logout, token refresh, and claim validation.
-  - Map OIDC group claims dynamically to Portal user groups.
-  - Support MFA and conditional access by delegating authentication entirely to the identity provider.
-- [ ] **Phase 2: Service Accounts**
-  - Implement non-interactive service account identities for scheduled CLI jobs and API access.
-  - Assign explicit OAuth scopes and rotation patterns.
-- [ ] **Phase 3: Approval Workflows (Four-Eyes)**
-  - Implement approval requests for critical actions (publishing reports, modifying production scheduled jobs).
-  - Enforce segregation of duties (a user cannot approve their own changes).
-  - Automatically re-evaluate and cancel pending/approved items if permissions or user status changes.
-  - Record all approval requests, comments, grants, and rejections in the Governance audit trail.
 
 ---
 

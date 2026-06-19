@@ -162,6 +162,10 @@ update_file "Docs/QUICKSTART.txt" \
     "(ETL-SQL v)[0-9]+\.[0-9]+\.[0-9]+( Quickstart)" \
     "\1${VERSION}\2"
 
+update_file "Docs/Reference/Performance.md" \
+    "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
+    "\1${VERSION}\2"
+
 update_file "Docs/Administrators_Guide.md" \
     "(ETL-SQL-Enterprise-v)[0-9]+\.[0-9]+\.[0-9]+(\.msi)" \
     "\1${VERSION}\2"
@@ -181,6 +185,10 @@ update_file "Docs/Architecture/Connectors.md" \
     "\1${VERSION}\2"
 
 update_file "Docs/Architecture/Orchestrator.md" \
+    "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
+    "\1${VERSION}\2"
+
+update_file "Docs/Architecture/Lineage.md" \
     "(\*\*Applies to ETL-SQL )[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 

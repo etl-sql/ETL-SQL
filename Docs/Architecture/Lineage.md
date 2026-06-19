@@ -1,6 +1,6 @@
 # ETL-SQL Lineage & Governance Architecture
 
-**Applies to ETL-SQL 0.9.0**
+**Applies to ETL-SQL 0.12.0**
 
 This document covers the lineage and governance subsystem: what is tracked automatically, how to query it during and after a run, how to export it, and how it connects to Orchestrator execution history.
 
@@ -116,7 +116,7 @@ The Mermaid export wraps the graph in a fenced ` ```mermaid ` block and appends 
 
 ## 4. Cross-run history (lineage catalog)
 
-While in-session lineage covers the current run, the `ILineageCatalogStore` persists entries across runs to a SQLite database (the same `etlsql.db` used by the Orchestrator). This catalog is populated automatically whenever an Orchestrator-managed job completes. For standalone `--run` executions the catalog is populated when `Engine:AuditAdHocRuns = true`.
+While in-session lineage covers the current run, the `ILineageCatalogStore` persists entries across runs in the Orchestrator state store. Single-node deployments use SQLite by default; HA deployments use the same PostgreSQL-backed `RelationalJobHistoryStore` selected by `Orchestrator:Database:Provider=Postgres`. This catalog is populated automatically whenever an Orchestrator-managed job completes. Portal executions also flush run lineage through the configured catalog store. For standalone `--run` executions the catalog is populated when `Engine:AuditAdHocRuns = true`.
 
 ### 4.1 Querying the catalog
 
@@ -166,16 +166,16 @@ This means a column annotated `/* @pii: true */` in a source table will automati
 
 ## 6. Integration with Orchestrator execution history
 
-The `SQLiteJobHistoryStore` implements both `IJobHistoryStore` (job run records) and `ILineageCatalogStore` (lineage catalog). They share the same `etlsql.db` file.
+`RelationalJobHistoryStore` implements both `IJobHistoryStore` (job run records) and `ILineageCatalogStore` (lineage catalog). `SQLiteJobHistoryStore` is now a thin SQLite wrapper over that relational store, while HA deployments use the PostgreSQL dialect through `NpgsqlOrchestratorDialect`.
 
 ```
-etlsql.db
+Orchestrator state store
 ├── Jobs              (CREATE JOB schedule definitions)
 ├── JobHistory        (per-run start/end/status/rows)
-└── LineageCatalog    (cross-run lineage entries)
+└── LineageHistory    (cross-run lineage entries)
 ```
 
-After each Orchestrator job run, the evaluator's full lineage is flushed via `ILineageCatalogStore.SaveLineageAsync()`. The `JobName` column in `LineageCatalog` is populated from the Orchestrator job name, enabling `SHOW LINEAGE HISTORY FOR JOB` queries.
+After each Orchestrator job run, the evaluator's full lineage is flushed via `ILineageCatalogStore.SaveLineageAsync()`. The `JobName` column in `LineageHistory` is populated from the Orchestrator job name, enabling `SHOW LINEAGE HISTORY FOR JOB` queries.
 
 ---
 
@@ -218,7 +218,8 @@ Script execution
       │
       ├─► EXPORT AS OPENLINEAGE ─────► .json file
       │
-      └─► ILineageCatalogStore ──────► etlsql.db (LineageCatalog)
+      └─► ILineageCatalogStore ──────► Orchestrator state store
+                                             (SQLite or PostgreSQL LineageHistory)
                │                             │
                └──────────────────────────────►  SHOW LINEAGE HISTORY
                                               │  (cross-run, by table/tag/job)
