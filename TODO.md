@@ -66,8 +66,14 @@ release begins.
 
 ### Phase 3 - Named Secret References
 
-- [ ] **P1.7 Implement `ISecretProvider`** with Environment, OS Secret Store, and HTTPS Vault
+- [x] **P1.7 Implement `ISecretProvider`** with Environment, OS Secret Store, and HTTPS Vault
   provider options.
+  *(done)* Added provider-neutral secret resolution with `ISecretProvider` and writable
+  OS-secret-store support. Environment secrets resolve normalized names with optional prefixes;
+  OS store secrets are protected with existing user/machine-bound Core crypto; HTTPS Vault requires
+  HTTPS endpoints and supports bearer auth plus JSON `{ "value": "..." }` responses. Tests cover all
+  providers, provider factory selection, protected-at-rest OS store values, and secret-name
+  validation.
 - [ ] **P1.8 Add named secret reference syntax** such as `SECRET:sales_db_password` for connector
   passwords and connection-string fields.
 - [ ] **P1.9 Block raw secret values from logs, diagnostics, audit rows, support bundles, and
