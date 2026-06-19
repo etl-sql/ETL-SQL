@@ -1703,7 +1703,7 @@ Use it for:
 - Browsing pipeline, result, variable, metadata, and report preview panels.
 - Expanding `$trigger` snippet templates with native VS Code tab-stop navigation.
 
-**Snippets in VS Code:** The same 38 built-in `$trigger` templates available in the TUI are delivered as VS Code-native completions with `${N:placeholder}` tab stops. Type `$bar` at the start of a statement and accept the completion — VS Code's standard Tab key cycles through all placeholders. User-defined snippets from `Snippets:UserSnippetsPath` are also available in the completion list.
+**Snippets in VS Code:** The same built-in `$trigger` templates available in the TUI are delivered as VS Code-native completions with `${N:placeholder}` tab stops. Type `$bar` at the start of a statement and accept the completion — VS Code's standard Tab key cycles through all placeholders. User-defined snippets from `Snippets:UserSnippetsPath` are also available in the completion list.
 
 The extension uses the ETL-SQL language server, so diagnostics should match command-line lint behavior. When in doubt, run the same script through the CLI or TUI before scheduling it.
 
