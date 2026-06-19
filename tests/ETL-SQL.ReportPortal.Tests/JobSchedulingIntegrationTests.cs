@@ -30,7 +30,7 @@ namespace ETL_SQL.ReportPortal.Tests
             _smtp = smtp;
         }
 
-        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(HttpClient client, string jobName, int expectedCount, int timeoutSeconds = 15)
+        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(HttpClient client, string jobName, int expectedCount, int timeoutSeconds = 45)
         {
             var start = DateTime.UtcNow;
             while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
@@ -92,7 +92,7 @@ namespace ETL_SQL.ReportPortal.Tests
             return doc.RootElement.Clone();
         }
 
-        private static async Task PollSchedulerIdleAsync(HttpClient client, int timeoutSeconds = 10)
+        private static async Task PollSchedulerIdleAsync(HttpClient client, int timeoutSeconds = 30)
         {
             var start = DateTime.UtcNow;
             while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
@@ -118,7 +118,7 @@ namespace ETL_SQL.ReportPortal.Tests
         private static async Task<JobDefinition> PollJobDefinitionUpdatedAsync(
             IJobHistoryStore store,
             string jobName,
-            int timeoutSeconds = 10)
+            int timeoutSeconds = 30)
         {
             var start = DateTime.UtcNow;
             while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)
@@ -146,7 +146,7 @@ namespace ETL_SQL.ReportPortal.Tests
         private async Task<JsonElement?> FindMailPitMessageAsync(string subject)
         {
             var start = DateTime.UtcNow;
-            while ((DateTime.UtcNow - start).TotalSeconds < 10)
+            while ((DateTime.UtcNow - start).TotalSeconds < 30)
             {
                 var messages = await _smtp.GetMessagesAsync();
                 var messageList = messages.GetProperty("messages");

@@ -226,10 +226,14 @@ namespace ETL_SQL.ReportPortal.Tests
                 return await _client.SendAsync(request);
             }
 
-            async Task<HttpResponseMessage> AuthPut(string token, string url, object body)
+            async Task<HttpResponseMessage> AuthPut(string token, string url, object body, string? ifMatch = null)
             {
                 using var request = new HttpRequestMessage(HttpMethod.Put, url);
                 request.Headers.Authorization = new("Bearer", token);
+                if (ifMatch != null)
+                {
+                    request.Headers.TryAddWithoutValidation("If-Match", ifMatch);
+                }
                 request.Content = JsonContent.Create(body);
                 return await _client.SendAsync(request);
             }
@@ -282,8 +286,9 @@ namespace ETL_SQL.ReportPortal.Tests
                 var grpNames = user.UserGroups.Select(ug => ug.Group.Name).ToList();
                 Assert.Contains("GG-Portal-Publishers", grpNames);
 
+                var admin = await db.Users.SingleAsync(u => u.UserName == "admin");
                 var groupId = user.UserGroups.Single(ug => ug.Group.Name == "GG-Portal-Publishers").GroupId;
-                var folder = new Folder { Name = "LDAP Finance", Path = "/LDAP Finance", OwnerId = user.Id };
+                var folder = new Folder { Name = "LDAP Finance", Path = "/LDAP Finance", OwnerId = admin.Id };
                 db.Folders.Add(folder);
                 await db.SaveChangesAsync();
                 db.FolderAcls.Add(new FolderAcl { FolderId = folder.Id, GroupId = groupId, Permission = FolderPermission.Read });
@@ -318,7 +323,7 @@ namespace ETL_SQL.ReportPortal.Tests
                 Assert.DoesNotContain("Publisher", await userManager.GetRolesAsync(user));
             }
 
-            Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(loginResp.Token, $"/api/reports/{reportId}")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized, (await AuthGet(loginResp.Token, $"/api/reports/{reportId}")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await AuthGet(relogin!.Token, $"/api/reports/{reportId}")).StatusCode);
 
             // 4. A removed directory user cannot establish a new session.
@@ -341,11 +346,19 @@ namespace ETL_SQL.ReportPortal.Tests
                 Assert.Equal(HttpStatusCode.NoContent, (await _client.SendAsync(changePassword)).StatusCode);
             }
 
+            long userVersion;
+            using (var scope = _factory.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+                var user = await db.Users.SingleAsync(u => u.Id == userId);
+                userVersion = user.Version;
+            }
+
             var adminReloginRes = await _client.PostAsJsonAsync("/api/auth/login", new LoginRequest("admin", "Admin@LdapTests99!"));
             Assert.Equal(HttpStatusCode.OK, adminReloginRes.StatusCode);
             var adminRelogin = await adminReloginRes.Content.ReadFromJsonAsync<LoginResponse>();
-            var deactivateRes = await AuthPut(adminRelogin!.Token, $"/api/admin/users/{userId}", new { isActive = false });
-            Assert.Equal(HttpStatusCode.NoContent, deactivateRes.StatusCode);
+            var deactivateRes = await AuthPut(adminRelogin!.Token, $"/api/admin/users/{userId}", new { isActive = false }, $"\"{userVersion}\"");
+            Assert.Equal(HttpStatusCode.OK, deactivateRes.StatusCode);
 
             Assert.Equal(HttpStatusCode.Unauthorized, (await AuthGet(relogin.Token, "/api/folders")).StatusCode);
             var refreshRes = await _client.PostAsJsonAsync("/api/auth/refresh", new RefreshRequest(relogin.RefreshToken));
