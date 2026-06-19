@@ -38,18 +38,18 @@ namespace ETL_SQL.Core
 
     public enum ObjectCreationMode { Create, Alter, CreateOrAlter }
 
-    public record Script : AstNode
+    public sealed record Script : AstNode
     {
         public List<Statement> Statements { get; init; } = new();
         public List<ETL_SQL.Core.Common.Diagnostic> Diagnostics { get; init; } = new();
         public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
-    public record NoOpStatement : Statement
+    public sealed record NoOpStatement : Statement
     {
     }
 
-    public record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, Expression>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
+    public sealed record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, Expression>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
     {
         public string ConnectionName { get; } = name;
         public string? ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
@@ -57,7 +57,7 @@ namespace ETL_SQL.Core
         public Dictionary<string, Expression>? Options { get; } = options;
         public ObjectCreationMode Mode { get; } = mode;
     }
-    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
+    public sealed record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
     {
         public Expression Path { get; } = path;
         public Expression? Bits { get; } = bits;
@@ -66,7 +66,7 @@ namespace ETL_SQL.Core
         public Expression? Comment { get; } = comment;
     }
 
-    public record CreatePgpKeyPairStatement(Expression path, Expression? bits = null, Expression? identity = null, Expression? passphrase = null) : Statement
+    public sealed record CreatePgpKeyPairStatement(Expression path, Expression? bits = null, Expression? identity = null, Expression? passphrase = null) : Statement
     {
         public Expression Path { get; } = path;
         public Expression? Bits { get; } = bits;
@@ -75,16 +75,23 @@ namespace ETL_SQL.Core
     }
 
 
-    public record SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
+    public sealed record SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
     {
         public Expression Expression { get; } = expression;
         public string? Alias { get; } = alias;
-        public Dictionary<string, string> Metadata { get; set; } = metadata ?? new(StringComparer.OrdinalIgnoreCase);
-        public string? Description => Metadata.TryGetValue("d", out var d) ? d : null;
+        // Lazily allocated: most select columns carry no metadata, so the dictionary is created on
+        // first use. Description reads the backing field directly to avoid allocating just to look up.
+        private Dictionary<string, string>? _metadata = metadata;
+        public Dictionary<string, string> Metadata
+        {
+            get => _metadata ??= new(StringComparer.OrdinalIgnoreCase);
+            set => _metadata = value;
+        }
+        public string? Description => _metadata != null && _metadata.TryGetValue("d", out var d) ? d : null;
         public string? DerivedFromDescriptions { get; set; }
     }
 
-    public record TableReference : AstNode
+    public sealed record TableReference : AstNode
     {
         public string? ConnectionName { get; }
         public string? DatabaseName { get; }
@@ -95,9 +102,23 @@ namespace ETL_SQL.Core
         public FunctionCallExpression? FunctionCall { get; }
         public List<List<Expression>>? ValuesRows { get; }
         public List<string>? ColumnAliases { get; }
-        public List<AstNode> TableOperators { get; } = new();
-        public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, Expression> Options { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        // Lazily allocated: PIVOT/UNPIVOT operators, table-hint options, and metadata are absent on
+        // the vast majority of table references, so the backing collections are created on first use
+        // rather than per-instance.
+        private List<AstNode>? _tableOperators;
+        private Dictionary<string, string>? _metadata;
+        private Dictionary<string, Expression>? _options;
+        public List<AstNode> TableOperators => _tableOperators ??= new();
+        public Dictionary<string, string> Metadata
+        {
+            get => _metadata ??= new(StringComparer.OrdinalIgnoreCase);
+            set => _metadata = value;
+        }
+        public Dictionary<string, Expression> Options
+        {
+            get => _options ??= new(StringComparer.OrdinalIgnoreCase);
+            set => _options = value;
+        }
 
         public TableReference(string tableName, string? schemaName = null, string? databaseName = null, string? connectionName = null, string? alias = null, Statement? subquery = null, FunctionCallExpression? functionCall = null, List<List<Expression>>? valuesRows = null, List<string>? columnAliases = null)
         {
@@ -114,7 +135,7 @@ namespace ETL_SQL.Core
 
         public override string ToSql() => AstSerializer.Format(this);
 
-        public virtual IEnumerable<string> GetSourceTables()
+        public IEnumerable<string> GetSourceTables()
         {
             if (Subquery is SelectStatement sel) return sel.GetSourceTables();
             if (Subquery is SetOperationStatement setOp) return setOp.GetSourceTables();
@@ -130,7 +151,7 @@ namespace ETL_SQL.Core
         public override string ToString() => ToSql();
     }
 
-    public record PivotClause : AstNode
+    public sealed record PivotClause : AstNode
     {
         public string AggregateFunction { get; }
         public string AggregateColumn { get; }
@@ -147,7 +168,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record OutputClause : AstNode
+    public sealed record OutputClause : AstNode
     {
         public List<SelectColumn> Columns { get; }
         public TableReference? IntoTable { get; }
@@ -159,7 +180,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record UnpivotClause : AstNode
+    public sealed record UnpivotClause : AstNode
     {
         public string ValueColumn { get; }
         public string NameColumn { get; }
@@ -174,7 +195,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record MatchRecognizeClause : AstNode
+    public sealed record MatchRecognizeClause : AstNode
     {
         public List<Expression> PartitionBy { get; } = new();
         public List<OrderByClause> OrderBy { get; } = new();
@@ -187,7 +208,7 @@ namespace ETL_SQL.Core
 
     public enum JoinHint { None, Hash, Loop, Merge }
 
-    public record JoinClause : AstNode
+    public sealed record JoinClause : AstNode
     {
         public string JoinType { get; }
         public TableReference Table { get; }
@@ -207,7 +228,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record OrderByClause : AstNode
+    public sealed record OrderByClause : AstNode
     {
         public Expression Expression { get; }
         public bool Descending { get; }
@@ -218,7 +239,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CteDefinition : AstNode
+    public sealed record CteDefinition : AstNode
     {
         public string Name { get; }
         public List<string>? ColumnNames { get; }
@@ -234,7 +255,7 @@ namespace ETL_SQL.Core
     public enum ForType { JSON, XML }
     public enum ForMode { PATH, AUTO, RAW, EXPLICIT }
 
-    public record ForClause : AstNode
+    public sealed record ForClause : AstNode
     {
         public ForType Type { get; }
         public ForMode Mode { get; }
@@ -251,7 +272,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record SelectStatement : Statement
+    public sealed record SelectStatement : Statement
     {
         public List<SelectColumn> Columns { get; init; }
         public TableReference? IntoTable { get; init; }
@@ -305,7 +326,7 @@ namespace ETL_SQL.Core
     /// Represents GROUP BY GROUPING SETS(...), ROLLUP(...), or CUBE(...).
     /// When Type == None, GroupSets contains exactly one entry (the plain GROUP BY list).
     /// </summary>
-    public record GroupingSetClause : AstNode
+    public sealed record GroupingSetClause : AstNode
     {
         public GroupingSetType Type { get; }
         /// <summary>
@@ -323,7 +344,7 @@ namespace ETL_SQL.Core
 
     public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
 
-    public record SetOperationStatement : Statement
+    public sealed record SetOperationStatement : Statement
     {
         public Statement Left { get; }
         public SetOpType Operation { get; }
@@ -347,7 +368,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ExecStatement : Statement
+    public sealed record ExecStatement : Statement
     {
         public Expression SqlExpression { get; }
         public Expression? ConnectionName { get; set; }
@@ -363,7 +384,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ExecuteRemoteBlockStatement : Statement
+    public sealed record ExecuteRemoteBlockStatement : Statement
     {
         public Expression ConnectionName { get; }
         public BlockStatement Body { get; }
@@ -377,7 +398,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ExecutePushdownStatement : Statement
+    public sealed record ExecutePushdownStatement : Statement
     {
         public Expression ConnectionName { get; }
         public string SqlText { get; }
@@ -554,7 +575,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record InsertStatement : Statement
+    public sealed record InsertStatement : Statement
     {
         public TableReference TargetTable { get; }
         public Statement? SelectQuery { get; }
@@ -590,7 +611,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record Assignment : AstNode
+    public sealed record Assignment : AstNode
     {
         public string ColumnName { get; }
         public Expression Value { get; }
@@ -602,7 +623,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record UpdateStatement : Statement
+    public sealed record UpdateStatement : Statement
     {
         public TableReference TargetTable { get; }
         public List<Assignment> Assignments { get; }
@@ -620,7 +641,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record DeleteStatement : Statement
+    public sealed record DeleteStatement : Statement
     {
         public TableReference TargetTable { get; }
         public Expression? WhereClause { get; }
@@ -633,29 +654,29 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record KillJobStatement(Expression JobIdExpr) : Statement;
+    public sealed record KillJobStatement(Expression JobIdExpr) : Statement;
 
-    public record DropJobStatement(string Name, bool IfExists) : Statement;
+    public sealed record DropJobStatement(string Name, bool IfExists) : Statement;
 
     /// <summary>ENABLE JOB 'name'; — enables a disabled job in the scheduler.</summary>
-    public record EnableJobStatement(string Name) : Statement
+    public sealed record EnableJobStatement(string Name) : Statement
     {
         public string? At { get; set; }
     }
 
     /// <summary>DISABLE JOB 'name'; — disables a job without deleting it.</summary>
-    public record DisableJobStatement(string Name) : Statement
+    public sealed record DisableJobStatement(string Name) : Statement
     {
         public string? At { get; set; }
     }
 
     /// <summary>TRIGGER JOB 'name'; — immediately queues a one-off run of the job.</summary>
-    public record TriggerJobStatement(string Name) : Statement
+    public sealed record TriggerJobStatement(string Name) : Statement
     {
         public string? At { get; set; }
     }
 
-    public record TruncateTableStatement : Statement
+    public sealed record TruncateTableStatement : Statement
     {
         public TableReference TargetTable { get; }
 
@@ -690,7 +711,7 @@ namespace ETL_SQL.Core
     }
 
     public record MergeMatchedClause(MergeActionType ActionType, Expression? Condition) : MergeActionClause(ActionType, Condition);
-    public record MergeUpdateClause : MergeMatchedClause
+    public sealed record MergeUpdateClause : MergeMatchedClause
     {
         public List<Assignment> Assignments { get; init; }
         public MergeUpdateClause(Expression? condition, List<Assignment> assignments) : base(MergeActionType.UPDATE, condition)
@@ -699,7 +720,7 @@ namespace ETL_SQL.Core
             UpdateAssignments = assignments;
         }
     }
-    public record MergeDeleteClause(Expression? Condition) : MergeMatchedClause(MergeActionType.DELETE, Condition)
+    public sealed record MergeDeleteClause(Expression? Condition) : MergeMatchedClause(MergeActionType.DELETE, Condition)
     {
     }
 
@@ -713,7 +734,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record MergeInsertClause : MergeNotMatchedClause
+    public sealed record MergeInsertClause : MergeNotMatchedClause
     {
         public List<string>? Columns { get; init; }
         public List<Expression> Values { get; init; }
@@ -730,7 +751,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record MergeStatement : Statement
+    public sealed record MergeStatement : Statement
     {
         public TableReference TargetTable { get; init; }
         public string? TargetAlias { get; init; }
@@ -767,7 +788,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ForeignKeyReference : AstNode
+    public sealed record ForeignKeyReference : AstNode
     {
         public TableReference Table { get; }
         public List<string> Columns { get; }
@@ -784,21 +805,21 @@ namespace ETL_SQL.Core
         public override abstract string ToSql();
     }
 
-    public record TablePrimaryKeyConstraint : TableConstraint
+    public sealed record TablePrimaryKeyConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public TablePrimaryKeyConstraint(List<string> columns) => Columns = columns;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record TableUniqueConstraint : TableConstraint
+    public sealed record TableUniqueConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public TableUniqueConstraint(List<string> columns) => Columns = columns;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record TableForeignKeyConstraint : TableConstraint
+    public sealed record TableForeignKeyConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public ForeignKeyReference Reference { get; }
@@ -810,14 +831,14 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record TableCheckConstraint : TableConstraint
+    public sealed record TableCheckConstraint : TableConstraint
     {
         public Expression Expression { get; }
         public TableCheckConstraint(Expression expression) => Expression = expression;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record ColumnDefinition : AstNode
+    public sealed record ColumnDefinition : AstNode
     {
         public string ColumnName { get; }
         public string DataType { get; }
@@ -841,7 +862,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CreateTableStatement : Statement
+    public sealed record CreateTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public bool IfNotExists { get; }
@@ -858,7 +879,7 @@ namespace ETL_SQL.Core
 
     public enum AlterTableActionType { ADD, DROP_COLUMN, RENAME_COLUMN }
 
-    public record AlterTableStatement : Statement
+    public sealed record AlterTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public AlterTableActionType Action { get; }
@@ -878,7 +899,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record DropTableStatement : Statement
+    public sealed record DropTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public bool IfExists { get; }
@@ -890,7 +911,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record DropConnectionStatement : Statement
+    public sealed record DropConnectionStatement : Statement
     {
         public string ConnectionName { get; }
         public bool IfExists { get; }
@@ -901,7 +922,7 @@ namespace ETL_SQL.Core
     /// ALTER CONNECTION &lt;name&gt; [ON &lt;type&gt;(&lt;target&gt;)] [WITH(&lt;options&gt;)];
     /// Modifies an existing connection. Previous options are preserved unless explicitly overridden.
     /// </summary>
-    public record AlterConnectionStatement : Statement
+    public sealed record AlterConnectionStatement : Statement
     {
         public string ConnectionName { get; }
         /// <summary>New connector type — null means keep the existing type.</summary>
@@ -921,36 +942,36 @@ namespace ETL_SQL.Core
     }
 
     public enum ClearSessionMode { Current, Single, All, Stale }
-    public record ClearSessionStatement(ClearSessionMode Mode = ClearSessionMode.Current, Expression? SessionId = null) : Statement
+    public sealed record ClearSessionStatement(ClearSessionMode Mode = ClearSessionMode.Current, Expression? SessionId = null) : Statement
     {
     }
 
-    public record ShowSessionsStatement(string? IntoTable = null) : Statement
+    public sealed record ShowSessionsStatement(string? IntoTable = null) : Statement
     {
     }
 
-    public record DropProcedureStatement : Statement
+    public sealed record DropProcedureStatement : Statement
     {
         public string ProcedureName { get; }
         public bool IfExists { get; }
         public DropProcedureStatement(string name, bool ifExists) { ProcedureName = name; IfExists = ifExists; }
     }
 
-    public record DropFunctionStatement : Statement
+    public sealed record DropFunctionStatement : Statement
     {
         public string FunctionName { get; }
         public bool IfExists { get; }
         public DropFunctionStatement(string name, bool ifExists) { FunctionName = name; IfExists = ifExists; }
     }
 
-    public record DropViewStatement : Statement
+    public sealed record DropViewStatement : Statement
     {
         public string ViewName { get; }
         public bool IfExists { get; }
         public DropViewStatement(string name, bool ifExists) { ViewName = name; IfExists = ifExists; }
     }
 
-    public record DropIndexStatement : Statement
+    public sealed record DropIndexStatement : Statement
     {
         public string IndexName { get; }
         public TableReference? Table { get; }
@@ -958,7 +979,7 @@ namespace ETL_SQL.Core
         public DropIndexStatement(string name, TableReference? table, bool ifExists) { IndexName = name; Table = table; IfExists = ifExists; }
     }
 
-    public record DeclareStatement : Statement
+    public sealed record DeclareStatement : Statement
     {
         public string VariableName { get; }
         public string DataType { get; }
@@ -992,7 +1013,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record DockerStatement : Statement
+    public sealed record DockerStatement : Statement
     {
         public Expression ImageName { get; }
         public string? Alias { get; }
@@ -1003,9 +1024,9 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record RunScriptParameter(string Name, Expression Value, bool IsOutput);
+    public sealed record RunScriptParameter(string Name, Expression Value, bool IsOutput);
 
-    public record RunScriptStatement : Statement
+    public sealed record RunScriptStatement : Statement
     {
         public Expression PathExpression { get; }
         public List<RunScriptParameter> Parameters { get; }
@@ -1019,7 +1040,7 @@ namespace ETL_SQL.Core
 
     public enum BundleSecretMode { None, Prompt, Literal }
 
-    public record PublishBundleStatement(
+    public sealed record PublishBundleStatement(
         string BundleName,
         Expression SourcePath,
         string EntryPath,
@@ -1029,16 +1050,16 @@ namespace ETL_SQL.Core
         string? KeyFile = null,
         string? Description = null) : Statement;
 
-    public record ValidateBundleStatement(
+    public sealed record ValidateBundleStatement(
         string BundleName,
         Expression SourcePath,
         string EntryPath,
         BundleSecretMode PasswordMode = BundleSecretMode.None,
         string? Password = null) : Statement;
 
-    public record ExportScriptStatement(Expression SourcePath, Expression TargetPath) : Statement;
+    public sealed record ExportScriptStatement(Expression SourcePath, Expression TargetPath) : Statement;
 
-    public record SetVariableStatement(Expression Target, Expression Value) : Statement
+    public sealed record SetVariableStatement(Expression Target, Expression Value) : Statement
     {
         public string VariableName => Target switch
         {
@@ -1049,7 +1070,7 @@ namespace ETL_SQL.Core
         };
     }
 
-    public record BlockStatement : Statement
+    public sealed record BlockStatement : Statement
     {
         public List<Statement> Statements { get; }
 
@@ -1059,7 +1080,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record WhileStatement : Statement
+    public sealed record WhileStatement : Statement
     {
         public Expression Condition { get; }
         public Statement Body { get; }
@@ -1071,7 +1092,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ForStatement : Statement
+    public sealed record ForStatement : Statement
     {
         public string VariableName { get; }
         public Expression StartValue { get; }
@@ -1090,7 +1111,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ForeachStatement : Statement
+    public sealed record ForeachStatement : Statement
     {
         public string VariableName { get; }
         public Expression ListExpression { get; }
@@ -1104,7 +1125,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ElseIfClause : AstNode
+    public sealed record ElseIfClause : AstNode
     {
         public Expression Condition { get; }
         public Statement Body { get; }
@@ -1116,7 +1137,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record IfStatement : Statement
+    public sealed record IfStatement : Statement
     {
         public Expression Condition { get; }
         public Statement IfBody { get; }
@@ -1132,9 +1153,9 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record PrintStatement(List<Expression> Arguments, Expression? ShowTimestamp = null, Expression? TimestampFormat = null) : Statement;
+    public sealed record PrintStatement(List<Expression> Arguments, Expression? ShowTimestamp = null, Expression? TimestampFormat = null) : Statement;
 
-    public record FileOperationStatement : Statement
+    public sealed record FileOperationStatement : Statement
     {
         public FileOpType Type { get; }
         public Expression Source { get; }
@@ -1160,7 +1181,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record DirectoryOperationStatement : Statement
+    public sealed record DirectoryOperationStatement : Statement
     {
         public DirectoryOpType Type { get; }
         public Expression Path { get; }
@@ -1189,17 +1210,17 @@ namespace ETL_SQL.Core
     }
 
 
-    public record WaitForFileStatement(Expression Path, Expression? Timeout = null, Expression? PollInterval = null) : Statement;
+    public sealed record WaitForFileStatement(Expression Path, Expression? Timeout = null, Expression? PollInterval = null) : Statement;
 
-    public record ConvertFileEncodingStatement(Expression Source, Expression Destination, Expression FromEncoding, Expression ToEncoding, Expression? Overwrite = null) : Statement;
+    public sealed record ConvertFileEncodingStatement(Expression Source, Expression Destination, Expression FromEncoding, Expression ToEncoding, Expression? Overwrite = null) : Statement;
 
-    public record SplitFileStatement(Expression Source, Expression DestinationDir, Expression LimitType, Expression LimitValue, Expression? Prefix = null, Expression? Overwrite = null) : Statement;
+    public sealed record SplitFileStatement(Expression Source, Expression DestinationDir, Expression LimitType, Expression LimitValue, Expression? Prefix = null, Expression? Overwrite = null) : Statement;
 
-    public record MergeFilesStatement(Expression Source, Expression Destination, Expression? Header = null, Expression? Overwrite = null) : Statement;
+    public sealed record MergeFilesStatement(Expression Source, Expression Destination, Expression? Header = null, Expression? Overwrite = null) : Statement;
 
-    public record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null) : Statement;
+    public sealed record SyncDirectoryStatement(Expression Source, Expression Destination, Expression? DeleteExtra = null, Expression? Overwrite = null, Expression? Recursive = null) : Statement;
 
-    public record VerifyFileIntegrityStatement(Expression Source, Expression? HashFile = null, Expression? ExpectedHash = null, Expression? Algorithm = null) : Statement;
+    public sealed record VerifyFileIntegrityStatement(Expression Source, Expression? HashFile = null, Expression? ExpectedHash = null, Expression? Algorithm = null) : Statement;
 
 
 
@@ -1207,13 +1228,13 @@ namespace ETL_SQL.Core
     public enum WaitType { Delay, Time, Until }
 
     /// <summary>WAITFOR DELAY/TIME '...' — pauses execution.</summary>
-    public record WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
+    public sealed record WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
     {
         public Expression Expression { get; } = expression;
         public WaitType Type { get; } = type;
     }
 
-    public record RaiseErrorStatement : Statement
+    public sealed record RaiseErrorStatement : Statement
     {
         public Expression Message { get; }
         public Expression Severity { get; }
@@ -1229,11 +1250,11 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record AssertStatement(Expression Condition, Expression? Message = null) : Statement
+    public sealed record AssertStatement(Expression Condition, Expression? Message = null) : Statement
     {
     }
 
-    public record ExpectedSchemaColumn
+    public sealed record ExpectedSchemaColumn
     {
         public required string ColumnName { get; init; }
         public required string DataType { get; init; }
@@ -1245,16 +1266,16 @@ namespace ETL_SQL.Core
     /// Validates that the actual schema of a #temp table or connection matches the declared columns.
     /// Raises ExecutionException (or logs a warning with ON DRIFT WARN) when drift is detected.
     /// </summary>
-    public record ExpectSchemaStatement : Statement
+    public sealed record ExpectSchemaStatement : Statement
     {
         public required string Target { get; init; }
         public required List<ExpectedSchemaColumn> Columns { get; init; }
         public bool WarnOnDrift { get; init; }
     }
 
-    public record ExecuteParameter(Expression Expression, string? Name = null, bool IsOutput = false, bool IsInput = false) : AstNode;
+    public sealed record ExecuteParameter(Expression Expression, string? Name = null, bool IsOutput = false, bool IsInput = false) : AstNode;
 
-    public record ExecuteStatement : Statement
+    public sealed record ExecuteStatement : Statement
     {
         public string ProcedureName { get; }
         public List<ExecuteParameter> Parameters { get; }
@@ -1266,7 +1287,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ParallelStatement : Statement
+    public sealed record ParallelStatement : Statement
     {
         public BlockStatement Body { get; }
         public int ConcurrencyLimit { get; set; } = 0; // 0 means no limit (all tasks)
@@ -1278,7 +1299,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ParallelForStatement : Statement
+    public sealed record ParallelForStatement : Statement
     {
         public string VariableName { get; }
         public Expression StartValue { get; }
@@ -1299,7 +1320,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record BulkInsertStatement : Statement
+    public sealed record BulkInsertStatement : Statement
     {
         public TableReference TargetTable { get; }
         public List<string>? Columns { get; }
@@ -1323,7 +1344,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CreateProcedureStatement : Statement
+    public sealed record CreateProcedureStatement : Statement
     {
         public string ProcedureName { get; }
         public List<ParameterDefinition> Parameters { get; }
@@ -1339,7 +1360,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CreateFunctionStatement : Statement
+    public sealed record CreateFunctionStatement : Statement
     {
         public string FunctionName { get; }
         public List<ParameterDefinition> Parameters { get; }
@@ -1357,7 +1378,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CreateViewStatement : Statement
+    public sealed record CreateViewStatement : Statement
     {
         public string ViewName { get; }
         public Statement Query { get; }
@@ -1371,7 +1392,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ParameterDefinition : AstNode
+    public sealed record ParameterDefinition : AstNode
     {
         public string Name { get; }
         public string DataType { get; }
@@ -1383,29 +1404,29 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record BeginTransactionStatement : Statement
+    public sealed record BeginTransactionStatement : Statement
     {
         public string? Name { get; }
         public BeginTransactionStatement(string? name = null) => Name = name;
     }
 
-    public record CommitTransactionStatement : Statement
+    public sealed record CommitTransactionStatement : Statement
     {
         public string? Name { get; }
         public CommitTransactionStatement(string? name = null) => Name = name;
     }
 
-    public record RollbackTransactionStatement : Statement
+    public sealed record RollbackTransactionStatement : Statement
     {
         public string? Name { get; }
         public RollbackTransactionStatement(string? name = null) => Name = name;
     }
 
-    public record ContinueStatement : Statement
+    public sealed record ContinueStatement : Statement
     {
     }
 
-    public record ThrowStatement : Statement
+    public sealed record ThrowStatement : Statement
     {
         public Expression? ErrorNumber { get; }
         public Expression? Message { get; }
@@ -1419,7 +1440,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record TryCatchStatement : Statement
+    public sealed record TryCatchStatement : Statement
     {
         public Statement TryBody { get; }
         public Statement CatchBody { get; }
@@ -1432,7 +1453,7 @@ namespace ETL_SQL.Core
     }
 
 
-    public record ReturnStatement : Statement
+    public sealed record ReturnStatement : Statement
     {
         public Expression? ReturnValue { get; }
 
@@ -1442,24 +1463,24 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record BreakStatement : Statement
+    public sealed record BreakStatement : Statement
     {
     }
 
     /// <summary>Marks a batch boundary. The Evaluator runs each batch independently;
     /// if one batch fails the next batch still executes.</summary>
-    public record GoStatement(int Count = 1) : Statement;
+    public sealed record GoStatement(int Count = 1) : Statement;
 
-    public record SectionLabelStatement(string LabelName) : Statement
+    public sealed record SectionLabelStatement(string LabelName) : Statement
     {
         public bool IsTopLevel { get; set; }
     }
 
-    public record GotoStatement(string LabelName) : Statement;
+    public sealed record GotoStatement(string LabelName) : Statement;
 
     /// <summary>Generates a 32-bit cryptographically secure JWT secret, encrypts it, 
     /// and optionally updates the appsettings.json file.</summary>
-    public record GenerateJwtSecretStatement : Statement
+    public sealed record GenerateJwtSecretStatement : Statement
     {
     }
 
@@ -1471,7 +1492,7 @@ namespace ETL_SQL.Core
         public virtual IEnumerable<string> GetSourceColumns() => Enumerable.Empty<string>();
     }
 
-    public record UnaryExpression : Expression
+    public sealed record UnaryExpression : Expression
     {
         public TokenType Operator { get; }
         public Expression Expression { get; }
@@ -1485,7 +1506,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Expression.GetSourceColumns();
     }
 
-    public record BinaryExpression : Expression
+    public sealed record BinaryExpression : Expression
     {
         public Expression Left { get; }
         public TokenType Operator { get; }
@@ -1501,7 +1522,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns().Concat(Right.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    public record LiteralExpression : Expression
+    public sealed record LiteralExpression : Expression
     {
         public object? Value { get; }
         public TokenType Type { get; }
@@ -1513,7 +1534,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record IdentifierExpression : Expression
+    public sealed record IdentifierExpression : Expression
     {
         public string Name { get; }
 
@@ -1526,7 +1547,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Name.Contains('.') ? new[] { Name.Split('.')[0] } : Enumerable.Empty<string>();
     }
 
-    public record MemberAccessExpression : Expression
+    public sealed record MemberAccessExpression : Expression
     {
         public Expression Expression { get; }
         public string MemberName { get; }
@@ -1541,7 +1562,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => new[] { MemberName };
     }
 
-    public record SubqueryExpression : Expression
+    public sealed record SubqueryExpression : Expression
     {
         public Statement Query { get; }
 
@@ -1551,12 +1572,12 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record VariableExpression(string Name) : Expression
+    public sealed record VariableExpression(string Name) : Expression
     {
         public string Name { get; } = Name;
     }
 
-    public record ParameterExpression(string Value, int? Index = null) : Expression
+    public sealed record ParameterExpression(string Value, int? Index = null) : Expression
     {
         public string Value { get; } = Value;
         public int? Index { get; } = Index;
@@ -1581,9 +1602,9 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Arguments.SelectMany(a => a.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    public record JsonTableSpec(List<JsonTableColumnSpec> Columns);
+    public sealed record JsonTableSpec(List<JsonTableColumnSpec> Columns);
 
-    public record JsonTableColumnSpec(
+    public sealed record JsonTableColumnSpec(
         string Name,
         string? TypeName,
         Expression? Path,
@@ -1592,7 +1613,7 @@ namespace ETL_SQL.Core
         Expression? DefaultOnEmpty = null,
         Expression? DefaultOnError = null);
 
-    public record ListExpression : Expression
+    public sealed record ListExpression : Expression
     {
         public List<Expression> Items { get; }
 
@@ -1602,7 +1623,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record IsNullExpression : Expression
+    public sealed record IsNullExpression : Expression
     {
         public Expression Expression { get; }
         public bool Not { get; }
@@ -1615,7 +1636,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>EXPORT REPORT 'path.rptsql' FORMAT PDF|CSV|MARKDOWN TO 'output.pdf' [WITH (...)]</summary>
-    public record ExportReportStatement(
+    public sealed record ExportReportStatement(
         Expression ReportPath,
         string Format,
         Expression OutputPath,
@@ -1623,7 +1644,7 @@ namespace ETL_SQL.Core
         Expression? Host = null,
         Expression? BrowserPath = null) : Statement;
 
-    public record ExportStatement : Statement
+    public sealed record ExportStatement : Statement
     {
         public Expression Source { get; }
         public string TargetPath { get; }
@@ -1637,7 +1658,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record HelpStatement : Statement
+    public sealed record HelpStatement : Statement
     {
         public string? Topic { get; }
         public string? SubTopic { get; }
@@ -1649,11 +1670,11 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record RequireVersionStatement(string Operator, string Version) : Statement
+    public sealed record RequireVersionStatement(string Operator, string Version) : Statement
     {
     }
 
-    public record InExpression : Expression
+    public sealed record InExpression : Expression
     {
         public Expression Left { get; }
         public Expression Right { get; }
@@ -1673,7 +1694,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Left.GetSourceTables();
     }
 
-    public record BetweenExpression : Expression
+    public sealed record BetweenExpression : Expression
     {
         public Expression Left { get; }
         public Expression Start { get; }
@@ -1692,7 +1713,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns().Concat(Start.GetSourceColumns()).Concat(End.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    public record LineageStatement : Statement
+    public sealed record LineageStatement : Statement
     {
         public TableReference? TargetTable { get; }
         public string? ColumnName { get; }
@@ -1710,7 +1731,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ShowLineageHistoryForTableStatement : Statement
+    public sealed record ShowLineageHistoryForTableStatement : Statement
     {
         public string TableName { get; init; } = string.Empty;
         public int? Limit { get; init; }
@@ -1718,7 +1739,7 @@ namespace ETL_SQL.Core
         public string? At { get; set; }
     }
 
-    public record ShowLineageHistoryForTagStatement : Statement
+    public sealed record ShowLineageHistoryForTagStatement : Statement
     {
         public string TagKey { get; init; } = string.Empty;
         public string? TagValue { get; init; }
@@ -1727,7 +1748,7 @@ namespace ETL_SQL.Core
         public string? At { get; set; }
     }
 
-    public record ShowLineageHistoryForJobStatement : Statement
+    public sealed record ShowLineageHistoryForJobStatement : Statement
     {
         public string JobName { get; init; } = string.Empty;
         public int? Limit { get; init; }
@@ -1735,7 +1756,7 @@ namespace ETL_SQL.Core
         public string? At { get; set; }
     }
 
-    public record ShowVariablesStatement : Statement
+    public sealed record ShowVariablesStatement : Statement
     {
         public bool IsLocalOnly { get; init; }
         public string? IntoTable { get; init; }
@@ -1747,7 +1768,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ShowScriptTagsStatement : Statement
+    public sealed record ShowScriptTagsStatement : Statement
     {
         public string? IntoTable { get; init; }
 
@@ -1757,7 +1778,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ShowSafeZonesStatement : Statement
+    public sealed record ShowSafeZonesStatement : Statement
     {
         public string? IntoTable { get; init; }
 
@@ -1767,7 +1788,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record EmailStatement : Statement
+    public sealed record EmailStatement : Statement
     {
         public Expression To { get; }
         public Expression From { get; }
@@ -1789,7 +1810,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record LikeExpression : Expression
+    public sealed record LikeExpression : Expression
     {
         public Expression Left { get; }
         public Expression Pattern { get; }
@@ -1807,7 +1828,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ExistsExpression : Expression
+    public sealed record ExistsExpression : Expression
     {
         public Statement Subquery { get; }
         public bool IsNot { get; }
@@ -1819,7 +1840,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CaseExpression : Expression
+    public sealed record CaseExpression : Expression
     {
         public Expression? InputExpression { get; }
         public List<(Expression Condition, Expression Result)> WhenClauses { get; }
@@ -1848,7 +1869,7 @@ namespace ETL_SQL.Core
             return columns.Distinct(StringComparer.OrdinalIgnoreCase);
         }
     }
-    public record AtTimeZoneExpression : Expression
+    public sealed record AtTimeZoneExpression : Expression
     {
         public Expression Left { get; }
         public Expression TimeZone { get; }
@@ -1863,7 +1884,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
     }
 
-    public record SubstringExpression : FunctionCallExpression
+    public sealed record SubstringExpression : FunctionCallExpression
     {
         public Expression String { get; }
         public Expression Start { get; }
@@ -1881,14 +1902,14 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns();
     }
 
-    public record GenerateRule(string ColumnName, string Rule) : AstNode;
+    public sealed record GenerateRule(string ColumnName, string Rule) : AstNode;
 
-    public record GenerateStatement(Expression RowCount, TableReference Target, List<GenerateRule> Rules, Dictionary<string, Expression>? Options = null) : Statement
+    public sealed record GenerateStatement(Expression RowCount, TableReference Target, List<GenerateRule> Rules, Dictionary<string, Expression>? Options = null) : Statement
     {
         public override IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
     }
 
-    public record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
+    public sealed record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
     {
         public Expression Substring { get; } = substring;
         public Expression String { get; } = str;
@@ -1897,7 +1918,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Substring.GetSourceColumns());
     }
 
-    public record ExtractExpression(string field, Expression source) : FunctionCallExpression("EXTRACT", new List<Expression> { new LiteralExpression(field, TokenType.IDENTIFIER), source })
+    public sealed record ExtractExpression(string field, Expression source) : FunctionCallExpression("EXTRACT", new List<Expression> { new LiteralExpression(field, TokenType.IDENTIFIER), source })
     {
         public string Field { get; } = field;
         public Expression Source { get; } = source;
@@ -1906,7 +1927,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Source.GetSourceColumns();
     }
 
-    public record OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : FunctionCallExpression("OVERLAY", new List<Expression> { str, overlay, start, length ?? new LiteralExpression(null, TokenType.NULL) })
+    public sealed record OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : FunctionCallExpression("OVERLAY", new List<Expression> { str, overlay, start, length ?? new LiteralExpression(null, TokenType.NULL) })
     {
         public Expression String { get; } = str;
         public Expression Overlay { get; } = overlay;
@@ -1919,7 +1940,7 @@ namespace ETL_SQL.Core
 
     public enum TrimType { BOTH, LEADING, TRAILING }
 
-    public record TrimExpression(TrimType type, Expression? characters, Expression str) : FunctionCallExpression("TRIM", new List<Expression> { new LiteralExpression(type.ToString(), TokenType.IDENTIFIER), characters ?? new LiteralExpression(null, TokenType.NULL), str })
+    public sealed record TrimExpression(TrimType type, Expression? characters, Expression str) : FunctionCallExpression("TRIM", new List<Expression> { new LiteralExpression(type.ToString(), TokenType.IDENTIFIER), characters ?? new LiteralExpression(null, TokenType.NULL), str })
     {
         public TrimType Type { get; } = type;
         public Expression? Characters { get; } = characters;
@@ -1933,7 +1954,7 @@ namespace ETL_SQL.Core
     public enum WindowFrameBoundType { PRECEDING, FOLLOWING, CURRENT_ROW, UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING }
     public enum WindowFrameExclusion { NoOthers, CurrentRow, Group, Ties }
 
-    public record WindowFrame : AstNode
+    public sealed record WindowFrame : AstNode
     {
         public WindowFrameType Type { get; }
         public WindowFrameBoundType StartBound { get; }
@@ -1954,7 +1975,7 @@ namespace ETL_SQL.Core
     }
 
 
-    public record WindowClause : AstNode
+    public sealed record WindowClause : AstNode
     {
         public List<Expression> PartitionBy { get; }
         public List<OrderByClause> OrderBy { get; }
@@ -1968,7 +1989,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record CreateIndexStatement : Statement
+    public sealed record CreateIndexStatement : Statement
     {
         public string IndexName { get; }
         public TableReference TargetTable { get; }
@@ -1984,7 +2005,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ExplainStatement : Statement
+    public sealed record ExplainStatement : Statement
     {
         public Statement Query { get; }
         public bool IsAnalyze { get; init; }
@@ -2003,7 +2024,7 @@ namespace ETL_SQL.Core
 
     public enum FileTransferType { Send, Receive }
 
-    public record FileTransferStatement : Statement
+    public sealed record FileTransferStatement : Statement
     {
         public FileTransferType Type { get; set; }
         public Expression LocalPath { get; set; } = null!;
@@ -2017,14 +2038,14 @@ namespace ETL_SQL.Core
 
     public enum DockerTargetMode { Single, LastStarted, All }
 
-    public record DockerActionStatement(DockerAction action, string? alias = null, DockerTargetMode targetMode = DockerTargetMode.Single) : Statement
+    public sealed record DockerActionStatement(DockerAction action, string? alias = null, DockerTargetMode targetMode = DockerTargetMode.Single) : Statement
     {
         public DockerAction Action { get; } = action;
         public string? Alias { get; } = alias;
         public DockerTargetMode TargetMode { get; } = targetMode;
     }
 
-    public record CreateJobStatement : Statement
+    public sealed record CreateJobStatement : Statement
     {
         public string JobName { get; }
         public ScheduleInfo Schedule { get; }
@@ -2049,7 +2070,7 @@ namespace ETL_SQL.Core
     /// Modifies an existing job's schedule and/or script body.
     /// Fails at execution time if the job does not exist.
     /// </summary>
-    public record AlterJobStatement : Statement
+    public sealed record AlterJobStatement : Statement
     {
         public string JobName { get; }
         /// <summary>New schedule — null means leave the existing schedule unchanged.</summary>
@@ -2065,7 +2086,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ScheduleInfo : AstNode
+    public sealed record ScheduleInfo : AstNode
     {
         public int Interval { get; }
         public string Unit { get; } // SECOND, MINUTE, HOUR, DAY
@@ -2079,7 +2100,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record ShowJobHistoryStatement : Statement
+    public sealed record ShowJobHistoryStatement : Statement
     {
         public string? JobName { get; }
         public string? IntoTable { get; set; }
@@ -2087,49 +2108,49 @@ namespace ETL_SQL.Core
         public ShowJobHistoryStatement(string? jobName = null) { JobName = jobName; }
     }
 
-    public record ShowJobsStatement : Statement
+    public sealed record ShowJobsStatement : Statement
     {
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }
 
-    public record ShowVersionStatement : Statement
+    public sealed record ShowVersionStatement : Statement
     {
         public string? IntoTable { get; init; }
     }
 
-    public record ShowConnectionsStatement : Statement
+    public sealed record ShowConnectionsStatement : Statement
     {
         public string? IntoTable { get; set; }
     }
 
-    public record ShowConnectionConfigStatement : Statement
+    public sealed record ShowConnectionConfigStatement : Statement
     {
         public string ConnectionName { get; }
         public string? IntoTable { get; set; }
         public ShowConnectionConfigStatement(string connectionName) { ConnectionName = connectionName; }
     }
 
-    public record ShowTablesStatement : Statement
+    public sealed record ShowTablesStatement : Statement
     {
         public string? ConnectionName { get; }
         public string? IntoTable { get; set; }
         public ShowTablesStatement(string? connectionName = null) { ConnectionName = connectionName; }
     }
 
-    public record ShowViewsStatement : Statement
+    public sealed record ShowViewsStatement : Statement
     {
         public string? IntoTable { get; init; }
     }
 
-    public record ShowColumnsStatement : Statement
+    public sealed record ShowColumnsStatement : Statement
     {
         public TableReference Table { get; }
         public string? IntoTable { get; set; }
         public ShowColumnsStatement(TableReference table) { Table = table; }
     }
 
-    public record ShowTagsStatement : Statement
+    public sealed record ShowTagsStatement : Statement
     {
         public string TableName { get; }
         public string? ColumnName { get; }
@@ -2137,7 +2158,7 @@ namespace ETL_SQL.Core
         public ShowTagsStatement(string tableName, string? columnName = null) { TableName = tableName; ColumnName = columnName; }
     }
 
-    public record ShowTagValueStatement : Statement
+    public sealed record ShowTagValueStatement : Statement
     {
         public string TableName { get; }
         public string? ColumnName { get; }
@@ -2146,7 +2167,7 @@ namespace ETL_SQL.Core
         public ShowTagValueStatement(string tableName, string tagName, string? columnName = null) { TableName = tableName; TagName = tagName; ColumnName = columnName; }
     }
 
-    public record LintStatement : Statement
+    public sealed record LintStatement : Statement
     {
         public string? ScriptPath { get; }
 
@@ -2157,7 +2178,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>A single variable assignment inside a CREATE SETS block.</summary>
-    public record SetsAssignment
+    public sealed record SetsAssignment
     {
         public string VariableName { get; }
         public Expression Value { get; }
@@ -2165,7 +2186,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>CREATE SETS !&lt;name&gt; BEGIN @var = val, ... [SET WITH_PROMPT ON;] END</summary>
-    public record CreateSetsStatement : Statement
+    public sealed record CreateSetsStatement : Statement
     {
         public string Name { get; }
         public List<SetsAssignment> Assignments { get; }
@@ -2184,7 +2205,7 @@ namespace ETL_SQL.Core
     /// table-/column-level metadata (tags) into the lineage tracker. Table/column names are
     /// expressions so they may be variables (e.g. @r.tbl in a FOR loop) or static identifiers.
     /// </summary>
-    public record CreateTagStatement : Statement
+    public sealed record CreateTagStatement : Statement
     {
         public Expression TableName { get; }
         public Expression? ColumnName { get; }
@@ -2202,7 +2223,7 @@ namespace ETL_SQL.Core
     /// CREATE LINEAGE FOR TABLE &lt;table&gt; FROM &lt;source&gt; — imports lineage from an OpenLineage
     /// JSON document (file path or inline JSON string), mirroring SHOW LINEAGE EXPORT AS OPENLINEAGE.
     /// </summary>
-    public record CreateLineageStatement : Statement
+    public sealed record CreateLineageStatement : Statement
     {
         public Expression TableName { get; }
         public Expression Source { get; }
@@ -2215,7 +2236,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
-    public record DropSetsStatement : Statement
+    public sealed record DropSetsStatement : Statement
     {
         public string Name { get; }
         public bool IfExists { get; }
@@ -2224,14 +2245,14 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>USE SETS !<name></summary>
-    public record UseSetsStatement : Statement
+    public sealed record UseSetsStatement : Statement
     {
         public string Name { get; }
         public UseSetsStatement(string name) { Name = name; }
     }
 
     /// <summary>USE PASSWORD = 'password' or USE PASSWORD PROMPT</summary>
-    public record UsePasswordStatement : Statement
+    public sealed record UsePasswordStatement : Statement
     {
         public string? Password { get; }
         public bool Prompt { get; }
@@ -2244,63 +2265,63 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this); // Always masked in serialization
     }
 
-    public record ShowPublishedBundlesStatement : Statement
+    public sealed record ShowPublishedBundlesStatement : Statement
     {
         public bool IsAlias { get; set; } = false;
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }
 
-    public record ShowBundleVersionsStatement(string BundleName) : Statement
+    public sealed record ShowBundleVersionsStatement(string BundleName) : Statement
     {
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }
 
-    public record ShowBundleFilesStatement(string BundleName, int Version) : Statement
+    public sealed record ShowBundleFilesStatement(string BundleName, int Version) : Statement
     {
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }
 
-    public record ShowBundleDependenciesStatement(string BundleName, int Version) : Statement
+    public sealed record ShowBundleDependenciesStatement(string BundleName, int Version) : Statement
     {
         public string? IntoTable { get; set; }
         public string? At { get; set; }
     }
 
     /// <summary>SET SHOW_SECRETS ON/OFF (alias: SET SHOW_PASSWORD)</summary>
-    public record SetShowPasswordStatement(bool Enabled) : Statement
+    public sealed record SetShowPasswordStatement(bool Enabled) : Statement
     {
     }
 
     /// <summary>SET ALLOW_PLAINTEXT_SECRETS ON/OFF</summary>
-    public record SetAllowPlaintextSecretsStatement(bool Enabled) : Statement
+    public sealed record SetAllowPlaintextSecretsStatement(bool Enabled) : Statement
     {
     }
 
     /// <summary>SET NO_SAVE_SENSITIVE ON/OFF</summary>
-    public record SetNoSaveSensitiveStatement(bool Enabled) : Statement
+    public sealed record SetNoSaveSensitiveStatement(bool Enabled) : Statement
     {
     }
 
     /// <summary>SET NO_SAVE_CONNECTION ON/OFF</summary>
-    public record SetNoSaveConnectionStatement(bool Enabled) : Statement
+    public sealed record SetNoSaveConnectionStatement(bool Enabled) : Statement
     {
     }
 
     /// <summary>SET CONNECTION_ENCRYPTION ON/OFF</summary>
-    public record SetConnectionEncryptionStatement(bool Enabled) : Statement
+    public sealed record SetConnectionEncryptionStatement(bool Enabled) : Statement
     {
     }
 
     /// <summary>SET WEEK_START_DAY = 'Monday' — configures the start-of-week day for RELDATE W/WS/WE anchors.</summary>
-    public record SetWeekStartDayStatement(string DayName) : Statement
+    public sealed record SetWeekStartDayStatement(string DayName) : Statement
     {
     }
 
     /// <summary>SET SCRIPT_HASH_POLICY = 'Warn'|'Block' — controls behaviour when a script's hash differs from the pinned value.</summary>
-    public record SetScriptHashPolicyStatement(string Policy) : Statement
+    public sealed record SetScriptHashPolicyStatement(string Policy) : Statement
     {
     }
 
@@ -2314,7 +2335,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>SET ALLOW_... ON/OFF or SET ALLOW_... = value</summary>
-    public record SetSecurityOverrideStatement(SecurityOverride Override, bool Enabled, Expression? Value = null) : Statement
+    public sealed record SetSecurityOverrideStatement(SecurityOverride Override, bool Enabled, Expression? Value = null) : Statement
     {
         public override string ToSql() => AstSerializer.Format(this);
     }
@@ -2323,29 +2344,29 @@ namespace ETL_SQL.Core
     // These are only valid inside an EXECUTE portal BEGIN…END block targeting a
     // REPORTPORTAL connection. The PortalConnector translates them into REST calls.
 
-    public record CreatePortalUserStatement(
+    public sealed record CreatePortalUserStatement(
         string Username, string Email, Expression? Password,
         string Role, string? FirstName, string? LastName, string? Provider = null) : Statement;
 
-    public record AlterPortalUserStatement(
+    public sealed record AlterPortalUserStatement(
         string Username,
         string? NewRole,
         string? NewEmail,
         bool? SetActive,        // true = ENABLE, false = DISABLE
         Expression? NewPassword) : Statement;
 
-    public record DropPortalUserStatement(string Username, bool Cascade) : Statement;
+    public sealed record DropPortalUserStatement(string Username, bool Cascade) : Statement;
 
-    public record CreatePortalGroupStatement(string Name, string? Description, string? Provider = null, string? AdGroup = null) : Statement;
+    public sealed record CreatePortalGroupStatement(string Name, string? Description, string? Provider = null, string? AdGroup = null) : Statement;
 
-    public record DropPortalGroupStatement(string Name, bool Cascade) : Statement;
+    public sealed record DropPortalGroupStatement(string Name, bool Cascade) : Statement;
 
-    public record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
+    public sealed record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
 
     /// <summary>Registers a portal-managed SMTP connection (named credential used by subscription
     /// and alert delivery). Password is an expression so ENC: values and variables work; it is sent
     /// to the portal once and stored encrypted — never echoed by SHOW.</summary>
-    public record CreatePortalSmtpConnectionStatement(
+    public sealed record CreatePortalSmtpConnectionStatement(
         string Alias,
         string Host,
         int Port,
@@ -2354,64 +2375,64 @@ namespace ETL_SQL.Core
         string? FromAddress,
         bool UseSsl) : Statement;
 
-    public record DropPortalSmtpConnectionStatement(string Alias) : Statement;
+    public sealed record DropPortalSmtpConnectionStatement(string Alias) : Statement;
 
-    public record ShowPortalSmtpConnectionsStatement(string? IntoTable = null) : Statement;
+    public sealed record ShowPortalSmtpConnectionsStatement(string? IntoTable = null) : Statement;
 
-    public record CreatePortalFolderStatement(string Path) : Statement;
+    public sealed record CreatePortalFolderStatement(string Path) : Statement;
 
-    public record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;
+    public sealed record AlterPortalFolderStatement(string Path, string? NewName, string? NewParentPath) : Statement;
 
-    public record DropPortalFolderStatement(string Path, bool Cascade) : Statement;
+    public sealed record DropPortalFolderStatement(string Path, bool Cascade) : Statement;
 
     public enum PortalFolderPermission { Read, Execute, Manage }
 
-    public record GrantPortalPermissionStatement(
+    public sealed record GrantPortalPermissionStatement(
         string FolderPath, string GroupName, PortalFolderPermission Permission) : Statement;
 
-    public record RevokePortalPermissionStatement(
+    public sealed record RevokePortalPermissionStatement(
         string FolderPath, string GroupName, PortalFolderPermission Permission) : Statement;
 
     public enum PortalDatasetPermission { Viewer, Refresh, Editor, Owner }
 
-    public record AlterPortalDatasetStatement(
+    public sealed record AlterPortalDatasetStatement(
         string DatasetName, string FolderPath, string? AccessLevel, string? Ttl) : Statement;
 
-    public record RefreshPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
+    public sealed record RefreshPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
 
-    public record DropPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
+    public sealed record DropPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
 
-    public record GrantPortalDatasetPermissionStatement(
+    public sealed record GrantPortalDatasetPermissionStatement(
         string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
 
-    public record RevokePortalDatasetPermissionStatement(
+    public sealed record RevokePortalDatasetPermissionStatement(
         string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
 
-    public record PublishPortalReportStatement(
+    public sealed record PublishPortalReportStatement(
         string ReportName, string ScriptPath, string FolderPath, string? Description) : Statement;
 
-    public record AlterPortalReportStatement(
+    public sealed record AlterPortalReportStatement(
         string ReportName, string? NewFolder, string? NewDescription) : Statement;
 
-    public record DropPortalReportStatement(string ReportName, bool Cascade) : Statement;
+    public sealed record DropPortalReportStatement(string ReportName, bool Cascade) : Statement;
 
-    public record FavoritePortalReportStatement(string ReportName, string? Username) : Statement;
+    public sealed record FavoritePortalReportStatement(string ReportName, string? Username) : Statement;
 
-    public record UnfavoritePortalReportStatement(string ReportName, string? Username) : Statement;
+    public sealed record UnfavoritePortalReportStatement(string ReportName, string? Username) : Statement;
 
-    public record CreatePortalShareLinkStatement(string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
+    public sealed record CreatePortalShareLinkStatement(string ReportName, string? ExpiresAt, string? IntoTable = null) : Statement;
 
-    public record RevokePortalShareLinkStatement(string Token) : Statement;
+    public sealed record RevokePortalShareLinkStatement(string Token) : Statement;
 
-    public record CreatePortalEmbedTokenStatement(string ReportName, string? Name, string? ExpiresAt, string? IntoTable = null) : Statement;
+    public sealed record CreatePortalEmbedTokenStatement(string ReportName, string? Name, string? ExpiresAt, string? IntoTable = null) : Statement;
 
-    public record RevokePortalEmbedTokenStatement(string Token) : Statement;
+    public sealed record RevokePortalEmbedTokenStatement(string Token) : Statement;
 
-    public record CreatePortalSavedViewStatement(string ReportName, string Name, IReadOnlyList<SubscriptionParameter> Parameters, bool IsDefault, string? IntoTable = null) : Statement;
+    public sealed record CreatePortalSavedViewStatement(string ReportName, string Name, IReadOnlyList<SubscriptionParameter> Parameters, bool IsDefault, string? IntoTable = null) : Statement;
 
-    public record DropPortalSavedViewStatement(string ReportName, string Name) : Statement;
+    public sealed record DropPortalSavedViewStatement(string ReportName, string Name) : Statement;
 
-    public record CreatePortalAlertStatement(
+    public sealed record CreatePortalAlertStatement(
         string ReportName,
         string Name,
         string VisualName,
@@ -2421,25 +2442,25 @@ namespace ETL_SQL.Core
         string? SmtpAlias,
         bool IsActive = true) : Statement;
 
-    public record DropPortalAlertStatement(string ReportName, string Name) : Statement;
+    public sealed record DropPortalAlertStatement(string ReportName, string Name) : Statement;
 
-    public record CreatePortalRefreshJobStatement(
+    public sealed record CreatePortalRefreshJobStatement(
         string ReportName, string Schedule, string OrchestratorAlias) : Statement;
 
-    public record RefreshPortalReportStatement(string ReportName) : Statement;
+    public sealed record RefreshPortalReportStatement(string ReportName) : Statement;
 
-    public record DropPortalRefreshJobStatement(string ReportName) : Statement;
+    public sealed record DropPortalRefreshJobStatement(string ReportName) : Statement;
 
-    public record DropPortalSnapshotStatement(string ReportName) : Statement;
+    public sealed record DropPortalSnapshotStatement(string ReportName) : Statement;
 
-    public record RebuildPortalSnapshotStatement(string ReportName) : Statement;
+    public sealed record RebuildPortalSnapshotStatement(string ReportName) : Statement;
 
     public enum PortalSubscriptionFormat { Pdf, Csv, Both }
 
     /// <summary>A named parameter binding passed to a subscription's report script.</summary>
-    public record SubscriptionParameter(string Name, string Value);
+    public sealed record SubscriptionParameter(string Name, string Value);
 
-    public record CreatePortalSubscriptionStatement(
+    public sealed record CreatePortalSubscriptionStatement(
         string ReportPath,
         string Recipient,        // username or group name
         bool IsGroup,
@@ -2455,7 +2476,7 @@ namespace ETL_SQL.Core
     /// ALTER SUBSCRIPTION &lt;id&gt; SET ...
     /// Parameters: null = leave unchanged; empty list = clear all parameters.
     /// </summary>
-    public record AlterPortalSubscriptionStatement(
+    public sealed record AlterPortalSubscriptionStatement(
         int SubscriptionId,
         string? NewSchedule,
         bool? SetActive,
@@ -2463,50 +2484,50 @@ namespace ETL_SQL.Core
         string? NewSmtpAlias,
         IReadOnlyList<SubscriptionParameter>? Parameters) : Statement;
 
-    public record DropPortalSubscriptionStatement(int SubscriptionId) : Statement;
+    public sealed record DropPortalSubscriptionStatement(int SubscriptionId) : Statement;
 
-    public record DisconnectPortalUserStatement(string Username) : Statement;
+    public sealed record DisconnectPortalUserStatement(string Username) : Statement;
 
-    public record RevokePortalTokensStatement(string Username) : Statement;
+    public sealed record RevokePortalTokensStatement(string Username) : Statement;
 
-    public record RestartPortalStatement : Statement;
+    public sealed record RestartPortalStatement : Statement;
 
     /// <summary>EXPORT PORTAL CONFIGURATION TO '&lt;file&gt;' — admin-only: writes the portal's
     /// declarative configuration as a replayable bootstrap script (secrets excluded; the portal
     /// emits placeholders and an export summary).</summary>
-    public record ExportPortalConfigurationStatement(string TargetPath) : Statement;
+    public sealed record ExportPortalConfigurationStatement(string TargetPath) : Statement;
 
-    public record ShutdownPortalStatement : Statement;
+    public sealed record ShutdownPortalStatement : Statement;
 
-    public record ShowPortalUsersStatement : Statement;
+    public sealed record ShowPortalUsersStatement : Statement;
 
-    public record ShowPortalReportsStatement(string? FolderPath, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalReportsStatement(string? FolderPath, string? IntoTable = null) : Statement;
 
-    public record ShowPortalReportStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalReportStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalReportHistoryStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalReportHistoryStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalReportDependenciesStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalReportDependenciesStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalShareLinksStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalShareLinksStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalEmbedTokensStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalEmbedTokensStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalSavedViewsStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalSavedViewsStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalAlertsStatement(string ReportName, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalAlertsStatement(string ReportName, string? IntoTable = null) : Statement;
 
-    public record ShowPortalFavoritesStatement(string? Username, int? Limit, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalFavoritesStatement(string? Username, int? Limit, string? IntoTable = null) : Statement;
 
-    public record ShowPortalRecentReportsStatement(int? Limit, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalRecentReportsStatement(int? Limit, string? IntoTable = null) : Statement;
 
-    public record SearchPortalCatalogStatement(string Query, int? Limit, string? IntoTable = null) : Statement;
+    public sealed record SearchPortalCatalogStatement(string Query, int? Limit, string? IntoTable = null) : Statement;
 
-    public record ShowEffectivePortalPermissionsStatement(string TargetType, string Target, string? IntoTable = null) : Statement;
+    public sealed record ShowEffectivePortalPermissionsStatement(string TargetType, string Target, string? IntoTable = null) : Statement;
 
-    public record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
+    public sealed record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
 
-    public record ShowActivePortalSessionsStatement(string? IntoTable = null) : Statement;
+    public sealed record ShowActivePortalSessionsStatement(string? IntoTable = null) : Statement;
 
-    public record ValidatePortalReportStatement(string ScriptPath, string? IntoTable = null) : Statement;
+    public sealed record ValidatePortalReportStatement(string ScriptPath, string? IntoTable = null) : Statement;
 }
