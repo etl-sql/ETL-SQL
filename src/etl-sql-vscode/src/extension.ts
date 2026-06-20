@@ -496,6 +496,11 @@ export async function activate(context: vscode.ExtensionContext) {
         await publishToPortal(context, editor.document.uri.fsPath);
     }));
 
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.reportIssue', async () => {
+        const { reportIssue } = await import('./reportIssueCommand');
+        await reportIssue(context);
+    }));
+
     context.subscriptions.push(vscode.workspace.onDidSaveTextDocument(async (document) => {
         if (document.languageId !== 'etlsql') {
             return;

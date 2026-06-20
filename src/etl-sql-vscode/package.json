@@ -61,7 +61,8 @@
     "onCommand:etlsql.showLineage",
     "onCommand:etlsql.publishToPortal",
     "onCommand:etlsql.exportNotebook",
-    "onCommand:etlsql.generateScriptFromSpec"
+    "onCommand:etlsql.generateScriptFromSpec",
+    "onCommand:etlsql.reportIssue"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -324,6 +325,11 @@
       {
         "command": "etlsql.generateScriptFromSpec",
         "title": "ETL-SQL: Generate Script from Spec"
+      },
+      {
+        "command": "etlsql.reportIssue",
+        "title": "ETL-SQL: Report Issue & Export Logs",
+        "category": "ETL-SQL"
       }
     ],
     "keybindings": [

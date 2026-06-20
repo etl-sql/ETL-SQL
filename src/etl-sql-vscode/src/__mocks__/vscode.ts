@@ -55,7 +55,8 @@ export const commands = {
 };
 
 export const env = {
-    clipboard: { writeText: vi.fn() }
+    clipboard: { writeText: vi.fn() },
+    openExternal: vi.fn()
 };
 
 export class EventEmitter<T> {
