@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -58,15 +59,19 @@ namespace ETL_SQL.Orchestrator.Execution
         private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct)
         {
             var exePath = ResolveExecutablePath();
-            var args = BuildArguments(scriptFile, sessionId);
+            var argList = BuildArguments(scriptFile, sessionId);
 
-            _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, args);
+            _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, string.Join(' ', argList));
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             if (_options.TimeoutSeconds > 0)
                 cts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
 
-            var psi = new ProcessStartInfo(exePath, args)
+            // Pass arguments through ArgumentList (not a single concatenated string) so the
+            // runtime quotes/escapes each token. This prevents argument injection from a
+            // hostile sessionId (e.g. one containing a quote) smuggling extra CLI flags into
+            // the child ETL-SQL process.
+            var psi = new ProcessStartInfo(exePath)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
@@ -74,6 +79,8 @@ namespace ETL_SQL.Orchestrator.Execution
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
             };
+            foreach (var arg in argList)
+                psi.ArgumentList.Add(arg);
 
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
@@ -201,18 +208,31 @@ namespace ETL_SQL.Orchestrator.Execution
                 $"Searched in: {dir}");
         }
 
-        private string BuildArguments(string scriptFile, string? sessionId)
+        private List<string> BuildArguments(string scriptFile, string? sessionId)
         {
             if (!string.IsNullOrWhiteSpace(_options.ArgumentsTemplate))
             {
-                return _options.ArgumentsTemplate
-                    .Replace("{ScriptFile}", scriptFile, StringComparison.Ordinal)
-                    .Replace("{SessionId}", sessionId ?? string.Empty, StringComparison.Ordinal);
+                // Each whitespace-separated template token becomes one argument; placeholders
+                // are substituted as whole values so a tokenised {SessionId} can never expand
+                // into multiple arguments. Operators should not add their own quoting —
+                // ArgumentList handles escaping.
+                var result = new List<string>();
+                foreach (var token in _options.ArgumentsTemplate.Split(
+                             (char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    result.Add(token
+                        .Replace("{ScriptFile}", scriptFile, StringComparison.Ordinal)
+                        .Replace("{SessionId}", sessionId ?? string.Empty, StringComparison.Ordinal));
+                }
+                return result;
             }
 
-            var args = $"run \"{scriptFile}\" --json";
+            var args = new List<string> { "run", scriptFile, "--json" };
             if (!string.IsNullOrEmpty(sessionId))
-                args += $" --session \"{sessionId}\"";
+            {
+                args.Add("--session");
+                args.Add(sessionId);
+            }
             return args;
         }
     }
