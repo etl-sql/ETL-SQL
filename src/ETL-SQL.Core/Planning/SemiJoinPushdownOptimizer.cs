@@ -57,7 +57,7 @@ namespace ETL_SQL.Core.Planning
                 }
 
                 var rightAlias = join.Table.Alias ?? join.Table.TableName;
-                
+
                 // Extract equijoin keys
                 if (TryGetEquijoinKeys(join.Condition, leftAlias, rightAlias, out var leftKey, out var rightKey))
                 {

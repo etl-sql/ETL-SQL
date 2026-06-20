@@ -79,7 +79,7 @@ namespace ETL_SQL.LSP
                             options.UpperCaseKeywords = true;
                         else if (options.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || options.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
                             options.UpperCaseKeywords = false;
-                        
+
                         if (options.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
                             options.LeadingCommas = true;
                         else if (options.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))

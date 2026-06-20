@@ -431,7 +431,7 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<ColumnMetadata>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null) + ":" + tableName.ToUpperInvariant();
-                
+
                 // If in memory cache, return immediately
                 if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
                 {
@@ -681,7 +681,7 @@ namespace ETL_SQL.Core.Services
             _logger.Info("Starting background schema refresh for connection {Name} ({Type})", connectionName, conn.Type);
 
             await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
-            
+
             var tables = (await source.GetTablesAsync()).ToList();
             if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
             {

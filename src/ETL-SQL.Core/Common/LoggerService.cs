@@ -1,12 +1,12 @@
 using System;
 using System.IO;
 using System.Linq;
+using ETL_SQL.Core.Common;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Context;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
-using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Common
 {

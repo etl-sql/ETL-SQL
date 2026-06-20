@@ -52,14 +52,14 @@ namespace ETL_SQL.Engine.Services
             }
             else if (expr is BetweenExpression bet)
             {
-                return ContainsLocalOnlyEngineFunctions(bet.Left) || 
-                       ContainsLocalOnlyEngineFunctions(bet.Start) || 
+                return ContainsLocalOnlyEngineFunctions(bet.Left) ||
+                       ContainsLocalOnlyEngineFunctions(bet.Start) ||
                        ContainsLocalOnlyEngineFunctions(bet.End);
             }
             else if (expr is LikeExpression like)
             {
-                return ContainsLocalOnlyEngineFunctions(like.Left) || 
-                       ContainsLocalOnlyEngineFunctions(like.Pattern) || 
+                return ContainsLocalOnlyEngineFunctions(like.Left) ||
+                       ContainsLocalOnlyEngineFunctions(like.Pattern) ||
                        (like.EscapeChar != null && ContainsLocalOnlyEngineFunctions(like.EscapeChar));
             }
             else if (expr is ExistsExpression ex)
@@ -108,7 +108,7 @@ namespace ETL_SQL.Engine.Services
                 if (ContainsLocalOnlyEngineFunctions(sel.Offset)) return true;
                 if (ContainsLocalOnlyEngineFunctions(sel.TopCount)) return true;
                 if (ContainsLocalOnlyEngineFunctions(sel.QualifyClause)) return true;
-                
+
                 if (sel.Joins != null)
                 {
                     foreach (var join in sel.Joins)

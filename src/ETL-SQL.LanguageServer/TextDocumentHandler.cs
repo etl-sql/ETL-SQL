@@ -70,7 +70,7 @@ namespace ETL_SQL.LSP
         {
             var text = request.ContentChanges.First().Text;
             _logger.LogInformation("didChange for {Uri}. Length: {Length}", request.TextDocument.Uri, text.Length);
-            
+
             // Sync text immediately so that completion/hover see the fresh text
             _store.UpdateText(request.TextDocument.Uri, text);
 

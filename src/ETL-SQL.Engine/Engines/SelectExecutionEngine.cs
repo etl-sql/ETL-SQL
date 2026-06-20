@@ -6,9 +6,9 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
-using ETL_SQL.Core.Planning;
 
 namespace ETL_SQL.Engine.Engines
 {

@@ -1076,10 +1076,10 @@ CREATE PAGE Page1 AS DASHBOARD(STRUCTURE = 'A', MAP ('A' = SalesTable));
                 // Create an isolated lock/epoch store so it doesn't touch the deleted etlsql.db
                 var lockDbPath = Path.Combine(TempDir, "lock.db");
                 var lockStore = new SQLiteJobHistoryStore(lockDbPath);
-                
+
                 services.RemoveAll<IClusterLockStore>();
                 services.AddSingleton<IClusterLockStore>(lockStore);
-                
+
                 services.RemoveAll<IWriteEpochStore>();
                 services.AddSingleton<IWriteEpochStore>(lockStore);
 

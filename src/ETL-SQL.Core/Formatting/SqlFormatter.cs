@@ -35,7 +35,7 @@ namespace ETL_SQL.Core.Formatting
         public bool OnClauseOnNewLine { get; set; } = false;
         public bool CaseWhenThenNewLine { get; set; } = true;
         public bool BreakoutWindowFunctions { get; set; } = true;
-        
+
         public string CommaPlacement
         {
             get => _commaPlacement;
@@ -71,7 +71,7 @@ namespace ETL_SQL.Core.Formatting
                                 loaded.UpperCaseKeywords = true;
                             else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
                                 loaded.UpperCaseKeywords = false;
-                            
+
                             // Sync comma placement setting with legacy setting
                             if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
                                 loaded.LeadingCommas = true;
@@ -116,7 +116,7 @@ namespace ETL_SQL.Core.Formatting
                                 loaded.UpperCaseKeywords = true;
                             else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
                                 loaded.UpperCaseKeywords = false;
-                            
+
                             // Sync comma placement setting with legacy setting
                             if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
                                 loaded.LeadingCommas = true;
@@ -145,7 +145,7 @@ namespace ETL_SQL.Core.Formatting
                             loaded.UpperCaseKeywords = true;
                         else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
                             loaded.UpperCaseKeywords = false;
-                        
+
                         // Sync comma placement setting with legacy setting
                         if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
                             loaded.LeadingCommas = true;
@@ -500,7 +500,7 @@ namespace ETL_SQL.Core.Formatting
                 {
                     var subParts = SplitByAndOrOutsideParens(trimmedContent);
                     string firstPart = subParts[0].Trim();
-                    
+
                     sb.Append(" " + firstPart);
                     sb.AppendLine();
 
@@ -560,7 +560,7 @@ namespace ETL_SQL.Core.Formatting
                     sb.Append(" " + tablePart);
 
                     string formattedOn = FormatKeyword("ON", options) + " ";
-                    
+
                     if (options.OnClauseOnNewLine)
                     {
                         sb.AppendLine();
@@ -1215,7 +1215,7 @@ namespace ETL_SQL.Core.Formatting
                     if (endIdx >= 0)
                     {
                         string commentInner = text.Substring(i + 2, endIdx - i - 2);
-                        
+
                         if (Regex.IsMatch(commentInner, @"@[a-zA-Z0-9_]"))
                         {
                             var lines = commentInner.Split(new[] { '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries);
@@ -1266,7 +1266,7 @@ namespace ETL_SQL.Core.Formatting
                         }
                     }
                 }
-                
+
                 sb.Append(text[i]);
                 i++;
             }

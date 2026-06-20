@@ -235,7 +235,7 @@ namespace ETL_SQL.LanguageServer.Tests
                 _registryMock.Setup(r => r.GetConnector(connType)).Returns(connectorMock.Object);
 
                 // Act - Invoke RefreshSchemaInternalAsync via reflection to write the cache to disk
-                var refreshMethod = typeof(MetadataManager).GetMethod("RefreshSchemaInternalAsync", 
+                var refreshMethod = typeof(MetadataManager).GetMethod("RefreshSchemaInternalAsync",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 Assert.NotNull(refreshMethod);
                 await (Task)refreshMethod.Invoke(manager, new object[] { connName, connStr, null });

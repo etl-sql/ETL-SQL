@@ -327,7 +327,7 @@ public class DesignerController : ControllerBase
         var grid = new string[maxRow, usedCols];
         for (int r = 0; r < maxRow; r++)
             for (int c = 0; c < usedCols; c++)
-        grid[r, c] = ".";
+                grid[r, c] = ".";
 
         foreach (var v in visuals)
         {

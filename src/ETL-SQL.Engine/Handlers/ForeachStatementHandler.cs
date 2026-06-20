@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine.Handlers
             if (!_dmlCache.TryGetValue(stmt, out var cached))
             {
                 var targetTable = sel.FromTable?.TableName;
-                var targetConn  = sel.FromTable?.ConnectionName;
+                var targetConn = sel.FromTable?.ConnectionName;
                 var detector = new DmlDetector(targetTable, targetConn);
                 detector.Analyze(stmt.Body);
                 cached = new DmlAnalysisResult { IsDmlOrOpaque = detector.IsDmlDetected || detector.HasOpaqueCalls };

@@ -51,7 +51,7 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             string colName = colElem.GetProperty("column_name").GetString() ?? "";
                             string typeFamily = colElem.GetProperty("type_family").GetString() ?? "VARCHAR";
-                            
+
                             string dataType = typeFamily;
                             if (colElem.TryGetProperty("max_length", out var maxLenProp) && maxLenProp.ValueKind == JsonValueKind.Number)
                             {
@@ -65,12 +65,12 @@ namespace ETL_SQL.Engine.Handlers
                             }
 
                             bool nullable = colElem.TryGetProperty("nullable", out var nullProp) && nullProp.ValueKind == JsonValueKind.True;
-                            
-                            expectedColumns.Add(new ExpectedSchemaColumn 
-                            { 
-                                ColumnName = colName, 
-                                DataType = dataType, 
-                                NotNull = !nullable 
+
+                            expectedColumns.Add(new ExpectedSchemaColumn
+                            {
+                                ColumnName = colName,
+                                DataType = dataType,
+                                NotNull = !nullable
                             });
                         }
                     }

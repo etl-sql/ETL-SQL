@@ -66,7 +66,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     LeaseFenceToken INTEGER NOT NULL DEFAULT 0
                 );";
 
-                var createHistoryTable = @"
+                    var createHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS JobHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     JobName TEXT NOT NULL,
@@ -77,7 +77,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     RowsProcessed INTEGER DEFAULT 0
                 );";
 
-                var createBundleTables = @"
+                    var createBundleTables = @"
                 CREATE TABLE IF NOT EXISTS BundleVersions (
                     BundleName TEXT NOT NULL,
                     Version INTEGER NOT NULL,
@@ -112,7 +112,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     FOREIGN KEY (BundleName, Version) REFERENCES BundleVersions(BundleName, Version)
                 );";
 
-                var createLineageHistoryTable = @"
+                    var createLineageHistoryTable = @"
                 CREATE TABLE IF NOT EXISTS LineageHistory (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
                     RunAt TEXT NOT NULL,
@@ -134,9 +134,9 @@ namespace ETL_SQL.Orchestrator.Storage
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
-                // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
-                // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.
-                var createNodesTable = @"
+                    // Cluster node registry (P1.7): one row per live Portal/Orchestrator process, kept fresh
+                    // by a TTL heartbeat. NodeId is a process-unique generated id, so no NOCASE is needed.
+                    var createNodesTable = @"
                 CREATE TABLE IF NOT EXISTS Nodes (
                     NodeId TEXT PRIMARY KEY,
                     Role TEXT NOT NULL,
@@ -147,9 +147,9 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_nodes_expires ON Nodes(ExpiresAt);";
 
-                // Write-epoch fencing for shared storage (P1.8): the highest fence token that has written
-                // each (Scope, EpochKey) resource, so a stale writer cannot overwrite a newer one.
-                var createWriteEpochsTable = @"
+                    // Write-epoch fencing for shared storage (P1.8): the highest fence token that has written
+                    // each (Scope, EpochKey) resource, so a stale writer cannot overwrite a newer one.
+                    var createWriteEpochsTable = @"
                 CREATE TABLE IF NOT EXISTS WriteEpochs (
                     Scope TEXT NOT NULL,
                     EpochKey TEXT NOT NULL,
@@ -157,17 +157,17 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (Scope, EpochKey)
                 );";
 
-                // Distributed locks / leader election (P1.9): one TTL-leased holder per named lock. Lives
-                // here (a CREATE-IF-NOT-EXISTS store) rather than the EF-migrated catalog so it exists
-                // before any node runs migrations.
-                var createClusterLocksTable = @"
+                    // Distributed locks / leader election (P1.9): one TTL-leased holder per named lock. Lives
+                    // here (a CREATE-IF-NOT-EXISTS store) rather than the EF-migrated catalog so it exists
+                    // before any node runs migrations.
+                    var createClusterLocksTable = @"
                 CREATE TABLE IF NOT EXISTS ClusterLocks (
                     LockName TEXT PRIMARY KEY,
                     Owner TEXT NOT NULL,
                     ExpiresAt TEXT NOT NULL
                 );";
 
-                var createJobStateTable = @"
+                    var createJobStateTable = @"
                 CREATE TABLE IF NOT EXISTS JobState (
                     JobName TEXT NOT NULL,
                     StateKey TEXT NOT NULL,
@@ -176,12 +176,12 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (JobName, StateKey)
                 );";
 
-                var schema = createJobsTable + createHistoryTable + createBundleTables
-                    + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable;
-                // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
-                // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
-                // COLLATE NOCASE indexes/queries resolve.
-                schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
+                    var schema = createJobsTable + createHistoryTable + createBundleTables
+                        + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable;
+                    // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
+                    // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
+                    // COLLATE NOCASE indexes/queries resolve.
+                    schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
 
                     await EnsureCollationExistsAsync(connection);
 

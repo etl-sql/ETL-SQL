@@ -1,6 +1,6 @@
 using ETL_SQL.Core;
-using ETL_SQL.Data;
 using ETL_SQL.Core.Planning;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Analysis.Explain
 {

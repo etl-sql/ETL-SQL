@@ -1,9 +1,9 @@
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.ReportPortal.Controllers;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Tests;

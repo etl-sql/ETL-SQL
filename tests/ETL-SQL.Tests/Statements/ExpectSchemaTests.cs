@@ -194,7 +194,7 @@ namespace ETL_SQL.Tests.Statements
         {
             var ev = GetEvaluator();
             string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
-            
+
             await ev.Evaluate(Parse($@"
                 CREATE TABLE #data (
                     customer_id INT, 

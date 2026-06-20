@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests.Core
         public void TestJoinIndentationOptions()
         {
             string sql = "SELECT * FROM t1 JOIN t2 ON t1.id = t2.id";
-            
+
             // Indent Joins = true, ON Clause on new line = true
             var opt1 = new FormatterOptions { IndentJoins = true, OnClauseOnNewLine = true, IndentSize = 4 };
             string res1 = SqlFormatter.Format(sql, opt1).Replace("\r\n", "\n");
@@ -100,7 +100,7 @@ namespace ETL_SQL.Tests.Core
         public void TestCaseStatementFormatting()
         {
             string sql = "SELECT CASE WHEN val = 1 THEN 'one' ELSE 'other' END FROM t";
-            
+
             // Case When Then on New Line = true
             var opt1 = new FormatterOptions { CaseWhenThenNewLine = true };
             string res1 = SqlFormatter.Format(sql, opt1).Replace("\r\n", "\n");
@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Core
         public void TestWindowFunctionFormatting()
         {
             string sql = "SELECT ROW_NUMBER() OVER (PARTITION BY cat ORDER BY val DESC) FROM t";
-            
+
             var opt = new FormatterOptions { BreakoutWindowFunctions = true };
             string res = SqlFormatter.Format(sql, opt).Replace("\r\n", "\n");
             Assert.Contains("ROW_NUMBER() OVER (\n        PARTITION BY cat\n        ORDER BY val DESC\n    )", res);

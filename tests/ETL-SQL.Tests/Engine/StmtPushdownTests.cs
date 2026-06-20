@@ -148,7 +148,7 @@ namespace ETL_SQL.Tests.Engine
             // Seed mock database with aggregated results
             var seedDt = new DataTable();
             seedDt.SetColumns(new[] { "Region", "TotalRevenue" });
-            
+
             var row1 = seedDt.NewRow();
             row1["Region"] = "North";
             row1["TotalRevenue"] = 5000m;
@@ -173,7 +173,7 @@ namespace ETL_SQL.Tests.Engine
 
             // Verify aggregated query was pushed down to the mock db
             Assert.Contains(mock.ExecutedSql, sql => sql.Contains("GROUP BY") && sql.Contains("SUM("));
-            
+
             // Verify Target table has been populated with the aggregated rows
             Assert.True(ev.Connections.ContainsKey("#Target"));
             var targetDs = ev.Connections["#Target"];
@@ -222,7 +222,7 @@ namespace ETL_SQL.Tests.Engine
             // Seed mock database with query results
             var seedDt = new DataTable();
             seedDt.SetColumns(new[] { "Id", "Name" });
-            
+
             var row1 = seedDt.NewRow();
             row1["Id"] = 101;
             row1["Name"] = "Alice";
@@ -248,18 +248,18 @@ namespace ETL_SQL.Tests.Engine
                 FROM #Local 
                 JOIN MyDb.Customer ON #Local.ID = MyDb.Customer.Id;
             ";
-            
+
             var parsed = Parse(selectScript);
             var selectStmt = parsed.Statements.OfType<SelectStatement>().First();
-            
+
             // 1. Manually optimize
             var optimized = await ETL_SQL.Core.Planning.SemiJoinPushdownOptimizer.OptimizeAsync(selectStmt, ev);
-            
+
             // Assert that the join target was indeed rewritten with a subquery
             Assert.Single(optimized.Joins);
             var joinTable = optimized.Joins[0].Table;
             Assert.NotNull(joinTable.Subquery);
-            
+
             // 2. Check if pushdown is possible on the rewritten subquery
             var pushdownEngine = new ETL_SQL.Engine.Services.PushdownEngine(ev.Logger);
             bool isPushdownPossible = pushdownEngine.IsPushdownPossible((SelectStatement)joinTable.Subquery, ev, out var connName);

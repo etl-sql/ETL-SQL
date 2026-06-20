@@ -1418,8 +1418,8 @@ namespace ETL_SQL.Engine
             public NodeReuseKey(Guid? parentId, Statement stmt)
             {
                 _hasParent = parentId.HasValue;
-                _parentId  = parentId.GetValueOrDefault();
-                _stmtHash  = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(stmt);
+                _parentId = parentId.GetValueOrDefault();
+                _stmtHash = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(stmt);
             }
 
             public bool Equals(NodeReuseKey other)
