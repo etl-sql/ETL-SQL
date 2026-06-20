@@ -67,7 +67,7 @@ bld/
 publish_test/
 /data/
 sdk_test_output/
-/coverage/
+coverage/
 coverage.*.xml
 /coverage-fresh
 
