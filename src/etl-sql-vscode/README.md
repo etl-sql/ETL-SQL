@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://marketplace.visualstudio.com/"><img src="https://img.shields.io/badge/VS%20Code-Marketplace-007ACC?style=for-the-badge&logo=visual-studio-code&logoColor=white" alt="VS Code Marketplace" /></a>
-  <img src="https://img.shields.io/badge/ETL--SQL-v0.11.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
+  <img src="https://img.shields.io/badge/ETL--SQL-v0.12.0-5C6BC0?style=for-the-badge&logo=dotnet&logoColor=white" alt="ETL-SQL Version" />
   <img src="https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-4CAF50?style=for-the-badge" alt="Platform" />
 </p>
 
