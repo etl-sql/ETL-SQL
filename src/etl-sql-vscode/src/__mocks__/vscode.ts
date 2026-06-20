@@ -15,6 +15,8 @@ export const window = {
     showErrorMessage: vi.fn(),
     showWarningMessage: vi.fn(),
     showInformationMessage: vi.fn(),
+    showInputBox: vi.fn(),
+    showQuickPick: vi.fn(),
     activeTextEditor: undefined as unknown,
     onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() }))
 };
@@ -68,3 +70,21 @@ export class TreeItem {
 }
 export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
 export const ThemeIcon = vi.fn();
+
+export enum NotebookCellKind {
+    Markup = 1,
+    Code = 2
+}
+
+export class NotebookCellData {
+    constructor(
+        public kind: NotebookCellKind,
+        public value: string,
+        public languageId: string
+    ) {}
+}
+
+export class NotebookData {
+    constructor(public cells: NotebookCellData[]) {}
+}
+
