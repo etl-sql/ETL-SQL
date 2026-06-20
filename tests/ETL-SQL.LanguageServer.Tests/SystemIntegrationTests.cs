@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Connectors.MockDb;
@@ -23,6 +26,43 @@ namespace ETL_SQL.LanguageServer.Tests
         public SystemIntegrationTests(ITestOutputHelper output)
         {
             _output = output;
+        }
+
+        [Fact]
+        public void ScriptVariableDiscovery_MasksSensitiveValues()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var loggerFactory = services.BuildServiceProvider().GetRequiredService<ILoggerFactory>();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry());
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, new DocumentStateStore());
+
+            var scriptText = @"
+DECLARE @normal STRING = 'visible';
+DECLARE @portalPassword SECRET = 'super-secret';
+SET @apiToken = 'raw-token';
+SET @normal = 'still-visible';
+";
+            var tokens = new ETL_SQL.Core.Parser.Lexer(scriptText).Tokenize();
+            var script = new ETL_SQL.Core.Parser.Parser(tokens, scriptText).Parse();
+            var method = typeof(TextDocumentHandler).GetMethod(
+                "DiscoverVariablesRecursive",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert.NotNull(method);
+
+            var variables = new List<object>();
+            var sensitive = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var statement in script.Statements)
+            {
+                method!.Invoke(handler, new object[] { statement, variables, sensitive });
+            }
+
+            var json = JsonSerializer.Serialize(variables);
+            Assert.Contains("visible", json);
+            Assert.Contains("still-visible", json);
+            Assert.Contains("(secret)", json);
+            Assert.DoesNotContain("super-secret", json);
+            Assert.DoesNotContain("raw-token", json);
         }
 
         [Fact]

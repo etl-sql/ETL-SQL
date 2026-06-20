@@ -31,6 +31,43 @@ let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
 let activeTerminals: vscode.Terminal[] = [];
 
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
+}
+
+function sanitizeConnectionForClient(value: unknown): Connection {
+    const obj = isObject(value) ? value : {};
+    return {
+        name: String(obj.name ?? ''),
+        type: String(obj.type ?? ''),
+        connectionString: '',
+        isDocument: Boolean(obj.isDocument)
+    };
+}
+
+function isSensitiveName(name: unknown): boolean {
+    const text = String(name ?? '');
+    return /(password|passwd|pwd|secret|token|api[_-]?key|credential|private[_-]?key)/i.test(text);
+}
+
+function sanitizeVariableForClient(value: unknown): unknown {
+    if (!isObject(value)) {
+        return value;
+    }
+
+    const name = value.name;
+    const typeName = value.typeName ?? value.type;
+    if (isSensitiveName(name) || isSensitiveName(typeName)) {
+        return { ...value, value: '(secret)' };
+    }
+
+    return value;
+}
+
+function buildSafeConnectionSnippet(conn: { name: string; type: string }): string {
+    return `CREATE CONNECTION ${conn.name} AS ${conn.type}(/* connection options */);`;
+}
+
 function syncNotebookContext(document: vscode.TextDocument) {
     if (!client) {
         return;
@@ -242,14 +279,19 @@ export async function activate(context: vscode.ExtensionContext) {
             client.onNotification('etlsql/scriptConnections', (params: { uri: string, connections: unknown[] }) => {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
                 outputChannel.appendLine(`Received ${params.connections.length} connections from script: ${normalizedUri}`);
-                connectionsProvider.updateScriptConnections(normalizedUri, params.connections as Connection[]);
-                sidebarProvider.postMessage({ type: 'scriptConnections', uri: normalizedUri, connections: params.connections });
+                const safeConnections = params.connections.map(sanitizeConnectionForClient);
+                connectionsProvider.updateScriptConnections(normalizedUri, safeConnections);
+                sidebarProvider.postMessage({ type: 'scriptConnections', uri: normalizedUri, connections: safeConnections });
             });
 
             client.onNotification('etlsql/scriptVariables', (params: { uri: string, variables: unknown[] }) => {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
                 // outputChannel.appendLine(`Received ${params.variables.length} variables from script: ${normalizedUri}`);
-                sidebarProvider.postMessage({ type: 'scriptVariables', uri: normalizedUri, variables: params.variables });
+                sidebarProvider.postMessage({
+                    type: 'scriptVariables',
+                    uri: normalizedUri,
+                    variables: params.variables.map(sanitizeVariableForClient)
+                });
             });
 
         }).catch(err => {
@@ -317,9 +359,9 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.copyConnection', (node: { connection?: { name: string; type: string; connectionString: string } }) => {
         if (node && node.connection) {
             const conn = node.connection;
-            const code = `CREATE CONNECTION ${conn.name} ON ${conn.type}('${conn.connectionString}');`;
+            const code = buildSafeConnectionSnippet(conn);
             vscode.env.clipboard.writeText(code);
-            vscode.window.showInformationMessage(`Copied to clipboard: ${code}`);
+            vscode.window.showInformationMessage(`Copied safe connection template for ${conn.name}.`);
         }
     }));
     

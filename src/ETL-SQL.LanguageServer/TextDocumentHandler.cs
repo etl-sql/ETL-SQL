@@ -157,15 +157,17 @@ namespace ETL_SQL.LSP
                     {
                         name = c.Name,
                         type = c.Type,
-                        connectionString = c.ConnectionString,
+                        connectionString = "",
+                        hasConnectionString = !string.IsNullOrEmpty(c.ConnectionString),
                         isDocument = c.IsDocument
                     }).ToList()
                 });
 
                 // Push variables to client sidebar
                 var scriptVariables = new List<object>();
+                var sensitiveVariables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var stmt in script.Statements)
-                    DiscoverVariablesRecursive(stmt, scriptVariables);
+                    DiscoverVariablesRecursive(stmt, scriptVariables, sensitiveVariables);
 
                 _server?.SendNotification("etlsql/scriptVariables", new
                 {
@@ -331,38 +333,86 @@ namespace ETL_SQL.LSP
                 Save = new SaveOptions { IncludeText = true }
             };
 
-        private void DiscoverVariablesRecursive(Statement? stmt, List<object> vars)
+        private static bool IsSensitiveVariableName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return false;
+            return name.Contains("password", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("passwd", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("pwd", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("secret", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("token", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("apiKey", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("apikey", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("credential", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("privateKey", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("private_key", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string RootVariableName(string name)
+        {
+            var dot = name.IndexOf('.');
+            return dot >= 0 ? name[..dot] : name;
+        }
+
+        private void DiscoverVariablesRecursive(Statement? stmt, List<object> vars, HashSet<string> sensitiveVariables)
         {
             if (stmt == null) return;
 
             if (stmt is DeclareStatement dec)
-                vars.Add(new { name = dec.VariableName, typeName = dec.DataType ?? "scalar", value = dec.InitialValue?.ToSql() });
+            {
+                var isSensitive = dec.IsSensitive
+                    || dec.IsSecret
+                    || string.Equals(dec.DataType, "SECRET", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dec.DataType, "SENSITIVE", StringComparison.OrdinalIgnoreCase)
+                    || IsSensitiveVariableName(dec.VariableName);
+                if (isSensitive)
+                    sensitiveVariables.Add(dec.VariableName);
+                vars.Add(new
+                {
+                    name = dec.VariableName,
+                    typeName = dec.DataType ?? "scalar",
+                    value = isSensitive && dec.InitialValue is not null ? "(secret)" : dec.InitialValue?.ToSql()
+                });
+            }
             else if (stmt is SetVariableStatement set)
-                vars.Add(new { name = set.VariableName, typeName = "unknown", value = set.Value?.ToSql() });
+            {
+                var variableName = set.VariableName;
+                var rootName = RootVariableName(variableName);
+                var isSensitive = sensitiveVariables.Contains(rootName)
+                    || sensitiveVariables.Contains(variableName)
+                    || IsSensitiveVariableName(rootName)
+                    || IsSensitiveVariableName(variableName);
+                vars.Add(new
+                {
+                    name = variableName,
+                    typeName = "unknown",
+                    value = isSensitive ? "(secret)" : set.Value?.ToSql()
+                });
+            }
             else if (stmt is ForStatement f)
             {
                 vars.Add(new { name = f.VariableName, typeName = "INT", value = "loop" });
-                DiscoverVariablesRecursive(f.Body, vars);
+                DiscoverVariablesRecursive(f.Body, vars, sensitiveVariables);
             }
             else if (stmt is ForeachStatement fe)
             {
                 vars.Add(new { name = fe.VariableName, typeName = "item", value = "loop" });
-                DiscoverVariablesRecursive(fe.Body, vars);
+                DiscoverVariablesRecursive(fe.Body, vars, sensitiveVariables);
             }
             else if (stmt is BlockStatement block)
-                foreach (var s in block.Statements) DiscoverVariablesRecursive(s, vars);
+                foreach (var s in block.Statements) DiscoverVariablesRecursive(s, vars, sensitiveVariables);
             else if (stmt is IfStatement ifStmt)
             {
-                DiscoverVariablesRecursive(ifStmt.IfBody, vars);
+                DiscoverVariablesRecursive(ifStmt.IfBody, vars, sensitiveVariables);
                 if (ifStmt.ElseIfClauses != null)
-                    foreach (var ei in ifStmt.ElseIfClauses) DiscoverVariablesRecursive(ei.Body, vars);
-                if (ifStmt.ElseBody != null) DiscoverVariablesRecursive(ifStmt.ElseBody, vars);
+                    foreach (var ei in ifStmt.ElseIfClauses) DiscoverVariablesRecursive(ei.Body, vars, sensitiveVariables);
+                if (ifStmt.ElseBody != null) DiscoverVariablesRecursive(ifStmt.ElseBody, vars, sensitiveVariables);
             }
-            else if (stmt is WhileStatement w) DiscoverVariablesRecursive(w.Body, vars);
+            else if (stmt is WhileStatement w) DiscoverVariablesRecursive(w.Body, vars, sensitiveVariables);
             else if (stmt is TryCatchStatement tc)
             {
-                DiscoverVariablesRecursive(tc.TryBody, vars);
-                DiscoverVariablesRecursive(tc.CatchBody, vars);
+                DiscoverVariablesRecursive(tc.TryBody, vars, sensitiveVariables);
+                DiscoverVariablesRecursive(tc.CatchBody, vars, sensitiveVariables);
             }
         }
     }
