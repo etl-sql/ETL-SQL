@@ -102,7 +102,7 @@ CREATE PAGE Overview AS DASHBOARD (
 
 ## See It In Action
 
-![ETL-SQL VS Code Extension Demo](https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/Docs/assets/vscode-demo.mp4)
+![ETL-SQL VS Code Extension Demo](https://raw.githubusercontent.com/etl-sql/ETL-SQL/main/Docs/assets/vscode-demo.gif)
 
 *Schema autocomplete · inline diagnostics · REPL results console · live report preview · cell-by-cell notebook execution · data lineage*
 

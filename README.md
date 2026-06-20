@@ -60,7 +60,7 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 
 ### VS Code Extension & Notebooks
 
-![VS Code demo](Docs/assets/vscode-demo.mp4)
+![VS Code demo](Docs/assets/vscode-demo.gif)
 
 *Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution · Lineage*
 
