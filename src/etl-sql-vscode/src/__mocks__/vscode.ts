@@ -17,6 +17,7 @@ export const window = {
     showInformationMessage: vi.fn(),
     showInputBox: vi.fn(),
     showQuickPick: vi.fn(),
+    registerWebviewViewProvider: vi.fn(),
     activeTextEditor: undefined as unknown,
     onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() }))
 };
@@ -33,7 +34,11 @@ export const workspace = {
 
 export const Uri = {
     parse: vi.fn((s: string) => ({ toString: () => s, fsPath: s })),
-    file: vi.fn((s: string) => ({ toString: () => `file://${s}`, fsPath: s }))
+    file: vi.fn((s: string) => ({ toString: () => `file://${s}`, fsPath: s })),
+    joinPath: vi.fn((base: any, ...segments: string[]) => ({
+        toString: () => `${base.toString()}/${segments.join('/')}`,
+        fsPath: `${base.fsPath}/${segments.join('/')}`
+    }))
 };
 
 export const ViewColumn = { One: 1, Two: 2, Three: 3 };
