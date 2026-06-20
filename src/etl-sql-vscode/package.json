@@ -380,37 +380,37 @@
       "editor/title": [
         {
           "command": "etlsql.runScript",
-          "group": "navigation",
+          "group": "navigation@10",
           "when": "resourceLangId == etlsql && !etlsql.isRunning"
         },
         {
           "command": "etlsql.stopScript",
-          "group": "navigation",
+          "group": "navigation@10",
           "when": "resourceLangId == etlsql && etlsql.isRunning"
         },
         {
           "command": "etlsql.runSelection",
-          "group": "navigation",
+          "group": "navigation@11",
           "when": "resourceLangId == etlsql && editorHasSelection && !etlsql.isRunning"
         },
         {
           "command": "etlsql.previewReport",
-          "group": "navigation@1",
+          "group": "navigation@12",
           "when": "resourceLangId == etlsql"
         },
         {
           "command": "etlsql.openReportDesigner",
-          "group": "navigation@1",
+          "group": "navigation@13",
           "when": "resourceLangId == etlsql"
         },
         {
           "submenu": "etlsql.launchMenu",
-          "group": "navigation@2",
+          "group": "navigation@14",
           "when": "resourceLangId == etlsql"
         },
         {
           "command": "etlsql.exportNotebook",
-          "group": "navigation@3",
+          "group": "navigation@15",
           "when": "notebookEditorFocused && notebookType == etl-sql-notebook"
         }
       ],
