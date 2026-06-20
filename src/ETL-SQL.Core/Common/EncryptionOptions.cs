@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Common
         {
             Enabled = false;
             Algorithm = HashAlgorithmName.SHA256;
-            Password = "DefaultETLPass123!";
+            Password = "";
 
             if (options == null) return;
 
@@ -57,10 +57,12 @@ namespace ETL_SQL.Core.Common
             {
                 Algorithm = algo.ToUpperInvariant() switch
                 {
-                    "MD5" => HashAlgorithmName.MD5,
-                    "SHA1" => HashAlgorithmName.SHA1,
                     "SHA2_256" or "SHA256" => HashAlgorithmName.SHA256,
                     "SHA2_512" or "SHA512" => HashAlgorithmName.SHA512,
+                    // MD5/SHA1 are intentionally rejected for encryption key derivation (cryptographically
+                    // broken). They remain available only for non-security checksum HASH() functions.
+                    "MD5" or "SHA1" => throw new ExecutionException(
+                        $"Encryption algorithm '{algo}' is not allowed (weak). Use SHA256 or SHA512."),
                     _ => throw new ExecutionException($"Unsupported encryption algorithm: {algo}")
                 };
             }
@@ -68,6 +70,14 @@ namespace ETL_SQL.Core.Common
             if (options.TryGetValue("KEYFILE", out var kf)) KeyFile = kf;
             if (options.TryGetValue("PASSPHRASE", out var pp)) Passphrase = pp;
             if (options.TryGetValue("PASSWORD", out var p)) Password = p;
+
+            // Fail closed: a password-based encryption mode must supply an actual key. Previously a
+            // missing PASSWORD silently fell back to a hardcoded, source-public default, which gave
+            // only the appearance of confidentiality. MACHINE/PORTAL/KEYFILE provide their own key.
+            if (Enabled && !IsMachineBound && string.IsNullOrEmpty(KeyFile) && string.IsNullOrEmpty(Password))
+                throw new ExecutionException(
+                    "Encryption is enabled but no key was supplied. Provide PASSWORD or KEYFILE, " +
+                    "or use ENCRYPT = MACHINE or ENCRYPT = PORTAL.");
         }
 
         /// <summary>

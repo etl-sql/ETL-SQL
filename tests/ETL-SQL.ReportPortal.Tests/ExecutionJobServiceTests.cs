@@ -654,7 +654,10 @@ public class ExecutionJobServiceTests : IDisposable
     private static async Task WaitForRunningCountAsync(
         ExecutionJobService service, int expected, params string[] jobIds)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(1500);
+        // Generous deadline so the assertion is about the steady-state outcome, not how fast jobs
+        // reach Running. It returns the instant the count matches, so a slow CI box only ever waits
+        // longer when something is genuinely wrong (a tight 1.5s window flaked under parallel load).
+        var deadline = DateTime.UtcNow.AddSeconds(10);
         while (DateTime.UtcNow < deadline)
         {
             if (await RunningCountAsync(service, jobIds) == expected) return;
@@ -665,7 +668,11 @@ public class ExecutionJobServiceTests : IDisposable
 
     private static async Task WaitForTerminalAsync(ExecutionJobService service, string jobId)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(15);
+        // Generous deadline: a queued job (held behind a per-user cap) only times out after the job
+        // ahead of it does, and on a saturated CI box timer callbacks/continuations are delayed, so a
+        // 2s logical timeout can take noticeably longer to fully unwind. Returns the instant the job
+        // is terminal, so the normal case is unaffected.
+        var deadline = DateTime.UtcNow.AddSeconds(45);
         while (DateTime.UtcNow < deadline)
         {
             var job = await service.GetAsync(jobId);
@@ -676,7 +683,7 @@ public class ExecutionJobServiceTests : IDisposable
         }
 
         Assert.Fail(
-            $"Job {jobId} did not reach a terminal state within 15s " +
+            $"Job {jobId} did not reach a terminal state within 45s " +
             $"(status={(await service.GetAsync(jobId))?.Status}).");
     }
 

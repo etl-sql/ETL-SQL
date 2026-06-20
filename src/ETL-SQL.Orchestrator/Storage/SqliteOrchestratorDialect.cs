@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Data;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +14,22 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public SqliteOrchestratorDialect(string connectionString) => _connectionString = connectionString;
 
-        public DbConnection CreateConnection() => new SqliteConnection(_connectionString);
+        public DbConnection CreateConnection()
+        {
+            var connection = new SqliteConnection(_connectionString);
+            // Make concurrent access robust: WAL lets readers and a writer coexist, and a busy timeout
+            // makes a contended writer wait rather than fail immediately with SQLITE_BUSY. Without this,
+            // two processes/connections sharing one SQLite file (e.g. two Orchestrator schedulers) can
+            // both fail a write under contention. Applied on every open (busy_timeout is per-connection).
+            connection.StateChange += (_, e) =>
+            {
+                if (e.CurrentState != ConnectionState.Open) return;
+                using var pragma = connection.CreateCommand();
+                pragma.CommandText = "PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;";
+                pragma.ExecuteNonQuery();
+            };
+            return connection;
+        }
 
         // SQLite's COLLATE NOCASE is built in — nothing to create.
         public string CollationDdl => string.Empty;

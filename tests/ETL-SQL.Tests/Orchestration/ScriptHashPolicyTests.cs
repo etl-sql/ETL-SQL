@@ -60,10 +60,27 @@ namespace ETL_SQL.Tests.Orchestration
             services.AddSingleton(mockExecutor.Object);
             var sp = services.BuildServiceProvider();
 
+            // Inject a healthy capacity monitor so the test is deterministic: without it the scheduler
+            // uses the real monitor, which under heavy CI/parallel load reports "overloaded" and
+            // short-circuits ExecuteJobAsync before any store call (flaky "0 invocations").
             var service = new SchedulerService(sp, mockStore.Object,
-                new Mock<ILogger<SchedulerService>>().Object, throttle, mockConfig.Object, mockSessions.Object);
+                new Mock<ILogger<SchedulerService>>().Object, throttle, mockConfig.Object, mockSessions.Object,
+                new HealthyCapacityMonitor());
 
             return (service, mockStore, mockExecutor);
+        }
+
+        private sealed class HealthyCapacityMonitor : INodeCapacityMonitor
+        {
+            public NodeCapacitySnapshot Capture() => new(
+                WorkingSetBytes: 64 * 1024 * 1024,
+                GcHeapBytes: 32 * 1024 * 1024,
+                TotalAvailableMemoryBytes: 1024L * 1024 * 1024,
+                MemoryLoadPercent: 10,
+                ProcessCpuPercent: 1,
+                ProcessorCount: Environment.ProcessorCount,
+                IsOverloaded: false,
+                CapturedAtUtc: DateTime.UtcNow);
         }
 
         private static Task InvokeExecuteJobAsync(SchedulerService service, JobDefinition job)

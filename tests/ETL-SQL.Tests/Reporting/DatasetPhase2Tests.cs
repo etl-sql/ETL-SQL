@@ -90,18 +90,48 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
-        public void EncryptionOptions_OnOrTrue_EnabledButNotMachineBound()
+        public void EncryptionOptions_OnOrTrue_WithPassword_EnabledButNotMachineBound()
         {
             foreach (var mode in new[] { "ON", "TRUE" })
             {
                 var opts = new EncryptionOptions(
                     new System.Collections.Generic.Dictionary<string, string>
                     {
-                        ["ENCRYPT"] = mode
+                        ["ENCRYPT"] = mode,
+                        ["PASSWORD"] = "an-actual-key"
                     });
 
                 Assert.True(opts.Enabled, $"Expected Enabled for ENCRYPT={mode}");
                 Assert.False(opts.IsMachineBound, $"Expected IsMachineBound=false for ENCRYPT={mode}");
+            }
+        }
+
+        [Fact]
+        public void EncryptionOptions_EnabledWithoutKey_FailsClosed()
+        {
+            // ENCRYPT=ON without PASSWORD/KEYFILE must throw rather than silently use a default key.
+            foreach (var mode in new[] { "ON", "TRUE", "PASSWORD" })
+            {
+                Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                    new EncryptionOptions(new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["ENCRYPT"] = mode
+                    }));
+            }
+        }
+
+        [Fact]
+        public void EncryptionOptions_WeakAlgorithm_IsRejected()
+        {
+            foreach (var weak in new[] { "MD5", "SHA1" })
+            {
+                Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                    new EncryptionOptions(new System.Collections.Generic.Dictionary<string, string>
+                    {
+                        ["ENCRYPT"] = "ON",
+                        ["PASSWORD"] = "k",
+                        ["ALGORITHM"] = weak
+                    }));
             }
         }
 

@@ -31,9 +31,11 @@ namespace ETL_SQL.Analysis.Linting.Rules
             "FLATFILE", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "CSV"
         };
 
+        // MD5/SHA1 are intentionally excluded: cryptographically broken, not allowed for encryption
+        // key derivation (the runtime EncryptionOptions rejects them too).
         private static readonly HashSet<string> ValidAlgorithms = new(StringComparer.OrdinalIgnoreCase)
         {
-            "MD5", "SHA1", "SHA2_256", "SHA256", "SHA2_512", "SHA512"
+            "SHA2_256", "SHA256", "SHA2_512", "SHA512"
         };
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -125,7 +127,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
                         {
                             RuleName = Name,
                             Severity = LintSeverity.Error,
-                            Message = $"Connection '{conn.ConnectionName}': Unsupported encryption algorithm '{algo}'. Supported: MD5, SHA1, SHA256, SHA512.",
+                            Message = $"Connection '{conn.ConnectionName}': Unsupported encryption algorithm '{algo}'. Supported: SHA256, SHA512.",
                             LineNumber = conn.Line,
                             ColumnNumber = conn.Column
                         });

@@ -268,6 +268,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         // shared slots. Acquire the per-user slot FIRST and without holding a global permit, so a
         // capped user queues without blocking the shared pool. Administrators are exempt.
         var userGate = job.IsAdministrator ? null : GetUserGate(job.UserId);
+        var userGateHeld = false;
         var groupGates = new List<SemaphoreSlim>();
         WeightedExecutionAdmission.Permit? executionPermit = null;
         try
@@ -275,7 +276,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             await WaitForNodeCapacityAsync(job, cts.Token).ConfigureAwait(false);
 
             if (userGate is not null)
+            {
                 await userGate.WaitAsync(cts.Token).ConfigureAwait(false);
+                userGateHeld = true;
+            }
 
             foreach (var groupId in await GetExecutionGroupIdsAsync(job, cts.Token).ConfigureAwait(false))
             {
@@ -290,7 +294,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             executionPermit?.Dispose();
             ReleaseGates(groupGates);
-            userGate?.Release();
+            // Only release the per-user gate if WaitAsync actually acquired it — otherwise a job that
+            // timed out *while waiting* for the gate would release a permit it never held, corrupting
+            // the per-user cap (and letting that user exceed it / starve the queue).
+            if (userGateHeld) userGate!.Release();
 
             // Timed out while queued — no global permit was retained, so only the job
             // bookkeeping needs unwinding (the refresh debounce must clear).
@@ -307,7 +314,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             executionPermit?.Dispose();
             ReleaseGates(groupGates);
-            userGate?.Release();
+            if (userGateHeld) userGate!.Release();
             throw;
         }
 
@@ -501,7 +508,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _jobCancellationReasons.TryRemove(job.Id, out _);
             executionPermit?.Dispose();
             ReleaseGates(groupGates);
-            userGate?.Release();
+            if (userGateHeld) userGate!.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
 
