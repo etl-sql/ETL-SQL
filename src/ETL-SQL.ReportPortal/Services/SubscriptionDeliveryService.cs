@@ -391,10 +391,13 @@ public class SubscriptionDeliveryService(
         string correlationId,
         CancellationToken ct)
     {
-        var safeReason = reason.Replace(
-            recipient,
-            "[recipient]",
-            StringComparison.OrdinalIgnoreCase);
+        // Redact the recipient and any embedded secret (e.g. an SMTP password echoed back
+        // in a transport error) before this reason is audited or logged.
+        var safeReason = ETL_SQL.Core.Common.SecretRedactor.Redact(
+            reason.Replace(
+                recipient,
+                "[recipient]",
+                StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
         audit.Stage(sub.UserId, "SUBSCRIPTION_DELIVERY_FAILED", "Subscription",
             sub.Id.ToString(),
             $"RecipientKey={RecipientKey(recipient)}; {safeReason}",
