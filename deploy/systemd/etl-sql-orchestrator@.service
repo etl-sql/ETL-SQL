@@ -1,0 +1,27 @@
+# Templated ETL-SQL Orchestrator unit — one instance per isolated environment.
+# Enable with the environment id as the instance, e.g.:  systemctl enable --now etl-sql-orchestrator@finance
+# The instance specifier %i is the environment id; each instance runs as its own user, reads its own
+# config, and writes only under its own data root. See Docs/Operations/Departmental_Isolation.md.
+[Unit]
+Description=ETL-SQL Orchestrator (%i)
+After=network.target
+
+[Service]
+Type=simple
+User=etlsql-%i
+Group=etlsql-%i
+EnvironmentFile=/etc/etl-sql/%i.env
+WorkingDirectory=/usr/lib/etl-sql/bin
+ExecStart=/usr/lib/etl-sql/bin/ETL-SQL-Service
+Restart=always
+RestartSec=10
+
+# Hardening: the service may write only to its own environment root; everything else is read-only.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/etl-sql/%i
+
+[Install]
+WantedBy=multi-user.target

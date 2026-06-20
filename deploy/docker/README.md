@@ -1,0 +1,54 @@
+# Docker Compose — isolated departmental environments
+
+Run multiple fully isolated ETL-SQL environments (dev/test/prod or per department) with Docker
+Compose. Each environment is a self-contained stack: its own PostgreSQL instance and volume, its own
+Portal and Orchestrator databases, its own artifact root, its own keys, and its own port block.
+Nothing is shared between environments — see
+[Departmental_Isolation.md](../../Docs/Operations/Departmental_Isolation.md).
+
+## Files
+
+| File | Purpose |
+| :--- | :--- |
+| `docker-compose.environment.yml` | Parameterized stack: PostgreSQL + Orchestrator + Portal, namespaced by `COMPOSE_PROJECT_NAME`. |
+| `environment.env.example` | Per-environment settings. Copy once per environment and edit every value. |
+| `initdb/10-create-orchestrator-db.sh` | First-run hook that creates the separate Orchestrator database. |
+
+## Quick start
+
+```bash
+cd deploy/docker
+cp environment.env.example finance.env
+# edit finance.env: set ETLSQL_ENV, COMPOSE_PROJECT_NAME=etlsql-finance, a distinct PORT_* block,
+# ENV_DATA_ROOT, and UNIQUE PG_PASSWORD / PORTAL_JWT_SECRET / PORTAL_DATASET_KEY / ORCH_API_KEY.
+
+docker compose --env-file finance.env -f docker-compose.environment.yml up -d
+docker compose --env-file finance.env -f docker-compose.environment.yml ps
+```
+
+Bring up a second environment by repeating with its own env file and a different `PORT_BASE`:
+
+```bash
+cp environment.env.example hr.env   # ETLSQL_ENV=hr, COMPOSE_PROJECT_NAME=etlsql-hr, PORT_PORTAL=5010 …
+docker compose --env-file hr.env -f docker-compose.environment.yml up -d
+```
+
+## Isolation guarantees
+
+- **Project namespacing** — `COMPOSE_PROJECT_NAME=etlsql-<env>` namespaces containers, the default
+  network, and the named `pgdata` volume, so two environments never collide or share storage.
+- **Separate databases** — each environment runs its own PostgreSQL with its own credentials and
+  volume; within it the Portal and Orchestrator use separate databases.
+- **Separate artifact roots** — bind-mounted under the environment's `ENV_DATA_ROOT`.
+- **Unique keys** — `PORTAL_JWT_SECRET`, `PORTAL_DATASET_KEY`, and `ORCH_API_KEY` must be unique per
+  environment; reusing them across environments breaks the isolation boundary.
+
+After bringing up more than one environment, verify they do not overlap:
+
+```bash
+../verify/verify-isolation.sh ./finance.env ./hr.env
+```
+
+> Production note: pin `ETLSQL_IMAGE_TAG` to a release, terminate TLS at a reverse proxy or
+> load balancer, and place production environments on separate networks rather than only separate
+> ports.
