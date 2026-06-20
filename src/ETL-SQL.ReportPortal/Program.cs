@@ -302,6 +302,11 @@ builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.IOidcDiscoveryProvid
 builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.IOidcAuthenticationService,
     ETL_SQL.ReportPortal.Services.OidcAuthenticationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OidcUserProvisioningService>();
+
+// Read-only fleet health aggregation (P2.2): fans out to each environment's GET /api/fleet/status
+// with a scoped FleetReader token. Registered so an aggregator host can resolve it.
+builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.FleetHealthAggregator>(client =>
+    client.Timeout = TimeSpan.FromSeconds(10));
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorApiKeyProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
@@ -646,7 +651,9 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
     var userMgr = services.GetRequiredService<UserManager<PortalUser>>();
     var roleMgr = services.GetRequiredService<RoleManager<PortalRole>>();
 
-    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager" })
+    // FleetReader: a scoped, read-only role for the fleet aggregator — authorizes only
+    // GET /api/fleet/status and nothing else (see Departmental_Isolation.md fleet trust boundary).
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager", "FleetReader" })
     {
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new PortalRole(role));

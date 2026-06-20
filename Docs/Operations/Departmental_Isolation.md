@@ -143,3 +143,42 @@ to production.
    account and confirm access is denied.
 5. **Record the result** alongside the deployment change record. A clean verifier run is the evidence
    that the isolation boundary holds.
+
+---
+
+## 7. Fleet aggregation trust boundary
+
+Once environments are isolated, an operator often wants **one read-only view of the whole fleet**.
+ETL-SQL supports this without weakening isolation, under a strict trust boundary (P2.1):
+
+- **Read-only.** The aggregator only issues `GET /api/fleet/status` against each environment. It never
+  writes, runs scripts, or reads report data.
+- **Scoped service account per environment.** Each environment provisions a dedicated user in the
+  `FleetReader` role. That role authorizes **only** `GET /api/fleet/status` — every other endpoint
+  (admin/identity, secrets, configuration, report publish/execute, report data) returns `403` for a
+  FleetReader token. Issue a distinct FleetReader credential per environment; never reuse a department
+  admin or a cross-environment credential.
+- **No raw data blending.** `/api/fleet/status` returns only aggregate operational counts —
+  environment status, queue depth, active executions, failed refreshes, audit-outbox backlog, and
+  storage availability. No report rows, scripts, identities, secrets, or keys cross the boundary.
+- **Containment.** Because the FleetReader credential authorizes nothing but the status endpoint, a
+  compromised aggregator credential cannot pivot into any department's database, artifact storage,
+  encryption keys, or execution capability — it can only read that environment's health summary. This
+  is certified by `FleetContainmentTests`.
+
+### What the aggregator reads
+
+`GET /api/fleet/status` (role `FleetReader` or `Admin`) returns:
+
+| Field | Meaning |
+| :--- | :--- |
+| `environment` | The environment id (`ETLSQL_ENV`). |
+| `status` | Overall health (`Healthy` / `Degraded` / `Unhealthy`) from the node's health checks. |
+| `queueDepth`, `activeExecutions` | Node-local queued and running execution jobs. |
+| `failedRefreshes` | Reports whose last refresh failed. |
+| `auditOutboxPending`, `auditOutboxFailed` | Durable audit-outbox backlog and terminal failures. |
+| `storage` | Whether shared artifact storage is reachable (`ok` / `unavailable`). |
+
+`FleetHealthAggregator` fans out to each environment's endpoint with its scoped token, tolerates
+unreachable environments (reporting them rather than failing the whole view), and merges the results
+into a `FleetHealthReport` (with `Total`, `Unreachable`, and `Unhealthy` counts).

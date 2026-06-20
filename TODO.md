@@ -74,10 +74,21 @@ release begins.
 
 ### Phase 3 - Fleet Aggregation
 
-- [ ] **P2.1 Define the fleet aggregator trust boundary** before implementation: read-only,
+- [x] **P2.1 Define the fleet aggregator trust boundary** before implementation: read-only,
   scoped service-account access to each environment, no script execution, no writes, and no raw data
   blending.
-- [ ] **P2.2 Build read-only fleet health aggregation** for environment status, queue depth,
+  *(done)* `Docs/Operations/Departmental_Isolation.md` §7: the aggregator only issues
+  `GET /api/fleet/status`; each environment provisions a distinct `FleetReader` credential that
+  authorizes that endpoint and nothing else; only aggregate operational counts cross the boundary —
+  no report data, scripts, identities, secrets, or keys.
+- [x] **P2.2 Build read-only fleet health aggregation** for environment status, queue depth,
   active executions, failed jobs, audit outbox health, and storage pressure.
-- [ ] **P2.3 Prove aggregator credential containment** so a compromised aggregator credential cannot
+  *(done)* Added the `FleetReader` role, `GET /api/fleet/status` (`FleetStatusController`) returning
+  status + queue depth + active executions + failed refreshes + audit-outbox pending/failed + storage
+  availability (with `ExecutionJobService.GetWorkloadCounts`), and `FleetHealthAggregator` which fans
+  out to each environment's endpoint with its scoped token and tolerates unreachable environments.
+- [x] **P2.3 Prove aggregator credential containment** so a compromised aggregator credential cannot
   pivot into any department database, artifact storage, encryption keys, or execution capability.
+  *(done)* `FleetContainmentTests` certify a FleetReader token reads only `/api/fleet/status` (200)
+  and is `403` on the admin/identity surface and report publish/execute; unauthenticated access is
+  `401`; `FleetHealthAggregatorTests` certifies fan-out + unreachable tolerance.

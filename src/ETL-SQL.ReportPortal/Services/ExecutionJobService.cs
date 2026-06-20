@@ -97,6 +97,21 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     /// in-memory job table cannot grow without bound on a long-running portal.</summary>
     internal static readonly TimeSpan CompletedJobRetention = TimeSpan.FromHours(24);
 
+    /// <summary>Node-local execution workload snapshot for read-only fleet health (P2.2): how many
+    /// jobs are queued (Pending) and actively running on this node. In an HA environment each node
+    /// reports its own; the fleet aggregator polls per environment.</summary>
+    public (int Queued, int Running) GetWorkloadCounts()
+    {
+        var queued = 0;
+        var running = 0;
+        foreach (var job in _jobs.Values)
+        {
+            if (job.Status == JobStatus.Pending) queued++;
+            else if (job.Status == JobStatus.Running) running++;
+        }
+        return (queued, running);
+    }
+
     public async Task<ExecutionJob?> GetAsync(string jobId)
     {
         if (_jobs.TryGetValue(jobId, out var job))
