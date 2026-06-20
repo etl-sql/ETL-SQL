@@ -119,7 +119,7 @@ public sealed class OidcController(
 
         if (!string.IsNullOrEmpty(error))
         {
-            log.LogWarning("OIDC provider returned error {Error}", error);
+            log.LogWarning("OIDC provider returned error {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(error));
             await auditService.LogAsync(null, "LOGIN_FAILED", "User", null, $"OIDC provider returned error: {error}");
             return Redirect("/login.html?error=sso_failed");
         }

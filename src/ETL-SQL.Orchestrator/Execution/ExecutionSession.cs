@@ -55,7 +55,7 @@ namespace ETL_SQL.Orchestrator.Execution
             Evaluator? evaluator = null;
 
             _logger.SessionId = _ctx.SessionId;
-            _logger.Info("Starting execution session {SessionId}", _ctx.SessionId);
+            _logger.Info("Starting execution session {SessionId}", ETL_SQL.Core.Common.LogSanitizer.Clean(_ctx.SessionId));
 
             try
             {

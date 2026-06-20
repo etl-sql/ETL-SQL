@@ -29,7 +29,7 @@ namespace ETL_SQL.ReportPortal.Services
             // 1. If ServiceUser is configured, perform a search first to find the user's distinguished name (DN)
             if (!string.IsNullOrEmpty(ldapConfig.ServiceUser))
             {
-                _logger.LogDebug("LDAP: Service User configured. Performing user lookup for '{Username}' first.", username);
+                _logger.LogDebug("LDAP: Service User configured. Performing user lookup for '{Username}' first.", ETL_SQL.Core.Common.LogSanitizer.Clean(username));
                 SearchResultEntry? userEntry = null;
                 var serviceGroups = new List<string>();
                 LdapConnection? serviceConn = null;
@@ -80,7 +80,7 @@ namespace ETL_SQL.ReportPortal.Services
                         var parts = ldapConfig.Domain.Split('.');
                         baseDn = string.Join(",", Array.ConvertAll(parts, p => $"DC={p}"));
                     }
-                    _logger.LogDebug("LDAP: Searching for user '{Username}' under configured base DN.", username);
+                    _logger.LogDebug("LDAP: Searching for user '{Username}' under configured base DN.", ETL_SQL.Core.Common.LogSanitizer.Clean(username));
 
                     var request = new SearchRequest(
                         baseDn,
@@ -125,7 +125,7 @@ namespace ETL_SQL.ReportPortal.Services
                                     "cn"
                                 );
                                 var groupResponse = (SearchResponse)await Task.Run(() => serviceConn.SendRequest(groupRequest));
-                                _logger.LogDebug("LDAP: Found {GroupCount} groups for user '{Username}'.", groupResponse.Entries.Count, username);
+                                _logger.LogDebug("LDAP: Found {GroupCount} groups for user '{Username}'.", groupResponse.Entries.Count, ETL_SQL.Core.Common.LogSanitizer.Clean(username));
                                 foreach (SearchResultEntry grp in groupResponse.Entries)
                                 {
                                     serviceGroups.Add(grp.DistinguishedName);
@@ -133,14 +133,14 @@ namespace ETL_SQL.ReportPortal.Services
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", username, ex.Message);
+                                _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(username), ex.Message);
                             }
                         }
                     }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning("LDAP Service User lookup failed for user '{Username}': {Error}", username, ex.Message);
+                    _logger.LogWarning("LDAP Service User lookup failed for user '{Username}': {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(username), ex.Message);
                 }
                 finally
                 {
@@ -149,12 +149,12 @@ namespace ETL_SQL.ReportPortal.Services
 
                 if (userEntry == null)
                 {
-                    _logger.LogWarning("LDAP: User '{Username}' not found during Service User lookup.", username);
+                    _logger.LogWarning("LDAP: User '{Username}' not found during Service User lookup.", ETL_SQL.Core.Common.LogSanitizer.Clean(username));
                     return null;
                 }
 
                 // Attempt to bind with the discovered user DN and their password
-                _logger.LogDebug("LDAP: Service lookup found user '{Username}'. Starting credential bind.", username);
+                _logger.LogDebug("LDAP: Service lookup found user '{Username}'. Starting credential bind.", ETL_SQL.Core.Common.LogSanitizer.Clean(username));
                 LdapConnection? userConn = null;
                 try
                 {
@@ -207,7 +207,7 @@ namespace ETL_SQL.ReportPortal.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning("LDAP authentication credentials bind failed for user '{Username}': {Error}", username, ex.Message);
+                    _logger.LogWarning("LDAP authentication credentials bind failed for user '{Username}': {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(username), ex.Message);
                     return null;
                 }
                 finally
@@ -217,7 +217,7 @@ namespace ETL_SQL.ReportPortal.Services
             }
 
             // 2. Direct Bind Fallback (Active Directory style or direct DN input style)
-            _logger.LogDebug("LDAP: Falling back to direct bind for user '{Username}'.", username);
+            _logger.LogDebug("LDAP: Falling back to direct bind for user '{Username}'.", ETL_SQL.Core.Common.LogSanitizer.Clean(username));
             string bindUsername = username;
             if (!string.IsNullOrEmpty(ldapConfig.Domain))
             {
@@ -336,7 +336,7 @@ namespace ETL_SQL.ReportPortal.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", username, ex.Message);
+                        _logger.LogDebug("LDAP: Group membership query fallback failed for user '{Username}': {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(username), ex.Message);
                     }
                 }
 
@@ -344,7 +344,7 @@ namespace ETL_SQL.ReportPortal.Services
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("LDAP direct authentication failed for user '{Username}': {Error}", username, ex.Message);
+                _logger.LogWarning("LDAP direct authentication failed for user '{Username}': {Error}", ETL_SQL.Core.Common.LogSanitizer.Clean(username), ex.Message);
                 return null;
             }
             finally

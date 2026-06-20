@@ -90,7 +90,7 @@ public class ReportScriptInspectionService(
         {
             // Log the full detail server-side; return a generic message to the client so internal
             // paths/offsets in the parser exception are not surfaced to the API consumer.
-            logger.LogWarning(ex, "Script validation failed for {ScriptPath}", resolvedScriptPath);
+            logger.LogWarning(ex, "Script validation failed for {ScriptPath}", ETL_SQL.Core.Common.LogSanitizer.Clean(resolvedScriptPath));
             return new ReportScriptValidationDto(
                 false,
                 resolvedScriptPath,

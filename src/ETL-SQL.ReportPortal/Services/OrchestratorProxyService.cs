@@ -58,13 +58,13 @@ public class OrchestratorProxyService(
     public async Task<HttpResponseMessage?> UpdateJobAsync(string name, UpdateJobRequest req, long version)
     {
         try { return await SendAsync(HttpMethod.Put, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", req, version); }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to update job {Name}.", name); return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to update job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
     public async Task<HttpResponseMessage?> DeleteJobAsync(string name, long version)
     {
         try { return await SendAsync(HttpMethod.Delete, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}", version: version); }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete job {Name}.", name); return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to delete job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
     public async Task<List<JobHistoryEntryDto>> GetHistoryAsync(string jobName, int limit = 50)
@@ -74,19 +74,19 @@ public class OrchestratorProxyService(
             return await GetJsonAsync<List<JobHistoryEntryDto>>(
                 $"api/scheduled-jobs/{Uri.EscapeDataString(jobName)}/history?limit={limit}") ?? [];
         }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get history for {Name}.", jobName); return []; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get history for {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(jobName)); return []; }
     }
 
     public async Task<HttpResponseMessage?> TriggerJobAsync(string name)
     {
         try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/trigger"); }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to trigger job {Name}.", name); return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to trigger job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
     public async Task<HttpResponseMessage?> KillJobAsync(string name)
     {
         try { return await SendAsync(HttpMethod.Post, $"api/scheduled-jobs/{Uri.EscapeDataString(name)}/kill"); }
-        catch (Exception ex) { logger.LogWarning(ex, "Failed to kill job {Name}.", name); return null; }
+        catch (Exception ex) { logger.LogWarning(ex, "Failed to kill job {Name}.", ETL_SQL.Core.Common.LogSanitizer.Clean(name)); return null; }
     }
 
     public async Task<OrchestratorScriptsDto?> GetScriptsAsync()
@@ -102,7 +102,7 @@ public class OrchestratorProxyService(
             var resp = await GetJsonAsync<ScriptContentResponse>($"api/scripts/content?path={Uri.EscapeDataString(path)}");
             return resp?.Content;
         }
-        catch (Exception ex) { logger.LogDebug(ex, "Failed to get script content for {Path}.", path); return null; }
+        catch (Exception ex) { logger.LogDebug(ex, "Failed to get script content for {Path}.", ETL_SQL.Core.Common.LogSanitizer.Clean(path)); return null; }
     }
 
     public async Task<HttpResponseMessage?> StopServiceAsync()

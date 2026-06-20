@@ -61,7 +61,7 @@ namespace ETL_SQL.Orchestrator.Execution
             var exePath = ResolveExecutablePath();
             var argList = BuildArguments(scriptFile, sessionId);
 
-            _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, string.Join(' ', argList));
+            _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, ETL_SQL.Core.Common.LogSanitizer.Clean(string.Join(' ', argList)));
 
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             if (_options.TimeoutSeconds > 0)

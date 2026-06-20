@@ -88,7 +88,7 @@ namespace ETL_SQL.Orchestrator.Service
                 var entry = new JobEntry(jobId, cts);
                 _jobs[jobId] = entry;
 
-                logger.LogInformation("Job {JobId} submitted (label={Label})", jobId, request.Label);
+                logger.LogInformation("Job {JobId} submitted (label={Label})", jobId, ETL_SQL.Core.Common.LogSanitizer.Clean(request.Label));
                 _ = RunJobAsync(entry, request, scopeFactory, logger, cts.Token);
 
                 return Results.Accepted($"/jobs/{jobId}", new { JobId = jobId });
@@ -101,7 +101,7 @@ namespace ETL_SQL.Orchestrator.Service
                 if (!_jobs.TryGetValue(id, out var entry))
                     return Results.NotFound(new { Error = $"Job '{id}' not found." });
 
-                logger.LogInformation("Cancelling job {JobId}", id);
+                logger.LogInformation("Cancelling job {JobId}", ETL_SQL.Core.Common.LogSanitizer.Clean(id));
                 entry.Cts.Cancel();
                 entry.Status = JobRunStatus.Cancelled;
                 return Results.Ok(new { JobId = id, Status = "Cancelled" });
@@ -526,7 +526,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                             var store = new SnapshotStore();
                             await store.SaveAsync(manifest, manifestPath);
-                            logger.LogInformation("Manifest saved to {Path}", manifestPath);
+                            logger.LogInformation("Manifest saved to {Path}", ETL_SQL.Core.Common.LogSanitizer.Clean(manifestPath));
                         }
                     }
                 }
