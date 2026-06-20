@@ -43,13 +43,22 @@ SELECT * FROM #Summary;
 
     class MockMetadataManager : IMetadataManager
     {
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionName) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName) => Task.FromResult(Enumerable.Empty<string>());
-        public IEnumerable<string> GetConnections() => Enumerable.Empty<string>();
-        public string GetConnectionType(string connectionName) => "MSSQL";
-        public void RegisterConnection(string name, string type, string target, Dictionary<string, string> options) { }
-        public void UnregisterConnection(string name) { }
-        public bool ConnectionExists(string name) => false;
-        public Task RefreshConnections(string script, bool force = false) => Task.CompletedTask;
+        public bool DebugMode { get; set; } = false;
+        public void RegisterConnection(string name, string type, string connectionString) { }
+        public void RegisterDocumentConnection(string uri, string name, string type, string connectionString) { }
+        public void ClearDocumentConnections(string uri) { }
+        public List<ConnectionInfo> GetConnections(string? uri = null) => new();
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
+        public void RegisterTempTable(string uri, string name, List<string> columns) { }
+        public void ClearTempTables(string uri) { }
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null) => Task.FromResult(Enumerable.Empty<ColumnMetadata>());
+        public IEnumerable<string> GetRegisteredNames() => Enumerable.Empty<string>();
+        public IConnector? GetConnector(string name) => null;
+        public string? GetConnectionType(string connectionName, string? uri = null) => "MSSQL";
+        public void ClearCache() { }
+        public void ClearCacheForUri(string uri) { }
     }
 }

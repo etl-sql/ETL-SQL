@@ -17,6 +17,14 @@ namespace ETL_SQL.LSP
         public void SetState(DocumentUri uri, string text, Script script, ILineageTracker lineage)
             => _states[uri] = new DocumentState(text, script, lineage);
 
+        /// <summary>Updates only the raw text of a document state, leaving the previous AST and lineage intact (or initializing if first time).</summary>
+        public void UpdateText(DocumentUri uri, string text)
+        {
+            _states.AddOrUpdate(uri,
+                _ => new DocumentState(text, new Script(), new LineageTracker(ETL_SQL.Common.NullLogger.Instance)),
+                (_, oldState) => oldState with { Text = text });
+        }
+
         /// <summary>Attempts to retrieve the current state for a document URI.</summary>
         public bool TryGetState(DocumentUri uri, out DocumentState state)
             => _states.TryGetValue(uri, out state!);

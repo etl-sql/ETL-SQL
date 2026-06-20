@@ -70,6 +70,10 @@ namespace ETL_SQL.LSP
         {
             var text = request.ContentChanges.First().Text;
             _logger.LogInformation("didChange for {Uri}. Length: {Length}", request.TextDocument.Uri, text.Length);
+            
+            // Sync text immediately so that completion/hover see the fresh text
+            _store.UpdateText(request.TextDocument.Uri, text);
+
             await AnalyzeAsync(request.TextDocument.Uri, text);
             return MediatR.Unit.Value;
         }
@@ -81,6 +85,9 @@ namespace ETL_SQL.LSP
 
             // Notify the client that a script has been opened/focused to help sync UI state
             _server?.SendNotification("etlsql/scriptOpened", new { uri = uri.ToString() });
+
+            // Sync text immediately so that completion/hover see the fresh text
+            _store.UpdateText(uri, request.TextDocument.Text);
 
             await AnalyzeAsync(uri, request.TextDocument.Text);
             return MediatR.Unit.Value;
@@ -133,10 +140,15 @@ namespace ETL_SQL.LSP
                     _logger.LogInformation("[DIAGNOSTIC] LSP: Parsed {Count} statements.", script.Statements.Count);
 
                 // Connection and temp-table discovery
-                _metadata.ClearDocumentConnections(uri.ToString());
-                _metadata.ClearTempTables(uri.ToString());
+                var activeConnections = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var activeTempTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var stmt in script.Statements)
-                    await DiscoverMetadataRecursiveAsync(stmt, uri.ToString());
+                    await DiscoverMetadataRecursiveAsync(stmt, uri.ToString(), activeConnections, activeTempTables);
+
+                if (_metadata is ETL_SQL.Core.Services.MetadataManager mm)
+                {
+                    mm.CleanUpDocumentConnectionsAndTempTables(uri.ToString(), activeConnections, activeTempTables);
+                }
 
                 // Push connections to client sidebar
                 var connections = _metadata.GetConnections(uri.ToString());
@@ -231,7 +243,7 @@ namespace ETL_SQL.LSP
             };
         }
 
-        private async Task DiscoverMetadataRecursiveAsync(Statement stmt, string uri)
+        private async Task DiscoverMetadataRecursiveAsync(Statement stmt, string uri, HashSet<string> activeConnections, HashSet<string> activeTempTables)
         {
             if (_metadata.DebugMode)
                 _logger.LogInformation("[DIAGNOSTIC] LSP: Discovering {Type}", stmt.GetType().Name);
@@ -241,12 +253,16 @@ namespace ETL_SQL.LSP
                 var connStr = ccs.TargetExpression?.ToSql() ?? "";
                 connStr = connStr.Trim('\'', '\"', '(', ')', ' ');
                 _metadata.RegisterDocumentConnection(uri, ccs.ConnectionName, ccs.ConnectionType ?? "UNKNOWN", connStr);
+                activeConnections.Add(ccs.ConnectionName);
             }
             else if (stmt is CreateTableStatement cts)
             {
                 var tableName = cts.TargetTable.TableName;
                 if (tableName.StartsWith("#"))
+                {
                     _metadata.RegisterTempTable(uri, tableName, cts.Columns.Select(c => c.ColumnName).ToList());
+                    activeTempTables.Add(tableName);
+                }
             }
             else if (stmt is SelectStatement ss && ss.IntoTable != null)
             {
@@ -266,6 +282,7 @@ namespace ETL_SQL.LSP
                         columns.AddRange(ss.Columns.Select(c => c.Alias ?? c.Expression.ToSql().Split('.').Last().Trim('[', ']', '"', '\'')));
                     }
                     _metadata.RegisterTempTable(uri, tableName, columns.Distinct().ToList());
+                    activeTempTables.Add(tableName);
                 }
             }
             else if (stmt is DockerStatement ds)
@@ -274,10 +291,11 @@ namespace ETL_SQL.LSP
                 if (!string.IsNullOrEmpty(ds.Alias))
                 {
                     _metadata.RegisterDocumentConnection(uri, ds.Alias, "DOCKER", ds.ImageName.ToSql());
+                    activeConnections.Add(ds.Alias);
                 }
             }
             else if (stmt is ExecuteRemoteBlockStatement erbs)
-                await DiscoverMetadataRecursiveAsync(erbs.Body, uri);
+                await DiscoverMetadataRecursiveAsync(erbs.Body, uri, activeConnections, activeTempTables);
             else if (stmt is ExecutePushdownStatement eps)
             {
                 // For pushdown, if 'INTO' is used, we should register it at least as a 'known' table
@@ -286,24 +304,25 @@ namespace ETL_SQL.LSP
                     // We don't know the columns easily without parsing the SQLText (which is native),
                     // but we can register it with no columns to avoid "Table not found" errors.
                     _metadata.RegisterTempTable(uri, eps.IntoTable.TableName, new List<string>());
+                    activeTempTables.Add(eps.IntoTable.TableName);
                 }
             }
             else if (stmt is BlockStatement block)
-                foreach (var s in block.Statements) await DiscoverMetadataRecursiveAsync(s, uri);
+                foreach (var s in block.Statements) await DiscoverMetadataRecursiveAsync(s, uri, activeConnections, activeTempTables);
             else if (stmt is IfStatement ifStmt)
             {
-                await DiscoverMetadataRecursiveAsync(ifStmt.IfBody, uri);
+                await DiscoverMetadataRecursiveAsync(ifStmt.IfBody, uri, activeConnections, activeTempTables);
                 if (ifStmt.ElseIfClauses != null)
-                    foreach (var ei in ifStmt.ElseIfClauses) await DiscoverMetadataRecursiveAsync(ei.Body, uri);
-                if (ifStmt.ElseBody != null) await DiscoverMetadataRecursiveAsync(ifStmt.ElseBody, uri);
+                    foreach (var ei in ifStmt.ElseIfClauses) await DiscoverMetadataRecursiveAsync(ei.Body, uri, activeConnections, activeTempTables);
+                if (ifStmt.ElseBody != null) await DiscoverMetadataRecursiveAsync(ifStmt.ElseBody, uri, activeConnections, activeTempTables);
             }
-            else if (stmt is WhileStatement w) await DiscoverMetadataRecursiveAsync(w.Body, uri);
-            else if (stmt is ForStatement f) await DiscoverMetadataRecursiveAsync(f.Body, uri);
-            else if (stmt is ForeachStatement fe) await DiscoverMetadataRecursiveAsync(fe.Body, uri);
+            else if (stmt is WhileStatement w) await DiscoverMetadataRecursiveAsync(w.Body, uri, activeConnections, activeTempTables);
+            else if (stmt is ForStatement f) await DiscoverMetadataRecursiveAsync(f.Body, uri, activeConnections, activeTempTables);
+            else if (stmt is ForeachStatement fe) await DiscoverMetadataRecursiveAsync(fe.Body, uri, activeConnections, activeTempTables);
             else if (stmt is TryCatchStatement tc)
             {
-                await DiscoverMetadataRecursiveAsync(tc.TryBody, uri);
-                await DiscoverMetadataRecursiveAsync(tc.CatchBody, uri);
+                await DiscoverMetadataRecursiveAsync(tc.TryBody, uri, activeConnections, activeTempTables);
+                await DiscoverMetadataRecursiveAsync(tc.CatchBody, uri, activeConnections, activeTempTables);
             }
         }
 

@@ -121,16 +121,45 @@ namespace ETL_SQL.TUI.UI
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null)
         {
+            var cols = await GetColumnDetailsAsync(connectionName, tableName, uri);
+            return cols.Select(c => c.Name);
+        }
+
+        public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null)
+        {
             if (_connections.TryGetValue(connectionName, out var source))
             {
+                var catalogProvider = source.GetCatalogProvider();
+                if (catalogProvider != null)
+                {
+                    try
+                    {
+                        string schema = "";
+                        string tName = tableName;
+                        if (tableName.Contains("."))
+                        {
+                            var parts = tableName.Split('.');
+                            schema = parts[0];
+                            tName = parts[1];
+                        }
+                        var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
+                        if (catCols != null && catCols.Count > 0)
+                        {
+                            return catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType));
+                        }
+                    }
+                    catch { }
+                }
+
                 if (source is IDatabaseSource db)
                 {
                     var cols = (await db.GetColumnsAsync(tableName)).ToList();
-                    if (cols.Any()) return cols;
+                    if (cols.Any()) return cols.Select(c => new ColumnMetadata(c, "ANY"));
                 }
-                return await source.GetColumnsAsync();
+                var defaultCols = await source.GetColumnsAsync();
+                return defaultCols.Select(c => new ColumnMetadata(c, "ANY"));
             }
-            return Enumerable.Empty<string>();
+            return Enumerable.Empty<ColumnMetadata>();
         }
 
         public async Task<IEnumerable<string>> GetViewsAsync(string connectionName, string? uri = null)

@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -25,8 +28,9 @@ namespace ETL_SQL.Core.Services
         private readonly ConcurrentDictionary<string, List<string>> _tables = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, List<string>> _views = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, List<string>> _docTempTables = new(StringComparer.OrdinalIgnoreCase);
-        private readonly ConcurrentDictionary<string, List<string>> _columns = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, List<ColumnMetadata>> _columns = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, DateTimeOffset> _cacheTimestamps = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, Task> _ongoingRefreshes = new(StringComparer.OrdinalIgnoreCase);
 
         public MetadataManager(ILogger logger, IConnectorRegistry connectors)
         {
@@ -70,6 +74,7 @@ namespace ETL_SQL.Core.Services
             _globalConnections[name] = new ConnectionInfo(name, type, connectionString, false);
             _logger.Info("Registered global connection {Name} of type {Type}", name, type);
             ClearCacheForConnection(name);
+            TryLoadAndRefreshCache(name, connectionString, null);
         }
 
         public void RegisterDocumentConnection(string uri, string name, string type, string connectionString)
@@ -83,6 +88,7 @@ namespace ETL_SQL.Core.Services
             }
             _logger.Info("Registered document connection {Name} for {Uri}", name, uri);
             ClearCacheForDocument(normalizedUri, name);
+            TryLoadAndRefreshCache(name, connectionString, normalizedUri);
         }
 
         public void ClearDocumentConnections(string uri)
@@ -160,6 +166,8 @@ namespace ETL_SQL.Core.Services
         }
 
         public bool DebugMode { get; set; } = false;
+        public string? SchemaCacheDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "SchemaCache");
+        public bool DisableBackgroundRefresh { get; set; } = false;
 
         public string? GetConnectionType(string connectionName, string? uri = null)
         {
@@ -176,12 +184,36 @@ namespace ETL_SQL.Core.Services
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
                 if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
+                // Try to load disk cache
+                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                if (diskCache != null)
+                {
+                    _tables[key] = diskCache.Tables;
+                    _views[key] = diskCache.Views;
+                    foreach (var kvp in diskCache.Columns)
+                    {
+                        var colKey = key + ":" + kvp.Key.ToUpperInvariant();
+                        _columns[colKey] = kvp.Value;
+                    }
+                    StampCache(key);
+
+                    // Trigger async background refresh
+                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
+                    var tablesList = diskCache.Tables.ToList();
+                    var dcNormalizedUri = NormalizeUri(uri);
+                    if (!string.IsNullOrEmpty(dcNormalizedUri) && _docTempTables.TryGetValue(dcNormalizedUri, out var dcTemps))
+                    {
+                        tablesList.AddRange(dcTemps.Where(t => !tablesList.Contains(t, StringComparer.OrdinalIgnoreCase)));
+                    }
+                    return tablesList;
+                }
+
                 var connector = _connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
                 var tables = (await source.GetTablesAsync()).ToList();
-
 
                 var normalizedUri = NormalizeUri(uri);
                 if (!string.IsNullOrEmpty(normalizedUri) && _docTempTables.TryGetValue(normalizedUri, out var temps))
@@ -196,6 +228,10 @@ namespace ETL_SQL.Core.Services
 
                 _tables[key] = tables;
                 StampCache(key);
+
+                // Trigger background refresh to fetch and cache columns as well
+                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
                 return tables;
             }
             catch (Exception ex)
@@ -215,6 +251,25 @@ namespace ETL_SQL.Core.Services
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
                 if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
+                // Try to load disk cache
+                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                if (diskCache != null)
+                {
+                    _tables[key] = diskCache.Tables;
+                    _views[key] = diskCache.Views;
+                    foreach (var kvp in diskCache.Columns)
+                    {
+                        var colKey = key + ":" + kvp.Key.ToUpperInvariant();
+                        _columns[colKey] = kvp.Value;
+                    }
+                    StampCache(key);
+
+                    // Trigger async background refresh
+                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
+                    return diskCache.Views;
+                }
+
                 var connector = _connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
@@ -227,6 +282,10 @@ namespace ETL_SQL.Core.Services
 
                 _views[key] = views.ToList();
                 StampCache(key);
+
+                // Trigger background refresh to fetch and cache columns as well
+                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
                 return views;
             }
             catch (Exception ex)
@@ -264,7 +323,7 @@ namespace ETL_SQL.Core.Services
             }
 
             var cacheKey = GetTempTableCacheKey(normalizedUri, name);
-            _columns[cacheKey] = columns;
+            _columns[cacheKey] = columns.Select(c => new ColumnMetadata(c, "ANY")).ToList();
             _logger.Info("Registered temp table {Name} for {Uri}", name, normalizedUri);
         }
 
@@ -288,6 +347,12 @@ namespace ETL_SQL.Core.Services
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null)
+        {
+            var cols = await GetColumnDetailsAsync(connectionName, tableName, uri);
+            return cols.Select(c => c.Name);
+        }
+
+        public async Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null)
         {
             try
             {
@@ -316,38 +381,95 @@ namespace ETL_SQL.Core.Services
 
                 if (tableName.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
                 {
-                    return new[] { "DUMMY" };
+                    return new[] { new ColumnMetadata("DUMMY", "VARCHAR") };
                 }
 
                 var conn = GetConnection(connectionName, uri);
-                if (conn == null) return Enumerable.Empty<string>();
+                if (conn == null) return Enumerable.Empty<ColumnMetadata>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null) + ":" + tableName.ToUpperInvariant();
+                
+                // If in memory cache, return immediately
                 if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
+                // Try to load disk cache if memory cache is empty
+                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                if (diskCache != null)
+                {
+                    var connKey = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
+                    _tables[connKey] = diskCache.Tables;
+                    _views[connKey] = diskCache.Views;
+                    foreach (var kvp in diskCache.Columns)
+                    {
+                        var colKey = connKey + ":" + kvp.Key.ToUpperInvariant();
+                        _columns[colKey] = kvp.Value;
+                    }
+                    StampCache(connKey);
+
+                    // Trigger async background refresh
+                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
+                    if (_columns.TryGetValue(key, out var diskLoadedCols))
+                    {
+                        return diskLoadedCols;
+                    }
+                }
+
+                // If not cached anywhere, we must fetch synchronously
                 var connector = _connectors.GetConnector(conn.Type);
-                if (connector == null) return Enumerable.Empty<string>();
+                if (connector == null) return Enumerable.Empty<ColumnMetadata>();
 
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
-                var columns = Enumerable.Empty<string>();
+                var colList = new List<ColumnMetadata>();
 
-                if (source is IDatabaseSource db)
+                var catalogProvider = source.GetCatalogProvider();
+                if (catalogProvider != null)
                 {
-                    columns = (await db.GetColumnsAsync(tableName)).ToList();
-                }
-                else
-                {
-                    columns = (await source.GetColumnsAsync()).ToList();
+                    try
+                    {
+                        string schema = "";
+                        string tName = tableName;
+                        if (tableName.Contains("."))
+                        {
+                            var parts = tableName.Split('.');
+                            schema = parts[0];
+                            tName = parts[1];
+                        }
+                        var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
+                        if (catCols != null && catCols.Count > 0)
+                        {
+                            colList.AddRange(catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)));
+                        }
+                    }
+                    catch { }
                 }
 
-                _columns[key] = columns.ToList();
+                if (colList.Count == 0)
+                {
+                    IEnumerable<string> rawCols;
+                    if (source is IDatabaseSource db)
+                    {
+                        rawCols = (await db.GetColumnsAsync(tableName)).ToList();
+                    }
+                    else
+                    {
+                        rawCols = (await source.GetColumnsAsync()).ToList();
+                    }
+                    colList.AddRange(rawCols.Select(c => new ColumnMetadata(c, "ANY")));
+                }
+
+                _columns[key] = colList;
                 StampCache(key);
-                return columns;
+
+                // Trigger background refresh for the whole connection to pre-fetch other metadata
+                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+
+                return colList;
             }
             catch (Exception ex)
             {
-                _logger.Error("GetColumnsAsync ERROR: {Message}", ex);
-                return Enumerable.Empty<string>();
+                _logger.Error("GetColumnDetailsAsync ERROR: {Message}", ex);
+                return Enumerable.Empty<ColumnMetadata>();
             }
         }
 
@@ -381,6 +503,40 @@ namespace ETL_SQL.Core.Services
             foreach (var key in colKeysToRemove) _columns.TryRemove(key, out _);
         }
 
+        public void CleanUpDocumentConnectionsAndTempTables(string uri, IEnumerable<string> activeConnectionNames, IEnumerable<string> activeTempTableNames)
+        {
+            var normalizedUri = NormalizeUri(uri);
+            var activeConns = new HashSet<string>(activeConnectionNames, StringComparer.OrdinalIgnoreCase);
+            var activeTemps = new HashSet<string>(activeTempTableNames, StringComparer.OrdinalIgnoreCase);
+
+            if (_docConnections.TryGetValue(normalizedUri, out var list))
+            {
+                lock (list)
+                {
+                    var toRemove = list.Where(c => !activeConns.Contains(c.Name)).ToList();
+                    foreach (var c in toRemove)
+                    {
+                        list.Remove(c);
+                        ClearCacheForDocument(normalizedUri, c.Name);
+                    }
+                }
+            }
+
+            if (_docTempTables.TryGetValue(normalizedUri, out var tempTablesList))
+            {
+                lock (tempTablesList)
+                {
+                    var toRemove = tempTablesList.Where(t => !activeTemps.Contains(t)).ToList();
+                    foreach (var t in toRemove)
+                    {
+                        tempTablesList.Remove(t);
+                        var cacheKey = GetTempTableCacheKey(normalizedUri, t);
+                        _columns.TryRemove(cacheKey, out _);
+                    }
+                }
+            }
+        }
+
         private void ClearCacheForDocument(string uri, string? connectionName = null)
         {
             var normalizedUri = NormalizeUri(uri);
@@ -407,5 +563,232 @@ namespace ETL_SQL.Core.Services
                 _docTempTables.TryRemove(normalizedUri, out _);
             }
         }
+
+        private void TryLoadAndRefreshCache(string connectionName, string connectionString, string? uri)
+        {
+            var cached = LoadSchemaFromDisk(connectionName, connectionString);
+            if (cached != null)
+            {
+                var connKey = GetCacheKey(connectionName, uri);
+                _tables[connKey] = cached.Tables;
+                _views[connKey] = cached.Views;
+                foreach (var kvp in cached.Columns)
+                {
+                    var colKey = connKey + ":" + kvp.Key.ToUpperInvariant();
+                    _columns[colKey] = kvp.Value;
+                }
+                StampCache(connKey);
+                _logger.Info("Loaded schema cache from disk for connection {Name}", connectionName);
+            }
+
+            TriggerBackgroundRefresh(connectionName, connectionString, uri);
+        }
+
+        private void TriggerBackgroundRefresh(string connectionName, string connectionString, string? uri)
+        {
+            if (DisableBackgroundRefresh) return;
+            var connKey = GetCacheKey(connectionName, uri);
+            if (_ongoingRefreshes.ContainsKey(connKey)) return;
+
+            var task = Task.Run(async () =>
+            {
+                try
+                {
+                    await RefreshSchemaInternalAsync(connectionName, connectionString, uri);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Error("Error during background schema refresh for connection {Name}", ex, connectionName);
+                }
+                finally
+                {
+                    _ongoingRefreshes.TryRemove(connKey, out _);
+                }
+            });
+
+            _ongoingRefreshes[connKey] = task;
+        }
+
+        private async Task RefreshSchemaInternalAsync(string connectionName, string connectionString, string? uri)
+        {
+            var conn = GetConnection(connectionName, uri);
+            if (conn == null) return;
+
+            var connector = _connectors.GetConnector(conn.Type);
+            if (connector == null) return;
+
+            _logger.Info("Starting background schema refresh for connection {Name} ({Type})", connectionName, conn.Type);
+
+            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+            
+            var tables = (await source.GetTablesAsync()).ToList();
+            if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
+            {
+                tables.Add("DUAL");
+            }
+
+            var views = new List<string>();
+            if (source is IDatabaseSource db)
+            {
+                views = (await db.GetViewsAsync()).ToList();
+            }
+
+            var columnsMap = new Dictionary<string, List<ColumnMetadata>>(StringComparer.OrdinalIgnoreCase);
+            var catalogProvider = source.GetCatalogProvider();
+
+            var allObjects = tables.Concat(views).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            foreach (var obj in allObjects)
+            {
+                if (obj.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
+                {
+                    columnsMap[obj] = new List<ColumnMetadata> { new ColumnMetadata("DUMMY", "VARCHAR") };
+                    continue;
+                }
+
+                var colList = new List<ColumnMetadata>();
+                if (catalogProvider != null)
+                {
+                    try
+                    {
+                        string schema = "";
+                        string tName = obj;
+                        if (obj.Contains("."))
+                        {
+                            var parts = obj.Split('.');
+                            schema = parts[0];
+                            tName = parts[1];
+                        }
+                        var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
+                        if (catCols != null)
+                        {
+                            colList.AddRange(catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)));
+                        }
+                    }
+                    catch
+                    {
+                        // Fallback below
+                    }
+                }
+
+                if (colList.Count == 0)
+                {
+                    try
+                    {
+                        IEnumerable<string> rawCols;
+                        if (source is IDatabaseSource dbSource)
+                        {
+                            rawCols = await dbSource.GetColumnsAsync(obj);
+                        }
+                        else
+                        {
+                            rawCols = await source.GetColumnsAsync();
+                        }
+                        colList.AddRange(rawCols.Select(c => new ColumnMetadata(c, "ANY")));
+                    }
+                    catch
+                    {
+                        // Ignore table/view if we can't query columns
+                    }
+                }
+
+                if (colList.Count > 0)
+                {
+                    columnsMap[obj] = colList;
+                }
+            }
+
+            var connKey = GetCacheKey(connectionName, uri);
+            _tables[connKey] = tables;
+            _views[connKey] = views;
+
+            var prefix = connKey + ":";
+            var keysToRemove = _columns.Keys.Where(k => k.StartsWith(prefix)).ToList();
+            foreach (var k in keysToRemove) _columns.TryRemove(k, out _);
+
+            foreach (var kvp in columnsMap)
+            {
+                var colKey = prefix + kvp.Key.ToUpperInvariant();
+                _columns[colKey] = kvp.Value;
+            }
+            StampCache(connKey);
+
+            var cacheData = new ConnectionSchemaCache
+            {
+                Tables = tables,
+                Views = views,
+                Columns = columnsMap
+            };
+            await SaveSchemaToDiskAsync(connectionName, connectionString, cacheData);
+
+            _logger.Info("Background schema refresh complete for connection {Name}. Cached {TableCount} tables/views.", connectionName, allObjects.Count);
+        }
+
+        private async Task SaveSchemaToDiskAsync(string connectionName, string connectionString, ConnectionSchemaCache cacheData)
+        {
+            if (string.IsNullOrEmpty(SchemaCacheDirectory)) return;
+            try
+            {
+                var directory = SchemaCacheDirectory;
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                var fileName = GetCacheFileName(connectionName, connectionString);
+                var filePath = Path.Combine(directory, fileName);
+
+                var json = JsonSerializer.Serialize(cacheData);
+                var plaintextBytes = Encoding.UTF8.GetBytes(json);
+                var ciphertextBytes = Common.MachineBoundCrypto.Protect(plaintextBytes);
+
+                await File.WriteAllBytesAsync(filePath, ciphertextBytes);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Failed to save schema cache to disk", ex);
+            }
+        }
+
+        private ConnectionSchemaCache? LoadSchemaFromDisk(string connectionName, string connectionString)
+        {
+            if (string.IsNullOrEmpty(SchemaCacheDirectory)) return null;
+            try
+            {
+                var directory = SchemaCacheDirectory;
+                var fileName = GetCacheFileName(connectionName, connectionString);
+                var filePath = Path.Combine(directory, fileName);
+
+                if (!File.Exists(filePath)) return null;
+
+                var ciphertextBytes = File.ReadAllBytes(filePath);
+                var plaintextBytes = Common.MachineBoundCrypto.Unprotect(ciphertextBytes);
+                var json = Encoding.UTF8.GetString(plaintextBytes);
+
+                return JsonSerializer.Deserialize<ConnectionSchemaCache>(json);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Failed to load schema cache from disk", ex);
+                return null;
+            }
+        }
+
+        private string GetCacheFileName(string connectionName, string connectionString)
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            var inputBytes = Encoding.UTF8.GetBytes(connectionString);
+            var hashBytes = sha.ComputeHash(inputBytes);
+            var hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
+            
+            var safeName = new string(connectionName.Where(char.IsLetterOrDigit).ToArray());
+            return $"{safeName}_{hashHex}.cache";
+        }
+    }
+
+    public class ConnectionSchemaCache
+    {
+        public List<string> Tables { get; set; } = new();
+        public List<string> Views { get; set; } = new();
+        public Dictionary<string, List<ColumnMetadata>> Columns { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

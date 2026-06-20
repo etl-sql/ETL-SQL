@@ -418,25 +418,25 @@ namespace ETL_SQL.Core.Services
 
                     if (context.Aliases.TryGetValue(alias, out var infoAlias))
                     {
-                        var cols = await _metadata.GetColumnsAsync(infoAlias.ConnectionName ?? infoAlias.TableName, infoAlias.BaseTableName ?? infoAlias.TableName, context.DocumentUri);
+                        var cols = await _metadata.GetColumnDetailsAsync(infoAlias.ConnectionName ?? infoAlias.TableName, infoAlias.BaseTableName ?? infoAlias.TableName, context.DocumentUri);
 
                         if (pref == "*")
                         {
                             if (cols.Any())
                             {
-                                string expansion = string.Join(", ", cols.Select(c => $"{alias}.{c.Trim('[', ']', '\"', '\'')}"));
+                                string expansion = string.Join(", ", cols.Select(c => $"{alias}.{c.Name.Trim('[', ']', '\"', '\'')}"));
                                 results.Add(new Suggestion(expansion, SuggestionType.Column, Priority: 0));
                             }
                         }
                         else
                         {
-                            results.AddRange(cols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
-                                               .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                            results.AddRange(cols.Where(c => c.Name.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                               .Select(c => new Suggestion($"{alias}.{c.Name.Trim('[', ']', '\"', '\'')}", SuggestionType.Column, Documentation: $"**Column**: {c.Name}\n**Type**: {c.DataType}")));
 
                             if (context.VirtualSchemas.TryGetValue(infoAlias.TableName, out var vCols))
                             {
                                 results.AddRange(vCols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
-                                                      .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                                                      .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column, Documentation: $"**Column**: {c}\n**Type**: ANY")));
                             }
                         }
                     }
@@ -456,9 +456,9 @@ namespace ETL_SQL.Core.Services
 
                             if (!inTableContext)
                             {
-                                var cols = await _metadata.GetColumnsAsync(match.Name, match.Name, context.DocumentUri);
-                                results.AddRange(cols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
-                                                   .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                                var cols = await _metadata.GetColumnDetailsAsync(match.Name, match.Name, context.DocumentUri);
+                                results.AddRange(cols.Where(c => c.Name.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                                   .Select(c => new Suggestion($"{alias}.{c.Name.Trim('[', ']', '\"', '\'')}", SuggestionType.Column, Documentation: $"**Column**: {c.Name}\n**Type**: {c.DataType}")));
                             }
                         }
                     }

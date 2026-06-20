@@ -6,6 +6,7 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Core
 {
     public record ConnectionInfo(string Name, string Type, string ConnectionString, bool IsDocument);
+    public record ColumnMetadata(string Name, string DataType);
 
     /// <summary>
     /// Manages metadata discovery (tables, columns) and connection registration 
@@ -27,6 +28,7 @@ namespace ETL_SQL.Core
         void RegisterTempTable(string uri, string name, List<string> columns);
         void ClearTempTables(string uri);
         Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName, string? uri = null);
+        Task<IEnumerable<ColumnMetadata>> GetColumnDetailsAsync(string connectionName, string tableName, string? uri = null);
         IEnumerable<string> GetRegisteredNames();
         IConnector? GetConnector(string name);
         string? GetConnectionType(string connectionName, string? uri = null);

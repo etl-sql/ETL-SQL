@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -294,6 +294,57 @@ namespace ETL_SQL.LanguageServer.Tests
 
             // Assert: Should suggest my_label1
             Assert.Contains(list, i => i.Label == "my_label1");
+        }
+
+        [Fact]
+        public async Task Completion_Should_Resolve_Connection_Immediately_On_Keystroke()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            connectorRegistry.Register(new MockDbConnector());
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            var languageService = new LanguageService(metadataManager, helpRegistry);
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
+
+            var uri = DocumentUri.From("untitled:Untitled-ConnImmediate");
+
+            // 1. Initial document state with CREATE CONNECTION statement
+            var initialScript = "CREATE CONNECTION m AS MOCKDB();\r\n";
+            await handler.AnalyzeAsync(uri, initialScript);
+
+            // Verify metadata is aware of connection
+            var connections = metadataManager.GetConnections(uri.ToString());
+            Assert.Contains(connections, c => string.Equals(c.Name, "m", StringComparison.OrdinalIgnoreCase));
+
+            // 2. User types "m." on the second line.
+            // In a real editor, this triggers didChange notification immediately.
+            var changedScript = "CREATE CONNECTION m AS MOCKDB();\r\nm.";
+            store.UpdateText(uri, changedScript);
+
+            // Simulating concurrent autocomplete request before AnalyzeAsync is completed or run.
+            var completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(1, 2), // Line 1, index 2 (just after "m.")
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
+            };
+
+            // Act
+            var list = await completionProvider.Handle(completionParams, CancellationToken.None);
+
+            // Assert: Connection "m" has tables Users, Products, Sales, etc.
+            // Check that the completion list contains suggestions prefixed with m.
+            Assert.NotEmpty(list);
+            Assert.Contains(list, i => i.Label == "m.Users");
+            Assert.Contains(list, i => i.Label == "m.Products");
         }
     }
 }
