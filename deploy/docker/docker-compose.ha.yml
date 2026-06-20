@@ -1,0 +1,98 @@
+# High Availability (HA) cluster configuration for ETL-SQL.
+#
+# Runs multiple load-balanced instances of the Report Portal and Orchestrator services.
+# Shared state is stored in PostgreSQL (instead of local SQLite), and shared artifacts 
+# (Reports, Snapshots, datasets, maps, and Data Protection key ring) are mapped to a
+# shared directory on the host. An HAProxy container serves as the frontend load balancer,
+# resolving scaling dynamically via Docker DNS.
+#
+# Usage:
+#   cp environment-ha.env.example production-ha.env  # then edit values
+#   docker compose --env-file production-ha.env -f docker-compose.ha.yml up -d --scale portal=3 --scale orchestrator=2
+#   docker compose --env-file production-ha.env -f docker-compose.ha.yml down
+#
+# Note: The original docker-compose.yml configuration remains intact for single-node development.
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER}
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: ${PG_DB_PORTAL}
+      PG_DB_ORCH: ${PG_DB_ORCH}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "${PORT_PG:-5032}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  orchestrator:
+    image: etl-sql/orchestrator:${ETLSQL_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_URLS=http://+:5001
+      - Orchestrator__Database__Provider=Postgres
+      - Orchestrator__Database__ConnectionString=Host=postgres;Database=${PG_DB_ORCH};Username=${PG_USER};Password=${PG_PASSWORD}
+      - Orchestrator__ApiKey=${ORCH_API_KEY}
+      - Jobs__UseProcessSpawning=false
+    volumes:
+      - ${ENV_DATA_ROOT}/Reports:/app/Reports
+      - ${ENV_DATA_ROOT}/Snapshots:/app/Snapshots
+      - ${ENV_DATA_ROOT}/logs:/app/logs
+
+  portal:
+    image: etl-sql/report-portal:${ETLSQL_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orchestrator:
+        condition: service_started
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - Portal__Database__Provider=Postgres
+      - Portal__Database__ConnectionString=Host=postgres;Database=${PG_DB_PORTAL};Username=${PG_USER};Password=${PG_PASSWORD}
+      - Portal__ScriptRootPath=/app/Reports
+      - Portal__SnapshotDirectory=/app/Snapshots
+      - Portal__DatasetRootPath=/app/datasets
+      - Portal__MapRootPath=/app/maps
+      - Portal__Storage__KeyRingPath=/app/data/.portal-keys
+      - Portal__Jwt__Secret=${PORTAL_JWT_SECRET}
+      - Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}
+      - Portal__Orchestrator__ApiUrl=http://loadbalancer:5001
+      - Portal__Orchestrator__ApiKey=${ORCH_API_KEY}
+      - Portal__FirstRun__AdminUsername=${PORTAL_ADMIN_USERNAME:-admin}
+    volumes:
+      - ${ENV_DATA_ROOT}/Reports:/app/Reports
+      - ${ENV_DATA_ROOT}/Snapshots:/app/Snapshots
+      - ${ENV_DATA_ROOT}/datasets:/app/datasets
+      - ${ENV_DATA_ROOT}/maps:/app/maps
+      - ${ENV_DATA_ROOT}/portal-data:/app/data
+
+  loadbalancer:
+    image: haproxy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - portal
+      - orchestrator
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${PORT_PORTAL:-5000}:5000"
+      - "${PORT_ORCH:-5001}:5001"
+
+volumes:
+  pgdata:
+    name: ${COMPOSE_PROJECT_NAME}-pgdata

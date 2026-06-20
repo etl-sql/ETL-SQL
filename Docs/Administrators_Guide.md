@@ -73,6 +73,9 @@ ETL-SQL provides pre-configured Docker Compose configurations to run containeriz
 3. **Development Builds (Source Override)**:
    If you have the source tree cloned locally and need to test code modifications inside the containers, use the [docker-compose.override.yml](../docker-compose.override.yml) file. When Docker Compose finds this file alongside the main compose config, it automatically overrides the registry images and compiles the local C# code via multi-stage builds.
 
+4. **High Availability Scaling**:
+   For multi-node active-active load-balanced clusters, use the HA-specific docker compose template located at [deploy/docker/docker-compose.ha.yml](../deploy/docker/docker-compose.ha.yml). This setup supports variable container scaling behind a sticky HAProxy load balancer. See [Section 6.2 Containerized HA Clustering (Docker Compose)](#62-containerized-ha-clustering-docker-compose) below for detailed instructions.
+
 ### First-Run Checklist
 
 Before exposing the services to users:
@@ -487,6 +490,36 @@ Operational requirements:
   account with explicit share and NTFS permissions.
 - Back up PostgreSQL and the shared artifact roots as one coordinated recovery set. The HA state is no
   longer represented by only `portal.db` and `etlsql.db` files.
+
+### 6.2 Containerized HA Clustering (Docker Compose)
+
+For container-native deployments (such as Docker engines, overlay networks, or Swarm environments), ETL-SQL provides a clustered, multi-node Compose template under [`deploy/docker/`](../deploy/docker) designed to run an active-active clustered environment with dynamic scaling.
+
+The HA container configuration utilizes:
+- **Shared PostgreSQL Database**: Centralized PostgreSQL container (configured via `docker-compose.ha.yml`) that replaces local SQLite database files. Both Portal and Orchestrator nodes communicate with this shared instance.
+- **Shared Host Volume Binding**: Mapped to `ENV_DATA_ROOT`. This directory hosts the reports, snapshots, datasets, maps, and the `.portal-keys` Data Protection key ring. Since all scaled Portal containers mount this same directory structure, they automatically share the Data Protection keys needed to decrypt and validate session tokens and cookies.
+- **Dynamic Load Balancing**: An HAProxy load balancer handles ingress routing on host ports `5000` (Portal) and `5001` (Orchestrator API).
+- **Session Affinity**: Because Report Portal interactive sessions are stored in process-local memory caches, the load balancer routes client requests stickily based on the `ETLSQL_PORTAL_AFFINITY` cookie. Stateless Orchestrator jobs are round-robin balanced.
+
+#### Deploying and Scaling the HA Stack
+
+1. Navigate to the deployment folder:
+   ```bash
+   cd deploy/docker
+   ```
+
+2. Generate your unique environment configuration:
+   ```bash
+   cp environment-ha.env.example production-ha.env
+   # Edit production-ha.env to supply unique JWT secrets, API keys, database credentials, and ports
+   ```
+
+3. Spin up the stack with your chosen scale (e.g., 3 Portals and 2 Orchestrators):
+   ```bash
+   docker compose --env-file production-ha.env -f docker-compose.ha.yml up -d --scale portal=3 --scale orchestrator=2
+   ```
+
+To dynamically scale containers up or down, execute the `up` command again with updated `--scale` flags. HAProxy dynamically queries Docker's internal DNS (`127.0.0.11`) to discover new container instances and mark decommissioned instances as down.
 
 ---
 
