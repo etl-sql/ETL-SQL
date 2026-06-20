@@ -145,10 +145,7 @@ namespace ETL_SQL.LSP
                 foreach (var stmt in script.Statements)
                     await DiscoverMetadataRecursiveAsync(stmt, uri.ToString(), activeConnections, activeTempTables);
 
-                if (_metadata is ETL_SQL.Core.Services.MetadataManager mm)
-                {
-                    mm.CleanUpDocumentConnectionsAndTempTables(uri.ToString(), activeConnections, activeTempTables);
-                }
+                _metadata.CleanUpDocumentConnectionsAndTempTables(uri.ToString(), activeConnections, activeTempTables);
 
                 // Push connections to client sidebar
                 var connections = _metadata.GetConnections(uri.ToString());

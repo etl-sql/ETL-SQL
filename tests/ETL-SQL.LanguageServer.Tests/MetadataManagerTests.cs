@@ -160,6 +160,53 @@ namespace ETL_SQL.LanguageServer.Tests
         }
 
         [Fact]
+        public async Task ValidCacheHit_TriggersBackgroundRefresh_WhenStale_AndReleasesSlot()
+        {
+            // Stale-while-revalidate (and slot-release): a valid in-memory hit must still kick off a
+            // background refresh once aged. That refresh only re-runs if the previous one released its
+            // _ongoingRefreshes slot — so a second source query proves both fixes.
+            var tableFetches = 0;
+            var dataSourceMock = new Mock<IDataSource>();
+            dataSourceMock.Setup(d => d.GetTablesAsync())
+                          .Callback(() => Interlocked.Increment(ref tableFetches))
+                          .ReturnsAsync(new List<string> { "T1" });
+            dataSourceMock.Setup(d => d.GetColumnsAsync()).ReturnsAsync(new List<string>());
+            // GetCatalogProvider() returns null by default (loose mock) → exercises the GetColumns fallback.
+
+            var connectorMock = new Mock<IConnector>();
+            connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                         .Returns(dataSourceMock.Object);
+            _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
+
+            var manager = new MetadataManager(_loggerMock.Object, _registryMock.Object)
+            {
+                SchemaCacheDirectory = null,
+                DisableBackgroundRefresh = false,
+                SoftRefreshInterval = TimeSpan.Zero // every read is "stale" → always revalidate
+            };
+
+            manager.RegisterConnection("C", "MSSQL", "...");      // warms + first background refresh
+            await WaitUntilAsync(() => tableFetches >= 1);
+
+            var before = tableFetches;
+            await manager.GetTablesAsync("C");                    // valid hit → second background refresh
+            await WaitUntilAsync(() => tableFetches > before);
+
+            Assert.True(tableFetches > before, "A stale valid cache-hit should trigger another background refresh.");
+        }
+
+        private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            while (DateTime.UtcNow < deadline)
+            {
+                if (condition()) return;
+                await Task.Delay(20);
+            }
+            Assert.True(condition(), "Condition not met within timeout.");
+        }
+
+        [Fact]
         public async Task SchemaCache_WritesEncryptedDataToDisk_AndLoadsItSuccessfully()
         {
             // Arrange
@@ -204,11 +251,11 @@ namespace ETL_SQL.LanguageServer.Tests
                 var fileContent = System.Text.Encoding.UTF8.GetString(fileBytes);
                 Assert.DoesNotContain("CachedTable1", fileContent);
 
-                // Assert 3: We can load the disk cache using LoadSchemaFromDisk
-                var loadMethod = typeof(MetadataManager).GetMethod("LoadSchemaFromDisk", 
+                // Assert 3: We can load the disk cache using LoadSchemaFromDiskAsync
+                var loadMethod = typeof(MetadataManager).GetMethod("LoadSchemaFromDiskAsync",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 Assert.NotNull(loadMethod);
-                var loadedCache = (ConnectionSchemaCache)loadMethod.Invoke(manager, new object[] { connName, connStr });
+                var loadedCache = await (Task<ConnectionSchemaCache>)loadMethod.Invoke(manager, new object[] { connName, connStr })!;
                 Assert.NotNull(loadedCache);
 
                 Assert.Contains("CachedTable1", loadedCache.Tables);

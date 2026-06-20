@@ -60,5 +60,6 @@ SELECT * FROM #Summary;
         public string? GetConnectionType(string connectionName, string? uri = null) => "MSSQL";
         public void ClearCache() { }
         public void ClearCacheForUri(string uri) { }
+        public void CleanUpDocumentConnectionsAndTempTables(string uri, IEnumerable<string> activeConnectionNames, IEnumerable<string> activeTempTableNames) { }
     }
 }

@@ -199,6 +199,7 @@ namespace ETL_SQL.TUI.UI
         public void ClearTempTables(string uri) { }
         public void ClearCache() { }
         public void ClearCacheForUri(string uri) { }
+        public void CleanUpDocumentConnectionsAndTempTables(string uri, IEnumerable<string> activeConnectionNames, IEnumerable<string> activeTempTableNames) { }
         public bool DebugMode { get; set; }
     }
 

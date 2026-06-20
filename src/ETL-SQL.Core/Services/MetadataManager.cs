@@ -21,6 +21,20 @@ namespace ETL_SQL.Core.Services
     {
         private static readonly TimeSpan WarehouseCacheTtl = TimeSpan.FromMinutes(5);
 
+        /// <summary>How old an in-memory entry may get before a read triggers a background refresh
+        /// (stale-while-revalidate): reads stay instant, and the schema keeps converging without a
+        /// blocking fetch on every access.</summary>
+        public TimeSpan SoftRefreshInterval { get; set; } = TimeSpan.FromMinutes(5);
+
+        /// <summary>Maximum number of tables/views a background refresh pre-fetches columns for. 0
+        /// (default) means unlimited; set it on very large warehouses to bound the crawl — columns
+        /// beyond the cap are still fetched lazily on first use.</summary>
+        public int MaxPrefetchColumnObjects { get; set; } = 0;
+
+        /// <summary>On-disk schema cache files older than this are ignored on read and pruned on
+        /// write. Defaults to 14 days.</summary>
+        public TimeSpan DiskCacheMaxAge { get; set; } = TimeSpan.FromDays(14);
+
         private readonly ILogger _logger;
         private readonly IConnectorRegistry _connectors;
         private readonly ConcurrentDictionary<string, ConnectionInfo> _globalConnections = new(StringComparer.OrdinalIgnoreCase);
@@ -48,6 +62,24 @@ namespace ETL_SQL.Core.Services
         }
 
         private void StampCache(string cacheKey) => _cacheTimestamps[cacheKey] = DateTimeOffset.UtcNow;
+
+        /// <summary>True when a still-valid in-memory entry is old enough to refresh in the
+        /// background (stale-while-revalidate), so non-warehouse schemas keep converging instead of
+        /// freezing after their first load.</summary>
+        private bool ShouldBackgroundRefresh(string cacheKey)
+        {
+            if (DisableBackgroundRefresh) return false;
+            return !_cacheTimestamps.TryGetValue(cacheKey, out var fetchedAt)
+                || DateTimeOffset.UtcNow - fetchedAt > SoftRefreshInterval;
+        }
+
+        /// <summary>Splits a possibly-qualified object name (table, schema.table, or db.schema.table)
+        /// into (schema, name), taking the last segment as the object name.</summary>
+        private static (string Schema, string Name) SplitQualifiedName(string qualified)
+        {
+            var parts = qualified.Split('.');
+            return parts.Length > 1 ? (parts[^2], parts[^1]) : ("", qualified);
+        }
 
         /// <summary>Normalizes a document URI for consistent cache lookups.</summary>
         private string NormalizeUri(string? uri)
@@ -182,10 +214,16 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<string>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
-                if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
+                if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
+                {
+                    // Stale-while-revalidate: serve instantly, refresh in the background when aged.
+                    if (ShouldBackgroundRefresh(key))
+                        TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    return cached;
+                }
 
                 // Try to load disk cache
-                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
                 if (diskCache != null)
                 {
                     _tables[key] = diskCache.Tables;
@@ -236,7 +274,7 @@ namespace ETL_SQL.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("GetTablesAsync ERROR: {Message}", ex);
+                _logger.Error("GetTablesAsync error: {Message}", ex, ex.Message);
                 return Enumerable.Empty<string>();
             }
         }
@@ -249,10 +287,15 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<string>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
-                if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
+                if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
+                {
+                    if (ShouldBackgroundRefresh(key))
+                        TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    return cached;
+                }
 
                 // Try to load disk cache
-                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
                 if (diskCache != null)
                 {
                     _tables[key] = diskCache.Tables;
@@ -290,7 +333,7 @@ namespace ETL_SQL.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("GetViewsAsync ERROR: {Message}", ex);
+                _logger.Error("GetViewsAsync error: {Message}", ex, ex.Message);
                 return Enumerable.Empty<string>();
             }
         }
@@ -390,10 +433,15 @@ namespace ETL_SQL.Core.Services
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null) + ":" + tableName.ToUpperInvariant();
                 
                 // If in memory cache, return immediately
-                if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
+                if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
+                {
+                    if (ShouldBackgroundRefresh(GetCacheKey(connectionName, conn.IsDocument ? uri : null)))
+                        TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    return cached;
+                }
 
                 // Try to load disk cache if memory cache is empty
-                var diskCache = LoadSchemaFromDisk(connectionName, conn.ConnectionString);
+                var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
                 if (diskCache != null)
                 {
                     var connKey = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
@@ -427,21 +475,18 @@ namespace ETL_SQL.Core.Services
                 {
                     try
                     {
-                        string schema = "";
-                        string tName = tableName;
-                        if (tableName.Contains("."))
-                        {
-                            var parts = tableName.Split('.');
-                            schema = parts[0];
-                            tName = parts[1];
-                        }
+                        var (schema, tName) = SplitQualifiedName(tableName);
                         var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
                         if (catCols != null && catCols.Count > 0)
                         {
                             colList.AddRange(catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)));
                         }
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug("Catalog column lookup failed for {Table}; falling back to GetColumns: {Message}",
+                            tableName, ex.Message);
+                    }
                 }
 
                 if (colList.Count == 0)
@@ -468,7 +513,7 @@ namespace ETL_SQL.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("GetColumnDetailsAsync ERROR: {Message}", ex);
+                _logger.Error("GetColumnDetailsAsync error: {Message}", ex, ex.Message);
                 return Enumerable.Empty<ColumnMetadata>();
             }
         }
@@ -490,6 +535,7 @@ namespace ETL_SQL.Core.Services
             _columns.Clear();
             _docTempTables.Clear();
             _cacheTimestamps.Clear();
+            _ongoingRefreshes.Clear();
         }
 
         public void ClearCacheForUri(string uri) => ClearCacheForDocument(uri);
@@ -566,31 +612,47 @@ namespace ETL_SQL.Core.Services
 
         private void TryLoadAndRefreshCache(string connectionName, string connectionString, string? uri)
         {
-            var cached = LoadSchemaFromDisk(connectionName, connectionString);
-            if (cached != null)
+            // Warm from disk and refresh live, both off the caller's thread (registration is sync and
+            // must not block on file I/O). A getter racing this will load the disk cache itself on miss.
+            _ = Task.Run(async () =>
             {
-                var connKey = GetCacheKey(connectionName, uri);
-                _tables[connKey] = cached.Tables;
-                _views[connKey] = cached.Views;
-                foreach (var kvp in cached.Columns)
+                try
                 {
-                    var colKey = connKey + ":" + kvp.Key.ToUpperInvariant();
-                    _columns[colKey] = kvp.Value;
+                    var cached = await LoadSchemaFromDiskAsync(connectionName, connectionString);
+                    if (cached != null)
+                    {
+                        var connKey = GetCacheKey(connectionName, uri);
+                        _tables[connKey] = cached.Tables;
+                        _views[connKey] = cached.Views;
+                        foreach (var kvp in cached.Columns)
+                        {
+                            var colKey = connKey + ":" + kvp.Key.ToUpperInvariant();
+                            _columns[colKey] = kvp.Value;
+                        }
+                        StampCache(connKey);
+                        _logger.Info("Loaded schema cache from disk for connection {Name}", connectionName);
+                    }
                 }
-                StampCache(connKey);
-                _logger.Info("Loaded schema cache from disk for connection {Name}", connectionName);
-            }
+                catch (Exception ex)
+                {
+                    _logger.Error("Failed to warm schema cache for connection {Name}: {Message}", ex, connectionName, ex.Message);
+                }
 
-            TriggerBackgroundRefresh(connectionName, connectionString, uri);
+                TriggerBackgroundRefresh(connectionName, connectionString, uri);
+            });
         }
 
         private void TriggerBackgroundRefresh(string connectionName, string connectionString, string? uri)
         {
             if (DisableBackgroundRefresh) return;
             var connKey = GetCacheKey(connectionName, uri);
-            if (_ongoingRefreshes.ContainsKey(connKey)) return;
 
-            var task = Task.Run(async () =>
+            // Claim the slot atomically BEFORE launching. Using ContainsKey-then-assign let two callers
+            // both start, and let a fast/failed task's finally run before the post-assignment — which
+            // re-inserted a completed task that never cleared, permanently disabling refresh for the key.
+            if (!_ongoingRefreshes.TryAdd(connKey, Task.CompletedTask)) return;
+
+            _ = Task.Run(async () =>
             {
                 try
                 {
@@ -598,15 +660,14 @@ namespace ETL_SQL.Core.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.Error("Error during background schema refresh for connection {Name}", ex, connectionName);
+                    _logger.Error("Error during background schema refresh for connection {Name}: {Message}",
+                        ex, connectionName, ex.Message);
                 }
                 finally
                 {
                     _ongoingRefreshes.TryRemove(connKey, out _);
                 }
             });
-
-            _ongoingRefreshes[connKey] = task;
         }
 
         private async Task RefreshSchemaInternalAsync(string connectionName, string connectionString, string? uri)
@@ -637,7 +698,12 @@ namespace ETL_SQL.Core.Services
             var catalogProvider = source.GetCatalogProvider();
 
             var allObjects = tables.Concat(views).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            foreach (var obj in allObjects)
+            // Bound the column crawl on very large schemas; objects past the cap still get columns
+            // lazily on first use via GetColumnDetailsAsync.
+            var prefetchObjects = MaxPrefetchColumnObjects > 0
+                ? allObjects.Take(MaxPrefetchColumnObjects)
+                : allObjects;
+            foreach (var obj in prefetchObjects)
             {
                 if (obj.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
                 {
@@ -650,23 +716,16 @@ namespace ETL_SQL.Core.Services
                 {
                     try
                     {
-                        string schema = "";
-                        string tName = obj;
-                        if (obj.Contains("."))
-                        {
-                            var parts = obj.Split('.');
-                            schema = parts[0];
-                            tName = parts[1];
-                        }
+                        var (schema, tName) = SplitQualifiedName(obj);
                         var catCols = await catalogProvider.GetColumnMetadataAsync(schema, tName);
                         if (catCols != null)
                         {
                             colList.AddRange(catCols.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)));
                         }
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Fallback below
+                        _logger.Debug("Catalog column lookup failed for {Object}; falling back: {Message}", obj, ex.Message);
                     }
                 }
 
@@ -685,9 +744,9 @@ namespace ETL_SQL.Core.Services
                         }
                         colList.AddRange(rawCols.Select(c => new ColumnMetadata(c, "ANY")));
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Ignore table/view if we can't query columns
+                        _logger.Debug("Column lookup failed for {Object}; skipping: {Message}", obj, ex.Message);
                     }
                 }
 
@@ -742,14 +801,15 @@ namespace ETL_SQL.Core.Services
                 var ciphertextBytes = Common.MachineBoundCrypto.Protect(plaintextBytes);
 
                 await File.WriteAllBytesAsync(filePath, ciphertextBytes);
+                PruneStaleDiskCaches(directory);
             }
             catch (Exception ex)
             {
-                _logger.Error("Failed to save schema cache to disk", ex);
+                _logger.Error("Failed to save schema cache to disk: {Message}", ex, ex.Message);
             }
         }
 
-        private ConnectionSchemaCache? LoadSchemaFromDisk(string connectionName, string connectionString)
+        private async Task<ConnectionSchemaCache?> LoadSchemaFromDiskAsync(string connectionName, string connectionString)
         {
             if (string.IsNullOrEmpty(SchemaCacheDirectory)) return null;
             try
@@ -760,7 +820,14 @@ namespace ETL_SQL.Core.Services
 
                 if (!File.Exists(filePath)) return null;
 
-                var ciphertextBytes = File.ReadAllBytes(filePath);
+                // Ignore caches older than the staleness bound; a live refresh will repopulate them.
+                if (DiskCacheMaxAge > TimeSpan.Zero
+                    && DateTime.UtcNow - File.GetLastWriteTimeUtc(filePath) > DiskCacheMaxAge)
+                {
+                    return null;
+                }
+
+                var ciphertextBytes = await File.ReadAllBytesAsync(filePath);
                 var plaintextBytes = Common.MachineBoundCrypto.Unprotect(ciphertextBytes);
                 var json = Encoding.UTF8.GetString(plaintextBytes);
 
@@ -768,18 +835,43 @@ namespace ETL_SQL.Core.Services
             }
             catch (Exception ex)
             {
-                _logger.Error("Failed to load schema cache from disk", ex);
+                _logger.Error("Failed to load schema cache from disk: {Message}", ex, ex.Message);
                 return null;
+            }
+        }
+
+        /// <summary>Best-effort removal of cache files past the staleness bound, so orphaned files
+        /// (renamed/removed connections, rotated connection strings) do not accumulate forever.</summary>
+        private void PruneStaleDiskCaches(string directory)
+        {
+            if (DiskCacheMaxAge <= TimeSpan.Zero) return;
+            try
+            {
+                var cutoff = DateTime.UtcNow - DiskCacheMaxAge;
+                foreach (var file in Directory.EnumerateFiles(directory, "*.cache"))
+                {
+                    if (File.GetLastWriteTimeUtc(file) < cutoff)
+                    {
+                        try { File.Delete(file); } catch { /* best effort */ }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Debug("Schema cache prune skipped: {Message}", ex.Message);
             }
         }
 
         private string GetCacheFileName(string connectionName, string connectionString)
         {
             using var sha = System.Security.Cryptography.SHA256.Create();
-            var inputBytes = Encoding.UTF8.GetBytes(connectionString);
+            // Salt with a per-user/machine value so the filename is not a portable, confirmable
+            // SHA-256 of the (credential-bearing) connection string.
+            var salt = $"{Environment.UserName}|{Environment.MachineName}|";
+            var inputBytes = Encoding.UTF8.GetBytes(salt + connectionString);
             var hashBytes = sha.ComputeHash(inputBytes);
             var hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
-            
+
             var safeName = new string(connectionName.Where(char.IsLetterOrDigit).ToArray());
             return $"{safeName}_{hashHex}.cache";
         }

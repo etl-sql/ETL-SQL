@@ -34,5 +34,11 @@ namespace ETL_SQL.Core
         string? GetConnectionType(string connectionName, string? uri = null);
         void ClearCache();
         void ClearCacheForUri(string uri);
+
+        /// <summary>Reconciles a document's registered connections and temp tables against the set
+        /// still present after a re-parse, pruning only those that disappeared (avoids the flush-and-
+        /// rebuild gap where autocomplete briefly loses connections/temp tables mid-edit).</summary>
+        void CleanUpDocumentConnectionsAndTempTables(
+            string uri, IEnumerable<string> activeConnectionNames, IEnumerable<string> activeTempTableNames);
     }
 }
