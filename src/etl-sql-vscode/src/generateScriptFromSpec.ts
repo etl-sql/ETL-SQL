@@ -51,9 +51,9 @@ async function callAiApi(
     mimeType: string,
     isTextFile: boolean
 ): Promise<any> {
-    let url = '';
-    let headers: Record<string, string> = {};
-    let body: any = null;
+    let url: string;
+    let headers: Record<string, string>;
+    let body: any;
 
     if (provider === 'Gemini') {
         const geminiModel = model || 'gemini-1.5-flash';
@@ -95,7 +95,7 @@ async function callAiApi(
         };
 
         const anthropicModel = model || 'claude-3-5-sonnet-latest';
-        let content: any = null;
+        let content: any;
 
         if (isTextFile) {
             const textContent = await fs.promises.readFile(filePath, 'utf8');
@@ -312,6 +312,7 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
                 const fallbackPath = path.resolve(context.extensionPath, '../../Docs/data_spec_parser_instructions.md');
                 prompt = await fs.promises.readFile(fallbackPath, 'utf8');
             } catch (fallbackErr) {
+                // eslint-disable-next-line preserve-caught-error
                 throw new Error(`Could not load prompt instructions from resources/data_spec_parser_instructions.md or fallback Docs/data_spec_parser_instructions.md.`);
             }
         }
@@ -339,15 +340,21 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         let responseJsonText = '';
         if (provider === 'Gemini') {
             const text = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error('Invalid response structure from Gemini API');
+            if (!text) {
+                throw new Error('Invalid response structure from Gemini API');
+            }
             responseJsonText = text;
         } else if (provider === 'Anthropic') {
             const text = responseData.content?.[0]?.text;
-            if (!text) throw new Error('Invalid response structure from Anthropic API');
+            if (!text) {
+                throw new Error('Invalid response structure from Anthropic API');
+            }
             responseJsonText = text;
         } else {
             const text = responseData.choices?.[0]?.message?.content;
-            if (!text) throw new Error(`Invalid response structure from ${provider} API`);
+            if (!text) {
+                throw new Error(`Invalid response structure from ${provider} API`);
+            }
             responseJsonText = text;
         }
 
@@ -361,6 +368,7 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
                 defaultName = `load_${parsed.pipeline_name}.etlsql`;
             }
         } catch (e: any) {
+            // eslint-disable-next-line preserve-caught-error
             throw new Error(`AI response was not valid JSON: ${e.message}\nRaw response:\n${responseJsonText}`);
         }
 

@@ -14,8 +14,8 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams. The current backlog is organized around product capabilities:
 
 1. **Completed foundations:** multi-user standalone hardening, script-first recovery, operator tooling, Practical HA, and Governance Core.
-2. **Current sprint candidate:** Enterprise Identity and Approvals.
-3. **High-value backlog candidates:** Data Stewardship & Lineage Governance, Debugger & Interactive Troubleshooting, and Departmental Isolation.
+2. **Current sprint candidate:** Departmental Isolation.
+3. **High-value backlog candidates:** Data Stewardship & Lineage Governance, Debugger & Interactive Troubleshooting, and Enterprise Identity follow-ons.
 4. **v1.0.0 release gate:** stabilization, language freeze, distribution trust, and production release verification.
 
 See `CHANGELOG.md` for the exact version where shipped work is packaged.
@@ -32,7 +32,7 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
 6. **Tooling Runbooks:** Backup, restore, and upgrade rely on manual runbooks rather than CLI commands.
 7. **Secrets Handling:** SMTP, JWT, connectors, and scripts handle secrets in separate, fragmented ways.
 8. **Audit Outbox:** Auditing lacks a transactional outbox to guarantee delivery to remote SIEMs.
-9. **OIDC Drift:** OIDC documentation and runtime implementation are out of sync.
+9. **OIDC Drift:** *(addressed)* OIDC documentation, runtime implementation, diagnostics, and recovery tests are now aligned.
 10. **Deployment Schema Updates:** Rolling upgrades lack mixed-version compatibility boundaries.
 
 ---
@@ -49,14 +49,29 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
 
 ## Current Sprint Candidate
 
-### Enterprise Identity & Approvals
-*Integrates with enterprise OpenID Connect (OIDC) providers and adds human-in-the-loop approval workflows.*
+### Departmental Isolation
+*Supports multiple isolated environments (dev/test/prod, or different departments) without the complexity of shared-table multitenancy.*
 
 #### TODOs:
-- [ ] **Phase 1: Certified OIDC Authentication**
-  - Reconcile and certify OIDC login, logout, token refresh, and claim validation.
-  - Map OIDC group claims dynamically to Portal user groups.
-  - Support MFA and conditional access by delegating authentication entirely to the identity provider.
+- [ ] **Phase 1: Repeatable Deployment Templates**
+  - Build systemd, Windows Service, and Docker templates for deploying isolated environments.
+  - Restrict access so that one department's service identity has no access to another's DB, storage, or keys.
+- [ ] **Phase 2: Environment Portability**
+  - Build CLI commands to export and import reports, jobs, and configs between environments (e.g., Dev to Prod).
+  - Ensure export/import routines strip out all environmental secrets and connection strings.
+- [ ] **Phase 3: Fleet Aggregation**
+  - Define the security boundary before implementation: the aggregator must be read-only, authenticate to each department Portal via a dedicated scoped service account, and have no ability to write data or execute scripts in any department environment.
+  - Build a central dashboard to aggregate environment health, active executions, and audit records without blending raw department data or permissions.
+  - Prove that a compromised fleet aggregator credential cannot be used to pivot into any department's database, artifact storage, or encryption keys.
+
+---
+
+## Product Backlog
+
+### Enterprise Identity Follow-ons
+*Builds on the shipped certified OIDC authentication path with non-interactive identities and approval workflows.*
+
+#### Candidate phases:
 - [ ] **Phase 2: Service Accounts**
   - Implement non-interactive service account identities for scheduled CLI jobs and API access.
   - Assign explicit OAuth scopes and rotation patterns.
@@ -65,10 +80,6 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
   - Enforce segregation of duties (a user cannot approve their own changes).
   - Automatically re-evaluate and cancel pending/approved items if permissions or user status changes.
   - Record all approval requests, comments, grants, and rejections in the Governance audit trail.
-
----
-
-## Product Backlog
 
 ### Data Stewardship & Lineage Governance
 *Turns captured lineage and tags into steward-facing workflow, certification, impact analysis, and tag-driven policy enforcement.*
@@ -170,20 +181,35 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 
 ---
 
-### Departmental Isolation
-*Supports multiple isolated environments (dev/test/prod, or different departments) without the complexity of shared-table multitenancy.*
+### Shipped Phase: Certified OIDC Authentication
+*Aligns OIDC runtime behavior, administrator documentation, diagnostics, claim/group handling, and recovery certification.*
 
 #### TODOs:
-- [ ] **Phase 1: Repeatable Deployment Templates**
-  - Build systemd, Windows Service, and Docker templates for deploying isolated environments.
-  - Restrict access so that one department's service identity has no access to another's DB, storage, or keys.
-- [ ] **Phase 2: Environment Portability**
-  - Build CLI commands to export and import reports, jobs, and configs between environments (e.g., Dev to Prod).
-  - Ensure export/import routines strip out all environmental secrets and connection strings.
-- [ ] **Phase 3: Fleet Aggregation**
-  - Define the security boundary before implementation: the aggregator must be read-only, authenticate to each department Portal via a dedicated scoped service account, and have no ability to write data or execute scripts in any department environment.
-  - Build a central dashboard to aggregate environment health, active executions, and audit records without blending raw department data or permissions.
-  - Prove that a compromised fleet aggregator credential cannot be used to pivot into any department's database, artifact storage, or encryption keys.
+- [x] **Phase 1: Certified OIDC Authentication**
+  - Reconcile and certify OIDC login, logout, token refresh, and claim validation.
+  - Map OIDC group claims dynamically to Portal user groups.
+  - Support MFA and conditional access by delegating authentication entirely to the identity provider.
+  - Add redacted diagnostics and recovery coverage for unavailable providers, JWKS rotation,
+    group-claim changes, disabled accounts, and session revocation.
+
+---
+
+### Shipped Phase: Engine Workflow Enhancements
+*Improves incremental loads, staged extract performance, cross-connection joins, and schema contract checks.*
+
+#### TODOs:
+- [x] **Job-scoped state persistence / incremental watermarking**
+  - Implement `GET_JOB_STATE()` and `SET_JOB_STATE()` with successful-run commit semantics.
+  - Persist scheduled-job state in the Orchestrator store and provide a local CLI fallback for
+    development runs.
+- [x] **Pushdown aggregation for staged extracts**
+  - Push eligible grouped/aggregate `SELECT ... INTO #temp` extracts to SQL connectors and stream
+    grouped results back into the engine.
+- [x] **Cross-connection semi-join pushdown**
+  - Push bounded, parameterized key filters for eligible local-temp-to-remote joins with clear
+    `EXPLAIN` visibility and safe fallback.
+- [x] **JSON/spec-backed schema contract checks**
+  - Extend `EXPECT SCHEMA` to load reviewed JSON contracts with `ON DRIFT WARN` support.
 
 ---
 

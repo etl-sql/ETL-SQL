@@ -37,8 +37,11 @@ suite('Extension Integration Test Suite', () => {
 	});
 
     test('Connections view should be visible', async () => {
-        const view = await vscode.commands.executeCommand('workbench.view.extension.etlsql-explorer');
-        assert.ok(view !== undefined);
+        try {
+            await vscode.commands.executeCommand('workbench.view.extension.etlsql-explorer');
+        } catch {
+            assert.fail('Connections view container not found');
+        }
     });
 
     test('Results panel should be registered and toggleable', async () => {

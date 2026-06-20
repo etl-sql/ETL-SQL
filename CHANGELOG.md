@@ -23,6 +23,17 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - Extended the `EXPECT SCHEMA` syntax to validate schemas using a reviewed JSON specification contract file: `EXPECT SCHEMA target FROM 'path/to/spec.json' [ON DRIFT WARN];`.
 - Added support for verifying column presence, type family matching, nullability constraints, string length limits, and decimal precision/scale settings loaded from the JSON `"schema"` array, respecting `context.ResolvePath()`.
 
+**Certified OpenID Connect (OIDC) Authentication**
+- Implemented federated login, logout, and token refresh in the Report Portal with support for external Identity Providers.
+- Hardened user account binding by keying local profiles to the immutable OIDC `sub` (subject) claim to prevent takeover risks if usernames/emails are reassigned.
+- Added dynamic group mapping to synchronize identity provider role/group claims to local Report Portal user groups at login.
+- Added configuration diagnostics and redacted status checks to ensure OIDC provider availability can be monitored without exposing client secrets.
+- Certified recovery scenarios (IdP outages, JWKS key rotation, claim modifications, and token revocation) with a robust integration test suite.
+
+**VS Code Extension Enhancements**
+- Cleaned up ESLint static analysis and type declarations across TypeScript sources.
+- Stabilized the extension integration test suite by tuning Mocha bootstrap timeouts to accommodate headless environment activation delays.
+
 ### Changed
 
 **Pushdown Aggregation & Staged Extracts**

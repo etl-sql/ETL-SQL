@@ -6,120 +6,49 @@ release begins.
 
 ---
 
-## Enterprise Identity & Approvals
+## Departmental Isolation
 
-> Status: **active (v0.14.0).**
-> Goal: certify enterprise OIDC authentication before adding service accounts and approval
-> workflows.
+> Status: **active.**
+> Goal: support multiple isolated environments (dev/test/prod, or separate departments) without
+> introducing shared-table multitenancy.
 >
-> Priority convention: **P1** the supported identity path that must exist before the enterprise
-> identity claim; **P2** certification, recovery, compatibility, and operational verification.
+> Priority convention: **P1** the deployment and portability path needed for supported isolated
+> environments; **P2** fleet-level visibility and hardening once isolation is proven.
 
-### Phase 1 - Certified OIDC Authentication
+### Phase 1 - Repeatable Deployment Templates
 
-- [x] **P1.1 Reconcile OIDC configuration and runtime behavior** across `PortalConfig`,
-  appsettings/environment variables, startup validation, and administrator documentation.
-  *(done)* Expanded `OidcIdentityConfig` to the full surface (Enabled, Authority, ClientId,
-  ClientSecret, Scopes, CallbackPath, PostLoginRedirectPath, username/email/group claim types,
-  ClockSkew). Added `OidcConfigValidationService` (hosted) that fails the host closed when OIDC is
-  enabled but misconfigured (non-HTTPS authority, missing client id/secret, missing `openid` scope,
-  bad paths); its `Validate` is a pure, reusable check. Exposed the effective posture at
-  `GET /api/auth/providers` so the login page renders SSO conditionally. Updated the administrators
-  guide (config example, full key table, accurate OIDC setup with redirect-URI registration and the
-  fail-closed startup note). Unit tests cover every validation branch.
-- [x] **P1.2 Certify OIDC login, logout, and token refresh** with integration coverage for the
-  authorization-code callback, session invalidation, refresh behavior, and local fallback behavior.
-  *(done)* Implemented the federated bridge: `OidcAuthenticationService` (discovery via cached
-  `ConfigurationManager`, PKCE+state+nonce authorization request, code exchange, id_token validation
-  against JWKS with issuer/audience/lifetime/nonce) and `OidcController` (`/api/auth/oidc/login` +
-  `/callback`) carrying per-flow secrets in an encrypted HttpOnly cookie. `OidcUserProvisioningService`
-  provisions/syncs the user (Provider="OIDC") and group claims, then issues the portal's own
-  JWT/refresh session; refresh and logout reuse the existing provider-agnostic endpoints. Local login
-  still works with OIDC enabled, and OIDC-provider accounts are blocked from the local password path.
-  Login page gained an SSO button + token-fragment hand-off. Integration tests certify
-  login→callback→session, refresh, logout, invalid-state rejection, disabled-account fail-closed,
-  group add/stale-remove sync, local fallback, and disabled-OIDC 404; service tests certify the token
-  crypto/validation paths. No new third-party dependency (uses IdentityModel already present via
-  JwtBearer).
-- [x] **P1.3 Validate OIDC claims and issuer/audience policy** including required claims, token
-  lifetime, clock skew, failed validation handling, and audit coverage for authentication failures.
-  *(done)* id_token validation enforces issuer, audience (ClientId + AdditionalAudiences), lifetime
-  with configurable `ClockSkewSeconds`, JWKS signature, and nonce binding; added a configurable
-  `RequiredClaims` policy that fails closed when a mandated claim is absent. All failures throw a
-  single `OidcAuthenticationException` the callback turns into a redirect, and every failure path is
-  audited (`LOGIN_FAILED` with reason): provider error, state/CSRF mismatch, token/claim validation,
-  provider-confusion refusal, and disabled account. Service tests cover wrong audience, expired token,
-  bad signature, nonce mismatch, token-endpoint failure, and required-claim present/absent.
-  Security fix folded in: federated logins are now bound to OIDC accounts only — an IdP identity whose
-  username matches a Local/LDAP account is refused (prevents account takeover via provider confusion).
-- [x] **P1.4 Map OIDC group claims dynamically to Portal groups** with deterministic membership sync,
-  stale membership removal, and no privilege retention after claim changes.
-  *(done)* `OidcUserProvisioningService.SyncGroupsAsync` reconciles only Provider="OIDC" groups
-  against the token's group claims (match by `AdGroup` else `Name`): idempotent (unchanged claims =
-  no writes), adds newly-claimed groups, removes unclaimed ones, and never touches Local/LDAP
-  memberships. On any change the user's session is invalidated (security stamp rotated + refresh
-  tokens revoked) so privileges in already-issued tokens cannot persist; on a privilege reduction the
-  user's anonymous share/embed links are revoked too. Integration tests certify add, deterministic
-  stale removal, and that the membership change drives invalidation.
-  Security fix folded in: the federated session is handed to the SPA via a server-rendered page with a
-  JSON data-island read by a same-origin script — tokens (incl. the refresh token) are no longer
-  placed in the URL fragment/browser history.
-- [x] **P1.5 Document MFA and conditional-access posture** so administrators know ETL-SQL delegates
-  MFA and conditional access enforcement to the identity provider.
-  *(done)* Added an "MFA and conditional access" subsection to the Report Portal administrators guide:
-  ETL-SQL implements no MFA/device/risk policy of its own — authentication strength is decided by the
-  IdP during the redirect and the portal only validates the result. Documents configuring MFA/CA in
-  the IdP, the two-layer session lifetime (IdP session vs. portal `Jwt.Expiry*`), using `RequiredClaims`
-  for step-up/claim gating, and the local break-glass admin path.
-- [x] **P2.1 Add operational diagnostics for OIDC** including a redacted configuration check, useful
-  admin-facing failure messages, and audit events for login/claim failures.
-  *(done)* Added admin-only `GET /api/auth/oidc/diagnostics`: returns the effective OIDC config with
-  the client secret reduced to a `clientSecretConfigured` flag, the startup validation errors, and a
-  live discovery reachability probe (issuer/endpoints/JWKS key count, or a redacted error). The
-  discovery client has a 10s timeout so the probe can't hang. Auth-failure audit (`LOGIN_FAILED` with
-  reason) was added in P1.3. Tests cover the redacted payload (secret never returned) and admin-only
-  authorization.
-- [x] **P2.2 Certify OIDC recovery scenarios** covering unavailable identity providers, rotated
-  signing keys/JWKS cache behavior, changed group claims, disabled local users, and logout/session
-  revocation.
-  *(done)* Recovery tests certify: unavailable IdP (discovery throws → `OidcAuthenticationException`;
-  callback redirects to error and audits), JWKS rotation (token signed with the new advertised key
-  validates; one signed with a retired key is rejected), changed group claims dropping membership, a
-  disabled account failing closed, and — the strong no-privilege-retention case — that after a group
-  claim change the previously issued access token and refresh token are both rejected.
+- [ ] **P1.1 Define the isolated-environment topology** for single-node and HA deployments,
+  including per-environment Portal database, Orchestrator database, artifact root, Data Protection
+  key ring, service identity, network boundary, and encryption keys.
+- [ ] **P1.2 Build Docker Compose templates** for isolated departmental environments, with separate
+  project names, ports, PostgreSQL volumes, artifact roots, environment files, and health checks.
+- [ ] **P1.3 Build Windows Service deployment templates** that install Portal and Orchestrator under
+  environment-specific service names and service identities, with isolated config, logs, storage,
+  and key material.
+- [ ] **P1.4 Build systemd deployment templates** for Linux hosts, with environment-specific units,
+  users/groups, config paths, storage roots, and restart/health behavior.
+- [ ] **P1.5 Add an isolation verification runbook or script** that proves one environment's service
+  identity cannot read or mutate another environment's database, artifact storage, logs, or keys.
 
----
+### Phase 2 - Environment Portability
 
-## Future Language Features & Engine Enhancements
+- [ ] **P1.6 Define the portable environment package format** for reports, jobs, folders,
+  permissions, subscriptions, datasets, alerts, and config metadata, excluding secrets and raw
+  connection strings.
+- [ ] **P1.7 Add export/import commands** for moving reports, jobs, and configuration between
+  isolated environments, with dry-run validation and deterministic idempotency.
+- [ ] **P1.8 Strip or externalize environment-specific secrets** during export, emitting named-secret
+  requirements instead of credential values.
+- [ ] **P1.9 Add promotion tests** for dev-to-test/prod movement that verify imported assets keep
+  logical identity while rebinding environment-specific secrets, roots, schedules, and service
+  accounts.
 
-> Status: **Proposed / Backlog**
-> Goal: Address key user experience, performance, and scaling pain points identified in [etl_pain_points_analysis.md](file:///C:/Users/chuck/.gemini/antigravity-cli/brain/6f8a3c19-3374-4017-a650-1c74979746fa/etl_pain_points_analysis.md) and [etl_implementation_strategies.md](file:///C:/Users/chuck/.gemini/antigravity-cli/brain/6f8a3c19-3374-4017-a650-1c74979746fa/etl_implementation_strategies.md).
+### Phase 3 - Fleet Aggregation
 
-### Recommended Near-Term Engine Features
-
-- [x] **P1.1 Job-scoped state persistence / incremental watermarking** — Implement
-  `GET_JOB_STATE()` and `SET_JOB_STATE()` primitives for scheduled and ad-hoc incremental loads.
-  Persist state in the orchestrator store for scheduled jobs, supporting both SQLite and PostgreSQL
-  HA deployments, and use a tightly scoped local `[script_name].etlstate` fallback only for CLI
-  development runs. State updates should commit only after successful script completion so failed
-  loads do not advance watermarks.
-  *(done)* Added `JobState` table to DB dialects, implemented `GetJobStateAsync` and `SetJobStateAsync` in
-  `RelationalJobHistoryStore` (shared SQLite and Postgres dialect backend), and registered standard system
-  functions in `StandardFunctions.System.cs`. Evaluator buffers pending state updates and commits them atomically
-  on successful top-level script completion. Local CLI developer runs fallback to sibling `[script_name].etlstate`
-  JSON files.
-- [x] **P1.2 Pushdown aggregation for staged extracts** — Allow eligible `SELECT ... INTO #temp`
-  queries with `GROUP BY` and aggregate functions to execute on SQL connectors via `IDatabaseSource`
-  and stream only grouped results back into the engine. This reduces source load, network transfer,
-  and engine memory pressure for large SQL-backed extracts.
-  *(done)* Modified `IsPushdownPossible` in `PushdownEngine.cs` to allow single-source SQL SELECT queries with aggregates, GROUP BY, DISTINCT, and joins when they are fully pushable and dialect-compilable. Modified `SelectStatementHandler.cs` (SELECT INTO route) to route eligible queries through the streaming pushdown pipeline. Fixed query compiler in `QueryCompiler.cs` to compile `CAST` and `TRY_CAST` target types raw (not parameterized) as `CAST(expr AS type)`. Added unit and integration tests in `StmtPushdownTests.cs`.
-- [x] **P1.3 Cross-connection semi-join pushdown** — For joins between a small local `#temp` table
-  and a large remote SQL table, push a bounded, parameterized key filter into the remote query when
-  the join is a simple single-column equijoin. Start with conservative limits, dialect-specific
-  parameter handling, clear `EXPLAIN` visibility, and a guaranteed fallback to normal engine joins.
-  *(done)* Implemented `SemiJoinPushdownOptimizer.OptimizeAsync` in `ETL-SQL.Core` to detect joins between local temp tables (1-1000 rows) and remote SQL connections. It rewrites the join target table to a subquery containing an `IN` clause with the local key values. Modified `QueryCompiler.cs` to explicitly compile `InExpression` and `ListExpression` using parameterized variables (e.g. `@p0`, `@p1`, etc.) to leverage driver caching and prevent SQL injection. Modified `DataSourceManager.cs` to resolve subquery table references at the start of `ResolveDataSourceAsync` so they evaluate properly during execution. Integrated with `ExplainPlanBuilder` to display `[SEMI-JOIN PUSHDOWN ON ...]` and validated with a suite of unit tests in `StmtPushdownTests.cs`.
-- [x] **P1.4 JSON/spec-backed schema contract checks** — Extend the existing `EXPECT SCHEMA`
-  capability to load expected columns/types from a reviewed JSON/spec contract when needed, rather
-  than introducing a competing `ASSERT SCHEMA` syntax. Keep inline `EXPECT SCHEMA` as the canonical
-  script-native form and preserve `ON DRIFT WARN` behavior.
-  *(done)* Extended `EXPECT SCHEMA` to parse and execute using `FROM 'path/to/spec.json'`. Evaluator checks column name, type family, limits, and nullability properties from the `"schema"` JSON array and compares it to actual schema. Supports `ON DRIFT WARN` and enforces Zero-Trust path resolution using `context.ResolvePath()`. Fully covered with unit and integration tests.
+- [ ] **P2.1 Define the fleet aggregator trust boundary** before implementation: read-only,
+  scoped service-account access to each environment, no script execution, no writes, and no raw data
+  blending.
+- [ ] **P2.2 Build read-only fleet health aggregation** for environment status, queue depth,
+  active executions, failed jobs, audit outbox health, and storage pressure.
+- [ ] **P2.3 Prove aggregator credential containment** so a compromised aggregator credential cannot
+  pivot into any department database, artifact storage, encryption keys, or execution capability.
