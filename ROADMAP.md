@@ -13,8 +13,8 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ETL-SQL grows through a progressive deployment model, optimized for a single maintainer and small operational teams. The current backlog is organized around product capabilities:
 
-1. **Completed foundations:** multi-user standalone hardening, script-first recovery, operator tooling, Practical HA, and Governance Core.
-2. **Current sprint candidate:** Departmental Isolation.
+1. **Completed foundations:** multi-user standalone hardening, script-first recovery, operator tooling, Practical HA, Governance Core, and Departmental Isolation.
+2. **Current sprint candidate:** none selected.
 3. **High-value backlog candidates:** Data Stewardship & Lineage Governance, Debugger & Interactive Troubleshooting, and Enterprise Identity follow-ons.
 4. **v1.0.0 release gate:** stabilization, language freeze, distribution trust, and production release verification.
 
@@ -49,20 +49,7 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
 
 ## Current Sprint Candidate
 
-### Departmental Isolation
-*Supports multiple isolated environments (dev/test/prod, or different departments) without the complexity of shared-table multitenancy.*
-
-#### TODOs:
-- [ ] **Phase 1: Repeatable Deployment Templates**
-  - Build systemd, Windows Service, and Docker templates for deploying isolated environments.
-  - Restrict access so that one department's service identity has no access to another's DB, storage, or keys.
-- [ ] **Phase 2: Environment Portability**
-  - Build CLI commands to export and import reports, jobs, and configs between environments (e.g., Dev to Prod).
-  - Ensure export/import routines strip out all environmental secrets and connection strings.
-- [ ] **Phase 3: Fleet Aggregation**
-  - Define the security boundary before implementation: the aggregator must be read-only, authenticate to each department Portal via a dedicated scoped service account, and have no ability to write data or execute scripts in any department environment.
-  - Build a central dashboard to aggregate environment health, active executions, and audit records without blending raw department data or permissions.
-  - Prove that a compromised fleet aggregator credential cannot be used to pivot into any department's database, artifact storage, or encryption keys.
+No active sprint is selected. Promote the next actionable backlog phase into `TODO.md` when ready.
 
 ---
 
@@ -121,6 +108,24 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 ---
 
 ## Shipped Work & Release Gates
+
+### Shipped Phase: Departmental Isolation
+*Supports multiple isolated environments (dev/test/prod, or different departments) without the complexity of shared-table multitenancy.*
+
+#### TODOs:
+- [x] **Phase 1: Repeatable Deployment Templates**
+  - Defined the isolated-environment topology for single-node and HA deployments, including per-environment Portal database, Orchestrator database, artifact root, Data Protection key ring, service identity, network boundary, and encryption keys.
+  - Added Docker Compose, Windows Service, and systemd deployment templates with isolated ports, storage roots, service identities, configuration, logs, and key material.
+  - Added isolation verification scripts and a runbook to prove environments do not share databases, artifact storage, logs, keys, service accounts, ports, or encryption keys.
+- [x] **Phase 2: Environment Portability**
+  - Defined the portable environment package format for reports, jobs, folders, permissions, subscriptions, datasets, alerts, and config metadata.
+  - Added export/import support with dry-run validation, deterministic idempotency, and logical identity preservation across environments.
+  - Strip or externalize environment-specific secrets during export, emitting named-secret requirements instead of credential values.
+  - Added promotion tests covering dev-to-prod movement, secret rebinding, script-root rebinding, orchestrator alias rebinding, and idempotent re-promotion.
+- [x] **Phase 3: Fleet Aggregation**
+  - Defined the fleet aggregator trust boundary as read-only scoped access to each environment, with no script execution, no writes, and no raw data blending.
+  - Added read-only fleet health aggregation for environment status, queue depth, active executions, failed refreshes, audit outbox health, and storage availability.
+  - Proved aggregator credential containment: a `FleetReader` token can read only `GET /api/fleet/status` and is denied admin, identity, publish, and execute paths.
 
 ### Shipped Phase: Practical High Availability
 *Enables horizontal scaling of Portal and Orchestrator nodes behind a load balancer with PostgreSQL state and shared artifact storage.*

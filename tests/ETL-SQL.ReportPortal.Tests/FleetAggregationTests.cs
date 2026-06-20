@@ -77,6 +77,59 @@ public sealed class FleetContainmentTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
     }
 
+    [Fact]
+    public async Task FleetReader_IsDeniedReportExecute_EvenWithFolderExecutePermission()
+    {
+        var (user, token) = await MintUserAsync("FleetReader");
+        var suffix = Guid.NewGuid().ToString("N");
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"fleet_exec_{suffix}.rptsql");
+        Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
+        await File.WriteAllTextAsync(scriptPath, "SELECT 1 AS Value INTO #data;");
+
+        int reportId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var group = new Group { Name = $"fleet_exec_{suffix}"[..24] };
+            var folder = new Folder
+            {
+                Name = $"fleet_exec_{suffix}"[..24],
+                Path = $"/fleet_exec_{suffix}"[..25],
+                OwnerId = user.Id
+            };
+
+            db.Groups.Add(group);
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+
+            db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = group.Id });
+            db.FolderAcls.Add(new FolderAcl
+            {
+                FolderId = folder.Id,
+                GroupId = group.Id,
+                Permission = FolderPermission.Execute
+            });
+
+            var report = new Report
+            {
+                FolderId = folder.Id,
+                Name = $"Fleet Execute {suffix}"[..24],
+                ScriptPath = scriptPath,
+                CreatedBy = user.Id
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var res = await PostAsync(
+            $"/api/reports/{reportId}/execute",
+            token,
+            new { parameters = new Dictionary<string, string>() });
+
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
     private Task<HttpResponseMessage> GetAsync(string path, string token)
     {
         var req = new HttpRequestMessage(HttpMethod.Get, path);
@@ -84,7 +137,23 @@ public sealed class FleetContainmentTests : IClassFixture<PortalWebFactory>
         return _factory.CreateClient().SendAsync(req);
     }
 
+    private Task<HttpResponseMessage> PostAsync(string path, string token, object body)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, path)
+        {
+            Content = JsonContent.Create(body)
+        };
+        req.Headers.Authorization = new("Bearer", token);
+        return _factory.CreateClient().SendAsync(req);
+    }
+
     private async Task<string> MintTokenAsync(string role)
+    {
+        var (_, token) = await MintUserAsync(role);
+        return token;
+    }
+
+    private async Task<(PortalUser User, string Token)> MintUserAsync(string role)
     {
         using var scope = _factory.Services.CreateScope();
         var userMgr = scope.ServiceProvider.GetRequiredService<UserManager<PortalUser>>();
@@ -98,7 +167,7 @@ public sealed class FleetContainmentTests : IClassFixture<PortalWebFactory>
         };
         Assert.True((await userMgr.CreateAsync(user, "Fleet@12345!")).Succeeded);
         await userMgr.AddToRoleAsync(user, role);
-        return tokens.GenerateJwt(user, await userMgr.GetRolesAsync(user));
+        return (user, tokens.GenerateJwt(user, await userMgr.GetRolesAsync(user)));
     }
 }
 

@@ -548,6 +548,29 @@ app.UseStaticFiles(staticFileOptions);
 app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true
+        && context.User.IsInRole("FleetReader")
+        && !context.User.IsInRole("Admin"))
+    {
+        var isFleetStatusRequest =
+            HttpMethods.IsGet(context.Request.Method)
+            && string.Equals(
+                context.Request.Path.Value,
+                "/api/fleet/status",
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!isFleetStatusRequest)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            await context.Response.WriteAsJsonAsync(new { error = "fleet_reader_scope_violation" });
+            return;
+        }
+    }
+
+    await next();
+});
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();
 app.MapControllers();
