@@ -13,8 +13,6 @@
 #
 # Note: The original docker-compose.yml configuration remains intact for single-node development.
 
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16-alpine
