@@ -332,6 +332,8 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.LINEAGE_IMPORT_CATALOG)) return SystemParser.ParseSetThreshold(ThresholdType.LineageImportCatalog);
             if (_parser.Match(TokenType.TRUNCATE_STRING)) return SystemParser.ParseSetThreshold(ThresholdType.TruncateString);
             if (_parser.Match(TokenType.SKIP_ERROR)) return SystemParser.ParseSetThreshold(ThresholdType.SkipError);
+            if (_parser.Match(TokenType.OPERATOR_MEMORY_GRANT)) return SystemParser.ParseSetThreshold(ThresholdType.OperatorMemoryGrant);
+            if (_parser.Match(TokenType.CONNECTION_PREVIEW_LIMIT)) return SystemParser.ParseSetThreshold(ThresholdType.ConnectionPreviewLimit);
             if (_parser.Match(TokenType.PERSIST)) return SystemParser.ParseSetPersist();
 
 

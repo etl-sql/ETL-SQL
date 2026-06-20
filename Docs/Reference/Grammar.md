@@ -531,6 +531,8 @@ Override `appsettings.json` defaults for the current session.
 | `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Partitions used when spilling joins/windows |
 | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per chunk during external sort |
 | `SET BATCHSIZE = n` | 10,000 | Rows per batch in the engine pipeline |
+| `SET OPERATOR_MEMORY_GRANT = n` | 256 | Memory grant in MB per query operator before spilling to disk |
+| `SET CONNECTION_PREVIEW_LIMIT = n` | 10 | Row limit for schema preview queries during connection setup |
 | `SET MAX_LAST_RESULT_ROWS = n` | 50,000 | Rows in the interactive display buffer |
 | `SET LINEAGE = ON\|OFF` | ON | Enables data lineage tracking for the current script session |
 | `SET LINEAGE_NAMESPACE = 'ns'` | 'etl-sql' | Sets the OpenLineage job namespace for the current session |

@@ -138,5 +138,35 @@ namespace ETL_SQL.Tests.Hardening
             // Check for warning message in evaluator
             Assert.Contains(eval.Messages, m => m.Message.Contains("Regex timeout exceeded"));
         }
+
+        [Fact]
+        public async Task SetOperatorMemoryGrant_Succeeds()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var eval = services.GetRequiredService<Evaluator>();
+
+            // default is 256
+            Assert.Equal(256, eval.OperatorMemoryGrantMB);
+
+            // Execute SET OPERATOR_MEMORY_GRANT = 512
+            await eval.EvaluateStatement(new SetThresholdStatement(ThresholdType.OperatorMemoryGrant, new LiteralExpression(512, TokenType.NUMBER)));
+
+            Assert.Equal(512, eval.OperatorMemoryGrantMB);
+        }
+
+        [Fact]
+        public async Task SetConnectionPreviewLimit_Succeeds()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var eval = services.GetRequiredService<Evaluator>();
+
+            // default is null
+            Assert.Null(eval.PreviewLimit);
+
+            // Execute SET CONNECTION_PREVIEW_LIMIT = 25
+            await eval.EvaluateStatement(new SetThresholdStatement(ThresholdType.ConnectionPreviewLimit, new LiteralExpression(25, TokenType.NUMBER)));
+
+            Assert.Equal(25, eval.PreviewLimit);
+        }
     }
 }

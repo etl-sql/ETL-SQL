@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -390,6 +390,23 @@ TRIGGER JOB JobC AT remote_conn;
             Assert.Contains("ENC:********", diag.Message);
             Assert.DoesNotContain("secret_key", diag.Message);
             Assert.DoesNotContain("abc123xyz", diag.Message);
+        }
+
+        [Fact]
+        public void TestParseOperatorMemoryGrantAndConnectionPreviewLimit()
+        {
+            var script = Parse("SET OPERATOR_MEMORY_GRANT = 512; SET CONNECTION_PREVIEW_LIMIT = 50;");
+            Assert.Equal(2, script.Statements.Count);
+
+            Assert.IsType<SetThresholdStatement>(script.Statements[0]);
+            var opMem = (SetThresholdStatement)script.Statements[0];
+            Assert.Equal(ThresholdType.OperatorMemoryGrant, opMem.Type);
+            Assert.Equal(512, Convert.ToInt32(((LiteralExpression)opMem.Value).Value));
+
+            Assert.IsType<SetThresholdStatement>(script.Statements[1]);
+            var prevLimit = (SetThresholdStatement)script.Statements[1];
+            Assert.Equal(ThresholdType.ConnectionPreviewLimit, prevLimit.Type);
+            Assert.Equal(50, Convert.ToInt32(((LiteralExpression)prevLimit.Value).Value));
         }
 
         private static Script Parse(string source)

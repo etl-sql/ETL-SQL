@@ -188,7 +188,7 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, connectionName);
             if (cols.Any())
             {
-                int previewLimit = _config?.GetValue<int>("Engine:ConnectionPreviewLimit") ?? 10;
+                int previewLimit = context.PreviewLimit ?? _config?.GetValue<int>("Engine:ConnectionPreviewLimit") ?? 10;
                 preview.SetColumns(cols.Take(previewLimit));
                 try
                 {

@@ -64,7 +64,7 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:ExternalHashPartitions` | integer | `32` | `SET EXTERNAL_HASH_PARTITIONS = n` | Number of hash buckets created during out-of-core partition operations. |
 | `Engine:ExternalSortChunkSize` | integer | `10000` | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | Run size in rows for sorting buffers spilled to disk. |
 | `Engine:WindowSpillThreshold` | integer | `10000` | `SET WINDOW_SPILL_THRESHOLD = n` | Rows in a partition before window functions spill to disk. |
-| `Engine:OperatorMemoryGrantMB` | integer | `256` | — | RAM granted per execution operator. |
+| `Engine:OperatorMemoryGrantMB` | integer | `256` | `SET OPERATOR_MEMORY_GRANT = n` | RAM granted per execution operator in MB. |
 | `Engine:TotalMemoryGrantMB` | integer | `4096` | — | RAM ceiling allocated to the engine execution process (4GB). |
 | `Engine:TempTableSpillThresholdRows` | integer | `1000000` | `SET TEMP_TABLE_SPILL_THRESHOLD = n` | Rows stored in `#temp` tables before shifting from memory to disk. |
 | `Engine:SubqueryCacheSize` | integer | `5000` | — | Number of unique subquery results stored in the evaluator cache. |
@@ -76,11 +76,11 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:TelemetryEnabled` | boolean | `true` | `SET TELEMETRY = ON\|OFF` | Transmits anonymous execution metrics to help refine optimization. |
 | `Engine:LineageEnabled` | boolean | `true` | `SET LINEAGE = ON\|OFF` | Automatically parses sources/targets to construct lineage maps. |
 | `Engine:AuditAdHocRuns` | boolean | `false` | — | When true, every script launched via local CLI is sent to the audit server. |
-| `Engine:ConnectionPreviewLimit` | integer | `10` | — | Rows previewed when validating connector definitions. |
+| `Engine:ConnectionPreviewLimit` | integer | `10` | `SET CONNECTION_PREVIEW_LIMIT = n` | Rows previewed when validating connector definitions. |
 | `Engine:DefaultHistoryLimit` | integer | `100` | — | Script run histories preserved in database storage. |
-| `Engine:StartOfWeek` | string | `Monday` | — | Start day used by date calculations (e.g. `DATEPART(WEEK, ...)`). |
+| `Engine:StartOfWeek` | string | `Monday` | `SET WEEK_START_DAY = 'day'` | Start day used by date calculations (e.g. `DATEPART(WEEK, ...)`). |
 | `Engine:ScriptHashPolicy` | string | `Warn` | — | Behavior when running scripts with modified hashes (`Warn`, `Block`, or `Ignore`). |
-| `Engine:CaseSensitiveComparison` | boolean | `false` | — | Controls case sensitivity inside in-memory engine expressions. |
+| `Engine:CaseSensitiveComparison` | boolean | `false` | `SET CASE_SENSITIVE = ON\|OFF` | Controls case sensitivity inside in-memory engine expressions. |
 | `Engine:AllowPlaintextSecrets` | boolean | `false` | `SET ALLOW_PLAINTEXT_SECRETS = ON\|OFF` | Blocks scripts from containing raw plaintext connection strings. |
 | `Engine:NoSaveSensitive` | boolean | `false` | `SET NO_SAVE_SENSITIVE = ON\|OFF` | Blocks storing credentials in workspace memory caches. |
 | `Engine:NoSaveConnection` | boolean | `false` | `SET NO_SAVE_CONNECTION = ON\|OFF` | Blocks saving connections to file/db stores. |

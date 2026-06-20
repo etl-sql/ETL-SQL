@@ -32,7 +32,9 @@ namespace ETL_SQL.Core
         LineageNamespace,
         LineageImportCatalog,
         TruncateString,
-        SkipError
+        SkipError,
+        OperatorMemoryGrant,
+        ConnectionPreviewLimit
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

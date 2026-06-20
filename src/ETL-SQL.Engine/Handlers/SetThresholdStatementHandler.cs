@@ -36,6 +36,8 @@ namespace ETL_SQL.Engine.Handlers
                 if ((s.Type == ThresholdType.BatchSize ||
                      s.Type == ThresholdType.ForeachPageSize ||
                      s.Type == ThresholdType.ExternalSortChunkSize ||
+                     s.Type == ThresholdType.OperatorMemoryGrant ||
+                     s.Type == ThresholdType.ConnectionPreviewLimit ||
                      s.Type == ThresholdType.MaxMessages) && intVal < 1)
                 {
                     throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
@@ -133,6 +135,12 @@ namespace ETL_SQL.Engine.Handlers
                     break;
                 case ThresholdType.SkipError:
                     context.SkipError = Convert.ToBoolean(val);
+                    break;
+                case ThresholdType.OperatorMemoryGrant:
+                    context.OperatorMemoryGrantMB = intVal;
+                    break;
+                case ThresholdType.ConnectionPreviewLimit:
+                    context.PreviewLimit = intVal;
                     break;
             }
 
