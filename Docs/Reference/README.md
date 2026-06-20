@@ -12,6 +12,7 @@ Reference docs are the authoritative product surface. They should describe what 
 | [Specialized_Operations.md](Specialized_Operations.md) | File/directory operations, email, Docker, profiling, and automation operations | Keep operational commands aligned with security guardrails |
 | [Lineage.md](Lineage.md) | Lineage statements, tags, metadata, and governance behavior | Keep examples aligned with current lineage analyzer output |
 | [RelativeDate_Parameters.md](RelativeDate_Parameters.md) | Relative date expressions for scripts, reports, and subscriptions | Keep portal/subscription examples synchronized with portal guides |
+| [Settings.md](Settings.md) | Configuration settings reference for appsettings.json | Synchronize keys and descriptions with changes to the default appsettings.json file |
 | [Spec_Driven_Development.md](Spec_Driven_Development.md) | Workflow guide for generating reviewed starter scripts from vendor data specifications | Keep aligned with current CLI compiler, parser prompt, JSON schema, and Cookbook recipe 25 |
 | [spec_pipeline.schema.json](spec_pipeline.schema.json) | Machine-readable JSON contract validated by `etl-sql gen-script` | Synchronize with `PipelineGenerator` model and validation rules |
 | [../data_spec_parser_instructions.md](../data_spec_parser_instructions.md) | AI prompt instruction sheet for LLM-assisted specification parsing | Synchronize model JSON format changes with the C# compiler and schema contract |

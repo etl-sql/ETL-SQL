@@ -42,6 +42,7 @@ Reference docs describe the supported product surface. They should stay factual,
 | [Reference/Specialized_Operations.md](Reference/Specialized_Operations.md) | File operations, email, Docker, profiling, and automation operations |
 | [Reference/Lineage.md](Reference/Lineage.md) | Lineage statements, tags, and governance metadata |
 | [Reference/RelativeDate_Parameters.md](Reference/RelativeDate_Parameters.md) | Relative date expressions for reports and subscriptions |
+| [Reference/Settings.md](Reference/Settings.md) | Configuration settings reference for appsettings.json |
 | [Reference/Spec_Driven_Development.md](Reference/Spec_Driven_Development.md) | Workflow guide for generating scripts from specs |
 | [data_spec_parser_instructions.md](data_spec_parser_instructions.md) | Prompt instructions payload for parsing spec files |
 | [Reference/spec_pipeline.schema.json](Reference/spec_pipeline.schema.json) | JSON contract validated by `etl-sql gen-script` |
