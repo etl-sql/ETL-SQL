@@ -31,6 +31,7 @@ namespace ETL_SQL.Tests.Orchestration
                 INodeCapacityMonitor? capacityMonitor = null,
                 Dictionary<string, string?>? config = null)
         {
+            capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             var mockStore = new Mock<IJobHistoryStore>();
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
@@ -59,6 +60,7 @@ namespace ETL_SQL.Tests.Orchestration
             INodeCapacityMonitor? capacityMonitor = null,
             Dictionary<string, string?>? config = null)
         {
+            capacityMonitor ??= new FixedCapacityMonitor(isOverloaded: false);
             // IServiceProvider.CreateScope() is an extension that calls
             // GetRequiredService<IServiceScopeFactory>().CreateScope()
             var mockScopeServiceProvider = new Mock<IServiceProvider>();
