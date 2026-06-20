@@ -24,7 +24,22 @@
     const safeRequestAnimationFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb) => setTimeout(cb, 16);
     
     let baselineManifest = null;
-    
+
+    // escHtml (defined below) escapes &<>"' for safe interpolation into innerHTML.
+    // Manifest-derived strings (titles, icons, names, error text) are treated as
+    // untrusted: a report author or a crafted server response must not be able to
+    // inject markup/script.
+
+    // Returns the URL only if it uses a safe scheme; otherwise returns '#'. Blocks
+    // javascript:, data:, vbscript: and similar from reaching href/src or location.
+    function safeUrl(value) {
+        const raw = String(value == null ? '' : value).trim();
+        // Allow relative URLs (no scheme) and explicit http(s)/mailto.
+        if (/^(?:https?:|mailto:)/i.test(raw)) return raw;
+        if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) return '#'; // some other scheme — reject
+        return raw; // scheme-less (relative) URL
+    }
+
     function getOption(options, key) {
         if (!options) return null;
         const lookup = key.toLowerCase();
@@ -225,7 +240,7 @@
                 manifest  = await res.json();
             } catch (e) {
                 document.getElementById('root').innerHTML =
-                    '<p class="error">Failed to load manifest: ' + e.message + '</p>';
+                    '<p class="error">Failed to load manifest: ' + escHtml(e.message) + '</p>';
                 publishExportState('error', { reason: 'manifest-load-failed', message: e.message });
                 return;
             }
@@ -979,9 +994,9 @@
             else if (icon === 'FILTER') iconHtml = '&#x1F50D;';
             else if (icon === 'INFO') iconHtml = '&#x2139;';
             else if (containerDef.icon.includes('.') || containerDef.icon.includes('/')) {
-                iconHtml = `<img src="${containerDef.icon}" style="width:24px;height:24px;">`;
+                iconHtml = `<img src="${escHtml(safeUrl(containerDef.icon))}" style="width:24px;height:24px;">`;
             } else {
-                iconHtml = containerDef.icon;
+                iconHtml = escHtml(containerDef.icon);
             }
         }
         trigger.innerHTML = iconHtml;
@@ -1629,7 +1644,10 @@
 
             // ── Phase 3: Legend Interaction ──
             chart.on('legendselectchanged', function (params) {
-                console.debug(`[Interaction] Legend changed on ${visual.name}:`, params);
+                // visual.name is passed as a separate argument (not interpolated into the
+                // format string) so a name containing console format specifiers cannot be
+                // reinterpreted as a format directive.
+                console.debug('[Interaction] Legend changed on', visual.name, params);
                 // In ECharts, params.name is the series name that was toggled
                 // We map this to a cross-filter action if possible
                 const seriesName = params.name;
@@ -2031,7 +2049,7 @@
                         // IMAGE: render <img> from URL value
                         if (rawVal) {
                             const img = document.createElement('img');
-                            img.src = rawVal;
+                            img.src = safeUrl(rawVal);
                             img.alt = '';
                             img.style.maxHeight = (meta.imageWidth || 32) + 'px';
                             img.style.maxWidth  = (meta.imageWidth ? meta.imageWidth * 3 : 96) + 'px';
@@ -2916,7 +2934,7 @@
             
             updateToggleText = () => {
                 if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
-                else if (selected.size === 1) toggle.innerHTML = `<span>${Array.from(selected)[0]}</span>`;
+                else if (selected.size === 1) toggle.innerHTML = `<span>${escHtml(Array.from(selected)[0])}</span>`;
                 else toggle.innerHTML = `<span>${selected.size} selected</span>`;
                 toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
             };
@@ -3624,7 +3642,7 @@
         wrapper.style.justifyContent = 'center';
 
         const img = document.createElement('img');
-        img.src   = src;
+        img.src   = safeUrl(src);
         img.alt   = alt;
         img.style.maxWidth  = '100%';
         img.style.maxHeight = '100%';
@@ -3770,7 +3788,7 @@
                     <span class="tree-icon" style="color:#888">${iconStr}</span>
                     <span class="node-name">${escHtml(node.name || 'Unnamed')}</span>
                     <span class="node-meta">
-                        <span class="status-${node.status || 'Completed'}">${escHtml(node.status || 'Completed')}</span>
+                        <span class="status-${escHtml(node.status || 'Completed')}">${escHtml(node.status || 'Completed')}</span>
                         ${timeStr} ${rowsStr}
                     </span>
                 `;
@@ -3811,7 +3829,7 @@
                 entry.className = 'log-entry';
                 
                 const time = new Date(msg.timestamp).toLocaleTimeString();
-                const colorClass = msg.color ? `log-${msg.color}` : 'log-white';
+                const colorClass = msg.color ? `log-${escHtml(msg.color)}` : 'log-white';
                 
                 entry.innerHTML = `
                     <span class="log-time">[${time}]</span>
@@ -4075,7 +4093,12 @@
                 }
 
                 if (qs) targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
-                window.location.href = targetUrl;
+                // Only navigate to a local, same-origin path: must start with a single '/'
+                // (reject '//host' / '/\host' protocol-relative targets) so a crafted report
+                // name can never redirect off-site.
+                if (/^\/(?![/\\])/.test(targetUrl)) {
+                    window.location.href = targetUrl;
+                }
             }
         } else if (action.type === 'SET_UI_STATE') {
             const targets = action.targets || [];
@@ -4295,11 +4318,12 @@
     }
 
     function escHtml(s) {
-        return String(s)
+        return String(s == null ? '' : s)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;');
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     }
 
     function parseHexColor(hex) {

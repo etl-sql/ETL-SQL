@@ -226,12 +226,14 @@ function extractLicense(text) {
 }
 
 function decodeXml(value) {
+  // Decode &amp; LAST so an already-escaped entity such as "&amp;lt;" decodes to the
+  // literal "&lt;" rather than being double-decoded into "<".
   return value
-    .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 function parseNpmPackages() {
@@ -305,7 +307,9 @@ function usageText(set) {
 
 function md(value) {
   const text = value == null || value === '' ? 'TBD' : String(value);
-  return text.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+  // Escape the backslash escape character together with the pipe so a value containing
+  // a literal backslash cannot defeat the table-cell escaping.
+  return text.replace(/([\\|])/g, '\\$1').replace(/\r?\n/g, ' ');
 }
 
 function render() {

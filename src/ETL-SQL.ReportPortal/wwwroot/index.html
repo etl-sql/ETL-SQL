@@ -1114,7 +1114,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
     const url = typeof input === 'string' ? input : input.url;
     if (url.startsWith('/api/')) {
       const h = new Headers(init.headers||{});
-      if (!h.has('Authorization')) h.set('Authorization', 'Bearer ${token.replace(/'/g, "\\'")}');
+      if (!h.has('Authorization')) h.set('Authorization', 'Bearer ${token.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}');
       return _f(input, {...init, headers:h});
     }
     return _f(input, init);
