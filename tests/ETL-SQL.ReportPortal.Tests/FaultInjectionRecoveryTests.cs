@@ -246,8 +246,21 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         await using var verifyScope = provider.CreateAsyncScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
         Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
-        var reportState = await verifyDb.Reports.FindAsync(reportId);
-        Assert.Equal("Failed", reportState!.LastRefreshStatus);
+
+        Report? reportState = null;
+        var dbDeadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < dbDeadline)
+        {
+            await using var pollScope = provider.CreateAsyncScope();
+            var pollDb = pollScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            reportState = await pollDb.Reports.FindAsync(reportId);
+            if (reportState?.LastRefreshStatus == "Failed")
+                break;
+            await Task.Delay(50);
+        }
+
+        Assert.NotNull(reportState);
+        Assert.Equal("Failed", reportState.LastRefreshStatus);
         Assert.Contains("disk pressure", reportState.LastRefreshError!, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -319,8 +332,21 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         await using var verifyScope = provider.CreateAsyncScope();
         var verifyDb = verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>();
         Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
-        var reportState = await verifyDb.Reports.FindAsync(reportId);
-        Assert.Equal("Failed", reportState!.LastRefreshStatus);
+
+        Report? reportState = null;
+        var dbDeadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < dbDeadline)
+        {
+            await using var pollScope = provider.CreateAsyncScope();
+            var pollDb = pollScope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            reportState = await pollDb.Reports.FindAsync(reportId);
+            if (reportState?.LastRefreshStatus == "Failed")
+                break;
+            await Task.Delay(50);
+        }
+
+        Assert.NotNull(reportState);
+        Assert.Equal("Failed", reportState.LastRefreshStatus);
         Assert.False(string.IsNullOrWhiteSpace(reportState.LastRefreshError));
     }
 
