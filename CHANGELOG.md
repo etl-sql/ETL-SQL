@@ -4,15 +4,17 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ## [Unreleased]
 
-### Added
-
-**Practical High Availability — PostgreSQL State Provider**
-- Made both the Portal (EF Core) and Orchestrator (hand-written) state stores **provider-selectable** between SQLite (default, unchanged) and PostgreSQL via configuration (`Portal:Database` / `Orchestrator:Database` Provider + ConnectionString), removing the previously hardcoded SQLite coupling.
-- Implemented PostgreSQL end to end for both stores, verified against a real Postgres via Testcontainers: the Portal gained a dedicated migrations assembly for Postgres, and the Orchestrator store became a provider-neutral `RelationalJobHistoryStore` behind a dialect (portable SQL, with a Postgres `nocase` ICU collation backing `COLLATE NOCASE`).
-- Added `etl-sql admin migrate-database --from sqlite --to postgres [--dry-run]` to copy existing single-node SQLite Portal/Orchestrator state into the configured PostgreSQL deployment: values are coerced to each target column's type, foreign-key ordering is bypassed for the load, identity sequences are resynced, and per-table row counts are verified — any mismatch fails closed (nothing is committed). `--dry-run` verifies counts and target-schema compatibility without writing.
 ## [0.12.0] — 2026-06-19
 
 ### Added
+
+**Practical High Availability — Multi-Node Portal & Orchestrator**
+- Made both the Portal (EF Core) and Orchestrator (hand-written) state stores **provider-selectable** between SQLite (default, unchanged) and PostgreSQL via configuration (`Portal:Database` / `Orchestrator:Database` Provider + ConnectionString), removing the previously hardcoded SQLite coupling. PostgreSQL is implemented end to end for both stores and verified against a real Postgres via Testcontainers: the Portal gained a dedicated migrations assembly for Postgres, and the Orchestrator store became a provider-neutral `RelationalJobHistoryStore` behind a dialect (portable SQL, with a Postgres `nocase` ICU collation backing `COLLATE NOCASE`).
+- Added `etl-sql admin migrate-database --from sqlite --to postgres [--dry-run]` to copy existing single-node SQLite Portal/Orchestrator state into the configured PostgreSQL deployment: values are coerced to each target column's type, foreign-key ordering is bypassed for the load, identity sequences are resynced, and per-table row counts are verified — any mismatch fails closed (nothing is committed). `--dry-run` verifies counts and target-schema compatibility without writing.
+- Added a unified `IArtifactStorage` interface with **Local** and **SMB/UNC** providers so reports, scripts, snapshots, and custom-map assets live on a shared root reachable by all nodes, with `SecurityService` guardrails enforced at the storage boundary.
+- Added database-backed cluster coordination: **node heartbeats and a cluster registry** (liveness on the database clock, with expired rows pruned on the heartbeat loop), **monotonic fencing tokens** for state and shared-storage writes, and **database-backed leader election** that serializes migrations and singleton work. Stale writers are fenced and in-flight portal work is cancelled on node lease loss.
+- Added per-node capacity gating with **job quarantine**, cross-node capacity claims, and snapshot write-failure recovery.
+- Added a scalable **HAProxy** docker-compose with sticky (session-affinity) balancing, a configurable shared Data Protection key ring, and a lightweight `GET /healthz` load-balancer probe (richer diagnostics remain on `GET /health`). HA clusters require a shared artifact root, a shared key ring, identical JWT/orchestrator/dataset keys across nodes, and load-balancer session affinity for node-local interactive sessions.
 
 **Job-Scoped State Persistence & Incremental Watermarking**
 - Implemented `GET_JOB_STATE(key)` and `SET_JOB_STATE(key, value)` primitives for scheduled and ad-hoc incremental data loads.
