@@ -1137,7 +1137,11 @@ FROM #bed_usage;
             stopwatch.Stop();
 
             Assert.Equal(2, attempts);
-            Assert.True(stopwatch.ElapsedMilliseconds >= 1000, $"Expected delay of >= 1000ms, got {stopwatch.ElapsedMilliseconds}ms");
+            // Retry-After: 1 should hold the request for ~1s. Allow a small tolerance below 1000ms
+            // because Task.Delay can complete a few ms early on Windows (the system timer quantum is
+            // ~15.6ms, so the delay can fire just before the requested deadline). Without the delay the
+            // elapsed time would be near-instant, so >= 950ms still proves the Retry-After was honored.
+            Assert.True(stopwatch.ElapsedMilliseconds >= 950, $"Expected delay of >= ~1000ms (>=950ms tolerance), got {stopwatch.ElapsedMilliseconds}ms");
         }
 
         [Fact]

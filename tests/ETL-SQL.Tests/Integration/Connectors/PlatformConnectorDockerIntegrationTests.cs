@@ -153,7 +153,11 @@ namespace ETL_SQL.Tests.Integration.Connectors
             return http;
         }
 
-        public async Task<JsonElement[]> PollHistoryUntilCompletedAsync(HttpClient http, string jobName, int timeoutSeconds = 30)
+        // Poll timeout must exceed the container's own Jobs__TimeoutSeconds (30s) with headroom: the
+        // job runs via process spawning inside the container, and under full-lane load (concurrent
+        // Docker image builds + container startup) the spawn+execute can approach 30s. A 30s poll would
+        // then give up before a job that ultimately succeeds, producing a flaky timeout.
+        public async Task<JsonElement[]> PollHistoryUntilCompletedAsync(HttpClient http, string jobName, int timeoutSeconds = 90)
         {
             var started = DateTime.UtcNow;
             while ((DateTime.UtcNow - started).TotalSeconds < timeoutSeconds)
