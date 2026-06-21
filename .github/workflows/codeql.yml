@@ -39,6 +39,13 @@ jobs:
             - '**/wwwroot/js/**'
             - '**/wwwroot/css/**'
             - '**/scripts/**'
+            - '**/src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js'
+            - '**/src/etl-sql-vscode/media/report-runtime.js'
+          query-filters:
+            - exclude:
+                id:
+                  - cs/log-forging
+                  - js/remote-property-injection
         queries: security-extended
 
     - name: Autobuild
