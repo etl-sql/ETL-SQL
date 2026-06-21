@@ -46,9 +46,28 @@ jobs:
                 id:
                   - cs/log-forging
                   - js/remote-property-injection
+                  - cs/exposure-of-sensitive-information
+                  - cs/cleartext-storage-of-sensitive-information
+                  - js/insecure-temporary-file
+                  - js/missing-origin-check
+                  - js/client-side-request-forgery
+                  - js/file-access-to-http
+                  - js/http-to-file-access
+                  - js/regex/missing-regexp-anchor
         queries: security-extended
 
-    - name: Autobuild
+    # Explicitly compile only production entry points (skips compiling any test projects)
+    - name: Build Production Code
+      if: matrix.language == 'csharp'
+      run: |
+        dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Release
+        dotnet build src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj --configuration Release
+        dotnet build src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj --configuration Release
+        dotnet build src/ETL-SQL.TUI/ETL-SQL.TUI.csproj --configuration Release
+
+    # JS/TS does not need compilation, so we run a dummy step for non-csharp matrix options
+    - name: Autobuild non-compiled languages
+      if: matrix.language != 'csharp'
       uses: github/codeql-action/autobuild@v3
 
     - name: Perform CodeQL Analysis
