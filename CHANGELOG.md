@@ -47,6 +47,11 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - Optimized hot-path identifier and column resolution by switching to allocation-free `Row.TryGetValue` instead of copying new row columns dictionaries, saving significant heap allocation during streaming query execution.
 - Avoided redundant column lookups during variable and identifier evaluations using a unified `TryResolveIdentifier` check.
 
+### Fixed
+
+**Test Stability**
+- Stabilized two timing-sensitive Docker integration-lane tests that failed intermittently only under full pre-release load: relaxed a `Retry-After` delay assertion to tolerate the ~15.6ms Windows timer quantum, and raised the orchestrator scheduled-job history poll timeout above the container's own job timeout so a job nearing its budget under load is not abandoned prematurely.
+
 ## [0.11.0] — 2026-06-14
 
 ### Added
