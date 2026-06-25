@@ -103,27 +103,27 @@ release begins.
 
 ## Remaining Projects Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **TUI Project Audit Findings**
-  - **Gemini:** Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking.
+  - **Gemini:** Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking. *(Sr. review: still incomplete.)*
   - [x] **Sr. Developer:** Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
 - [ ] **Report Builder & CLI Project Audit Findings**
-  - **Gemini:** Synchronous directory creation (`Directory.CreateDirectory`) and file existence checks are performed inside asynchronous statement execution paths in `ExportReportStatementHandler.cs`.
-  - **Gemini:** The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup.
+  - **Gemini:** Synchronous directory creation (`Directory.CreateDirectory`) and file existence checks are performed inside asynchronous statement execution paths in `ExportReportStatementHandler.cs`. *(Sr. review: still incomplete.)*
+  - **Gemini:** The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup. *(Sr. review: still incomplete; output writes are async, but temp manifest create/delete still use sync APIs.)*
 - [ ] **Report Player & Hosting Project Audit Findings**
-  - **Gemini:** `DashboardService.cs` contains synchronous cancellation calls (`_refreshCts?.Cancel()`) inside the async `DisposeAsync()` method.
+  - **Gemini:** `DashboardService.cs` contains synchronous cancellation calls (`_refreshCts?.Cancel()`) inside the async `DisposeAsync()` method. *(Sr. review: still incomplete.)*
   - [x] **Sr. Developer:** `ReportPlayer/Program.cs` contains synchronous file reads (`File.ReadAllText`) inside high-frequency minimal API endpoint routes, which block thread pool threads during server requests.
 - [ ] **Reporting Project Audit Findings**
   - [x] **Sr. Developer:** `PdfExporter.cs` performs synchronous file writes and reads (`File.WriteAllBytes`, `File.ReadAllBytes`) when building PDF documents, instead of streaming asynchronously.
-  - **Gemini:** `SnapshotStore.cs` performs synchronous file moves (`File.Move`) and synchronous deletions (`File.Delete`) inside async save/read workflows.
+  - **Gemini:** `SnapshotStore.cs` performs synchronous file moves (`File.Move`) and synchronous deletions (`File.Delete`) inside async save/read workflows. *(Sr. review: still incomplete.)*
 - [ ] **ETL-SQL.App Project Audit Findings**
-  - **Gemini:** CLI startup logic performs synchronous file checking and console standard output writes before bootstrapping is complete.
+  - **Gemini:** CLI startup logic performs synchronous file checking and console standard output writes before bootstrapping is complete. *(Sr. review: still incomplete.)*
   - [x] **Sr. Developer:** Init scaffolding (`InitScaffolder.cs`) and backup/restore services (`BackupRestoreService.cs`) perform synchronous directory creation and local file compression/decompression operations.
 - [ ] **ETL-SQL.Orchestrator.Service Project Audit Findings**
   - [x] **Sr. Developer:** OrchestratorHostedService uses synchronous blocking lifecycle hooks on worker registration.
-  - **Gemini:** Job API routing uses synchronous configuration parameter lookup.
+  - **Gemini:** Job API routing uses synchronous configuration parameter lookup. *(Sr. review: still incomplete; route handlers still pull `IConfiguration` and call synchronous indexer/section lookups per request.)*
 - [ ] **ETL-SQL.ReportPortal.Data & Migrations Project Audit Findings**
   - [x] **Sr. Developer:** Dynamic connection configuration database migrations run synchronously on Startup. *(Sr. review: verified startup uses `MigrateAsync`.)*
   - [x] **Sr. Developer:** Query compilation profiles do not support async initialization. *(Sr. review: no query compilation profile subsystem exists; current `QueryCompiler` is CPU-bound and has no async initialization path.)*
 - [ ] **ETL-SQL.ReportRuntime Project Audit Findings**
-  - **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.
+  - **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks. *(Sr. review: still incomplete; wrapper delegates to `sync-assets.ps1`, which still uses synchronous `Test-Path`, `ReadAllText`, and `WriteAllText` checks.)*
 - [ ] **ETL-SQL.Installer Project Audit Findings**
-  - **Gemini:** WiX configuration paths are hardcoded to historic version paths and require script updates during active release packaging.
+  - **Gemini:** WiX configuration paths are hardcoded to historic version paths and require script updates during active release packaging. *(Sr. review: still incomplete; installer tree still contains committed historical MSI/WiX artifacts and fixed `publish\win-x64\bin` source paths.)*
