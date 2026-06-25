@@ -20,7 +20,11 @@ namespace ETL_SQL.Common
         private const int Iterations = 600000;
         private const int SaltSize = 16;
         private const int IvSize = 16;
-        private const byte CURRENT_VERSION = 1;
+        private const int NonceSize = 12;
+        private const int TagSize = 16;
+        private const int FileTagSize = 32;
+        private const byte CURRENT_VERSION = 2;
+        private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQL2");
 
         /// <summary>
         /// Encrypts a string using the specified password and optional algorithm.
@@ -32,22 +36,21 @@ namespace ETL_SQL.Common
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
             byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
 
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.GenerateIV();
-            byte[] iv = aes.IV;
+            var nonce = RandomNumberGenerator.GetBytes(NonceSize);
+            var plaintextBytes = Encoding.UTF8.GetBytes(plainText);
+            var ciphertext = new byte[plaintextBytes.Length];
+            var tag = new byte[TagSize];
+            using (var aes = new AesGcm(key, TagSize))
+            {
+                aes.Encrypt(nonce, plaintextBytes, ciphertext, tag);
+            }
 
-            using var encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
-            using var ms = new MemoryStream();
+            using var ms = new MemoryStream(1 + SaltSize + NonceSize + TagSize + ciphertext.Length);
             ms.WriteByte(CURRENT_VERSION);
             ms.Write(salt, 0, SaltSize);
-            ms.Write(iv, 0, IvSize);
-
-            using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
-            using (var sw = new StreamWriter(cs, Encoding.UTF8))
-            {
-                sw.Write(plainText);
-            }
+            ms.Write(nonce, 0, NonceSize);
+            ms.Write(tag, 0, TagSize);
+            ms.Write(ciphertext, 0, ciphertext.Length);
 
             return "ENC:" + Convert.ToBase64String(ms.ToArray());
         }
@@ -70,11 +73,29 @@ namespace ETL_SQL.Common
                 int iterations = Iterations;
                 int keySize = KeySize;
 
-                // Check for version header
+                if (fullBytes.Length > 0 && fullBytes[0] == CURRENT_VERSION)
+                {
+                    if (fullBytes.Length < 1 + SaltSize + NonceSize + TagSize)
+                        throw new ExecutionException("Invalid encrypted connection string format.");
+
+                    var v2Salt = fullBytes.AsSpan(1, SaltSize).ToArray();
+                    var nonce = fullBytes.AsSpan(1 + SaltSize, NonceSize).ToArray();
+                    var tag = fullBytes.AsSpan(1 + SaltSize + NonceSize, TagSize).ToArray();
+                    var v2Encrypted = fullBytes.AsSpan(1 + SaltSize + NonceSize + TagSize).ToArray();
+                    var v2Key = Rfc2898DeriveBytes.Pbkdf2(password, v2Salt, iterations, hashAlgo, keySize / 8);
+                    var plaintext = new byte[v2Encrypted.Length];
+                    using (var aesGcm = new AesGcm(v2Key, TagSize))
+                    {
+                        aesGcm.Decrypt(nonce, v2Encrypted, tag, plaintext);
+                    }
+
+                    return Encoding.UTF8.GetString(plaintext);
+                }
+
+                // Legacy AES-CBC payloads used version 1. Keep read compatibility.
                 if (fullBytes.Length > 0 && fullBytes[0] == 1)
                 {
                     offset = 1;
-                    // In the future, we can change iterations based on fullBytes[0]
                 }
 
                 if (fullBytes.Length < offset + SaltSize + IvSize)
@@ -118,24 +139,30 @@ namespace ETL_SQL.Common
 
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
+            var (encryptionKey, hmacKey) = DeriveFileKeys(password, salt, hashAlgo);
+            var tempCipher = outputFile + ".tmp-" + Guid.NewGuid().ToString("N");
 
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.GenerateIV();
-            byte[] iv = aes.IV;
-
-            using (var fsOut = new FileStream(outputFile, FileMode.Create))
+            try
             {
-                fsOut.Write(salt, 0, SaltSize);
-                fsOut.Write(iv, 0, IvSize);
-
-                using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
-                using (var cs = new CryptoStream(fsOut, encryptor, CryptoStreamMode.Write))
-                using (var fsIn = new FileStream(inputFile, FileMode.Open))
+                using (var aes = Aes.Create())
                 {
-                    fsIn.CopyTo(cs);
+                    aes.Key = encryptionKey;
+                    aes.GenerateIV();
+
+                    using (var fsIn = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (var fsCipher = new FileStream(tempCipher, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
+                    using (var cs = new CryptoStream(fsCipher, encryptor, CryptoStreamMode.Write))
+                    {
+                        fsIn.CopyTo(cs);
+                    }
+
+                    WriteAuthenticatedFile(outputFile, salt, aes.IV, hmacKey, tempCipher);
                 }
+            }
+            finally
+            {
+                TryDeleteFile(tempCipher);
             }
         }
 
@@ -151,6 +178,33 @@ namespace ETL_SQL.Common
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             using (var fsIn = new FileStream(inputFile, FileMode.Open))
             {
+                if (TryReadFileMagicV2(fsIn))
+                {
+                    byte[] v2Salt = new byte[SaltSize];
+                    byte[] v2Iv = new byte[IvSize];
+                    fsIn.ReadExactly(v2Salt, 0, SaltSize);
+                    fsIn.ReadExactly(v2Iv, 0, IvSize);
+                    var cipherStart = fsIn.Position;
+                    var cipherLength = fsIn.Length - cipherStart - FileTagSize;
+                    if (cipherLength < 0)
+                        throw new ExecutionException("Invalid encrypted file format.");
+
+                    var (encryptionKey, hmacKey) = DeriveFileKeys(password, v2Salt, hashAlgo);
+                    VerifyAuthenticatedFile(fsIn, v2Salt, v2Iv, hmacKey, cipherStart, cipherLength);
+
+                    fsIn.Position = cipherStart;
+                    using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
+                    using var v2Aes = Aes.Create();
+                    v2Aes.Key = encryptionKey;
+                    v2Aes.IV = v2Iv;
+                    using var v2Decryptor = v2Aes.CreateDecryptor(v2Aes.Key, v2Aes.IV);
+                    using var cs = new CryptoStream(limitedCipher, v2Decryptor, CryptoStreamMode.Read);
+                    using var fsOut = new FileStream(outputFile, FileMode.Create);
+                    cs.CopyTo(fsOut);
+                    return;
+                }
+
+                fsIn.Position = 0;
                 byte[] salt = new byte[SaltSize];
                 byte[] iv = new byte[IvSize];
                 fsIn.ReadExactly(salt, 0, SaltSize);
@@ -166,6 +220,110 @@ namespace ETL_SQL.Common
                     cs.CopyTo(fsOut);
                 }
             }
+        }
+
+        private static bool TryReadFileMagicV2(FileStream fs)
+        {
+            if (fs.Length < FileMagicV2.Length) return false;
+            Span<byte> magic = stackalloc byte[FileMagicV2.Length];
+            fs.ReadExactly(magic);
+            return magic.SequenceEqual(FileMagicV2);
+        }
+
+        private static (byte[] EncryptionKey, byte[] HmacKey) DeriveFileKeys(string password, byte[] salt, HashAlgorithmName hashAlgo)
+        {
+            var keyMaterial = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, 64);
+            return (keyMaterial[..32], keyMaterial[32..]);
+        }
+
+        private static void WriteAuthenticatedFile(string outputFile, byte[] salt, byte[] iv, byte[] hmacKey, string tempCipher)
+        {
+            using var hmac = new HMACSHA256(hmacKey);
+            using var fsOut = new FileStream(outputFile, FileMode.Create);
+            WriteAndHash(fsOut, hmac, FileMagicV2);
+            WriteAndHash(fsOut, hmac, salt);
+            WriteAndHash(fsOut, hmac, iv);
+
+            var buffer = new byte[81920];
+            using (var fsCipher = new FileStream(tempCipher, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                int read;
+                while ((read = fsCipher.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    fsOut.Write(buffer, 0, read);
+                    hmac.TransformBlock(buffer, 0, read, null, 0);
+                }
+            }
+
+            hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            fsOut.Write(hmac.Hash!, 0, hmac.Hash!.Length);
+        }
+
+        private static void VerifyAuthenticatedFile(FileStream fsIn, byte[] salt, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength)
+        {
+            using var hmac = new HMACSHA256(hmacKey);
+            hmac.TransformBlock(FileMagicV2, 0, FileMagicV2.Length, null, 0);
+            hmac.TransformBlock(salt, 0, salt.Length, null, 0);
+            hmac.TransformBlock(iv, 0, iv.Length, null, 0);
+
+            var buffer = new byte[81920];
+            var remaining = cipherLength;
+            while (remaining > 0)
+            {
+                var read = fsIn.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                if (read <= 0)
+                    throw new ExecutionException("Invalid encrypted file format.");
+                hmac.TransformBlock(buffer, 0, read, null, 0);
+                remaining -= read;
+            }
+            hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+
+            var expectedTag = new byte[FileTagSize];
+            fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
+            if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
+                throw new CryptographicException("Encrypted file authentication failed.");
+        }
+
+        private static void WriteAndHash(Stream stream, HMAC hmac, byte[] bytes)
+        {
+            stream.Write(bytes, 0, bytes.Length);
+            hmac.TransformBlock(bytes, 0, bytes.Length, null, 0);
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        }
+
+        private sealed class LimitedReadStream : Stream
+        {
+            private readonly Stream _inner;
+            private readonly long _length;
+            private long _remaining;
+
+            public LimitedReadStream(Stream inner, long length)
+            {
+                _inner = inner;
+                _length = length;
+                _remaining = length;
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => _length;
+            public override long Position { get => _length - _remaining; set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (_remaining <= 0) return 0;
+                var read = _inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
+                _remaining -= read;
+                return read;
+            }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         }
 
         /// <summary>

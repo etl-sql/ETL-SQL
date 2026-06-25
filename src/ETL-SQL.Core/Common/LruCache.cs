@@ -15,6 +15,8 @@ namespace ETL_SQL.Core.Common
 
         public LruCache(int capacity, IEqualityComparer<TKey>? comparer = null)
         {
+            if (capacity <= 0)
+                throw new ArgumentOutOfRangeException(nameof(capacity), "LRU cache capacity must be greater than zero.");
             _capacity = capacity;
             _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity, comparer);
         }

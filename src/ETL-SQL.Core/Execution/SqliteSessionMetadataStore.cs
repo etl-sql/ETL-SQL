@@ -26,7 +26,10 @@ namespace ETL_SQL.Core.Execution
         public SqliteSessionMetadataStore(string sessionId, string sessionRoot, string machineKeyEntropy)
         {
             _sessionId = sessionId;
-            _dbPath = Path.Combine(sessionRoot, sessionId, "metadata.db");
+            var resolvedRoot = Path.GetFullPath(sessionRoot);
+            var candidatePath = Path.Combine(resolvedRoot, sessionId, "metadata.db");
+            if (!SafePath.TryResolveWithinRoot(resolvedRoot, candidatePath, out _dbPath))
+                throw new ArgumentException("Session metadata path escapes the configured session root.", nameof(sessionId));
             _entropy = machineKeyEntropy;
 
             var dir = Path.GetDirectoryName(_dbPath);
@@ -35,7 +38,8 @@ namespace ETL_SQL.Core.Execution
 
         public async Task InitializeAsync()
         {
-            _connection = new SqliteConnection($"Data Source={_dbPath}");
+            var builder = new SqliteConnectionStringBuilder { DataSource = _dbPath };
+            _connection = new SqliteConnection(builder.ConnectionString);
             await _connection.OpenAsync();
 
             using var cmd = _connection.CreateCommand();

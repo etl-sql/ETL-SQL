@@ -31,6 +31,17 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void TestEncryptedStringTamperDetection()
+        {
+            string encrypted = CryptoUtils.Encrypt("secret-value", "Secret123!");
+            byte[] payload = Convert.FromBase64String(encrypted.Substring("ENC:".Length));
+            payload[^1] ^= 0x01;
+            string tampered = "ENC:" + Convert.ToBase64String(payload);
+
+            Assert.ThrowsAny<Exception>(() => CryptoUtils.Decrypt(tampered, "Secret123!"));
+        }
+
+        [Fact]
         public async Task TestEvaluatorDecryption()
         {
             string original = "dummy_connection_string";

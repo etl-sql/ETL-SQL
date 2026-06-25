@@ -39,6 +39,16 @@ namespace ETL_SQL.Tests.Reporting
         }
 
         [Fact]
+        public void MachineBoundCrypto_ProtectedBytes_DetectTampering()
+        {
+            var protected_ = MachineBoundCrypto.Protect("tamper check"u8.ToArray());
+            protected_[^1] ^= 0x01;
+
+            Assert.ThrowsAny<System.Security.Cryptography.CryptographicException>(
+                () => MachineBoundCrypto.Unprotect(protected_));
+        }
+
+        [Fact]
         public void MachineBoundCrypto_FileRoundTrip_ProducesIdenticalContent()
         {
             var dir = Path.GetTempPath();

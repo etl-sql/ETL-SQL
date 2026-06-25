@@ -696,6 +696,12 @@ namespace ETL_SQL.Tests.Coverage
             Assert.Contains(logged, m => m.Contains("Successfully deleted"));
         }
 
+        [Fact]
+        public void LruCache_InvalidCapacity_ThrowsArgumentOutOfRangeException()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new LruCache<string, string>(0));
+        }
+
         // ── EngineLogger ──────────────────────────────────────────────────────
 
         [Fact]

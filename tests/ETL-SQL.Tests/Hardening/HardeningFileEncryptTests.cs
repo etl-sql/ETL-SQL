@@ -78,6 +78,20 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public void CryptoUtils_PasswordEncryption_DetectsTampering()
+        {
+            string pwd = "Password123!";
+            CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, true, HashAlgorithmName.SHA256);
+
+            var encrypted = File.ReadAllBytes(_encryptedFile);
+            encrypted[^1] ^= 0x01;
+            File.WriteAllBytes(_encryptedFile, encrypted);
+
+            Assert.ThrowsAny<Exception>(() =>
+                CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, true, HashAlgorithmName.SHA256));
+        }
+
+        [Fact]
         public void CryptoUtils_SshKeyEncryption_NoPassphrase()
         {
             CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);

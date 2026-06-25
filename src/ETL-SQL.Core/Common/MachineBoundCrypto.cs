@@ -11,12 +11,14 @@ namespace ETL_SQL.Core.Common
     /// Windows: uses DPAPI <see cref="DataProtectionScope.LocalMachine"/> so data is
     /// unreadable if moved to another machine.
     /// Linux/macOS: derives a machine-unique AES-256 key from <c>/etc/machine-id</c>
-    /// (or the hostname as a fallback), then encrypts with AES-256-CBC.
+    /// (or the hostname as a fallback), then encrypts with authenticated AES-256-GCM.
     /// </summary>
     internal static class MachineBoundCrypto
     {
-        // AES IV is always 16 bytes; prepend it to every ciphertext on non-Windows.
+        private static readonly byte[] MagicV2 = Encoding.ASCII.GetBytes("ETLSQLM2");
         private const int AesIvLength = 16;
+        private const int AesGcmNonceLength = 12;
+        private const int AesGcmTagLength = 16;
 
         // ── Public API ────────────────────────────────────────────────────────────
 
@@ -75,43 +77,69 @@ namespace ETL_SQL.Core.Common
             return Environment.MachineName;
         }
 
-        // ── AES-256-CBC helpers ───────────────────────────────────────────────────
+        // ── AES-256-GCM helpers ───────────────────────────────────────────────────
 
         private static byte[] AesEncrypt(byte[] data, byte[] key)
         {
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.GenerateIV();
-
-            using var ms = new MemoryStream();
-            ms.Write(aes.IV, 0, aes.IV.Length);
-            using (var cs = new CryptoStream(ms, aes.CreateEncryptor(), CryptoStreamMode.Write))
+            var nonce = RandomNumberGenerator.GetBytes(AesGcmNonceLength);
+            var ciphertext = new byte[data.Length];
+            var tag = new byte[AesGcmTagLength];
+            using (var aes = new AesGcm(key, AesGcmTagLength))
             {
-                cs.Write(data, 0, data.Length);
-                cs.FlushFinalBlock();
+                aes.Encrypt(nonce, data, ciphertext, tag);
             }
+
+            using var ms = new MemoryStream(MagicV2.Length + AesGcmNonceLength + AesGcmTagLength + ciphertext.Length);
+            ms.Write(MagicV2, 0, MagicV2.Length);
+            ms.Write(nonce, 0, nonce.Length);
+            ms.Write(tag, 0, tag.Length);
+            ms.Write(ciphertext, 0, ciphertext.Length);
             return ms.ToArray();
         }
 
         private static byte[] AesDecrypt(byte[] data, byte[] key)
         {
+            if (HasMagicV2(data))
+            {
+                if (data.Length < MagicV2.Length + AesGcmNonceLength + AesGcmTagLength)
+                    throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
+
+                var offset = MagicV2.Length;
+                var nonce = data.AsSpan(offset, AesGcmNonceLength).ToArray();
+                offset += AesGcmNonceLength;
+                var tag = data.AsSpan(offset, AesGcmTagLength).ToArray();
+                offset += AesGcmTagLength;
+                var ciphertext = data.AsSpan(offset).ToArray();
+                var plaintext = new byte[ciphertext.Length];
+                using (var aes = new AesGcm(key, AesGcmTagLength))
+                {
+                    aes.Decrypt(nonce, ciphertext, tag, plaintext);
+                }
+
+                return plaintext;
+            }
+
+            // Legacy non-Windows payloads used AES-CBC with the IV prepended. Keep read compatibility.
             if (data.Length < AesIvLength)
                 throw new CryptographicException("Ciphertext is too short to contain an IV.");
 
             var iv = new byte[AesIvLength];
             Array.Copy(data, 0, iv, 0, AesIvLength);
 
-            using var aes = Aes.Create();
-            aes.Key = key;
-            aes.IV = iv;
+            using var legacyAes = Aes.Create();
+            legacyAes.Key = key;
+            legacyAes.IV = iv;
 
             using var ms = new MemoryStream();
-            using (var cs = new CryptoStream(ms, aes.CreateDecryptor(), CryptoStreamMode.Write))
+            using (var cs = new CryptoStream(ms, legacyAes.CreateDecryptor(), CryptoStreamMode.Write))
             {
                 cs.Write(data, AesIvLength, data.Length - AesIvLength);
                 cs.FlushFinalBlock();
             }
             return ms.ToArray();
         }
+
+        private static bool HasMagicV2(byte[] data) =>
+            data.Length >= MagicV2.Length && data.AsSpan(0, MagicV2.Length).SequenceEqual(MagicV2);
     }
 }
