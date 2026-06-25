@@ -89,6 +89,46 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("pwd=***REDACTED***", (string?)root["B"]!["Url"]);
         }
 
+        [Fact]
+        public void SupportBundle_DiagnosticRedaction_StripsQueryParamsPathsAndPersonalData()
+        {
+            var text = """
+            GET https://portal.local/report?id=42&customer=Acme
+            C:\Users\alice\Documents\private.etlsql
+            /home/bob/data/customer.csv
+            owner alice@example.com from 192.168.1.50
+            """;
+
+            var redacted = SupportBundleBuilder.RedactDiagnosticText(text);
+
+            Assert.DoesNotContain("42", redacted);
+            Assert.DoesNotContain("Acme", redacted);
+            Assert.DoesNotContain("alice", redacted);
+            Assert.DoesNotContain("bob", redacted);
+            Assert.DoesNotContain("192.168.1.50", redacted);
+            Assert.Contains("***REDACTED_PATH***", redacted);
+            Assert.Contains("***REDACTED_VALUE***", redacted);
+        }
+
+        [Fact]
+        public void SupportBundle_DiagnosticRedaction_StripsPrivateTableRows()
+        {
+            var text = """
+            Id,Name,Email
+            1,Alice,alice@example.com
+            | Account | Balance | Owner |
+            | 123 | 1000 | Bob |
+            System.InvalidOperationException: keep stack trace context
+            """;
+
+            var redacted = SupportBundleBuilder.RedactDiagnosticText(text);
+
+            Assert.DoesNotContain("Alice", redacted);
+            Assert.DoesNotContain("Balance", redacted);
+            Assert.Contains("***REDACTED_TABLE_ROW***", redacted);
+            Assert.Contains("System.InvalidOperationException", redacted);
+        }
+
         // ── init scaffolding ──────────────────────────────────────────────────
 
         [Fact]

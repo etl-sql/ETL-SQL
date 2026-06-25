@@ -807,17 +807,19 @@ etl-sql admin support-bundle --output C:\temp\bundle.zip
 
 The archive contains:
 
-- **`manifest.json`** — bundle metadata (generated time, tool version, OS, .NET runtime, host).
+- **`manifest.json`** — bundle metadata (generated time, tool version, OS, .NET runtime; host and local paths are redacted).
 - **`doctor-health.json`** — a full `doctor` health snapshot in machine-readable form.
 - **`config-redacted.json`** — your `appsettings.json` with **all credentials redacted**.
-- **`database-metrics.json`** — Portal/Orchestrator database file paths, sizes, and last-write times.
-- **`logs/`** — the most recent application and script log files.
+- **`database-metrics.json`** — Portal/Orchestrator database file sizes and last-write times; local paths are redacted.
+- **`logs/`** — the most recent application and script log files, rewritten through the diagnostic redactor.
 
 **Redaction contract:** every credential is masked (`***REDACTED***`) before anything is written —
 passwords, JWT/at-rest/API keys, connection strings, tokens, and credentials embedded inside
-connection-string values. Non-secret configuration knobs (timeouts, limits, key *versions*, feature
-flags) remain visible for diagnostics. Empty secret fields are kept as empty so you can see whether a
-value was configured. Always review a bundle before sharing it.
+connection-string values. Diagnostic text additionally strips URL query parameter values, local file
+paths, email addresses, IP addresses, machine/user identifiers, and table-shaped rows that may contain
+private data. Non-secret configuration knobs (timeouts, limits, key *versions*, feature flags) remain
+visible for diagnostics. Empty secret fields are kept as empty so you can see whether a value was
+configured. Always review a bundle before sharing it.
 
 ### 11.3 Backup and restore — `etl-sql admin backup` / `restore`
 

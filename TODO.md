@@ -10,7 +10,7 @@ release begins.
 *Establishes a stable language contract, unified open-source licensing, distribution trust, and final release gates. Focuses strictly on stabilization and security; no new features.*
 
 - [ ] **Phase 1: Language & Manifest Freeze**
-  - **Sr. Developer:** Publish the canonical language grammar, connector options reference, and standard library docs.
+  - [x] **Sr. Developer:** Publish the canonical language grammar, connector options reference, and standard library docs. *(Verified `Docs/Reference/Grammar.md`, `Data_Connectors.md`, `Standard_Library.md`, and the authoritative reference map.)*
   - [x] **Sr. Developer:** Define a strict deprecation policy for syntax and options. *(Documented in `Docs/Standards/Breaking_Change_Standards.md` and linked from the reference map.)*
   - [x] **Sr. Developer:** Implement script compatibility test corpus and a migration-linter. *(Added parser corpus coverage and stable `ETLSQL-MIG001` migration diagnostic for deprecated `FILE` connections.)*
   - [x] **Gemini:** Implement `SHOW VERSION` and machine-readable compatibility diagnostics.
@@ -25,7 +25,7 @@ release begins.
   - **Sr. Developer:** Verify that a clean script-to-scheduled-production workflow completes successfully without manual intervention.
   - **Sr. Developer:** Ensure zero credentials leak in logs, bundles, or debug dumps.
   - **Sr. Developer:** Reconcile OIDC/LDAP configurations with standard documentation libraries.
-  - **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
+  - [x] **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
 ## Core Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Performance Audit Fixes**

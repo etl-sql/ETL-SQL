@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,7 +38,34 @@ namespace ETL_SQL.App
             "((?:password|pwd|secret|accountkey|sharedaccesskey)\\s*=)([^;]*)",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        private static readonly Regex UrlQueryValuePattern = new(
+            @"([?&][^=\s&#?]+)=([^&\s#]*)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex EmailPattern = new(
+            @"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex IpAddressPattern = new(
+            @"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b",
+            RegexOptions.Compiled);
+
+        private static readonly Regex WindowsPathPattern = new(
+            @"\b[A-Z]:\\[^\s""'<>|]+",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex UserPathPattern = new(
+            @"/(?:Users|home)/[^\s""'<>|]+",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex TableLikeLinePattern = new(
+            @"^\s*(?:[|│].*[|│]|[^,\r\n]+,[^,\r\n]+,[^,\r\n]+).*$",
+            RegexOptions.Compiled);
+
         private const string RedactedMarker = "***REDACTED***";
+        private const string RedactedValueMarker = "***REDACTED_VALUE***";
+        private const string RedactedPathMarker = "***REDACTED_PATH***";
+        private const string RedactedTableRowMarker = "***REDACTED_TABLE_ROW***";
 
         /// <summary>
         /// True when a configuration key names a secret value (and is not an exempt metadata suffix
@@ -73,7 +101,7 @@ namespace ETL_SQL.App
             }
             catch (Exception ex)
             {
-                logger.WriteLine($"Failed to build support bundle: {ex.Message}", ConsoleColor.Red);
+                logger.WriteLine($"Failed to build support bundle: {RedactDiagnosticText(ex.Message)}", ConsoleColor.Red);
                 return 1;
             }
             finally
@@ -100,8 +128,8 @@ namespace ETL_SQL.App
                 ["toolVersion"] = typeof(SupportBundleBuilder).Assembly.GetName().Version?.ToString() ?? "unknown",
                 ["operatingSystem"] = Environment.OSVersion.ToString(),
                 ["dotnetRuntime"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
-                ["machineName"] = Environment.MachineName,
-                ["baseDirectory"] = AppDomain.CurrentDomain.BaseDirectory,
+                ["machineName"] = RedactedValueMarker,
+                ["baseDirectory"] = RedactDiagnosticText(AppDomain.CurrentDomain.BaseDirectory),
             };
             await File.WriteAllTextAsync(
                 Path.Combine(staging, "manifest.json"),
@@ -123,7 +151,7 @@ namespace ETL_SQL.App
                 Console.SetOut(originalOut);
             }
 
-            await File.WriteAllTextAsync(Path.Combine(staging, "doctor-health.json"), captured.ToString());
+            await File.WriteAllTextAsync(Path.Combine(staging, "doctor-health.json"), RedactDiagnosticText(captured.ToString()));
         }
 
         private static async Task WriteRedactedConfigAsync(string staging)
@@ -146,7 +174,7 @@ namespace ETL_SQL.App
             }
             catch (Exception ex)
             {
-                redacted = $"{{ \"note\": \"appsettings.json could not be parsed for redaction: {ex.Message}\" }}";
+                redacted = $"{{ \"note\": \"appsettings.json could not be parsed for redaction: {RedactDiagnosticText(ex.Message)}\" }}";
             }
 
             await File.WriteAllTextAsync(Path.Combine(staging, "config-redacted.json"), redacted);
@@ -223,7 +251,7 @@ namespace ETL_SQL.App
             void Add(string label, string? path)
             {
                 if (string.IsNullOrWhiteSpace(path)) return;
-                var entry = new JsonObject { ["name"] = label, ["path"] = path };
+                var entry = new JsonObject { ["name"] = label, ["path"] = RedactDiagnosticText(path) };
                 try
                 {
                     var fi = new FileInfo(path);
@@ -234,7 +262,7 @@ namespace ETL_SQL.App
                         entry["lastWriteUtc"] = fi.LastWriteTimeUtc.ToString("o");
                     }
                 }
-                catch (Exception ex) { entry["error"] = ex.Message; }
+                catch (Exception ex) { entry["error"] = RedactDiagnosticText(ex.Message); }
                 files.Add(entry);
             }
 
@@ -274,12 +302,55 @@ namespace ETL_SQL.App
                     Directory.CreateDirectory(dest);
                     foreach (var file in recent)
                     {
-                        try { file.CopyTo(Path.Combine(dest, file.Name), overwrite: true); }
+                        try
+                        {
+                            var text = File.ReadAllText(file.FullName);
+                            File.WriteAllText(Path.Combine(dest, file.Name), RedactDiagnosticText(text));
+                        }
                         catch { /* skip locked/unreadable log files */ }
                     }
                 }
                 catch { /* a missing or inaccessible log dir is non-fatal for the bundle */ }
             }
+        }
+
+        /// <summary>
+        /// Redacts diagnostic text before it enters a support bundle. This intentionally masks more
+        /// than secret keys: URLs, local paths, host/user identifiers, emails, IPs, and table-shaped
+        /// rows can all carry private operational data.
+        /// </summary>
+        internal static string RedactDiagnosticText(string? text)
+        {
+            if (string.IsNullOrEmpty(text)) return string.Empty;
+
+            var redacted = SecretRedactor.Redact(text) ?? string.Empty;
+            redacted = UrlQueryValuePattern.Replace(redacted, m => $"{m.Groups[1].Value}={RedactedValueMarker}");
+            redacted = EmailPattern.Replace(redacted, RedactedValueMarker);
+            redacted = IpAddressPattern.Replace(redacted, RedactedValueMarker);
+            redacted = WindowsPathPattern.Replace(redacted, RedactedPathMarker);
+            redacted = UserPathPattern.Replace(redacted, RedactedPathMarker);
+
+            var lines = redacted.Replace("\r\n", "\n").Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (LooksLikePrivateTableRow(lines[i]))
+                    lines[i] = RedactedTableRowMarker;
+            }
+
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        private static bool LooksLikePrivateTableRow(string line)
+        {
+            if (string.IsNullOrWhiteSpace(line)) return false;
+            if (line.Contains("Exception", StringComparison.OrdinalIgnoreCase)
+                || line.Contains(" at ", StringComparison.Ordinal)
+                || line.Contains("=>", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return TableLikeLinePattern.IsMatch(line);
         }
     }
 }
