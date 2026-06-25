@@ -6,7 +6,7 @@ release begins.
 
 ---
 
-## Active Sprint (v0.12.0 Stabilization & Release Gates)
+## Active Sprint (v0.13.0 Stabilization & Release Gates)
 *Establishes a stable language contract, unified open-source licensing, distribution trust, and final release gates. Focuses strictly on stabilization and security; no new features.*
 
 - [x] **Phase 1: Language & Manifest Freeze**
@@ -27,13 +27,13 @@ release begins.
   - [x] **Sr. Developer:** Reconcile OIDC/LDAP configurations with standard documentation libraries. *(Aligned `PortalConfig` OIDC/LDAP options with `Docs/Reference/Settings.md` and `Docs/ReportPortal_Administrators_Guide.md`.)*
   - [x] **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
-## Core Project Code Audit Tasks (v0.12.0 Stabilization)
+## Core Project Code Audit Tasks (v0.13.0 Stabilization)
 - [x] **Performance Audit Fixes**
   - [x] **Sr. Developer:** Convert `CryptoUtils.EncryptFileWithSsh`/`DecryptFileWithSsh` and `MachineBoundCrypto.EncryptFile`/`DecryptFile` to async/streaming paths; add authenticated encryption for the SSH file envelope.
   - [x] **Gemini:** Move synchronous file and directory operations out of the constructors of `SqliteSessionMetadataStore` and `SnippetLibrary`.
   - [x] **Gemini:** Refactor `AliasScanner` regex matches to use modern `[GeneratedRegex]` source generators and explicit regex timeouts.
 
-## Remaining Projects Code Audit Tasks (v0.12.0 Stabilization)
+## Remaining Projects Code Audit Tasks (v0.13.0 Stabilization)
 - [x] **TUI Project Audit Findings**
   - [x] **Gemini:** Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking.
   - [x] **Sr. Developer:** Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
@@ -70,7 +70,7 @@ release begins.
 - [x] **Encrypted & Compressed Snapshots** — Secure dashboard snapshot packages on disk (`Snapshots` area) by writing `.etlsnap` encrypted ZIP containers with the portal's `Dataset:AtRestKey`; startup migration converts and deletes legacy plaintext `.snapshot.json` artifacts.
 - [x] **Application-Layer PII Encryption** — Implement application-layer column encryption (using EF Core Value Converters and .NET Data Protection keys) for sensitive PII fields (like user email addresses) in local SQLite databases to protect user data at rest without database-level overhead or dependency complications.
 
-## Code Review: Performance & Scalability Audit Findings (v0.12.0)
+## Code Review: Performance & Scalability Audit Findings (v0.13.0)
 *Audit focused on three data volumes: Small (10k rows), Medium (1M rows), and Large (50M rows) to identify bottlenecks and structural improvements.*
 
 ### Small-Scale Perspective (10k Rows)
@@ -86,8 +86,8 @@ At medium scale (crossing the 100k memory-to-disk spill thresholds), serializati
   - *Solution*: Extract schema indices once before the row loop, use indexer lookup `row[colIdx]` (array access), and fallback to non-allocating `row.TryGetValue(...)`.
 - [x] **Flat File Row Constructor Double-Allocation** — [ParquetDataSource.cs:L97](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Parquet/ParquetDataSource.cs#L97) (and Avro/Excel/Directory equivalents): Parquet, Avro, Excel, and Directory readers now use schema-backed `currentBatch.NewRow()` rows instead of parameterless dynamic rows.
   - *Solution*: Initialize rows with target schema (`new Row(schema)` or `currentBatch.NewRow()`) to populate arrays directly.
-- [ ] **Sort Keys JSON Serialization Overhead** — [ExternalSortEngine.cs:L98](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs#L98): Spilling `_SYS_SORT_KEYS_` as an array column writes to Arrow as a JSON string (`\x1Ejson:[]`), requiring millions of serialization and deserialization cycles.
-  - *Solution*: Write keys as distinct primitive Arrow columns (e.g. `_SYS_SORT_KEY_0`, `_SYS_SORT_KEY_1`) so Arrow handles native fast serialization without JSON helper loops.
+- [x] **Sort Keys JSON Serialization Overhead** — [ExternalSortEngine.cs:L98](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs#L98): Spilling `_SYS_SORT_KEYS_` as an array column wrote to Arrow as a JSON string (`\x1Ejson:[]`), requiring millions of serialization and deserialization cycles.
+  - *Solution*: Write keys as distinct primitive Arrow columns (`_SYS_SK_0`, `_SYS_SK_1`, ...) so Arrow handles native fast serialization without JSON helper loops. Added `Row.RemoveColumn` to `DataModel.cs` to cleanly strip sentinel columns from deserialized rows before yielding.
 
 ### Large-Scale Perspective (50M Rows)
 At large volumes, recursive interpreters and bulk data grouping hit memory boundaries and GC thresholds:
@@ -95,12 +95,18 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
   - *Solution*: Use the callback-based `row.ForEachColumn` to copy properties without allocating dictionary copies.
 - [ ] **External Aggregation Memory Retention** — [ExternalAggregateEngine.cs:L69](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs#L69): Grouping reads all partition stream rows and stores them in-memory via `bucket.Rows.Add(row)` before final aggregate calculation, leading to OOM on low-memory nodes.
   - *Solution*: Apply running/partial hash aggregation on-the-fly during partition reading to only keep unique keys and running aggregate states in memory.
+- [ ] **Select Pipeline Materialization Boundaries** — [SelectExecutionEngine.cs:L91](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/SelectExecutionEngine.cs#L91): Several large-query paths still materialize `allRows` before or after external operators, including joins, external aggregate results, full ORDER BY, QUALIFY, LIMIT, and final projection. This can negate spill benefits on 50M-row workflows.
+  - *Solution*: Preserve streaming boundaries across external operators and projection, materializing only for blocking semantics that strictly require it.
+- [ ] **External Window Partition Buffering** — [ExternalWindowEngine.cs:L166](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/ExternalWindowEngine.cs#L166): Non-deep-spill-compatible window partitions still call `ToListAsync()` before in-memory window evaluation. Large partitions using functions beyond ROW_NUMBER/RANK/DENSE_RANK can still OOM.
+  - *Solution*: Add streaming or segmented implementations for additional window functions, or spill partition frames with bounded memory.
+- [ ] **PIVOT/UNPIVOT/MATCH_RECOGNIZE Full-Source Buffering** — [DataSourceManager.cs:L452](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/DataSourceManager.cs#L452): Table operators buffer every source row into `allRows` before applying PIVOT, UNPIVOT, or MATCH_RECOGNIZE. Large operator inputs bypass the normal spill pipeline and can exhaust memory.
+  - *Solution*: Add operator-specific streaming/spill paths or enforce documented row limits until spill-aware implementations exist.
 - [ ] **Interpretive AST Traversal Bottleneck** — [ExpressionEvaluator.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/ExpressionEvaluator.cs): Evaluating variables, operators, and functions traverses the AST recursively on every row. For 50M rows, this recursive overhead slows processing significantly.
   - *Solution*: Compile AST structures into compiled delegates (`Func<Row, object?>`) once per statement using `System.Linq.Expressions` or dynamic code-generation.
 - [ ] **Flat File Char-by-Char Stream Parser** — [FlatFileDataSource.cs:L486](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs#L486): Reading files char-by-char with custom delimiters via `reader.Read()` stalls the CPU on multi-gigabyte files.
   - *Solution*: Utilize Span-based block parsing to find delimiters inside buffers instead of character-by-character calls.
 
-## Code Review: Script Parsing & Execution Performance Audit (v0.12.0)
+## Code Review: Script Parsing & Execution Performance Audit (v0.13.0)
 *Audit focused on three script scales: Small (100 lines), Large (20,000 lines), and Multi-File (10 files each 10,000 lines long).*
 
 ### Small Script Perspective (100 Lines)
@@ -126,7 +132,7 @@ At high scales with cross-script references, dynamic scoping and un-indexed trac
   - *Solution*: Index lineage entries by `TargetTable` and `TargetColumn` upon recording to enable constant-time $O(1)$ lookups.
 - [x] **LSP Cross-File Reference Provider Gaps** — [DefinitionProvider.cs:L33](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.LanguageServer/DefinitionProvider.cs#L33): Language features (Hover, Go-To-Definition) did not search for variables/connections declared in other project files. Fixed by searching indexed declarations across the global `DocumentStateStore`, preferring the active document and then other open files.
 
-## Code Review: Report Portal & Orchestrator Scale Performance Audit (v0.12.0)
+## Code Review: Report Portal & Orchestrator Scale Performance Audit (v0.13.0)
 *Audit focused on scaling the Report Portal (10, 100, and 10k published reports) and the Orchestrator (10, 100, and 10k scheduled/triggered jobs) to identify database, scheduling, and system execution hotspots.*
 
 ### Small-Scale Perspective (10 Reports / 10 Jobs)
@@ -146,6 +152,8 @@ At medium scales, structural patterns start introducing I/O wait times and threa
 At large scales, in-memory processing, missing indexes, and polling loops cause database locks, memory exhaustion, and high CPU thrashing:
 - [ ] **In-Memory Catalog and Tree Materialization** — [CatalogController.cs:L22](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/CatalogController.cs#L22) & [FoldersController.cs:L28](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/FoldersController.cs#L28): Loading all 10k reports, snapshots, folders, and ACL tables into EF Core memory before applying search matches or building folder trees generates massive payloads, instantiates 30k+ tracked entities, and spikes GC heap memory.
   - *Solution*: Perform SQL-level filter pushdowns (`LIKE` or Full-Text search) and paginate folder lists / searches (`Skip`/`Take`).
+- [ ] **Visible Folder ID Expansion** — [CatalogController.cs:L216](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/CatalogController.cs#L216): Catalog/report endpoints materialize all visible folder IDs and feed large `Contains(...)` sets back into report queries. At 10k folders this creates large `IN` predicates, memory churn, and uneven query plans.
+  - *Solution*: Push permission checks into SQL joins/subqueries or cache compact permission scopes per user/group instead of expanding every visible folder ID per request.
 - [ ] **Severe Thread-Pool Starvation on File IO** — [CatalogController.cs:L314](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/CatalogController.cs#L314): Returning large query matches runs synchronous disk checks on thousands of scripts, locking the thread pool and causing API gateway timeouts.
   - *Solution*: Reference only metadata-cached hashes during lists, checking disk files only via background workers or async refresh events.
 - [x] **Scheduler Db Polling and Memory Trash** — [SchedulerService.cs:L133](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Scheduling/SchedulerService.cs#L133) & [SQLiteJobHistoryStore.cs:L778](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Storage/SQLiteJobHistoryStore.cs#L778): Scheduler polling now uses a due-job query path that pushes `IsEnabled` and `NextRun` filtering into the relational store.
@@ -155,7 +163,7 @@ At large scales, in-memory processing, missing indexes, and polling loops cause 
 - [ ] **Lock Starvation in Queue Throttling** — [JobThrottle.cs:L96](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/JobThrottle.cs#L96) & [L180](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/JobThrottle.cs#L180): With thousands of jobs queued, polling `AcquireAsync` every 500ms triggers thousands of serialized DB transactions. Each transaction runs `Process.GetProcessById(pid)` inside the database transaction, stalling other locks and causing SQLite write lock starvation (`SQLITE_BUSY`).
   - *Solution*: Move process-alive checks out of active transactions to a background timer, and migrate from 500ms polling to database events (e.g. Postgres `LISTEN`/`NOTIFY`) or distributed lock queues.
 
-## Code Review: Engine State & Session Scale Performance Audit (v0.12.0)
+## Code Review: Engine State & Session Scale Performance Audit (v0.13.0)
 *Audit focused on scaling connection configurations (5, 20, 100), temp tables (5, 20, 100), visuals (5, 20, 100), and variables (5, 100, 10k) to analyze engine execution and state serialization overhead.*
 
 ### Small-Scale Perspective (5 Connections / 5 Temp Tables / 5 Visuals / 5 Variables)
@@ -166,13 +174,15 @@ At small scales, overhead is non-existent:
 
 ### Medium-Scale Perspective (20 Connections / 20 Temp Tables / 20 Visuals / 100 Variables)
 At medium scales, minor overheads begin to surface:
-- [ ] **Connection Allocation Footprint** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Initializing and maintaining 20 active connections pools databases, slightly increasing process socket usage and startup times.
-- [ ] **DPAPI Encryption Overhead** — [SqliteSessionMetadataStore.cs:L255](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Execution/SqliteSessionMetadataStore.cs#L255): Encrypting 20 connections sequentially during session saves starts consuming measurable CPU cycles (~5-15ms).
+- [ ] **Datasource Object and Pool Footprint After First Use** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Declaring 20 connections mainly stores long-lived datasource objects and connection strings; most database sockets are opened lazily by connector operations. The medium-scale risk is retained datasource state and provider pool pressure after connections are first queried, not immediate socket allocation at `CREATE CONNECTION`.
+  - *Solution*: Track last-used datasource activity, dispose idle datasources, and document connector pool behavior.
+- [ ] **Connection Encryption Overhead During Session Save** — [SqliteSessionMetadataStore.cs:L255](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Execution/SqliteSessionMetadataStore.cs#L255): Encrypting 20 connection records sequentially during session saves can add measurable CPU latency, but this is likely a medium-priority optimization unless profiling shows it affects interactive saves.
+  - *Solution*: Treat as part of the large-scale batch session-save work unless telemetry shows medium-scale regressions.
 - [ ] **Visual Query Sequence Delay** — [ManifestBuilder.cs:L93](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/ManifestBuilder.cs#L93): Sequential visual building results in serialized database query execution. If each visual query takes 100ms, building the manifest is delayed by 2 seconds.
 
 ### Large-Scale Perspective (100 Connections / 100 Temp Tables / 100 Visuals / 10k Variables)
 At large scales, sequential processing, DPAPI loops, and N+1 query patterns trigger significant degradation:
-- [ ] **Connection Pool and File Descriptor Exhaustion** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Holding 100 active connections concurrently can exhaust OS file descriptors, socket pools, or exceed connection limits on target database servers.
+- [ ] **Connection Pool and File Descriptor Exhaustion After Broad Query Fan-Out** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Holding 100 declared datasource objects is not automatically 100 open sockets, but broad query fan-out across many database-backed connections can exhaust provider pools, OS file descriptors, sockets, or target database connection limits.
   - *Solution*: Implement aggressive connection pool timeouts, lazy connection resolution (only open connections when first queried), and active pool cleanup.
 - [ ] **Heap Copying on Scope Forks** — [VariableScopeManager.cs:L203](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/VariableScopeManager.cs#L203): Forking variables and metadata during parallel loops (e.g. `PARALLEL FOR`) copies the entire 10k-entry dictionary. Under high iteration counts, this triggers millions of heap allocations.
   - *Solution*: Implement copy-on-write scope wrappers to share parent scope dictionaries, copying entries only when modified locally.
@@ -182,8 +192,10 @@ At large scales, sequential processing, DPAPI loops, and N+1 query patterns trig
   - *Solution*: Use a single JOIN query (`SELECT ... FROM temp_tables JOIN temp_table_chunks`) to eager-load all temp tables and chunks in one roundtrip.
 - [ ] **Sequential Visual Query Execution** — [ManifestBuilder.cs:L89](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/ManifestBuilder.cs#L89): Manifest generation executes visual queries one-by-one. Evaluating 100 visuals sequentially multiply latencies, especially for remote queries, leading to portal timeouts.
   - *Solution*: Execute visual queries in parallel using `Task.WhenAll` with a configurable degree of parallelism throttling to protect target databases.
+- [ ] **Dataset Viewer In-Memory Filtering and Sorting** — [DatasetViewerService.cs:L22](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Services/DatasetViewerService.cs#L22): Dataset preview loads cached Parquet rows into memory, then applies filtering, sorting, paging, stats, and distinct-value extraction in LINQ. If `MaxPreviewRows` grows or large datasets are exposed interactively, portal memory and CPU scale with cached row count.
+  - *Solution*: Push filters, sort, stats, and pagination into a bounded row-group reader or query engine rather than materializing preview rows in memory.
 
-## Code Review: Filesystem & Storage Scale Performance Audit (v0.12.0)
+## Code Review: Filesystem & Storage Scale Performance Audit (v0.13.0)
 *Audit focused on scaling local and network file storage (spills, temp scripts, persistent sessions, and visual dashboard snapshots).*
 
 ### Small-Scale Perspective (10 Active Sessions / 10 Active Jobs / 10 Snapshots)
@@ -201,9 +213,9 @@ At medium scales, orphaned files can accumulate but listing performance is stabl
 At large scales, flat file layouts, deep recursive scans, and orphan file accumulation cause high disk I/O, file lookup delays, and network latency:
 - [x] **Orphaned Temp Script Accumulation** — [ProcessJobExecutor.cs:L44](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs#L44): `ProcessJobExecutor` now purges stale `etlsql-job-*.etlsql` files older than 24 hours at startup and at most hourly during execution.
   - *Solution*: Add a startup and periodic background cleaning routine in the Orchestrator to purge `etlsql-job-*.etlsql` temp files older than 24 hours.
-- [ ] **Orphaned Spill Chunks and Session Size Lockups** — [SpillStore.cs:L177](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs#L177) & [SessionStateManager.cs:L356](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/SessionStateManager.cs#L356): Terminated query tasks leave orphaned Arrow spill chunk files. During session saves, `MeasureSessionSize` recursively walks all files in the session directory. If thousands of orphaned chunks exist, this recursive traversal blocks session save threads.
-  - *Solution*: Auto-expire and purge spill chunks tied to specific statement scopes on run termination/failure.
-- [ ] **Disk Thrashing during Session Reaping** — [SessionStateManager.cs:L267](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/SessionStateManager.cs#L267): Scanning 10k+ session folders and recursively sum-sizing files via `Directory.GetFiles()` causes massive metadata disk I/O, freezing the process thread pool and causing high latencies on shared network folders (SMB/UNC).
-  - *Solution*: Do not calculate folder sizes during the reap sweep. Scan write times or directory timestamps directly, and calculate sizes only on-demand.
-- [ ] **Flat Folder Snapshot Listing Latency** — [SnapshotStore.cs:L32](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/SnapshotStore.cs#L32): Storing thousands of `.etlsnap` files in a flat script/snapshot folder causes high lookup latencies, particularly over shared network storage (UNC paths) in HA deployments.
+- [ ] **Orphaned Spill Chunks and Persistent Spill Root Growth** — [SpillStore.cs:L177](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs#L177) & [SessionStateManager.cs:L240](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/SessionStateManager.cs#L240): Terminated query tasks can leave orphaned Arrow spill chunk files. Persistent sessions place spill chunks under the session spill root, and session listing recursively sums files via `Directory.GetFiles(...)`, so thousands of orphaned chunks can block session list/cleanup operations.
+  - *Solution*: Auto-expire and purge spill chunks tied to specific statement scopes on run termination/failure, and keep per-session spill directories bounded.
+- [ ] **Disk Thrashing during Session Listing/Reaping** — [SessionStateManager.cs:L240](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/SessionStateManager.cs#L240) & [L267](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/SessionStateManager.cs#L267): Session listing recursively sum-sizes files, while stale-session reaping scans every session directory. At 10k+ session folders on shared storage this causes heavy metadata I/O and can freeze request or background cleanup threads.
+  - *Solution*: Do not calculate folder sizes during sweep/list paths by default. Maintain cached size metadata or calculate sizes only on-demand.
+- [ ] **Flat Folder Snapshot Listing Latency** — [SnapshotStore.cs:L32](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/SnapshotStore.cs#L32) & [L171](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/SnapshotStore.cs#L171): Default snapshot paths still place `.etlsnap` artifacts beside scripts, and cleanup/listing operations scan flat directories. Thousands of snapshots in a single script/snapshot folder cause high lookup and enumeration latency, particularly over shared network storage.
   - *Solution*: Implement a partitioned directory structure (e.g. hash-partitioned subfolders like `/snapshots/ab/cd/`) to keep file counts per folder under a few hundred.

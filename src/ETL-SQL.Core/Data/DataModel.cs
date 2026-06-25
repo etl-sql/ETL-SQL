@@ -266,6 +266,26 @@ public class Row
     }
 
     /// <summary>
+    /// Removes a dynamic column entry by name.
+    /// For schema-backed columns the slot is zeroed; the column name remains in the schema
+    /// (use <see cref="TableSchema.RemoveColumn"/> on the shared schema only when appropriate).
+    /// For dynamic columns the entry is removed from the dictionary.
+    /// </summary>
+    public void RemoveColumn(string columnName)
+    {
+        if (_schema != null)
+        {
+            int index = _schema.GetIndex(columnName);
+            if (index >= 0 && _values != null && index < _values.Length)
+            {
+                _values[index] = null;
+                return;
+            }
+        }
+        _dynamicColumns?.Remove(columnName);
+    }
+
+    /// <summary>
     /// Returns an enumerable of all column names (both schema-defined and dynamic).
     /// Optimized to avoid creating a full dictionary copy.
     /// </summary>

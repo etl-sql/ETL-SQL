@@ -23,6 +23,13 @@ public class ExternalSortEngine
     private readonly IBufferManager? _bufferManager;
     public int ChunkSize => _context.ExternalSortChunkSize;
 
+    // Column-name prefix for individual sort-key columns written to spill chunks.
+    // Using one column per key avoids JSON array serialization and lets Arrow store
+    // each value in its native typed column (Int64, Decimal128, Double, Boolean,
+    // Timestamp, or String), which eliminates millions of JsonElement allocations
+    // and string deserialization cycles on medium/large sort workloads.
+    private const string SortKeyPrefix = "_SYS_SK_";
+
     public ExternalSortEngine(IExecutionContext context, ILogger logger)
     {
         _context = context;
@@ -47,7 +54,9 @@ public class ExternalSortEngine
 
     /// <summary>
     /// Sorts an asynchronous stream of rows using an external merge sort.
-    /// spills chunks to disk and merges them back.
+    /// Spills chunks to disk and merges them back.
+    /// Sort keys are stored as individual named Arrow columns (<c>_SYS_SK_0</c>, <c>_SYS_SK_1</c>, ...)
+    /// so Arrow handles native type serialization without JSON encoding overhead.
     /// </summary>
     public async IAsyncEnumerable<Row> SortStreamAsync(
         IAsyncEnumerable<Row> inputStream,
@@ -55,6 +64,10 @@ public class ExternalSortEngine
     {
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var chunkPaths = new List<string>();
+
+        // Pre-build the column name array once — avoids per-row string allocation.
+        var keyColumnNames = BuildKeyColumnNames(orderBy.Count);
+
         try
         {
             // 1. Comparison function
@@ -63,8 +76,6 @@ public class ExternalSortEngine
                 for (int i = 0; i < orderBy.Count; i++)
                 {
                     var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                    // For PriorityQueue (Min-Heap), return positive to put it later, negative to put it earlier.
-                    // If descending, invert the comparison: greater values should be "smaller" (returned earlier).
                     if (res != 0) return orderBy[i].Descending ? -res : res;
                 }
                 return 0;
@@ -89,17 +100,7 @@ public class ExternalSortEngine
                     currentChunk.Sort(Compare);
                     var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                     chunkPaths.Add(chunkName);
-
-                    await using (var writer = await _context.SpillStore.CreateWriterAsync(chunkName))
-                    {
-                        foreach (var entry in currentChunk)
-                        {
-                            // Attach keys to row for spilling
-                            entry.Row["_SYS_SORT_KEYS_"] = entry.Keys;
-                            await writer.WriteRowAsync(entry.Row);
-                        }
-                    }
-
+                    await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
                     _context.Telemetry.SortSpillCount++;
                     _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
@@ -120,15 +121,7 @@ public class ExternalSortEngine
                 var prefix = Guid.NewGuid().ToString("N");
                 var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
-
-                await using (var writer = await _context.SpillStore.CreateWriterAsync(chunkName))
-                {
-                    foreach (var entry in currentChunk)
-                    {
-                        entry.Row["_SYS_SORT_KEYS_"] = entry.Keys;
-                        await writer.WriteRowAsync(entry.Row);
-                    }
-                }
+                await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
             }
@@ -149,18 +142,8 @@ public class ExternalSortEngine
                     var row = await readers[i].ReadRowAsync();
                     if (row != null)
                     {
-                        var keysCol = row["_SYS_SORT_KEYS_"];
-                        object?[] unwrapped;
-                        if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
-                        {
-                            unwrapped = je.EnumerateArray().Select(x => SpillSerializationHelper.UnwrapValue(x)).Cast<object?>().ToArray();
-                        }
-                        else
-                        {
-                            var keys = keysCol as IEnumerable<object>;
-                            unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
-                        }
-                        heap.Enqueue(i, (row, unwrapped));
+                        var keys = ExtractAndStripKeys(row, keyColumnNames);
+                        heap.Enqueue(i, (row, keys));
                     }
                 }
 
@@ -173,18 +156,8 @@ public class ExternalSortEngine
                         var nextRow = await readers[chunkIdx].ReadRowAsync();
                         if (nextRow != null)
                         {
-                            var keysCol = nextRow["_SYS_SORT_KEYS_"];
-                            object?[] unwrapped;
-                            if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
-                            {
-                                unwrapped = je.EnumerateArray().Select(x => SpillSerializationHelper.UnwrapValue(x)).Cast<object?>().ToArray();
-                            }
-                            else
-                            {
-                                var keys = keysCol as IEnumerable<object>;
-                                unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
-                            }
-                            heap.Enqueue(chunkIdx, (nextRow, unwrapped));
+                            var keys = ExtractAndStripKeys(nextRow, keyColumnNames);
+                            heap.Enqueue(chunkIdx, (nextRow, keys));
                         }
                     }
                 }
@@ -210,5 +183,61 @@ public class ExternalSortEngine
         }
     }
 
-}
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Builds the stable array of sort-key column names once per sort operation.
+    /// </summary>
+    private static string[] BuildKeyColumnNames(int count)
+    {
+        var names = new string[count];
+        for (int i = 0; i < count; i++)
+            names[i] = SortKeyPrefix + i;
+        return names;
+    }
+
+    /// <summary>
+    /// Writes a sorted chunk to a spill file. Each sort key is written as a separate
+    /// named column (<c>_SYS_SK_0</c>, <c>_SYS_SK_1</c>, ...) so Arrow stores the value
+    /// in its native typed column rather than encoding it inside a JSON string.
+    /// </summary>
+    private async Task SpillChunkAsync(
+        string chunkName,
+        List<(Row Row, object?[] Keys)> chunk,
+        string[] keyColumnNames)
+    {
+        await using var writer = await _context.SpillStore.CreateWriterAsync(chunkName);
+        foreach (var entry in chunk)
+        {
+            // Stamp each key into its own dedicated column before writing the row.
+            // These sentinel columns are stripped by ExtractAndStripKeys on the read path.
+            for (int k = 0; k < keyColumnNames.Length; k++)
+                entry.Row[keyColumnNames[k]] = entry.Keys[k];
+
+            await writer.WriteRowAsync(entry.Row);
+
+            // Clean up the sentinel columns immediately so the in-memory Row objects
+            // don't accumulate extra columns if the chunk gets reused by the caller.
+            for (int k = 0; k < keyColumnNames.Length; k++)
+                entry.Row.RemoveColumn(keyColumnNames[k]);
+        }
+    }
+
+    /// <summary>
+    /// Reads the per-column sort keys back from a spilled row and removes them from
+    /// the row so the caller never sees the sentinel columns in the final output.
+    /// </summary>
+    private static object?[] ExtractAndStripKeys(Row row, string[] keyColumnNames)
+    {
+        var keys = new object?[keyColumnNames.Length];
+        for (int i = 0; i < keyColumnNames.Length; i++)
+        {
+            if (row.TryGetValue(keyColumnNames[i], out var raw))
+            {
+                keys[i] = SpillSerializationHelper.UnwrapValue(raw);
+                row.RemoveColumn(keyColumnNames[i]);
+            }
+        }
+        return keys;
+    }
+}
