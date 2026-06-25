@@ -99,6 +99,14 @@ namespace ETL_SQL.TUI.UI
         public List<int> CompareScrollCols { get; set; } = new();
         public List<string> CompareFilters { get; set; } = new();
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
+        private EditorLayout _cachedLayout;
+        private int _cachedLayoutWidth = -1;
+        private int _cachedLayoutHeight = -1;
+        private int _cachedLayoutLineCount = -1;
+        private bool _cachedLayoutSidebarVisible;
+        private int _cachedLayoutSidebarWidth = -1;
+        private bool _cachedLayoutBottomMaximized;
+        private bool _cachedLayoutCompareMode;
 
         // Report-SQL Preview State (Phase 5)
         public bool ReportVisible { get; set; } = false;
@@ -171,6 +179,31 @@ namespace ETL_SQL.TUI.UI
             _sidebarPanel = new SidebarPanel(this, evaluator);
         }
 
+        private EditorLayout GetLayout(int totalWidth, int totalHeight, int bufferLineCount)
+        {
+            if (_cachedLayoutWidth == totalWidth
+                && _cachedLayoutHeight == totalHeight
+                && _cachedLayoutLineCount == bufferLineCount
+                && _cachedLayoutSidebarVisible == SidebarVisible
+                && _cachedLayoutSidebarWidth == SidebarWidth
+                && _cachedLayoutBottomMaximized == IsBottomMaximized
+                && _cachedLayoutCompareMode == CompareMode)
+            {
+                return _cachedLayout;
+            }
+
+            _cachedLayout = LayoutCalculator.Compute(totalWidth, totalHeight, bufferLineCount,
+                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            _cachedLayoutWidth = totalWidth;
+            _cachedLayoutHeight = totalHeight;
+            _cachedLayoutLineCount = bufferLineCount;
+            _cachedLayoutSidebarVisible = SidebarVisible;
+            _cachedLayoutSidebarWidth = SidebarWidth;
+            _cachedLayoutBottomMaximized = IsBottomMaximized;
+            _cachedLayoutCompareMode = CompareMode;
+            return _cachedLayout;
+        }
+
         /// <summary>Renders the entire editor UI to the console.</summary>
         /// <param name="buffer">The text buffer to display.</param>
         /// <param name="evaluator">The evaluator containing results and logs.</param>
@@ -216,8 +249,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // ── Layout Definitions (single source of truth — see LayoutCalculator) ──
-            var layout = LayoutCalculator.Compute(totalWidth, totalHeight, buffer.Lines.Count,
-                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            var layout = GetLayout(totalWidth, totalHeight, buffer.Lines.Count);
             int editorAreaTop = layout.EditorAreaTop;
             int statusHeight = layout.StatusHeight;
             int lowerAreaHeight = layout.LowerAreaHeight;
@@ -996,8 +1028,7 @@ namespace ETL_SQL.TUI.UI
             var buffer = editor._buffer;
             if (buffer.Lines.Count == 0) return;
 
-            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, buffer.Lines.Count,
-                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            var layout = GetLayout(_lastWidth, _lastHeight, buffer.Lines.Count);
 
             int clampedY = Math.Clamp(y, layout.EditorAreaTop, layout.EditorAreaTop + layout.EditorAreaHeight - 1);
             int line = Math.Clamp(layout.EditorLineAt(clampedY, ScrollLine), 0, buffer.Lines.Count - 1);
@@ -1024,8 +1055,7 @@ namespace ETL_SQL.TUI.UI
 
         public void ScrollRegion(int x, int y, int delta)
         {
-            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, 1,
-                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+            var layout = GetLayout(_lastWidth, _lastHeight, 1);
 
             if (layout.InEditorBand(y))
             {
@@ -1150,8 +1180,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            var layout = LayoutCalculator.Compute(_lastWidth, _lastHeight, editor._buffer.Lines.Count,
-                SidebarVisible, SidebarWidth, IsBottomMaximized, CompareMode);
+                var layout = GetLayout(_lastWidth, _lastHeight, editor._buffer.Lines.Count);
 
             if (layout.InSidebar(x, y) && !ReportVisible)
             {

@@ -129,6 +129,12 @@ namespace ETL_SQL.TUI.UI
         /// </remarks>
         public const int MaxHelpColumnRows = 28;
 
+        private static readonly IReadOnlyDictionary<KeyCategory, IReadOnlyList<KeyBinding>> BindingsByCategory =
+            All.GroupBy(b => b.Category).ToDictionary(g => g.Key, g => (IReadOnlyList<KeyBinding>)g.ToArray());
+
+        private static readonly IReadOnlyList<KeyBinding> EssentialBindings = All.Where(b => b.Essential).ToArray();
+        private static readonly IReadOnlyList<IReadOnlyList<KeyCategory>> DefaultHelpColumns = BuildHelpColumnLayout(columns: 2);
+
         private static string FocusAnnotation(EditorRenderer r) => r.Focus switch
         {
             EditorFocus.Editor => "now: EDITOR",
@@ -146,22 +152,25 @@ namespace ETL_SQL.TUI.UI
             : "now: PIPELINE";
 
         /// <summary>Bindings under a single category, in catalog order.</summary>
-        public static IEnumerable<KeyBinding> InCategory(KeyCategory category) =>
-            All.Where(b => b.Category == category);
+        public static IReadOnlyList<KeyBinding> InCategory(KeyCategory category) =>
+            BindingsByCategory.TryGetValue(category, out var bindings) ? bindings : Array.Empty<KeyBinding>();
 
         /// <summary>Bindings flagged for the compact status-bar hint strip.</summary>
-        public static IEnumerable<KeyBinding> Essentials => All.Where(b => b.Essential);
+        public static IReadOnlyList<KeyBinding> Essentials => EssentialBindings;
 
         /// <summary>Row count a category occupies in the card (entries + its title).</summary>
         public static int ColumnHeight(IEnumerable<KeyCategory> categories) =>
-            categories.Sum(c => InCategory(c).Count() + 1);
+            categories.Sum(c => InCategory(c).Count + 1);
 
         /// <summary>
         /// Distributes categories across <paramref name="columns"/> columns, greedily
         /// adding each (in enum order) to the currently shortest column to keep the
         /// card balanced. Deterministic, so the renderer and tests agree.
         /// </summary>
-        public static List<List<KeyCategory>> HelpColumnLayout(int columns = 2)
+        public static IReadOnlyList<IReadOnlyList<KeyCategory>> HelpColumnLayout(int columns = 2) =>
+            columns == 2 ? DefaultHelpColumns : BuildHelpColumnLayout(columns);
+
+        private static IReadOnlyList<IReadOnlyList<KeyCategory>> BuildHelpColumnLayout(int columns)
         {
             var cols = new List<List<KeyCategory>>();
             var heights = new int[columns];
@@ -174,10 +183,10 @@ namespace ETL_SQL.TUI.UI
                     if (heights[i] < heights[target]) target = i;
 
                 cols[target].Add(cat);
-                heights[target] += InCategory(cat).Count() + 1;
+                heights[target] += InCategory(cat).Count + 1;
             }
 
-            return cols;
+            return cols.Select(c => (IReadOnlyList<KeyCategory>)c.ToArray()).ToArray();
         }
     }
 }

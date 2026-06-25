@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -37,24 +36,40 @@ namespace ETL_SQL.TUI.UI
             new StatusButton("^Q:Exit", ConsoleKey.Q, ConsoleModifiers.Control),
         };
 
-        public static IEnumerable<(StatusButton Button, int StartX, int Width)> Segments()
-        {
-            int x = LeadGap;
-            foreach (var b in Buttons)
-            {
-                yield return (b, x, b.Label.Length);
-                x += b.Label.Length + Gap;
-            }
-        }
+        private static readonly IReadOnlyList<(StatusButton Button, int StartX, int Width)> CachedSegments = BuildSegments();
+        private static readonly string CachedPlainText = BuildPlainText();
+
+        public static IEnumerable<(StatusButton Button, int StartX, int Width)> Segments() => CachedSegments;
 
         public static StatusButton? HitTest(int x)
         {
-            foreach (var seg in Segments())
+            foreach (var seg in CachedSegments)
                 if (x >= seg.StartX && x < seg.StartX + seg.Width) return seg.Button;
             return null;
         }
 
         /// <summary>Plain text of the bar: leading space + buttons joined by two spaces + trailing space.</summary>
-        public static string PlainText() => " " + string.Join("  ", Buttons.Select(b => b.Label)) + " ";
+        public static string PlainText() => CachedPlainText;
+
+        private static IReadOnlyList<(StatusButton Button, int StartX, int Width)> BuildSegments()
+        {
+            var segments = new List<(StatusButton Button, int StartX, int Width)>(Buttons.Count);
+            int x = LeadGap;
+            foreach (var b in Buttons)
+            {
+                segments.Add((b, x, b.Label.Length));
+                x += b.Label.Length + Gap;
+            }
+
+            return segments;
+        }
+
+        private static string BuildPlainText()
+        {
+            var labels = new string[Buttons.Count];
+            for (int i = 0; i < Buttons.Count; i++)
+                labels[i] = Buttons[i].Label;
+            return " " + string.Join("  ", labels) + " ";
+        }
     }
 }

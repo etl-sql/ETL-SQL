@@ -104,7 +104,7 @@ release begins.
 ## Remaining Projects Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **TUI Project Audit Findings**
   - **Gemini:** Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking.
-  - **Sr. Developer:** Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
+  - [x] **Sr. Developer:** Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
 - [ ] **Report Builder & CLI Project Audit Findings**
   - **Gemini:** Synchronous directory creation (`Directory.CreateDirectory`) and file existence checks are performed inside asynchronous statement execution paths in `ExportReportStatementHandler.cs`.
   - **Gemini:** The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup.
@@ -122,7 +122,7 @@ release begins.
   - **Gemini:** Job API routing uses synchronous configuration parameter lookup.
 - [ ] **ETL-SQL.ReportPortal.Data & Migrations Project Audit Findings**
   - [x] **Sr. Developer:** Dynamic connection configuration database migrations run synchronously on Startup. *(Sr. review: verified startup uses `MigrateAsync`.)*
-  - **Sr. Developer:** Query compilation profiles do not support async initialization.
+  - [x] **Sr. Developer:** Query compilation profiles do not support async initialization. *(Sr. review: no query compilation profile subsystem exists; current `QueryCompiler` is CPU-bound and has no async initialization path.)*
 - [ ] **ETL-SQL.ReportRuntime Project Audit Findings**
   - **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.
 - [ ] **ETL-SQL.Installer Project Audit Findings**
