@@ -59,3 +59,9 @@ release begins.
   - [x] **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.
 - [x] **ETL-SQL.Installer Project Audit Findings**
   - [x] **Gemini:** WiX configuration paths are hardcoded to historic version paths and require script updates during active release packaging.
+
+## Future Performance & Scalability Enhancements
+- [ ] **Orchestrator Concurrency Notification** — Transition from a polling loop (500ms) in `JobThrottle` to database-driven event notifications (e.g., PostgreSQL `LISTEN`/`NOTIFY` or Redis pub/sub) to reduce latency and read amplification.
+- [ ] **Postgres HA Transition Verification** — Document and verify lock concurrency behavior and latency under high volume when migrating from SQLite to PostgreSQL in clustered HA deployments.
+- [ ] **Process Pooling for Out-of-Process Execution** — Implement a warm runner process pool in `ProcessJobExecutor` to avoid OS process startup, CLR initialization, and JIT compilation overhead for out-of-process job execution.
+
