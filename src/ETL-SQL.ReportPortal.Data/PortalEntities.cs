@@ -236,6 +236,9 @@ public class PortalExecutionJob
     public DateTime? CompletedAt { get; set; }
     public string? ManifestPath { get; set; }
     public string? Error { get; set; }
+    public long RowsProcessed { get; set; }
+    public long PeakMemoryBytes { get; set; }
+    public double CpuTimeSeconds { get; set; }
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────

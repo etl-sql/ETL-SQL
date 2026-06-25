@@ -3,11 +3,13 @@ using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net.Http.Json;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -351,6 +353,63 @@ public class ExecutionJobServiceTests : IDisposable
         Assert.Equal("fresh", await inner.ReadAllTextAsync(ArtifactArea.Snapshots, "partition/report.json"));
     }
 
+    [Fact]
+    public async Task CompletedRemoteExecution_PersistsResourceMetrics()
+    {
+        var scriptPath = Path.Combine(_tempDir, "scripts", "metrics.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Metrics';");
+        var (config, provider) = CreatePersistentServices();
+        await using var services = provider;
+
+        int reportId;
+        await using (var scope = services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder { Name = "metrics", Path = "/metrics", OwnerId = 1 };
+            var report = new Report
+            {
+                Folder = folder,
+                Name = "Metrics Report",
+                ScriptPath = scriptPath,
+                CreatedBy = 1
+            };
+            db.AddRange(folder, report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+        }
+
+        var scopes = services.GetRequiredService<IServiceScopeFactory>();
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        using var service = new ExecutionJobService(
+            config,
+            scopes,
+            NullLogger<ExecutionJobService>.Instance,
+            sessions,
+            new HttpJobChannelClient(
+                new HttpClient(new CompletedMetricJobHandler()) { BaseAddress = new Uri("http://orchestrator.test") },
+                NullLogger<HttpJobChannelClient>.Instance),
+            artifacts: new InMemoryArtifactStorage(),
+            capacityMonitor: new MutableCapacityMonitor(isOverloaded: false));
+
+        var jobId = await service.EnqueueExecutionAsync(reportId, userId: 7, scriptPath);
+        await WaitForTerminalAsync(service, jobId);
+
+        var job = await service.GetAsync(jobId);
+        Assert.Equal(JobStatus.Completed, job!.Status);
+        Assert.Equal(1234, job.RowsProcessed);
+        Assert.Equal(987654321, job.PeakMemoryBytes);
+        Assert.Equal(12.5, job.CpuTimeSeconds);
+
+        await using var verifyScope = services.CreateAsyncScope();
+        var stored = await verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .PortalExecutionJobs
+            .AsNoTracking()
+            .SingleAsync(value => value.Id == jobId);
+        Assert.Equal(1234, stored.RowsProcessed);
+        Assert.Equal(987654321, stored.PeakMemoryBytes);
+        Assert.Equal(12.5, stored.CpuTimeSeconds);
+    }
+
     private (PortalConfig Config, ServiceProvider Provider) CreatePersistentServices()
     {
         var config = new PortalConfig
@@ -359,6 +418,11 @@ public class ExecutionJobServiceTests : IDisposable
             ScriptRootPath = Path.Combine(_tempDir, "scripts"),
             SnapshotDirectory = Path.Combine(_tempDir, "snapshots"),
             DatasetRootPath = Path.Combine(_tempDir, "datasets"),
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            },
             Resources = new ResourcesConfig
             {
                 MaxConcurrentReportExecutions = 1,
@@ -739,6 +803,48 @@ public class ExecutionJobServiceTests : IDisposable
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new OperationCanceledException(cancellationToken);
+        }
+    }
+
+    private sealed class CompletedMetricJobHandler : HttpMessageHandler
+    {
+        private static readonly string ManifestJson = System.Text.Json.JsonSerializer.Serialize(new ReportManifest
+        {
+            Source = "metrics.rptsql",
+            Title = "Metrics",
+            Telemetry = new TelemetryManifest { RowsProcessed = 1234, ExecutionTimeMs = 250 }
+        });
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.Method == HttpMethod.Post && request.RequestUri?.AbsolutePath == "/jobs")
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Accepted)
+                {
+                    Content = JsonContent.Create(new { jobId = "remote-metrics" })
+                });
+            }
+
+            if (request.Method == HttpMethod.Get && request.RequestUri?.AbsolutePath == "/jobs/remote-metrics")
+            {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                {
+                    Content = JsonContent.Create(new ETL_SQL.Orchestrator.Channels.JobStatusResponse
+                    {
+                        JobId = "remote-metrics",
+                        Status = JobRunStatus.Completed,
+                        RowsProcessed = 1234,
+                        ExecutionTimeMs = 250,
+                        PeakMemoryBytes = 987654321,
+                        CpuTimeSeconds = 12.5,
+                        ReportManifestJson = ManifestJson
+                    })
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
         }
     }
 

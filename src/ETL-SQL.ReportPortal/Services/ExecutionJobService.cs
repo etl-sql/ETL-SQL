@@ -30,6 +30,9 @@ public record ExecutionJob(
     public DateTime? CompletedAt { get; set; }
     public string? ManifestPath { get; set; }
     public string? Error { get; set; }
+    public long RowsProcessed { get; set; }
+    public long PeakMemoryBytes { get; set; }
+    public double CpuTimeSeconds { get; set; }
     public string DatasetCallerContext => TrustedDatasetExecution
         ? "IsAdmin=true"
         : IsAdministrator
@@ -373,6 +376,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     var status = await _channel.GetStatusAsync(remoteJobId, cts.Token);
                     if (status.Status == JobRunStatus.Completed)
                     {
+                        ApplyExecutionMetrics(job, status);
                         if (!string.IsNullOrWhiteSpace(status.ReportManifestJson))
                         {
                             var manifest = System.Text.Json.JsonSerializer.Deserialize<ReportManifest>(
@@ -396,6 +400,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             }
             else
             {
+                var process = System.Diagnostics.Process.GetCurrentProcess();
+                process.Refresh();
+                var startCpuSeconds = process.TotalProcessorTime.TotalSeconds;
                 // Use an independent DashboardService for snapshots (not the session cache).
                 // Interactive execution and user-triggered refresh retain the caller identity.
                 // Only the orchestrator poller explicitly creates trusted scheduled refreshes.
@@ -412,6 +419,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
 
                 var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
+                process.Refresh();
+                job.RowsProcessed = manifest.Telemetry?.RowsProcessed ?? 0;
+                job.PeakMemoryBytes = process.PeakWorkingSet64;
+                job.CpuTimeSeconds = Math.Max(0, process.TotalProcessorTime.TotalSeconds - startCpuSeconds);
                 await PersistReportLineageAsync(job, scriptPath, svc.CurrentLineageTracker);
 
                 await SaveSnapshotManifestAsync(manifest, manifestKey, cts.Token);
@@ -729,6 +740,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             stored.CompletedAt = job.CompletedAt;
             stored.ManifestPath = job.ManifestPath;
             stored.Error = job.Error;
+            stored.RowsProcessed = job.RowsProcessed;
+            stored.PeakMemoryBytes = job.PeakMemoryBytes;
+            stored.CpuTimeSeconds = job.CpuTimeSeconds;
             await db.SaveChangesAsync();
         }
         catch (Exception ex)
@@ -748,7 +762,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         StartedAt = job.StartedAt,
         CompletedAt = job.CompletedAt,
         ManifestPath = job.ManifestPath,
-        Error = job.Error
+        Error = job.Error,
+        RowsProcessed = job.RowsProcessed,
+        PeakMemoryBytes = job.PeakMemoryBytes,
+        CpuTimeSeconds = job.CpuTimeSeconds
     };
 
     private static ExecutionJob FromEntity(PortalExecutionJob stored)
@@ -760,9 +777,19 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             StartedAt = stored.StartedAt,
             CompletedAt = stored.CompletedAt,
             ManifestPath = stored.ManifestPath,
-            Error = stored.Error
+            Error = stored.Error,
+            RowsProcessed = stored.RowsProcessed,
+            PeakMemoryBytes = stored.PeakMemoryBytes,
+            CpuTimeSeconds = stored.CpuTimeSeconds
         };
         return job;
+    }
+
+    private static void ApplyExecutionMetrics(ExecutionJob job, ETL_SQL.Orchestrator.Channels.JobStatusResponse status)
+    {
+        job.RowsProcessed = status.RowsProcessed;
+        job.PeakMemoryBytes = status.PeakMemoryBytes;
+        job.CpuTimeSeconds = status.CpuTimeSeconds;
     }
 
     private async Task PersistReportLineageAsync(ExecutionJob job, string scriptPath, ILineageTracker? tracker)

@@ -349,6 +349,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("CpuTimeSeconds")
+                        .HasColumnType("REAL");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -362,7 +365,13 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<string>("ManifestPath")
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("PeakMemoryBytes")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("ReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("RowsProcessed")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("StartedAt")

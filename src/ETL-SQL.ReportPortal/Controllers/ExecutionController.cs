@@ -76,7 +76,8 @@ public class ExecutionController(
         return Ok(new JobStatusResponse(
             job.Id, job.Status.ToString(),
             job.CreatedAt, job.StartedAt, job.CompletedAt,
-            job.ManifestPath, job.Error));
+            job.ManifestPath, job.Error,
+            job.RowsProcessed, job.PeakMemoryBytes, job.CpuTimeSeconds));
     }
 
     [HttpDelete("jobs/{jobId}")]

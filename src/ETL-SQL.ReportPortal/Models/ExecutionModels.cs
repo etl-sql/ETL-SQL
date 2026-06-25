@@ -9,7 +9,10 @@ public record JobStatusResponse(
     DateTime? StartedAt,
     DateTime? CompletedAt,
     string? ManifestPath,
-    string? Error);
+    string? Error,
+    long RowsProcessed,
+    long PeakMemoryBytes,
+    double CpuTimeSeconds);
 
 public record RefreshResponse(string JobId, bool AlreadyRunning);
 

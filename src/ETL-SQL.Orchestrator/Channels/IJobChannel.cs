@@ -53,6 +53,8 @@ namespace ETL_SQL.Orchestrator.Channels
         public required JobRunStatus Status { get; set; }
         public long RowsProcessed { get; set; }
         public long ExecutionTimeMs { get; set; }
+        public long PeakMemoryBytes { get; set; }
+        public double CpuTimeSeconds { get; set; }
         public string? ErrorMessage { get; set; }
         /// <summary>Serialized report manifest returned for completed report jobs.</summary>
         public string? ReportManifestJson { get; set; }

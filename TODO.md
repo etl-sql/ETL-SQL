@@ -28,7 +28,7 @@ release begins.
   - [x] **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
 ## Core Project Code Audit Tasks (v0.12.0 Stabilization)
-- [ ] **Performance Audit Fixes**
+- [x] **Performance Audit Fixes**
   - [x] **Sr. Developer:** Convert `CryptoUtils.EncryptFileWithSsh`/`DecryptFileWithSsh` and `MachineBoundCrypto.EncryptFile`/`DecryptFile` to async/streaming paths; add authenticated encryption for the SSH file envelope.
   - [x] **Gemini:** Move synchronous file and directory operations out of the constructors of `SqliteSessionMetadataStore` and `SnippetLibrary`.
   - [x] **Gemini:** Refactor `AliasScanner` regex matches to use modern `[GeneratedRegex]` source generators and explicit regex timeouts.
@@ -64,7 +64,7 @@ release begins.
 - [ ] **Orchestrator Concurrency Notification** — Transition from a polling loop (500ms) in `JobThrottle` to database-driven event notifications (e.g., PostgreSQL `LISTEN`/`NOTIFY` or Redis pub/sub) to reduce latency and read amplification.
 - [ ] **Postgres HA Transition Verification** — Document and verify lock concurrency behavior and latency under high volume when migrating from SQLite to PostgreSQL in clustered HA deployments.
 - [ ] **Process Pooling for Out-of-Process Execution** — Implement a warm runner process pool in `ProcessJobExecutor` to avoid OS process startup, CLR initialization, and JIT compilation overhead for out-of-process job execution.
-- [ ] **Resource Profiling per Execution** — Enhance the portal execution log to record the peak memory and execution CPU usage of reports (from engine telemetry) so admins can identify and optimize resource-heavy scripts.
+- [x] **Resource Profiling per Execution** — Portal execution jobs now persist rows processed, peak memory, and CPU time for report executions, including remote orchestrator runs surfaced through the job status contract.
 - [ ] **Historical Load Profiling** — Expose simple aggregated metrics (e.g., average queue length and execution counts per hour) to help admins decide on schedule shifts for heavy subscriptions.
 - [x] **Apache Arrow Snapshot Format** — Hybrid `.etlsnap` storage writes large visual row sets as `tables/*.arrow` IPC entries beside lightweight `layout.json`, exposes per-visual row/Arrow endpoints, keeps export/inspection readers fully rehydrated, and lets the browser manifest lazy-load large visual rows.
 - [x] **Encrypted & Compressed Snapshots** — Secure dashboard snapshot packages on disk (`Snapshots` area) by writing `.etlsnap` encrypted ZIP containers with the portal's `Dataset:AtRestKey`; startup migration converts and deletes legacy plaintext `.snapshot.json` artifacts.

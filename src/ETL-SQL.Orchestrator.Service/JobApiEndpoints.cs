@@ -121,6 +121,8 @@ namespace ETL_SQL.Orchestrator.Service
                     Status = entry.Status,
                     RowsProcessed = entry.RowsProcessed,
                     ExecutionTimeMs = entry.ExecutionTimeMs,
+                    PeakMemoryBytes = entry.PeakMemoryBytes,
+                    CpuTimeSeconds = entry.CpuTimeSeconds,
                     ErrorMessage = entry.ErrorMessage,
                     ReportManifestJson = includeSensitivePayload ? entry.ReportManifestJson : null
                 });
@@ -558,6 +560,8 @@ namespace ETL_SQL.Orchestrator.Service
                     ct,
                     request.GetLineageJobName(entry.JobId));
                 entry.RowsProcessed = result.RowsProcessed;
+                entry.PeakMemoryBytes = result.PeakMemoryBytes;
+                entry.CpuTimeSeconds = result.CpuTimeSeconds;
                 entry.Status = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
                 entry.ErrorMessage = result.ErrorMessage;
 
@@ -656,6 +660,8 @@ namespace ETL_SQL.Orchestrator.Service
             public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
             public long RowsProcessed { get; set; }
             public long ExecutionTimeMs { get; set; }
+            public long PeakMemoryBytes { get; set; }
+            public double CpuTimeSeconds { get; set; }
             public string? ErrorMessage { get; set; }
             public string? ReportManifestJson { get; set; }
         }
