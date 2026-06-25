@@ -949,6 +949,10 @@ public sealed record ShowSessionsStatement(string? IntoTable = null) : Statement
 {
 }
 
+public sealed record ShowLocksStatement(string? IntoTable = null) : Statement
+{
+}
+
 public sealed record DropProcedureStatement : Statement
 {
     public string ProcedureName { get; }

@@ -11,7 +11,7 @@ namespace ETL_SQL.Core;
 public interface IScriptExecutor
 {
     /// <summary>Executes the given script text and returns the result.</summary>
-    Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null);
+    Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0);
 }
 
 public record ScriptExecutionResult(bool Success, long RowsProcessed, string? ErrorMessage = null, long PeakMemoryBytes = 0, double CpuTimeSeconds = 0, string? SessionId = null);

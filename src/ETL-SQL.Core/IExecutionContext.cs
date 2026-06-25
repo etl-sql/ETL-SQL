@@ -150,6 +150,8 @@ public interface ITelemetryContext
     int SortSpillCount { get; set; }
     int FetchStatus { get; set; }
     bool IsProfiling { get; set; }
+    long QueueWaitMs { get; set; }
+    long LockWaitMs { get; set; }
     List<ExecutionMetrics> ProfileMetrics { get; }
     Common.ExecutionTree ExecutionTree { get; }
     void Clear();

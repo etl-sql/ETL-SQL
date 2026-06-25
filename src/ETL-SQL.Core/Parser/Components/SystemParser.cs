@@ -559,6 +559,7 @@ public class SystemParser : ParserComponent
             stmt = new ShowSafeZonesStatement();
         }
         else if (Match(TokenType.SESSIONS)) stmt = new ShowSessionsStatement();
+        else if (MatchIdentifier("LOCKS")) stmt = new ShowLocksStatement();
         // Portal admin SHOW commands
         else if (Match(TokenType.USER) || MatchIdentifier("USERS"))
             stmt = new ShowPortalUsersStatement();
@@ -737,6 +738,7 @@ public class SystemParser : ParserComponent
                 ShowVersionStatement svs => svs with { IntoTable = tempTable },
                 ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
                 ShowSessionsStatement sess => sess with { IntoTable = tempTable },
+                ShowLocksStatement sls => sls with { IntoTable = tempTable },
                 ShowDatasetsStatement sds => sds with { IntoTable = tempTable },
                 ShowPublishedBundlesStatement spb => spb with { IntoTable = tempTable },
                 ShowBundleVersionsStatement sbv => sbv with { IntoTable = tempTable },

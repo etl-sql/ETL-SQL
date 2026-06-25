@@ -20,6 +20,8 @@ public class ExecutionMetricsReporter(IExecutionContext context)
     private long _lastSubqSpilledBytes;
     private int _lastPartitionsCount;
     private long _startRows;
+    private long _lastQueueWaitMs;
+    private long _lastLockWaitMs;
 
     public List<ExecutionMetrics> ProfileMetrics => _context.Telemetry.ProfileMetrics;
 
@@ -36,6 +38,8 @@ public class ExecutionMetricsReporter(IExecutionContext context)
         _lastSubqSpilledBytes = _context.Telemetry.SubquerySpilledBytes;
         _lastPartitionsCount = _context.Telemetry.PartitionsCount;
         _startRows = _context.Telemetry.RowsProcessed;
+        _lastQueueWaitMs = _context.Telemetry.QueueWaitMs;
+        _lastLockWaitMs = _context.Telemetry.LockWaitMs;
     }
 
     /// <summary>
@@ -64,7 +68,9 @@ public class ExecutionMetricsReporter(IExecutionContext context)
             SubqueryCacheMisses = _context.Telemetry.SubqueryCacheMisses - _lastSubqMisses,
             SubquerySpilledBytes = _context.Telemetry.SubquerySpilledBytes - _lastSubqSpilledBytes,
             PartitionsCount = _context.Telemetry.PartitionsCount - _lastPartitionsCount,
-            RecursiveDepth = _context.EngineContext.CurrentRecursiveDepth
+            RecursiveDepth = _context.EngineContext.CurrentRecursiveDepth,
+            QueueWaitMs = _context.Telemetry.QueueWaitMs - _lastQueueWaitMs,
+            LockWaitMs = _context.Telemetry.LockWaitMs - _lastLockWaitMs
         });
     }
 

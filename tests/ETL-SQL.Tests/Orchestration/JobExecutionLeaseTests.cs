@@ -249,7 +249,8 @@ namespace ETL_SQL.Tests.Orchestration
                 string scriptText,
                 string? sessionId = null,
                 CancellationToken cancellationToken = default,
-                string? jobName = null)
+                string? jobName = null,
+                long queueWaitMs = 0)
             {
                 Interlocked.Increment(ref _count);
                 // Hold the slot briefly so the losing scheduler's claim attempt overlaps the run.

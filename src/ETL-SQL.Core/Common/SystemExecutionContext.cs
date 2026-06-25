@@ -93,6 +93,8 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public Action<DataTable>? OnResultSet { get; set; }
 
     public bool IsProfiling { get; set; }
+    public long QueueWaitMs { get; set; }
+    public long LockWaitMs { get; set; }
     public bool IsWhatIf { get; set; }
     public bool LineageEnabled { get; set; } = true;
     public string? LineageNamespace { get; set; } = "etl-sql";

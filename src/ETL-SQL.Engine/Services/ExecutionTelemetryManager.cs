@@ -62,6 +62,8 @@ public class ExecutionTelemetryManager : ITelemetryContext
     public int FetchStatus { get; set; } = 0;
 
     public bool IsProfiling { get; set; } = true;
+    public long QueueWaitMs { get; set; } = 0;
+    public long LockWaitMs { get; set; } = 0;
 
     public List<ExecutionMetrics> ProfileMetrics { get; } = new();
 
@@ -82,6 +84,8 @@ public class ExecutionTelemetryManager : ITelemetryContext
         SubquerySpilledBytes = 0;
         SortSpillCount = 0;
         FetchStatus = 0;
+        QueueWaitMs = 0;
+        LockWaitMs = 0;
         ProfileMetrics.Clear();
         ExecutionTree.Clear();
     }

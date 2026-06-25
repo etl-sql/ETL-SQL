@@ -32,7 +32,7 @@ namespace ETL_SQL.Orchestrator.Execution
             _catalog = catalog;
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
         {
             var process = System.Diagnostics.Process.GetCurrentProcess();
             var startCpu = process.TotalProcessorTime.TotalSeconds;
@@ -45,7 +45,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     _ctx.SessionId = sessionId;
 
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
-                var result = await session.ExecuteAsync(scriptText, cancellationToken, jobName);
+                var result = await session.ExecuteAsync(scriptText, cancellationToken, jobName, queueWaitMs);
                 LastEvaluator = session.LastEvaluator;
 
                 // Persist lineage to the cross-run catalog (fire-and-forget errors so they never fail the job)

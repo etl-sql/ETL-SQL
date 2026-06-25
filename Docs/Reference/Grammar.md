@@ -2280,6 +2280,7 @@ SHOW SAFE ZONES              [INTO #temp];
 SHOW VARIABLES                 [INTO #temp];
 SHOW LOCAL VARIABLES           [INTO #temp];
 SHOW SESSIONS                  [INTO #temp];
+SHOW LOCKS                     [INTO #temp];
 SHOW PROFILE                   [INTO #temp];
 SHOW LINEAGE [FOR <table_ref> [COLUMN <column>]] [INTO #temp];
 SHOW LINEAGE FOR REPORT <report_name> [INTO #temp];

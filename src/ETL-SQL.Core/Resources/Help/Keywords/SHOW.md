@@ -9,6 +9,7 @@ Subjects:
 - **VARIABLES** — all declared variables in scope (SECRET vars masked)
 - **PROFILE** — per-statement timing (requires SET PROFILING = ON)
 - **JOBS** — active and pending background or scheduled jobs
+- **LOCKS** — active database/job throttle slots and concurrency queue details
 - **TABLES [AT conn]** — tables available on a connection
 - **VIEWS** — session-scoped ETL-SQL query views
 - **TAGS** — lineage tags applied in the current session

@@ -41,14 +41,14 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger = logger;
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
         {
             // Write script to a temp file — ETL-SQL.exe run expects a file path
             var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-job-{Guid.NewGuid():N}.etlsql");
             try
             {
                 await File.WriteAllTextAsync(tempFile, scriptText, Encoding.UTF8, cancellationToken);
-                return await RunProcessAsync(tempFile, sessionId, cancellationToken);
+                return await RunProcessAsync(tempFile, sessionId, cancellationToken, queueWaitMs);
             }
             finally
             {
@@ -56,7 +56,7 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct)
+        private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct, long queueWaitMs = 0)
         {
             var exePath = ResolveExecutablePath();
             var argList = BuildArguments(scriptFile, sessionId);
@@ -79,6 +79,10 @@ namespace ETL_SQL.Orchestrator.Execution
                 CreateNoWindow = true,
                 WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
             };
+            if (queueWaitMs > 0)
+            {
+                psi.EnvironmentVariables["ETLSQL_QUEUE_WAIT_MS"] = queueWaitMs.ToString();
+            }
             foreach (var arg in argList)
                 psi.ArgumentList.Add(arg);
 

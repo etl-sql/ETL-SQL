@@ -41,6 +41,8 @@ public class ShowProfileStatementHandler : IStatementHandler
         dataTable.AddColumn("SubqMisses");
         dataTable.AddColumn("SubqSpilled");
         dataTable.AddColumn("Partitions");
+        dataTable.AddColumn("QueueWaitMs");
+        dataTable.AddColumn("LockWaitMs");
 
         foreach (var m in context.Telemetry.ProfileMetrics)
         {
@@ -56,6 +58,8 @@ public class ShowProfileStatementHandler : IStatementHandler
             row["SubqMisses"] = m.SubqueryCacheMisses;
             row["SubqSpilled"] = m.SubquerySpilledBytes;
             row["Partitions"] = m.PartitionsCount;
+            row["QueueWaitMs"] = m.QueueWaitMs;
+            row["LockWaitMs"] = m.LockWaitMs;
             await dataTable.AddRowAsync(row);
         }
 

@@ -37,6 +37,8 @@ namespace ETL_SQL.Orchestrator.Execution
         /// </summary>
         public void CleanupOrphans()
         {
+            SweepTempSpillDirectories();
+
             if (!File.Exists(_persistPath)) return;
 
             List<PersistedPid>? entries;
@@ -112,6 +114,47 @@ namespace ETL_SQL.Orchestrator.Execution
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to persist child PID store.");
+            }
+        }
+
+        private void SweepTempSpillDirectories()
+        {
+            try
+            {
+                var tempSpillRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill");
+                if (Directory.Exists(tempSpillRoot))
+                {
+                    _logger.LogInformation("Sweeping orphaned temporary spill directories in {Path}...", tempSpillRoot);
+                    var directories = Directory.GetDirectories(tempSpillRoot);
+                    var cutoff = DateTime.UtcNow.AddHours(-24);
+                    int prunedCount = 0;
+
+                    foreach (var dir in directories)
+                    {
+                        try
+                        {
+                            var lastWrite = Directory.GetLastWriteTimeUtc(dir);
+                            if (lastWrite < cutoff)
+                            {
+                                Directory.Delete(dir, true);
+                                prunedCount++;
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug(ex, "Failed to delete orphaned temporary spill directory: {Path}", dir);
+                        }
+                    }
+
+                    if (prunedCount > 0)
+                    {
+                        _logger.LogInformation("Pruned {Count} stale temporary spill directories.", prunedCount);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error sweeping temporary spill directories.");
             }
         }
 

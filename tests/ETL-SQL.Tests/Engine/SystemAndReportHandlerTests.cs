@@ -511,6 +511,15 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(eval.LastResult);
         }
 
+        // ── SHOW LOCKS ────────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task ShowLocks_ReturnsResult()
+        {
+            var eval = await RunAndGet("SHOW LOCKS;");
+            Assert.NotNull(eval.LastResult);
+        }
+
         // ── SHOW PROFILE ──────────────────────────────────────────────────────
 
         [Fact]

@@ -68,9 +68,22 @@ namespace ETL_SQL.Orchestrator.Execution
                         Id          INTEGER PRIMARY KEY AUTOINCREMENT,
                         ProcessId   INTEGER NOT NULL,
                         JobName     TEXT    NOT NULL,
-                        AcquiredAt  TEXT    NOT NULL
+                        AcquiredAt  TEXT    NOT NULL,
+                        MachineName TEXT    DEFAULT ''
                     );";
                 await cmd.ExecuteNonQueryAsync();
+
+                // Add MachineName column to existing tables for backwards compatibility
+                try
+                {
+                    cmd.CommandText = "ALTER TABLE ThrottleSlots ADD COLUMN MachineName TEXT DEFAULT '';";
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 1)
+                {
+                    // Column already exists, ignore
+                }
+
                 _tableReady = true;
             }
             finally { _initLock.Release(); }
@@ -139,12 +152,13 @@ namespace ETL_SQL.Orchestrator.Execution
                 using var insertCmd = conn.CreateCommand();
                 insertCmd.Transaction = tx;
                 insertCmd.CommandText = @"
-                    INSERT INTO ThrottleSlots (ProcessId, JobName, AcquiredAt)
-                    VALUES (@pid, @job, @at);
+                    INSERT INTO ThrottleSlots (ProcessId, JobName, AcquiredAt, MachineName)
+                    VALUES (@pid, @job, @at, @machine);
                     SELECT last_insert_rowid();";
                 insertCmd.Parameters.AddWithValue("@pid", _pid);
                 insertCmd.Parameters.AddWithValue("@job", jobName);
                 insertCmd.Parameters.AddWithValue("@at", DateTime.UtcNow.ToString("O"));
+                insertCmd.Parameters.AddWithValue("@machine", Environment.MachineName);
                 var id = Convert.ToInt64(await insertCmd.ExecuteScalarAsync()!);
 
                 tx.Commit();
@@ -169,8 +183,9 @@ namespace ETL_SQL.Orchestrator.Execution
             using (var cmd = conn.CreateCommand())
             {
                 cmd.Transaction = tx;
-                cmd.CommandText = "SELECT DISTINCT ProcessId FROM ThrottleSlots WHERE ProcessId != @own;";
+                cmd.CommandText = "SELECT DISTINCT ProcessId FROM ThrottleSlots WHERE ProcessId != @own AND (MachineName = @machine OR MachineName IS NULL OR MachineName = '');";
                 cmd.Parameters.AddWithValue("@own", _pid);
+                cmd.Parameters.AddWithValue("@machine", Environment.MachineName);
                 using var r = await cmd.ExecuteReaderAsync();
                 while (await r.ReadAsync()) pids.Add(r.GetInt32(0));
             }
@@ -185,8 +200,9 @@ namespace ETL_SQL.Orchestrator.Execution
                 {
                     using var del = conn.CreateCommand();
                     del.Transaction = tx;
-                    del.CommandText = "DELETE FROM ThrottleSlots WHERE ProcessId = @pid;";
+                    del.CommandText = "DELETE FROM ThrottleSlots WHERE ProcessId = @pid AND (MachineName = @machine OR MachineName IS NULL OR MachineName = '');";
                     del.Parameters.AddWithValue("@pid", pid);
+                    del.Parameters.AddWithValue("@machine", Environment.MachineName);
                     await del.ExecuteNonQueryAsync();
                     // Note: no logging inside the exclusive lock to keep it short
                 }

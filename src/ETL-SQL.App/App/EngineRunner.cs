@@ -294,6 +294,11 @@ namespace ETL_SQL.App
                     evaluator.SessionId = ctx.SessionId;
                     evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
 
+                    if (long.TryParse(Environment.GetEnvironmentVariable("ETLSQL_QUEUE_WAIT_MS"), out var envQueueWait))
+                    {
+                        evaluator.Telemetry.QueueWaitMs = envQueueWait;
+                    }
+
                     if (System.IO.File.Exists(ctx.ScriptFile.FullName))
                     {
                         var bytes = await System.IO.File.ReadAllBytesAsync(ctx.ScriptFile.FullName);

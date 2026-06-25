@@ -15,4 +15,6 @@ public class ExecutionMetrics
     public int RecursiveDepth { get; set; }
     public string? IndexName { get; set; }
     public DateTime Timestamp { get; set; } = DateTime.Now;
+    public long QueueWaitMs { get; set; }
+    public long LockWaitMs { get; set; }
 }

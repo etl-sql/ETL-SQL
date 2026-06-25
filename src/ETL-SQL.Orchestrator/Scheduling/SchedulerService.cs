@@ -330,11 +330,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                     try
                     {
-                        using var slot = await _throttle.AcquireAsync(job.Name);
+                        var throttleSw = System.Diagnostics.Stopwatch.StartNew();
+                        using var slot = await _throttle.AcquireAsync(job.Name, cycleCts.Token);
+                        throttleSw.Stop();
+                        var queueWaitMs = throttleSw.ElapsedMilliseconds;
+                        _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
                         var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
 
-                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, cycleCts.Token, job.Name);
+                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, cycleCts.Token, job.Name, queueWaitMs);
                         sessionId = lastResult.SessionId;
 
                         if (lastResult.Success)

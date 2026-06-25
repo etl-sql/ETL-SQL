@@ -48,7 +48,7 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger = logger;
         }
 
-        public async Task<ExecutionResult> ExecuteAsync(string source, CancellationToken cancellationToken = default, string? jobName = null)
+        public async Task<ExecutionResult> ExecuteAsync(string source, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
         {
             var result = new ExecutionResult();
             var timer = Stopwatch.StartNew();
@@ -108,6 +108,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.SessionId = _ctx.SessionId;
                 evaluator.JobName = jobName;
                 evaluator.Telemetry.IsProfiling = true;
+                evaluator.Telemetry.QueueWaitMs = queueWaitMs > 0 ? queueWaitMs : (long.TryParse(Environment.GetEnvironmentVariable("ETLSQL_QUEUE_WAIT_MS"), out var eqw) ? eqw : 0);
                 evaluator.RedirectOutput = true;
 
                 if (OnTreeNodeAdded != null)
