@@ -42,6 +42,9 @@ public class LineageEntry
 public class LineageTracker : ILineageTracker
 {
     private readonly List<LineageEntry> _entries = new();
+    private readonly Dictionary<string, List<LineageEntry>> _entriesByTable = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<LineageEntry>> _tableWideEntriesByTable = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<(string table, string column), List<LineageEntry>> _entriesByColumn = new(TableColumnKeyComparer.Instance);
     private readonly object _lock = new object();
     private readonly ILogger _logger;
     private readonly Dictionary<(string table, string op, string? col, int l, int c, string? f), LineageEntry> _lookup = new();
@@ -109,7 +112,7 @@ public class LineageTracker : ILineageTracker
                     entry.Metadata[kv.Key] = kv.Value;
             }
 
-            _entries.Add(entry);
+            AddEntry(entry);
             _lookup[key] = entry;
 
             // Track latest metadata for inheritance
@@ -201,7 +204,7 @@ public class LineageTracker : ILineageTracker
                 foreach (var kv in tags) cm[kv.Key] = kv.Value;
             }
 
-            _entries.Add(new LineageEntry(table, "TABLE_TAGS")
+            AddEntry(new LineageEntry(table, "TABLE_TAGS")
             {
                 TargetColumn = column,
                 Metadata = new Dictionary<string, string>(tags, StringComparer.OrdinalIgnoreCase)
@@ -213,9 +216,9 @@ public class LineageTracker : ILineageTracker
     {
         lock (_lock)
         {
-            return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase))
-                           .OrderByDescending(e => e.Timestamp)
-                           .ToList();
+            return _entriesByTable.TryGetValue(tableName, out var entries)
+                ? CopyNewestFirst(entries)
+                : Enumerable.Empty<LineageEntry>();
         }
     }
 
@@ -223,10 +226,10 @@ public class LineageTracker : ILineageTracker
     {
         lock (_lock)
         {
-            return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase) &&
-                                      (e.TargetColumn == null || e.TargetColumn.Equals(columnName, StringComparison.OrdinalIgnoreCase)))
-                           .OrderByDescending(e => e.Timestamp)
-                           .ToList();
+            _tableWideEntriesByTable.TryGetValue(tableName, out var tableEntries);
+            _entriesByColumn.TryGetValue((tableName, columnName), out var columnEntries);
+
+            return CopyNewestFirst(tableEntries, columnEntries);
         }
     }
 
@@ -240,6 +243,74 @@ public class LineageTracker : ILineageTracker
             WalkAncestors(tableName, columnName, visited, path, ancestors);
             return ancestors;
         }
+    }
+
+    private void AddEntry(LineageEntry entry)
+    {
+        _entries.Add(entry);
+        AddIndexedEntry(_entriesByTable, entry.TargetTable, entry);
+
+        if (string.IsNullOrEmpty(entry.TargetColumn))
+        {
+            AddIndexedEntry(_tableWideEntriesByTable, entry.TargetTable, entry);
+        }
+        else
+        {
+            var key = (entry.TargetTable, entry.TargetColumn);
+            if (!_entriesByColumn.TryGetValue(key, out var columnEntries))
+            {
+                columnEntries = new List<LineageEntry>();
+                _entriesByColumn[key] = columnEntries;
+            }
+
+            columnEntries.Add(entry);
+        }
+    }
+
+    private static void AddIndexedEntry(Dictionary<string, List<LineageEntry>> index, string key, LineageEntry entry)
+    {
+        if (!index.TryGetValue(key, out var entries))
+        {
+            entries = new List<LineageEntry>();
+            index[key] = entries;
+        }
+
+        entries.Add(entry);
+    }
+
+    private static List<LineageEntry> CopyNewestFirst(List<LineageEntry>? entries)
+    {
+        if (entries == null || entries.Count == 0) return new List<LineageEntry>();
+
+        var result = new List<LineageEntry>(entries.Count);
+        for (var i = entries.Count - 1; i >= 0; i--)
+            result.Add(entries[i]);
+
+        return result;
+    }
+
+    private static List<LineageEntry> CopyNewestFirst(List<LineageEntry>? first, List<LineageEntry>? second)
+    {
+        if (first == null || first.Count == 0) return CopyNewestFirst(second);
+        if (second == null || second.Count == 0) return CopyNewestFirst(first);
+
+        var result = new List<LineageEntry>(first.Count + second.Count);
+        var firstIndex = first.Count - 1;
+        var secondIndex = second.Count - 1;
+
+        while (firstIndex >= 0 || secondIndex >= 0)
+        {
+            if (secondIndex < 0 || (firstIndex >= 0 && first[firstIndex].Timestamp >= second[secondIndex].Timestamp))
+            {
+                result.Add(first[firstIndex--]);
+            }
+            else
+            {
+                result.Add(second[secondIndex--]);
+            }
+        }
+
+        return result;
     }
 
     private void WalkAncestors(string table, string? column, HashSet<string> visited, HashSet<string> path, List<LineageEntry> collective)
@@ -362,9 +433,30 @@ public class LineageTracker : ILineageTracker
         lock (_lock)
         {
             _entries.Clear();
+            _entriesByTable.Clear();
+            _tableWideEntriesByTable.Clear();
+            _entriesByColumn.Clear();
             _lookup.Clear();
             _latestTableMetadata.Clear();
             _latestColumnMetadata.Clear();
+            _detectedCycles.Clear();
+        }
+    }
+
+    private sealed class TableColumnKeyComparer : IEqualityComparer<(string table, string column)>
+    {
+        public static readonly TableColumnKeyComparer Instance = new();
+
+        public bool Equals((string table, string column) x, (string table, string column) y) =>
+            StringComparer.OrdinalIgnoreCase.Equals(x.table, y.table) &&
+            StringComparer.OrdinalIgnoreCase.Equals(x.column, y.column);
+
+        public int GetHashCode((string table, string column) obj)
+        {
+            var hash = new HashCode();
+            hash.Add(obj.table, StringComparer.OrdinalIgnoreCase);
+            hash.Add(obj.column, StringComparer.OrdinalIgnoreCase);
+            return hash.ToHashCode();
         }
     }
 }

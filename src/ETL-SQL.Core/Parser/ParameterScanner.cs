@@ -1,6 +1,9 @@
 using System;
+using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 namespace ETL_SQL.Core.Parser;
 /// <summary>
@@ -9,6 +12,8 @@ namespace ETL_SQL.Core.Parser;
 /// </summary>
 public static class ParameterScanner
 {
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> TraversableProperties = new();
+
     public static HashSet<string> Scan(AstNode? node)
     {
         var vars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -34,7 +39,7 @@ public static class ParameterScanner
         }
 
         // Optimization for common collections in AST
-        if (obj is System.Collections.IEnumerable enumerable && !(obj is string))
+        if (obj is IEnumerable enumerable && !(obj is string))
         {
             foreach (var item in enumerable) ScanRecursive(item, vars);
             return;
@@ -44,11 +49,8 @@ public static class ParameterScanner
         var type = obj.GetType();
         if (type.IsPrimitive || type == typeof(string) || type.IsEnum) return;
 
-        foreach (var prop in type.GetProperties())
+        foreach (var prop in TraversableProperties.GetOrAdd(type, GetTraversableProperties))
         {
-            // Skip location properties to save time
-            if (prop.Name is "Line" or "Column" or "EndLine" or "EndColumn") continue;
-
             try
             {
                 var val = prop.GetValue(obj);
@@ -57,4 +59,10 @@ public static class ParameterScanner
             catch { /* skip inaccessible properties */ }
         }
     }
+
+    private static PropertyInfo[] GetTraversableProperties(Type type) =>
+        type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(p => p.Name is not ("Line" or "Column" or "EndLine" or "EndColumn"))
+            .Where(p => p.GetIndexParameters().Length == 0)
+            .ToArray();
 }

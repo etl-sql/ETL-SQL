@@ -80,5 +80,18 @@ namespace ETL_SQL.Tests.Analysis
 
             Assert.Single(logger.Warnings, w => w.Contains("Lineage cycle detected involving 'A'"));
         }
+
+        [Fact]
+        public void ColumnLineage_UsesCaseInsensitiveIndexedLookupAndKeepsNewestFirstOrder()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+
+            tracker.Record("Orders", new[] { "RawOrders" }, "SELECT", targetColumn: "Amount", sourceColumns: new[] { "Amount" });
+            tracker.Record("Orders", new[] { "Adjustments" }, "UPDATE COLUMN", targetColumn: "Amount", sourceColumns: new[] { "Amount" });
+
+            var entries = tracker.GetColumnLineage("orders", "amount").ToList();
+
+            Assert.Equal(new[] { "UPDATE COLUMN", "SELECT" }, entries.Select(e => e.Operation));
+        }
     }
 }
