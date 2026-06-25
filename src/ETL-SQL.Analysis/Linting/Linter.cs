@@ -151,7 +151,7 @@ namespace ETL_SQL.Analysis.Linting
 
             // 2. Regex Fallback for "Big Stuff" discovery
             // CREATE TABLE [dbo.]TableName
-            var createMatches = Regex.Matches(sql, @"CREATE\s+TABLE\s+(?:[\w\[\]""]+\.)?([\w\[\]""]+)", RegexOptions.IgnoreCase);
+            var createMatches = Regex.Matches(sql, @"CREATE\s+TABLE\s+(?:[\w\[\]""]+\.)?([\w\[\]""]+)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
             foreach (Match match in createMatches)
             {
                 string tableName = NormalizeName(match.Groups[1].Value);

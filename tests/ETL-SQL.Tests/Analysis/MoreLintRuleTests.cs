@@ -403,6 +403,26 @@ namespace ETL_SQL.Tests.Analysis
             Assert.NotEmpty(results);
         }
 
+        [Fact]
+        public async Task CredentialLeak_InsideTryCatch_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new CredentialLeakRule());
+            var script = Parse("DECLARE @password STRING = 'secret'; BEGIN TRY PRINT @password; END TRY BEGIN CATCH SELECT 1; END CATCH");
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Contains(results, r => r.Message.Contains("PRINT"));
+        }
+
+        [Fact]
+        public async Task CredentialLeak_InsideParallelBlock_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new CredentialLeakRule());
+            var script = Parse("DECLARE @password STRING = 'secret'; PARALLEL BEGIN PRINT @password; END");
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Contains(results, r => r.Message.Contains("PRINT"));
+        }
+
         // ── UndeclaredVariableRule ────────────────────────────────────────────
 
         [Fact]

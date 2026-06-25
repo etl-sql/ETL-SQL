@@ -102,6 +102,15 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 AnalyzeStatement(parallel.Body, results);
             }
+            else if (statement is ParallelForStatement parallelFor)
+            {
+                AnalyzeStatement(parallelFor.Body, results);
+            }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                AnalyzeStatement(tryCatch.TryBody, results);
+                AnalyzeStatement(tryCatch.CatchBody, results);
+            }
         }
 
         private void CheckPathExpression(Expression? expr, List<LintResult> results)
@@ -129,7 +138,7 @@ namespace ETL_SQL.Analysis.Linting.Rules
             // 2. System directory check
             foreach (var forbidden in ForbiddenFolders)
             {
-                if (upperPath.StartsWith(forbidden))
+                if (IsForbiddenPath(upperPath, forbidden))
                 {
                     AddSecurityWarning($"Access to system directory '{path}' is restricted for security reasons.", line, col, results);
                     break;
@@ -157,6 +166,14 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 LineNumber = line,
                 ColumnNumber = col
             });
+        }
+
+        private static bool IsForbiddenPath(string upperPath, string forbidden)
+        {
+            if (!upperPath.StartsWith(forbidden, StringComparison.Ordinal)) return false;
+            return upperPath.Length == forbidden.Length
+                || upperPath[forbidden.Length] == '\\'
+                || upperPath[forbidden.Length] == ':';
         }
     }
 }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules
@@ -122,6 +123,20 @@ namespace ETL_SQL.Analysis.Linting.Rules
                 scopes.Peek()[foreachStmt.VariableName] = _sensitiveKeywords.Any(k => foreachStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 AnalyzeStatement(foreachStmt.Body, scopes, results);
             }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                AnalyzeStatement(tryCatch.TryBody, scopes, results);
+                AnalyzeStatement(tryCatch.CatchBody, scopes, results);
+            }
+            else if (statement is ParallelStatement parallel)
+            {
+                AnalyzeStatement(parallel.Body, scopes, results);
+            }
+            else if (statement is ParallelForStatement parallelFor)
+            {
+                scopes.Peek()[parallelFor.VariableName] = _sensitiveKeywords.Any(k => parallelFor.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                AnalyzeStatement(parallelFor.Body, scopes, results);
+            }
         }
 
         private void CheckLeak(Expression expr, AstNode node, Stack<Dictionary<string, bool>> scopes, List<LintResult> results, string sinkName)
@@ -134,8 +149,8 @@ namespace ETL_SQL.Analysis.Linting.Rules
         {
             var detected = new List<string>();
             // Use regex to find potential internal variable mentions in the raw SQL text
-            var matches = System.Text.RegularExpressions.Regex.Matches(sql, @"@\w+");
-            foreach (System.Text.RegularExpressions.Match match in matches)
+            var matches = Regex.Matches(sql, @"@\w+", RegexOptions.None, TimeSpan.FromSeconds(1));
+            foreach (Match match in matches)
             {
                 if (IsVariableSensitive(match.Value, scopes))
                 {

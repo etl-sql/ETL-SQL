@@ -108,5 +108,53 @@ namespace ETL_SQL.Tests.Analysis
 
             Assert.Empty(results);
         }
+
+        [Fact]
+        public async Task AbsolutePathRule_ChecksTryCatchAndParallelForBodies()
+        {
+            var linter = new Linter();
+            linter.AddRule(new AbsolutePathRule());
+
+            var sql = @"
+                BEGIN TRY RUN SCRIPT 'relative\try.etlsql'; END TRY BEGIN CATCH SELECT 1; END CATCH
+                PARALLEL FOR @i = 1 TO 2 BEGIN RUN SCRIPT 'relative\parallel.etlsql'; END
+            ";
+
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Contains(results, r => r.Message.Contains("relative\\try.etlsql"));
+            Assert.Contains(results, r => r.Message.Contains("relative\\parallel.etlsql"));
+        }
+
+        [Fact]
+        public async Task FileSystemSecurityRule_ChecksTryCatchAndParallelForBodies()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FileSystemSecurityRule());
+
+            var sql = @"
+                BEGIN TRY RUN SCRIPT 'C:\Windows\System32\setup.etlsql'; END TRY BEGIN CATCH SELECT 1; END CATCH
+                PARALLEL FOR @i = 1 TO 2 BEGIN RUN SCRIPT '.git\hooks\pre-commit'; END
+            ";
+
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Contains(results, r => r.Severity == LintSeverity.Warning && r.Message.Contains("C:\\Windows\\System32\\setup.etlsql"));
+            Assert.Contains(results, r => r.Severity == LintSeverity.Warning && r.Message.Contains(".git\\hooks\\pre-commit"));
+        }
+
+        [Fact]
+        public async Task FileSystemSecurityRule_DoesNotTreatSiblingPrefixAsSystemDirectory()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FileSystemSecurityRule());
+
+            var script = Parse(@"RUN SCRIPT 'C:\WindowsBackup\restore.etlsql';");
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.DoesNotContain(results, r => r.Severity == LintSeverity.Warning);
+        }
     }
 }

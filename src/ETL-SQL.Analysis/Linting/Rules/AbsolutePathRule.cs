@@ -107,6 +107,15 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 AnalyzeStatement(parallel.Body, results);
             }
+            else if (statement is ParallelForStatement parallelFor)
+            {
+                AnalyzeStatement(parallelFor.Body, results);
+            }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                AnalyzeStatement(tryCatch.TryBody, results);
+                AnalyzeStatement(tryCatch.CatchBody, results);
+            }
         }
 
         private void CheckPathExpression(Expression? expr, List<LintResult> results)
