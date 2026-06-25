@@ -150,6 +150,7 @@
     let _exportReadyGeneration = 0;
     let _exportReadyPromise = Promise.resolve();
     let _exportReadyResolve = null;
+    let _pendingLazyRows = 0;
 
     function publishExportState(status, detail) {
         const state = {
@@ -205,6 +206,54 @@
                 });
             });
         });
+    }
+
+    function hasDeferredRows(visual) {
+        return !!(visual && visual.rowsSource && visual.rowsSource.url && (!visual.rows || visual.rows.length === 0));
+    }
+
+    function beginLazyRows() {
+        _pendingLazyRows++;
+        markExportNotReady('lazy-rows', { pendingLazyRows: _pendingLazyRows });
+    }
+
+    function finishLazyRows(completed) {
+        _pendingLazyRows = Math.max(0, _pendingLazyRows - 1);
+        if (completed && _pendingLazyRows === 0 && _lastManifest) {
+            markExportReady(_lastManifest);
+        } else if (completed) {
+            publishExportState('rendering', { reason: 'lazy-rows', pendingLazyRows: _pendingLazyRows });
+        }
+    }
+
+    function loadVisualRows(visual) {
+        if (!hasDeferredRows(visual)) return Promise.resolve(visual);
+        if (visual.__rowsPromise) return visual.__rowsPromise;
+
+        beginLazyRows();
+        const source = visual.rowsSource;
+        visual.__rowsPromise = fetch(source.url, { credentials: 'same-origin' })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to load rows for ' + (visual.name || 'visual') + '.');
+                return res.json();
+            })
+            .then(payload => {
+                visual.columns = payload.columns || source.columns || visual.columns || [];
+                visual.rows = payload.rows || [];
+                visual.rowsSource = null;
+                visual.__rowsLoaded = true;
+                return visual;
+            })
+            .then(
+                result => {
+                    finishLazyRows(true);
+                    return result;
+                },
+                error => {
+                    finishLazyRows(false);
+                    throw error;
+                });
+        return visual.__rowsPromise;
     }
 
     window.__etlSqlReportWhenExportReady = function (timeoutMs) {
@@ -482,7 +531,9 @@
         renderFooter(root, manifest);
         renderPipelineConsole(root, manifest);
         renderAutoPanel(root, manifest);
-        markExportReady(manifest);
+        if (_pendingLazyRows === 0) {
+            markExportReady(manifest);
+        }
     }
 
     function renderAutoPanel(container, manifest) {
@@ -1223,6 +1274,32 @@
             ph.textContent = 'Configure parameters above and click Run to load data.';
             card.appendChild(ph);
             container.appendChild(card);
+            return;
+        }
+
+        if (hasDeferredRows(visual)) {
+            const loading = document.createElement('div');
+            loading.className = 'empty-state';
+            const count = visual.rowsSource && visual.rowsSource.rowCount ? Number(visual.rowsSource.rowCount).toLocaleString() : '';
+            loading.innerHTML = '<div class="empty-icon">...</div>' +
+                                '<p>Loading' + (count ? ' ' + escHtml(count) : '') + ' rows.</p>';
+            card.appendChild(loading);
+            container.appendChild(card);
+
+            const nextSibling = card.nextSibling;
+            loadVisualRows(visual)
+                .then(() => {
+                    const parent = card.parentElement;
+                    if (!parent) return;
+                    card.remove();
+                    renderVisual(parent, visual, pageTheme, manifest);
+                    const rendered = parent.lastElementChild;
+                    if (nextSibling && rendered) parent.insertBefore(rendered, nextSibling);
+                })
+                .catch(e => {
+                    loading.replaceChildren(errorEl(e.message || 'Failed to load visual rows.'));
+                    publishExportState('error', { reason: 'lazy-rows-failed', message: e.message });
+                });
             return;
         }
 

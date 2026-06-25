@@ -79,6 +79,91 @@ public sealed class SnapshotPackageService(
         return JsonSerializer.Serialize(manifest, JsonOptions);
     }
 
+    public async Task<string> LoadLightweightLayoutJsonAsync(
+        string key,
+        Func<int, string> rowsUrlFactory,
+        Func<int, string?>? arrowUrlFactory = null,
+        CancellationToken ct = default)
+    {
+        if (IsLegacyJsonKey(key))
+            return await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
+
+        if (!IsPackageKey(key))
+            throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
+
+        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var compressedPackage = Decrypt(encryptedPackage);
+        var manifest = await ReadLightweightManifestFromPackageAsync(compressedPackage, rowsUrlFactory, arrowUrlFactory, ct);
+        return JsonSerializer.Serialize(manifest, JsonOptions);
+    }
+
+    public async Task<SnapshotVisualRows?> LoadRowsAsync(string key, int visualIndex, CancellationToken ct = default)
+    {
+        if (visualIndex < 0)
+            return null;
+
+        if (IsLegacyJsonKey(key))
+        {
+            var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, key, ct);
+            var legacyManifest = JsonSerializer.Deserialize<ReportManifest>(json, JsonOptions);
+            if (legacyManifest is null || visualIndex >= legacyManifest.Visuals.Count)
+                return null;
+
+            var legacyVisual = legacyManifest.Visuals[visualIndex];
+            return new SnapshotVisualRows(legacyVisual.Columns.ToList(), legacyVisual.Rows, legacyVisual.Rows.Count);
+        }
+
+        if (!IsPackageKey(key))
+            throw new InvalidDataException($"Unsupported snapshot artifact extension: {key}");
+
+        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var compressedPackage = Decrypt(encryptedPackage);
+        using var input = new MemoryStream(compressedPackage, writable: false);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        var metadata = await ReadPackageMetadataAsync(zip, ct);
+        var table = metadata.Tables.FirstOrDefault(t => t.VisualIndex == visualIndex);
+        if (table is not null)
+        {
+            var tableEntry = zip.GetEntry(table.Entry)
+                ?? throw new InvalidDataException($"Snapshot package is missing Arrow table {table.Entry}.");
+            await using var tableStream = tableEntry.Open();
+            using var tableBuffer = new MemoryStream();
+            await tableStream.CopyToAsync(tableBuffer, ct);
+            tableBuffer.Position = 0;
+            var rows = await ReadArrowRowsAsync(tableBuffer, table.Columns, ct);
+            return new SnapshotVisualRows(table.Columns.ToList(), rows, table.RowCount);
+        }
+
+        var layoutManifest = await ReadLayoutManifestAsync(zip, ct);
+        if (visualIndex >= layoutManifest.Visuals.Count)
+            return null;
+
+        var layoutVisual = layoutManifest.Visuals[visualIndex];
+        return new SnapshotVisualRows(layoutVisual.Columns.ToList(), layoutVisual.Rows, layoutVisual.Rows.Count);
+    }
+
+    public async Task<byte[]?> LoadArrowTableAsync(string key, int visualIndex, CancellationToken ct = default)
+    {
+        if (visualIndex < 0 || !IsPackageKey(key))
+            return null;
+
+        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var compressedPackage = Decrypt(encryptedPackage);
+        using var input = new MemoryStream(compressedPackage, writable: false);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        var metadata = await ReadPackageMetadataAsync(zip, ct);
+        var table = metadata.Tables.FirstOrDefault(t => t.VisualIndex == visualIndex);
+        if (table is null)
+            return null;
+
+        var tableEntry = zip.GetEntry(table.Entry)
+            ?? throw new InvalidDataException($"Snapshot package is missing Arrow table {table.Entry}.");
+        await using var stream = tableEntry.Open();
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer, ct);
+        return buffer.ToArray();
+    }
+
     internal async Task<IReadOnlyList<string>> ListPackageEntriesForTestsAsync(string key, CancellationToken ct = default)
     {
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
@@ -311,12 +396,7 @@ public sealed class SnapshotPackageService(
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
         var metadata = await ReadPackageMetadataAsync(zip, ct);
-        var entry = zip.GetEntry(LayoutEntryName)
-            ?? throw new InvalidDataException($"Snapshot package is missing {LayoutEntryName}.");
-        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-        var layoutJson = await reader.ReadToEndAsync(ct);
-        var manifest = JsonSerializer.Deserialize<ReportManifest>(layoutJson, JsonOptions)
-            ?? throw new InvalidDataException("Snapshot package contains an invalid layout manifest.");
+        var manifest = await ReadLayoutManifestAsync(zip, ct);
 
         foreach (var table in metadata.Tables)
         {
@@ -333,6 +413,47 @@ public sealed class SnapshotPackageService(
         }
 
         return manifest;
+    }
+
+    private static async Task<ReportManifest> ReadLightweightManifestFromPackageAsync(
+        byte[] compressedPackage,
+        Func<int, string> rowsUrlFactory,
+        Func<int, string?>? arrowUrlFactory,
+        CancellationToken ct)
+    {
+        using var input = new MemoryStream(compressedPackage, writable: false);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        var metadata = await ReadPackageMetadataAsync(zip, ct);
+        var manifest = await ReadLayoutManifestAsync(zip, ct);
+
+        foreach (var table in metadata.Tables)
+        {
+            if (table.VisualIndex < 0 || table.VisualIndex >= manifest.Visuals.Count)
+                throw new InvalidDataException($"Snapshot Arrow table references invalid visual index {table.VisualIndex}.");
+
+            var visual = manifest.Visuals[table.VisualIndex];
+            visual.Rows = [];
+            visual.RowsSource = new VisualRowsSourceManifest
+            {
+                Format = "json",
+                Url = rowsUrlFactory(table.VisualIndex),
+                ArrowUrl = arrowUrlFactory?.Invoke(table.VisualIndex),
+                RowCount = table.RowCount,
+                Columns = table.Columns.ToList()
+            };
+        }
+
+        return manifest;
+    }
+
+    private static async Task<ReportManifest> ReadLayoutManifestAsync(ZipArchive zip, CancellationToken ct)
+    {
+        var entry = zip.GetEntry(LayoutEntryName)
+            ?? throw new InvalidDataException($"Snapshot package is missing {LayoutEntryName}.");
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+        var layoutJson = await reader.ReadToEndAsync(ct);
+        return JsonSerializer.Deserialize<ReportManifest>(layoutJson, JsonOptions)
+            ?? throw new InvalidDataException("Snapshot package contains an invalid layout manifest.");
     }
 
     private static async Task<SnapshotPackageMetadata> ReadPackageMetadataAsync(ZipArchive zip, CancellationToken ct)
@@ -422,3 +543,8 @@ public sealed class SnapshotPackageService(
         [property: JsonPropertyName("rowCount")] int RowCount,
         [property: JsonPropertyName("columns")] List<string> Columns);
 }
+
+public sealed record SnapshotVisualRows(
+    [property: JsonPropertyName("columns")] List<string> Columns,
+    [property: JsonPropertyName("rows")] List<List<string?>> Rows,
+    [property: JsonPropertyName("rowCount")] int RowCount);

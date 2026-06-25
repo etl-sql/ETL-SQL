@@ -214,6 +214,11 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("rows")]
         public List<List<string?>> Rows { get; set; } = new();
 
+        /// <summary>Deferred row payload for large visuals stored outside the manifest.</summary>
+        [JsonPropertyName("rowsSource")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public VisualRowsSourceManifest? RowsSource { get; set; }
+
         /// <summary>Subset of rows that should be highlighted (Phase 9E Path B).</summary>
         [JsonPropertyName("highlightRows")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -285,6 +290,26 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("drillState")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public VisualDrillStateManifest? DrillState { get; set; }
+    }
+
+    /// <summary>Lazy row source metadata for large browser-rendered visuals.</summary>
+    public class VisualRowsSourceManifest
+    {
+        [JsonPropertyName("format")]
+        public string Format { get; set; } = "json";
+
+        [JsonPropertyName("url")]
+        public string Url { get; set; } = string.Empty;
+
+        [JsonPropertyName("arrowUrl")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ArrowUrl { get; set; }
+
+        [JsonPropertyName("rowCount")]
+        public int RowCount { get; set; }
+
+        [JsonPropertyName("columns")]
+        public List<string> Columns { get; set; } = new();
     }
 
     /// <summary>Sent to the browser for a visual that has an active DRILL_IN state.</summary>

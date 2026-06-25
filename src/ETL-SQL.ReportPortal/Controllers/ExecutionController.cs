@@ -158,14 +158,60 @@ public class ExecutionController(
     [HttpGet("reports/{id:int}/snapshot/manifest")]
     public async Task<IActionResult> GetManifest(int id)
     {
+        var resolved = await ResolveReadableSnapshotKeyAsync(id);
+        if (resolved.Error is not null) return resolved.Error;
+
+        var json = await snapshotPackages.LoadLightweightLayoutJsonAsync(
+            resolved.Key!,
+            visualIndex => Url.Action(nameof(GetSnapshotRows), new { id, visualIndex })
+                ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}",
+            visualIndex => Url.Action(nameof(GetSnapshotArrowRows), new { id, visualIndex })
+                ?? $"/api/reports/{id}/snapshot/rows/{visualIndex}.arrow");
+        return Content(json, "application/json");
+    }
+
+    // ── 2.2  GET /api/reports/{id}/snapshot/rows/{visualIndex} ───────────────
+    // Returns rows for one visual when a large snapshot table was omitted from the
+    // browser manifest. Permission checks mirror the manifest endpoint.
+
+    [HttpGet("reports/{id:int}/snapshot/rows/{visualIndex:int}")]
+    public async Task<IActionResult> GetSnapshotRows(int id, int visualIndex)
+    {
+        var resolved = await ResolveReadableSnapshotKeyAsync(id);
+        if (resolved.Error is not null) return resolved.Error;
+
+        var rows = await snapshotPackages.LoadRowsAsync(resolved.Key!, visualIndex, HttpContext.RequestAborted);
+        return rows is null
+            ? NotFound(new { error = "Snapshot visual rows are not available." })
+            : Ok(rows);
+    }
+
+    // ── 2.2  GET /api/reports/{id}/snapshot/rows/{visualIndex}.arrow ─────────
+    // Exposes the stored Arrow IPC table for clients that can consume Arrow
+    // directly; the browser runtime currently uses the JSON row endpoint.
+
+    [HttpGet("reports/{id:int}/snapshot/rows/{visualIndex:int}.arrow")]
+    public async Task<IActionResult> GetSnapshotArrowRows(int id, int visualIndex)
+    {
+        var resolved = await ResolveReadableSnapshotKeyAsync(id);
+        if (resolved.Error is not null) return resolved.Error;
+
+        var table = await snapshotPackages.LoadArrowTableAsync(resolved.Key!, visualIndex, HttpContext.RequestAborted);
+        return table is null
+            ? NotFound(new { error = "Snapshot Arrow table is not available." })
+            : File(table, "application/vnd.apache.arrow.stream");
+    }
+
+    private async Task<(string? Key, IActionResult? Error)> ResolveReadableSnapshotKeyAsync(int id)
+    {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
-        if (report is null) return NotFound();
+        if (report is null) return (null, NotFound());
 
         var perm = await GetEffectivePermissionAsync(report.FolderId);
-        if (perm is null) return Forbid();
+        if (perm is null) return (null, Forbid());
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
-            return Forbid();
+            return (null, Forbid());
 
         var snapshot = await db.ReportSnapshots
             .Where(s => s.ReportId == id)
@@ -173,17 +219,16 @@ public class ExecutionController(
             .FirstOrDefaultAsync();
 
         if (snapshot is null)
-            return NotFound(new { error = "No snapshot available." });
+            return (null, NotFound(new { error = "No snapshot available." }));
 
         var manifestKey = PortalPathGuard.ToSnapshotKey(portalConfig, snapshot.ManifestPath);
         if (manifestKey is null)
-            return Forbid();
+            return (null, Forbid());
 
         if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
-            return NotFound(new { error = "No snapshot available." });
+            return (null, NotFound(new { error = "No snapshot available." }));
 
-        var json = await snapshotPackages.LoadLayoutJsonAsync(manifestKey);
-        return Content(json, "application/json");
+        return (manifestKey, null);
     }
 
     // ── 2.4  POST /api/reports/{id}/refresh ──────────────────────────────────

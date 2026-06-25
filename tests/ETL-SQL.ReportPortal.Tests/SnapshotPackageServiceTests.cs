@@ -142,6 +142,83 @@ public sealed class SnapshotPackageServiceTests
         Assert.Equal("small-inline", loaded.Visuals[1].Rows[0][0]);
     }
 
+    [Fact]
+    public async Task LoadLightweightLayoutJsonAsync_UsesRowSource_ForArrowBackedVisuals()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig
+        {
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            }
+        };
+        var service = new SnapshotPackageService(
+            config,
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+        var manifest = CreateLargeManifest();
+
+        await service.SaveAsync(manifest, "large.etlsnap");
+
+        var json = await service.LoadLightweightLayoutJsonAsync(
+            "large.etlsnap",
+            visualIndex => $"/snapshot/rows/{visualIndex}",
+            visualIndex => $"/snapshot/rows/{visualIndex}.arrow");
+        var lightweight = JsonSerializer.Deserialize<ReportManifest>(json);
+
+        Assert.NotNull(lightweight);
+        var large = lightweight!.Visuals[0];
+        Assert.Empty(large.Rows);
+        Assert.NotNull(large.RowsSource);
+        Assert.Equal("json", large.RowsSource!.Format);
+        Assert.Equal("/snapshot/rows/0", large.RowsSource.Url);
+        Assert.Equal("/snapshot/rows/0.arrow", large.RowsSource.ArrowUrl);
+        Assert.Equal(SnapshotPackageService.ArrowRowThreshold, large.RowsSource.RowCount);
+        Assert.Equal(new[] { "CustomerId", "Amount" }, large.RowsSource.Columns);
+
+        var small = lightweight.Visuals[1];
+        Assert.Null(small.RowsSource);
+        Assert.Equal("small-inline", small.Rows[0][0]);
+    }
+
+    [Fact]
+    public async Task LoadRowsAsync_ReturnsRequestedArrowBackedRows_AndInlineRows()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig
+        {
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            }
+        };
+        var service = new SnapshotPackageService(
+            config,
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+        var manifest = CreateLargeManifest();
+
+        await service.SaveAsync(manifest, "large.etlsnap");
+
+        var largeRows = await service.LoadRowsAsync("large.etlsnap", 0);
+        Assert.NotNull(largeRows);
+        Assert.Equal(SnapshotPackageService.ArrowRowThreshold, largeRows!.Rows.Count);
+        Assert.Equal("customer-00000", largeRows.Rows[0][0]);
+        Assert.Equal("9999", largeRows.Rows[^1][1]);
+
+        var inlineRows = await service.LoadRowsAsync("large.etlsnap", 1);
+        Assert.NotNull(inlineRows);
+        Assert.Equal("small-inline", inlineRows!.Rows[0][0]);
+
+        var arrow = await service.LoadArrowTableAsync("large.etlsnap", 0);
+        Assert.NotNull(arrow);
+        Assert.NotEmpty(arrow!);
+        Assert.Null(await service.LoadArrowTableAsync("large.etlsnap", 1));
+    }
+
     private static ReportManifest CreateManifest(string secretValue) => new()
     {
         Source = "secret.rptsql",
