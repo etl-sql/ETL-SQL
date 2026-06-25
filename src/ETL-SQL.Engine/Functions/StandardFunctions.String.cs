@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
@@ -258,8 +259,16 @@ namespace ETL_SQL.Engine.Functions
             string s = args[1]?.ToString() ?? "";
 
             string regexPat = "^" + System.Text.RegularExpressions.Regex.Escape(pat).Replace("%", ".*").Replace("_", ".") + "$";
-            var match = System.Text.RegularExpressions.Regex.Match(s, regexPat, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return match.Success ? (decimal)(match.Index + 1) : 0m;
+            try
+            {
+                var match = Regex.Match(s, regexPat, RegexOptions.IgnoreCase, RegexTimeout(ctx));
+                return match.Success ? (decimal)(match.Index + 1) : 0m;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in PATINDEX.");
+                return null;
+            }
         }
 
         private static object? Str(List<object?> args, IExecutionContext ctx)
@@ -334,34 +343,77 @@ namespace ETL_SQL.Engine.Functions
         private static object? RegexpLike(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
-            return System.Text.RegularExpressions.Regex.IsMatch(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? 1m : 0m;
+            try
+            {
+                return Regex.IsMatch(args[0]!.ToString()!, args[1]!.ToString()!, RegexOptions.IgnoreCase, RegexTimeout(ctx)) ? 1m : 0m;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_LIKE.");
+                return null;
+            }
         }
 
         private static object? RegexpSubstr(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2 || args[0] == null || args[1] == null) return null;
-            var match = System.Text.RegularExpressions.Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return match.Success ? match.Value : null;
+            try
+            {
+                var match = Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, RegexOptions.IgnoreCase, RegexTimeout(ctx));
+                return match.Success ? match.Value : null;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_SUBSTR.");
+                return null;
+            }
         }
 
         private static object? RegexpReplace(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 3 || args[0] == null || args[1] == null) return args.FirstOrDefault();
-            return System.Text.RegularExpressions.Regex.Replace(args[0]!.ToString()!, args[1]!.ToString()!, args[2]?.ToString() ?? "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            try
+            {
+                return Regex.Replace(args[0]!.ToString()!, args[1]!.ToString()!, args[2]?.ToString() ?? "", RegexOptions.IgnoreCase, RegexTimeout(ctx));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_REPLACE.");
+                return args[0];
+            }
         }
 
         private static object? RegexpInstr(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
-            var match = System.Text.RegularExpressions.Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            return match.Success ? (decimal)(match.Index + 1) : 0m;
+            try
+            {
+                var match = Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, RegexOptions.IgnoreCase, RegexTimeout(ctx));
+                return match.Success ? (decimal)(match.Index + 1) : 0m;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_INSTR.");
+                return null;
+            }
         }
 
         private static object? RegexpCount(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
-            return (decimal)System.Text.RegularExpressions.Regex.Matches(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count;
+            try
+            {
+                return (decimal)Regex.Matches(args[0]!.ToString()!, args[1]!.ToString()!, RegexOptions.IgnoreCase, RegexTimeout(ctx)).Count;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_COUNT.");
+                return null;
+            }
         }
+
+        private static TimeSpan RegexTimeout(IExecutionContext ctx)
+            => TimeSpan.FromMilliseconds(Math.Max(1, ctx.RegexMatchTimeoutMs));
 
         // --- Hidden / typographic character cleanup --------------------------------------------------
         // Code points are listed numerically (not as literals) so the source stays plain ASCII and the

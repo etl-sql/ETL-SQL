@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Data;
@@ -71,7 +72,16 @@ namespace ETL_SQL.Engine.Services
             return root;
         }
 
-        private string GetSessionDbPath(string sessionId) => Path.Combine(SessionRoot, sessionId, "metadata.db");
+        private string GetSessionDirectory(string sessionId)
+        {
+            var sessionDir = Path.GetFullPath(Path.Combine(SessionRoot, sessionId));
+            if (!SafePath.IsWithinRoot(SessionRoot, sessionDir))
+                throw new ExecutionException($"Invalid session id: {sessionId}");
+
+            return sessionDir;
+        }
+
+        private string GetSessionDbPath(string sessionId) => Path.Combine(GetSessionDirectory(sessionId), "metadata.db");
 
         /// <summary>Saves the current evaluator state to a persistent SQLite-backed session.</summary>
         public async Task SaveSession(string sessionId, object evaluatorObj, string? scriptSource = null)
@@ -205,7 +215,7 @@ namespace ETL_SQL.Engine.Services
 
             _securityService.ExecuteInternal(() =>
             {
-                var sessionDir = Path.Combine(SessionRoot, sessionId);
+                var sessionDir = GetSessionDirectory(sessionId);
                 if (Directory.Exists(sessionDir))
                 {
                     Directory.Delete(sessionDir, true);

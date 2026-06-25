@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Handlers;
 using Xunit;
 
@@ -75,6 +76,61 @@ CREATE VISUAL SalesCard AS CARD (
                 e.TargetTable == "report:SalesCard" &&
                 e.Operation == "CREATE VISUAL" &&
                 e.SourceFile == "report.rptsql");
+        }
+
+        [Fact]
+        public async Task PreflightAsync_RejectsEntryThatEscapesRootThroughSiblingPrefix()
+        {
+            var sibling = _root + "-sibling";
+            Directory.CreateDirectory(sibling);
+            await File.WriteAllTextAsync(Path.Combine(sibling, "escape.etlsql"), "PRINT 'escape';");
+
+            try
+            {
+                var entry = Path.Combine("..", Path.GetFileName(sibling), "escape.etlsql");
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+                    BundlePublishSupport.PreflightAsync(
+                        "integration",
+                        _root,
+                        entry,
+                        publishPassword: null,
+                        encryptionPassword: "machine-key"));
+
+                Assert.Contains("escapes bundle root", ex.Message);
+            }
+            finally
+            {
+                try { if (Directory.Exists(sibling)) Directory.Delete(sibling, recursive: true); } catch (IOException) { }
+            }
+        }
+
+        [Fact]
+        public async Task PreflightAsync_RejectsRunScriptDependencyThatEscapesRootThroughSiblingPrefix()
+        {
+            var sibling = _root + "-sibling";
+            Directory.CreateDirectory(sibling);
+            await File.WriteAllTextAsync(Path.Combine(sibling, "child.etlsql"), "PRINT 'child';");
+
+            var childRef = Path.Combine("..", Path.GetFileName(sibling), "child.etlsql").Replace('\\', '/');
+            await File.WriteAllTextAsync(Path.Combine(_root, "main.etlsql"), $"RUN SCRIPT '{childRef}';");
+
+            try
+            {
+                var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+                    BundlePublishSupport.PreflightAsync(
+                        "integration",
+                        _root,
+                        "main.etlsql",
+                        publishPassword: null,
+                        encryptionPassword: "machine-key"));
+
+                Assert.Contains("escapes bundle root", ex.Message);
+            }
+            finally
+            {
+                try { if (Directory.Exists(sibling)) Directory.Delete(sibling, recursive: true); } catch (IOException) { }
+            }
         }
     }
 }

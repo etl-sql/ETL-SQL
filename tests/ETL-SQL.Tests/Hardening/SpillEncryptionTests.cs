@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Parser;
@@ -113,6 +114,33 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Equal(key1, key2);
             Assert.NotEqual(key1, key3);
             Assert.Equal(32, key1.Length); // SHA256
+        }
+
+        [Fact]
+        public void ClearSession_RejectsSessionIdPathTraversal()
+        {
+            var sessionRoot = Path.Combine(Path.GetTempPath(), "ETL-SQL-SessionRoot", Guid.NewGuid().ToString("N"));
+            var sibling = sessionRoot + "-sibling";
+            Directory.CreateDirectory(sessionRoot);
+            Directory.CreateDirectory(sibling);
+            File.WriteAllText(Path.Combine(sibling, "metadata.db"), "");
+
+            try
+            {
+                var logger = new Mock<ILogger>();
+                var security = new SecurityService(logger.Object) { IsTestMode = true };
+                var config = new ConfigurationBuilder().Build();
+                var manager = new SessionStateManager(logger.Object, security, config, sessionRoot);
+                var maliciousId = Path.Combine("..", Path.GetFileName(sibling));
+
+                Assert.Throws<ExecutionException>(() => manager.ClearSession(maliciousId));
+                Assert.True(Directory.Exists(sibling));
+            }
+            finally
+            {
+                try { if (Directory.Exists(sessionRoot)) Directory.Delete(sessionRoot, true); } catch (IOException) { }
+                try { if (Directory.Exists(sibling)) Directory.Delete(sibling, true); } catch (IOException) { }
+            }
         }
 
         [Fact]

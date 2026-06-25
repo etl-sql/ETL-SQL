@@ -23,31 +23,36 @@ namespace ETL_SQL.Engine.Services
             FunctionCallExpression f, System.Collections.Generic.List<object?> args, Row row)
         {
             _context.CurrentRecursiveDepth++;
-            _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
-
-            if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
-            {
-                _context.CurrentRecursiveDepth--;
-                throw new ExecutionException($"Unknown function: {f.FunctionName}. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).");
-            }
-
-            var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v)).ToList());
-            _context.VarContext.PushScope(localVars);
-            object? result = null;
+            var scopePushed = false;
             try
             {
-                await _context.EvaluateStatement(funcStmt.Body);
-            }
-            catch (ReturnException ex)
-            {
-                result = ex.Value;
+                _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
+
+                if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
+                {
+                    throw new ExecutionException($"Unknown function: {f.FunctionName}. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).");
+                }
+
+                var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v)).ToList());
+                _context.VarContext.PushScope(localVars);
+                scopePushed = true;
+                object? result = null;
+                try
+                {
+                    await _context.EvaluateStatement(funcStmt.Body);
+                }
+                catch (ReturnException ex)
+                {
+                    result = ex.Value;
+                }
+                return result;
             }
             finally
             {
-                _context.VarContext.PopScope();
+                if (scopePushed)
+                    _context.VarContext.PopScope();
                 _context.CurrentRecursiveDepth--;
             }
-            return result;
         }
 
         /// <summary>
@@ -56,27 +61,32 @@ namespace ETL_SQL.Engine.Services
         public async Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
         {
             _context.CurrentRecursiveDepth++;
-            _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
-
-            if (!_scopeManager.TryGetProcedure(name, out var procStmt) || procStmt == null)
-            {
-                _context.CurrentRecursiveDepth--;
-                throw new ExecutionException($"Procedure not found: {name}");
-            }
-
-            var localVars = BuildParameterDictionary(procStmt.Parameters, args);
-            _context.VarContext.PushScope(localVars);
+            var scopePushed = false;
             try
             {
-                await _context.EvaluateStatement(procStmt.Body);
-            }
-            catch (ReturnException)
-            {
-                // Procedures do not return values to the caller in standard SQL.
+                _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
+
+                if (!_scopeManager.TryGetProcedure(name, out var procStmt) || procStmt == null)
+                {
+                    throw new ExecutionException($"Procedure not found: {name}");
+                }
+
+                var localVars = BuildParameterDictionary(procStmt.Parameters, args);
+                _context.VarContext.PushScope(localVars);
+                scopePushed = true;
+                try
+                {
+                    await _context.EvaluateStatement(procStmt.Body);
+                }
+                catch (ReturnException)
+                {
+                    // Procedures do not return values to the caller in standard SQL.
+                }
             }
             finally
             {
-                _context.VarContext.PopScope();
+                if (scopePushed)
+                    _context.VarContext.PopScope();
                 _context.CurrentRecursiveDepth--;
             }
         }

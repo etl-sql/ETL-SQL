@@ -205,6 +205,19 @@ namespace ETL_SQL.Tests.Statements.Statements
             }
         }
 
+        [Theory]
+        [InlineData("TIMEOUT = 0, POLL_INTERVAL_MS = 100")]
+        [InlineData("TIMEOUT = 1, POLL_INTERVAL_MS = 0")]
+        public async Task TestWaitForFileUnlockedRejectsNonPositiveTiming(string options)
+        {
+            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+
+            await Assert.ThrowsAsync<ExecutionException>(async () =>
+            {
+                await ExecuteAsync($"WAITFOR FILE UNLOCKED 'wait_invalid.txt' WITH ({options});", evaluator);
+            });
+        }
+
         [Fact]
         public async Task TestConvertFileEncoding()
         {

@@ -61,80 +61,88 @@ namespace ETL_SQL.Engine.Services
             // 2. Iterative Recursive Member
             int depth = 0;
             var colDefs = new List<ColumnDefinition>();
+            var previousRecursiveDepth = context.CurrentRecursiveDepth;
 
-            while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
+            try
             {
-                depth++;
-                context.CurrentRecursiveDepth = depth;
-
-                // Register currentStep as the CTE source for this iteration
-                var mem = new InMemoryDataSource();
-                mem.Validator = context as IDataValidator;
-                mem.ExecutionContext = context;
-                mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-
-                // Type inference (only on first iteration to establish schema)
-                if (depth == 1 && currentStep.Rows.Count > 0)
+                while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
                 {
-                    var firstRow = currentStep.Rows[0];
-                    foreach (var colName in currentStep.ColumnNames)
+                    depth++;
+                    context.CurrentRecursiveDepth = previousRecursiveDepth + depth;
+
+                    // Register currentStep as the CTE source for this iteration
+                    var mem = new InMemoryDataSource();
+                    mem.Validator = context as IDataValidator;
+                    mem.ExecutionContext = context;
+                    mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+
+                    // Type inference (only on first iteration to establish schema)
+                    if (depth == 1 && currentStep.Rows.Count > 0)
                     {
-                        var val = firstRow[colName];
-                        string type = "STRING";
-                        // Intermediate iterations use DECIMAL for every numeric column. The schema is
-                        // locked from the first iteration but later iterations can produce fractional
-                        // values; typing INT here would Math.Truncate them mid-recursion (TypeConverter
-                        // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
-                        // final result is re-typed below once all values are known.
-                        if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
-                        else if (val is DateTime) type = "DATETIME";
-                        else if (val is bool) type = "BOOLEAN";
-                        colDefs.Add(new ColumnDefinition(colName, type, true));
-                    }
-                }
-                else if (depth == 1)
-                {
-                    foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
-                }
-
-                mem.SetSchema(colDefs);
-                await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
-                if (context.LocalSources.TryGetValue(cte.Name, out var prev)) await prev.DisposeAsync();
-                context.LocalSources[cte.Name] = mem;
-
-                var nextStep = new DataTable();
-                nextStep.SetColumns(currentStep.ColumnNames);
-
-                await foreach (var batch in context.ExecuteQuery(recursive))
-                {
-                    // Aligned by index to anchor schema
-                    var alignedBatch = context.AlignColumns(new[] { batch }.ToAsyncEnumerable(), currentStep.ColumnNames.ToList());
-                    await foreach (var aligned in alignedBatch)
-                    {
-                        foreach (var r in aligned.Rows)
+                        var firstRow = currentStep.Rows[0];
+                        foreach (var colName in currentStep.ColumnNames)
                         {
-                            if (isDistinct)
+                            var val = firstRow[colName];
+                            string type = "STRING";
+                            // Intermediate iterations use DECIMAL for every numeric column. The schema is
+                            // locked from the first iteration but later iterations can produce fractional
+                            // values; typing INT here would Math.Truncate them mid-recursion (TypeConverter
+                            // "INT" cast) and corrupt the result. DECIMAL holds integers losslessly. The
+                            // final result is re-typed below once all values are known.
+                            if (val is int || val is long || val is decimal || val is double || val is float) type = "DECIMAL";
+                            else if (val is DateTime) type = "DATETIME";
+                            else if (val is bool) type = "BOOLEAN";
+                            colDefs.Add(new ColumnDefinition(colName, type, true));
+                        }
+                    }
+                    else if (depth == 1)
+                    {
+                        foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
+                    }
+
+                    mem.SetSchema(colDefs);
+                    await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
+                    if (context.LocalSources.TryGetValue(cte.Name, out var prev)) await prev.DisposeAsync();
+                    context.LocalSources[cte.Name] = mem;
+
+                    var nextStep = new DataTable();
+                    nextStep.SetColumns(currentStep.ColumnNames);
+
+                    await foreach (var batch in context.ExecuteQuery(recursive))
+                    {
+                        // Aligned by index to anchor schema
+                        var alignedBatch = context.AlignColumns(new[] { batch }.ToAsyncEnumerable(), currentStep.ColumnNames.ToList());
+                        await foreach (var aligned in alignedBatch)
+                        {
+                            foreach (var r in aligned.Rows)
                             {
-                                var key = MakeRowKey(r, nextStep.ColumnNames);
-                                if (seenKeys!.Add(key))
+                                if (isDistinct)
+                                {
+                                    var key = MakeRowKey(r, nextStep.ColumnNames);
+                                    if (seenKeys!.Add(key))
+                                    {
+                                        await finalResult.AddRowAsync(r);
+                                        await nextStep.AddRowAsync(r);
+                                    }
+                                }
+                                else
                                 {
                                     await finalResult.AddRowAsync(r);
                                     await nextStep.AddRowAsync(r);
                                 }
                             }
-                            else
-                            {
-                                await finalResult.AddRowAsync(r);
-                                await nextStep.AddRowAsync(r);
-                            }
                         }
                     }
+                    currentStep = nextStep;
                 }
-                currentStep = nextStep;
-            }
 
-            if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
-                throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
+                if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
+                    throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
+            }
+            finally
+            {
+                context.CurrentRecursiveDepth = previousRecursiveDepth;
+            }
 
             var finalMem = new InMemoryDataSource();
             finalMem.Validator = context as IDataValidator;

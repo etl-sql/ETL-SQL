@@ -114,5 +114,40 @@ RUN SCRIPT '{subScriptPath}' WITH (@a = 100, @b = 30);
             var ex = await Assert.ThrowsAsync<ExecutionException>(async () => await evaluator.Evaluate(script));
             Assert.Contains("non_existent_file.etlsql", ex.Message);
         }
+
+        [Fact]
+        public async Task RunScriptFileNotFound_RestoresRecursiveDepth()
+        {
+            string mainScript = "RUN SCRIPT 'non_existent_file.etlsql';";
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            await Assert.ThrowsAsync<ExecutionException>(async () => await evaluator.Evaluate(TestHelpers.Parse(mainScript)));
+
+            Assert.Equal(0, evaluator.CurrentRecursiveDepth);
+        }
+
+        [Fact]
+        public async Task RunScriptParseFailure_RestoresCurrentScriptPath()
+        {
+            var previousPath = Path.Combine(Path.GetTempPath(), "parent.etlsql");
+            var subScriptPath = Path.Combine(Path.GetTempPath(), $"sub_bad_{Guid.NewGuid():N}.etlsql");
+            await File.WriteAllTextAsync(subScriptPath, "RUN SCRIPT 'missing.etlsql' WITH (@x = 1");
+
+            try
+            {
+                var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                evaluator.CurrentScriptPath = previousPath;
+
+                await Assert.ThrowsAnyAsync<Exception>(async () =>
+                    await evaluator.Evaluate(TestHelpers.Parse($"RUN SCRIPT '{subScriptPath.Replace("\\", "\\\\")}';")));
+
+                Assert.Equal(previousPath, evaluator.CurrentScriptPath);
+                Assert.Equal(0, evaluator.CurrentRecursiveDepth);
+            }
+            finally
+            {
+                if (File.Exists(subScriptPath)) File.Delete(subScriptPath);
+            }
+        }
     }
 }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using ETL_SQL.Engine.Functions;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -136,6 +137,24 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Null(result);
 
             // Check for warning message in evaluator
+            Assert.Contains(eval.Messages, m => m.Message.Contains("Regex timeout exceeded"));
+        }
+
+        [Fact]
+        public async Task StandardRegexFunctions_EnforceTimeoutWithoutRegexFunctionRegistration()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var eval = services.GetService<Evaluator>()!;
+            var registry = new FunctionRegistry();
+            StandardFunctions.Register(registry);
+
+            eval.RegexMatchTimeoutMs = 1;
+            eval.RedirectOutput = true;
+
+            var input = new string('a', 30) + "b";
+            var result = await registry.ExecuteAsync("REGEXP_LIKE", new List<object?> { input, "^(a+)+$" }, eval);
+
+            Assert.Null(result);
             Assert.Contains(eval.Messages, m => m.Message.Contains("Regex timeout exceeded"));
         }
 

@@ -60,6 +60,7 @@ namespace ETL_SQL.Engine.Handlers
             var tokens = new Lexer(source).Tokenize();
             var script = new ETL_SQL.Core.Parser.Parser(tokens).Parse();
 
+            var previousScriptPath = context.CurrentScriptPath;
             var localVars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             var localMetadata = new Dictionary<string, VariableMetadata>(StringComparer.OrdinalIgnoreCase);
 
@@ -90,6 +91,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             context.VarContext.PushScope(localVars, localMetadata);
+            context.CurrentScriptPath = scriptPath;
             try
             {
                 await context.Evaluate(script);
@@ -100,12 +102,19 @@ namespace ETL_SQL.Engine.Handlers
             }
             finally
             {
-                var outputs = context.VarContext.GetVariablesWithMetadata(v => v.IsOutput);
-                context.VarContext.PopScope();
-
-                foreach (var kvp in outputs)
+                try
                 {
-                    context.VarContext.SetVariable(kvp.Key, kvp.Value.Value);
+                    var outputs = context.VarContext.GetVariablesWithMetadata(v => v.IsOutput);
+                    context.VarContext.PopScope();
+
+                    foreach (var kvp in outputs)
+                    {
+                        context.VarContext.SetVariable(kvp.Key, kvp.Value.Value);
+                    }
+                }
+                finally
+                {
+                    context.CurrentScriptPath = previousScriptPath;
                 }
             }
         }

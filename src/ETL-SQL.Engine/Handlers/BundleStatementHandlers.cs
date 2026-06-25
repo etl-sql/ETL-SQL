@@ -46,11 +46,15 @@ namespace ETL_SQL.Engine.Handlers
             var root = Directory.Exists(resolvedSource)
                 ? resolvedSource
                 : Path.GetDirectoryName(resolvedSource) ?? Directory.GetCurrentDirectory();
+            root = Path.GetFullPath(root);
 
             var normalizedEntry = BundleUri.NormalizePath(entryPath);
             var entryFullPath = Directory.Exists(resolvedSource)
                 ? Path.GetFullPath(Path.Combine(root, normalizedEntry))
                 : resolvedSource;
+
+            if (!IsWithinRoot(root, entryFullPath))
+                throw new ExecutionException($"Bundle publish failed: entry script escapes bundle root: {entryPath}");
 
             if (!File.Exists(entryFullPath))
                 throw new ExecutionException($"Bundle publish failed: entry script not found: {entryFullPath}");
@@ -141,7 +145,7 @@ namespace ETL_SQL.Engine.Handlers
                     continue;
 
                 var childFullPath = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullPath) ?? root, childRaw));
-                if (!childFullPath.StartsWith(Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase))
+                if (!IsWithinRoot(root, childFullPath))
                     throw new ExecutionException($"Bundle publish failed: RUN SCRIPT dependency escapes bundle root: {childRaw}");
                 if (!File.Exists(childFullPath))
                     throw new ExecutionException($"Bundle publish failed: RUN SCRIPT dependency not found: {childRaw}");
@@ -246,6 +250,9 @@ namespace ETL_SQL.Engine.Handlers
             var rel = Path.GetRelativePath(root, fullPath);
             return BundleUri.NormalizePath(rel);
         }
+
+        private static bool IsWithinRoot(string root, string fullPath)
+            => SafePath.IsWithinRoot(root, fullPath);
 
         private static string GuessContentType(string path)
             => Path.GetExtension(path).ToLowerInvariant() switch
@@ -365,7 +372,7 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var file in files)
             {
                 var outPath = Path.GetFullPath(Path.Combine(targetDir, file.VirtualPath.Replace('/', Path.DirectorySeparatorChar)));
-                if (!outPath.StartsWith(Path.GetFullPath(targetDir), StringComparison.OrdinalIgnoreCase))
+                if (!SafePath.IsWithinRoot(targetDir, outPath))
                     throw new ExecutionException($"EXPORT SCRIPT refused path outside target directory: {file.VirtualPath}");
                 Directory.CreateDirectory(Path.GetDirectoryName(outPath)!);
                 await File.WriteAllTextAsync(outPath, file.Content);

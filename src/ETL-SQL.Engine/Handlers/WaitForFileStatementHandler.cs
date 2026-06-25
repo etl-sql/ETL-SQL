@@ -34,6 +34,8 @@ namespace ETL_SQL.Engine.Handlers
                 if (tVal != null && int.TryParse(tVal.ToString(), out var tSec))
                     timeoutSec = tSec;
             }
+            if (timeoutSec <= 0)
+                throw new ExecutionException("WAITFOR FILE UNLOCKED TIMEOUT must be a positive number of seconds.", null, stmt.Line, stmt.Column);
 
             int pollIntervalMs = 500; // Default poll interval
             if (stmt.PollInterval != null)
@@ -42,6 +44,8 @@ namespace ETL_SQL.Engine.Handlers
                 if (pVal != null && int.TryParse(pVal.ToString(), out var pMs))
                     pollIntervalMs = pMs;
             }
+            if (pollIntervalMs <= 0)
+                throw new ExecutionException("WAITFOR FILE UNLOCKED POLL_INTERVAL_MS must be a positive number of milliseconds.", null, stmt.Line, stmt.Column);
 
             if (context.IsVerbose)
                 context.Log($"[WaitForFile] Waiting for '{resolvedPath}' to arrive and unlock. Timeout: {timeoutSec}s, Poll: {pollIntervalMs}ms");

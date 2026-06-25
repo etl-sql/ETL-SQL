@@ -55,6 +55,7 @@ SELECT id, name, level FROM subordinates ORDER BY level, id;
             // Level 2: Sales Rep
             Assert.Equal("Sales Rep", result.Rows[3]["name"]);
             Assert.Equal(2, Convert.ToInt32(result.Rows[3]["level"]));
+            Assert.Equal(0, evaluator.CurrentRecursiveDepth);
         }
 
         [Fact]
@@ -100,6 +101,7 @@ SELECT * FROM infinite;
 
             var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => evaluator.Evaluate(Parse(script)));
             Assert.Contains("maximum recursion", ex.Message);
+            Assert.Equal(0, evaluator.CurrentRecursiveDepth);
         }
     }
 }

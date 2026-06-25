@@ -209,8 +209,12 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task ExecuteProcedure_Nonexistent_Throws()
         {
+            var eval = Eval();
+
             await Assert.ThrowsAsync<ExecutionException>(() =>
-                Run("EXECUTE proc_does_not_exist_xyz;"));
+                eval.Evaluate(Parse("EXECUTE proc_does_not_exist_xyz;")));
+
+            Assert.Equal(0, eval.CurrentRecursiveDepth);
         }
 
         // ── CREATE DATASET with encryption validation ─────────────────────────
@@ -337,6 +341,35 @@ namespace ETL_SQL.Tests.Engine
 
                 Assert.NotNull(eval.LastResult);
                 Assert.Equal(99m, Convert.ToDecimal(eval.LastResult!.Rows[0]["result"]));
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }
+            }
+        }
+
+        [Fact]
+        public async Task ExecuteScript_NestedRelativePath_ResolvesFromExecutedScriptPath()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "etlsql_exec_" + Guid.NewGuid().ToString("N"));
+            var nestedDir = Path.Combine(dir, "nested");
+            Directory.CreateDirectory(nestedDir);
+            var mainPath = Path.Combine(dir, "main.etlsql");
+            var nestedPath = Path.Combine(nestedDir, "nested.etlsql");
+            var leafPath = Path.Combine(nestedDir, "leaf.etlsql");
+            File.WriteAllText(mainPath, "EXECUTE 'nested/nested.etlsql';");
+            File.WriteAllText(nestedPath, "EXECUTE 'leaf.etlsql';");
+            File.WriteAllText(leafPath, "SELECT 101 AS result;");
+
+            try
+            {
+                var eval = Eval();
+                eval.CurrentScriptPath = mainPath;
+                await eval.Evaluate(Parse("EXECUTE 'nested/nested.etlsql';"));
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(101m, Convert.ToDecimal(eval.LastResult!.Rows[0]["result"]));
+                Assert.Equal(mainPath, eval.CurrentScriptPath);
             }
             finally
             {
