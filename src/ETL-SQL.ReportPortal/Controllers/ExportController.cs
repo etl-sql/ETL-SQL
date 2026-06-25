@@ -159,11 +159,11 @@ public class ExportController(
             // token to every sub-resource the report references (e.g. an attacker-controlled image
             // URL embedded in report content). Static rendering needs no token and no host round-trip.
             var exporter = new ReportPdfExporter();
-            pdfBytes = exporter.Export(manifest, new PdfExportOptions
+            pdfBytes = await exporter.ExportAsync(manifest, new PdfExportOptions
             {
                 Mode = PdfExportMode.Static,
                 Warn = message => { }
-            });
+            }, HttpContext.RequestAborted);
         }
         catch (Exception ex)
         {

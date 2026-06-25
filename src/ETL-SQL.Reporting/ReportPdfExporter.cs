@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace ETL_SQL.Reporting
 {
@@ -23,6 +25,20 @@ namespace ETL_SQL.Reporting
             };
         }
 
+        public async Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            options ??= PdfExportOptions.Static;
+
+            return options.Mode switch
+            {
+                PdfExportMode.Static => await _staticExporter.ExportAsync(manifest, options, cancellationToken),
+                PdfExportMode.Auto => await ExportAutoAsync(manifest, options, cancellationToken),
+                PdfExportMode.Hosted => await _highFidelityExporter.ExportAsync(manifest, options, cancellationToken),
+                PdfExportMode.Browser => await _highFidelityExporter.ExportAsync(manifest, options, cancellationToken),
+                _ => throw new ArgumentOutOfRangeException(nameof(options), $"Unsupported PDF export mode '{options.Mode}'.")
+            };
+        }
+
         private byte[] ExportAuto(ReportManifest manifest, PdfExportOptions options)
         {
             if (!string.IsNullOrWhiteSpace(options.Host))
@@ -42,6 +58,27 @@ namespace ETL_SQL.Reporting
             }
 
             return _staticExporter.Export(manifest, options);
+        }
+
+        private async Task<byte[]> ExportAutoAsync(ReportManifest manifest, PdfExportOptions options, CancellationToken cancellationToken)
+        {
+            if (!string.IsNullOrWhiteSpace(options.Host))
+            {
+                try
+                {
+                    return await _highFidelityExporter.ExportAsync(manifest, options, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    options.Warn?.Invoke($"High-fidelity PDF export failed ({ex.Message}); falling back to STATIC PDF export.");
+                }
+            }
+            else
+            {
+                options.Warn?.Invoke("High-fidelity PDF export is not configured; falling back to STATIC PDF export.");
+            }
+
+            return await _staticExporter.ExportAsync(manifest, options, cancellationToken);
         }
     }
 }

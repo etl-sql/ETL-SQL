@@ -30,11 +30,10 @@ namespace ETL_SQL.Orchestrator.Service
             return Task.CompletedTask;
         }
 
-        public Task StopAsync(CancellationToken cancellationToken)
+        public async Task StopAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("Orchestrator hosted service stopping.");
-            _scheduler.Stop();
-            return Task.CompletedTask;
+            await _scheduler.StopAsync(cancellationToken);
         }
     }
 }

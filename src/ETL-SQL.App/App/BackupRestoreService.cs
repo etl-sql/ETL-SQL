@@ -48,22 +48,23 @@ namespace ETL_SQL.App
         /// <summary>Testable backup core: explicit config, install/base directory, and output directory.</summary>
         internal static async Task<int> BackupCoreAsync(IConfiguration config, string baseDir, string outputDir, ILogger logger)
         {
-            Directory.CreateDirectory(outputDir);
+            await CreateDirectoryAsync(outputDir);
 
-            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             var backupId = Guid.NewGuid().ToString("N");
-            var dataZip = Path.Combine(outputDir, $"etl-sql-backup-{stamp}.zip");
-            var keysZip = Path.Combine(outputDir, $"etl-sql-keys-{stamp}.zip");
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var archiveId = $"{stamp}-{backupId}";
+            var dataZip = Path.Combine(outputDir, $"etl-sql-backup-{archiveId}.zip");
+            var keysZip = Path.Combine(outputDir, $"etl-sql-keys-{archiveId}.zip");
 
             // Stage under a per-user secure root with owner-only (0700) permissions so the staged key
             // ring and plaintext secrets are never readable by other local users during the backup.
-            var staging = Path.Combine(SecureTempRoot(), $"etl-sql-backup-{backupId}");
+            var staging = Path.Combine(await SecureTempRootAsync(), $"etl-sql-backup-{backupId}");
             var dataStage = Path.Combine(staging, "data");
             var keysStage = Path.Combine(staging, "keys");
-            Directory.CreateDirectory(staging);
+            await CreateDirectoryAsync(staging);
             RestrictToOwner(staging, isDirectory: true);
-            Directory.CreateDirectory(dataStage);
-            Directory.CreateDirectory(keysStage);
+            await CreateDirectoryAsync(dataStage);
+            await CreateDirectoryAsync(keysStage);
 
             try
             {
@@ -76,23 +77,23 @@ namespace ETL_SQL.App
                 var files = new List<BackupFile>();
 
                 // Databases (copy the .db plus -wal/-shm sidecars so a cold copy is consistent).
-                files.AddRange(CopySqliteSet(portalDb, Path.Combine(dataStage, "db"), "portal.db", dataStage));
-                files.AddRange(CopySqliteSet(orchDb, Path.Combine(dataStage, "db"), "etlsql.db", dataStage));
+                files.AddRange(await CopySqliteSetAsync(portalDb, Path.Combine(dataStage, "db"), "portal.db", dataStage));
+                files.AddRange(await CopySqliteSetAsync(orchDb, Path.Combine(dataStage, "db"), "etlsql.db", dataStage));
 
                 // Content directories.
-                files.AddRange(CopyTree(Resolve(config["Portal:SnapshotDirectory"] ?? "./Snapshots", baseDir), Path.Combine(dataStage, "content", "snapshots"), dataStage));
-                files.AddRange(CopyTree(Resolve(config["Portal:ScriptRootPath"] ?? "./Reports", baseDir), Path.Combine(dataStage, "content", "reports"), dataStage));
-                files.AddRange(CopyTree(Resolve(config["Portal:DatasetRootPath"] ?? "./data/datasets", baseDir), Path.Combine(dataStage, "content", "datasets"), dataStage));
-                files.AddRange(CopyTree(Resolve(config["Portal:MapRootPath"] ?? "./data/maps", baseDir), Path.Combine(dataStage, "content", "maps"), dataStage));
+                files.AddRange(await CopyTreeAsync(Resolve(config["Portal:SnapshotDirectory"] ?? "./Snapshots", baseDir), Path.Combine(dataStage, "content", "snapshots"), dataStage));
+                files.AddRange(await CopyTreeAsync(Resolve(config["Portal:ScriptRootPath"] ?? "./Reports", baseDir), Path.Combine(dataStage, "content", "reports"), dataStage));
+                files.AddRange(await CopyTreeAsync(Resolve(config["Portal:DatasetRootPath"] ?? "./data/datasets", baseDir), Path.Combine(dataStage, "content", "datasets"), dataStage));
+                files.AddRange(await CopyTreeAsync(Resolve(config["Portal:MapRootPath"] ?? "./data/maps", baseDir), Path.Combine(dataStage, "content", "maps"), dataStage));
 
                 // Config, with secrets split out into the keys archive.
-                var (strippedConfig, secrets) = SplitConfigSecrets(Path.Combine(baseDir, "appsettings.json"));
+                var (strippedConfig, secrets) = await SplitConfigSecretsAsync(Path.Combine(baseDir, "appsettings.json"));
                 await File.WriteAllTextAsync(Path.Combine(dataStage, "appsettings.json"), strippedConfig);
                 files.Add(await DescribeAsync(Path.Combine(dataStage, "appsettings.json"), dataStage));
 
                 // ── Keys archive: Data Protection key ring + the stripped secrets ──────
                 var dpRing = Path.Combine(Path.GetDirectoryName(portalDb) ?? baseDir, DpKeyRingDirName);
-                int dpKeyFiles = CopyTree(dpRing, Path.Combine(keysStage, DpKeyRingDirName), keysStage).Count();
+                int dpKeyFiles = (await CopyTreeAsync(dpRing, Path.Combine(keysStage, DpKeyRingDirName), keysStage)).Count;
                 var secretsPath = Path.Combine(keysStage, SecretsName);
                 await File.WriteAllTextAsync(secretsPath,
                     new JsonObject(secrets.Select(kv => new KeyValuePair<string, JsonNode?>(kv.Key, kv.Value))).ToJsonString(JsonOpts));
@@ -127,10 +128,10 @@ namespace ETL_SQL.App
                 };
                 await File.WriteAllTextAsync(Path.Combine(dataStage, DataManifestName), manifest.ToJsonString(JsonOpts));
 
-                if (File.Exists(dataZip)) File.Delete(dataZip);
-                if (File.Exists(keysZip)) File.Delete(keysZip);
-                ZipFile.CreateFromDirectory(dataStage, dataZip, CompressionLevel.Optimal, includeBaseDirectory: false);
-                ZipFile.CreateFromDirectory(keysStage, keysZip, CompressionLevel.Optimal, includeBaseDirectory: false);
+                await DeleteFileIfExistsAsync(dataZip);
+                await DeleteFileIfExistsAsync(keysZip);
+                await CreateZipFromDirectoryAsync(dataStage, dataZip);
+                await CreateZipFromDirectoryAsync(keysStage, keysZip);
                 // The output archives carry sensitive material (the data archive holds the databases;
                 // the keys archive holds plaintext secrets) — restrict both to the owner.
                 RestrictToOwner(dataZip, isDirectory: false);
@@ -145,7 +146,7 @@ namespace ETL_SQL.App
             }
             catch (Exception ex)
             {
-                logger.WriteLine($"Backup failed: {ex.Message}", ConsoleColor.Red);
+                logger.Error("Backup failed.", ex);
                 return 1;
             }
             finally
@@ -171,16 +172,16 @@ namespace ETL_SQL.App
 
             // Extract under a per-user secure root with owner-only (0700) permissions; the keys archive
             // expands to plaintext secrets + the key ring, which must not be readable by other users.
-            var work = Path.Combine(SecureTempRoot(), $"etl-sql-restore-{Guid.NewGuid():N}");
+            var work = Path.Combine(await SecureTempRootAsync(), $"etl-sql-restore-{Guid.NewGuid():N}");
             var dataExtract = Path.Combine(work, "data");
             var keysExtract = Path.Combine(work, "keys");
 
             try
             {
-                Directory.CreateDirectory(work);
+                await CreateDirectoryAsync(work);
                 RestrictToOwner(work, isDirectory: true);
-                ZipFile.ExtractToDirectory(dataZip, dataExtract);
-                ZipFile.ExtractToDirectory(keysZip, keysExtract);
+                await ExtractZipToDirectoryAsync(dataZip, dataExtract);
+                await ExtractZipToDirectoryAsync(keysZip, keysExtract);
 
                 var problems = await ValidateAsync(dataExtract, keysExtract, logger);
                 if (problems.Count > 0)
@@ -205,17 +206,17 @@ namespace ETL_SQL.App
                 }
 
                 var target = Path.GetFullPath(ctx.RestoreTo.Trim('"', '\'', ' '));
-                Directory.CreateDirectory(target);
+                await CreateDirectoryAsync(target);
 
                 // Materialize the restored layout: databases at the root, content under their dirs,
                 // the DP key ring beside the database, and secrets merged back into appsettings.json.
                 // The yielded manifest entries are not needed on restore (archiveRoot is irrelevant).
-                CopyTree(Path.Combine(dataExtract, "db"), target, target).Count();
-                CopyTree(Path.Combine(dataExtract, "content", "snapshots"), Path.Combine(target, "Snapshots"), target).Count();
-                CopyTree(Path.Combine(dataExtract, "content", "reports"), Path.Combine(target, "Reports"), target).Count();
-                CopyTree(Path.Combine(dataExtract, "content", "datasets"), Path.Combine(target, "data", "datasets"), target).Count();
-                CopyTree(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target).Count();
-                CopyTree(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target).Count();
+                await CopyTreeAsync(Path.Combine(dataExtract, "db"), target, target);
+                await CopyTreeAsync(Path.Combine(dataExtract, "content", "snapshots"), Path.Combine(target, "Snapshots"), target);
+                await CopyTreeAsync(Path.Combine(dataExtract, "content", "reports"), Path.Combine(target, "Reports"), target);
+                await CopyTreeAsync(Path.Combine(dataExtract, "content", "datasets"), Path.Combine(target, "data", "datasets"), target);
+                await CopyTreeAsync(Path.Combine(dataExtract, "content", "maps"), Path.Combine(target, "data", "maps"), target);
+                await CopyTreeAsync(Path.Combine(keysExtract, DpKeyRingDirName), Path.Combine(target, DpKeyRingDirName), target);
 
                 var restoredConfig = Path.Combine(target, "appsettings.json");
                 await MergeConfigAsync(
@@ -316,12 +317,15 @@ namespace ETL_SQL.App
         /// and a path→value map (dotted JSON path) of the removed secrets for the keys archive.
         /// </summary>
         internal static (string StrippedConfig, Dictionary<string, JsonNode?> Secrets) SplitConfigSecrets(string appSettingsPath)
+            => SplitConfigSecretsAsync(appSettingsPath).GetAwaiter().GetResult();
+
+        internal static async Task<(string StrippedConfig, Dictionary<string, JsonNode?> Secrets)> SplitConfigSecretsAsync(string appSettingsPath)
         {
             var secrets = new Dictionary<string, JsonNode?>();
             if (!File.Exists(appSettingsPath))
                 return ("{}", secrets);
 
-            var root = JsonNode.Parse(File.ReadAllText(appSettingsPath));
+            var root = JsonNode.Parse(await File.ReadAllTextAsync(appSettingsPath));
             if (root != null) Strip(root, "", secrets);
             return (root?.ToJsonString(JsonOpts) ?? "{}", secrets);
 
@@ -401,31 +405,43 @@ namespace ETL_SQL.App
 
         /// <summary>Copies a SQLite db plus its -wal/-shm sidecars into <paramref name="destDir"/>.</summary>
         private static IEnumerable<BackupFile> CopySqliteSet(string dbPath, string destDir, string destName, string archiveRoot)
+            => CopySqliteSetAsync(dbPath, destDir, destName, archiveRoot).GetAwaiter().GetResult();
+
+        private static async Task<List<BackupFile>> CopySqliteSetAsync(string dbPath, string destDir, string destName, string archiveRoot)
         {
+            var files = new List<BackupFile>();
             foreach (var (suffix, name) in new[] { ("", destName), ("-wal", destName + "-wal"), ("-shm", destName + "-shm") })
             {
                 var src = dbPath + suffix;
                 if (!File.Exists(src)) continue;
-                Directory.CreateDirectory(destDir);
+                await CreateDirectoryAsync(destDir);
                 var dest = Path.Combine(destDir, name);
-                File.Copy(src, dest, overwrite: true);
-                yield return Describe(dest, archiveRoot);
+                await CopyFileAsync(src, dest);
+                files.Add(await DescribeAsync(dest, archiveRoot));
             }
+
+            return files;
         }
 
         /// <summary>Recursively copies a directory tree; yields a manifest entry per file. No-op if absent.</summary>
         private static IEnumerable<BackupFile> CopyTree(string sourceDir, string destDir, string archiveRoot)
+            => CopyTreeAsync(sourceDir, destDir, archiveRoot).GetAwaiter().GetResult();
+
+        private static async Task<List<BackupFile>> CopyTreeAsync(string sourceDir, string destDir, string archiveRoot)
         {
-            if (string.IsNullOrWhiteSpace(sourceDir) || !Directory.Exists(sourceDir)) yield break;
+            var files = new List<BackupFile>();
+            if (string.IsNullOrWhiteSpace(sourceDir) || !Directory.Exists(sourceDir)) return files;
             var root = Path.GetFullPath(sourceDir);
             foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             {
                 var rel = Path.GetRelativePath(root, file);
                 var dest = Path.Combine(destDir, rel);
-                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                File.Copy(file, dest, overwrite: true);
-                yield return Describe(dest, archiveRoot);
+                await CreateDirectoryAsync(Path.GetDirectoryName(dest)!);
+                await CopyFileAsync(file, dest);
+                files.Add(await DescribeAsync(dest, archiveRoot));
             }
+
+            return files;
         }
 
         /// <summary>A manifest entry whose path is recorded relative to the archive root, slash-normalized.</summary>
@@ -454,9 +470,31 @@ namespace ETL_SQL.App
         private static async Task<string> Sha256Async(string path)
         {
             using var sha = SHA256.Create();
-            await using var stream = File.OpenRead(path);
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
             return Convert.ToHexString(await sha.ComputeHashAsync(stream));
         }
+
+        private static Task CreateDirectoryAsync(string path) =>
+            Task.Run(() => Directory.CreateDirectory(path));
+
+        private static async Task CopyFileAsync(string source, string destination)
+        {
+            await using var sourceStream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using var destinationStream = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 128 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await sourceStream.CopyToAsync(destinationStream);
+        }
+
+        private static Task DeleteFileIfExistsAsync(string path) =>
+            Task.Run(() =>
+            {
+                if (File.Exists(path)) File.Delete(path);
+            });
+
+        private static Task CreateZipFromDirectoryAsync(string sourceDirectory, string destinationArchive) =>
+            Task.Run(() => ZipFile.CreateFromDirectory(sourceDirectory, destinationArchive, CompressionLevel.Optimal, includeBaseDirectory: false));
+
+        private static Task ExtractZipToDirectoryAsync(string sourceArchive, string destinationDirectory) =>
+            Task.Run(() => ZipFile.ExtractToDirectory(sourceArchive, destinationDirectory));
 
         /// <summary>Reads the last applied EF migration id from a portal SQLite db (read-only).</summary>
         private static string? ReadCatalogMigration(string portalDbPath)
@@ -483,12 +521,15 @@ namespace ETL_SQL.App
         /// the shared system temp directory for staging credential-bearing backup artifacts.
         /// </summary>
         private static string SecureTempRoot()
+            => SecureTempRootAsync().GetAwaiter().GetResult();
+
+        private static async Task<string> SecureTempRootAsync()
         {
             var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             var root = string.IsNullOrWhiteSpace(local)
                 ? Path.Combine(Path.GetTempPath(), "ETL-SQL", "tmp")
                 : Path.Combine(local, "ETL-SQL", "tmp");
-            Directory.CreateDirectory(root);
+            await CreateDirectoryAsync(root);
             RestrictToOwner(root, isDirectory: true);
             return root;
         }

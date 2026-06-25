@@ -89,6 +89,29 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }
         }
 
+        public async Task StopAsync(CancellationToken cancellationToken = default)
+        {
+            _cts?.Cancel();
+            try
+            {
+                if (_runTask != null)
+                {
+                    await _runTask.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error waiting for scheduler background task to terminate.");
+            }
+        }
+
         private async Task RunAsync(CancellationToken ct)
         {
             _logger.LogInformation("Scheduler service started.");

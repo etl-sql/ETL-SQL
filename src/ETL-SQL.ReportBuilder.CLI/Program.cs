@@ -108,7 +108,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             }
             else if (format == "pdf")
             {
-                var pdfBytes = new PdfExporter().Export(manifest);
+                var pdfBytes = await new PdfExporter().ExportAsync(manifest);
                 await File.WriteAllBytesAsync(outputPath, pdfBytes);
             }
             else

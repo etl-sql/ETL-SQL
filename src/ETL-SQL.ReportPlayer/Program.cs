@@ -140,12 +140,12 @@ app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = contentTypes })
 var noCache = new JsonSerializerOptions { WriteIndented = false };
 var webOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
-app.MapGet("/third-party-notices", () =>
+app.MapGet("/third-party-notices", async (HttpContext ctx) =>
 {
     var noticesPath = FindRepoFile("THIRD-PARTY-NOTICES.md");
     return noticesPath is null
         ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
-        : Results.Text(File.ReadAllText(noticesPath), "text/markdown; charset=utf-8");
+        : Results.Text(await File.ReadAllTextAsync(noticesPath, ctx.RequestAborted), "text/markdown; charset=utf-8");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,13 +265,13 @@ if (multiMode)
         if (svc == null) return Results.NotFound();
         var manifest = await svc.GetManifestAsync();
         var url = BuildAbsoluteUrl(ctx, "/reports/" + WebUtility.UrlEncode(name));
-        var bytes = new ReportPdfExporter().Export(manifest, new PdfExportOptions
+        var bytes = await new ReportPdfExporter().ExportAsync(manifest, new PdfExportOptions
         {
             Mode = PdfExportMode.Auto,
             Host = url,
             BrowserPath = builder.Configuration["ReportPlayer:PdfExport:BrowserPath"],
             Warn = message => Console.WriteLine("PDF export: " + message)
-        });
+        }, ctx.RequestAborted);
         var filename = SanitizeFilename(manifest.Title ?? name) + "_" + DateTime.UtcNow.ToString("yyyyMMdd") + ".pdf";
         return Results.File(bytes, "application/pdf", filename);
     });
@@ -353,13 +353,13 @@ else
     app.MapGet("/api/export/pdf", async (HttpContext ctx, DashboardService svc) =>
     {
         var manifest = await svc.GetManifestAsync();
-        var bytes = new ReportPdfExporter().Export(manifest, new PdfExportOptions
+        var bytes = await new ReportPdfExporter().ExportAsync(manifest, new PdfExportOptions
         {
             Mode = PdfExportMode.Auto,
             Host = BuildAbsoluteUrl(ctx, "/"),
             BrowserPath = builder.Configuration["ReportPlayer:PdfExport:BrowserPath"],
             Warn = message => Console.WriteLine("PDF export: " + message)
-        });
+        }, ctx.RequestAborted);
         var filename = SanitizeFilename(manifest.Title ?? Path.GetFileNameWithoutExtension(scriptPath) ?? "report")
             + "_" + DateTime.UtcNow.ToString("yyyyMMdd") + ".pdf";
         return Results.File(bytes, "application/pdf", filename);

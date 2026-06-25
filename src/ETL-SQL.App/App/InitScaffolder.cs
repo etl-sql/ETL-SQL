@@ -12,7 +12,7 @@ namespace ETL_SQL.App
     /// </summary>
     internal static class InitScaffolder
     {
-        internal static Task<int> RunAsync(CliContext ctx, ILogger logger)
+        internal static async Task<int> RunAsync(CliContext ctx, ILogger logger)
         {
             var targetDir = string.IsNullOrWhiteSpace(ctx.InitDirectory)
                 ? Directory.GetCurrentDirectory()
@@ -20,18 +20,18 @@ namespace ETL_SQL.App
 
             try
             {
-                Directory.CreateDirectory(targetDir);
+                await Task.Run(() => Directory.CreateDirectory(targetDir));
             }
             catch (Exception ex)
             {
                 logger.WriteLine($"Could not create target directory '{targetDir}': {ex.Message}", ConsoleColor.Red);
-                return Task.FromResult(1);
+                return 1;
             }
 
             int created = 0, skipped = 0;
 
-            WriteFile(Path.Combine(targetDir, "appsettings.json"), BuildStarterConfig(), ctx.InitForce, logger, ref created, ref skipped);
-            WriteFile(Path.Combine(targetDir, "hello.etlsql"), BuildStarterScript(), ctx.InitForce, logger, ref created, ref skipped);
+            (created, skipped) = await WriteFileAsync(Path.Combine(targetDir, "appsettings.json"), BuildStarterConfig(), ctx.InitForce, logger, created, skipped);
+            (created, skipped) = await WriteFileAsync(Path.Combine(targetDir, "hello.etlsql"), BuildStarterScript(), ctx.InitForce, logger, created, skipped);
 
             logger.WriteLine("", ConsoleColor.Gray);
             logger.WriteLine($"Initialized ETL-SQL workspace in {targetDir}", ConsoleColor.Green);
@@ -44,21 +44,22 @@ namespace ETL_SQL.App
             logger.WriteLine("  2. Verify your environment: etl-sql admin doctor", ConsoleColor.Gray);
             logger.WriteLine("  3. Read the User Manual:    Docs/User_Manual.md", ConsoleColor.Gray);
 
-            return Task.FromResult(0);
+            return 0;
         }
 
-        private static void WriteFile(string path, string content, bool force, ILogger logger, ref int created, ref int skipped)
+        private static async Task<(int Created, int Skipped)> WriteFileAsync(string path, string content, bool force, ILogger logger, int created, int skipped)
         {
             if (File.Exists(path) && !force)
             {
                 logger.WriteLine($"  skip   {Path.GetFileName(path)} (already exists)", ConsoleColor.DarkGray);
                 skipped++;
-                return;
+                return (created, skipped);
             }
 
-            File.WriteAllText(path, content);
+            await File.WriteAllTextAsync(path, content);
             logger.WriteLine($"  create {Path.GetFileName(path)}", ConsoleColor.Green);
             created++;
+            return (created, skipped);
         }
 
         private static string GenerateJwtSecret()

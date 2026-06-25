@@ -1058,7 +1058,7 @@ CREATE PAGE Main AS DASHBOARD (
                         }
                     });
 
-                    var pdfBytes = new PdfExporter().Export(pdfManifest);
+                    var pdfBytes = await new PdfExporter().ExportAsync(pdfManifest);
                     if (pdfBytes.Length < 5
                         || pdfBytes[0] != (byte)'%'
                         || pdfBytes[1] != (byte)'P'

@@ -110,18 +110,18 @@ release begins.
   - **Gemini:** The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup.
 - [ ] **Report Player & Hosting Project Audit Findings**
   - **Gemini:** `DashboardService.cs` contains synchronous cancellation calls (`_refreshCts?.Cancel()`) inside the async `DisposeAsync()` method.
-  - **Sr. Developer:** `ReportPlayer/Program.cs` contains synchronous file reads (`File.ReadAllText`) inside high-frequency minimal API endpoint routes, which block thread pool threads during server requests.
+  - [x] **Sr. Developer:** `ReportPlayer/Program.cs` contains synchronous file reads (`File.ReadAllText`) inside high-frequency minimal API endpoint routes, which block thread pool threads during server requests.
 - [ ] **Reporting Project Audit Findings**
-  - **Sr. Developer:** `PdfExporter.cs` performs synchronous file writes and reads (`File.WriteAllBytes`, `File.ReadAllBytes`) when building PDF documents, instead of streaming asynchronously.
+  - [x] **Sr. Developer:** `PdfExporter.cs` performs synchronous file writes and reads (`File.WriteAllBytes`, `File.ReadAllBytes`) when building PDF documents, instead of streaming asynchronously.
   - **Gemini:** `SnapshotStore.cs` performs synchronous file moves (`File.Move`) and synchronous deletions (`File.Delete`) inside async save/read workflows.
 - [ ] **ETL-SQL.App Project Audit Findings**
   - **Gemini:** CLI startup logic performs synchronous file checking and console standard output writes before bootstrapping is complete.
-  - **Sr. Developer:** Init scaffolding (`InitScaffolder.cs`) and backup/restore services (`BackupRestoreService.cs`) perform synchronous directory creation and local file compression/decompression operations.
+  - [x] **Sr. Developer:** Init scaffolding (`InitScaffolder.cs`) and backup/restore services (`BackupRestoreService.cs`) perform synchronous directory creation and local file compression/decompression operations.
 - [ ] **ETL-SQL.Orchestrator.Service Project Audit Findings**
-  - **Sr. Developer:** OrchestratorHostedService uses synchronous blocking lifecycle hooks on worker registration.
+  - [x] **Sr. Developer:** OrchestratorHostedService uses synchronous blocking lifecycle hooks on worker registration.
   - **Gemini:** Job API routing uses synchronous configuration parameter lookup.
 - [ ] **ETL-SQL.ReportPortal.Data & Migrations Project Audit Findings**
-  - **Sr. Developer:** Dynamic connection configuration database migrations run synchronously on Startup.
+  - [x] **Sr. Developer:** Dynamic connection configuration database migrations run synchronously on Startup. *(Sr. review: verified startup uses `MigrateAsync`.)*
   - **Sr. Developer:** Query compilation profiles do not support async initialization.
 - [ ] **ETL-SQL.ReportRuntime Project Audit Findings**
   - **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.

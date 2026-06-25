@@ -27,7 +27,16 @@ namespace ETL_SQL.Reporting
             return ExportAsync(options).GetAwaiter().GetResult();
         }
 
-        private static async Task<byte[]> ExportAsync(PdfExportOptions options)
+        public Task<byte[]> ExportAsync(ReportManifest manifest, PdfExportOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            options ??= PdfExportOptions.Static;
+            if (string.IsNullOrWhiteSpace(options.Host))
+                throw new InvalidOperationException("Browser-backed PDF export requires a HOST URL.");
+
+            return ExportAsync(options, cancellationToken);
+        }
+
+        private static async Task<byte[]> ExportAsync(PdfExportOptions options, CancellationToken cancellationToken = default)
         {
             var browserPath = ResolveBrowserPath(options.BrowserPath);
             var port = GetFreeTcpPort();
@@ -35,26 +44,28 @@ namespace ETL_SQL.Reporting
             Directory.CreateDirectory(userDataDir);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, cancellationToken);
+            var token = linkedCts.Token;
             using var process = StartBrowser(browserPath, port, userDataDir);
 
             try
             {
-                var wsUrl = await WaitForPageWebSocketAsync(port, cts.Token);
+                var wsUrl = await WaitForPageWebSocketAsync(port, token);
                 using var socket = new ClientWebSocket();
-                await socket.ConnectAsync(new Uri(wsUrl), cts.Token);
+                await socket.ConnectAsync(new Uri(wsUrl), token);
 
                 var cdp = new CdpClient(socket);
-                await cdp.SendAsync("Page.enable", null, cts.Token);
-                await cdp.SendAsync("Runtime.enable", null, cts.Token);
+                await cdp.SendAsync("Page.enable", null, token);
+                await cdp.SendAsync("Runtime.enable", null, token);
 
                 if (options.RequestHeaders is { Count: > 0 })
                 {
-                    await cdp.SendAsync("Network.enable", null, cts.Token);
-                    await cdp.SendAsync("Network.setExtraHTTPHeaders", new { headers = options.RequestHeaders }, cts.Token);
+                    await cdp.SendAsync("Network.enable", null, token);
+                    await cdp.SendAsync("Network.setExtraHTTPHeaders", new { headers = options.RequestHeaders }, token);
                 }
 
-                await cdp.SendAsync("Page.navigate", new { url = options.Host }, cts.Token);
-                await cdp.WaitForEventAsync("Page.loadEventFired", cts.Token);
+                await cdp.SendAsync("Page.navigate", new { url = options.Host }, token);
+                await cdp.WaitForEventAsync("Page.loadEventFired", token);
                 await cdp.SendAsync("Runtime.evaluate", new
                 {
                     expression =
@@ -62,7 +73,7 @@ namespace ETL_SQL.Reporting
                         "window.__etlSqlReportWhenExportReady(30000).then(() => true) : true",
                     awaitPromise = true,
                     returnByValue = true
-                }, cts.Token);
+                }, token);
 
                 var printResult = await cdp.SendAsync("Page.printToPDF", new
                 {
@@ -72,7 +83,7 @@ namespace ETL_SQL.Reporting
                     marginBottom = 0.25,
                     marginLeft = 0.25,
                     marginRight = 0.25
-                }, cts.Token);
+                }, token);
 
                 var base64 = printResult.RootElement.GetProperty("result").GetProperty("data").GetString();
                 return Convert.FromBase64String(base64 ?? throw new InvalidOperationException("Browser PDF export returned no PDF data."));

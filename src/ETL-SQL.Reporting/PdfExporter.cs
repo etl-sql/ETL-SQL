@@ -4,6 +4,8 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using MigraDoc.DocumentObjectModel;
 using MigraDoc.DocumentObjectModel.Tables;
 using MigraDoc.Rendering;
@@ -36,13 +38,16 @@ namespace ETL_SQL.Reporting
         private readonly SvgChartRenderer _svg = new();
 
         public byte[] Export(ReportManifest manifest)
+            => ExportAsync(manifest).GetAwaiter().GetResult();
+
+        public async Task<byte[]> ExportAsync(ReportManifest manifest, CancellationToken cancellationToken = default)
         {
             EnsureFontsInitialized();
 
             var tempFiles = new List<string>();
             try
             {
-                var document = BuildDocument(manifest, tempFiles);
+                var document = await BuildDocumentAsync(manifest, tempFiles, cancellationToken);
                 var renderer = new PdfDocumentRenderer { Document = document };
                 renderer.RenderDocument();
                 using var ms = new MemoryStream();
@@ -120,7 +125,7 @@ namespace ETL_SQL.Reporting
                     {
                         if (File.Exists(path))
                         {
-                            var bytes = File.ReadAllBytes(path);
+                            var bytes = ReadFontBytes(path);
                             _fontCache[faceName] = bytes;
                             return bytes;
                         }
@@ -131,9 +136,23 @@ namespace ETL_SQL.Reporting
                         "(e.g. 'fonts-dejavu-core' on Linux).");
                 }
             }
+
+            private static byte[] ReadFontBytes(string path)
+            {
+                using var stream = new FileStream(
+                    path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    bufferSize: 64 * 1024,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                using var memory = new MemoryStream();
+                stream.CopyToAsync(memory).GetAwaiter().GetResult();
+                return memory.ToArray();
+            }
         }
 
-        private Document BuildDocument(ReportManifest manifest, List<string> tempFiles)
+        private async Task<Document> BuildDocumentAsync(ReportManifest manifest, List<string> tempFiles, CancellationToken cancellationToken)
         {
             var document = new Document();
             var style = document.Styles["Normal"]!;
@@ -173,7 +192,7 @@ namespace ETL_SQL.Reporting
 
             // ── Visuals ───────────────────────────────────────────────────────
             foreach (var visual in GetVisualsInOrder(manifest))
-                RenderVisual(section, visual, manifest, tempFiles);
+                await RenderVisualAsync(section, visual, manifest, tempFiles, cancellationToken);
 
             return document;
         }
@@ -200,7 +219,7 @@ namespace ETL_SQL.Reporting
             return result;
         }
 
-        private void RenderVisual(Section section, VisualManifest v, ReportManifest manifest, List<string> tempFiles)
+        private async Task RenderVisualAsync(Section section, VisualManifest v, ReportManifest manifest, List<string> tempFiles, CancellationToken cancellationToken)
         {
             var heading = section.AddParagraph(v.Name);
             heading.Format.SpaceBefore = Unit.FromPoint(16);
@@ -220,7 +239,7 @@ namespace ETL_SQL.Reporting
                 case "TABLE": RenderTable(section, v); break;
                 case "CARD": RenderCard(section, v); break;
                 case "TEXT": RenderText(section, v); break;
-                case "IMAGE": RenderImage(section, v, tempFiles); break;
+                case "IMAGE": await RenderImageAsync(section, v, tempFiles, cancellationToken); break;
 
                 // Filter/input controls: render the selection that was in effect at
                 // export time, so the reader knows how the report was filtered.
@@ -237,7 +256,7 @@ namespace ETL_SQL.Reporting
                     break;
 
                 default:
-                    RenderChart(section, v, tempFiles);
+                    await RenderChartAsync(section, v, tempFiles, cancellationToken);
                     break;
             }
         }
@@ -254,7 +273,7 @@ namespace ETL_SQL.Reporting
             p.AddFormattedText(display, TextFormat.Bold);
         }
 
-        private void RenderChart(Section section, VisualManifest v, List<string> tempFiles)
+        private async Task RenderChartAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
             // Prefer real ECharts (SSR) so every chart type matches the on-screen report;
             // fall back to the static SVG renderer when there's no chart option or SSR fails.
@@ -265,7 +284,7 @@ namespace ETL_SQL.Reporting
                 if (png.Length > 0)
                 {
                     var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".png");
-                    File.WriteAllBytes(tmp, png);
+                    await File.WriteAllBytesAsync(tmp, png, cancellationToken);
                     tempFiles.Add(tmp);
                     var img = section.AddImage(tmp);
                     img.Width = Unit.FromPoint(ContentWidthPt);
@@ -410,10 +429,10 @@ namespace ETL_SQL.Reporting
             }
         }
 
-        private static void RenderImage(Section section, VisualManifest v, List<string> tempFiles)
+        private static async Task RenderImageAsync(Section section, VisualManifest v, List<string> tempFiles, CancellationToken cancellationToken)
         {
             var src = v.Options.GetValueOrDefault("SRC") ?? v.Options.GetValueOrDefault("src");
-            var path = string.IsNullOrWhiteSpace(src) ? null : DataUriToTempImage(src!, tempFiles);
+            var path = string.IsNullOrWhiteSpace(src) ? null : await DataUriToTempImageAsync(src!, tempFiles, cancellationToken);
             if (path != null)
             {
                 var img = section.AddImage(path);
@@ -432,7 +451,7 @@ namespace ETL_SQL.Reporting
 
         // Decodes a data: URI to a temp image file (SVG rasterised at native aspect,
         // base64 raster written as-is). Remote URLs are skipped (no network during export).
-        private static string? DataUriToTempImage(string src, List<string> tempFiles)
+        private static async Task<string?> DataUriToTempImageAsync(string src, List<string> tempFiles, CancellationToken cancellationToken)
         {
             if (!src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return null;
             int comma = src.IndexOf(',');
@@ -467,7 +486,7 @@ namespace ETL_SQL.Reporting
 
             if (bytes.Length == 0) return null;
             var tmp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + "." + ext);
-            File.WriteAllBytes(tmp, bytes);
+            await File.WriteAllBytesAsync(tmp, bytes, cancellationToken);
             tempFiles.Add(tmp);
             return tmp;
         }

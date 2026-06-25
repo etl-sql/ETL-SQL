@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.IO.Compression;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -87,6 +88,29 @@ namespace ETL_SQL.Tests.CliCommands
             return (data[0], keys[0]);
         }
 
+        private sealed class CapturingLogger : ILogger
+        {
+            private readonly StringBuilder _messages = new();
+
+            public string? SessionId { get; set; }
+            public bool IsDebugEnabled => true;
+            public bool IsVerboseEnabled => true;
+            public bool IsVerbose { get; set; }
+            public bool SuppressConsole { get; set; }
+            public bool IsJsonMode { get; set; }
+            public event Action<string, string?, ConsoleColor>? OnMessage;
+
+            public void Log(LogLevel level, string message, Exception? ex = null)
+            {
+                _messages.Append('[').Append(level).Append("] ").AppendLine(message);
+                if (ex != null)
+                    _messages.AppendLine(ex.ToString());
+                OnMessage?.Invoke(message, null, ConsoleColor.White);
+            }
+
+            public override string ToString() => _messages.ToString();
+        }
+
         [Fact]
         public async Task Backup_SplitsSecretsOutOfDataArchiveIntoKeysArchive()
         {
@@ -167,8 +191,11 @@ namespace ETL_SQL.Tests.CliCommands
             // Two independent backups → two different backup ids.
             var out1 = Path.Combine(_root, "out1");
             var out2 = Path.Combine(_root, "out2");
-            await BackupRestoreService.BackupCoreAsync(Config(), _source, out1, NullLogger.Instance);
-            await BackupRestoreService.BackupCoreAsync(Config(), _source, out2, NullLogger.Instance);
+            var logger = new CapturingLogger();
+            Assert.Equal(0, await BackupRestoreService.BackupCoreAsync(Config(), _source, out1, logger));
+            Assert.True(
+                0 == await BackupRestoreService.BackupCoreAsync(Config(), _source, out2, logger),
+                logger.ToString());
             var (dataZip1, _) = FindArchives(out1);
             var (_, keysZip2) = FindArchives(out2);
 
