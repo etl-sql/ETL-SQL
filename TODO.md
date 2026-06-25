@@ -117,8 +117,7 @@ At large single-script scales, hand-written recursive scanners and reflection-ba
   - *Solution*: Debounce deep rule linting and lineage analysis (e.g. 1.5s pause or file save), leaving the didChange loop to run fast syntax checks only.
 - [x] **No Recursion Depth Limit in Expression Parser** — [ExpressionParser.cs:L42](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Parser/ExpressionParser.cs#L42): `ParseExpression` now enforces a maximum nesting depth and throws a controlled `SyntaxException` before crafted input can risk stack overflow.
   - *Solution*: Add a recursion depth counter in `Parser` that throws a controlled parsing exception if nesting exceeds a conservative threshold.
-- [ ] **Synchronous AST Search in Go-To-Definition** — [DefinitionProvider.cs:L55](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.LanguageServer/DefinitionProvider.cs#L55): Recursively crawls the statement AST from scratch on every request, blocking the LSP thread.
-  - *Solution*: Build a declaration index dictionary (`Dictionary<string, Location>`) during the initial document analysis.
+- [x] **Synchronous AST Search in Go-To-Definition** — [DefinitionProvider.cs:L55](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.LanguageServer/DefinitionProvider.cs#L55): Recursively crawled the statement AST from scratch on every request, blocking the LSP thread. Fixed by building a case-insensitive declaration index when parsed document state is stored and using direct lookups in the definition provider.
 
 ### Multi-File Script Perspective (10x 10,000 Lines)
 At high scales with cross-script references, dynamic scoping and un-indexed tracing introduce query verification challenges:

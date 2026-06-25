@@ -302,6 +302,27 @@ SET @normal = 'still-visible';
         }
 
         [Fact]
+        public async Task ParsedDocumentState_Should_Index_Definitions_For_GoToDefinition()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry()), store);
+
+            var uri = DocumentUri.From("untitled:Untitled-Definitions");
+            var script = "DECLARE @val INT = 10;\r\nmy_label:\r\nFOR @i = 1 TO 2 BEGIN\r\n    PRINT @i;\r\nEND";
+            await handler.AnalyzeAsync(uri, script);
+
+            Assert.True(store.TryGetState(uri, out var state));
+            Assert.True(state.Declarations.ContainsKey("@val"));
+            Assert.True(state.Declarations.ContainsKey("my_label"));
+            Assert.True(state.Declarations.ContainsKey("@i"));
+        }
+
+        [Fact]
         public async Task Completion_After_Goto_Should_Suggest_Labels()
         {
             // Arrange

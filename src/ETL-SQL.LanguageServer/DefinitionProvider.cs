@@ -1,8 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using ETL_SQL.Core;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -52,70 +50,18 @@ namespace ETL_SQL.LSP
             if (string.IsNullOrEmpty(word))
                 return Task.FromResult<LocationOrLocationLinks?>(default);
 
-            foreach (var stmt in state.Script.Statements)
+            if (state.Declarations.TryGetValue(word, out var declaration))
             {
-                var loc = FindDeclaration(stmt, word, request.TextDocument.Uri);
-                if (loc is not null)
-                    return Task.FromResult<LocationOrLocationLinks?>(loc);
+                var range = new LSPRange(
+                    declaration.Line - 1,
+                    declaration.Column - 1,
+                    declaration.Line - 1,
+                    declaration.Column - 1 + declaration.Name.Length);
+                var location = new Location { Uri = request.TextDocument.Uri, Range = range };
+                return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(location));
             }
 
             return Task.FromResult<LocationOrLocationLinks?>(default);
-        }
-
-        private static LocationOrLocationLinks? FindDeclaration(Statement stmt, string name, DocumentUri uri)
-        {
-            if (stmt is SectionLabelStatement sls && string.Equals(sls.LabelName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(sls.Line - 1, sls.Column - 1, sls.Line - 1, sls.Column - 1 + name.Length) });
-
-            if (stmt is DeclareStatement ds && string.Equals(ds.VariableName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(ds.Line - 1, ds.Column - 1, ds.Line - 1, ds.Column - 1 + name.Length) });
-
-            if (stmt is CreateTableStatement cts && string.Equals(cts.TargetTable.TableName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(cts.Line - 1, cts.Column - 1, cts.Line - 1, cts.Column - 1 + name.Length) });
-
-            if (stmt is CreateConnectionStatement ccs && string.Equals(ccs.ConnectionName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(ccs.Line - 1, ccs.Column - 1, ccs.Line - 1, ccs.Column - 1 + name.Length) });
-
-            if (stmt is ForStatement fs && string.Equals(fs.VariableName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(fs.Line - 1, fs.Column - 1, fs.Line - 1, fs.Column - 1 + name.Length) });
-
-            if (stmt is ForeachStatement fes && string.Equals(fes.VariableName, name, StringComparison.OrdinalIgnoreCase))
-                return new LocationOrLocationLinks(new Location { Uri = uri, Range = new LSPRange(fes.Line - 1, fes.Column - 1, fes.Line - 1, fes.Column - 1 + name.Length) });
-
-            if (stmt is BlockStatement block)
-            {
-                foreach (var s in block.Statements)
-                {
-                    var found = FindDeclaration(s, name, uri);
-                    if (found is not null) return found;
-                }
-            }
-
-            if (stmt is IfStatement ifStmt)
-            {
-                var found = FindDeclaration(ifStmt.IfBody, name, uri);
-                if (found is not null) return found;
-                if (ifStmt.ElseIfClauses != null)
-                    foreach (var ei in ifStmt.ElseIfClauses)
-                    {
-                        found = FindDeclaration(ei.Body, name, uri);
-                        if (found is not null) return found;
-                    }
-                if (ifStmt.ElseBody != null)
-                    return FindDeclaration(ifStmt.ElseBody, name, uri);
-            }
-
-            if (stmt is WhileStatement whileStmt)
-                return FindDeclaration(whileStmt.Body, name, uri);
-
-            if (stmt is TryCatchStatement tc)
-            {
-                var found = FindDeclaration(tc.TryBody, name, uri);
-                if (found is not null) return found;
-                return FindDeclaration(tc.CatchBody, name, uri);
-            }
-
-            return null;
         }
 
         public DefinitionRegistrationOptions GetRegistrationOptions(DefinitionCapability capability, ClientCapabilities clientCapabilities)
