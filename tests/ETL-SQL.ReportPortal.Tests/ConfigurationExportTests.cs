@@ -141,6 +141,57 @@ public sealed class ConfigurationExportTests
     }
 
     [Fact]
+    public async Task Export_WithOrchestratorAlias_EmitsParseableScheduledProductionBootstrap()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderId = (await PostAsync(client, adminToken, "/api/folders",
+            new { name = $"prod_folder_{suffix}", parentId = (int?)null }))!["id"]!.GetValue<int>();
+        var scriptPath = Path.Combine(factory.TempDir, "scripts", $"prod_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "-- scheduled production report\nSELECT 1 AS Value;\n");
+        Assert.NotNull(await PostAsync(client, adminToken, "/api/reports", new
+        {
+            folderId,
+            name = $"Production Report {suffix}",
+            description = "Clean scheduled production test",
+            scriptPath
+        }));
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var report = await db.Reports.SingleAsync(r => r.Name == $"Production Report {suffix}");
+            db.DatasetJobs.Add(new DatasetJob
+            {
+                ReportId = report.Id,
+                OrchestratorJobName = $"dev-refresh-{suffix}",
+                RefreshInterval = "0 2 * * *"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await SendAsync(client, HttpMethod.Get,
+            "/api/admin/configuration/export?orchestratorAlias=prod_orchestrator", adminToken, null);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var script = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains(
+            $"CREATE REFRESH JOB FOR REPORT '/prod_folder_{suffix}/Production Report {suffix}' " +
+            "SCHEDULE '0 2 * * *' AT prod_orchestrator;",
+            script);
+        Assert.DoesNotContain($"dev-refresh-{suffix}", script);
+        Assert.DoesNotContain("Admin@Tests99!", script);
+        Assert.DoesNotContain("Admin@12345!", script);
+
+        var statements = new ETL_SQL.Core.Parser.Parser(
+            new ETL_SQL.Core.Parser.Lexer(script).Tokenize()).Parse();
+        Assert.NotEmpty(statements.Statements);
+    }
+
+    [Fact]
     public async Task Export_RequiresAdmin()
     {
         using var factory = new PortalWebFactory();

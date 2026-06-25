@@ -9,21 +9,21 @@ release begins.
 ## Active Sprint (v0.12.0 Stabilization & Release Gates)
 *Establishes a stable language contract, unified open-source licensing, distribution trust, and final release gates. Focuses strictly on stabilization and security; no new features.*
 
-- [ ] **Phase 1: Language & Manifest Freeze**
+- [x] **Phase 1: Language & Manifest Freeze**
   - [x] **Sr. Developer:** Publish the canonical language grammar, connector options reference, and standard library docs. *(Verified `Docs/Reference/Grammar.md`, `Data_Connectors.md`, `Standard_Library.md`, and the authoritative reference map.)*
   - [x] **Sr. Developer:** Define a strict deprecation policy for syntax and options. *(Documented in `Docs/Standards/Breaking_Change_Standards.md` and linked from the reference map.)*
   - [x] **Sr. Developer:** Implement script compatibility test corpus and a migration-linter. *(Added parser corpus coverage and stable `ETLSQL-MIG001` migration diagnostic for deprecated `FILE` connections.)*
   - [x] **Gemini:** Implement `SHOW VERSION` and machine-readable compatibility diagnostics.
-- [ ] **Phase 2: Licensing & Contribution Policies**
+- [x] **Phase 2: Licensing & Contribution Policies**
   - [x] **Gemini:** Apply the **Apache-2.0 License** consistently across all projects, extension manifests, and installers.
   - [x] **Sr. Developer:** Establish the **Developer Certificate of Origin (DCO)** for external code contributions. *(Policy documented in `CONTRIBUTING.md`; PR template now requires commit sign-off confirmation.)*
-- [ ] **Phase 3: Distribution Trust**
+- [x] **Phase 3: Distribution Trust**
   - [x] **Gemini:** Automate build workflows to generate SHA-256 checksums and an SBOM (Software Bill of Materials).
   - [x] **Gemini:** Retain test and certification reports in public release assets.
   - [x] **Gemini:** Implement cache-busting asset fingerprinting (inject hashes into JS/CSS URLs) in the Report Portal to prevent outdated client-side assets after upgrades.
-- [ ] **Phase 4: Release Gates**
-  - **Sr. Developer:** Verify that a clean script-to-scheduled-production workflow completes successfully without manual intervention.
-  - **Sr. Developer:** Ensure zero credentials leak in logs, bundles, or debug dumps.
+- [x] **Phase 4: Release Gates**
+  - [x] **Sr. Developer:** Verify that a clean script-to-scheduled-production workflow completes successfully without manual intervention. *(Added and passed an HTTP-level configuration export test that emits a parseable scheduled-production bootstrap with a target Orchestrator alias.)*
+  - [x] **Sr. Developer:** Ensure zero credentials leak in logs, bundles, or debug dumps. *(Verified configuration export secret exclusion, support-bundle diagnostic redaction, and credential-leak hardening tests.)*
   - [x] **Sr. Developer:** Reconcile OIDC/LDAP configurations with standard documentation libraries. *(Aligned `PortalConfig` OIDC/LDAP options with `Docs/Reference/Settings.md` and `Docs/ReportPortal_Administrators_Guide.md`.)*
   - [x] **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
