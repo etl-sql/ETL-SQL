@@ -130,10 +130,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 try
                 {
-                    var activeJobs = await _store.GetActiveJobsAsync();
                     var now = DateTime.Now;
+                    var dueJobs = _store is IJobScheduleQueryStore scheduleQueryStore
+                        ? await scheduleQueryStore.GetDueJobsAsync(now)
+                        : (await _store.GetActiveJobsAsync()).Where(job => job.NextRun == null || job.NextRun <= now);
 
-                    foreach (var job in activeJobs.Where(job => job.NextRun == null || job.NextRun <= now))
+                    foreach (var job in dueJobs)
                     {
                         if (!_scheduledJobStarts.TryAdd(job.Name, 0))
                         {

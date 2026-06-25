@@ -90,14 +90,6 @@ public class SubscriptionsController(
         page = Math.Max(page, 1);
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = db.Subscriptions.Include(s => s.Report).AsQueryable();
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var term = $"%{q.Trim()}%";
-            query = query.Where(s =>
-                EF.Functions.Like(s.Name ?? "", term) ||
-                EF.Functions.Like(s.Recipients, term) ||
-                EF.Functions.Like(s.Report.Name, term));
-        }
         if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
             query = query.Where(s => s.IsActive);
         else if (string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase))
@@ -108,12 +100,35 @@ public class SubscriptionsController(
             Enum.TryParse<SubscriptionFormat>(format, true, out var parsedFormat))
             query = query.Where(s => s.Format == parsedFormat);
 
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        int total;
+        List<Subscription> items;
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var allFiltered = await query.ToListAsync();
+            var term = q.Trim();
+            var matched = allFiltered.Where(s =>
+                (s.Name != null && s.Name.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (s.Recipients != null && s.Recipients.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (s.Report?.Name != null && s.Report.Name.Contains(term, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+
+            total = matched.Count;
+            items = matched
+                .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+        else
+        {
+            total = await query.CountAsync();
+            items = await query
+                .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
         return Ok(new PagedResult<SubscriptionDto>(items.Select(ToDto).ToList(), total, page, pageSize));
     }
 

@@ -247,6 +247,10 @@ namespace ETL_SQL.Tests
             var usage = Assert.IsType<ShowPortalUsageMetricsStatement>(Assert.Single(usageScript.Statements));
             Assert.Equal(30, usage.Days);
             Assert.Equal("#usage", usage.IntoTable);
+
+            var operationalScript = TestHelpers.Parse("SHOW PORTAL OPERATIONAL METRICS INTO #ops;");
+            var operational = Assert.IsType<ShowPortalOperationalMetricsStatement>(Assert.Single(operationalScript.Statements));
+            Assert.Equal("#ops", operational.IntoTable);
         }
 
         [Fact]

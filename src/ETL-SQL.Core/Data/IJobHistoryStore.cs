@@ -118,3 +118,8 @@ public interface IJobHistoryStore
     Task<string?> GetJobStateAsync(string jobName, string key);
     Task SetJobStateAsync(string jobName, string key, string? value);
 }
+
+public interface IJobScheduleQueryStore
+{
+    Task<IEnumerable<JobDefinition>> GetDueJobsAsync(DateTime now);
+}

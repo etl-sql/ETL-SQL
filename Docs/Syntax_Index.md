@@ -941,6 +941,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW CATALOG SEARCH` | Portal   | Searches the portal catalog |
 | `SHOW EFFECTIVE PERMISSIONS` | Portal | Shows resolved portal permissions |
 | `SHOW PORTAL USAGE METRICS` | Portal | Shows usage and refresh health metrics |
+| `SHOW PORTAL OPERATIONAL METRICS` | Portal | Shows live queue, resource, load, and schema health metrics |
 | `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |

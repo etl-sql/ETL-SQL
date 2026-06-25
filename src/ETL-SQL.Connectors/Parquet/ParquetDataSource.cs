@@ -94,7 +94,7 @@ namespace ETL_SQL.Connectors.Parquet
                             currentBatch.SetColumns(colNames);
                         }
 
-                        var etlRow = new ETL_SQL.Data.Row();
+                        var etlRow = currentBatch.NewRow();
                         for (int c = 0; c < dataFields.Length; c++)
                         {
                             etlRow[colNames[c]] = columns[c][r];

@@ -19,7 +19,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -131,6 +131,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     FunctionsApplied TEXT NOT NULL DEFAULT '[]',
                     DerivedFromDescriptions TEXT
                 );
+                CREATE INDEX IF NOT EXISTS idx_jobs_sched ON Jobs(IsEnabled, NextRun);
+                CREATE INDEX IF NOT EXISTS idx_jh_job_start ON JobHistory(JobName, StartTime);
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
@@ -784,6 +786,25 @@ namespace ETL_SQL.Orchestrator.Storage
             var sql = "SELECT * FROM Jobs WHERE IsEnabled = 1;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
+
+            var jobs = new List<JobDefinition>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                jobs.Add(ReadJob(reader));
+            }
+            return jobs;
+        }
+
+        public async Task<IEnumerable<JobDefinition>> GetDueJobsAsync(DateTime now)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Jobs WHERE IsEnabled = 1 AND (NextRun IS NULL OR NextRun <= @now);";
+            command.AddParam("@now", now.ToString("O"));
 
             var jobs = new List<JobDefinition>();
             using var reader = await command.ExecuteReaderAsync();

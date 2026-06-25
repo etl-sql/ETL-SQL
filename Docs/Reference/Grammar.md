@@ -3007,6 +3007,7 @@ EXECUTE portal BEGIN
 
     SHOW ACTIVE SESSIONS [INTO #sessions];
     SHOW PORTAL USAGE METRICS FOR 30 DAYS [INTO #usage];
+    SHOW PORTAL OPERATIONAL METRICS [INTO #ops];
 
     -- =========================================================
     -- SERVICE CONTROL

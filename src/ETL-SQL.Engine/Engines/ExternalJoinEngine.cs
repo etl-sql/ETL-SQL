@@ -265,8 +265,8 @@ public class ExternalJoinEngine
     private Row CombineRows(Row left, Row right)
     {
         var combined = new Row();
-        foreach (var kv in left.Columns) combined[kv.Key] = kv.Value;
-        foreach (var kv in right.Columns) combined[kv.Key] = kv.Value;
+        left.ForEachColumn((name, value) => combined[name] = value);
+        right.ForEachColumn((name, value) => combined[name] = value);
         return combined;
     }
 

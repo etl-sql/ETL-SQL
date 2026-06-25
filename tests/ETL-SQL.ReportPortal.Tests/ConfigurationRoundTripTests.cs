@@ -410,18 +410,46 @@ public sealed class ConfigurationRoundTripTests
             .Where(j => j.Report.Name.EndsWith($"_{suffix}"))
             .Select(j => j.Report.Folder.Path + "/" + j.Report.Name + "|" + j.RefreshInterval)
             .ToListAsync()).ToHashSet();
-        var subscriptions = (await db.Subscriptions
+        var rawSubscriptions = await db.Subscriptions
             .Where(s => s.Name != null && s.Name.EndsWith($"_{suffix}"))
-            .Select(s => s.Report.Folder.Path + "/" + s.Report.Name + "|" + s.Name + "|" +
+            .Select(s => new {
+                FolderPath = s.Report.Folder.Path,
+                ReportName = s.Report.Name,
+                s.Name,
+                s.Schedule,
+                s.DeliverOnRefresh,
+                s.Format,
+                s.SmtpAlias,
+                s.Recipients,
+                s.IsActive,
+                s.ParametersJson
+            })
+            .ToListAsync();
+        var subscriptions = rawSubscriptions
+            .Select(s => s.FolderPath + "/" + s.ReportName + "|" + s.Name + "|" +
                 s.Schedule + "|" + s.DeliverOnRefresh + "|" + s.Format + "|" + s.SmtpAlias + "|" +
                 s.Recipients + "|" + s.IsActive + "|" + s.ParametersJson)
-            .ToListAsync()).ToHashSet();
-        var alerts = (await db.ReportAlerts
+            .ToHashSet();
+
+        var rawAlerts = await db.ReportAlerts
             .Where(a => a.Name.EndsWith($"_{suffix}"))
-            .Select(a => a.Report.Folder.Path + "/" + a.Report.Name + "|" + a.Name + "|" +
+            .Select(a => new {
+                FolderPath = a.Report.Folder.Path,
+                ReportName = a.Report.Name,
+                a.Name,
+                a.VisualName,
+                a.Operator,
+                a.Threshold,
+                a.Recipient,
+                a.SmtpAlias,
+                a.IsActive
+            })
+            .ToListAsync();
+        var alerts = rawAlerts
+            .Select(a => a.FolderPath + "/" + a.ReportName + "|" + a.Name + "|" +
                 a.VisualName + "|" + a.Operator + "|" + a.Threshold + "|" + a.Recipient + "|" +
                 a.SmtpAlias + "|" + a.IsActive)
-            .ToListAsync()).ToHashSet();
+            .ToHashSet();
 
         return new NormalizedState(
             users, groups, memberships, folders, acls, smtp,

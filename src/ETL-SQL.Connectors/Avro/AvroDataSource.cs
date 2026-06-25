@@ -81,7 +81,7 @@ namespace ETL_SQL.Connectors.Avro
                 while (await Task.Run(() => reader.HasNext()))
                 {
                     var record = await Task.Run(() => reader.Next());
-                    var row = new Row();
+                    var row = currentBatch.NewRow();
                     foreach (var field in schema.Fields)
                     {
                         row[field.Name] = record[field.Name];

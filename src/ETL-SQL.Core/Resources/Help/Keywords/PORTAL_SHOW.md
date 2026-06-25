@@ -11,6 +11,7 @@ EXECUTE portal BEGIN
   SHOW ACTIVE SESSIONS [INTO #sessions];
   SHOW EFFECTIVE PERMISSIONS FOR USER 'username' [INTO #perms];
   SHOW PORTAL USAGE METRICS [INTO #metrics];
+  SHOW PORTAL OPERATIONAL METRICS [INTO #ops];
   SHOW REPORT HISTORY 'ReportName' [INTO #history];
   SHOW REPORT DEPENDENCIES 'ReportName' [INTO #deps];
   SHOW CATALOG SEARCH 'search_term' [INTO #results];
@@ -58,11 +59,17 @@ EXECUTE portal BEGIN
 END;
 SELECT folder, access_level, granted_via FROM #perms;
 
--- Check portal health and dataset cache metrics
+-- Check longer-term usage metrics
 EXECUTE portal BEGIN
   SHOW PORTAL USAGE METRICS INTO #metrics;
 END;
-SELECT dataset_name, hit_rate, last_refreshed, ttl, refresh_errors FROM #metrics;
+SELECT reportName, views, uniqueViewers, lastViewedAt, lastRefreshStatus FROM #metrics;
+
+-- Check live operational load and resource metrics
+EXECUTE portal BEGIN
+  SHOW PORTAL OPERATIONAL METRICS INTO #ops;
+END;
+SELECT activeExecutions, queuedExecutions, averageExecutionDurationMs FROM #ops;
 
 -- Review the publish and refresh history for a report
 EXECUTE portal BEGIN
@@ -87,7 +94,8 @@ SELECT report_name, folder, relevance_score FROM #results ORDER BY relevance_sco
 - All `SHOW` commands support an optional `INTO #tempTable` clause that captures the result set as a temp table for further processing with `SELECT`, `INSERT`, or `EXPORT`.
 - Omitting `INTO` prints the results directly to the output (same behavior as a bare `SELECT`).
 - `SHOW EFFECTIVE PERMISSIONS FOR USER` resolves the combined permissions from all individual user grants and group memberships. The `granted_via` column indicates whether the access came from a direct user grant or a group.
-- `SHOW PORTAL USAGE METRICS` returns refresh health, active session count, dataset cache hit rates, and error counts since the last portal restart.
+- `SHOW PORTAL USAGE METRICS` returns report view counts, unique viewers, refresh health, and subscription delivery failures for the requested period.
+- `SHOW PORTAL OPERATIONAL METRICS` returns live queue depth, execution caps, recent failure counts, storage size, schema status, and last-24-hour execution load/resource buckets.
 - `SHOW CATALOG SEARCH` performs a full-text search across report names, descriptions, and tags. The search term supports simple keyword matching; multiple words are treated as an AND query.
 - `SHOW REPORT HISTORY` covers publish events, refresh cycles, validation runs, and permission changes for the named report.
 - `SHOW REPORT DEPENDENCIES` lists the datasets, connector types, and external scripts the report depends on, along with their current availability status.

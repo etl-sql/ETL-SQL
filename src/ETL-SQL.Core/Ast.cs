@@ -2531,6 +2531,8 @@ public sealed record ShowEffectivePortalPermissionsStatement(string TargetType, 
 
 public sealed record ShowPortalUsageMetricsStatement(int? Days, string? IntoTable = null) : Statement;
 
+public sealed record ShowPortalOperationalMetricsStatement(string? IntoTable = null) : Statement;
+
 public sealed record ShowActivePortalSessionsStatement(string? IntoTable = null) : Statement;
 
 public sealed record ValidatePortalReportStatement(string ScriptPath, string? IntoTable = null) : Statement;

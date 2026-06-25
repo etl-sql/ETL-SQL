@@ -1845,7 +1845,7 @@ Common portal commands include:
 | User navigation | `FAVORITE REPORT`, `CREATE SAVED VIEW`, `SHOW CATALOG SEARCH` |
 | Delivery | `CREATE SUBSCRIPTION`, `CREATE ALERT` |
 | Sharing and embedding | `CREATE SHARE LINK`, `CREATE EMBED TOKEN` |
-| Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS` |
+| Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS`, `SHOW PORTAL OPERATIONAL METRICS` |
 | Security review | `SHOW EFFECTIVE PERMISSIONS`, `VALIDATE REPORT SCRIPT` |
 
 For browser usage, see [ReportPortal_User_Guide.md](ReportPortal_User_Guide.md). For deployment and administration, see [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md).

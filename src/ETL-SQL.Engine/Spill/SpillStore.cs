@@ -562,7 +562,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else b.Append(Convert.ToInt64(v));
                             }
@@ -574,7 +574,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else b.Append(Math.Round(Convert.ToDecimal(v), dt.Scale));
                             }
@@ -586,7 +586,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else b.Append(Convert.ToDouble(v));
                             }
@@ -598,7 +598,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else b.Append(Convert.ToBoolean(v));
                             }
@@ -610,7 +610,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else
                                 {
@@ -629,7 +629,7 @@ namespace ETL_SQL.Engine.Spill;
                             b.Reserve(rows.Count);
                             foreach (var row in rows)
                             {
-                                var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
+                                var v = row.TryGetValue(field.Name, out var val) ? val : null;
                                 if (v == null) b.AppendNull();
                                 else if (v is string s) b.Append(s);
                                 else b.Append(JsonPrefix + JsonSerializer.Serialize(v));

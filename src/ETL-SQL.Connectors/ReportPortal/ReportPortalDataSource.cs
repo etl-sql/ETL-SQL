@@ -171,6 +171,7 @@ namespace ETL_SQL.Connectors.ReportPortal
                 case SearchPortalCatalogStatement s: await SearchCatalogAsync(s, context); break;
                 case ShowEffectivePortalPermissionsStatement s: await ShowEffectivePermissionsAsync(s, context); break;
                 case ShowPortalUsageMetricsStatement s: await ShowUsageMetricsAsync(s, context); break;
+                case ShowPortalOperationalMetricsStatement s: await ShowOperationalMetricsAsync(s, context); break;
 
                 case CreatePortalRefreshJobStatement s: await CreatePortalRefreshJobAsync(s, context); break;
                 case DropPortalRefreshJobStatement s: await DropPortalRefreshJobAsync(s, context); break;
@@ -770,6 +771,9 @@ namespace ETL_SQL.Connectors.ReportPortal
             var days = stmt.Days ?? 30;
             await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, $"api/admin/metrics/usage?days={days}", null), stmt.IntoTable, context);
         }
+
+        private async Task ShowOperationalMetricsAsync(ShowPortalOperationalMetricsStatement stmt, IExecutionContext context) =>
+            await PublishJsonResultAsync(await SendJsonAsync(HttpMethod.Get, "api/admin/metrics/operational", null), stmt.IntoTable, context);
 
         // ── Refresh Jobs ──────────────────────────────────────────────────────────
 

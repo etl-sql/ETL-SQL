@@ -107,15 +107,6 @@ public class AdminController(
         pageSize = Math.Clamp(pageSize, 1, 100);
         var query = userManager.Users.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var term = $"%{q.Trim()}%";
-            query = query.Where(u =>
-                EF.Functions.Like(u.UserName!, term) ||
-                EF.Functions.Like(u.Email ?? "", term) ||
-                EF.Functions.Like(u.FirstName ?? "", term) ||
-                EF.Functions.Like(u.LastName ?? "", term));
-        }
         if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
             query = query.Where(u => u.IsActive);
         else if (string.Equals(status, "inactive", StringComparison.OrdinalIgnoreCase))
@@ -135,13 +126,40 @@ public class AdminController(
                 : query.Where(_ => false);
         }
 
-        var total = await query.CountAsync();
-        var users = await query
-            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-            .OrderBy(u => u.UserName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
+        int total;
+        List<PortalUser> users;
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var allFilteredUsers = await query
+                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+                .OrderBy(u => u.UserName)
+                .ToListAsync();
+
+            var term = q.Trim();
+            var matchedUsers = allFilteredUsers.Where(u =>
+                (u.UserName != null && u.UserName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (u.Email != null && u.Email.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (u.FirstName != null && u.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (u.LastName != null && u.LastName.Contains(term, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+
+            total = matchedUsers.Count;
+            users = matchedUsers
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+        }
+        else
+        {
+            total = await query.CountAsync();
+            users = await query
+                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+                .OrderBy(u => u.UserName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
 
         var items = new List<UserDto>();
         foreach (var u in users)
@@ -804,20 +822,33 @@ public class AdminController(
                 (ug, u) => u);
         if (!string.IsNullOrWhiteSpace(q))
         {
-            var term = $"%{q.Trim()}%";
-            query = query.Where(u =>
-                EF.Functions.Like(u.UserName!, term) ||
-                EF.Functions.Like(u.Email ?? "", term));
-        }
+            var allUsers = await query.ToListAsync();
+            var term = q.Trim();
+            var matchedUsers = allUsers.Where(u =>
+                (u.UserName != null && u.UserName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
+                (u.Email != null && u.Email.Contains(term, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
 
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderBy(u => u.UserName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
-            .ToListAsync();
-        return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
+            var total = matchedUsers.Count;
+            var items = matchedUsers
+                .OrderBy(u => u.UserName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
+                .ToList();
+            return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
+        }
+        else
+        {
+            var total = await query.CountAsync();
+            var items = await query
+                .OrderBy(u => u.UserName)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(u => new GroupMemberDto(u.Id, u.UserName!, u.Email, u.IsActive))
+                .ToListAsync();
+            return Ok(new PagedResult<GroupMemberDto>(items, total, page, pageSize));
+        }
     }
 
     [HttpPost("groups/{id:int}/members")]

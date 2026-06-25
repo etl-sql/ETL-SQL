@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors.Directory
             foreach (var file in files)
             {
                 var info = new FileInfo(file);
-                var row = new Row();
+                var row = currentBatch.NewRow();
                 row["FileName"] = info.Name;
                 row["Path"] = info.FullName;
                 row["Extension"] = info.Extension;

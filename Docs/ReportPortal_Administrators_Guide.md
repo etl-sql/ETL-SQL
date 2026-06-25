@@ -774,17 +774,29 @@ Admins can inspect operational usage with `SHOW PORTAL USAGE METRICS FOR 30 DAYS
 SHOW PORTAL USAGE METRICS FOR 30 DAYS INTO #usage;
 ```
 
-For live operational health (as opposed to longer-term usage), `GET /api/admin/metrics/operational`
-returns a point-in-time snapshot for a multi-user deployment: `activeExecutions` and
+For live operational health (as opposed to longer-term usage), use
+`SHOW PORTAL OPERATIONAL METRICS INTO #ops` or `GET /api/admin/metrics/operational`. The response
+is a point-in-time snapshot for a multi-user deployment: `activeExecutions` and
 `queuedExecutions` (queue depth), the configured `executionCap`/`perUserExecutionCap`, recent
 execution and subscription-delivery counts and failure counts over the last 24 hours (the failure
-rate denominators), and `datasetStorageBytes`/`snapshotStorageBytes` for disk-usage monitoring. The
-execution and delivery figures come from the durable `PortalExecutionJobs` and subscription-delivery
-ledgers, so they survive a restart. It also reports database **schema migration status** —
-`appliedMigrations`, `pendingMigrations`, `lastAppliedMigration`, and `schemaUpToDate` — so after an
-in-place upgrade an operator can confirm the catalog migrated fully (`pendingMigrations: 0`) without
-shell access. The `/health` endpoint's `execution` check also reports the single-instance topology and
-active execution count for liveness probes.
+rate denominators), `averageExecutionDurationMs`, `averageQueuedExecutionAgeSeconds`, and
+`datasetStorageBytes`/`snapshotStorageBytes` for disk-usage monitoring. The response also includes
+`hourlyExecutionLoad`, a last-24-hours UTC bucket list with `hourUtc`, `executions`, `failures`,
+`rowsProcessed`, and `peakMemoryBytes`, so operators can identify busy hours, high-failure windows,
+and executions that are moving unusually large result sets. The execution and delivery figures come
+from the durable `PortalExecutionJobs` and subscription-delivery ledgers, so they survive a restart.
+It also reports database **schema migration status** — `appliedMigrations`, `pendingMigrations`,
+`lastAppliedMigration`, and `schemaUpToDate` — so after an in-place upgrade an operator can confirm
+the catalog migrated fully (`pendingMigrations: 0`) without shell access. The `/health` endpoint's
+`execution` check also reports the single-instance topology and active execution count for liveness
+probes.
+
+For a single report execution, poll `GET /api/jobs/{jobId}` with the job id returned by a refresh or
+execute request. The job response includes `rowsProcessed`, `peakMemoryBytes`, and `cpuTimeSeconds`
+when the execution path can measure them. Use this endpoint for per-job troubleshooting; use
+`SHOW PORTAL OPERATIONAL METRICS` or `GET /api/admin/metrics/operational` for aggregate
+administrator load monitoring. The current portal UI does not surface all of these fields yet, so
+the documented script and REST endpoints are the discovery path.
 
 ### 6.8 Report Dependencies
 

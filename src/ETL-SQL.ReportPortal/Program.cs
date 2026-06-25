@@ -397,6 +397,9 @@ builder.WebHost.ConfigureKestrel(options =>
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
 
+// Initialize application-layer PII column encryption provider with Data Protection keys.
+PortalEncryptionProvider.Initialize(app.Services.GetRequiredService<IDataProtectionProvider>());
+
 if (Directory.Exists(app.Environment.WebRootPath))
 {
     try
@@ -465,6 +468,10 @@ using (var scope = app.Services.CreateScope())
     }
     if (db.Database.IsSqlite())
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+    await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
+        db,
+        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("PiiColumnEncryptionMaintenance"));
     await DatasetStorageMaintenance.ReconcileAsync(
         db,
         portalConfig,

@@ -30,6 +30,8 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ProcessJobExecutorOptions _options;
         private readonly ChildProcessTracker _tracker;
         private readonly ILogger<ProcessJobExecutor> _logger;
+        private static readonly object CleanupLock = new();
+        private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
 
         public ProcessJobExecutor(
             IOptions<ProcessJobExecutorOptions> options,
@@ -39,10 +41,13 @@ namespace ETL_SQL.Orchestrator.Execution
             _options = options.Value;
             _tracker = tracker;
             _logger = logger;
+            CleanupOldTempScripts(force: true);
         }
 
         public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
         {
+            CleanupOldTempScripts(force: false);
+
             // Write script to a temp file — ETL-SQL.exe run expects a file path
             var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-job-{Guid.NewGuid():N}.etlsql");
             try
@@ -53,6 +58,40 @@ namespace ETL_SQL.Orchestrator.Execution
             finally
             {
                 try { File.Delete(tempFile); } catch { /* best effort */ }
+            }
+        }
+
+        private void CleanupOldTempScripts(bool force)
+        {
+            var now = DateTime.UtcNow;
+            lock (CleanupLock)
+            {
+                if (!force && now - _lastTempScriptCleanupUtc < TimeSpan.FromHours(1))
+                    return;
+
+                _lastTempScriptCleanupUtc = now;
+            }
+
+            try
+            {
+                var cutoff = now - TimeSpan.FromHours(24);
+                foreach (var path in Directory.EnumerateFiles(Path.GetTempPath(), "etlsql-job-*.etlsql", SearchOption.TopDirectoryOnly))
+                {
+                    try
+                    {
+                        var lastWrite = File.GetLastWriteTimeUtc(path);
+                        if (lastWrite < cutoff)
+                            File.Delete(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Unable to delete stale Orchestrator job temp script {Path}", path);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Unable to enumerate stale Orchestrator job temp scripts.");
             }
         }
 

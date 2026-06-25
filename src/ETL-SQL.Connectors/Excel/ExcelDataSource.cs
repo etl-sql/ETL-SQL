@@ -127,7 +127,7 @@ namespace ETL_SQL.Connectors.Excel
                 for (int r = dataStartRow; r <= endRow; r++)
                 {
                     var row = sheet.Rows[r];
-                    var etlRow = new Row();
+                    var etlRow = etlBatch.NewRow();
                     for (int c = startCol; c <= endCol; c++)
                     {
                         string colName = columnNames[c - startCol];

@@ -196,8 +196,10 @@ public sealed class BackupRestoreDrillTests : IDisposable
         Assert.Equal(FolderPermission.Read, perm);
 
         // Subscriptions and their metadata.
-        Assert.True(await db2.Subscriptions.AnyAsync(s =>
-            s.Id == subscriptionId && s.Recipients == "cfo@test.local" && s.IsActive));
+        var sub = await db2.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId);
+        Assert.NotNull(sub);
+        Assert.Equal("cfo@test.local", sub!.Recipients);
+        Assert.True(sub.IsActive);
 
         // Dataset metadata + key-version continuity.
         var ds = await db2.Datasets.SingleAsync(d => d.Id == datasetId);

@@ -126,5 +126,14 @@ namespace ETL_SQL.Tests.Core
             var list = (ListExpression)expr!;
             Assert.Equal(3, list.Items.Count);
         }
+
+        [Fact]
+        public void DeeplyNestedExpression_FailsWithSyntaxException()
+        {
+            var expr = new string('(', 120) + "1" + new string(')', 120);
+
+            var ex = Assert.Throws<ETL_SQL.Core.Common.Exceptions.SyntaxException>(() => Parse(expr));
+            Assert.Contains("maximum supported depth", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

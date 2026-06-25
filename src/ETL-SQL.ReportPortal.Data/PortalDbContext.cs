@@ -35,6 +35,9 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     {
         base.OnModelCreating(builder);
 
+        var piiConverter = new EncryptedDbConverter();
+        var piiNullableConverter = new EncryptedDbNullableConverter();
+
         builder.Entity<UserGroup>(e =>
         {
             e.HasKey(x => new { x.UserId, x.GroupId });
@@ -113,6 +116,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.HasOne(x => x.Owner).WithMany(u => u.ReportAlerts).HasForeignKey(x => x.OwnerId);
             e.HasOne(x => x.Report).WithMany(r => r.Alerts).HasForeignKey(x => x.ReportId);
+            e.Property(x => x.Recipient).HasConversion(piiNullableConverter);
         });
 
         builder.Entity<SmtpConnection>(e =>
@@ -126,6 +130,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             // At-most-once per recipient and scheduler completion.
             e.HasIndex(x => new { x.SubscriptionId, x.TriggerKey, x.RecipientKey }).IsUnique();
             e.HasIndex(x => x.DeliveryId);
+            e.Property(x => x.Recipients).HasConversion(piiConverter);
         });
 
         builder.Entity<AuditOutboxMessage>(e =>
@@ -150,11 +155,17 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Version).IsConcurrencyToken();
             // Federated accounts are looked up by their immutable provider subject.
             e.HasIndex(x => new { x.Provider, x.ExternalSubject });
+            e.Property(x => x.Email).HasConversion(piiNullableConverter);
+            e.Property(x => x.NormalizedEmail).HasConversion(piiNullableConverter);
+            e.Property(x => x.FirstName).HasConversion(piiNullableConverter);
+            e.Property(x => x.LastName).HasConversion(piiNullableConverter);
+            e.Property(x => x.PhoneNumber).HasConversion(piiNullableConverter);
         });
 
         builder.Entity<Subscription>(e =>
         {
             e.Property(x => x.Version).IsConcurrencyToken();
+            e.Property(x => x.Recipients).HasConversion(piiConverter);
         });
 
         builder.Entity<Folder>(e =>

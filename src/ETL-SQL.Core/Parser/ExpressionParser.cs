@@ -11,7 +11,9 @@ namespace ETL_SQL.Core.Parser;
 /// </summary>
 public partial class ExpressionParser
 {
+    private const int MaxExpressionDepth = 100;
     private readonly IParser _parser;
+    private int _expressionDepth;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExpressionParser"/> class.
@@ -41,7 +43,23 @@ public partial class ExpressionParser
     /// <returns>The root <see cref="Expression"/> node.</returns>
     public Expression ParseExpression()
     {
-        return ParseOr();
+        _expressionDepth++;
+        try
+        {
+            if (_expressionDepth > MaxExpressionDepth)
+            {
+                throw new SyntaxException(
+                    $"Expression nesting exceeds the maximum supported depth of {MaxExpressionDepth}.",
+                    _parser.Current.Line,
+                    _parser.Current.Column);
+            }
+
+            return ParseOr();
+        }
+        finally
+        {
+            _expressionDepth--;
+        }
     }
 
     private Expression ParseOr()

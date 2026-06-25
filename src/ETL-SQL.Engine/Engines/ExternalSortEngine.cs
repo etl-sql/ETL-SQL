@@ -109,6 +109,14 @@ public class ExternalSortEngine
             if (currentChunk.Count > 0)
             {
                 currentChunk.Sort(Compare);
+                if (chunkPaths.Count == 0)
+                {
+                    foreach (var entry in currentChunk)
+                        yield return entry.Row;
+
+                    yield break;
+                }
+
                 var prefix = Guid.NewGuid().ToString("N");
                 var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);

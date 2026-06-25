@@ -678,8 +678,13 @@ public class SystemParser : ParserComponent
                 Match(TokenType.METRICS);
                 stmt = new ShowPortalUsageMetricsStatement(ParseOptionalDays());
             }
+            else if (MatchIdentifier("OPERATIONAL"))
+            {
+                Match(TokenType.METRICS);
+                stmt = new ShowPortalOperationalMetricsStatement();
+            }
             else
-                throw new SyntaxException("Expected USAGE after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected USAGE or OPERATIONAL after SHOW PORTAL", _parser.Current.Line, _parser.Current.Column);
         }
         else if (Match(TokenType.USAGE))
         {
@@ -757,6 +762,7 @@ public class SystemParser : ParserComponent
                 SearchPortalCatalogStatement spc => spc with { IntoTable = tempTable },
                 ShowEffectivePortalPermissionsStatement sepp => sepp with { IntoTable = tempTable },
                 ShowPortalUsageMetricsStatement spum => spum with { IntoTable = tempTable },
+                ShowPortalOperationalMetricsStatement spom => spom with { IntoTable = tempTable },
                 ShowActivePortalSessionsStatement saps => saps with { IntoTable = tempTable },
                 ShowPortalSmtpConnectionsStatement ssmtp => ssmtp with { IntoTable = tempTable },
                 LineageStatement lin => lin with { IntoTable = tempTable },

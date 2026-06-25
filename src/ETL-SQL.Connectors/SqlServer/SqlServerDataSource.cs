@@ -113,7 +113,7 @@ namespace ETL_SQL.Connectors.SqlServer
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                     }
                     await currentBatch.AddRowAsync(row);
 
@@ -254,7 +254,7 @@ namespace ETL_SQL.Connectors.SqlServer
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
                         {
-                            row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                            row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                         }
                         await currentBatch.AddRowAsync(row);
 
