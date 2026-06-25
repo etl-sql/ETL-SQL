@@ -30,8 +30,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // Check if it's a script file
             if (stmt.ProcedureName.EndsWith(".etlsql", StringComparison.OrdinalIgnoreCase) ||
-                stmt.ProcedureName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase) ||
-                File.Exists(stmt.ProcedureName))
+                stmt.ProcedureName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
             {
                 await ExecuteScript(stmt, context);
                 return;
@@ -50,12 +49,14 @@ namespace ETL_SQL.Engine.Handlers
 
         private async Task ExecuteScript(ExecuteStatement stmt, IExecutionContext context)
         {
-            _logger.Debug("Running sub-script: {ScriptPath}", stmt.ProcedureName);
+            var scriptPath = context.ResolvePath(stmt.ProcedureName);
 
-            if (!File.Exists(stmt.ProcedureName))
-                throw new ExecutionException($"Script file not found: {stmt.ProcedureName}");
+            _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
 
-            var source = await File.ReadAllTextAsync(stmt.ProcedureName);
+            if (!File.Exists(scriptPath))
+                throw new ExecutionException($"Script file not found: {scriptPath}");
+
+            var source = await File.ReadAllTextAsync(scriptPath);
             var tokens = new Lexer(source).Tokenize();
             var script = new ETL_SQL.Core.Parser.Parser(tokens).Parse();
 

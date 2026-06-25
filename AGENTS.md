@@ -315,7 +315,7 @@ These rules apply when you are editing the ETL-SQL engine source code — **not*
 These apply when authoring or modifying any `IConnector` / `IDataSource` implementation:
 
 - **Option naming**: All `WITH()`-style option keys must be **UPPERCASE with underscores** (`TIMEOUT_SECONDS`, `MIN_POOL_SIZE`, `CREDENTIAL_FILE`). Never PascalCase, camelCase, or mixed.
-- **PASSWORD only — no PWD**: `PASSWORD` is the only accepted option key for passwords in any connector. Never add `PWD` as an alias or fallback. The `ConnectionStringBuilder` is responsible for mapping `PASSWORD` → the driver-native keyword (`PWD`, `Password`, etc.) when building the wire connection string.
+- **PASSWORD for ETL-SQL-owned options; vendor-native names are allowed**: Use `PASSWORD` for ETL-SQL-created connector password options and do not add convenience aliases such as `PWD` for those options. Vendor-native pass-through syntax is exempt when intentionally exposed by a connector; for example, ODBC `PWD` is valid because it is part of the ODBC connection-string vocabulary. The `ConnectionStringBuilder` should map ETL-SQL `PASSWORD` → the driver-native keyword when building structured connection strings.
 - **Timeout defaults**: OLTP connectors (MSSQL, Postgres, Oracle, MySQL, SQLite, ODBC) default to **30 seconds**. Data warehouse connectors (Snowflake, BigQuery) default to **1800 seconds** (30 min). Both must read `TIMEOUT_SECONDS` from options to allow override.
 - **Constructor signature**: `IDataSource` implementations use `(IExecutionContext context, string connectionString, string? tableName, Dictionary<string, string>? options)` — this order exactly.
 - **ResolvePath for file path options**: Any connector option accepting a file path (`CREDENTIAL_FILE`, `KEY_FILE`, `CERT_FILE`, `PRIVATE_KEY_FILE`, `PATH`) must call `context.ResolvePath()` before any I/O, even when the connector is not in the engine tier.
@@ -450,7 +450,7 @@ For full usage and script details, refer to **[scripts/README.md](file:///c:/Use
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
 | Using `Firebird` as a connector token | Firebird is not a supported connector; use `ODBC` with a Firebird driver instead |
 | Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src AS FLATFILE('my.csv'); SELECT * FROM src` |
-| Using `PWD=` as a connection option | Always use `PASSWORD=`. The `ConnectionStringBuilder` maps it to `PWD` internally when the driver requires it. |
+| Using `PWD=` as an ETL-SQL-owned connection option | Use `PASSWORD=` for ETL-SQL-created options. Vendor-native pass-through syntax such as ODBC `PWD` is valid when the connector intentionally exposes it. |
 | Writing `CREATE CONNECTION ... WITH(option=value)` | `WITH()` is not valid on `CREATE CONNECTION`. Options go directly in parentheses: `CREATE CONNECTION c AS MSSQL(SERVER='s', PASSWORD='p')` |
 
 ---

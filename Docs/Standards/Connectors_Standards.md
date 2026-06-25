@@ -176,9 +176,11 @@ public HashSet<string> GetExcludedKeywords() => new();  // Returns empty — lin
 
 All `WITH()`-style option keys must be strictly UPPERCASE with underscores (e.g., `TIMEOUT_SECONDS`, `MIN_POOL_SIZE`, `CREDENTIAL_FILE`). PascalCase, camelCase, or mixed-case keys are forbidden.
 
-Additionally, `PASSWORD` is the only accepted option key for passwords in any connector. Never use `PWD` or any other alias. The connector's connection-string builder is responsible for mapping `PASSWORD` to the driver-native keyword when constructing the connection string.
+For ETL-SQL-created connector options, `PASSWORD` is the standard option key for passwords. Do not add convenience aliases such as `PWD` for an ETL-SQL-owned option; the connector's connection-string builder is responsible for mapping `PASSWORD` to the driver-native keyword when constructing the connection string.
 
-**Violation indicator:** Any option key in `GetSupportedOptions()` or constructor parsed options that contains lowercase letters, or is named `PWD`.
+Vendor-native pass-through syntax is exempt when the connector intentionally exposes the provider vocabulary. ODBC `PWD`, for example, is acceptable because it is part of the ODBC connection-string vocabulary, not an ETL-SQL-created alias.
+
+**Violation indicator:** Any option key in `GetSupportedOptions()` or constructor parsed options that contains lowercase letters, or any non-vendor-native password alias added for convenience.
 
 ---
 
@@ -371,7 +373,7 @@ Use this checklist when reviewing any PR that adds or significantly modifies a c
 **Metadata**
 - [ ] `GetSupportedOptions()` lists all `WITH` clause keys including sensitive ones?
 - [ ] All option keys in `GetSupportedOptions()` are strictly UPPERCASE with underscores?
-- [ ] `PASSWORD` is used as the only password option key (no `PWD` or aliases)?
+- [ ] `PASSWORD` is used for ETL-SQL-owned password options, with only intentional vendor-native pass-through exceptions such as ODBC `PWD`?
 - [ ] `GetOptionValues()` provides safe display values (no sensitive value defaults)?
 - [ ] `GetExcludedKeywords()` lists all baseline keywords the target dialect rejects?
 - [ ] `GetHelp()` documents authentication patterns and required vs. optional options?

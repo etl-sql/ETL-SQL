@@ -47,7 +47,7 @@ namespace ETL_SQL.Engine.Functions
 
             registry.RegisterWithHelp("CONNECTION_PROPERTY", ConnectionProperty, "CONNECTION_PROPERTY(conn_name, prop_name): Returns the value of a connection property, masking sensitive properties.");
 
-            registry.RegisterWithHelp("GET_JOB_STATE", (args, ctx) =>
+            registry.RegisterWithHelp("GET_JOB_STATE", async (args, ctx) =>
             {
                 if (args.Count < 1) throw new ExecutionException("GET_JOB_STATE requires at least 1 argument (key)");
                 string? key = args[0]?.ToString();
@@ -58,7 +58,7 @@ namespace ETL_SQL.Engine.Functions
                     var store = ctx.ServiceProvider.GetService(typeof(Core.Data.IJobHistoryStore)) as Core.Data.IJobHistoryStore;
                     if (store != null)
                     {
-                        return store.GetJobStateAsync(ctx.JobName, key).GetAwaiter().GetResult();
+                        return await store.GetJobStateAsync(ctx.JobName, key);
                     }
                 }
                 else

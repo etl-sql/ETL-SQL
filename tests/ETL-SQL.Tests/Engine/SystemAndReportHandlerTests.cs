@@ -319,6 +319,31 @@ namespace ETL_SQL.Tests.Engine
             finally { if (File.Exists(tmpFile)) File.Delete(tmpFile); }
         }
 
+        [Fact]
+        public async Task ExecuteScript_RelativePath_ResolvesFromCurrentScriptPath()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "etlsql_exec_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var mainPath = Path.Combine(dir, "main.etlsql");
+            var subPath = Path.Combine(dir, "sub.etlsql");
+            File.WriteAllText(mainPath, "EXECUTE 'sub.etlsql';");
+            File.WriteAllText(subPath, "SELECT 99 AS result;");
+
+            try
+            {
+                var eval = Eval();
+                eval.CurrentScriptPath = mainPath;
+                await eval.Evaluate(Parse("EXECUTE 'sub.etlsql';"));
+
+                Assert.NotNull(eval.LastResult);
+                Assert.Equal(99m, Convert.ToDecimal(eval.LastResult!.Rows[0]["result"]));
+            }
+            finally
+            {
+                try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); } catch { }
+            }
+        }
+
         // ── ShowDatasets with report context ──────────────────────────────────
 
         [Fact]

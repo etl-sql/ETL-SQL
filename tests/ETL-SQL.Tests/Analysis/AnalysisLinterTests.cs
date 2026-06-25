@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using Xunit;
 
@@ -18,6 +19,9 @@ namespace ETL_SQL.Tests.Analysis
             var parser = new Parser(tokens);
             return parser.Parse();
         }
+
+        private static void EnsureConnectorRegistry() =>
+            _ = DependencyInjectionSetup.BuildServiceProvider();
 
         [Fact]
         public async Task TestSafeDeleteUpdateRule()
@@ -192,6 +196,39 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
 
             // File connectors should not be checked for TRUSTED_CONNECTION conflicts
             var sql = "CREATE CONNECTION f AS FLATFILE('C:\\Data\\', TRUSTED_CONNECTION='TRUE', PASSWORD='secret');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task UnsupportedConnectionOptionRule_UnknownOption_Warns()
+        {
+            EnsureConnectorRegistry();
+            var linter = new Linter();
+            linter.AddRule(new UnsupportedConnectionOptionRule());
+
+            var sql = "CREATE CONNECTION db AS MSSQL(SERVER='.', DATABASE='d', API_KEY='secret');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Warning, results[0].Severity);
+            Assert.Contains("API_KEY", results[0].Message);
+            Assert.Contains("MSSQL", results[0].Message);
+        }
+
+        [Fact]
+        public async Task UnsupportedConnectionOptionRule_OdbcPwd_IsAllowedVendorOption()
+        {
+            EnsureConnectorRegistry();
+            var linter = new Linter();
+            linter.AddRule(new UnsupportedConnectionOptionRule());
+
+            var sql = "CREATE CONNECTION o AS ODBC(DSN='MyDsn', UID='etl', PWD='secret');";
 
             var script = Parse(sql);
             var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
