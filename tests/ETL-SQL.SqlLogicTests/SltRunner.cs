@@ -423,7 +423,7 @@ SET TELEMETRY = OFF;";
             FuzzyFunctions.Register(registry);
 
             var tracker = new Mock<ILineageTracker>();
-            tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
+            tracker.Setup(t => t.GlobalMetadata).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>());
 
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<ISessionStateManager>();

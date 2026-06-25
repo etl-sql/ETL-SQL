@@ -20,7 +20,7 @@ public class SnippetLibrary
     private static readonly Lazy<SnippetLibrary> _instance = new(() => new SnippetLibrary());
     public static SnippetLibrary Instance => _instance.Value;
 
-    private readonly IReadOnlyList<SnippetDef> _snippets;
+    private readonly Lazy<IReadOnlyList<SnippetDef>> _lazySnippets;
 
     // Call once at startup (before Instance is first accessed) to enable user snippets.
     public static void Initialize(string? userSnippetsPath)
@@ -28,14 +28,20 @@ public class SnippetLibrary
         _userSnippetsPath = userSnippetsPath;
     }
 
-    public SnippetLibrary() => _snippets = Load(_userSnippetsPath);
+    public SnippetLibrary()
+    {
+        _lazySnippets = new Lazy<IReadOnlyList<SnippetDef>>(() => Load(_userSnippetsPath));
+    }
 
-    public SnippetLibrary(string? userSnippetsPath) => _snippets = Load(userSnippetsPath);
+    public SnippetLibrary(string? userSnippetsPath)
+    {
+        _lazySnippets = new Lazy<IReadOnlyList<SnippetDef>>(() => Load(userSnippetsPath));
+    }
 
-    public IReadOnlyList<SnippetDef> GetAll() => _snippets;
+    public IReadOnlyList<SnippetDef> GetAll() => _lazySnippets.Value;
 
     public IEnumerable<SnippetDef> GetByPrefix(string prefix) =>
-        _snippets.Where(s => s.Trigger.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        _lazySnippets.Value.Where(s => s.Trigger.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<SnippetDef> Load(string? userSnippetsPath)
     {

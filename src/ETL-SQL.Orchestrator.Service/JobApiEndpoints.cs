@@ -426,16 +426,76 @@ namespace ETL_SQL.Orchestrator.Service
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
+        private static string? _cachedApiKey;
+        private static string[] _cachedPreviousApiKeys = Array.Empty<string>();
+        private static byte[]? _cachedApiKeyDigest;
+        private static byte[][] _cachedPreviousApiKeyDigests = Array.Empty<byte[]>();
+        private static string? _cachedScriptRoot;
+        private static readonly object _configLock = new();
+        private static bool _configInitialized = false;
+
+        private static void InitializeCache(IConfiguration cfg)
+        {
+            if (_configInitialized) return;
+            lock (_configLock)
+            {
+                if (_configInitialized) return;
+                _cachedApiKey = cfg["Orchestrator:ApiKey"];
+                _cachedPreviousApiKeys = cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? Array.Empty<string>();
+                _cachedScriptRoot = cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
+
+                if (!string.IsNullOrWhiteSpace(_cachedApiKey))
+                {
+                    _cachedApiKeyDigest = SHA256.HashData(Encoding.UTF8.GetBytes(_cachedApiKey));
+                }
+
+                var digests = new List<byte[]>();
+                foreach (var k in _cachedPreviousApiKeys.Take(1).Where(key => !string.IsNullOrWhiteSpace(key)))
+                {
+                    digests.Add(SHA256.HashData(Encoding.UTF8.GetBytes(k)));
+                }
+                _cachedPreviousApiKeyDigests = digests.ToArray();
+
+                _configInitialized = true;
+            }
+        }
+
         private static bool ApiKeyDenied(HttpContext ctx, IConfiguration cfg)
         {
+            InitializeCache(cfg);
             ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
-            return !ApiKeyAccepted(cfg, provided.ToString());
+            return !ApiKeyAcceptedInternal(provided.ToString());
         }
 
         private static bool ApiKeyAcceptedForSensitivePayload(HttpContext ctx, IConfiguration cfg)
         {
+            InitializeCache(cfg);
             ctx.Request.Headers.TryGetValue("X-Orchestrator-Key", out var provided);
-            return ApiKeyAccepted(cfg, provided.ToString(), requireConfiguredKey: true);
+            return ApiKeyAcceptedInternal(provided.ToString(), requireConfiguredKey: true);
+        }
+
+        internal static bool ApiKeyAcceptedInternal(
+            string? provided,
+            bool requireConfiguredKey = false)
+        {
+            var configuredCount = (_cachedApiKeyDigest != null ? 1 : 0) + _cachedPreviousApiKeyDigests.Length;
+            if (configuredCount == 0)
+                return !requireConfiguredKey;
+            if (string.IsNullOrEmpty(provided))
+                return false;
+
+            var providedDigest = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
+
+            if (_cachedApiKeyDigest != null && CryptographicOperations.FixedTimeEquals(_cachedApiKeyDigest, providedDigest))
+                return true;
+
+            foreach (var prevDigest in _cachedPreviousApiKeyDigests)
+            {
+                if (CryptographicOperations.FixedTimeEquals(prevDigest, providedDigest))
+                    return true;
+            }
+
+            return false;
         }
 
         internal static bool ApiKeyAccepted(
@@ -443,25 +503,15 @@ namespace ETL_SQL.Orchestrator.Service
             string? provided,
             bool requireConfiguredKey = false)
         {
-            var configuredKeys = new[] { cfg["Orchestrator:ApiKey"] }
-                .Concat((cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? []).Take(1))
-                .Where(key => !string.IsNullOrWhiteSpace(key))
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-            if (configuredKeys.Length == 0)
-                return !requireConfiguredKey;
-            if (string.IsNullOrEmpty(provided))
-                return false;
-
-            var providedDigest = SHA256.HashData(Encoding.UTF8.GetBytes(provided));
-            return configuredKeys.Any(key =>
-                CryptographicOperations.FixedTimeEquals(
-                    SHA256.HashData(Encoding.UTF8.GetBytes(key!)),
-                    providedDigest));
+            InitializeCache(cfg);
+            return ApiKeyAcceptedInternal(provided, requireConfiguredKey);
         }
 
-        private static string GetScriptRoot(IConfiguration cfg) =>
-            cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
+        private static string GetScriptRoot(IConfiguration cfg)
+        {
+            InitializeCache(cfg);
+            return _cachedScriptRoot!;
+        }
 
         private static async Task<string> PinBundlePathsAsync(string scriptText, IBundleStore store)
         {

@@ -35,7 +35,8 @@ namespace ETL_SQL.ReportBuilder
             var reportPath = context.ResolvePath(reportPathRaw);
             var outputPath = context.ResolvePath(outputPathRaw);
 
-            if (!File.Exists(reportPath))
+            bool exists = await Task.Run(() => File.Exists(reportPath));
+            if (!exists)
                 throw new ExecutionException($"EXPORT REPORT: report file not found: '{reportPath}'");
 
             // ── Run the .rptsql in a nested scope of the current context ───────
@@ -63,7 +64,7 @@ namespace ETL_SQL.ReportBuilder
 
             // ── Write the export file ──────────────────────────────────────────
             var dir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            if (!string.IsNullOrEmpty(dir)) await Task.Run(() => Directory.CreateDirectory(dir));
 
             switch (stmt.Format.ToUpperInvariant())
             {

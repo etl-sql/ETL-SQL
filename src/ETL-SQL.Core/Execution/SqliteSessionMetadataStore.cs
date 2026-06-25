@@ -30,13 +30,16 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         if (!SafePath.TryResolveWithinRoot(resolvedRoot, candidatePath, out _dbPath))
             throw new ArgumentException("Session metadata path escapes the configured session root.", nameof(sessionId));
         _entropy = machineKeyEntropy;
-
-        var dir = Path.GetDirectoryName(_dbPath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
     }
 
     public async Task InitializeAsync()
     {
+        var dir = Path.GetDirectoryName(_dbPath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            await Task.Run(() => Directory.CreateDirectory(dir));
+        }
+
         var builder = new SqliteConnectionStringBuilder { DataSource = _dbPath };
         _connection = new SqliteConnection(builder.ConnectionString);
         await _connection.OpenAsync();

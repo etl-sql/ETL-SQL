@@ -59,16 +59,16 @@
         <!-- Everything lives directly in INSTALLFOLDER -->
         <ComponentGroup Id="SDKComponents" Directory="INSTALLFOLDER">
             <Component Id="ETL_SQL_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL.exe" KeyPath="yes" />
             </Component>
             <Component Id="ETL_SQL_LSP_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-LSP.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL-LSP.exe" KeyPath="yes" />
             </Component>
             <Component Id="ETL_SQL_REPORT_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL-Report.exe" KeyPath="yes" />
             </Component>
             <Component Id="ETL_SQL_PLAYER_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-Player.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL-Player.exe" KeyPath="yes" />
             </Component>
         </ComponentGroup>
 
@@ -88,12 +88,12 @@
 
             <!-- Single shared configuration file -->
             <Component Id="AppSettings" Guid="*" Win64="yes">
-                <File Id="appsettings_json" Source="publish\win-x64\bin\appsettings.json" KeyPath="yes" />
+                <File Id="appsettings_json" Source="$(var.PublishDir)\appsettings.json" KeyPath="yes" />
             </Component>
 
             <!-- Orchestrator service (pinned to port 5001 via the urls argument) -->
             <Component Id="Orchestrator_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-Service.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL-Service.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Orchestrator"
                                 Type="ownProcess"
                                 Name="ETL-SQL-Orchestrator"
@@ -108,7 +108,7 @@
 
             <!-- Report Portal service (pinned to port 5002 via the urls argument) -->
             <Component Id="Portal_EXE" Guid="*" Win64="yes">
-                <File Source="publish\win-x64\bin\ETL-SQL-Portal.exe" KeyPath="yes" />
+                <File Source="$(var.PublishDir)\ETL-SQL-Portal.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Portal"
                                 Type="ownProcess"
                                 Name="ETL-SQL-Portal"

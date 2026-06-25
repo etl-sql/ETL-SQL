@@ -146,7 +146,7 @@ try {
         exit $LASTEXITCODE
     }
 
-    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" -arch x64 -ext WixUtilExtension
+    & $WixToolset.Candle Installer.wxs wwwroot.wxs "-dProductVersion=$WixVersion" "-dWwwrootSource=$wwwrootSource" "-dPublishDir=$BuildDir" -arch x64 -ext WixUtilExtension
     if ($LASTEXITCODE -ne 0) {
         Write-Error "candle.exe failed (exit code $LASTEXITCODE)"
         exit $LASTEXITCODE

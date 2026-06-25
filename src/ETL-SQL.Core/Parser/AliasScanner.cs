@@ -13,8 +13,17 @@ public record AliasInfo(string TableName, string? Alias = null)
     public bool HasExplicitAlias => !string.IsNullOrEmpty(Alias) && !Alias.Equals(TableName, StringComparison.OrdinalIgnoreCase);
 }
 
-public static class AliasScanner
+public static partial class AliasScanner
 {
+    [GeneratedRegex(@"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase, 1000)]
+    private static partial Regex BlockSplitRegex();
+
+    [GeneratedRegex(@"\b(FROM|JOIN)\s+([^;]+?)(?=\b(WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|JOIN|ON|UNION|EXCEPT|INTERSECT|SELECT)\b|;|SELECT|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline, 1000)]
+    private static partial Regex TableScanRegex();
+
+    [GeneratedRegex(@"^(#?[\w\.]+|\[[^\]]+\]|\w+\s*\([^)]*\))(?:\s+(?:AS\s+)?(\w+))?$", RegexOptions.IgnoreCase, 1000)]
+    private static partial Regex TableSpecRegex();
+
     public static Dictionary<string, AliasInfo> Scan(string script, int cursorOffset = -1)
     {
         var aliases = new Dictionary<string, AliasInfo>(StringComparer.OrdinalIgnoreCase);
@@ -24,7 +33,7 @@ public static class AliasScanner
         string activeBlock = script;
         if (cursorOffset >= 0 && cursorOffset <= script.Length)
         {
-            var blocks = Regex.Matches(script, @"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase);
+            var blocks = BlockSplitRegex().Matches(script);
             int start = 0;
             int end = script.Length;
 
@@ -49,7 +58,7 @@ public static class AliasScanner
         }
 
         // Find FROM/JOIN and the tables following them until next major keyword or separator
-        var matches = Regex.Matches(activeBlock, @"\b(FROM|JOIN)\s+([^;]+?)(?=\b(WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|JOIN|ON|UNION|EXCEPT|INTERSECT|SELECT)\b|;|SELECT|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        var matches = TableScanRegex().Matches(activeBlock);
 
         foreach (Match m in matches)
         {
@@ -60,7 +69,7 @@ public static class AliasScanner
                 var trimmed = spec.Trim();
                 // Match table name and optional alias
                 // Groups: 1=Table, 2=Alias
-                var tableMatch = Regex.Match(trimmed, @"^(#?[\w\.]+|\[[^\]]+\]|\w+\s*\([^)]*\))(?:\s+(?:AS\s+)?(\w+))?$", RegexOptions.IgnoreCase);
+                var tableMatch = TableSpecRegex().Match(trimmed);
                 if (tableMatch.Success)
                 {
                     var table = tableMatch.Groups[1].Value.Trim('[', ']');

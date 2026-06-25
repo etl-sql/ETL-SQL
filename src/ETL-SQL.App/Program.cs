@@ -49,11 +49,11 @@ namespace ETL_SQL
 
                 // Diagnostic breadcrumb for IDEs
                 if (!isDoctorJson)
-                    Console.Error.WriteLine("[PROC_START] ETL-SQL Engine process identified.");
+                    await Console.Error.WriteLineAsync("[PROC_START] ETL-SQL Engine process identified.");
 
-                ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
+                ServiceProvider = await Task.Run(() => DependencyInjectionSetup.BuildServiceProvider());
                 if (!isDoctorJson)
-                    Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
+                    await Console.Error.WriteLineAsync("[DI_READY] Dependency injection logic completed.");
 
 
                 // Start scheduler only for interactive/daemon modes, not for one-shot script execution
@@ -64,12 +64,12 @@ namespace ETL_SQL
                     {
                         var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
                         scheduler.Start();
-                        Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
+                        await Console.Error.WriteLineAsync("[SCHEDULER_START] Background scheduler is active.");
                         AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
                     }
                     catch (Exception schedEx)
                     {
-                        Console.Error.WriteLine($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
+                        await Console.Error.WriteLineAsync($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
                     }
                 }
 
@@ -90,8 +90,8 @@ namespace ETL_SQL
             catch (Exception ex)
             {
                 // Ensure any fatal startup error is visible to the IDE even before JSON protocol starts
-                Console.Error.WriteLine($"[FATAL_STARTUP_ERROR] {ex.Message}");
-                Console.Error.WriteLine(ex.ToString());
+                await Console.Error.WriteLineAsync($"[FATAL_STARTUP_ERROR] {ex.Message}");
+                await Console.Error.WriteLineAsync(ex.ToString());
                 return 1;
             }
         }

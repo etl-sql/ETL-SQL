@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -66,7 +66,7 @@ namespace ETL_SQL.Benchmarks
                 StandardFunctions.Register(registry);
 
                 var tracker = new Mock<ILineageTracker>();
-                tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
+                tracker.Setup(t => t.GlobalMetadata).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>());
 
                 var config = new ConfigurationBuilder()
                     .AddInMemoryCollection(new Dictionary<string, string?> { { "Session:PersistentSessionTTLHours", "1" } })

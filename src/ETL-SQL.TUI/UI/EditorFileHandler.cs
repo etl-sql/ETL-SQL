@@ -25,12 +25,13 @@ namespace ETL_SQL.TUI.UI
                 return (new[] { "" }, "untitled.etlsql");
             }
 
-            if (!_fs.Exists(filePath))
+            bool exists = await Task.Run(() => _fs.Exists(filePath));
+            if (!exists)
             {
                 return (new[] { "" }, filePath);
             }
 
-            var lines = _fs.ReadAllLines(filePath);
+            var lines = await Task.Run(() => _fs.ReadAllLines(filePath));
             var text = string.Join("\n", lines);
 
             if (text.Contains("ENC:"))
@@ -69,7 +70,7 @@ namespace ETL_SQL.TUI.UI
 
             try
             {
-                _fs.WriteAllText(filePath, text);
+                await Task.Run(() => _fs.WriteAllText(filePath, text));
                 return true;
             }
             catch

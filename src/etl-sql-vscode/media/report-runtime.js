@@ -1,7 +1,8 @@
 /* GENERATED FILE - DO NOT EDIT.
  * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js
- * Edit the canonical source, then run: .\scripts\sync-assets.ps1
+ * Edit the canonical source, then run: node .\scripts\sync-assets.js
  */
+
 /**
  * Copyright 2026 Charles Clemens and ETL-SQL contributors
  * Licensed under the Apache License, Version 2.0.

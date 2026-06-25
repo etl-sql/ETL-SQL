@@ -328,7 +328,7 @@ namespace ETL_SQL.ReportBuilder.CLI
                 }).ToList();
 
                 tempManifest = Path.Combine(dirPath, $".etl_reports_{Guid.NewGuid():N}.tmp.json");
-                File.WriteAllText(tempManifest, JsonSerializer.Serialize(new { reports = entries }, new JsonSerializerOptions { WriteIndented = true }));
+                await File.WriteAllTextAsync(tempManifest, JsonSerializer.Serialize(new { reports = entries }, new JsonSerializerOptions { WriteIndented = true }));
                 manifestPath = tempManifest;
             }
 
@@ -461,9 +461,13 @@ namespace ETL_SQL.ReportBuilder.CLI
             await proc.WaitForExitAsync();
 
             // Cleanup temp manifest
-            if (tempManifest != null && File.Exists(tempManifest))
+            if (tempManifest != null)
             {
-                try { File.Delete(tempManifest); } catch { }
+                bool tempExists = await Task.Run(() => File.Exists(tempManifest));
+                if (tempExists)
+                {
+                    try { await Task.Run(() => File.Delete(tempManifest)); } catch { }
+                }
             }
 
             return proc.ExitCode;

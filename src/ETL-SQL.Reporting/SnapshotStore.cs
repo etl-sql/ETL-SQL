@@ -42,21 +42,28 @@ namespace ETL_SQL.Reporting
             try
             {
                 var dir = Path.GetDirectoryName(fullPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    bool dirExists = await Task.Run(() => Directory.Exists(dir));
+                    if (!dirExists)
+                    {
+                        await Task.Run(() => Directory.CreateDirectory(dir));
+                    }
+                }
 
                 var json = JsonSerializer.Serialize(manifest, _opts);
                 await File.WriteAllTextAsync(tmpPath, json);
 
                 // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems.
                 // Last-writer-wins across processes — both produce valid snapshots, so no corruption.
-                File.Move(tmpPath, fullPath, overwrite: true);
+                await Task.Run(() => File.Move(tmpPath, fullPath, overwrite: true));
             }
             finally
             {
-                if (File.Exists(tmpPath))
+                bool tmpExists = await Task.Run(() => File.Exists(tmpPath));
+                if (tmpExists)
                 {
-                    try { File.Delete(tmpPath); } catch { /* ignore cleanup errors */ }
+                    try { await Task.Run(() => File.Delete(tmpPath)); } catch { /* ignore cleanup errors */ }
                 }
                 lockObj.WriterLock.Release();
             }
@@ -74,7 +81,8 @@ namespace ETL_SQL.Reporting
             await lockObj.EnterReadLockAsync();
             try
             {
-                if (!File.Exists(fullPath)) return null;
+                bool exists = await Task.Run(() => File.Exists(fullPath));
+                if (!exists) return null;
                 var json = await File.ReadAllTextAsync(fullPath);
                 return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
             }

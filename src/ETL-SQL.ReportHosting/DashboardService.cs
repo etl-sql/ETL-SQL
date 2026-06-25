@@ -75,8 +75,11 @@ namespace ETL_SQL.ReportHosting
                 _evaluator = null;
             }
 
-            _refreshCts?.Cancel();
-            _refreshCts?.Dispose();
+            if (_refreshCts != null)
+            {
+                await _refreshCts.CancelAsync();
+                _refreshCts.Dispose();
+            }
             _lock.Dispose();
         }
 
