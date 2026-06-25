@@ -77,7 +77,12 @@ namespace ETL_SQL.LSP
             if (word != null && word.StartsWith('&'))
                 datasetEntry = _datasets.Find(word);
 
-            if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null)
+            DocumentUri declarationUri = default!;
+            DocumentDeclaration? declaration = null;
+            var hasDeclaration = word != null &&
+                _store.TryFindDeclaration(word, request.TextDocument.Uri, out declarationUri, out declaration);
+
+            if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null && !hasDeclaration)
                 return Task.FromResult<Hover?>(null);
 
             var md = new List<string>();
@@ -124,6 +129,14 @@ namespace ETL_SQL.LSP
                     md.Add($"- **TTL**: {datasetEntry.Ttl}");
                 if (datasetEntry.IsStale)
                     md.Add("> ⚠ This dataset is stale and will re-materialise on next script execution.");
+            }
+
+            if (hasDeclaration)
+            {
+                if (md.Count > 0) md.Add("---");
+                md.Add($"#### Declaration `{declaration!.Name}`");
+                md.Add($"- **File**: `{declarationUri}`");
+                md.Add($"- **Line**: {declaration.Line}");
             }
 
             if (functionHelp != null)

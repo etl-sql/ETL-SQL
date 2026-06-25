@@ -323,6 +323,42 @@ SET @normal = 'still-visible';
         }
 
         [Fact]
+        public async Task Hover_Should_Find_Declarations_In_Other_Open_Files()
+        {
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+
+            var store = new DocumentStateStore();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, new ETL_SQL.Data.ConnectorRegistry());
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var hoverProvider = new HoverProvider(
+                loggerFactory.CreateLogger<HoverProvider>(),
+                store,
+                new Engine.Functions.FunctionRegistry(),
+                helpRegistry,
+                new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
+
+            var libraryUri = DocumentUri.From("untitled:Library");
+            var useUri = DocumentUri.From("untitled:Use");
+            await handler.AnalyzeAsync(libraryUri, "DECLARE @shared INT = 10;");
+            await handler.AnalyzeAsync(useUri, "PRINT @shared;");
+
+            var hover = await hoverProvider.Handle(new HoverParams
+            {
+                TextDocument = new TextDocumentIdentifier(useUri),
+                Position = new Position(0, 8)
+            }, CancellationToken.None);
+
+            Assert.NotNull(hover);
+            var markdown = hover!.Contents.MarkupContent.Value;
+            Assert.Contains("Declaration `@shared`", markdown);
+            Assert.Contains("untitled:Library", markdown);
+        }
+
+        [Fact]
         public async Task Completion_After_Goto_Should_Suggest_Labels()
         {
             // Arrange

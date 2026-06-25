@@ -50,14 +50,14 @@ namespace ETL_SQL.LSP
             if (string.IsNullOrEmpty(word))
                 return Task.FromResult<LocationOrLocationLinks?>(default);
 
-            if (state.Declarations.TryGetValue(word, out var declaration))
+            if (_store.TryFindDeclaration(word, request.TextDocument.Uri, out var declarationUri, out var declaration))
             {
                 var range = new LSPRange(
                     declaration.Line - 1,
                     declaration.Column - 1,
                     declaration.Line - 1,
                     declaration.Column - 1 + declaration.Name.Length);
-                var location = new Location { Uri = request.TextDocument.Uri, Range = range };
+                var location = new Location { Uri = declarationUri, Range = range };
                 return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(location));
             }
 

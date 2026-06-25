@@ -55,6 +55,30 @@ namespace ETL_SQL.LSP
         public string? GetNotebookPath(string uri)
             => _notebookContexts.TryGetValue(uri, out var context) ? context.Path : null;
 
+        public bool TryFindDeclaration(string name, DocumentUri preferredUri, out DocumentUri uri, out DocumentDeclaration declaration)
+        {
+            if (_states.TryGetValue(preferredUri, out var preferredState) &&
+                preferredState.Declarations.TryGetValue(name, out declaration!))
+            {
+                uri = preferredUri;
+                return true;
+            }
+
+            foreach (var pair in _states)
+            {
+                if (pair.Key.Equals(preferredUri)) continue;
+                if (pair.Value.Declarations.TryGetValue(name, out declaration!))
+                {
+                    uri = pair.Key;
+                    return true;
+                }
+            }
+
+            uri = default!;
+            declaration = default!;
+            return false;
+        }
+
         private static IReadOnlyDictionary<string, DocumentDeclaration> BuildDeclarationIndex(Script script)
         {
             var declarations = new Dictionary<string, DocumentDeclaration>(StringComparer.OrdinalIgnoreCase);

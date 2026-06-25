@@ -124,8 +124,7 @@ At high scales with cross-script references, dynamic scoping and un-indexed trac
   - *Solution*: Statically resolve and parse all local `RUN SCRIPT` references during pre-flight validation.
 - [x] **DFS Lineage Lookup Quadratic Bottleneck** — [LineageTracker.cs:L263](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/LineageTracker.cs#L263): dfs-based WalkAncestors recursively called lineage retrieval filters, executing linear scans `.Where(...)` and sorting `.OrderByDescending(...)` on the global `_entries` list. Fixed by maintaining case-insensitive table/column lineage indexes during writes and returning newest-first snapshots from indexed lists.
   - *Solution*: Index lineage entries by `TargetTable` and `TargetColumn` upon recording to enable constant-time $O(1)$ lookups.
-- [ ] **LSP Cross-File Reference Provider Gaps** — [DefinitionProvider.cs:L33](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.LanguageServer/DefinitionProvider.cs#L33): Language features (Hover, Go-To-Definition) do not search for variables/connections declared in other project files.
-  - *Solution*: Extend providers to scan the global `DocumentStateStore` of open files or cache definitions workspace-wide.
+- [x] **LSP Cross-File Reference Provider Gaps** — [DefinitionProvider.cs:L33](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.LanguageServer/DefinitionProvider.cs#L33): Language features (Hover, Go-To-Definition) did not search for variables/connections declared in other project files. Fixed by searching indexed declarations across the global `DocumentStateStore`, preferring the active document and then other open files.
 
 ## Code Review: Report Portal & Orchestrator Scale Performance Audit (v0.12.0)
 *Audit focused on scaling the Report Portal (10, 100, and 10k published reports) and the Orchestrator (10, 100, and 10k scheduled/triggered jobs) to identify database, scheduling, and system execution hotspots.*
