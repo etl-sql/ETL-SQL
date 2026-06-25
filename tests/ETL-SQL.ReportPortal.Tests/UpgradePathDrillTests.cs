@@ -68,15 +68,11 @@ public sealed class UpgradePathDrillTests : IDisposable
                 GroupId = group.Id,
                 Permission = FolderPermission.Manage
             });
-            db.PortalExecutionJobs.Add(new PortalExecutionJob
-            {
-                Id = "job-upgrade-1",
-                ReportId = 1,
-                UserId = 1,
-                Kind = "Execution",
-                Status = "Pending",
-                CreatedAt = DateTime.UtcNow
-            });
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO PortalExecutionJobs (Id, ReportId, UserId, Kind, Status, CreatedAt) " +
+                "VALUES ('job-upgrade-1', 1, 1, 'Execution', 'Pending', {0})",
+                DateTime.UtcNow.ToString("o"));
+
             var dataset = new Dataset
             {
                 Name = "#sales",

@@ -179,9 +179,10 @@ public sealed class OperationalMetricsService(
 
     private static DateTime TruncateToHour(DateTime value)
     {
-        var utc = value.Kind == DateTimeKind.Utc ? value : value.ToUniversalTime();
+        var utc = value.Kind == DateTimeKind.Utc ? value : DateTime.SpecifyKind(value, DateTimeKind.Utc);
         return new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc);
     }
+
 
     private sealed record ExecutionLoadRow(
         DateTime CompletedAt,
