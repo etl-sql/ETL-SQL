@@ -71,7 +71,11 @@ public sealed class OperationalObservabilityTests : IDisposable
             ReportId = report.Id,
             UserId = owner.Id,
             Status = status,
-            CompletedAt = completed ? now : null
+            CreatedAt = completed ? now.AddMinutes(-10) : now.AddMinutes(-5),
+            StartedAt = completed ? now.AddMinutes(-2) : null,
+            CompletedAt = completed ? now : null,
+            RowsProcessed = completed ? 100 : 0,
+            PeakMemoryBytes = completed ? 1024 : 0
         };
         db.PortalExecutionJobs.AddRange(
             Job("Running", false),
@@ -109,6 +113,15 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(2, m.PerUserExecutionCap);
         Assert.Equal(3, m.RecentExecutions);          // Failed + Cancelled + Completed
         Assert.Equal(2, m.RecentExecutionFailures);   // Failed + Cancelled
+        Assert.True(m.AverageExecutionDurationMs > 0);
+        Assert.True(m.AverageQueuedExecutionAgeSeconds > 0);
+        Assert.NotEmpty(m.HourlyExecutionLoad);
+        var currentHour = m.HourlyExecutionLoad.Single(b =>
+            b.HourUtc == new DateTime(now.Year, now.Month, now.Day, now.Hour, 0, 0, DateTimeKind.Utc));
+        Assert.Equal(3, currentHour.Executions);
+        Assert.Equal(2, currentHour.Failures);
+        Assert.Equal(300, currentHour.RowsProcessed);
+        Assert.Equal(1024, currentHour.PeakMemoryBytes);
         Assert.Equal(4, m.RecentDeliveries);
         Assert.Equal(2, m.RecentDeliveryFailures);    // Failed + Denied
         Assert.Equal(1024, m.DatasetStorageBytes);
@@ -136,6 +149,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         var body = await adminResp.Content.ReadFromJsonAsync<JsonObject>();
         Assert.True(body!.ContainsKey("activeExecutions"));
         Assert.True(body.ContainsKey("datasetStorageBytes"));
+        Assert.True(body.ContainsKey("hourlyExecutionLoad"));
+        Assert.True(body.ContainsKey("averageQueuedExecutionAgeSeconds"));
 
         // A non-admin is rejected.
         var create = new HttpRequestMessage(HttpMethod.Post, "/api/admin/users")
