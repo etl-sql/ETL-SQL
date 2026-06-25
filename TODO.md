@@ -105,8 +105,7 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
 
 ### Small Script Perspective (100 Lines)
 At small scales, parser execution is fast, but repeated startup and sub-script parsing adds latency:
-- [ ] **Redundant Multi-Compilation of Utility Scripts** — [RunScriptStatementHandler.cs:L80](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Handlers/RunScriptStatementHandler.cs#L80): Standard utility scripts called inside loops are re-lexed and re-parsed on every execution pass.
-  - *Solution*: Implement a cache for parsed script ASTs keyed by path/URI to skip tokenization and parsing on consecutive `RUN SCRIPT` executions.
+- [x] **Redundant Multi-Compilation of Utility Scripts** — [RunScriptStatementHandler.cs:L80](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Handlers/RunScriptStatementHandler.cs#L80): Standard utility scripts called inside loops were re-lexed and re-parsed on every execution pass. Fixed with a process-local parsed-script cache keyed by resolved path/URI and invalidated for local files by last-write time plus file length.
 
 ### Large Script Perspective (20,000 Lines)
 At large single-script scales, hand-written recursive scanners and reflection-based AST traversers degrade compilation:

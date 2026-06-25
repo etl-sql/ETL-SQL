@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -16,6 +17,7 @@ namespace ETL_SQL.Engine.Handlers;
 /// </summary>
 public class RunScriptStatementHandler : IStatementHandler
 {
+    private static readonly ConcurrentDictionary<string, CachedScript> ScriptCache = new(StringComparer.Ordinal);
     private readonly ILogger _logger;
     public Type SupportedStatementType => typeof(RunScriptStatement);
 
@@ -51,6 +53,8 @@ public class RunScriptStatementHandler : IStatementHandler
 
             string source;
             string currentPathForContext;
+            string cacheKey;
+            string cacheStamp;
             if (BundleUri.TryParse(scriptPath, out var uri) && uri != null)
             {
                 var store = context.ServiceProvider.GetService<IBundleStore>()
@@ -61,6 +65,8 @@ public class RunScriptStatementHandler : IStatementHandler
                     ?? throw new ExecutionException($"RUN SCRIPT orch:// failed: script '{uri.Path}' was not found in bundle '{uri.BundleName}' version {version}.");
                 source = file.Content;
                 currentPathForContext = uri.ToPinnedString(version);
+                cacheKey = currentPathForContext;
+                cacheStamp = $"{file.Content.Length}";
             }
             else
             {
@@ -71,14 +77,16 @@ public class RunScriptStatementHandler : IStatementHandler
                 if (!File.Exists(scriptPath))
                     throw new ExecutionException($"Script file not found: {scriptPath}");
 
+                var fileInfo = new FileInfo(scriptPath);
                 source = await File.ReadAllTextAsync(scriptPath);
-                currentPathForContext = Path.GetFullPath(scriptPath);
+                currentPathForContext = fileInfo.FullName;
+                cacheKey = currentPathForContext;
+                cacheStamp = $"{fileInfo.LastWriteTimeUtc.Ticks}:{fileInfo.Length}";
             }
 
             context.CurrentScriptPath = currentPathForContext;
 
-            var tokens = new Lexer(source).Tokenize();
-            var script = new Parser(tokens).Parse();
+            var script = GetOrParseScript(cacheKey, cacheStamp, source);
 
             var localVars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
             var localMetadata = new Dictionary<string, VariableMetadata>(StringComparer.OrdinalIgnoreCase);
@@ -154,5 +162,18 @@ public class RunScriptStatementHandler : IStatementHandler
             context.CurrentScriptPath = oldPath;
         }
     }
+
+    private static Script GetOrParseScript(string cacheKey, string cacheStamp, string source)
+    {
+        if (ScriptCache.TryGetValue(cacheKey, out var cached) && cached.Stamp == cacheStamp)
+            return cached.Script;
+
+        var tokens = new Lexer(source).Tokenize();
+        var script = new Parser(tokens).Parse();
+        ScriptCache[cacheKey] = new CachedScript(cacheStamp, script);
+        return script;
+    }
+
+    private sealed record CachedScript(string Stamp, Script Script);
 }
 

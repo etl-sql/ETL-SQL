@@ -81,6 +81,32 @@ RUN SCRIPT '{subScriptPath}' WITH (@a = 100, @b = 30);
                 if (File.Exists(subScriptPath)) File.Delete(subScriptPath);
             }
         }
+
+        [Fact]
+        public async Task RunScript_Reparses_When_File_Changes()
+        {
+            var subScriptPath = Path.Combine(Path.GetTempPath(), $"sub_cache_{Guid.NewGuid():N}.etlsql");
+            var escapedPath = subScriptPath.Replace("\\", "\\\\");
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            try
+            {
+                await File.WriteAllTextAsync(subScriptPath, "DECLARE @output int OUTPUT; SET @output = 1;");
+                await evaluator.Evaluate(TestHelpers.Parse($"RUN SCRIPT '{escapedPath}';"));
+                Assert.Equal(1m, Convert.ToDecimal(evaluator.GetVariable("@output")));
+
+                await File.WriteAllTextAsync(subScriptPath, "DECLARE @output int OUTPUT; SET @output = 222;");
+                File.SetLastWriteTimeUtc(subScriptPath, DateTime.UtcNow.AddSeconds(2));
+
+                await evaluator.Evaluate(TestHelpers.Parse($"RUN SCRIPT '{escapedPath}';"));
+                Assert.Equal(222m, Convert.ToDecimal(evaluator.GetVariable("@output")));
+            }
+            finally
+            {
+                if (File.Exists(subScriptPath)) File.Delete(subScriptPath);
+            }
+        }
+
         [Fact]
         public async Task TestRunScriptErrorPropagation()
         {
