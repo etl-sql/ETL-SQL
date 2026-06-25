@@ -57,6 +57,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [CONFIG.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CONFIG.md) |
 | `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW LOCKS` | Diagnostics | [Grammar.md](../Docs/Reference/Grammar.md) | [SHOW.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `CLEAR SESSION` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [CLEAR.md](../src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
 | `USE PASSWORD` | Session / Security | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
 | `USE SETS` | Session | [Grammar.md](../Docs/Reference/Grammar.md) | [USE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
@@ -955,6 +956,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW TAGS` | Lineage | Lists tags on a table/column |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |
+| `SHOW LOCKS` | Diagnostics | Lists active database/job throttle slots and concurrency queue details |
 | `SHOW SESSIONS` | Portal | Lists active web/CLI sessions |
 | `SHOW ZONES` | Diagnostics | Lists security zones and policies |
 

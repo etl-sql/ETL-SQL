@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests.Orchestration
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()))
                         .ReturnsAsync(result);
 
             return (BuildService(mockStore, mockExecutor, capacityMonitor, config), mockStore, mockExecutor);
@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests.Orchestration
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -121,7 +121,7 @@ namespace ETL_SQL.Tests.Orchestration
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -135,7 +135,7 @@ namespace ETL_SQL.Tests.Orchestration
             await Task.Delay(300);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()), Times.Never());
+            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()), Times.Never());
         }
 
         [Fact]
@@ -184,7 +184,7 @@ namespace ETL_SQL.Tests.Orchestration
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()))
                         .ThrowsAsync(new InvalidOperationException("DB connection lost"));
 
             var service = BuildService(mockStore, mockExecutor);
@@ -245,7 +245,7 @@ namespace ETL_SQL.Tests.Orchestration
             store.Verify(s => s.AcquireJobLeaseAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>()), Times.Never());
             executor.Verify(e => e.ExecuteTextAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()),
                 Times.Never());
         }
 

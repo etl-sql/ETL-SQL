@@ -770,6 +770,14 @@ Displays timing and resource usage for the most recently profiled execution.
 SHOW PROFILE;
 ```
 
+### 8.7 `SHOW LOCKS`
+Lists active database/job throttle slots and concurrency queue details from the shared orchestrator database.
+
+```sql
+SHOW LOCKS;
+SHOW LOCKS INTO #locks;
+```
+
 ---
 
 ## 9. Dynamic SQL & Remote Execution (EXEC / EXECUTE)

@@ -57,8 +57,8 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Fail first 2 times, succeed on 3rd
             int attempts = 0;
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>()))
-                .ReturnsAsync((string s, string sid, CancellationToken ct, string jn) =>
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()))
+                .ReturnsAsync((string s, string sid, CancellationToken ct, string jn, long qw) =>
                 {
                     attempts++;
                     if (attempts < 3)
@@ -78,8 +78,8 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(3, attempts);
 
             // Verify session ID was passed back in subsequent calls (attempts 2 and 3)
-            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, null, It.IsAny<CancellationToken>(), job.Name), Times.Once());
-            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name), Times.Exactly(2));
+            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, null, It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>()), Times.Once());
+            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>()), Times.Exactly(2));
 
             // Verify history was logged for each attempt
             mockStore.Verify(s => s.LogJobStartAsync(job.Name), Times.Exactly(3));

@@ -53,7 +53,7 @@ namespace ETL_SQL.Tests.Orchestration
                 .Returns(new Mock<IConfigurationSection>().Object);
 
             mockExecutor.Setup(e => e.ExecuteTextAsync(
-                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()))
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>(), It.IsAny<long>()))
                 .ReturnsAsync(new ScriptExecutionResult(true, 10, null, SessionId: "sess_test"));
 
             var services = new ServiceCollection();
@@ -101,7 +101,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             await InvokeExecuteJobAsync(service, job);
 
-            executor.Verify(e => e.ExecuteTextAsync(Script, It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()),
+            executor.Verify(e => e.ExecuteTextAsync(Script, It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>(), It.IsAny<long>()),
                 Times.Once());
             store.Verify(s => s.LogJobEndAsync(
                 1L, "SUCCESS", It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(),
@@ -121,7 +121,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             await InvokeExecuteJobAsync(service, job);
 
-            executor.Verify(e => e.ExecuteTextAsync(Script, It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()),
+            executor.Verify(e => e.ExecuteTextAsync(Script, It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>(), It.IsAny<long>()),
                 Times.Once());
             store.Verify(s => s.LogJobEndAsync(
                 1L, "SUCCESS", It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(),
@@ -141,7 +141,7 @@ namespace ETL_SQL.Tests.Orchestration
             await InvokeExecuteJobAsync(service, job);
 
             executor.Verify(e => e.ExecuteTextAsync(
-                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>()),
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>(), It.IsAny<string?>(), It.IsAny<long>()),
                 Times.Never());
             store.Verify(s => s.LogJobEndAsync(
                 1L, "BLOCKED", It.IsAny<string?>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(),
