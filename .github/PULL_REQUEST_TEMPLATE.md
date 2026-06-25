@@ -25,3 +25,7 @@ Before submitting this PR, please check that you have completed the following ve
 
 - [ ] I have verified that no plaintext secrets, connection strings, passwords, or `ENC:...` strings are committed in any scripts, help files, or source files.
 - [ ] No changes violate the Zero-Trust security boundaries (such as raw drive root actions or raw script file edits).
+
+## Contribution Certification
+
+- [ ] Every commit includes a valid Developer Certificate of Origin `Signed-off-by` line (`git commit -s`), using my real name and an email address I control.

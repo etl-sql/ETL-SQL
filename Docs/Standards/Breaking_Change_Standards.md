@@ -15,22 +15,33 @@ A **breaking change** is any modification to the engine, compiler, parser, or st
 
 ---
 
-## 2. Deprecation Protocol
+## 2. Deprecation and Compatibility Policy
 
-When introducing a breaking change, developers must strictly adhere to the following three-step protocol:
+ETL-SQL uses a strict deprecation policy for all language syntax, connector options, report options, CLI switches, and configuration keys:
 
-1. **Inline Annotation**: Add a `// COMPAT_BREAK: x.y` comment directly above the modified line of code in the source, where `x.y` is the target release version.
-2. **Attribution Log**: Register the breaking change in [BREAKING_CHANGES.md](../../BREAKING_CHANGES.md) at the repository root using this format:
-   `version | category | description | migration path`
-3. **Regression Testing**: Write a dedicated regression test proving the difference between the old and new behaviors. Mark the test class with the Xunit trait:
+- **No silent behavior changes**: A script or report that parses successfully in one stable release must not produce different results in the next stable release without an explicit compatibility note, test, and migration path.
+- **Warn before removal**: Deprecated syntax and options must continue to parse and execute while emitting a lint/LSP warning and, when applicable, a runtime warning.
+- **Minimum support window**: Deprecated syntax and options must remain supported for at least two minor releases after the first released warning. Removal earlier than that requires a security exception approved by maintainers and documented in the changelog.
+- **Canonical replacement required**: Every deprecation must document the exact replacement syntax or option key in the reference docs and migration guide.
+- **Machine-readable diagnostics**: Deprecated surfaces must have a stable diagnostic code so IDEs, CI, and migration tooling can detect them consistently.
+- **No new aliases during freeze**: Once a release enters language freeze, new aliases or compatibility spellings are treated as syntax additions and require explicit maintainer approval.
+
+When introducing a deprecation or breaking change, developers must strictly adhere to the following protocol:
+
+1. **Inline Annotation**: Add a `// COMPAT_BREAK: x.y` or `// DEPRECATED_SYNTAX: x.y` comment directly above the modified line of code in the source, where `x.y` is the first release that warns.
+2. **Attribution Log**: Register the change in [BREAKING_CHANGES.md](../../BREAKING_CHANGES.md) at the repository root using this format:
+   `version | category | diagnostic | description | migration path | earliest removal`
+3. **Reference Update**: Update [Grammar.md](../Reference/Grammar.md), [Data_Connectors.md](../Reference/Data_Connectors.md), [Standard_Library.md](../Reference/Standard_Library.md), or the affected product guide in the same change.
+4. **Regression Testing**: Write a dedicated compatibility test proving both the deprecated form and replacement behavior. Mark the test class with the Xunit trait:
    `[Trait("CompatBreak", "x.y")]`
 
 ---
 
 ## 3. Grace Period for Syntax Removals
 
-- **Deprecation Warning**: When removing a keyword or syntax, keep the old syntax parsing in `StatementParser.cs` but emit a static lint/LSP warning indicating the syntax is deprecated.
-- **Removal**: The deprecated syntax must remain supported for a minimum of **one minor version** before being physically deleted from the parser codebase.
+- **Deprecation Warning**: When removing a keyword, syntax form, connector option, report option, CLI switch, or configuration key, keep the old form accepted but emit a static lint/LSP warning indicating the deprecation and replacement.
+- **Removal**: The deprecated surface must remain supported for a minimum of **two minor versions** before being physically deleted from the parser, binder, connector option reader, report manifest builder, or CLI binder.
+- **Removal Checklist**: Before removal, verify that compatibility diagnostics shipped, migration docs shipped, compatibility tests existed for the full warning window, and release notes called out the final removal.
 
 ---
 

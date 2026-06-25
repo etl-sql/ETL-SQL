@@ -22,5 +22,6 @@ Reference docs are the authoritative product surface. They should describe what 
 - Do not put roadmap promises in reference docs.
 - Do not document aliases or old forms that the parser no longer accepts.
 - Prefer one canonical syntax form when multiple historical forms existed before release.
+- Deprecations must follow [Breaking Change Standards](../Standards/Breaking_Change_Standards.md): warn first, keep compatibility for at least two minor releases, document the replacement, and ship machine-readable diagnostics.
 - Cross-link to cookbooks for full workflows, but keep the reference examples small and exact.
 - When source behavior changes, update the matching reference page in the same change.

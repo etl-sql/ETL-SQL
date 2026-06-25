@@ -11,12 +11,12 @@ release begins.
 
 - [ ] **Phase 1: Language & Manifest Freeze**
   - **Sr. Developer:** Publish the canonical language grammar, connector options reference, and standard library docs.
-  - **Sr. Developer:** Define a strict deprecation policy for syntax and options.
+  - [x] **Sr. Developer:** Define a strict deprecation policy for syntax and options. *(Documented in `Docs/Standards/Breaking_Change_Standards.md` and linked from the reference map.)*
   - **Sr. Developer:** Implement script compatibility test corpus and a migration-linter.
   - [x] **Gemini:** Implement `SHOW VERSION` and machine-readable compatibility diagnostics.
 - [ ] **Phase 2: Licensing & Contribution Policies**
   - [x] **Gemini:** Apply the **Apache-2.0 License** consistently across all projects, extension manifests, and installers.
-  - **Sr. Developer:** Establish the **Developer Certificate of Origin (DCO)** for external code contributions.
+  - [x] **Sr. Developer:** Establish the **Developer Certificate of Origin (DCO)** for external code contributions. *(Policy documented in `CONTRIBUTING.md`; PR template now requires commit sign-off confirmation.)*
 - [ ] **Phase 3: Distribution Trust**
   - [x] **Gemini:** Automate build workflows to generate SHA-256 checksums and an SBOM (Software Bill of Materials).
   - [x] **Gemini:** Retain test and certification reports in public release assets.
