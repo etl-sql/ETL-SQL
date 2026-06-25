@@ -5,6 +5,9 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Storage;
+using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Services;
 
 namespace ETL_SQL.Reporting
 {
@@ -27,7 +30,7 @@ namespace ETL_SQL.Reporting
 
         /// <summary>Derives the default snapshot path from a script path.</summary>
         public static string DefaultPath(string scriptPath) =>
-            Path.ChangeExtension(scriptPath, null) + ".snapshot.json";
+            Path.ChangeExtension(scriptPath, null) + ".etlsnap";
 
         /// <summary>Serialises the manifest to a JSON file atomically.</summary>
         public async Task SaveAsync(ReportManifest manifest, string outputPath)
@@ -36,9 +39,6 @@ namespace ETL_SQL.Reporting
             var lockObj = _pathLocks.GetOrAdd(fullPath, _ => new AsyncReaderWriterLock());
 
             await lockObj.WriterLock.WaitAsync();
-            // Use a per-write unique temp path so concurrent writes from different
-            // processes do not overwrite each other's in-progress temp file.
-            var tmpPath = fullPath + ".tmp." + Guid.NewGuid().ToString("N");
             try
             {
                 var dir = Path.GetDirectoryName(fullPath);
@@ -51,20 +51,45 @@ namespace ETL_SQL.Reporting
                     }
                 }
 
-                var json = JsonSerializer.Serialize(manifest, _opts);
-                await File.WriteAllTextAsync(tmpPath, json);
+                if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
+                {
+                    var directory = dir ?? "";
+                    var filename = Path.GetFileName(fullPath);
+                    var storage = new FileSystemArtifactStorage(new Dictionary<ArtifactArea, string> {
+                        { ArtifactArea.Snapshots, directory }
+                    });
+                    var service = new SnapshotPackageService(
+                        new PortalConfig(),
+                        storage,
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
+                    await service.SaveAsync(manifest, filename);
+                }
+                else
+                {
+                    // Use a per-write unique temp path so concurrent writes from different
+                    // processes do not overwrite each other's in-progress temp file.
+                    var tmpPath = fullPath + ".tmp." + Guid.NewGuid().ToString("N");
+                    try
+                    {
+                        var json = JsonSerializer.Serialize(manifest, _opts);
+                        await File.WriteAllTextAsync(tmpPath, json);
 
-                // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems.
-                // Last-writer-wins across processes — both produce valid snapshots, so no corruption.
-                await Task.Run(() => File.Move(tmpPath, fullPath, overwrite: true));
+                        // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems.
+                        // Last-writer-wins across processes — both produce valid snapshots, so no corruption.
+                        await Task.Run(() => File.Move(tmpPath, fullPath, overwrite: true));
+                    }
+                    finally
+                    {
+                        bool tmpExists = await Task.Run(() => File.Exists(tmpPath));
+                        if (tmpExists)
+                        {
+                            try { await Task.Run(() => File.Delete(tmpPath)); } catch { /* ignore cleanup errors */ }
+                        }
+                    }
+                }
             }
             finally
             {
-                bool tmpExists = await Task.Run(() => File.Exists(tmpPath));
-                if (tmpExists)
-                {
-                    try { await Task.Run(() => File.Delete(tmpPath)); } catch { /* ignore cleanup errors */ }
-                }
                 lockObj.WriterLock.Release();
             }
         }
@@ -82,9 +107,46 @@ namespace ETL_SQL.Reporting
             try
             {
                 bool exists = await Task.Run(() => File.Exists(fullPath));
-                if (!exists) return null;
-                var json = await File.ReadAllTextAsync(fullPath);
-                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                if (!exists)
+                {
+                    // If .etlsnap requested but only legacy .snapshot.json or .json exists, load legacy
+                    if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var legacyPath = Path.ChangeExtension(fullPath, ".snapshot.json");
+                        if (await Task.Run(() => File.Exists(legacyPath)))
+                        {
+                            var json = await File.ReadAllTextAsync(legacyPath);
+                            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                        }
+
+                        var jsonPath = Path.ChangeExtension(fullPath, ".json");
+                        if (await Task.Run(() => File.Exists(jsonPath)))
+                        {
+                            var json = await File.ReadAllTextAsync(jsonPath);
+                            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                        }
+                    }
+                    return null;
+                }
+
+                if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
+                {
+                    var directory = Path.GetDirectoryName(fullPath) ?? "";
+                    var filename = Path.GetFileName(fullPath);
+                    var storage = new FileSystemArtifactStorage(new Dictionary<ArtifactArea, string> {
+                        { ArtifactArea.Snapshots, directory }
+                    });
+                    var service = new SnapshotPackageService(
+                        new PortalConfig(),
+                        storage,
+                        Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
+                    return await service.LoadAsync(filename);
+                }
+                else
+                {
+                    var json = await File.ReadAllTextAsync(fullPath);
+                    return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                }
             }
             catch (JsonException)
             {

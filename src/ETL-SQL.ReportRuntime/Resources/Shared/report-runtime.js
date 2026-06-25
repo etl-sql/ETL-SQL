@@ -221,17 +221,84 @@
         }
     }
 
+    let _arrowLibraryPromise = null;
+    function ensureArrowLibrary() {
+        if (window.arrow) return Promise.resolve(window.arrow);
+        if (_arrowLibraryPromise) return _arrowLibraryPromise;
+
+        _arrowLibraryPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            let baseUrl = "";
+            if (window.__IS_WEB__) {
+                baseUrl = "";
+            } else if (window.__API_BASE__) {
+                baseUrl = "/js";
+            } else {
+                baseUrl = "/js";
+            }
+            script.src = baseUrl + "/arrow.min.js";
+            script.onload = () => {
+                if (window.arrow) {
+                    resolve(window.arrow);
+                } else {
+                    reject(new Error("Apache Arrow library failed to initialize."));
+                }
+            };
+            script.onerror = () => reject(new Error("Failed to load Apache Arrow library script."));
+            document.head.appendChild(script);
+        });
+
+        return _arrowLibraryPromise;
+    }
+
+    function fetchJsonRows(source) {
+        return fetch(source.url, { credentials: 'same-origin' })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to load rows.');
+                return res.json();
+            });
+    }
+
     function loadVisualRows(visual) {
         if (!hasDeferredRows(visual)) return Promise.resolve(visual);
         if (visual.__rowsPromise) return visual.__rowsPromise;
 
         beginLazyRows();
         const source = visual.rowsSource;
-        visual.__rowsPromise = fetch(source.url, { credentials: 'same-origin' })
-            .then(res => {
-                if (!res.ok) throw new Error('Failed to load rows for ' + (visual.name || 'visual') + '.');
-                return res.json();
-            })
+
+        let promise;
+        if (source.arrowUrl) {
+            promise = ensureArrowLibrary()
+                .then(() => {
+                    return fetch(source.arrowUrl, { credentials: 'same-origin' })
+                        .then(res => {
+                            if (!res.ok) throw new Error('Failed to load binary Arrow stream.');
+                            return res.arrayBuffer();
+                        })
+                        .then(buffer => {
+                            const table = window.arrow.tableFromIPC(new Uint8Array(buffer));
+                            const columns = table.schema.fields.map(f => f.name);
+                            const rows = [];
+                            for (let i = 0; i < table.numRows; i++) {
+                                const row = [];
+                                for (let j = 0; j < table.numCols; j++) {
+                                    const cell = table.getChildAt(j).get(i);
+                                    row.push(cell === null ? null : String(cell));
+                                }
+                                rows.push(row);
+                            }
+                            return { columns, rows };
+                        });
+                })
+                .catch(err => {
+                    console.warn("Client-side Arrow parsing failed, falling back to JSON: ", err);
+                    return fetchJsonRows(source);
+                });
+        } else {
+            promise = fetchJsonRows(source);
+        }
+
+        visual.__rowsPromise = promise
             .then(payload => {
                 visual.columns = payload.columns || source.columns || visual.columns || [];
                 visual.rows = payload.rows || [];

@@ -357,6 +357,32 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public async Task SnapshotStore_SaveAndLoad_EtlSnap_RoundTrips()
+        {
+            var manifest = MakeSampleManifest("sample.rptsql");
+            manifest.Visuals.Add(MakeSampleVisual("BAR"));
+
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"snapshot_{Guid.NewGuid()}.etlsnap");
+            var store = new SnapshotStore();
+
+            try
+            {
+                await store.SaveAsync(manifest, path);
+                var loaded = await store.LoadAsync(path);
+
+                Assert.NotNull(loaded);
+                Assert.Equal(manifest.Source, loaded!.Source);
+                Assert.Single(loaded.Visuals);
+                Assert.Equal("BAR", loaded.Visuals[0].VisualType);
+            }
+            finally
+            {
+                if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+            }
+        }
+
+        [Fact]
         public async Task SnapshotStore_LoadAsync_ReturnsNull_WhenFileNotFound()
         {
             var store = new SnapshotStore();

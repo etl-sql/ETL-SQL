@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace ETL_SQL.ReportPortal;
 
 public class PortalConfig

@@ -10,6 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
     <PackageReference Include="MiniExcel" />
     <PackageReference Include="PDFsharp-MigraDoc" />
     <PackageReference Include="Svg.Skia" />
@@ -37,6 +38,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="ETL-SQL.Tests" />
+    <InternalsVisibleTo Include="ETL-SQL.ReportPortal.Tests" />
   </ItemGroup>
 
 </Project>
