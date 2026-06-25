@@ -24,7 +24,7 @@ release begins.
 - [ ] **Phase 4: Release Gates**
   - **Sr. Developer:** Verify that a clean script-to-scheduled-production workflow completes successfully without manual intervention.
   - **Sr. Developer:** Ensure zero credentials leak in logs, bundles, or debug dumps.
-  - **Sr. Developer:** Reconcile OIDC/LDAP configurations with standard documentation libraries.
+  - [x] **Sr. Developer:** Reconcile OIDC/LDAP configurations with standard documentation libraries. *(Aligned `PortalConfig` OIDC/LDAP options with `Docs/Reference/Settings.md` and `Docs/ReportPortal_Administrators_Guide.md`.)*
   - [x] **Sr. Developer:** Implement automatic diagnostic redaction in `etl-sql admin support-bundle` to automatically strip query parameters, private table data, and personal data (PII) before export.
 
 ## Core Project Code Audit Tasks (v0.12.0 Stabilization)

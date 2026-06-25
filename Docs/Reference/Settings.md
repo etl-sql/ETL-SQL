@@ -233,17 +233,29 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 
 Defines authentication configuration. Supported providers: `Local`, `Oidc` (OpenID Connect), and `Ldap`.
 
+- `Provider` (default: `Local`): Main authentication provider model. Use `Local` or `Oidc`; LDAP logins are enabled alongside the selected provider when `Ldap:Enabled` is true.
 - **OIDC Configuration (`Portal:Identity:Oidc`)**:
-  - `Authority`: The identity authority endpoint URL.
+  - `Enabled` (default: `false`): Enables federated OIDC login and startup validation.
+  - `Authority`: HTTPS identity authority/discovery endpoint URL.
   - `ClientId`: Client application ID.
-  - `TenantId`: Target directory tenant ID.
+  - `ClientSecret`: Confidential client secret; provide through `Portal__Identity__Oidc__ClientSecret` or another protected configuration source.
+  - `TenantId`: Optional target directory tenant ID.
+  - `Scopes` (default: `["openid", "profile", "email"]`): Authorization scopes. `openid` is required.
+  - `CallbackPath` (default: `/api/auth/oidc/callback`): Redirect path registered with the identity provider.
+  - `PostLoginRedirectPath` (default: `/index.html`): Portal page loaded after the callback establishes the session.
   - `GroupClaimTypes`: Array of claims parsed to resolve user groups (e.g. `["groups", "roles"]`).
+  - `UsernameClaimType` (default: `preferred_username`): Claim used as the portal username.
+  - `EmailClaimType` (default: `email`): Claim used as the user's email address.
+  - `AdditionalAudiences` (default: `[]`): Extra accepted id_token audiences beyond `ClientId`.
+  - `RequiredClaims` (default: `[]`): Claim types that must be present in the validated id_token.
+  - `ClockSkewSeconds` (default: `60`): Allowed id_token lifetime clock skew.
 - **LDAP Configuration (`Portal:Identity:Ldap`)**:
   - `Enabled` (default: `false`): Enables LDAP verification checks.
   - `Server` (default: `localhost`): Domain controller address.
   - `Port` (default: `389`): Target directory port.
   - `UseSsl` (default: `false`): Runs LDAP queries over secure connection channels.
-  - `Domain` (default: `corp.local`): Active Directory DNS domain name.
+  - `AllowSelfSignedCertificates` (default: `false`): Allows self-signed LDAP TLS certificates for isolated development/test directories.
+  - `Domain` (default: `""`): Active Directory DNS or NetBIOS domain name.
   - `BaseDn`: Base Distinguished Name for scope searches.
   - `ServiceUser` / `ServicePassword`: LDAP bind service account.
   - `RoleMappings`: JSON key-value map mapping LDAP groups to portal roles (e.g. `"GG-Admins": "Admin"`).

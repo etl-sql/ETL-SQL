@@ -146,6 +146,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
         "GroupClaimTypes": [ "groups", "roles" ],
         "UsernameClaimType": "preferred_username",
         "EmailClaimType": "email",
+        "AdditionalAudiences": [],
         "ClockSkewSeconds": 60
       },
       "Ldap": {
@@ -153,6 +154,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
         "Server": "localhost",
         "Port": 389,
         "UseSsl": false,
+        "AllowSelfSignedCertificates": false,
         "Domain": "",
         "BaseDn": "",
         "ServiceUser": "",
@@ -201,6 +203,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Identity.Oidc.Authority` | *(empty)* | OIDC issuer/discovery URL (must be **HTTPS**), for example `https://login.microsoftonline.com/<tenant-id>/v2.0`. The portal reads `/.well-known/openid-configuration` and JWKS from it. |
 | `Identity.Oidc.ClientId` | *(empty)* | OIDC client/application id registered with the provider. |
 | `Identity.Oidc.ClientSecret` | *(empty)* | Confidential client secret for the authorization-code exchange. Used verbatim — supply it via the `Portal__Identity__Oidc__ClientSecret` environment variable or a protected configuration source, not in committed files. |
+| `Identity.Oidc.TenantId` | *(empty)* | Optional tenant identifier used by tenant-aware identity providers and deployment templates. |
 | `Identity.Oidc.Scopes` | `openid`, `profile`, `email` | Scopes requested at authorization time. `openid` is required and added automatically. |
 | `Identity.Oidc.CallbackPath` | `/api/auth/oidc/callback` | Absolute path the provider redirects back to. Register `https://<portal-host>/api/auth/oidc/callback` as a redirect URI with the provider. |
 | `Identity.Oidc.PostLoginRedirectPath` | `/index.html` | App page the user lands on after a successful federated login. The callback renders a hand-off page that stores the session (tokens are never placed in the URL) and forwards here. |
@@ -208,11 +211,13 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Identity.Oidc.RequiredClaims` | *(empty)* | Claim types that must be present in a validated id_token (beyond `sub`). Login fails closed if any is missing — use to mandate, for example, `email` or a tenant claim. |
 | `Identity.Oidc.UsernameClaimType` | `preferred_username` | Claim used as the portal username (falls back to `preferred_username` then `sub`). |
 | `Identity.Oidc.EmailClaimType` | `email` | Claim used as the user's email address. |
+| `Identity.Oidc.AdditionalAudiences` | *(empty)* | Additional token audiences accepted during id_token validation beyond `ClientId`. |
 | `Identity.Oidc.ClockSkewSeconds` | `60` | Allowed clock skew when validating id_token lifetime. |
 | `Identity.Ldap.Enabled` | `false` | Set to `true` to enable LDAP and Active Directory integration. |
 | `Identity.Ldap.Server` | `localhost` | The hostname or IP address of the LDAP/AD server. |
 | `Identity.Ldap.Port` | `389` | The server connection port (usually 389 for plain/STARTTLS, 636 for LDAPS/SSL). |
 | `Identity.Ldap.UseSsl` | `false` | Set to `true` to establish connections via SSL/TLS (LDAPS). |
+| `Identity.Ldap.AllowSelfSignedCertificates` | `false` | Allows self-signed LDAP TLS certificates. Use only in isolated development/test directories; production should trust the issuing CA instead. |
 | `Identity.Ldap.Domain` | *(empty)* | Default DNS or NetBIOS domain suffix used to qualify logins (e.g. `corp.local`). |
 | `Identity.Ldap.BaseDn` | *(empty)* | LDAP directory base search path (e.g. `OU=Users,DC=corp,DC=local`). |
 | `Identity.Ldap.ServiceUser` | *(empty)* | Optional service account distinguished name or UPN for searching. |
@@ -335,6 +340,7 @@ To enable and configure LDAP, update `appsettings.json` under `"Identity"`:
         "Server": "domaincontroller.corp.local",
         "Port": 389,
         "UseSsl": false,
+        "AllowSelfSignedCertificates": false,
         "Domain": "corp.local",
         "BaseDn": "OU=Users,DC=corp,DC=local",
         "ServiceUser": "",
