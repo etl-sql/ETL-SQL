@@ -1,4 +1,5 @@
 using System;
+using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Engine.Services;
@@ -16,9 +17,11 @@ public class UsePasswordStatementHandler : IStatementHandler
         var stmt = (UsePasswordStatement)statement;
         if (stmt.Prompt)
         {
+            var promptProvider = context.ServiceProvider.GetService<IPasswordPromptProvider>()
+                ?? ConsolePasswordPromptProvider.Instance;
             context.ScriptPassword = !string.IsNullOrEmpty(context.MasterPassword)
                 ? context.MasterPassword
-                : PasswordPrompt.ReadPassword("ETL-SQL password: ");
+                : promptProvider.ReadPassword("ETL-SQL password: ");
         }
         else
         {

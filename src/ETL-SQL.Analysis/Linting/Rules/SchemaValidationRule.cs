@@ -1,12 +1,26 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
 public class SchemaValidationRule : ILintRule
 {
+    private readonly ILogger? _logger;
+
+    public SchemaValidationRule()
+    {
+    }
+
+    public SchemaValidationRule(ILogger? logger)
+    {
+        _logger = logger;
+    }
+
     public string Name => "SchemaValidation";
     public string Description => "Validates that tables and columns exist in the connected sources.";
 
@@ -78,48 +92,107 @@ public class SchemaValidationRule : ILintRule
         }
     }
 
-    private string? ResolvePath(string path, string documentUri)
+    private string? ResolvePath(string path, string documentUri, ILogger? logger)
     {
         if (string.IsNullOrWhiteSpace(path)) return null;
 
-        if (System.IO.Path.IsPathRooted(path))
-        {
-            return path;
-        }
-
-        if (!string.IsNullOrWhiteSpace(documentUri))
-        {
-            try
-            {
-                string baseDir = "";
-                if (documentUri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-                {
-                    var uri = new Uri(documentUri);
-                    baseDir = System.IO.Path.GetDirectoryName(uri.LocalPath) ?? "";
-                }
-                else if (System.IO.Path.IsPathRooted(documentUri))
-                {
-                    baseDir = System.IO.Path.GetDirectoryName(documentUri) ?? "";
-                }
-
-                if (!string.IsNullOrEmpty(baseDir))
-                {
-                    return System.IO.Path.GetFullPath(System.IO.Path.Combine(baseDir, path));
-                }
-            }
-            catch
-            {
-                // Ignore URI/Path exceptions
-            }
-        }
-
         try
         {
-            return System.IO.Path.GetFullPath(path);
+            if (Path.IsPathRooted(path))
+            {
+                return Path.GetFullPath(path);
+            }
+
+            if (!string.IsNullOrWhiteSpace(documentUri))
+            {
+                var baseDir = ResolveDocumentDirectory(documentUri, logger);
+                if (!string.IsNullOrEmpty(baseDir))
+                {
+                    return Path.GetFullPath(Path.Combine(baseDir, path));
+                }
+            }
+
+            return Path.GetFullPath(path);
         }
-        catch
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or UnauthorizedAccessException or IOException or UriFormatException)
         {
+            logger?.Warning("Failed to resolve schema validation path '{Path}': {Message}", path, ex.Message);
             return null;
+        }
+    }
+
+    private string? ResolveDocumentDirectory(string documentUri, ILogger? logger)
+    {
+        try
+        {
+            if (documentUri.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            {
+                var uri = new Uri(documentUri);
+                return Path.GetDirectoryName(uri.LocalPath);
+            }
+
+            if (Path.IsPathRooted(documentUri))
+            {
+                return Path.GetDirectoryName(documentUri);
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or UriFormatException or PathTooLongException)
+        {
+            logger?.Warning("Failed to resolve lint document URI '{DocumentUri}': {Message}", documentUri, ex.Message);
+        }
+
+        return null;
+    }
+
+    private bool IsSafePathToProbe(string resolvedPath, string documentUri, ILogger? logger)
+    {
+        if (string.IsNullOrWhiteSpace(resolvedPath)) return false;
+
+        if (IsProtectedPath(resolvedPath))
+        {
+            logger?.Warning("Skipping schema file existence probe for protected path '{Path}'.", resolvedPath);
+            return false;
+        }
+
+        var baseDir = ResolveDocumentDirectory(documentUri, logger);
+        if (!string.IsNullOrWhiteSpace(baseDir) && !SafePath.IsWithinRoot(baseDir, resolvedPath))
+        {
+            logger?.Warning("Skipping schema file existence probe outside document root. Path: '{Path}'", resolvedPath);
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsProtectedPath(string path)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var protectedRoots = OperatingSystem.IsWindows()
+            ? new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".git")
+            }
+            : new[] { "/etc", "/root", "/proc", "/sys", "/dev", "/var/run", "/.ssh", "/.git" };
+
+        return protectedRoots
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Any(root => SafePath.IsWithinRoot(root, fullPath) || string.Equals(Path.GetFullPath(root), fullPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<bool> FileExistsAsync(string resolvedPath, ILogger? logger)
+    {
+        try
+        {
+            return await Task.Run(() => File.Exists(resolvedPath));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or UnauthorizedAccessException or IOException)
+        {
+            logger?.Warning("Failed to check schema file path '{Path}': {Message}", resolvedPath, ex.Message);
+            return false;
         }
     }
 
@@ -255,6 +328,8 @@ public class SchemaValidationRule : ILintRule
 
     private async Task ValidateTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results, List<(string Conn, string Table, string? Alias)> tablesInScope, Dictionary<string, CreateConnectionStatement> scriptConnections, bool isInsert)
     {
+        var logger = context.Logger ?? _logger;
+
         if (tableRef.Subquery != null)
         {
             // Recursive analysis for subqueries if needed
@@ -288,26 +363,19 @@ public class SchemaValidationRule : ILintRule
             {
                 if (!isInsert)
                 {
-                    var resolvedPath = ResolvePath(targetPath, context.DocumentUri);
-                    if (!string.IsNullOrEmpty(resolvedPath))
+                    var resolvedPath = ResolvePath(targetPath, context.DocumentUri, logger);
+                    if (!string.IsNullOrEmpty(resolvedPath) && IsSafePathToProbe(resolvedPath, context.DocumentUri, logger))
                     {
-                        try
+                        if (!await FileExistsAsync(resolvedPath, logger))
                         {
-                            if (!System.IO.File.Exists(resolvedPath))
+                            results.Add(new LintResult
                             {
-                                results.Add(new LintResult
-                                {
-                                    RuleName = Name,
-                                    Severity = LintSeverity.Warning,
-                                    Message = $"File '{targetPath}' for connection '{connName}' does not exist.",
-                                    LineNumber = tableRef.Line,
-                                    ColumnNumber = tableRef.Column
-                                });
-                            }
-                        }
-                        catch
-                        {
-                            // Ignore
+                                RuleName = Name,
+                                Severity = LintSeverity.Warning,
+                                Message = $"File '{targetPath}' for connection '{connName}' does not exist.",
+                                LineNumber = tableRef.Line,
+                                ColumnNumber = tableRef.Column
+                            });
                         }
                     }
                 }

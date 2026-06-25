@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting;
@@ -12,6 +13,12 @@ namespace ETL_SQL.Analysis.Linting;
 public class Linter
 {
     private readonly List<ILintRule> _rules = new();
+    private readonly ILogger? _logger;
+
+    public Linter(ILogger? logger = null)
+    {
+        _logger = logger;
+    }
 
     /// <summary>Adds a new linting rule to the linter.</summary>
     public void AddRule(ILintRule rule)
@@ -25,7 +32,7 @@ public class Linter
     /// <summary>Analyzes the script against all registered rules.</summary>
     public async Task<List<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
-        var results = new List<LintResult>();
+        var logger = context.Logger ?? _logger;
 
         // 1. Discovery Pass (populate in-script metadata)
         var overlay = new ScriptMetadataOverlay(context.Metadata);
@@ -38,12 +45,24 @@ public class Linter
         }
 
         // 3. Execute Rules
-        foreach (var rule in _rules)
+        var rules = _rules.ToArray();
+        var ruleTasks = rules.Select(rule => AnalyzeRuleAsync(rule, script, context, logger));
+        var ruleResults = await Task.WhenAll(ruleTasks);
+        return ruleResults.SelectMany(r => r).ToList();
+    }
+
+    private async Task<IReadOnlyCollection<LintResult>> AnalyzeRuleAsync(ILintRule rule, Script script, ILintContext context, ILogger? logger)
+    {
+        try
         {
-            var ruleResults = await rule.AnalyzeAsync(script, context);
-            results.AddRange(ruleResults);
+            var results = await rule.AnalyzeAsync(script, context);
+            return results as IReadOnlyCollection<LintResult> ?? results.ToList();
         }
-        return results;
+        catch (Exception ex)
+        {
+            logger?.Error("Lint rule {RuleName} failed.", ex, rule.Name);
+            return Array.Empty<LintResult>();
+        }
     }
 
     private void DiscoverScriptMetadata(Script script, ScriptMetadataOverlay overlay)

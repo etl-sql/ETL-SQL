@@ -3,6 +3,26 @@ using System.Text;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Services;
+
+public interface IPasswordPromptProvider
+{
+    string ReadPassword(string prompt);
+}
+
+public sealed class ConsolePasswordPromptProvider : IPasswordPromptProvider
+{
+    public static ConsolePasswordPromptProvider Instance { get; } = new();
+
+    private ConsolePasswordPromptProvider()
+    {
+    }
+
+    public string ReadPassword(string prompt)
+    {
+        return PasswordPrompt.ReadPassword(prompt);
+    }
+}
+
 public static class PasswordPrompt
 {
     public static string ReadPassword(string prompt)

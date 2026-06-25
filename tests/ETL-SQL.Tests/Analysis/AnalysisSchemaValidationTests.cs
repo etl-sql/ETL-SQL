@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using Xunit;
@@ -135,6 +137,35 @@ namespace ETL_SQL.Tests.Analysis
             // Should NOT have a warning about file not existing
             var warnings = results.Where(r => r.Message.Contains("does not exist")).ToList();
             Assert.Empty(warnings);
+        }
+
+        [Fact]
+        public async Task SelectFromEscapingFilePath_SkipsExistenceProbeAndLogsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new SchemaValidationRule());
+
+            var metadata = new MockFileMetadataProvider();
+            var logger = new CapturingLogger();
+            var baseDir = Path.Combine(Path.GetTempPath(), "etl-sql-lint-root", Guid.NewGuid().ToString("N"));
+            var documentPath = Path.Combine(baseDir, "script.etlsql");
+            var context = new DefaultLintContext
+            {
+                Metadata = metadata,
+                DocumentUri = new Uri(documentPath).AbsoluteUri,
+                Logger = logger
+            };
+
+            var sql = @"
+                CREATE CONNECTION MockGenerator AS FLATFILE('../outside.csv');
+                SELECT * FROM MockGenerator.FILE;
+            ";
+
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, context);
+
+            Assert.DoesNotContain(results, r => r.Message.Contains("outside.csv") && r.Message.Contains("does not exist"));
+            Assert.Contains(logger.Messages, m => m.Level == LogLevel.Warning && m.Message.Contains("outside document root"));
         }
 
         public class MockFileMetadataProvider : IMetadataProvider

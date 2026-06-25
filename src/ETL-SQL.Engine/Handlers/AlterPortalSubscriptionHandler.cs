@@ -39,7 +39,9 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
         }
 
         // Rebuild parameters from the existing script if needed
-        var existingParams = await ExtractParametersFromScriptAsync(job.Script);
+        var scriptPath = ResolveSubscriptionScriptPath(job.Script, context, requireWrite: stmt.Parameters is not null || stmt.NewFormat.HasValue);
+
+        var existingParams = await ExtractParametersFromScriptAsync(scriptPath, context.CancellationToken);
 
         IReadOnlyList<SubscriptionParameter> finalParams = stmt.Parameters switch
         {
@@ -50,7 +52,7 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
 
         // Rewrite the script if parameters changed or format changed
         if (stmt.Parameters is not null || stmt.NewFormat.HasValue)
-            await RewriteScriptAsync(job.Script, finalParams, stmt.NewFormat);
+            await RewriteScriptAsync(scriptPath, finalParams, stmt.NewFormat, context.CancellationToken);
 
         var newSchedule = stmt.NewSchedule ?? job.Unit;
         var (interval, unit) = ParseScheduleUnit(stmt.NewSchedule, job.Interval, job.Unit);
@@ -82,11 +84,20 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
             ConsoleColor.Green);
     }
 
-    private static async Task<IReadOnlyList<SubscriptionParameter>> ExtractParametersFromScriptAsync(string scriptPath)
+    private static string ResolveSubscriptionScriptPath(string scriptPath, IExecutionContext context, bool requireWrite)
+    {
+        var resolved = context.ResolvePath(scriptPath);
+        context.SecurityService.ValidatePath(resolved);
+        if (requireWrite)
+            context.SecurityService.ValidateWriteAccess(resolved);
+        return resolved;
+    }
+
+    private static async Task<IReadOnlyList<SubscriptionParameter>> ExtractParametersFromScriptAsync(string scriptPath, System.Threading.CancellationToken cancellationToken)
     {
         if (!File.Exists(scriptPath)) return Array.Empty<SubscriptionParameter>();
         var result = new List<SubscriptionParameter>();
-        foreach (var line in await File.ReadAllLinesAsync(scriptPath))
+        foreach (var line in await File.ReadAllLinesAsync(scriptPath, cancellationToken))
         {
             var m = Regex.Match(line, @"^(?:SET|DECLARE)\s+(@\w+)(?:\s+STRING)?\s*=\s*'(.*)';\s*$", RegexOptions.IgnoreCase);
             if (m.Success) result.Add(new SubscriptionParameter(m.Groups[1].Value, m.Groups[2].Value));
@@ -94,10 +105,10 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
         return result;
     }
 
-    private static async Task RewriteScriptAsync(string scriptPath, IReadOnlyList<SubscriptionParameter> parameters, PortalSubscriptionFormat? newFormat)
+    private static async Task RewriteScriptAsync(string scriptPath, IReadOnlyList<SubscriptionParameter> parameters, PortalSubscriptionFormat? newFormat, System.Threading.CancellationToken cancellationToken)
     {
         if (!File.Exists(scriptPath)) return;
-        var lines = (await File.ReadAllLinesAsync(scriptPath)).ToList();
+        var lines = (await File.ReadAllLinesAsync(scriptPath, cancellationToken)).ToList();
 
         // Remove old SET / DECLARE @param lines
         lines.RemoveAll(l => Regex.IsMatch(l, @"^(?:SET|DECLARE)\s+@\w+(?:\s+STRING)?\s*=\s*'.*';\s*$", RegexOptions.IgnoreCase));
@@ -123,7 +134,7 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
                 lines[i] = Regex.Replace(lines[i], @"\bFORMAT\s+(PDF|CSV|BOTH)\b", $"FORMAT {formatStr}", RegexOptions.IgnoreCase);
         }
 
-        await File.WriteAllLinesAsync(scriptPath, lines);
+        await File.WriteAllLinesAsync(scriptPath, lines, cancellationToken);
     }
 
     private static (int interval, string unit) ParseScheduleUnit(string? newSchedule, int existingInterval, string existingUnit)

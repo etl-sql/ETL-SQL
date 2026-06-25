@@ -37,22 +37,23 @@ namespace ETL_SQL.LSP
         public string? GetDocumentText(DocumentUri uri)
             => _states.TryGetValue(uri, out var s) ? s.Text : null;
 
-        private readonly ConcurrentDictionary<string, string> _notebookPrefixes = new();
-        private readonly ConcurrentDictionary<string, string> _notebookPaths = new();
+        private readonly ConcurrentDictionary<string, NotebookContext> _notebookContexts = new();
 
         public void SetNotebookContext(string uri, string prefix, string path)
         {
-            _notebookPrefixes[uri] = prefix;
-            _notebookPaths[uri] = path;
+            _notebookContexts[uri] = new NotebookContext(prefix, path);
         }
 
         public string GetNotebookPrefix(string uri)
-            => _notebookPrefixes.TryGetValue(uri, out var prefix) ? prefix : "";
+            => _notebookContexts.TryGetValue(uri, out var context) ? context.Prefix : "";
 
         public string? GetNotebookPath(string uri)
-            => _notebookPaths.TryGetValue(uri, out var path) ? path : null;
+            => _notebookContexts.TryGetValue(uri, out var context) ? context.Path : null;
     }
 
     /// <summary>Immutable snapshot of a parsed document.</summary>
     public record DocumentState(string Text, Script Script, ILineageTracker Lineage);
+
+    /// <summary>Immutable notebook context so prefix and path are updated atomically.</summary>
+    public record NotebookContext(string Prefix, string Path);
 }

@@ -399,7 +399,7 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
 
 public interface ILineageTracker
 {
-    Dictionary<string, string> GlobalMetadata { get; }
+    System.Collections.Concurrent.ConcurrentDictionary<string, string> GlobalMetadata { get; }
     void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null, TransformationKind transformationKind = TransformationKind.Unknown, string? transformationExpression = null, IReadOnlyList<string>? functionsApplied = null);
     IEnumerable<LineageEntry> GetLineage(string tableName);
     IEnumerable<LineageEntry> GetColumnLineage(string tableName, string columnName);
@@ -418,11 +418,11 @@ public interface IDockerManager : IAsyncDisposable
     bool HasActiveContainers { get; }
     string? LastConnectionString { get; }
     string? LastAlias { get; }
-    Task<string> StartContainer(string imageName, string? alias = null);
-    Task StopContainer(string? alias);
-    Task PauseContainer(string? alias);
-    Task ResumeContainer(string? alias);
-    Task CloseContainers(string? nameOrAlias = null);
+    Task<string> StartContainer(string imageName, string? alias = null, System.Threading.CancellationToken cancellationToken = default);
+    Task StopContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task PauseContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task ResumeContainer(string? alias, System.Threading.CancellationToken cancellationToken = default);
+    Task CloseContainers(string? nameOrAlias = null, System.Threading.CancellationToken cancellationToken = default);
     string? GetConnectionString(string alias);
     Dictionary<string, string> GetState();
     void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString);

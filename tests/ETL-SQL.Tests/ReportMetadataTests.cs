@@ -48,7 +48,7 @@ namespace ETL_SQL.Tests
             var mockServiceProvider = new Mock<IServiceProvider>();
             var mockFunctions = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
             var mockLineage = new Mock<ILineageTracker>();
-            var globalMetadata = new Dictionary<string, string>();
+            var globalMetadata = new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             mockLineage.Setup(l => l.GlobalMetadata).Returns(globalMetadata);
 
             var mockDocker = new Mock<IDockerManager>();

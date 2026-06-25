@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Common;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.App;
 using ETL_SQL.Core;
@@ -22,6 +24,35 @@ namespace ETL_SQL.Tests.Analysis
 
         private static void EnsureConnectorRegistry() =>
             _ = DependencyInjectionSetup.BuildServiceProvider();
+
+        [Fact]
+        public async Task Linter_AnalyzeAsync_RunsIndependentRulesConcurrently()
+        {
+            var linter = new Linter();
+            linter.AddRule(new DelayedLintRule("first", 150));
+            linter.AddRule(new DelayedLintRule("second", 150));
+
+            var startedAt = DateTimeOffset.UtcNow;
+            var results = await linter.AnalyzeAsync(Parse("SELECT 1;"), new DefaultLintContext());
+            var elapsed = DateTimeOffset.UtcNow - startedAt;
+
+            Assert.Equal(2, results.Count);
+            Assert.True(elapsed < TimeSpan.FromMilliseconds(275), $"Lint rules did not run concurrently. Elapsed: {elapsed.TotalMilliseconds}ms");
+        }
+
+        [Fact]
+        public async Task Linter_AnalyzeAsync_LogsRuleFailuresAndContinues()
+        {
+            var logger = new CapturingLogger();
+            var linter = new Linter(logger);
+            linter.AddRule(new ThrowingLintRule());
+            linter.AddRule(new DelayedLintRule("healthy", 1));
+
+            var results = await linter.AnalyzeAsync(Parse("SELECT 1;"), new DefaultLintContext());
+
+            Assert.Single(results);
+            Assert.Contains(logger.Messages, m => m.Level == LogLevel.Error && m.Message.Contains("Throwing"));
+        }
 
         [Fact]
         public async Task TestSafeDeleteUpdateRule()
@@ -434,5 +465,47 @@ CREATE PAGE Overview AS DASHBOARD (
         public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName) => Task.FromResult(Columns.TryGetValue(tableName, out var cols) ? cols.AsEnumerable() : Enumerable.Empty<string>());
         public IEnumerable<string> GetConnections() => Connections;
         public string? GetConnectionType(string connectionName) => "MSSQL";
+    }
+
+    internal sealed class DelayedLintRule : ILintRule
+    {
+        private readonly string _name;
+        private readonly int _delayMs;
+
+        public DelayedLintRule(string name, int delayMs)
+        {
+            _name = name;
+            _delayMs = delayMs;
+        }
+
+        public string Name => _name;
+        public string Description => "Test delay rule.";
+
+        public async Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+        {
+            await Task.Delay(_delayMs);
+            return new[] { new LintResult { RuleName = Name, Severity = LintSeverity.Info, Message = Name } };
+        }
+    }
+
+    internal sealed class ThrowingLintRule : ILintRule
+    {
+        public string Name => "Throwing";
+        public string Description => "Test failure rule.";
+        public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context) => throw new InvalidOperationException("boom");
+    }
+
+    internal sealed class CapturingLogger : ILogger
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Messages { get; } = new();
+
+        public void Log(LogLevel level, string message, Exception? ex = null) => Messages.Add((level, message, ex));
+        public string? SessionId { get; set; }
+        public bool IsDebugEnabled => true;
+        public bool IsVerboseEnabled => true;
+        public bool IsVerbose { get; set; }
+        public bool SuppressConsole { get; set; }
+        public bool IsJsonMode { get; set; }
+        public event Action<string, string?, ConsoleColor>? OnMessage { add { } remove { } }
     }
 }

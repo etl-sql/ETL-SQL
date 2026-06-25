@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using ETL_SQL.Core.Common.Exceptions;
 using PgpCore;
 
@@ -21,9 +22,10 @@ public static class CryptoUtils
     private const int IvSize = 16;
     private const int NonceSize = 12;
     private const int TagSize = 16;
-    private const int FileTagSize = 32;
-    private const byte CURRENT_VERSION = 2;
-    private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQL2");
+        private const int FileTagSize = 32;
+        private const byte CURRENT_VERSION = 2;
+        private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQL2");
+        private static readonly byte[] SshFileMagicV2 = Encoding.ASCII.GetBytes("ETLSQLSSH2");
 
     /// <summary>
     /// Encrypts a string using the specified password and optional algorithm.
@@ -328,75 +330,208 @@ public static class CryptoUtils
     /// <summary>
     /// Encrypts a file using an SSH (RSA) public key.
     /// </summary>
-    public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite)
-    {
-        if (File.Exists(outputFile) && !overwrite)
-            throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+        public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite)
+            => EncryptFileWithSshAsync(inputFile, outputFile, keyFile, overwrite).GetAwaiter().GetResult();
 
-        string pem = File.ReadAllText(keyFile);
-        using var rsa = RSA.Create();
-        rsa.ImportFromPem(pem);
-
-        byte[] aesKey = RandomNumberGenerator.GetBytes(KeySize / 8);
-        byte[] encryptedKey = rsa.Encrypt(aesKey, RSAEncryptionPadding.OaepSHA256);
-
-        using var aes = Aes.Create();
-        aes.Key = aesKey;
-        aes.GenerateIV();
-        byte[] iv = aes.IV;
-
-        using (var fsOut = new FileStream(outputFile, FileMode.Create))
+        public static async Task EncryptFileWithSshAsync(
+            string inputFile,
+            string outputFile,
+            string keyFile,
+            bool overwrite,
+            CancellationToken cancellationToken = default)
         {
-            // Format: [EncKeyLength(4)] [EncryptedKey] [IV(16)] [Data...]
-            fsOut.Write(BitConverter.GetBytes(encryptedKey.Length), 0, 4);
-            fsOut.Write(encryptedKey, 0, encryptedKey.Length);
-            fsOut.Write(iv, 0, IvSize);
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-            using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
-            using (var cs = new CryptoStream(fsOut, encryptor, CryptoStreamMode.Write))
-            using (var fsIn = new FileStream(inputFile, FileMode.Open))
+            string pem = await File.ReadAllTextAsync(keyFile, cancellationToken).ConfigureAwait(false);
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(pem);
+
+            byte[] aesKey = RandomNumberGenerator.GetBytes(KeySize / 8);
+            byte[] hmacKey = RandomNumberGenerator.GetBytes(32);
+            byte[] keyMaterial = new byte[aesKey.Length + hmacKey.Length];
+            Buffer.BlockCopy(aesKey, 0, keyMaterial, 0, aesKey.Length);
+            Buffer.BlockCopy(hmacKey, 0, keyMaterial, aesKey.Length, hmacKey.Length);
+            byte[] encryptedKey = rsa.Encrypt(keyMaterial, RSAEncryptionPadding.OaepSHA256);
+
+            using var aes = Aes.Create();
+            aes.Key = aesKey;
+            aes.GenerateIV();
+            byte[] iv = aes.IV;
+            var tempCipher = outputFile + ".tmp-" + Guid.NewGuid().ToString("N");
+
+            try
             {
-                fsIn.CopyTo(cs);
+                using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
+                await using (var fsIn = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+                await using (var fsCipher = new FileStream(tempCipher, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                await using (var cs = new CryptoStream(fsCipher, encryptor, CryptoStreamMode.Write))
+                {
+                    await fsIn.CopyToAsync(cs, cancellationToken).ConfigureAwait(false);
+                }
+
+                await WriteAuthenticatedSshFileAsync(outputFile, encryptedKey, iv, hmacKey, tempCipher, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                TryDeleteFile(tempCipher);
             }
         }
-    }
 
     /// <summary>
     /// Decrypts a file using an SSH (RSA) private key.
     /// </summary>
-    public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite, string? passphrase = null)
-    {
-        if (File.Exists(outputFile) && !overwrite)
-            throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+        public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite, string? passphrase = null)
+            => DecryptFileWithSshAsync(inputFile, outputFile, keyFile, overwrite, passphrase).GetAwaiter().GetResult();
 
-        string pem = File.ReadAllText(keyFile);
-        using var rsa = RSA.Create();
-        if (string.IsNullOrEmpty(passphrase)) rsa.ImportFromPem(pem);
-        else rsa.ImportFromEncryptedPem(pem, passphrase);
-
-        using (var fsIn = new FileStream(inputFile, FileMode.Open))
+        public static async Task DecryptFileWithSshAsync(
+            string inputFile,
+            string outputFile,
+            string keyFile,
+            bool overwrite,
+            string? passphrase = null,
+            CancellationToken cancellationToken = default)
         {
-            byte[] lenBytes = new byte[4];
-            fsIn.ReadExactly(lenBytes, 0, 4);
-            int keyLen = BitConverter.ToInt32(lenBytes, 0);
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
-            byte[] encryptedKey = new byte[keyLen];
-            fsIn.ReadExactly(encryptedKey, 0, keyLen);
+            string pem = await File.ReadAllTextAsync(keyFile, cancellationToken).ConfigureAwait(false);
+            using var rsa = RSA.Create();
+            if (string.IsNullOrEmpty(passphrase)) rsa.ImportFromPem(pem);
+            else rsa.ImportFromEncryptedPem(pem, passphrase);
 
-            byte[] iv = new byte[IvSize];
-            fsIn.ReadExactly(iv, 0, IvSize);
-
-            byte[] aesKey = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
-
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(aesKey, iv);
-            using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
-            using (var fsOut = new FileStream(outputFile, FileMode.Create))
+            await using (var fsIn = new FileStream(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
             {
-                cs.CopyTo(fsOut);
+                if (await TryReadMagicAsync(fsIn, SshFileMagicV2, cancellationToken).ConfigureAwait(false))
+                {
+                    byte[] lenBytesV2 = new byte[4];
+                    await fsIn.ReadExactlyAsync(lenBytesV2, cancellationToken).ConfigureAwait(false);
+                    int keyLenV2 = BitConverter.ToInt32(lenBytesV2, 0);
+                    if (keyLenV2 <= 0)
+                        throw new ExecutionException("Invalid SSH encrypted file format.");
+
+                    byte[] encryptedKeyV2 = new byte[keyLenV2];
+                    await fsIn.ReadExactlyAsync(encryptedKeyV2, cancellationToken).ConfigureAwait(false);
+
+                    byte[] ivV2 = new byte[IvSize];
+                    await fsIn.ReadExactlyAsync(ivV2, cancellationToken).ConfigureAwait(false);
+
+                    byte[] keyMaterial = rsa.Decrypt(encryptedKeyV2, RSAEncryptionPadding.OaepSHA256);
+                    if (keyMaterial.Length < 64)
+                        throw new ExecutionException("Invalid SSH encrypted file key material.");
+
+                    byte[] aesKeyV2 = keyMaterial.AsSpan(0, 32).ToArray();
+                    byte[] hmacKeyV2 = keyMaterial.AsSpan(32, 32).ToArray();
+                    var cipherStart = fsIn.Position;
+                    var cipherLength = fsIn.Length - cipherStart - FileTagSize;
+                    if (cipherLength < 0)
+                        throw new ExecutionException("Invalid SSH encrypted file format.");
+
+                    VerifyAuthenticatedSshFile(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength);
+
+                    fsIn.Position = cipherStart;
+                    using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
+                    using var aesV2 = Aes.Create();
+                    using var decryptorV2 = aesV2.CreateDecryptor(aesKeyV2, ivV2);
+                    await using var fsOutV2 = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+                    await using var csV2 = new CryptoStream(limitedCipher, decryptorV2, CryptoStreamMode.Read);
+                    await csV2.CopyToAsync(fsOutV2, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+
+                fsIn.Position = 0;
+                byte[] lenBytes = new byte[4];
+                await fsIn.ReadExactlyAsync(lenBytes, cancellationToken).ConfigureAwait(false);
+                int keyLen = BitConverter.ToInt32(lenBytes, 0);
+
+                byte[] encryptedKey = new byte[keyLen];
+                await fsIn.ReadExactlyAsync(encryptedKey, cancellationToken).ConfigureAwait(false);
+
+                byte[] iv = new byte[IvSize];
+                await fsIn.ReadExactlyAsync(iv, cancellationToken).ConfigureAwait(false);
+
+                byte[] aesKey = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
+
+                using var aes = Aes.Create();
+                using var decryptor = aes.CreateDecryptor(aesKey, iv);
+                await using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
+                await using (var fsOut = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                {
+                    await cs.CopyToAsync(fsOut, cancellationToken).ConfigureAwait(false);
+                }
             }
         }
-    }
+
+        private static async Task WriteAuthenticatedSshFileAsync(
+            string outputFile,
+            byte[] encryptedKey,
+            byte[] iv,
+            byte[] hmacKey,
+            string tempCipher,
+            CancellationToken cancellationToken)
+        {
+            using var hmac = new HMACSHA256(hmacKey);
+            await using var fsOut = new FileStream(outputFile, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+            await WriteAndHashAsync(fsOut, hmac, SshFileMagicV2, cancellationToken).ConfigureAwait(false);
+            await WriteAndHashAsync(fsOut, hmac, BitConverter.GetBytes(encryptedKey.Length), cancellationToken).ConfigureAwait(false);
+            await WriteAndHashAsync(fsOut, hmac, encryptedKey, cancellationToken).ConfigureAwait(false);
+            await WriteAndHashAsync(fsOut, hmac, iv, cancellationToken).ConfigureAwait(false);
+
+            var buffer = new byte[81920];
+            await using (var fsCipher = new FileStream(tempCipher, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true))
+            {
+                int read;
+                while ((read = await fsCipher.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken).ConfigureAwait(false)) > 0)
+                {
+                    await fsOut.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    hmac.TransformBlock(buffer, 0, read, null, 0);
+                }
+            }
+
+            hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            await fsOut.WriteAsync(hmac.Hash!, cancellationToken).ConfigureAwait(false);
+        }
+
+        private static void VerifyAuthenticatedSshFile(FileStream fsIn, byte[] encryptedKey, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength)
+        {
+            using var hmac = new HMACSHA256(hmacKey);
+            hmac.TransformBlock(SshFileMagicV2, 0, SshFileMagicV2.Length, null, 0);
+            var keyLengthBytes = BitConverter.GetBytes(encryptedKey.Length);
+            hmac.TransformBlock(keyLengthBytes, 0, keyLengthBytes.Length, null, 0);
+            hmac.TransformBlock(encryptedKey, 0, encryptedKey.Length, null, 0);
+            hmac.TransformBlock(iv, 0, iv.Length, null, 0);
+
+            var buffer = new byte[81920];
+            var remaining = cipherLength;
+            while (remaining > 0)
+            {
+                var read = fsIn.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                if (read <= 0)
+                    throw new ExecutionException("Invalid SSH encrypted file format.");
+                hmac.TransformBlock(buffer, 0, read, null, 0);
+                remaining -= read;
+            }
+            hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+
+            var expectedTag = new byte[FileTagSize];
+            fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
+            if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
+                throw new CryptographicException("SSH encrypted file authentication failed.");
+        }
+
+        private static async Task WriteAndHashAsync(Stream stream, HMAC hmac, byte[] bytes, CancellationToken cancellationToken)
+        {
+            await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            hmac.TransformBlock(bytes, 0, bytes.Length, null, 0);
+        }
+
+        private static async Task<bool> TryReadMagicAsync(FileStream fs, byte[] magic, CancellationToken cancellationToken)
+        {
+            if (fs.Length < magic.Length) return false;
+            byte[] candidate = new byte[magic.Length];
+            await fs.ReadExactlyAsync(candidate, cancellationToken).ConfigureAwait(false);
+            return candidate.AsSpan().SequenceEqual(magic);
+        }
 
     /// <summary>
     /// Highly secure, zero-password encryption bound to the current OS user and machine (DPAPI).

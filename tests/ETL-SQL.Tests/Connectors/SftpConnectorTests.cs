@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors;
 using ETL_SQL.Core.Common;
@@ -36,7 +37,7 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void Constructor_WithKeyFile_UsesPrivateKeyAuth()
+        public async Task Constructor_WithKeyFile_UsesPrivateKeyAuth()
         {
             // We use the internal constructor with a factory to verify parameters without real SSH connections
             string host = "sftp.example.com";
@@ -57,7 +58,7 @@ namespace ETL_SQL.Tests.Connectors
             });
 
             // Trigger lazy load
-            try { var c = connector.GetType().GetProperty("Client", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(connector); } catch { }
+            try { await InvokeClientCreationAsync(connector); } catch { }
 
             Assert.True(factoryCalled);
             Assert.Equal(keyFile, capturedKeyFile);
@@ -65,7 +66,7 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
-        public void Constructor_WithPassword_UsesPasswordAuth()
+        public async Task Constructor_WithPassword_UsesPasswordAuth()
         {
             string host = "sftp.example.com";
             string user = "testuser";
@@ -82,7 +83,7 @@ namespace ETL_SQL.Tests.Connectors
             });
 
             // Trigger lazy load
-            try { var c = connector.GetType().GetProperty("Client", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance).GetValue(connector); } catch { }
+            try { await InvokeClientCreationAsync(connector); } catch { }
 
             Assert.True(factoryCalled);
             Assert.Equal(pass, capturedPass);
@@ -117,6 +118,16 @@ namespace ETL_SQL.Tests.Connectors
             var timeoutField = typeof(SftpConnector).GetField("_timeoutSeconds", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var timeoutValue = (int)timeoutField.GetValue(dataSource);
             Assert.Equal(45, timeoutValue);
+        }
+
+        private static async Task InvokeClientCreationAsync(SftpConnector connector)
+        {
+            var method = typeof(SftpConnector).GetMethod(
+                "GetOrCreateClientAsync",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(method);
+            var task = (Task<SftpClient>)method.Invoke(connector, null)!;
+            await task;
         }
     }
 }

@@ -21,6 +21,12 @@ namespace ETL_SQL.Connectors
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY", "MOCKDB"
         };
 
+        private static readonly HashSet<string> SensitiveKeys = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "PASSWORD", "PWD", "TOKEN", "ACCESS_TOKEN", "REFRESH_TOKEN", "API_KEY", "CLIENT_SECRET",
+            "SECRET", "SASL_PASSWORD", "PASSPHRASE", "KEY", "PRIVATE_KEY"
+        };
+
         /// <summary>
         /// Builds a provider-specific connection string from a property dictionary.
         /// </summary>
@@ -60,6 +66,25 @@ namespace ETL_SQL.Connectors
                 _ => throw new ArgumentException($"Structured property building is not yet supported for provider: {provider}")
             };
         }
+
+        /// <summary>
+        /// Builds a provider-specific connection string with sensitive values replaced for diagnostics.
+        /// Use this for logs, exceptions, and support bundles instead of logging <see cref="Build"/>.
+        /// </summary>
+        public static string BuildForDiagnostics(string provider, Dictionary<string, string> props)
+        {
+            if (props == null || props.Count == 0)
+                return Build(provider, props!);
+
+            var redactedProps = props.ToDictionary(
+                kvp => kvp.Key,
+                kvp => IsSensitiveKey(kvp.Key) ? "<redacted>" : kvp.Value,
+                StringComparer.OrdinalIgnoreCase);
+
+            return Build(provider, redactedProps);
+        }
+
+        public static bool IsSensitiveKey(string key) => SensitiveKeys.Contains(key);
 
         private static void ValidateProvider(string provider)
         {

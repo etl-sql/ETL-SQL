@@ -6,8 +6,6 @@ using ETL_SQL.Analysis.Explain;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -122,66 +120,12 @@ public class ExplainStatementHandler : IStatementHandler
             context.OnResultSet?.Invoke(plan);
             if (!context.RedirectOutput)
             {
-                var table = new Table()
-                    .Border(TableBorder.Rounded)
-                    .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
-                    .AddColumn("ID")
-                    .AddColumn("Operation")
-                    .AddColumn("Details")
-                    .AddColumn("Cost", c => c.RightAligned())
-                    .AddColumn("Mode")
-                    .AddColumn("Est. Rows", c => c.RightAligned());
-
+                ResultFormatter.PrintTable(plan);
+                context.Log($"Total Plan Cost: {metrics.DurationMs}", ConsoleColor.Yellow);
                 if (stmt.IsAnalyze)
                 {
-                    table.AddColumn("Actual Rows", c => c.RightAligned());
-                    table.AddColumn("Actual Time", c => c.RightAligned());
-                    table.AddColumn("Spill Bytes", c => c.RightAligned());
-                    table.AddColumn("Spill Count", c => c.RightAligned());
-                }
-
-                foreach (var row in plan.Rows)
-                {
-                    var modeRaw = row["Mode"]?.ToString() ?? "";
-                    var modeMarkup = modeRaw == "BLOCKING"
-                        ? new Markup("[yellow]BLOCKING[/]")
-                        : (IRenderable)new Text(modeRaw);
-                    var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
-
-                    if (stmt.IsAnalyze)
-                    {
-                        table.AddRow(
-                            new Text(row["ID"]?.ToString() ?? ""),
-                            new Text(row["Operation"]?.ToString() ?? ""),
-                            new Text(row["Details"]?.ToString() ?? ""),
-                            new Text(row["Cost"]?.ToString() ?? ""),
-                            modeMarkup,
-                            estRows,
-                            new Text(row["Actual Rows"]?.ToString() ?? "--"),
-                            new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
-                            new Text(row["Spill Bytes"]?.ToString() ?? "0"),
-                            new Text(row["Spill Count"]?.ToString() ?? "0")
-                        );
-                    }
-                    else
-                    {
-                        table.AddRow(
-                            new Text(row["ID"]?.ToString() ?? ""),
-                            new Text(row["Operation"]?.ToString() ?? ""),
-                            new Text(row["Details"]?.ToString() ?? ""),
-                            new Text(row["Cost"]?.ToString() ?? ""),
-                            modeMarkup,
-                            estRows
-                        );
-                    }
-                }
-
-                AnsiConsole.Write(table);
-                AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
-                if (stmt.IsAnalyze)
-                {
-                    AnsiConsole.MarkupLine($"[grey]Total Actual Time:[/] [green]{actualTime}ms[/]");
-                    AnsiConsole.MarkupLine($"[grey]Total Actual Rows:[/] [green]{actualRows}[/]");
+                    context.Log($"Total Actual Time: {actualTime}ms", ConsoleColor.Green);
+                    context.Log($"Total Actual Rows: {actualRows}", ConsoleColor.Green);
                 }
             }
         }

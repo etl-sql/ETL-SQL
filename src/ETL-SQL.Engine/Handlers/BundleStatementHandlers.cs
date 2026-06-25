@@ -15,6 +15,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers;
 public sealed record BundlePreflightResult(
@@ -290,7 +291,7 @@ public class PublishBundleStatementHandler(IBundleStore store) : IStatementHandl
             ?? throw new ExecutionException("PUBLISH BUNDLE source path evaluated to null.");
 
         var publishPassword = stmt.PasswordMode == BundleSecretMode.Prompt
-            ? PasswordPrompt.ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
+            ? PasswordPromptResolver.Get(context).ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
             : stmt.Password;
 
         var encryptionPassword = SecurityService.GetMachineKey();
@@ -335,7 +336,7 @@ public class ValidateBundleStatementHandler : IStatementHandler
     {
         var stmt = (ValidateBundleStatement)statement;
         var publishPassword = stmt.PasswordMode == BundleSecretMode.Prompt
-            ? PasswordPrompt.ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
+            ? PasswordPromptResolver.Get(context).ReadPassword($"Publish password for bundle '{stmt.BundleName}': ")
             : stmt.Password;
         var source = (await context.EvaluateValue(stmt.SourcePath, new Row()))?.ToString()
             ?? throw new ExecutionException("VALIDATE BUNDLE source path evaluated to null.");
@@ -343,6 +344,13 @@ public class ValidateBundleStatementHandler : IStatementHandler
             stmt.EntryPath, publishPassword, SecurityService.GetMachineKey());
         context.Log($"Bundle '{stmt.BundleName}' validated: {result.Files.Count} file(s), {result.Dependencies.Count} dependency edge(s).", ConsoleColor.Green);
     }
+
+}
+
+internal static class PasswordPromptResolver
+{
+    public static IPasswordPromptProvider Get(IExecutionContext context)
+        => context.ServiceProvider.GetService<IPasswordPromptProvider>() ?? ConsolePasswordPromptProvider.Instance;
 }
 
 public class ExportScriptStatementHandler(IBundleStore store) : IStatementHandler

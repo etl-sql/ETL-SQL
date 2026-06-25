@@ -48,6 +48,8 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
     /// </summary>
     public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
     {
+        _evaluator.CancellationToken.ThrowIfCancellationRequested();
+
         if (table.Subquery != null)
         {
             return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
@@ -181,6 +183,8 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
             throw new ExecutionException($"Unknown source: {name} at Line {table.Line}");
         }
 
+        _evaluator.CancellationToken.ThrowIfCancellationRequested();
+
         if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source);
 
         if (table.ConnectionName != null) return source.WithTable(table.TableName);
@@ -198,7 +202,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         _viewResolutionStack.Push(viewName);
         try
         {
-            await foreach (var batch in _evaluator.ExecuteQuery(query))
+            await foreach (var batch in _evaluator.ExecuteQuery(query).WithCancellation(_evaluator.CancellationToken))
                 yield return batch;
         }
         finally
@@ -209,6 +213,8 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
 
     private async Task<IDataSource> BuildValuesDataSourceAsync(TableReference table)
     {
+        _evaluator.CancellationToken.ThrowIfCancellationRequested();
+
         var rows = table.ValuesRows ?? new List<List<Expression>>();
         if (rows.Count == 0)
         {
@@ -245,6 +251,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
             var dataRow = new Row(result.Schema);
             for (int i = 0; i < valueRow.Count; i++)
             {
+                _evaluator.CancellationToken.ThrowIfCancellationRequested();
                 dataRow[columnNames[i]] = await _expressionEvaluator.EvaluateInternal(valueRow[i], new Row());
             }
             await result.AddRowAsync(dataRow);
@@ -260,6 +267,8 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
 
     private async Task<IDataSource> BuildJsonTableDataSourceAsync(FunctionCallExpression functionCall)
     {
+        _evaluator.CancellationToken.ThrowIfCancellationRequested();
+
         string? json = functionCall.Arguments.Count > 0
             ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[0], new Row()))?.ToString()
             : null;
@@ -302,6 +311,8 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
     /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
     public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
     {
+        _evaluator.CancellationToken.ThrowIfCancellationRequested();
+
         var ds = new InMemoryDataSource();
         ds.Validator = _evaluator;
         ds.ExecutionContext = _evaluator;
@@ -325,7 +336,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         {
             try
             {
-                string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
+                string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath, _evaluator.CancellationToken);
                 string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
                 var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
 
@@ -336,6 +347,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
 
                     foreach (var rowDict in rows)
                     {
+                        _evaluator.CancellationToken.ThrowIfCancellationRequested();
                         var row = dt.NewRow();
                         foreach (var kvp in rowDict)
                         {

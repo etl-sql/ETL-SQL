@@ -8,7 +8,6 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Services;
-using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -35,19 +34,12 @@ public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandl
         var machineKey = SecurityService.GetMachineKey();
         var encryptedSecret = CryptoUtils.Encrypt(secret, machineKey);
 
-        // 3. UI - Bold Warning
-        AnsiConsole.Clear();
-        AnsiConsole.Write(new FigletText("JWT SETUP").Centered().Color(Color.Yellow));
-        AnsiConsole.Write(new Rule("[red bold]CRITICAL SECURITY INFORMATION[/]").RuleStyle("red"));
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold red]GENERATED PLAIN-TEXT SECRET:[/]");
-        AnsiConsole.MarkupLine($"[bold yellow]{Markup.Escape(secret)}[/]");
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold white]ENCRYPTED CONFIG VALUE (Machine-Bound):[/]");
-        AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(encryptedSecret)}[/]");
-        AnsiConsole.WriteLine();
-        AnsiConsole.MarkupLine("[bold red]IMPORTANT:[/] Record the plain-text secret in your password manager. It cannot be recovered from the encrypted value if the machine key changes.");
-        AnsiConsole.WriteLine();
+        context.Log("JWT SETUP - CRITICAL SECURITY INFORMATION", ConsoleColor.Yellow);
+        context.Log("GENERATED PLAIN-TEXT SECRET:", ConsoleColor.Red);
+        context.Log(secret, ConsoleColor.Yellow);
+        context.Log("ENCRYPTED CONFIG VALUE (Machine-Bound):", ConsoleColor.White);
+        context.Log(encryptedSecret, ConsoleColor.Cyan);
+        context.Log("IMPORTANT: Record the plain-text secret in your password manager. It cannot be recovered from the encrypted value if the machine key changes.", ConsoleColor.Red);
 
         // 4. Update appsettings.json if it exists in the execution directory
         var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
@@ -69,21 +61,18 @@ public class GenerateJwtSecretStatementHandler(ILogger logger) : IStatementHandl
 
                     var options = new JsonSerializerOptions { WriteIndented = true };
                     await File.WriteAllTextAsync(configPath, root.ToJsonString(options));
-                    AnsiConsole.MarkupLine("[green]SUCCESS:[/] Updated appsettings.json with the encrypted secret.");
+                    context.Log("SUCCESS: Updated appsettings.json with the encrypted secret.", ConsoleColor.Green);
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error("Failed to update appsettings.json: {Message}", ex, ex.Message);
-                AnsiConsole.MarkupLine($"[red]ERROR:[/] Could not update appsettings.json automatically: {Markup.Escape(ex.Message)}");
+                context.Log($"ERROR: Could not update appsettings.json automatically: {ex.Message}", ConsoleColor.Red);
             }
         }
         else
         {
-            AnsiConsole.MarkupLine("[yellow]NOTE:[/] appsettings.json not found in the application directory. Please update your configuration manually using the encrypted value above.");
+            context.Log("NOTE: appsettings.json not found in the application directory. Please update your configuration manually using the encrypted value above.", ConsoleColor.Yellow);
         }
-
-        AnsiConsole.Write(new Rule().RuleStyle("grey"));
-        AnsiConsole.WriteLine();
     }
 }

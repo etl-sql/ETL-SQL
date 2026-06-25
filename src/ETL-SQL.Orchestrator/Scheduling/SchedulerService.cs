@@ -32,6 +32,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly INodeCapacityMonitor _capacityMonitor;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _scheduledJobStarts = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Identifies this scheduler instance as a lease owner (P1.1). Unique per process
         /// start so a restarted instance never silently inherits its previous leases.</summary>
@@ -109,12 +110,24 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     var activeJobs = await _store.GetActiveJobsAsync();
                     var now = DateTime.Now;
 
-                    foreach (var job in activeJobs)
+                    foreach (var job in activeJobs.Where(job => job.NextRun == null || job.NextRun <= now))
                     {
-                        if (job.NextRun == null || job.NextRun <= now)
+                        if (!_scheduledJobStarts.TryAdd(job.Name, 0))
                         {
-                            await ExecuteJobAsync(job);
+                            continue;
                         }
+
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await ExecuteJobAsync(job);
+                            }
+                            finally
+                            {
+                                _scheduledJobStarts.TryRemove(job.Name, out _);
+                            }
+                        }, CancellationToken.None);
                     }
 
                     // Resolve intervals from configuration with safe defaults

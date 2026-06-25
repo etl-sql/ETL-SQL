@@ -189,5 +189,41 @@ namespace ETL_SQL.Tests.Connectors
 
             Assert.Equal("ftp.example.com", cs);
         }
+
+        [Fact]
+        public void BuildForDiagnostics_RedactsDatabasePasswords()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "HOST", "localhost" },
+                { "DATABASE", "mydb" },
+                { "USER", "etl" },
+                { "PASSWORD", "p@ssword" }
+            };
+
+            var cs = ConnectionStringBuilder.BuildForDiagnostics("POSTGRES", props);
+
+            Assert.Contains("Password=<redacted>", cs, System.StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("p@ssword", cs);
+        }
+
+        [Fact]
+        public void BuildForDiagnostics_RedactsOdbcSensitivePassThroughValues()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "DRIVER", "ODBC Driver 18 for SQL Server" },
+                { "SERVER", "localhost" },
+                { "PWD", "secret" },
+                { "API_KEY", "token-value" }
+            };
+
+            var cs = ConnectionStringBuilder.BuildForDiagnostics("ODBC", props);
+
+            Assert.DoesNotContain("secret", cs);
+            Assert.DoesNotContain("token-value", cs);
+            Assert.Contains("PWD=<redacted>", cs);
+            Assert.Contains("API_KEY=<redacted>", cs);
+        }
     }
 }

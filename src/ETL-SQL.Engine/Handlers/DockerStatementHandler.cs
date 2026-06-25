@@ -39,7 +39,7 @@ public class DockerStatementHandler : IStatementHandler
             return;
         }
 
-        await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
+        await context.DockerManager.StartContainer(imageName, dockerStmt.Alias, context.CancellationToken);
 
         _logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
     }

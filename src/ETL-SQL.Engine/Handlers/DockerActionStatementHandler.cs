@@ -33,7 +33,7 @@ public class DockerActionStatementHandler : IStatementHandler
 
             if (actionStmt.Action == DockerAction.Close)
             {
-                await context.DockerManager.CloseContainers(null);
+                await context.DockerManager.CloseContainers(null, context.CancellationToken);
             }
             else
             {
@@ -65,16 +65,16 @@ public class DockerActionStatementHandler : IStatementHandler
         {
             case DockerAction.Start:
             case DockerAction.Resume:
-                await context.DockerManager.ResumeContainer(alias);
+                await context.DockerManager.ResumeContainer(alias, context.CancellationToken);
                 break;
             case DockerAction.Stop:
-                await context.DockerManager.StopContainer(alias);
+                await context.DockerManager.StopContainer(alias, context.CancellationToken);
                 break;
             case DockerAction.Pause:
-                await context.DockerManager.PauseContainer(alias);
+                await context.DockerManager.PauseContainer(alias, context.CancellationToken);
                 break;
             case DockerAction.Close:
-                await context.DockerManager.CloseContainers(alias);
+                await context.DockerManager.CloseContainers(alias, context.CancellationToken);
                 break;
         }
     }

@@ -11,6 +11,10 @@ namespace ETL_SQL.Analysis.Linting;
 /// </summary>
 public static class LinterFactory
 {
+    private static readonly Type[] RuleTypes = typeof(ILintRule).Assembly.GetTypes()
+        .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
+        .ToArray();
+
     /// <summary>
     /// Returns a <see cref="Linter"/> loaded with every <see cref="ILintRule"/>
     /// implementation found in the ETL-SQL.Analysis assembly.
@@ -30,10 +34,7 @@ public static class LinterFactory
         }
 
         // Also load any rules NOT registered in DI but present in the assembly
-        var ruleTypes = typeof(ILintRule).Assembly.GetTypes()
-            .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-
-        foreach (var type in ruleTypes)
+        foreach (var type in RuleTypes)
         {
             // Skip if already added via DI
             if (linter.HasRuleOfType(type)) continue;

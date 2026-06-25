@@ -781,22 +781,22 @@ public class MetadataManager : IMetadataManager
         _logger.Info("Background schema refresh complete for connection {Name}. Cached {TableCount} tables/views.", connectionName, allObjects.Count);
     }
 
-    private async Task SaveSchemaToDiskAsync(string connectionName, string connectionString, ConnectionSchemaCache cacheData)
-    {
-        if (string.IsNullOrEmpty(SchemaCacheDirectory)) return;
-        try
+        private async Task SaveSchemaToDiskAsync(string connectionName, string connectionString, ConnectionSchemaCache cacheData)
         {
-            var directory = SchemaCacheDirectory;
-            if (!Directory.Exists(directory))
+            var directory = ResolveSafeSchemaCacheDirectory();
+            if (directory == null) return;
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
 
-            var fileName = GetCacheFileName(connectionName, connectionString);
-            var filePath = Path.Combine(directory, fileName);
+                var fileName = GetCacheFileName(connectionName, connectionString);
+                var filePath = ResolveSchemaCacheFile(directory, fileName);
 
-            var json = JsonSerializer.Serialize(cacheData);
-            var plaintextBytes = Encoding.UTF8.GetBytes(json);
+                var json = JsonSerializer.Serialize(cacheData);
+                var plaintextBytes = Encoding.UTF8.GetBytes(json);
             var ciphertextBytes = Common.MachineBoundCrypto.Protect(plaintextBytes);
 
             await File.WriteAllBytesAsync(filePath, ciphertextBytes);
@@ -808,16 +808,16 @@ public class MetadataManager : IMetadataManager
         }
     }
 
-    private async Task<ConnectionSchemaCache?> LoadSchemaFromDiskAsync(string connectionName, string connectionString)
-    {
-        if (string.IsNullOrEmpty(SchemaCacheDirectory)) return null;
-        try
+        private async Task<ConnectionSchemaCache?> LoadSchemaFromDiskAsync(string connectionName, string connectionString)
         {
-            var directory = SchemaCacheDirectory;
-            var fileName = GetCacheFileName(connectionName, connectionString);
-            var filePath = Path.Combine(directory, fileName);
+            var directory = ResolveSafeSchemaCacheDirectory();
+            if (directory == null) return null;
+            try
+            {
+                var fileName = GetCacheFileName(connectionName, connectionString);
+                var filePath = ResolveSchemaCacheFile(directory, fileName);
 
-            if (!File.Exists(filePath)) return null;
+                if (!File.Exists(filePath)) return null;
 
             // Ignore caches older than the staleness bound; a live refresh will repopulate them.
             if (DiskCacheMaxAge > TimeSpan.Zero
@@ -841,7 +841,7 @@ public class MetadataManager : IMetadataManager
 
     /// <summary>Best-effort removal of cache files past the staleness bound, so orphaned files
     /// (renamed/removed connections, rotated connection strings) do not accumulate forever.</summary>
-    private void PruneStaleDiskCaches(string directory)
+        private void PruneStaleDiskCaches(string directory)
     {
         if (DiskCacheMaxAge <= TimeSpan.Zero) return;
         try
@@ -861,7 +861,7 @@ public class MetadataManager : IMetadataManager
         }
     }
 
-    private string GetCacheFileName(string connectionName, string connectionString)
+        private string GetCacheFileName(string connectionName, string connectionString)
     {
         using var sha = System.Security.Cryptography.SHA256.Create();
         // Salt with a per-user/machine value so the filename is not a portable, confirmable
@@ -872,9 +872,59 @@ public class MetadataManager : IMetadataManager
         var hashHex = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
         var safeName = new string(connectionName.Where(char.IsLetterOrDigit).ToArray());
-        return $"{safeName}_{hashHex}.cache";
+            return $"{safeName}_{hashHex}.cache";
+        }
+
+        private string? ResolveSafeSchemaCacheDirectory()
+        {
+            if (string.IsNullOrWhiteSpace(SchemaCacheDirectory)) return null;
+
+            try
+            {
+                var fullPath = Path.GetFullPath(SchemaCacheDirectory);
+                if (IsProtectedCacheDirectory(fullPath))
+                {
+                    _logger.Warning("Schema cache directory '{Path}' is restricted; disk schema cache is disabled.", fullPath);
+                    return null;
+                }
+
+                return fullPath;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Schema cache directory '{Path}' is invalid; disk schema cache is disabled: {Message}", SchemaCacheDirectory, ex.Message);
+                return null;
+            }
+        }
+
+        private static string ResolveSchemaCacheFile(string directory, string fileName)
+        {
+            var fullDirectory = Path.GetFullPath(directory);
+            var fullPath = Path.GetFullPath(Path.Combine(fullDirectory, fileName));
+            if (!SafePath.IsWithinRoot(fullDirectory, fullPath))
+                throw new InvalidOperationException("Schema cache file path escapes the configured schema cache directory.");
+            return fullPath;
+        }
+
+        private static bool IsProtectedCacheDirectory(string fullPath)
+        {
+            var trimmed = fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var root = Path.GetPathRoot(trimmed);
+            if (!string.IsNullOrEmpty(root) && trimmed.Equals(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            var normalized = trimmed.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            var upper = normalized.ToUpperInvariant();
+            return upper.Contains($"{Path.DirectorySeparatorChar}.GIT", StringComparison.Ordinal)
+                || upper.Contains($"{Path.DirectorySeparatorChar}.SSH", StringComparison.Ordinal)
+                || upper.StartsWith(@"C:\WINDOWS", StringComparison.Ordinal)
+                || upper.StartsWith(@"C:\PROGRAM FILES", StringComparison.Ordinal)
+                || upper.Equals("/ETC", StringComparison.Ordinal)
+                || upper.StartsWith("/ETC/", StringComparison.Ordinal)
+                || upper.Equals("/ROOT", StringComparison.Ordinal)
+                || upper.StartsWith("/ROOT/", StringComparison.Ordinal);
+        }
     }
-}
 
 public class ConnectionSchemaCache
 {

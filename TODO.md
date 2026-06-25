@@ -29,14 +29,14 @@ release begins.
 
 ## Core Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Performance Audit Fixes**
-  - [ ] **Sr. Developer:** Convert `CryptoUtils.EncryptFileWithSsh`/`DecryptFileWithSsh` and `MachineBoundCrypto.EncryptFile`/`DecryptFile` to async/streaming paths; add authenticated encryption for the SSH file envelope.
-  - [x] **Gemini:** Move synchronous file and directory operations out of the constructors of `SqliteSessionMetadataStore` and `SnippetLibrary`.
-  - [x] **Gemini:** Refactor `AliasScanner` regex matches to use modern `[GeneratedRegex]` source generators and explicit regex timeouts.
+  - [x] **Sr. Developer:** Convert `CryptoUtils.EncryptFileWithSsh`/`DecryptFileWithSsh` and `MachineBoundCrypto.EncryptFile`/`DecryptFile` to async/streaming paths; add authenticated encryption for the SSH file envelope.
+  - [ ] **Gemini:** Move synchronous file and directory operations out of the constructors of `SqliteSessionMetadataStore` and `SnippetLibrary`. *(Sr. review: still incomplete.)*
+  - [ ] **Gemini:** Refactor `AliasScanner` regex matches to use modern `[GeneratedRegex]` source generators and explicit regex timeouts. *(Sr. review: still incomplete.)*
 - [ ] **Security Audit Fixes**
-  - [ ] **Sr. Developer:** Replace hardcoded test credentials in `DockerContainerManager` (e.g. `postgres`, `mysql`, `Password123!`) with dynamically generated secure secrets or configuration overrides.
-  - [ ] **Sr. Developer:** Add zero-trust validation checks or path-resolution to file cache access in `MetadataManager`.
+  - [x] **Sr. Developer:** Replace hardcoded test credentials in `DockerContainerManager` (e.g. `postgres`, `mysql`, `Password123!`) with dynamically generated secure secrets or configuration overrides.
+  - [x] **Sr. Developer:** Add zero-trust validation checks or path-resolution to file cache access in `MetadataManager`.
 - [ ] **Bug & Concurrency Fixes**
-  - [ ] **Sr. Developer:** Refactor `LineageTracker.GlobalMetadata` to use a thread-safe structure or safe mutation API to prevent exceptions during parallel query executions.
+  - [x] **Sr. Developer:** Refactor `LineageTracker.GlobalMetadata` to use a thread-safe structure or safe mutation API to prevent exceptions during parallel query executions.
   - [x] **Gemini:** Safely handle and dispose of `IContainer` instances in `DockerContainerManager.StartContainer` on startup exception failures.
   - [x] **Gemini:** Add `CancellationToken` support and propagation to all `DockerContainerManager` container controls.
   - [x] **Gemini:** Wrap SQLite queries in `SqliteSessionMetadataStore` to catch database errors and wrap them in sanitized `ExecutionException`s to prevent path/schema leakage.
@@ -51,47 +51,47 @@ release begins.
   - [x] **Gemini:** Convert synchronous file and directory operations inside `FileSystemService` and `AlterPortalSubscriptionHandler` to async overloads.
   - [x] **Gemini:** Refactor encryption IV reading in `SecureSpillReader` and `ArrowSpillReader` to run asynchronously outside constructors.
 - [ ] **Security Audit Fixes**
-  - [ ] **Sr. Developer:** Add zero-trust validation checks or path-resolution to subscription script updates in `AlterPortalSubscriptionHandler`.
-  - [ ] **Sr. Developer:** Add safe boundary path checks for local job state `.etlstate` files generated in `Evaluator.cs`.
+  - [x] **Sr. Developer:** Add zero-trust validation checks or path-resolution to subscription script updates in `AlterPortalSubscriptionHandler`.
+  - [x] **Sr. Developer:** Add safe boundary path checks for local job state `.etlstate` files generated in `Evaluator.cs`.
 - [ ] **Bug & Concurrency Fixes**
-  - [ ] **Sr. Developer:** Decouple interactive `PasswordPrompt` from the Engine core by defining an `IPasswordPromptProvider` interface to avoid blocking service runs.
-  - [ ] **Sr. Developer:** Propagate `CancellationToken` through `DataSourceManager` connection and query resolutions.
+  - [x] **Sr. Developer:** Decouple interactive `PasswordPrompt` from the Engine core by defining an `IPasswordPromptProvider` interface to avoid blocking service runs.
+  - [x] **Sr. Developer:** Propagate `CancellationToken` through `DataSourceManager` connection and query resolutions.
 - [ ] **Code Styling & Logging Cleanup**
   - [x] **Gemini:** Convert curly-brace block-scoped namespaces in Engine files (Evaluator, Handlers, Engines, Services) to file-scoped namespaces.
-  - [ ] **Sr. Developer:** Refactor stdout presentation dependencies (`AnsiConsole.Write`) in `ExplainStatementHandler`, `GenerateJwtSecretStatementHandler`, and `ResultFormatter` to cleanly separate the Engine and presentation layers.
+  - [x] **Sr. Developer:** Refactor stdout presentation dependencies (`AnsiConsole.Write`) in `ExplainStatementHandler`, `GenerateJwtSecretStatementHandler`, and `ResultFormatter` to cleanly separate the Engine and presentation layers.
 
 ## Analysis Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Performance Audit Fixes**
   - [x] **Gemini:** Cache the discovered list of `ILintRule` types inside a static readonly field in `LinterFactory.cs` to avoid repetitive reflection scans.
-  - [ ] **Sr. Developer:** Execute independent lint rules concurrently using `Task.WhenAll` in `Linter.AnalyzeAsync` to lower analysis latency.
+  - [x] **Sr. Developer:** Execute independent lint rules concurrently using `Task.WhenAll` in `Linter.AnalyzeAsync` to lower analysis latency.
   - [x] **Gemini:** Convert synchronous file check (`File.Exists`) inside `SchemaValidationRule` to a background task or run asynchronously.
 - [ ] **Security Audit Fixes**
-  - [ ] **Sr. Developer:** Add zero-trust validation checks or path-resolution to schema/file checks in `SchemaValidationRule` to prevent probing restricted path existences.
+  - [x] **Sr. Developer:** Add zero-trust validation checks or path-resolution to schema/file checks in `SchemaValidationRule` to prevent probing restricted path existences.
 - [ ] **Bug & Concurrency Fixes**
   - [x] **Gemini:** Capture and log exceptions from filesystem/IO checks in `SchemaValidationRule` instead of silently swallowing them.
 - [ ] **Code Styling & Logging Cleanup**
   - [x] **Gemini:** Convert curly-brace block-scoped namespaces in Analysis files (Linter, Lineage, Rules) to file-scoped namespaces.
-  - [ ] **Sr. Developer:** Inject `ILogger` into the linting pipeline to enable diagnostic logging during script checks.
+  - [x] **Sr. Developer:** Inject `ILogger` into the linting pipeline to enable diagnostic logging during script checks.
 
 ## Connectors Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Performance Audit Fixes**
-  - [ ] **Sr. Developer:** Convert `Renci.SshNet.PrivateKeyFile` synchronous load operations in `SftpConnector` to async.
+  - [x] **Sr. Developer:** Convert `Renci.SshNet.PrivateKeyFile` synchronous load operations in `SftpConnector` to async.
   - [x] **Gemini:** Refactor synchronous `cmd.ExecuteReader` calls inside `OdbcDataSource.cs` to use async overloads.
 - [ ] **Security Audit Fixes**
-  - [ ] **Sr. Developer:** Ensure raw connection strings constructed in `ConnectionStringBuilder` do not log passwords or tokens.
+  - [x] **Sr. Developer:** Ensure raw connection strings constructed in `ConnectionStringBuilder` do not log passwords or tokens.
 - [ ] **Bug & Concurrency Fixes**
   - [x] **Gemini:** Handle potential `NullReferenceException` in `AzureBlobConnector.cs` when retrieving container lists with empty prefix.
 
 ## Orchestrator Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Performance Audit Fixes**
-  - [ ] **Sr. Developer:** Implement parallel validation of active jobs in `SchedulerService` using a pool thread to avoid loop delays.
+  - [x] **Sr. Developer:** Implement parallel validation of active jobs in `SchedulerService` using a pool thread to avoid loop delays.
 - [ ] **Bug & Concurrency Fixes**
   - [x] **Gemini:** Safely wait for the background task to cancel in `SchedulerService.Stop` instead of abandoning it instantly.
   - [x] **Gemini:** Wrap telemetry updates in `NodeHeartbeatService` with atomic operations to prevent concurrency conflicts.
 
 ## Report Portal Project Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **Security Audit Fixes**
-  - [ ] **Sr. Developer:** Verify that path guard checks in `PortalPathGuard` prevent relative path escape (`../`) consistently across Linux and Windows.
+  - [x] **Sr. Developer:** Verify that path guard checks in `PortalPathGuard` prevent relative path escape (`../`) consistently across Linux and Windows.
 - [ ] **Bug & Concurrency Fixes**
   - [x] **Gemini:** Fix potential connection leak in `PortalDbContext` if dynamic connection strings are re-initialized in rapid succession.
 
@@ -99,31 +99,31 @@ release begins.
 - [ ] **Performance Audit Fixes**
   - [x] **Gemini:** Add debounce logic to `TextDocumentHandler` requests to prevent high CPU load on typing.
 - [ ] **Bug & Concurrency Fixes**
-  - [ ] **Sr. Developer:** Handle concurrency exceptions when multiple text documents are opened simultaneously in `DocumentStateStore`.
+  - [x] **Sr. Developer:** Handle concurrency exceptions when multiple text documents are opened simultaneously in `DocumentStateStore`.
 
 ## Remaining Projects Code Audit Tasks (v0.12.0 Stabilization)
 - [ ] **TUI Project Audit Findings**
-  - Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking.
-  - Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
+  - **Gemini:** Synchronous file I/O operations (`_fs.ReadAllLines`, `_fs.WriteAllText`) are called inside asynchronous methods (`LoadAsync` and `SaveAsync` in `EditorFileHandler.cs`), causing thread blocking.
+  - **Sr. Developer:** Key bindings and layout rendering checks are performed synchronously on every frame, which can cause UI lag in larger consoles.
 - [ ] **Report Builder & CLI Project Audit Findings**
-  - Synchronous directory creation (`Directory.CreateDirectory`) and file existence checks are performed inside asynchronous statement execution paths in `ExportReportStatementHandler.cs`.
-  - The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup.
+  - **Gemini:** Synchronous directory creation (`Directory.CreateDirectory`) and file existence checks are performed inside asynchronous statement execution paths in `ExportReportStatementHandler.cs`.
+  - **Gemini:** The CLI tool `Program.cs` performs synchronous file writes (`File.WriteAllText`) and deletions (`File.Delete`) during batch reports generation and cleanup.
 - [ ] **Report Player & Hosting Project Audit Findings**
-  - `DashboardService.cs` contains synchronous cancellation calls (`_refreshCts?.Cancel()`) inside the async `DisposeAsync()` method.
-  - `ReportPlayer/Program.cs` contains synchronous file reads (`File.ReadAllText`) inside high-frequency minimal API endpoint routes, which block thread pool threads during server requests.
+  - **Gemini:** `DashboardService.cs` contains synchronous cancellation calls (`_refreshCts?.Cancel()`) inside the async `DisposeAsync()` method.
+  - **Sr. Developer:** `ReportPlayer/Program.cs` contains synchronous file reads (`File.ReadAllText`) inside high-frequency minimal API endpoint routes, which block thread pool threads during server requests.
 - [ ] **Reporting Project Audit Findings**
-  - `PdfExporter.cs` performs synchronous file writes and reads (`File.WriteAllBytes`, `File.ReadAllBytes`) when building PDF documents, instead of streaming asynchronously.
-  - `SnapshotStore.cs` performs synchronous file moves (`File.Move`) and synchronous deletions (`File.Delete`) inside async save/read workflows.
+  - **Sr. Developer:** `PdfExporter.cs` performs synchronous file writes and reads (`File.WriteAllBytes`, `File.ReadAllBytes`) when building PDF documents, instead of streaming asynchronously.
+  - **Gemini:** `SnapshotStore.cs` performs synchronous file moves (`File.Move`) and synchronous deletions (`File.Delete`) inside async save/read workflows.
 - [ ] **ETL-SQL.App Project Audit Findings**
-  - CLI startup logic performs synchronous file checking and console standard output writes before bootstrapping is complete.
-  - Init scaffolding (`InitScaffolder.cs`) and backup/restore services (`BackupRestoreService.cs`) perform synchronous directory creation and local file compression/decompression operations.
+  - **Gemini:** CLI startup logic performs synchronous file checking and console standard output writes before bootstrapping is complete.
+  - **Sr. Developer:** Init scaffolding (`InitScaffolder.cs`) and backup/restore services (`BackupRestoreService.cs`) perform synchronous directory creation and local file compression/decompression operations.
 - [ ] **ETL-SQL.Orchestrator.Service Project Audit Findings**
-  - OrchestratorHostedService uses synchronous blocking lifecycle hooks on worker registration.
-  - Job API routing uses synchronous configuration parameter lookup.
+  - **Sr. Developer:** OrchestratorHostedService uses synchronous blocking lifecycle hooks on worker registration.
+  - **Gemini:** Job API routing uses synchronous configuration parameter lookup.
 - [ ] **ETL-SQL.ReportPortal.Data & Migrations Project Audit Findings**
-  - Dynamic connection configuration database migrations run synchronously on Startup.
-  - Query compilation profiles do not support async initialization.
+  - **Sr. Developer:** Dynamic connection configuration database migrations run synchronously on Startup.
+  - **Sr. Developer:** Query compilation profiles do not support async initialization.
 - [ ] **ETL-SQL.ReportRuntime Project Audit Findings**
-  - Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.
+  - **Gemini:** Visual resource JS/CSS sync logic (`sync-assets.js`) performs multiple synchronous file checks.
 - [ ] **ETL-SQL.Installer Project Audit Findings**
-  - WiX configuration paths are hardcoded to historic version paths and require script updates during active release packaging.
+  - **Gemini:** WiX configuration paths are hardcoded to historic version paths and require script updates during active release packaging.

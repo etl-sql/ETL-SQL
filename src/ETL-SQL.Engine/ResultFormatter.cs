@@ -13,9 +13,26 @@ namespace ETL_SQL.Engine;
 /// </summary>
 public class ResultFormatter
 {
+    public interface IResultOutputSink
+    {
+        void Write(Table table);
+        void WriteLine(string text);
+        void MarkupLine(string markup);
+        ConsoleKeyInfo ReadKey(bool intercept);
+    }
+
+    private sealed class SpectreResultOutputSink : IResultOutputSink
+    {
+        public void Write(Table table) => AnsiConsole.Write(table);
+        public void WriteLine(string text) => AnsiConsole.Console.WriteLine(text);
+        public void MarkupLine(string markup) => AnsiConsole.MarkupLine(markup);
+        public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);
+    }
+
     public static bool IsJsonMode { get; set; } = false;
     public static bool EnablePaging { get; set; } = false;
     public static bool SuppressOutput { get; set; } = false;
+    public static IResultOutputSink OutputSink { get; set; } = new SpectreResultOutputSink();
     private static int _resultSetCount = 0;
 
     /// <summary>Resets the internal result set count for paging.</summary>
@@ -33,8 +50,8 @@ public class ResultFormatter
 
         if (EnablePaging && isFirst && _resultSetCount > 0)
         {
-            AnsiConsole.MarkupLine("\n[yellow]Press any key to see the next result set...[/]");
-            Console.ReadKey(true);
+            OutputSink.MarkupLine("\n[yellow]Press any key to see the next result set...[/]");
+            OutputSink.ReadKey(true);
         }
         if (isFirst) _resultSetCount++;
 
@@ -56,7 +73,7 @@ public class ResultFormatter
 
         if (isFirst)
         {
-            AnsiConsole.Write(table);
+            OutputSink.Write(table);
         }
         else
         {
@@ -64,7 +81,7 @@ public class ResultFormatter
             // but Spectre Table doesn't support easy appending to an existing rendered table.
             // For now, we print a new table for each batch (less than ideal but better than nothing).
             // Usually we'd use a Live display, but that's harder to orchestrate across batches.
-            AnsiConsole.Write(table);
+            OutputSink.Write(table);
         }
     }
 
@@ -90,7 +107,7 @@ public class ResultFormatter
                 return dict;
             }).ToList()
         };
-        AnsiConsole.Console.WriteLine(JsonSerializer.Serialize(data, options));
+        OutputSink.WriteLine(JsonSerializer.Serialize(data, options));
     }
 
     /// <summary>

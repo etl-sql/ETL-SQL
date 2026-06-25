@@ -125,7 +125,7 @@ SELECT * FROM #large;";
             var l = logger ?? new TestLogger();
             var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
             var tracker = new Mock<ILineageTracker>();
-            tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
+            tracker.Setup(t => t.GlobalMetadata).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
             var docker = new Mock<IDockerManager>();
             var sessions = new Mock<SessionStateManager>(l, _security, new Mock<IConfiguration>().Object, null);

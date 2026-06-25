@@ -48,7 +48,7 @@ public class LineageTracker : ILineageTracker
     private readonly Dictionary<string, Dictionary<string, string>> _latestTableMetadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> _latestColumnMetadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _detectedCycles = new(StringComparer.OrdinalIgnoreCase);
-    public Dictionary<string, string> GlobalMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public ConcurrentDictionary<string, string> GlobalMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Nodes (table or table.column) where a lineage cycle was encountered during ancestor

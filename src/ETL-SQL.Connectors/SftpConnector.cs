@@ -26,7 +26,7 @@ namespace ETL_SQL.Connectors
         private readonly int _timeoutSeconds = 30;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
-        private readonly Func<string, string, string?, string?, string?, SftpClient>? _clientFactory;
+        private readonly Func<string, string, string?, string?, string?, Task<SftpClient>>? _clientFactory;
         private readonly SemaphoreSlim _clientLock = new(1, 1);
 
         public string Name => "SFTP";
@@ -98,7 +98,7 @@ namespace ETL_SQL.Connectors
             _passphrase = passphrase;
             _timeoutSeconds = timeoutSeconds;
             _logger = context?.Logger ?? NullLogger.Instance;
-            _clientFactory = clientFactory;
+            _clientFactory = (h, u, p, k, pp) => Task.Run(() => clientFactory(h, u, p, k, pp));
 
             // Security Hardening: egress control
             if (context != null)
@@ -113,18 +113,16 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        private SftpClient Client
+        private async Task<SftpClient> GetOrCreateClientAsync()
         {
-            get
+            if (_client == null)
             {
-                if (_client == null)
-                {
-                    if (_clientFactory == null || _host == null || _username == null)
-                        throw new InvalidOperationException("Connector not initialized with connection details.");
-                    _client = _clientFactory(_host, _username, _password, _keyFilePath, _passphrase);
-                }
-                return _client;
+                if (_clientFactory == null || _host == null || _username == null)
+                    throw new InvalidOperationException("Connector not initialized with connection details.");
+                _client = await _clientFactory(_host, _username, _password, _keyFilePath, _passphrase);
             }
+
+            return _client;
         }
 
         public string Path => _port == 22 ? $"sftp://{_host}" : $"sftp://{_host}:{_port}";
@@ -206,14 +204,15 @@ namespace ETL_SQL.Connectors
         public string BuildConnectionString(Dictionary<string, string> properties) =>
             ConnectionStringBuilder.Build(Name, properties);
 
-        private SftpClient EnsureConnected()
+        private async Task<SftpClient> EnsureConnectedAsync()
         {
-            if (!Client.IsConnected)
+            var client = await GetOrCreateClientAsync();
+            if (!client.IsConnected)
             {
-                Client.Connect();
+                await Task.Run(client.Connect);
             }
 
-            return Client;
+            return client;
         }
 
         private async Task RunClientOperationAsync(Action<SftpClient> operation)
@@ -222,7 +221,8 @@ namespace ETL_SQL.Connectors
             await _clientLock.WaitAsync();
             try
             {
-                await Task.Run(() => operation(EnsureConnected()));
+                var client = await EnsureConnectedAsync();
+                await Task.Run(() => operation(client));
             }
             finally
             {
@@ -236,7 +236,8 @@ namespace ETL_SQL.Connectors
             await _clientLock.WaitAsync();
             try
             {
-                return await Task.Run(() => operation(EnsureConnected()));
+                var client = await EnsureConnectedAsync();
+                return await Task.Run(() => operation(client));
             }
             finally
             {

@@ -115,6 +115,19 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public void CryptoUtils_SshKeyEncryption_DetectsTampering()
+        {
+            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
+
+            var encrypted = File.ReadAllBytes(_encryptedFile);
+            encrypted[^1] ^= 0x01;
+            File.WriteAllBytes(_encryptedFile, encrypted);
+
+            Assert.ThrowsAny<CryptographicException>(() =>
+                CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _privateKeyFile, true));
+        }
+
+        [Fact]
         public async Task Linter_EncryptionRules()
         {
             var sql = @"

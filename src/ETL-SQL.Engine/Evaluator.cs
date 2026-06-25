@@ -972,6 +972,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         try
         {
             var stateFile = System.IO.Path.ChangeExtension(CurrentScriptPath, ".etlstate");
+            var scriptDir = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(CurrentScriptPath));
+            if (string.IsNullOrEmpty(scriptDir) || !SafePath.IsWithinRoot(scriptDir, stateFile))
+                throw new Core.Common.Exceptions.ExecutionException("Refusing to write local job state outside the current script directory.");
+            SecurityService.ValidateWriteAccess(stateFile);
+
             var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (System.IO.File.Exists(stateFile))
             {
