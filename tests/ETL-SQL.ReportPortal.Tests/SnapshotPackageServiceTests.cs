@@ -107,6 +107,41 @@ public sealed class SnapshotPackageServiceTests
         }
     }
 
+    [Fact]
+    public async Task SaveAsync_StoresLargeVisualRowsAsArrow_AndRehydratesForReaders()
+    {
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig
+        {
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            }
+        };
+        var service = new SnapshotPackageService(
+            config,
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+        var manifest = CreateLargeManifest();
+
+        await service.SaveAsync(manifest, "large.etlsnap");
+
+        var entries = await service.ListPackageEntriesForTestsAsync("large.etlsnap");
+        Assert.Contains("layout.json", entries);
+        Assert.Contains(entries, e => e.StartsWith("tables/", StringComparison.Ordinal) && e.EndsWith(".arrow", StringComparison.Ordinal));
+
+        var storedLayout = await service.ReadStoredLayoutJsonForTestsAsync("large.etlsnap");
+        Assert.DoesNotContain("customer-09999", storedLayout);
+
+        var loaded = await service.LoadAsync("large.etlsnap");
+        Assert.NotNull(loaded);
+        Assert.Equal(SnapshotPackageService.ArrowRowThreshold, loaded!.Visuals[0].Rows.Count);
+        Assert.Equal("customer-00000", loaded.Visuals[0].Rows[0][0]);
+        Assert.Equal("9999", loaded.Visuals[0].Rows[^1][1]);
+        Assert.Equal("small-inline", loaded.Visuals[1].Rows[0][0]);
+    }
+
     private static ReportManifest CreateManifest(string secretValue) => new()
     {
         Source = "secret.rptsql",
@@ -119,6 +154,31 @@ public sealed class SnapshotPackageServiceTests
                 VisualType = "TABLE",
                 Columns = ["CustomerId"],
                 Rows = [[secretValue]]
+            }
+        }
+    };
+
+    private static ReportManifest CreateLargeManifest() => new()
+    {
+        Source = "large.rptsql",
+        Title = "Large Sensitive Report",
+        Visuals =
+        {
+            new VisualManifest
+            {
+                Name = "LargeTable",
+                VisualType = "TABLE",
+                Columns = ["CustomerId", "Amount"],
+                Rows = Enumerable.Range(0, SnapshotPackageService.ArrowRowThreshold)
+                    .Select(i => new List<string?> { $"customer-{i:D5}", i.ToString() })
+                    .ToList()
+            },
+            new VisualManifest
+            {
+                Name = "SmallTable",
+                VisualType = "TABLE",
+                Columns = ["Value"],
+                Rows = [["small-inline"]]
             }
         }
     };

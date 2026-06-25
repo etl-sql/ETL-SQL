@@ -3,6 +3,10 @@ using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using Apache.Arrow;
+using Apache.Arrow.Ipc;
+using Apache.Arrow.Types;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 
@@ -14,6 +18,7 @@ public sealed class SnapshotPackageService(
     ILogger<SnapshotPackageService> logger)
 {
     public const string Extension = ".etlsnap";
+    internal const int ArrowRowThreshold = 10_000;
     private const string LayoutEntryName = "layout.json";
     private const string MetadataEntryName = "manifest.json";
     private const int NonceLength = 12;
@@ -49,8 +54,7 @@ public sealed class SnapshotPackageService(
         if (!IsPackageKey(key))
             throw new InvalidOperationException($"Snapshot packages must use the {Extension} extension.");
 
-        var layoutJson = JsonSerializer.Serialize(manifest, JsonOptions);
-        var compressedPackage = CreateCompressedPackage(layoutJson);
+        var compressedPackage = await CreateCompressedPackageAsync(manifest, ct);
         var encryptedPackage = Encrypt(compressedPackage);
         await artifacts.WriteAllBytesAsync(ArtifactArea.Snapshots, key, encryptedPackage, ct: ct);
     }
@@ -71,7 +75,29 @@ public sealed class SnapshotPackageService(
 
         var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
         var compressedPackage = Decrypt(encryptedPackage);
-        return ReadLayoutJson(compressedPackage);
+        var manifest = await ReadManifestFromPackageAsync(compressedPackage, ct);
+        return JsonSerializer.Serialize(manifest, JsonOptions);
+    }
+
+    internal async Task<IReadOnlyList<string>> ListPackageEntriesForTestsAsync(string key, CancellationToken ct = default)
+    {
+        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var compressedPackage = Decrypt(encryptedPackage);
+        using var input = new MemoryStream(compressedPackage, writable: false);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        return zip.Entries.Select(e => e.FullName).Order(StringComparer.Ordinal).ToList();
+    }
+
+    internal async Task<string> ReadStoredLayoutJsonForTestsAsync(string key, CancellationToken ct = default)
+    {
+        var encryptedPackage = await artifacts.ReadAllBytesAsync(ArtifactArea.Snapshots, key, ct);
+        var compressedPackage = Decrypt(encryptedPackage);
+        using var input = new MemoryStream(compressedPackage, writable: false);
+        using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        var entry = zip.GetEntry(LayoutEntryName)
+            ?? throw new InvalidDataException($"Snapshot package is missing {LayoutEntryName}.");
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+        return await reader.ReadToEndAsync(ct);
     }
 
     public async Task<string?> MigrateLegacyJsonAsync(string legacyKey, CancellationToken ct = default)
@@ -178,37 +204,221 @@ public sealed class SnapshotPackageService(
         }
     }
 
-    private static byte[] CreateCompressedPackage(string layoutJson)
+    private static async Task<byte[]> CreateCompressedPackageAsync(ReportManifest manifest, CancellationToken ct)
     {
+        var (layout, tables) = await ExtractArrowTablesAsync(manifest, ct);
+        var layoutJson = JsonSerializer.Serialize(layout, JsonOptions);
         using var output = new MemoryStream();
         using (var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
         {
-            WriteEntry(zip, MetadataEntryName, JsonSerializer.Serialize(new
+            await WriteEntryAsync(zip, MetadataEntryName, JsonSerializer.Serialize(new SnapshotPackageMetadata(
+                Format: "etl-sql.snapshot",
+                Version: 2,
+                Layout: LayoutEntryName,
+                CreatedAt: DateTimeOffset.UtcNow,
+                Tables: tables.Select(t => t.Metadata).ToList())), ct);
+            await WriteEntryAsync(zip, LayoutEntryName, layoutJson, ct);
+            foreach (var table in tables)
             {
-                format = "etl-sql.snapshot",
-                version = 1,
-                layout = LayoutEntryName,
-                createdAt = DateTimeOffset.UtcNow
-            }));
-            WriteEntry(zip, LayoutEntryName, layoutJson);
+                await WriteBytesEntryAsync(zip, table.Metadata.Entry, table.Bytes, ct);
+            }
         }
         return output.ToArray();
     }
 
-    private static void WriteEntry(ZipArchive zip, string name, string content)
+    private static async Task WriteEntryAsync(ZipArchive zip, string name, string content, CancellationToken ct)
     {
         var entry = zip.CreateEntry(name, CompressionLevel.SmallestSize);
-        using var writer = new StreamWriter(entry.Open(), Encoding.UTF8);
-        writer.Write(content);
+        await using var stream = entry.Open();
+        await using var writer = new StreamWriter(stream, Encoding.UTF8);
+        await writer.WriteAsync(content.AsMemory(), ct);
     }
 
-    private static string ReadLayoutJson(byte[] compressedPackage)
+    private static async Task WriteBytesEntryAsync(ZipArchive zip, string name, byte[] content, CancellationToken ct)
+    {
+        var entry = zip.CreateEntry(name, CompressionLevel.SmallestSize);
+        await using var stream = entry.Open();
+        await stream.WriteAsync(content, ct);
+    }
+
+    private static async Task<(ReportManifest Layout, List<SnapshotArrowTable> Tables)> ExtractArrowTablesAsync(
+        ReportManifest manifest,
+        CancellationToken ct)
+    {
+        var cloneJson = JsonSerializer.Serialize(manifest, JsonOptions);
+        var layout = JsonSerializer.Deserialize<ReportManifest>(cloneJson, JsonOptions)
+            ?? throw new InvalidDataException("Snapshot manifest could not be cloned.");
+        var tables = new List<SnapshotArrowTable>();
+
+        for (var i = 0; i < layout.Visuals.Count; i++)
+        {
+            var visual = layout.Visuals[i];
+            if (visual.Rows.Count < ArrowRowThreshold || visual.Columns.Count == 0)
+                continue;
+
+            var entryName = $"tables/visual-{i:D4}-{SanitizeEntryName(visual.Name)}.arrow";
+            var rows = visual.Rows;
+            var metadata = new SnapshotTableMetadata(
+                VisualIndex: i,
+                VisualName: visual.Name,
+                Entry: entryName,
+                RowCount: rows.Count,
+                Columns: visual.Columns.ToList());
+            var arrowBytes = await WriteArrowRowsAsync(visual.Columns, rows, ct);
+
+            visual.Rows = new List<List<string?>>();
+            tables.Add(new SnapshotArrowTable(metadata, arrowBytes));
+        }
+
+        return (layout, tables);
+    }
+
+    private static async Task<byte[]> WriteArrowRowsAsync(
+        IReadOnlyList<string> columns,
+        IReadOnlyList<List<string?>> rows,
+        CancellationToken ct)
+    {
+        var fields = columns
+            .Select(c => new Field(c, StringType.Default, nullable: true))
+            .ToList();
+        var schema = new Schema(fields, metadata: null);
+        var arrays = new List<IArrowArray>(columns.Count);
+        for (var columnIndex = 0; columnIndex < columns.Count; columnIndex++)
+        {
+            var builder = new StringArray.Builder();
+            builder.Reserve(rows.Count);
+            foreach (var row in rows)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (columnIndex >= row.Count || row[columnIndex] is null)
+                    builder.AppendNull();
+                else
+                    builder.Append(row[columnIndex]);
+            }
+            arrays.Add(builder.Build());
+        }
+
+        using var output = new MemoryStream();
+        using var writer = new ArrowStreamWriter(output, schema, leaveOpen: true);
+        await writer.WriteStartAsync(ct);
+        await writer.WriteRecordBatchAsync(new RecordBatch(schema, arrays, rows.Count), ct);
+        await writer.WriteEndAsync(ct);
+        return output.ToArray();
+    }
+
+    private static async Task<ReportManifest> ReadManifestFromPackageAsync(byte[] compressedPackage, CancellationToken ct)
     {
         using var input = new MemoryStream(compressedPackage, writable: false);
         using var zip = new ZipArchive(input, ZipArchiveMode.Read);
+        var metadata = await ReadPackageMetadataAsync(zip, ct);
         var entry = zip.GetEntry(LayoutEntryName)
             ?? throw new InvalidDataException($"Snapshot package is missing {LayoutEntryName}.");
         using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
-        return reader.ReadToEnd();
+        var layoutJson = await reader.ReadToEndAsync(ct);
+        var manifest = JsonSerializer.Deserialize<ReportManifest>(layoutJson, JsonOptions)
+            ?? throw new InvalidDataException("Snapshot package contains an invalid layout manifest.");
+
+        foreach (var table in metadata.Tables)
+        {
+            if (table.VisualIndex < 0 || table.VisualIndex >= manifest.Visuals.Count)
+                throw new InvalidDataException($"Snapshot Arrow table references invalid visual index {table.VisualIndex}.");
+
+            var tableEntry = zip.GetEntry(table.Entry)
+                ?? throw new InvalidDataException($"Snapshot package is missing Arrow table {table.Entry}.");
+            await using var tableStream = tableEntry.Open();
+            using var tableBuffer = new MemoryStream();
+            await tableStream.CopyToAsync(tableBuffer, ct);
+            tableBuffer.Position = 0;
+            manifest.Visuals[table.VisualIndex].Rows = await ReadArrowRowsAsync(tableBuffer, table.Columns, ct);
+        }
+
+        return manifest;
     }
+
+    private static async Task<SnapshotPackageMetadata> ReadPackageMetadataAsync(ZipArchive zip, CancellationToken ct)
+    {
+        var entry = zip.GetEntry(MetadataEntryName);
+        if (entry is null)
+            return SnapshotPackageMetadata.Empty;
+
+        using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+        var json = await reader.ReadToEndAsync(ct);
+        var metadata = JsonSerializer.Deserialize<SnapshotPackageMetadata>(json, JsonOptions)
+            ?? SnapshotPackageMetadata.Empty;
+        return metadata.Tables is null ? metadata with { Tables = [] } : metadata;
+    }
+
+    private static async Task<List<List<string?>>> ReadArrowRowsAsync(
+        Stream stream,
+        IReadOnlyList<string> expectedColumns,
+        CancellationToken ct)
+    {
+        var rows = new List<List<string?>>();
+        using var arrowReader = new ArrowStreamReader(stream);
+        while (true)
+        {
+            var batch = await arrowReader.ReadNextRecordBatchAsync(ct);
+            if (batch is null)
+                return rows;
+
+            var arrays = expectedColumns
+                .Select(column =>
+                {
+                    var index = batch.Schema.GetFieldIndex(column);
+                    if (index < 0)
+                        throw new InvalidDataException($"Snapshot Arrow table is missing column '{column}'.");
+                    return (StringArray)batch.Arrays.ElementAt(index);
+                })
+                .ToList();
+
+            for (var rowIndex = 0; rowIndex < batch.Length; rowIndex++)
+            {
+                ct.ThrowIfCancellationRequested();
+                var row = new List<string?>(arrays.Count);
+                foreach (var array in arrays)
+                    row.Add(array.IsNull(rowIndex) ? null : array.GetString(rowIndex));
+                rows.Add(row);
+            }
+        }
+    }
+
+    private static string SanitizeEntryName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "visual";
+
+        var builder = new StringBuilder(name.Length);
+        foreach (var ch in name)
+        {
+            if (char.IsLetterOrDigit(ch) || ch is '-' or '_')
+                builder.Append(ch);
+            else
+                builder.Append('-');
+        }
+        return builder.Length == 0 ? "visual" : builder.ToString();
+    }
+
+    private sealed record SnapshotArrowTable(SnapshotTableMetadata Metadata, byte[] Bytes);
+
+    private sealed record SnapshotPackageMetadata(
+        [property: JsonPropertyName("format")] string Format,
+        [property: JsonPropertyName("version")] int Version,
+        [property: JsonPropertyName("layout")] string Layout,
+        [property: JsonPropertyName("createdAt")] DateTimeOffset CreatedAt,
+        [property: JsonPropertyName("tables")] List<SnapshotTableMetadata> Tables)
+    {
+        public static SnapshotPackageMetadata Empty { get; } = new(
+            "etl-sql.snapshot",
+            1,
+            LayoutEntryName,
+            DateTimeOffset.MinValue,
+            []);
+    }
+
+    private sealed record SnapshotTableMetadata(
+        [property: JsonPropertyName("visualIndex")] int VisualIndex,
+        [property: JsonPropertyName("visualName")] string VisualName,
+        [property: JsonPropertyName("entry")] string Entry,
+        [property: JsonPropertyName("rowCount")] int RowCount,
+        [property: JsonPropertyName("columns")] List<string> Columns);
 }
