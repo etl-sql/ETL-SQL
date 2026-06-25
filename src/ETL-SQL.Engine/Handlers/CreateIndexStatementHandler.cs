@@ -3,25 +3,23 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the CREATE INDEX statement.
+/// </summary>
+public class CreateIndexStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles the CREATE INDEX statement.
-    /// </summary>
-    public class CreateIndexStatementHandler(ILogger logger) : IStatementHandler
+    private readonly ILogger _logger = logger;
+    public Type SupportedStatementType => typeof(CreateIndexStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        private readonly ILogger _logger = logger;
-        public Type SupportedStatementType => typeof(CreateIndexStatement);
+        var stmt = (CreateIndexStatement)statement;
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        _logger.Debug("Creating index {IndexName} on {ConnectionName}", stmt.IndexName, stmt.TargetTable.ConnectionName ?? "local");
+        if (context.EngineContext is Evaluator eval)
         {
-            var stmt = (CreateIndexStatement)statement;
-
-            _logger.Debug("Creating index {IndexName} on {ConnectionName}", stmt.IndexName, stmt.TargetTable.ConnectionName ?? "local");
-            if (context.EngineContext is Evaluator eval)
-            {
-                await eval.SchemaManager.EvaluateCreateIndex(stmt, context.DataContext.Connections);
-            }
+            await eval.SchemaManager.EvaluateCreateIndex(stmt, context.DataContext.Connections);
         }
     }
 }

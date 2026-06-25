@@ -7,65 +7,63 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the SHOW CONNECTIONS statement, listing all active data sources.
+/// </summary>
+public class ShowConnectionsStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the SHOW CONNECTIONS statement, listing all active data sources.
-    /// </summary>
-    public class ShowConnectionsStatementHandler : IStatementHandler
+    public Type SupportedStatementType => typeof(ShowConnectionsStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(ShowConnectionsStatement);
+        var stmt = (ShowConnectionsStatement)statement;
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        var table = new DataTable();
+        table.AddColumn("Name");
+        table.AddColumn("Type");
+        table.AddColumn("Details");
+
+        foreach (var conn in context.Connections)
         {
-            var stmt = (ShowConnectionsStatement)statement;
+            var row = new Row();
+            row["Name"] = conn.Key;
+            row["Type"] = conn.Value.GetType().Name;
+            row["Details"] = conn.Value.ToString();
+            await table.AddRowAsync(row);
+        }
 
-            var table = new DataTable();
-            table.AddColumn("Name");
-            table.AddColumn("Type");
-            table.AddColumn("Details");
-
-            foreach (var conn in context.Connections)
+        if (stmt.IntoTable != null)
+        {
+            await WriteToTempTable(stmt.IntoTable, table, context);
+        }
+        else
+        {
+            if (table.Rows.Count == 0)
             {
-                var row = new Row();
-                row["Name"] = conn.Key;
-                row["Type"] = conn.Value.GetType().Name;
-                row["Details"] = conn.Value.ToString();
-                await table.AddRowAsync(row);
-            }
-
-            if (stmt.IntoTable != null)
-            {
-                await WriteToTempTable(stmt.IntoTable, table, context);
+                context.Log("0 rows returned.", ConsoleColor.Cyan);
             }
             else
             {
-                if (table.Rows.Count == 0)
+                if (!context.RedirectOutput)
                 {
-                    context.Log("0 rows returned.", ConsoleColor.Cyan);
+                    ResultFormatter.PrintTable(table);
                 }
-                else
-                {
-                    if (!context.RedirectOutput)
-                    {
-                        ResultFormatter.PrintTable(table);
-                    }
-                }
-
-                context.LastResult = table;
-                context.LastResultSets.Add(table);
-                context.OnResultSet?.Invoke(table);
             }
-        }
 
-        private async Task WriteToTempTable(string tableName, DataTable table, IExecutionContext context)
+            context.LastResult = table;
+            context.LastResultSets.Add(table);
+            context.OnResultSet?.Invoke(table);
+        }
+    }
+
+    private async Task WriteToTempTable(string tableName, DataTable table, IExecutionContext context)
+    {
+        if (!context.Connections.ContainsKey(tableName))
         {
-            if (!context.Connections.ContainsKey(tableName))
-            {
-                context.Connections[tableName] = new InMemoryDataSource();
-            }
-            var destination = await context.ResolveDataSourceAsync(new TableReference(tableName));
-            await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            context.Connections[tableName] = new InMemoryDataSource();
         }
+        var destination = await context.ResolveDataSourceAsync(new TableReference(tableName));
+        await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
     }
 }

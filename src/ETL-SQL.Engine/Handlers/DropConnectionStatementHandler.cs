@@ -4,38 +4,36 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the DROP CONNECTION statement, removing registered connections from the execution context.
+/// </summary>
+public class DropConnectionStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles the DROP CONNECTION statement, removing registered connections from the execution context.
-    /// </summary>
-    public class DropConnectionStatementHandler(ILogger logger) : IStatementHandler
+    private readonly ILogger _logger = logger;
+    public Type SupportedStatementType => typeof(DropConnectionStatement);
+
+    /// <summary>Executes the DROP CONNECTION statement in the current context.</summary>
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        private readonly ILogger _logger = logger;
-        public Type SupportedStatementType => typeof(DropConnectionStatement);
+        var stmt = (DropConnectionStatement)statement;
+        var connections = context.DataContext.Connections;
 
-        /// <summary>Executes the DROP CONNECTION statement in the current context.</summary>
-        public async Task Execute(Statement statement, IExecutionContext context)
+        if (context.IsWhatIf)
         {
-            var stmt = (DropConnectionStatement)statement;
-            var connections = context.DataContext.Connections;
+            _logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+            return;
+        }
 
-            if (context.IsWhatIf)
-            {
-                _logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
-                return;
-            }
-
-            if (connections.TryGetValue(stmt.ConnectionName, out var ds))
-            {
-                await ds.DisposeAsync();
-                connections.Remove(stmt.ConnectionName);
-                _logger.WriteLine($"Connection {stmt.ConnectionName} dropped.", ConsoleColor.Yellow);
-            }
-            else if (!stmt.IfExists)
-            {
-                throw new ExecutionException($"Connection not found: {stmt.ConnectionName}");
-            }
+        if (connections.TryGetValue(stmt.ConnectionName, out var ds))
+        {
+            await ds.DisposeAsync();
+            connections.Remove(stmt.ConnectionName);
+            _logger.WriteLine($"Connection {stmt.ConnectionName} dropped.", ConsoleColor.Yellow);
+        }
+        else if (!stmt.IfExists)
+        {
+            throw new ExecutionException($"Connection not found: {stmt.ConnectionName}");
         }
     }
 }

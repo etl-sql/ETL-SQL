@@ -4,43 +4,41 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the DROP JOB statement, removing a scheduled ETL-SQL script job.
+/// </summary>
+public class DropJobStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the DROP JOB statement, removing a scheduled ETL-SQL script job.
-    /// </summary>
-    public class DropJobStatementHandler : IStatementHandler
-    {
-        public Type SupportedStatementType => typeof(DropJobStatement);
-        private readonly IJobHistoryStore _store;
+    public Type SupportedStatementType => typeof(DropJobStatement);
+    private readonly IJobHistoryStore _store;
 
-        public DropJobStatementHandler(IJobHistoryStore store)
+    public DropJobStatementHandler(IJobHistoryStore store)
+    {
+        _store = store;
+    }
+
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        var stmt = (DropJobStatement)statement;
+
+        if (context.IsWhatIf)
         {
-            _store = store;
+            context.Log($"WHAT IF: Would drop job '{stmt.Name}'.", ConsoleColor.Yellow);
+            return;
         }
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        try
         {
-            var stmt = (DropJobStatement)statement;
-
-            if (context.IsWhatIf)
+            // DeleteJobAsync deletes both the job and its history entries.
+            await _store.DeleteJobAsync(stmt.Name);
+            context.Log($"Job '{stmt.Name}' dropped successfully.", ConsoleColor.Yellow);
+        }
+        catch (Exception ex)
+        {
+            if (!stmt.IfExists)
             {
-                context.Log($"WHAT IF: Would drop job '{stmt.Name}'.", ConsoleColor.Yellow);
-                return;
-            }
-
-            try
-            {
-                // DeleteJobAsync deletes both the job and its history entries.
-                await _store.DeleteJobAsync(stmt.Name);
-                context.Log($"Job '{stmt.Name}' dropped successfully.", ConsoleColor.Yellow);
-            }
-            catch (Exception ex)
-            {
-                if (!stmt.IfExists)
-                {
-                    throw new ExecutionException($"Failed to drop job '{stmt.Name}': {ex.Message}", null, stmt.Line, stmt.Column);
-                }
+                throw new ExecutionException($"Failed to drop job '{stmt.Name}': {ex.Message}", null, stmt.Line, stmt.Column);
             }
         }
     }

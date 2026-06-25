@@ -11,52 +11,52 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.Engine.Engines
+namespace ETL_SQL.Engine.Engines;
+/// <summary>
+/// High-scale sort engine that spills sorted chunks to disk when row count exceeds the in-memory threshold.
+/// Uses an external k-way merge sort: divide into sorted runs, then merge with a min-heap.
+/// </summary>
+public class ExternalSortEngine
 {
-    /// <summary>
-    /// High-scale sort engine that spills sorted chunks to disk when row count exceeds the in-memory threshold.
-    /// Uses an external k-way merge sort: divide into sorted runs, then merge with a min-heap.
-    /// </summary>
-    public class ExternalSortEngine
+    private readonly IExecutionContext _context;
+    private readonly ILogger _logger;
+    private readonly IBufferManager? _bufferManager;
+    public int ChunkSize => _context.ExternalSortChunkSize;
+
+    public ExternalSortEngine(IExecutionContext context, ILogger logger)
     {
-        private readonly IExecutionContext _context;
-        private readonly ILogger _logger;
-        private readonly IBufferManager? _bufferManager;
-        public int ChunkSize => _context.ExternalSortChunkSize;
+        _context = context;
+        _logger = logger;
+        _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
+    }
 
-        public ExternalSortEngine(IExecutionContext context, ILogger logger)
+    public async Task<List<Row>> SortExternal(
+        List<Row> rows,
+        List<OrderByClause> orderBy)
+    {
+        var stream = ConvertToAsyncEnumerable(rows);
+        var sortedStream = SortStreamAsync(stream, orderBy);
+        return await sortedStream.ToListAsync();
+    }
+
+    private async IAsyncEnumerable<Row> ConvertToAsyncEnumerable(List<Row> rows)
+    {
+        foreach (var r in rows) yield return r;
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Sorts an asynchronous stream of rows using an external merge sort.
+    /// spills chunks to disk and merges them back.
+    /// </summary>
+    public async IAsyncEnumerable<Row> SortStreamAsync(
+        IAsyncEnumerable<Row> inputStream,
+        List<OrderByClause> orderBy)
+    {
+        using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
+        var chunkPaths = new List<string>();
+        try
         {
-            _context = context;
-            _logger = logger;
-            _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
-        }
-
-        public async Task<List<Row>> SortExternal(
-            List<Row> rows,
-            List<OrderByClause> orderBy)
-        {
-            var stream = ConvertToAsyncEnumerable(rows);
-            var sortedStream = SortStreamAsync(stream, orderBy);
-            return await sortedStream.ToListAsync();
-        }
-
-        private async IAsyncEnumerable<Row> ConvertToAsyncEnumerable(List<Row> rows)
-        {
-            foreach (var r in rows) yield return r;
-            await Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Sorts an asynchronous stream of rows using an external merge sort.
-        /// spills chunks to disk and merges them back.
-        /// </summary>
-        public async IAsyncEnumerable<Row> SortStreamAsync(
-            IAsyncEnumerable<Row> inputStream,
-            List<OrderByClause> orderBy)
-        {
-            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
-            var chunkPaths = new List<string>();
-
             // 1. Comparison function
             int Compare((Row Row, object?[] Keys) a, (Row Row, object?[] Keys) b)
             {
@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine.Engines
                 for (int i = 0; i < orderBy.Count; i++)
                 {
                     var val = await _context.EvaluateValue(orderBy[i].Expression, row);
-                    keys[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(val);
+                    keys[i] = CompoundKey.NormalizeValue(val);
                 }
 
                 currentChunk.Add((row, keys));
@@ -186,7 +186,21 @@ namespace ETL_SQL.Engine.Engines
                 foreach (var rd in readers) await rd.DisposeAsync();
             }
         }
-
+        finally
+        {
+            foreach (var path in chunkPaths)
+            {
+                try
+                {
+                    _context.SpillStore.DeleteChunk(path);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Error cleaning up external sort chunk {path}: {ex.Message}");
+                }
+            }
+        }
     }
+
 }
 

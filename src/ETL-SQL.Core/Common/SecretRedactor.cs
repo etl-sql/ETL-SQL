@@ -1,135 +1,133 @@
 using System;
 using System.Text.RegularExpressions;
 
-namespace ETL_SQL.Core.Common
+namespace ETL_SQL.Core.Common;
+/// <summary>
+/// Shared last-mile redaction for text that may leave the engine through logs,
+/// diagnostics, audit rows, result payloads, or operator-facing status.
+/// </summary>
+public static class SecretRedactor
 {
-    /// <summary>
-    /// Shared last-mile redaction for text that may leave the engine through logs,
-    /// diagnostics, audit rows, result payloads, or operator-facing status.
-    /// </summary>
-    public static class SecretRedactor
+    public const string Mask = "********";
+
+    private static readonly Regex ProtectedValuePattern = new(
+        @"\b(ENC|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex SecretReferencePattern = new(
+        @"\bSECRET:[A-Za-z0-9_.:/@\-]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex BearerPattern = new(
+        @"\bBearer\s+[A-Za-z0-9._~+/=\-]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex JsonSecretPattern = new(
+        @"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex AssignmentSecretPattern = new(
+        @"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    public static bool IsSensitiveKey(string? key)
     {
-        public const string Mask = "********";
+        if (string.IsNullOrWhiteSpace(key)) return false;
+        return key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("PWD", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("API_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("ACCOUNT_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("SASL_JAAS_CONFIG", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("PASSPHRASE", StringComparison.OrdinalIgnoreCase)
+            || key.Equals("AUTHORIZATION", StringComparison.OrdinalIgnoreCase);
+    }
 
-        private static readonly Regex ProtectedValuePattern = new(
-            @"\b(ENC|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public static bool LooksSensitiveValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        return value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("DPAPI:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("MACHINE:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
+    }
 
-        private static readonly Regex SecretReferencePattern = new(
-            @"\bSECRET:[A-Za-z0-9_.:/@\-]+",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public static string? Redact(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
 
-        private static readonly Regex BearerPattern = new(
-            @"\bBearer\s+[A-Za-z0-9._~+/=\-]+",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        private static readonly Regex JsonSecretPattern = new(
-            @"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        private static readonly Regex AssignmentSecretPattern = new(
-            @"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-
-        public static bool IsSensitiveKey(string? key)
+        var redacted = ProtectedValuePattern.Replace(text, match =>
         {
-            if (string.IsNullOrWhiteSpace(key)) return false;
-            return key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
-                || key.Equals("PWD", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("API_KEY", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("ACCOUNT_KEY", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("SASL_JAAS_CONFIG", StringComparison.OrdinalIgnoreCase)
-                || key.Contains("PASSPHRASE", StringComparison.OrdinalIgnoreCase)
-                || key.Equals("AUTHORIZATION", StringComparison.OrdinalIgnoreCase);
+            var prefix = match.Value.Split(':', 2)[0];
+            return $"{prefix}:{Mask}";
+        });
+        redacted = SecretReferencePattern.Replace(redacted, $"SECRET:{Mask}");
+        redacted = BearerPattern.Replace(redacted, $"Bearer {Mask}");
+        redacted = JsonSecretPattern.Replace(redacted, match =>
+        {
+            var key = match.Groups[2].Value;
+            return $"{match.Groups[1].Value}{key}{match.Groups[3].Value}:{match.Groups[4].Value}{Mask}{match.Groups[5].Value}";
+        });
+        redacted = AssignmentSecretPattern.Replace(redacted, match =>
+        {
+            var key = match.Groups[1].Value;
+            return $"{key}={match.Groups[2].Value}{Mask}{match.Groups[3].Value}";
+        });
+        return redacted;
+    }
+
+    public static object? RedactValue(string? key, object? value)
+    {
+        if (value is null) return null;
+        if (IsSensitiveKey(key)) return Mask;
+        return value is string text
+            ? Redact(text)
+            : value;
+    }
+
+    public static string MaskIfSensitive(string? key, string? value)
+    {
+        if (IsSensitiveKey(key) || LooksSensitiveValue(value)) return Mask;
+        return Redact(value) ?? string.Empty;
+    }
+
+    public static Exception? RedactException(Exception? exception)
+    {
+        if (exception is null) return null;
+        return new RedactedException(exception.GetType().FullName ?? exception.GetType().Name,
+            Redact(exception.Message) ?? string.Empty,
+            Redact(exception.StackTrace),
+            RedactException(exception.InnerException));
+    }
+
+    private sealed class RedactedException : Exception
+    {
+        private readonly string _typeName;
+        private readonly string? _redactedStackTrace;
+
+        public RedactedException(string typeName, string message, string? redactedStackTrace, Exception? inner)
+            : base(message, inner)
+        {
+            _typeName = typeName;
+            _redactedStackTrace = redactedStackTrace;
         }
 
-        public static bool LooksSensitiveValue(string? value)
+        public override string? StackTrace => _redactedStackTrace;
+
+        public override string ToString()
         {
-            if (string.IsNullOrEmpty(value)) return false;
-            return value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
-                || value.StartsWith("DPAPI:", StringComparison.OrdinalIgnoreCase)
-                || value.StartsWith("MACHINE:", StringComparison.OrdinalIgnoreCase)
-                || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
-                || value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
-        }
-
-        public static string? Redact(string? text)
-        {
-            if (string.IsNullOrEmpty(text)) return text;
-
-            var redacted = ProtectedValuePattern.Replace(text, match =>
-            {
-                var prefix = match.Value.Split(':', 2)[0];
-                return $"{prefix}:{Mask}";
-            });
-            redacted = SecretReferencePattern.Replace(redacted, $"SECRET:{Mask}");
-            redacted = BearerPattern.Replace(redacted, $"Bearer {Mask}");
-            redacted = JsonSecretPattern.Replace(redacted, match =>
-            {
-                var key = match.Groups[2].Value;
-                return $"{match.Groups[1].Value}{key}{match.Groups[3].Value}:{match.Groups[4].Value}{Mask}{match.Groups[5].Value}";
-            });
-            redacted = AssignmentSecretPattern.Replace(redacted, match =>
-            {
-                var key = match.Groups[1].Value;
-                return $"{key}={match.Groups[2].Value}{Mask}{match.Groups[3].Value}";
-            });
-            return redacted;
-        }
-
-        public static object? RedactValue(string? key, object? value)
-        {
-            if (value is null) return null;
-            if (IsSensitiveKey(key)) return Mask;
-            return value is string text
-                ? Redact(text)
-                : value;
-        }
-
-        public static string MaskIfSensitive(string? key, string? value)
-        {
-            if (IsSensitiveKey(key) || LooksSensitiveValue(value)) return Mask;
-            return Redact(value) ?? string.Empty;
-        }
-
-        public static Exception? RedactException(Exception? exception)
-        {
-            if (exception is null) return null;
-            return new RedactedException(exception.GetType().FullName ?? exception.GetType().Name,
-                Redact(exception.Message) ?? string.Empty,
-                Redact(exception.StackTrace),
-                RedactException(exception.InnerException));
-        }
-
-        private sealed class RedactedException : Exception
-        {
-            private readonly string _typeName;
-            private readonly string? _redactedStackTrace;
-
-            public RedactedException(string typeName, string message, string? redactedStackTrace, Exception? inner)
-                : base(message, inner)
-            {
-                _typeName = typeName;
-                _redactedStackTrace = redactedStackTrace;
-            }
-
-            public override string? StackTrace => _redactedStackTrace;
-
-            public override string ToString()
-            {
-                var text = $"{_typeName}: {Message}";
-                if (!string.IsNullOrWhiteSpace(_redactedStackTrace))
-                    text += Environment.NewLine + _redactedStackTrace;
-                if (InnerException is not null)
-                    text += Environment.NewLine + "---> " + InnerException;
-                return text;
-            }
+            var text = $"{_typeName}: {Message}";
+            if (!string.IsNullOrWhiteSpace(_redactedStackTrace))
+                text += Environment.NewLine + _redactedStackTrace;
+            if (InnerException is not null)
+                text += Environment.NewLine + "---> " + InnerException;
+            return text;
         }
     }
 }

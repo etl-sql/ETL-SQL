@@ -74,6 +74,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
         public void Stop()
         {
             _cts?.Cancel();
+            try
+            {
+                _runTask?.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (AggregateException ae)
+            {
+                ae.Handle(ex => ex is OperationCanceledException || ex is TaskCanceledException);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error waiting for scheduler background task to terminate.");
+            }
         }
 
         private async Task RunAsync(CancellationToken ct)

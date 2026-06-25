@@ -7,111 +7,109 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles REFRESH DATASET &amp;name — forces re-execution of the stored source query,
+/// re-writes the Parquet file, and updates LastRefresh in the portal registry.
+///
+/// Requires portal mode (IDatasetRegistry available). In non-portal mode the statement
+/// throws an ExecutionException since there is no persistence layer to refresh.
+/// </summary>
+public class RefreshDatasetStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles REFRESH DATASET &amp;name — forces re-execution of the stored source query,
-    /// re-writes the Parquet file, and updates LastRefresh in the portal registry.
-    ///
-    /// Requires portal mode (IDatasetRegistry available). In non-portal mode the statement
-    /// throws an ExecutionException since there is no persistence layer to refresh.
-    /// </summary>
-    public class RefreshDatasetStatementHandler(ILogger logger) : IStatementHandler
+    private readonly ILogger _logger = logger;
+    public Type SupportedStatementType => typeof(RefreshDatasetStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        private readonly ILogger _logger = logger;
-        public Type SupportedStatementType => typeof(RefreshDatasetStatement);
+        var stmt = (RefreshDatasetStatement)statement;
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        var registry = context is Evaluator e ? e.DatasetRegistry : null;
+        if (registry == null)
+            throw new ExecutionException(
+                $"REFRESH DATASET '{stmt.DatasetName}' requires portal mode. " +
+                "Datasets can only be refreshed when a DatasetRegistry is available.",
+                null, stmt.Line, stmt.Column);
+
+        var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
+        var callerAtRestKey = (context as Evaluator)?.DatasetAtRestKey;
+        var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
+        if (existing == null)
+            throw new ExecutionException(
+                $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
+                "Run CREATE DATASET first.",
+                null, stmt.Line, stmt.Column);
+
+        // Refresh re-materialises the source query. It is independently delegable without granting
+        // metadata/query editing; admin and trusted scheduled jobs also pass this check.
+        if (!await registry.CanRefreshAsync(stmt.DatasetName, callerCtx))
+            throw new ExecutionException(
+                $"REFRESH DATASET '{stmt.DatasetName}' requires refresh, editor, or owner permission.",
+                null, stmt.Line, stmt.Column);
+
+        if (string.IsNullOrWhiteSpace(existing.SourceQuery))
+            throw new ExecutionException(
+                $"REFRESH DATASET '{stmt.DatasetName}': no source query stored in registry. " +
+                "The dataset may have been created by an older version of the engine.",
+                null, stmt.Line, stmt.Column);
+
+        _logger.Debug("REFRESH DATASET '{Name}': re-materialising from source query...", stmt.DatasetName);
+
+        // ── 1. Parse and re-execute the stored source SQL ─────────────────
+        var tokens = new Lexer(existing.SourceQuery).Tokenize();
+        var parser = new Parser(tokens);
+        var sourceStmt = new StatementParser(parser).ParseStatement();
+
+        Statement selectInto;
+        if (sourceStmt is SelectStatement sel)
+            selectInto = sel with { IntoTable = new TableReference(stmt.DatasetName) };
+        else
+            selectInto = new SelectStatement(
+                new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
+                new TableReference(stmt.DatasetName),
+                new TableReference("SUBQUERY", null, null, null, "_src", sourceStmt),
+                new List<JoinClause>(),
+                null);
+
+        await context.EvaluateStatement(selectInto);
+        var rowCount = context.Telemetry.LastStatementRowsProcessed;
+
+        // ── 2. Re-write Parquet with machine-bound encryption ─────────────
+        var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
+        using var fileTransaction = DatasetFileTransaction.Create(parquetPath);
+        var connAlias = $"__ds_write_{Guid.NewGuid():N}__";
+
+        var encOptions = new Dictionary<string, Expression>
         {
-            var stmt = (RefreshDatasetStatement)statement;
+            ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL)
+        };
+        DatasetAtRestOptions.Apply(encOptions, callerAtRestKey);
 
-            var registry = context is Evaluator e ? e.DatasetRegistry : null;
-            if (registry == null)
-                throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}' requires portal mode. " +
-                    "Datasets can only be refreshed when a DatasetRegistry is available.",
-                    null, stmt.Line, stmt.Column);
+        var connStmt = new CreateConnectionStatement(
+            connAlias, "PARQUET",
+            new LiteralExpression(fileTransaction.StagingPath, TokenType.STRING_LITERAL),
+            encOptions);
 
-            var callerCtx = (context as Evaluator)?.DatasetCallerContext ?? "";
-            var callerAtRestKey = (context as Evaluator)?.DatasetAtRestKey;
-            var existing = await registry.Lookup(stmt.DatasetName, callerCtx);
-            if (existing == null)
-                throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}': dataset not found in the portal registry. " +
-                    "Run CREATE DATASET first.",
-                    null, stmt.Line, stmt.Column);
+        var insertStmt = new InsertStatement(
+            new TableReference("FILE", null, null, connAlias),
+            new SelectStatement(
+                new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
+                null,
+                new TableReference(stmt.DatasetName),
+                new List<JoinClause>(),
+                null));
 
-            // Refresh re-materialises the source query. It is independently delegable without granting
-            // metadata/query editing; admin and trusted scheduled jobs also pass this check.
-            if (!await registry.CanRefreshAsync(stmt.DatasetName, callerCtx))
-                throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}' requires refresh, editor, or owner permission.",
-                    null, stmt.Line, stmt.Column);
+        await context.EvaluateStatement(connStmt);
+        await context.EvaluateStatement(insertStmt);
+        fileTransaction.Commit();
 
-            if (string.IsNullOrWhiteSpace(existing.SourceQuery))
-                throw new ExecutionException(
-                    $"REFRESH DATASET '{stmt.DatasetName}': no source query stored in registry. " +
-                    "The dataset may have been created by an older version of the engine.",
-                    null, stmt.Line, stmt.Column);
+        // ── 3. Update registry ────────────────────────────────────────────
+        existing.ParquetFilePath = parquetPath;
+        existing.LastRefresh = DateTime.UtcNow;
+        existing.RowCount = rowCount;
+        await registry.RegisterOrUpdate(existing);
+        fileTransaction.Complete();
 
-            _logger.Debug("REFRESH DATASET '{Name}': re-materialising from source query...", stmt.DatasetName);
-
-            // ── 1. Parse and re-execute the stored source SQL ─────────────────
-            var tokens = new Lexer(existing.SourceQuery).Tokenize();
-            var parser = new Parser(tokens);
-            var sourceStmt = new StatementParser(parser).ParseStatement();
-
-            Statement selectInto;
-            if (sourceStmt is SelectStatement sel)
-                selectInto = sel with { IntoTable = new TableReference(stmt.DatasetName) };
-            else
-                selectInto = new SelectStatement(
-                    new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
-                    new TableReference(stmt.DatasetName),
-                    new TableReference("SUBQUERY", null, null, null, "_src", sourceStmt),
-                    new List<JoinClause>(),
-                    null);
-
-            await context.EvaluateStatement(selectInto);
-            var rowCount = context.Telemetry.LastStatementRowsProcessed;
-
-            // ── 2. Re-write Parquet with machine-bound encryption ─────────────
-            var parquetPath = registry.BuildDatasetFilePath(existing.Id, stmt.DatasetName);
-            using var fileTransaction = DatasetFileTransaction.Create(parquetPath);
-            var connAlias = $"__ds_write_{Guid.NewGuid():N}__";
-
-            var encOptions = new Dictionary<string, Expression>
-            {
-                ["COMPRESSION"] = new LiteralExpression("SNAPPY", TokenType.STRING_LITERAL)
-            };
-            DatasetAtRestOptions.Apply(encOptions, callerAtRestKey);
-
-            var connStmt = new CreateConnectionStatement(
-                connAlias, "PARQUET",
-                new LiteralExpression(fileTransaction.StagingPath, TokenType.STRING_LITERAL),
-                encOptions);
-
-            var insertStmt = new InsertStatement(
-                new TableReference("FILE", null, null, connAlias),
-                new SelectStatement(
-                    new List<SelectColumn> { new(new IdentifierExpression("*"), null, null) },
-                    null,
-                    new TableReference(stmt.DatasetName),
-                    new List<JoinClause>(),
-                    null));
-
-            await context.EvaluateStatement(connStmt);
-            await context.EvaluateStatement(insertStmt);
-            fileTransaction.Commit();
-
-            // ── 3. Update registry ────────────────────────────────────────────
-            existing.ParquetFilePath = parquetPath;
-            existing.LastRefresh = DateTime.UtcNow;
-            existing.RowCount = rowCount;
-            await registry.RegisterOrUpdate(existing);
-            fileTransaction.Complete();
-
-            context.Log($"Dataset '{stmt.DatasetName}' refreshed ({rowCount:N0} rows).");
-        }
+        context.Log($"Dataset '{stmt.DatasetName}' refreshed ({rowCount:N0} rows).");
     }
 }

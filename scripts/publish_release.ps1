@@ -194,4 +194,29 @@ foreach ($Platform in $Platforms) {
     Write-Host "  Platform $Platform complete. Archive: $ZipFileName" -ForegroundColor Green
 }
 
+# 7.5 Retain test and certification reports in release assets
+Write-Host "`nPackaging test and certification reports..." -ForegroundColor Yellow
+if (Test-Path (Join-Path $RepoRoot "certification-results")) {
+    New-VerifiedArchive -SourceGlob (Join-Path $RepoRoot "certification-results\*") -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-certification-results.zip")
+    Write-Host "  Packaged certification results." -ForegroundColor Green
+}
+if (Test-Path (Join-Path $RepoRoot "coverage/report")) {
+    New-VerifiedArchive -SourceGlob (Join-Path $RepoRoot "coverage\report\*") -DestinationPath (Join-Path $ReleaseRoot "ETL-SQL-v$Version-coverage-report.zip")
+    Write-Host "  Packaged coverage report." -ForegroundColor Green
+}
+
+# 8. Generate SBOM
+Write-Host "`nGenerating Software Bill of Materials (SBOM)..." -ForegroundColor Yellow
+node (Join-Path $PSScriptRoot "generate-sbom.js")
+
+# 9. Generate Checksums
+Write-Host "`nGenerating SHA-256 checksums..." -ForegroundColor Yellow
+$Artifacts = Get-ChildItem -Path $ReleaseRoot -File | Where-Object { $_.Name -like "ETL-SQL-*" -or $_.Name -like "*.vsix" -or $_.Name -like "*.msi" -or $_.Name -eq "sbom.json" }
+$Checksums = foreach ($Artifact in $Artifacts) {
+    $Hash = (Get-FileHash -Path $Artifact.FullName -Algorithm SHA256).Hash.ToLower()
+    "$Hash  $($Artifact.Name)"
+}
+$Checksums | Out-File -FilePath (Join-Path $ReleaseRoot "sha256sums.txt") -Encoding ascii -Force
+Write-Host "  Checksums file generated: sha256sums.txt" -ForegroundColor Green
+
 Write-Host "`nRelease v$Version ready in $ReleaseRoot" -ForegroundColor Cyan

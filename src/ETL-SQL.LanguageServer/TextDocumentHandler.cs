@@ -40,6 +40,7 @@ namespace ETL_SQL.LSP
         private readonly IMetadataManager _metadata;
         private readonly DocumentStateStore _store;
         private ILanguageServerFacade? _server;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> _debouncers = new();
 
         public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store)
         {
@@ -68,13 +69,51 @@ namespace ETL_SQL.LSP
 
         public override async Task<MediatR.Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
         {
+            var uri = request.TextDocument.Uri;
             var text = request.ContentChanges.First().Text;
-            _logger.LogInformation("didChange for {Uri}. Length: {Length}", request.TextDocument.Uri, text.Length);
+            _logger.LogInformation("didChange for {Uri}. Length: {Length}", uri, text.Length);
 
             // Sync text immediately so that completion/hover see the fresh text
-            _store.UpdateText(request.TextDocument.Uri, text);
+            _store.UpdateText(uri, text);
 
-            await AnalyzeAsync(request.TextDocument.Uri, text);
+            // Debounce the analysis to avoid high CPU load on typing
+            var newCts = new CancellationTokenSource();
+            var oldCts = _debouncers.AddOrUpdate(uri, newCts, (key, existing) =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    try { await existing.CancelAsync(); } catch {}
+                    try { existing.Dispose(); } catch {}
+                });
+                return newCts;
+            });
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(300, newCts.Token);
+                    if (!newCts.Token.IsCancellationRequested)
+                    {
+                        await AnalyzeAsync(uri, text);
+                    }
+                }
+                catch (TaskCanceledException)
+                {
+                    // Debounced
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in debounced AnalyzeAsync for {Uri}", uri);
+                }
+                finally
+                {
+                    // Clean up if we are still the current active CTS
+                    _debouncers.TryRemove(KeyValuePair.Create(uri, newCts));
+                    newCts.Dispose();
+                }
+            }, CancellationToken.None);
+
             return MediatR.Unit.Value;
         }
 
@@ -96,10 +135,16 @@ namespace ETL_SQL.LSP
         public override Task<MediatR.Unit> Handle(DidSaveTextDocumentParams request, CancellationToken cancellationToken)
             => Task.FromResult(MediatR.Unit.Value);
 
-        public override Task<MediatR.Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
+        public override async Task<MediatR.Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
         {
             var uri = request.TextDocument.Uri;
             _logger.LogInformation("LSP: didClose {Uri}. Cleaning up metadata and signaling session recycle.", uri);
+
+            if (_debouncers.TryRemove(uri, out var cts))
+            {
+                try { await cts.CancelAsync(); } catch {}
+                try { cts.Dispose(); } catch {}
+            }
 
             // 1. Clear session metadata and temp tables for this document
             _metadata.ClearDocumentConnections(uri.ToString());
@@ -111,7 +156,7 @@ namespace ETL_SQL.LSP
             // 3. Notify the client that the script is closed and its session can be recycled/deleted
             _server?.SendNotification("etlsql/scriptClosed", new { uri = uri.ToString() });
 
-            return Task.FromResult(MediatR.Unit.Value);
+            return MediatR.Unit.Value;
         }
 
         /// <summary>

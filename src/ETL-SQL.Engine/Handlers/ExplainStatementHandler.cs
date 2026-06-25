@@ -9,186 +9,184 @@ using ETL_SQL.Data;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the EXPLAIN statement, generating and displaying a high-level execution plan for a given query.
+/// </summary>
+public class ExplainStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the EXPLAIN statement, generating and displaying a high-level execution plan for a given query.
-    /// </summary>
-    public class ExplainStatementHandler : IStatementHandler
+    public Type SupportedStatementType => typeof(ExplainStatement);
+    /// <summary>Executes the EXPLAIN statement, building a plan table and displaying it via Spectre.Console.</summary>
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(ExplainStatement);
-        /// <summary>Executes the EXPLAIN statement, building a plan table and displaying it via Spectre.Console.</summary>
-        public async Task Execute(Statement statement, IExecutionContext context)
+        var stmt = (ExplainStatement)statement;
+
+        var plan = new DataTable();
+        var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode", "Est. Rows" };
+        if (stmt.IsAnalyze)
         {
-            var stmt = (ExplainStatement)statement;
+            columns.Add("Actual Rows");
+            columns.Add("Actual Time (ms)");
+            columns.Add("Spill Bytes");
+            columns.Add("Spill Count");
+        }
+        plan.SetColumns(columns.ToArray());
 
-            var plan = new DataTable();
-            var columns = new List<string> { "ID", "Operation", "Details", "Cost", "Mode", "Est. Rows" };
-            if (stmt.IsAnalyze)
+        var metrics = new ExecutionMetrics
+        {
+            Sql = (stmt.IsAnalyze ? "EXPLAIN ANALYZE: " : "EXPLAIN: ") + stmt.Query.ToSql(),
+            Timestamp = DateTime.Now
+        };
+
+        // If ANALYZE, run the actual query first to collect metrics
+        long actualRows = 0;
+        long actualTime = 0;
+        long spillBytes = 0;
+        int spillCount = 0;
+        if (stmt.IsAnalyze)
+        {
+            var oldProfiling = context.Telemetry.IsProfiling;
+            var oldRedirect = context.RedirectOutput;
+            context.Telemetry.IsProfiling = true;
+            context.RedirectOutput = true;
+
+            long spillBefore = context.Telemetry.TotalSpilledBytes;
+            int sortSpillBefore = context.Telemetry.SortSpillCount;
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
             {
-                columns.Add("Actual Rows");
-                columns.Add("Actual Time (ms)");
-                columns.Add("Spill Bytes");
-                columns.Add("Spill Count");
+                await foreach (var batch in context.ExecuteQuery(stmt.Query))
+                    actualRows += batch.Rows.Count;
             }
-            plan.SetColumns(columns.ToArray());
-
-            var metrics = new ExecutionMetrics
+            finally
             {
-                Sql = (stmt.IsAnalyze ? "EXPLAIN ANALYZE: " : "EXPLAIN: ") + stmt.Query.ToSql(),
-                Timestamp = DateTime.Now
-            };
-
-            // If ANALYZE, run the actual query first to collect metrics
-            long actualRows = 0;
-            long actualTime = 0;
-            long spillBytes = 0;
-            int spillCount = 0;
-            if (stmt.IsAnalyze)
-            {
-                var oldProfiling = context.Telemetry.IsProfiling;
-                var oldRedirect = context.RedirectOutput;
-                context.Telemetry.IsProfiling = true;
-                context.RedirectOutput = true;
-
-                long spillBefore = context.Telemetry.TotalSpilledBytes;
-                int sortSpillBefore = context.Telemetry.SortSpillCount;
-
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                try
-                {
-                    await foreach (var batch in context.ExecuteQuery(stmt.Query))
-                        actualRows += batch.Rows.Count;
-                }
-                finally
-                {
-                    sw.Stop();
-                    actualTime = sw.ElapsedMilliseconds;
-                    spillBytes = context.Telemetry.TotalSpilledBytes - spillBefore;
-                    spillCount = context.Telemetry.SortSpillCount - sortSpillBefore;
-                    context.Telemetry.IsProfiling = oldProfiling;
-                    context.RedirectOutput = oldRedirect;
-                }
+                sw.Stop();
+                actualTime = sw.ElapsedMilliseconds;
+                spillBytes = context.Telemetry.TotalSpilledBytes - spillBefore;
+                spillCount = context.Telemetry.SortSpillCount - sortSpillBefore;
+                context.Telemetry.IsProfiling = oldProfiling;
+                context.RedirectOutput = oldRedirect;
             }
+        }
 
-            await new ExplainPlanBuilder().BuildAsync(stmt.Query, plan, context, metrics);
+        await new ExplainPlanBuilder().BuildAsync(stmt.Query, plan, context, metrics);
 
-            if (stmt.IsAnalyze)
+        if (stmt.IsAnalyze)
+        {
+            // Initialize ANALYZE columns on all rows.
+            foreach (var planRow in plan.Rows)
             {
-                // Initialize ANALYZE columns on all rows.
-                foreach (var planRow in plan.Rows)
-                {
-                    planRow["Actual Rows"] = "--";
-                    planRow["Actual Time (ms)"] = "--";
-                    planRow["Spill Bytes"] = 0L;
-                    planRow["Spill Count"] = 0;
-                }
-
-                // Assign total elapsed time and row count to the last plan row.
-                var lastRow = plan.Rows.LastOrDefault();
-                if (lastRow != null)
-                {
-                    lastRow["Actual Rows"] = actualRows;
-                    lastRow["Actual Time (ms)"] = actualTime;
-                }
-
-                // Assign spill stats to the Sort row; fall back to last row if no Sort present.
-                if (spillBytes > 0 || spillCount > 0)
-                {
-                    var sortRow = plan.Rows.LastOrDefault(r => r["Operation"]?.ToString() == "Sort")
-                                  ?? lastRow;
-                    if (sortRow != null)
-                    {
-                        sortRow["Spill Bytes"] = spillBytes;
-                        sortRow["Spill Count"] = spillCount;
-                    }
-                }
+                planRow["Actual Rows"] = "--";
+                planRow["Actual Time (ms)"] = "--";
+                planRow["Spill Bytes"] = 0L;
+                planRow["Spill Count"] = 0;
             }
 
-            // Populate the context's profile metrics so the UI Performance tab can see it
-            metrics.DurationMs = plan.Rows.Sum(r => Convert.ToInt64(r["Cost"] ?? 0));
-            context.Telemetry.ProfileMetrics.Add(metrics);
-
-            context.LastResult = plan;
-            context.LastResultSets.Add(plan);
-
-            if (stmt.IntoTable != null)
+            // Assign total elapsed time and row count to the last plan row.
+            var lastRow = plan.Rows.LastOrDefault();
+            if (lastRow != null)
             {
-                var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);
-                await destination.WriteBatches(new List<DataTable> { plan }.ToAsyncEnumerable());
-                context.Log($"Query plan stored in {stmt.IntoTable.TableName}.");
+                lastRow["Actual Rows"] = actualRows;
+                lastRow["Actual Time (ms)"] = actualTime;
             }
-            else
+
+            // Assign spill stats to the Sort row; fall back to last row if no Sort present.
+            if (spillBytes > 0 || spillCount > 0)
             {
-                context.OnResultSet?.Invoke(plan);
-                if (!context.RedirectOutput)
+                var sortRow = plan.Rows.LastOrDefault(r => r["Operation"]?.ToString() == "Sort")
+                              ?? lastRow;
+                if (sortRow != null)
                 {
-                    var table = new Table()
-                        .Border(TableBorder.Rounded)
-                        .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
-                        .AddColumn("ID")
-                        .AddColumn("Operation")
-                        .AddColumn("Details")
-                        .AddColumn("Cost", c => c.RightAligned())
-                        .AddColumn("Mode")
-                        .AddColumn("Est. Rows", c => c.RightAligned());
-
-                    if (stmt.IsAnalyze)
-                    {
-                        table.AddColumn("Actual Rows", c => c.RightAligned());
-                        table.AddColumn("Actual Time", c => c.RightAligned());
-                        table.AddColumn("Spill Bytes", c => c.RightAligned());
-                        table.AddColumn("Spill Count", c => c.RightAligned());
-                    }
-
-                    foreach (var row in plan.Rows)
-                    {
-                        var modeRaw = row["Mode"]?.ToString() ?? "";
-                        var modeMarkup = modeRaw == "BLOCKING"
-                            ? new Markup("[yellow]BLOCKING[/]")
-                            : (IRenderable)new Text(modeRaw);
-                        var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
-
-                        if (stmt.IsAnalyze)
-                        {
-                            table.AddRow(
-                                new Text(row["ID"]?.ToString() ?? ""),
-                                new Text(row["Operation"]?.ToString() ?? ""),
-                                new Text(row["Details"]?.ToString() ?? ""),
-                                new Text(row["Cost"]?.ToString() ?? ""),
-                                modeMarkup,
-                                estRows,
-                                new Text(row["Actual Rows"]?.ToString() ?? "--"),
-                                new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
-                                new Text(row["Spill Bytes"]?.ToString() ?? "0"),
-                                new Text(row["Spill Count"]?.ToString() ?? "0")
-                            );
-                        }
-                        else
-                        {
-                            table.AddRow(
-                                new Text(row["ID"]?.ToString() ?? ""),
-                                new Text(row["Operation"]?.ToString() ?? ""),
-                                new Text(row["Details"]?.ToString() ?? ""),
-                                new Text(row["Cost"]?.ToString() ?? ""),
-                                modeMarkup,
-                                estRows
-                            );
-                        }
-                    }
-
-                    AnsiConsole.Write(table);
-                    AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
-                    if (stmt.IsAnalyze)
-                    {
-                        AnsiConsole.MarkupLine($"[grey]Total Actual Time:[/] [green]{actualTime}ms[/]");
-                        AnsiConsole.MarkupLine($"[grey]Total Actual Rows:[/] [green]{actualRows}[/]");
-                    }
+                    sortRow["Spill Bytes"] = spillBytes;
+                    sortRow["Spill Count"] = spillCount;
                 }
             }
         }
 
+        // Populate the context's profile metrics so the UI Performance tab can see it
+        metrics.DurationMs = plan.Rows.Sum(r => Convert.ToInt64(r["Cost"] ?? 0));
+        context.Telemetry.ProfileMetrics.Add(metrics);
+
+        context.LastResult = plan;
+        context.LastResultSets.Add(plan);
+
+        if (stmt.IntoTable != null)
+        {
+            var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);
+            await destination.WriteBatches(new List<DataTable> { plan }.ToAsyncEnumerable());
+            context.Log($"Query plan stored in {stmt.IntoTable.TableName}.");
+        }
+        else
+        {
+            context.OnResultSet?.Invoke(plan);
+            if (!context.RedirectOutput)
+            {
+                var table = new Table()
+                    .Border(TableBorder.Rounded)
+                    .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
+                    .AddColumn("ID")
+                    .AddColumn("Operation")
+                    .AddColumn("Details")
+                    .AddColumn("Cost", c => c.RightAligned())
+                    .AddColumn("Mode")
+                    .AddColumn("Est. Rows", c => c.RightAligned());
+
+                if (stmt.IsAnalyze)
+                {
+                    table.AddColumn("Actual Rows", c => c.RightAligned());
+                    table.AddColumn("Actual Time", c => c.RightAligned());
+                    table.AddColumn("Spill Bytes", c => c.RightAligned());
+                    table.AddColumn("Spill Count", c => c.RightAligned());
+                }
+
+                foreach (var row in plan.Rows)
+                {
+                    var modeRaw = row["Mode"]?.ToString() ?? "";
+                    var modeMarkup = modeRaw == "BLOCKING"
+                        ? new Markup("[yellow]BLOCKING[/]")
+                        : (IRenderable)new Text(modeRaw);
+                    var estRows = new Text(row["Est. Rows"]?.ToString() ?? "--");
+
+                    if (stmt.IsAnalyze)
+                    {
+                        table.AddRow(
+                            new Text(row["ID"]?.ToString() ?? ""),
+                            new Text(row["Operation"]?.ToString() ?? ""),
+                            new Text(row["Details"]?.ToString() ?? ""),
+                            new Text(row["Cost"]?.ToString() ?? ""),
+                            modeMarkup,
+                            estRows,
+                            new Text(row["Actual Rows"]?.ToString() ?? "--"),
+                            new Text(row["Actual Time (ms)"]?.ToString() ?? "--"),
+                            new Text(row["Spill Bytes"]?.ToString() ?? "0"),
+                            new Text(row["Spill Count"]?.ToString() ?? "0")
+                        );
+                    }
+                    else
+                    {
+                        table.AddRow(
+                            new Text(row["ID"]?.ToString() ?? ""),
+                            new Text(row["Operation"]?.ToString() ?? ""),
+                            new Text(row["Details"]?.ToString() ?? ""),
+                            new Text(row["Cost"]?.ToString() ?? ""),
+                            modeMarkup,
+                            estRows
+                        );
+                    }
+                }
+
+                AnsiConsole.Write(table);
+                AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
+                if (stmt.IsAnalyze)
+                {
+                    AnsiConsole.MarkupLine($"[grey]Total Actual Time:[/] [green]{actualTime}ms[/]");
+                    AnsiConsole.MarkupLine($"[grey]Total Actual Rows:[/] [green]{actualRows}[/]");
+                }
+            }
+        }
     }
+
 }
 
 

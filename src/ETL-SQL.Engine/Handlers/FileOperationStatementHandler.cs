@@ -7,327 +7,325 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles various file operations including DELETE, COPY, MOVE, RENAME, COMPRESS, DECOMPRESS, ENCRYPT, and DECRYPT.
+/// </summary>
+public class FileOperationStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles various file operations including DELETE, COPY, MOVE, RENAME, COMPRESS, DECOMPRESS, ENCRYPT, and DECRYPT.
-    /// </summary>
-    public class FileOperationStatementHandler : IStatementHandler
+    private readonly ILogger _logger;
+    public Type SupportedStatementType => typeof(FileOperationStatement);
+
+    public FileOperationStatementHandler(ILogger logger)
     {
-        private readonly ILogger _logger;
-        public Type SupportedStatementType => typeof(FileOperationStatement);
+        _logger = logger;
+    }
 
-        public FileOperationStatementHandler(ILogger logger)
+    /// <summary>Executes the file operation, resolving paths and performing the requested action.</summary>
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        var stmt = (FileOperationStatement)statement;
+
+        if (!string.IsNullOrEmpty(stmt.ConnectionName))
         {
-            _logger = logger;
-        }
-
-        /// <summary>Executes the file operation, resolving paths and performing the requested action.</summary>
-        public async Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (FileOperationStatement)statement;
-
-            if (!string.IsNullOrEmpty(stmt.ConnectionName))
+            // Remote execution context
+            if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
             {
-                // Remote execution context
-                if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
-                {
-                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote file operations.");
-                }
-
-                string remoteSource = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
-                string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
-                // Security Hardening: Count this as a file operation for runaway protection
-                context.IncrementOperationCount(OperationType.FileSystem, remoteSource, 1);
-
-                if (context.IsWhatIf)
-                {
-                    context.Log($"WHAT IF: Would perform {stmt.Type}_FILE on connection '{stmt.ConnectionName}': {remoteSource}{(remoteDest != null ? " -> " + remoteDest : "")}", ConsoleColor.Yellow);
-                    return;
-                }
-
-                bool remoteOverwrite = true; // Default to true for backward compatibility with underscore functions
-                if (stmt.Overwrite != null)
-                {
-                    var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
-                    if (ovrVal != null)
-                    {
-                        if (ovrVal is bool b) remoteOverwrite = b;
-                        else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
-                        else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
-                        else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
-                        else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
-                    }
-                }
-
-                _logger.Debug("Remote File Operation: {OperationType} on {Connection}:{Source}{Dest}", stmt.Type, stmt.ConnectionName, remoteSource, remoteDest != null ? $" -> {remoteDest}" : "");
-
-                try
-                {
-                    switch (stmt.Type)
-                    {
-                        case FileOpType.Delete:
-                            await remoteFs.DeleteFileAsync(remoteSource);
-                            context.Log($"Remote file deleted: {stmt.ConnectionName}:{remoteSource}", ConsoleColor.Green);
-                            break;
-                        case FileOpType.Move:
-                        case FileOpType.Rename:
-                            if (remoteDest == null)
-                                throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
-
-                            string finalDest = remoteDest;
-                            if (stmt.Type == FileOpType.Rename && !remoteDest.Contains("/") && !remoteDest.Contains("\\"))
-                            {
-                                // It's just a file name, keep it in the same directory as source
-                                var lastSlash = remoteSource.LastIndexOfAny(new[] { '/', '\\' });
-                                if (lastSlash >= 0)
-                                {
-                                    finalDest = remoteSource.Substring(0, lastSlash + 1) + remoteDest;
-                                }
-                            }
-
-                            await remoteFs.RenameFileAsync(remoteSource, finalDest, remoteOverwrite);
-                            context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remoteSource} -> {finalDest}", ConsoleColor.Green);
-                            break;
-                        default:
-                            throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote systems.");
-                    }
-                }
-                catch (ExecutionException) { throw; }
-                catch (Exception ex)
-                {
-                    throw new ExecutionException($"Remote file operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
-                }
-                return;
+                throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote file operations.");
             }
 
-            string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
-            string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
-            string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
-
+            string remoteSource = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
+            string? remoteDest = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() : null;
             // Security Hardening: Count this as a file operation for runaway protection
-            context.IncrementOperationCount(OperationType.FileSystem, source, 1);
+            context.IncrementOperationCount(OperationType.FileSystem, remoteSource, 1);
+
             if (context.IsWhatIf)
             {
-                context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
+                context.Log($"WHAT IF: Would perform {stmt.Type}_FILE on connection '{stmt.ConnectionName}': {remoteSource}{(remoteDest != null ? " -> " + remoteDest : "")}", ConsoleColor.Yellow);
                 return;
             }
 
-            bool overwrite = true; // Default to true for backward compatibility with underscore functions
+            bool remoteOverwrite = true; // Default to true for backward compatibility with underscore functions
             if (stmt.Overwrite != null)
             {
                 var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
                 if (ovrVal != null)
                 {
-                    if (ovrVal is bool b) overwrite = b;
-                    else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) overwrite = true;
-                    else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) overwrite = false;
-                    else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) overwrite = true;
-                    else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+                    if (ovrVal is bool b) remoteOverwrite = b;
+                    else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                    else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
+                    else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = true;
+                    else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) remoteOverwrite = false;
                 }
             }
 
-            _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
-
-            // Performance / Stability: If the file was JUST written by a preceding INSERT/SELECT INTO, 
-            if (stmt.Type != FileOpType.Delete && !File.Exists(source))
-            {
-                for (int i = 0; i < 3; i++)
-                {
-                    await Task.Delay(100);
-                    if (File.Exists(source)) break;
-                }
-            }
+            _logger.Debug("Remote File Operation: {OperationType} on {Connection}:{Source}{Dest}", stmt.Type, stmt.ConnectionName, remoteSource, remoteDest != null ? $" -> {remoteDest}" : "");
 
             try
             {
                 switch (stmt.Type)
                 {
                     case FileOpType.Delete:
-                        // Security Hardening: Block deleting script files and dangerous file types
-                        context.SecurityService.ValidateWriteAccess(source);
-                        context.SecurityService.ValidateFileType(source);
-
-                        if (File.Exists(source))
-                        {
-                            File.Delete(source);
-                            context.Log($"File deleted: {source}", ConsoleColor.Green);
-                        }
-                        else if (stmt.IfExists)
-                        {
-                            context.Log($"DELETE FILE IF EXISTS: {sourceVal} not found. Skipping.", ConsoleColor.Gray);
-                        }
-                        else
-                        {
-                            // If not if_exists, the engine usually continues but logs a warning or throws depending on strictness
-                            // Standards say: Check existence first to avoid silent no-ops or errors (Rule 9)
-                            _logger.Warning("File not found for deletion: {Source}", source);
-                        }
-                        break;
-                    case FileOpType.Copy:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (File.Exists(dest))
-                            {
-                                if (overwrite) File.Delete(dest);
-                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                            }
-                            File.Copy(source, dest, overwrite);
-                        }
+                        await remoteFs.DeleteFileAsync(remoteSource);
+                        context.Log($"Remote file deleted: {stmt.ConnectionName}:{remoteSource}", ConsoleColor.Green);
                         break;
                     case FileOpType.Move:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (File.Exists(dest))
-                            {
-                                if (overwrite) File.Delete(dest);
-                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                            }
-                            File.Move(source, dest);
-                        }
-                        break;
                     case FileOpType.Rename:
-                        if (dest != null)
+                        if (remoteDest == null)
+                            throw new ExecutionException($"{stmt.Type}_FILE requires a destination name.");
+
+                        string finalDest = remoteDest;
+                        if (stmt.Type == FileOpType.Rename && !remoteDest.Contains("/") && !remoteDest.Contains("\\"))
                         {
-                            var fileName = Path.GetFileName(source);
-                            var dir = Path.GetDirectoryName(source) ?? "";
-                            var newPath = Path.Combine(dir, dest);
-
-                            // Security Hardening: Validate the constructed rename path
-                            context.SecurityService.ValidatePath(newPath);
-                            context.SecurityService.ValidateWriteAccess(newPath);
-
-                            if (File.Exists(newPath))
+                            // It's just a file name, keep it in the same directory as source
+                            var lastSlash = remoteSource.LastIndexOfAny(new[] { '/', '\\' });
+                            if (lastSlash >= 0)
                             {
-                                if (overwrite) File.Delete(newPath);
-                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {newPath}");
+                                finalDest = remoteSource.Substring(0, lastSlash + 1) + remoteDest;
                             }
-                            File.Move(source, newPath);
                         }
-                        else
-                        {
-                            throw new ExecutionException("RENAME FILE requires a destination name.");
-                        }
+
+                        await remoteFs.RenameFileAsync(remoteSource, finalDest, remoteOverwrite);
+                        context.Log($"Remote file {(stmt.Type == FileOpType.Move ? "moved" : "renamed")}: {stmt.ConnectionName}:{remoteSource} -> {finalDest}", ConsoleColor.Green);
                         break;
-                    case FileOpType.Compress:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (File.Exists(dest))
-                            {
-                                if (overwrite) File.Delete(dest);
-                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                            }
-
-                            if (Directory.Exists(source))
-                            {
-                                System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
-                            }
-                            else if (File.Exists(source))
-                            {
-                                using var archive = ZipFile.Open(dest, ZipArchiveMode.Create);
-                                archive.CreateEntryFromFile(source, Path.GetFileName(source));
-                            }
-                            else
-                            {
-                                throw new ExecutionException($"Source for COMPRESS_FILE does not exist: {source}");
-                            }
-                        }
-                        break;
-                    case FileOpType.Decompress:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (File.Exists(source))
-                            {
-                                ZipFile.ExtractToDirectory(source, dest, overwrite);
-                                context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
-                            }
-                            else
-                            {
-                                throw new ExecutionException($"Source for DECOMPRESS_FILE does not exist: {source}");
-                            }
-                        }
-                        break;
-                    case FileOpType.Encrypt:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (stmt.PgpKey != null)
-                            {
-                                string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
-                                await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
-                            }
-                            else if (stmt.KeyFile != null)
-                            {
-                                string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
-                                CryptoUtils.EncryptFileWithSsh(source, dest, keyFilePath, overwrite);
-                            }
-                            else
-                            {
-                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                                pwd ??= context.SecurityService.MasterPassword;
-                                if (string.IsNullOrEmpty(pwd))
-                                    throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
-                                CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
-                            }
-                        }
-                        break;
-                    case FileOpType.Decrypt:
-                        if (dest != null)
-                        {
-                            // Security Hardening: Block writing to script files and dangerous types
-                            context.SecurityService.ValidateWriteAccess(dest);
-                            context.SecurityService.ValidateFileType(dest);
-
-                            if (stmt.PgpKey != null)
-                            {
-                                string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
-                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                                await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
-                            }
-                            else if (stmt.KeyFile != null)
-                            {
-                                string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
-                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                                CryptoUtils.DecryptFileWithSsh(source, dest, keyFilePath, overwrite, pwd);
-                            }
-                            else
-                            {
-                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                                pwd ??= context.SecurityService.MasterPassword;
-                                if (string.IsNullOrEmpty(pwd))
-                                    throw new ExecutionException("DECRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
-                                CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
-                            }
-                        }
-                        break;
+                    default:
+                        throw new ExecutionException($"File operation '{stmt.Type}' is not supported on remote systems.");
                 }
             }
             catch (ExecutionException) { throw; }
-            catch (ETL_SQL.Services.SecurityException) { throw; }
             catch (Exception ex)
             {
-                throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+                throw new ExecutionException($"Remote file operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
             }
-            await Task.CompletedTask;
+            return;
         }
+
+        string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
+        string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
+        string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+
+        // Security Hardening: Count this as a file operation for runaway protection
+        context.IncrementOperationCount(OperationType.FileSystem, source, 1);
+        if (context.IsWhatIf)
+        {
+            context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
+            return;
+        }
+
+        bool overwrite = true; // Default to true for backward compatibility with underscore functions
+        if (stmt.Overwrite != null)
+        {
+            var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+            if (ovrVal != null)
+            {
+                if (ovrVal is bool b) overwrite = b;
+                else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+                else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+            }
+        }
+
+        _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
+
+        // Performance / Stability: If the file was JUST written by a preceding INSERT/SELECT INTO, 
+        if (stmt.Type != FileOpType.Delete && !File.Exists(source))
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                await Task.Delay(100);
+                if (File.Exists(source)) break;
+            }
+        }
+
+        try
+        {
+            switch (stmt.Type)
+            {
+                case FileOpType.Delete:
+                    // Security Hardening: Block deleting script files and dangerous file types
+                    context.SecurityService.ValidateWriteAccess(source);
+                    context.SecurityService.ValidateFileType(source);
+
+                    if (File.Exists(source))
+                    {
+                        File.Delete(source);
+                        context.Log($"File deleted: {source}", ConsoleColor.Green);
+                    }
+                    else if (stmt.IfExists)
+                    {
+                        context.Log($"DELETE FILE IF EXISTS: {sourceVal} not found. Skipping.", ConsoleColor.Gray);
+                    }
+                    else
+                    {
+                        // If not if_exists, the engine usually continues but logs a warning or throws depending on strictness
+                        // Standards say: Check existence first to avoid silent no-ops or errors (Rule 9)
+                        _logger.Warning("File not found for deletion: {Source}", source);
+                    }
+                    break;
+                case FileOpType.Copy:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (File.Exists(dest))
+                        {
+                            if (overwrite) File.Delete(dest);
+                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                        }
+                        File.Copy(source, dest, overwrite);
+                    }
+                    break;
+                case FileOpType.Move:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (File.Exists(dest))
+                        {
+                            if (overwrite) File.Delete(dest);
+                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                        }
+                        File.Move(source, dest);
+                    }
+                    break;
+                case FileOpType.Rename:
+                    if (dest != null)
+                    {
+                        var fileName = Path.GetFileName(source);
+                        var dir = Path.GetDirectoryName(source) ?? "";
+                        var newPath = Path.Combine(dir, dest);
+
+                        // Security Hardening: Validate the constructed rename path
+                        context.SecurityService.ValidatePath(newPath);
+                        context.SecurityService.ValidateWriteAccess(newPath);
+
+                        if (File.Exists(newPath))
+                        {
+                            if (overwrite) File.Delete(newPath);
+                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {newPath}");
+                        }
+                        File.Move(source, newPath);
+                    }
+                    else
+                    {
+                        throw new ExecutionException("RENAME FILE requires a destination name.");
+                    }
+                    break;
+                case FileOpType.Compress:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (File.Exists(dest))
+                        {
+                            if (overwrite) File.Delete(dest);
+                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                        }
+
+                        if (Directory.Exists(source))
+                        {
+                            System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
+                        }
+                        else if (File.Exists(source))
+                        {
+                            using var archive = ZipFile.Open(dest, ZipArchiveMode.Create);
+                            archive.CreateEntryFromFile(source, Path.GetFileName(source));
+                        }
+                        else
+                        {
+                            throw new ExecutionException($"Source for COMPRESS_FILE does not exist: {source}");
+                        }
+                    }
+                    break;
+                case FileOpType.Decompress:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (File.Exists(source))
+                        {
+                            ZipFile.ExtractToDirectory(source, dest, overwrite);
+                            context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
+                        }
+                        else
+                        {
+                            throw new ExecutionException($"Source for DECOMPRESS_FILE does not exist: {source}");
+                        }
+                    }
+                    break;
+                case FileOpType.Encrypt:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (stmt.PgpKey != null)
+                        {
+                            string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                            await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
+                        }
+                        else if (stmt.KeyFile != null)
+                        {
+                            string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                            CryptoUtils.EncryptFileWithSsh(source, dest, keyFilePath, overwrite);
+                        }
+                        else
+                        {
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (string.IsNullOrEmpty(pwd))
+                                throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                            CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
+                        }
+                    }
+                    break;
+                case FileOpType.Decrypt:
+                    if (dest != null)
+                    {
+                        // Security Hardening: Block writing to script files and dangerous types
+                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateFileType(dest);
+
+                        if (stmt.PgpKey != null)
+                        {
+                            string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
+                        }
+                        else if (stmt.KeyFile != null)
+                        {
+                            string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            CryptoUtils.DecryptFileWithSsh(source, dest, keyFilePath, overwrite, pwd);
+                        }
+                        else
+                        {
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (string.IsNullOrEmpty(pwd))
+                                throw new ExecutionException("DECRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                            CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
+                        }
+                    }
+                    break;
+            }
+        }
+        catch (ExecutionException) { throw; }
+        catch (ETL_SQL.Services.SecurityException) { throw; }
+        catch (Exception ex)
+        {
+            throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+        }
+        await Task.CompletedTask;
     }
 }

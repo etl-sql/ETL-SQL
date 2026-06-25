@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests.Hardening
             // Assert
             Assert.StartsWith("ENC:", encrypted);
             byte[] fullBytes = Convert.FromBase64String(encrypted.Substring(4));
-            Assert.Equal(1, fullBytes[0]); // Version 1 prefix
+            Assert.Equal(2, fullBytes[0]); // Version 2 prefix
         }
 
         [Fact]

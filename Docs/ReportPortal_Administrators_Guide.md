@@ -648,6 +648,8 @@ remain valid (for example, audit rows written before correlation-id support read
 correlation id). This is covered by an automated upgrade-path drill that seeds the previous release's
 schema, migrates forward over populated data, and asserts continuity.
 
+Additionally, to prevent browsers from serving stale cached assets after an upgrade, the portal automatically applies cache-busting asset fingerprinting on startup. It scans HTML files in the web root and appends the active `EngineVersion` as a query parameter (e.g., `?v=0.12.0`) to all referenced JS, CSS, and ES module imports.
+
 Rolling upgrade migrations follow an expand/migrate/contract discipline. The automated
 `PortalMigrations_UpOperationsFollowRollingExpandContract` test rejects destructive `Up` operations
 such as table/column drops, table/column renames, existing-column alterations, or required columns

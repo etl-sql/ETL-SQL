@@ -18,929 +18,538 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.Data
+namespace ETL_SQL.Data;
+public struct CompositeKey : IEquatable<CompositeKey>
 {
-    public struct CompositeKey : IEquatable<CompositeKey>
+    private readonly object?[] _values;
+    private readonly int _hashCode;
+
+    public CompositeKey(object?[] values)
     {
-        private readonly object?[] _values;
-        private readonly int _hashCode;
-
-        public CompositeKey(object?[] values)
-        {
-            _values = values;
-            var hash = new HashCode();
-            foreach (var v in values) hash.Add(v);
-            _hashCode = hash.ToHashCode();
-        }
-
-        public bool Equals(CompositeKey other)
-        {
-            if (_values.Length != other._values.Length) return false;
-            for (int i = 0; i < _values.Length; i++)
-            {
-                if (!object.Equals(_values[i], other._values[i])) return false;
-            }
-            return true;
-        }
-
-        public override bool Equals(object? obj) => obj is CompositeKey other && Equals(other);
-        public override int GetHashCode() => _hashCode;
+        _values = values;
+        var hash = new HashCode();
+        foreach (var v in values) hash.Add(v);
+        _hashCode = hash.ToHashCode();
     }
 
+    public bool Equals(CompositeKey other)
+    {
+        if (_values.Length != other._values.Length) return false;
+        for (int i = 0; i < _values.Length; i++)
+        {
+            if (!object.Equals(_values[i], other._values[i])) return false;
+        }
+        return true;
+    }
+
+    public override bool Equals(object? obj) => obj is CompositeKey other && Equals(other);
+    public override int GetHashCode() => _hashCode;
+}
+
+/// <summary>
+/// Defines methods for validating row-level constraints (CHECK, FOREIGN KEY).
+/// </summary>
+public interface IDataValidator
+{
+    /// <summary>Validates a check constraint expression against a row.</summary>
+    Task<bool> ValidateCheckConstraint(Expression expression, Row row);
+    /// <summary>Validates that a foreign key reference exists in the target table.</summary>
+    Task<bool> ValidateForeignKey(ForeignKeyReference reference, List<string> sourceColumns, Row row);
+}
+
+public interface ITransactionalDataSource : IDataSource
+{
+    Task BeginTransactionAsync();
+    Task CommitAsync();
+    Task RollbackAsync();
+}
+
+/// <summary>
+/// Base interface for all data sources (Files, SQL Databases, In-Memory).
+/// </summary>
+public interface IDataSource : IAsyncDisposable
+{
+    /// <summary>Streams the data source content in batches.</summary>
+    IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000);
+    /// <summary>Writes batches of data into the data source. If append is true, existing data is preserved.</summary>
+    Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false);
+    /// <summary>Removes all data from the data source.</summary>
+    Task TruncateAsync() => throw new NotSupportedException($"TRUNCATE is not supported for {GetType().Name}");
+    /// <summary>Returns the list of column names in the data source.</summary>
+    Task<IEnumerable<string>> GetColumnsAsync();
+    /// <summary>Creates a state snapshot of the data source for transaction support.</summary>
+    object? Snapshot();
+    /// <summary>Restores the data source to a previous state snapshot.</summary>
+    void Restore(object? snapshot);
+    /// <summary>Returns a new data source instance scoped to a specific table.</summary>
+    IDataSource WithTable(string tableName);
+    /// <summary>The physical or logical path to the data source.</summary>
+    string Path { get; }
+    /// <summary>Returns a catalog metadata provider for this connection, or <c>null</c> if not supported.</summary>
+    ICatalogMetadataProvider? GetCatalogProvider() => null;
+    /// <summary>The options used to create this data source.</summary>
+    Dictionary<string, string>? Options { get; }
+    /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>
+    string ConnectorType { get; }
+    /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
+    Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
+    /// <summary>Returns the options used to create this data source, with sensitive values masked.</summary>
+    IReadOnlyDictionary<string, string> GetConfig()
+    {
+        var config = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (Options != null)
+        {
+            foreach (var kv in Options)
+            {
+                config[kv.Key] = SecretRedactor.IsSensitiveKey(kv.Key)
+                    || kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase)
+                    || SecretRedactor.LooksSensitiveValue(kv.Value)
+                    ? SecretRedactor.Mask
+                    : SecretRedactor.Redact(kv.Value) ?? string.Empty;
+            }
+        }
+        return config;
+    }
+
+    /// <summary>Checks if a row with matching column values exists in the data source.</summary>
+    Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
+}
+
+public interface IDatabaseSource : IDataSource
+{
+    Task<string> GetVersionAsync();
+    HashSet<string> GetSupportedFunctions();
+    IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null);
+    string ConnectionString { get; }
+    string Dialect { get; }
+    Task<IEnumerable<string>> GetViewsAsync();
+    Task<IEnumerable<string>> GetColumnsAsync(string tableName);
     /// <summary>
-    /// Defines methods for validating row-level constraints (CHECK, FOREIGN KEY).
+    /// True when this connector can execute arbitrary SQL natively (SQL Server, Postgres, etc.).
+    /// False for file-based connectors (FlatFile, JSON, XML) that only support full-table reads.
     /// </summary>
-    public interface IDataValidator
+    bool SupportsSqlPushdown { get; }
+}
+
+/// <summary>
+/// Represents an in-memory data store with indexing and constraint validation support.
+/// Used for temporary tables, MOCKDB, and intermediate query results.
+/// </summary>
+public class InMemoryDataSource : IDataSource, ISpillable
+{
+    private readonly List<DataTable> _batches = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
+    public string Path => "";
+    public Dictionary<string, string>? Options => null;
+    public string ConnectorType => "INMEMORY";
+    private readonly List<string> _columnOrder = new();
+    public Dictionary<string, ColumnDefinition> Schema { get; } = new(StringComparer.OrdinalIgnoreCase);
+    private readonly InMemoryTableIndex _index = new();
+    public List<TableConstraint> TableConstraints { get; private set; } = new();
+    public IDataValidator? Validator { get; set; }
+
+    public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+    public bool ReplaceOnConflict { get; set; } = false;
+
+    private readonly List<string> _spillChunkNames = new();
+    public int SpillChunkCount => _spillChunkNames.Count;
+    public long SpillTotalBytes { get; private set; } = 0;
+    private long _totalRowCount = 0;
+    public long EstimatedRowCount => _totalRowCount;
+    private IExecutionContext? _executionContext;
+    public IExecutionContext? ExecutionContext
     {
-        /// <summary>Validates a check constraint expression against a row.</summary>
-        Task<bool> ValidateCheckConstraint(Expression expression, Row row);
-        /// <summary>Validates that a foreign key reference exists in the target table.</summary>
-        Task<bool> ValidateForeignKey(ForeignKeyReference reference, List<string> sourceColumns, Row row);
-    }
-
-    public interface ITransactionalDataSource : IDataSource
-    {
-        Task BeginTransactionAsync();
-        Task CommitAsync();
-        Task RollbackAsync();
-    }
-
-    /// <summary>
-    /// Base interface for all data sources (Files, SQL Databases, In-Memory).
-    /// </summary>
-    public interface IDataSource : IAsyncDisposable
-    {
-        /// <summary>Streams the data source content in batches.</summary>
-        IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000);
-        /// <summary>Writes batches of data into the data source. If append is true, existing data is preserved.</summary>
-        Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false);
-        /// <summary>Removes all data from the data source.</summary>
-        Task TruncateAsync() => throw new NotSupportedException($"TRUNCATE is not supported for {GetType().Name}");
-        /// <summary>Returns the list of column names in the data source.</summary>
-        Task<IEnumerable<string>> GetColumnsAsync();
-        /// <summary>Creates a state snapshot of the data source for transaction support.</summary>
-        object? Snapshot();
-        /// <summary>Restores the data source to a previous state snapshot.</summary>
-        void Restore(object? snapshot);
-        /// <summary>Returns a new data source instance scoped to a specific table.</summary>
-        IDataSource WithTable(string tableName);
-        /// <summary>The physical or logical path to the data source.</summary>
-        string Path { get; }
-        /// <summary>Returns a catalog metadata provider for this connection, or <c>null</c> if not supported.</summary>
-        ICatalogMetadataProvider? GetCatalogProvider() => null;
-        /// <summary>The options used to create this data source.</summary>
-        Dictionary<string, string>? Options { get; }
-        /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>
-        string ConnectorType { get; }
-        /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
-        Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
-        /// <summary>Returns the options used to create this data source, with sensitive values masked.</summary>
-        IReadOnlyDictionary<string, string> GetConfig()
+        get => _executionContext;
+        set
         {
-            var config = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (Options != null)
+            if (_executionContext != null)
             {
-                foreach (var kv in Options)
-                {
-                    config[kv.Key] = SecretRedactor.IsSensitiveKey(kv.Key)
-                        || kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase)
-                        || SecretRedactor.LooksSensitiveValue(kv.Value)
-                        ? SecretRedactor.Mask
-                        : SecretRedactor.Redact(kv.Value) ?? string.Empty;
-                }
-            }
-            return config;
-        }
-
-        /// <summary>Checks if a row with matching column values exists in the data source.</summary>
-        Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
-    }
-
-    public interface IDatabaseSource : IDataSource
-    {
-        Task<string> GetVersionAsync();
-        HashSet<string> GetSupportedFunctions();
-        IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null);
-        string ConnectionString { get; }
-        string Dialect { get; }
-        Task<IEnumerable<string>> GetViewsAsync();
-        Task<IEnumerable<string>> GetColumnsAsync(string tableName);
-        /// <summary>
-        /// True when this connector can execute arbitrary SQL natively (SQL Server, Postgres, etc.).
-        /// False for file-based connectors (FlatFile, JSON, XML) that only support full-table reads.
-        /// </summary>
-        bool SupportsSqlPushdown { get; }
-    }
-
-    /// <summary>
-    /// Represents an in-memory data store with indexing and constraint validation support.
-    /// Used for temporary tables, MOCKDB, and intermediate query results.
-    /// </summary>
-    public class InMemoryDataSource : IDataSource, ISpillable
-    {
-        private readonly List<DataTable> _batches = new();
-        private readonly SemaphoreSlim _lock = new(1, 1);
-        public string Path => "";
-        public Dictionary<string, string>? Options => null;
-        public string ConnectorType => "INMEMORY";
-        private readonly List<string> _columnOrder = new();
-        public Dictionary<string, ColumnDefinition> Schema { get; } = new(StringComparer.OrdinalIgnoreCase);
-        private readonly InMemoryTableIndex _index = new();
-        public List<TableConstraint> TableConstraints { get; private set; } = new();
-        public IDataValidator? Validator { get; set; }
-
-        public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
-        public bool ReplaceOnConflict { get; set; } = false;
-
-        private readonly List<string> _spillChunkNames = new();
-        public int SpillChunkCount => _spillChunkNames.Count;
-        public long SpillTotalBytes { get; private set; } = 0;
-        private long _totalRowCount = 0;
-        public long EstimatedRowCount => _totalRowCount;
-        private IExecutionContext? _executionContext;
-        public IExecutionContext? ExecutionContext
-        {
-            get => _executionContext;
-            set
-            {
-                if (_executionContext != null)
-                {
-                    try
-                    {
-                        _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
-                    }
-                    catch (ObjectDisposedException) { /* ignore during shutdown */ }
-                }
-                _executionContext = value;
-                if (_executionContext != null)
-                {
-                    try
-                    {
-                        _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
-                    }
-                    catch (ObjectDisposedException) { /* ignore during shutdown */ }
-                }
-            }
-
-        }
-
-        public long MemoryUsageBytes
-        {
-            get
-            {
-                // Simple estimation: 256 bytes per row (overhead + pointers)
-                // Plus index overhead
-                long batchBytes = _batches.Sum(b => (long)b.Rows.Count * 256);
-                long indexBytes = _index.Count * 128L; // Simplified
-                // Spilled chunks are ON DISK, so they don't count towards CURRENT RAM USAGE.
-                // This is critical for BufferManager to know how much RAM is actually reclaimable.
-                return batchBytes + indexBytes;
-            }
-        }
-
-        public string SpillToken => "InMemoryDataSource_" + (string.IsNullOrEmpty(Path) ? GetHashCode().ToString("X") : Path);
-
-        public async Task<bool> SpillAsync()
-        {
-            await _lock.WaitAsync();
-            try
-            {
-                if (_batches.Count == 0 && _index.Count == 0) return false;
-                if (ExecutionContext == null) return false;
-
-                // Move all batches to spill store
-                foreach (var batch in _batches)
-                {
-                    var chunkName = $"{Guid.NewGuid():N}.spill";
-                    await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
-                    {
-                        await writer.WriteRowsAsync(batch.Rows);
-                        SpillTotalBytes += writer.BytesWritten;
-                    }
-                    _spillChunkNames.Add(chunkName);
-                }
-
-                _batches.Clear();
-                _index.Clear();
-
-                return true;
-            }
-            finally
-            {
-                _lock.Release();
-            }
-        }
-
-        private int? GetMaxLen(string dataType)
-        {
-            if (string.IsNullOrEmpty(dataType)) return null;
-            int idx = dataType.IndexOf('(');
-            if (idx == -1) return null;
-            int endIdx = dataType.IndexOf(')', idx);
-            if (endIdx == -1) return null;
-            string lenStr = dataType.Substring(idx + 1, endIdx - idx - 1).Trim();
-            if (int.TryParse(lenStr, out int result)) return result;
-            return null;
-        }
-
-        public Task ValidateRow(Row row) => ValidateRow(row, _batches);
-
-        public async Task ValidateRow(Row row, IEnumerable<DataTable> activeBatches)
-        {
-            var errors = new List<string>();
-
-            foreach (var kv in Schema)
-            {
-                var col = kv.Value;
-                var val = row[col.ColumnName];
-
-                // 0. Type Coercion
-                if (val != null && val != DBNull.Value)
-                {
-                    try
-                    {
-                        row[col.ColumnName] = val = TypeConverter.Cast(val, col.DataType);
-                    }
-                    catch (Exception ex)
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            row[col.ColumnName] = val = null;
-                        }
-                        else
-                        {
-                            errors.Add($"Column '{col.ColumnName}' (value '{val}') cannot be converted to target type {col.DataType}. Detail: {ex.Message}");
-                        }
-                    }
-                }
-
-                // 0b. String Truncation Check
-                if (val is string strVal)
-                {
-                    var maxLen = GetMaxLen(col.DataType);
-                    if (maxLen.HasValue && strVal.Length > maxLen.Value)
-                    {
-                        if (ExecutionContext?.TruncateString == true)
-                        {
-                            row[col.ColumnName] = val = strVal.Substring(0, maxLen.Value);
-                        }
-                        else
-                        {
-                            errors.Add($"Column '{col.ColumnName}' is trying to insert a string with length {strVal.Length} into a {maxLen.Value} character column (Value: '{strVal}')");
-                        }
-                    }
-                }
-
-                // 1. NOT NULL
-                if (!col.IsNullable && (val == null || val == DBNull.Value))
-                {
-                    if (ExecutionContext?.SkipError == true)
-                    {
-                        throw new RowSkipException($"Column '{col.ColumnName}' does not allow nulls.");
-                    }
-                    else
-                    {
-                        errors.Add($"Column '{col.ColumnName}' does not allow nulls.");
-                    }
-                }
-
-                // 2. Column-level CHECK
-                if (col.CheckConstraint != null && Validator != null)
-                {
-                    if (!await Validator.ValidateCheckConstraint(col.CheckConstraint, row))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Check constraint violation on column {col.ColumnName}");
-                        }
-                        else
-                        {
-                            errors.Add($"Check constraint violation on column {col.ColumnName}");
-                        }
-                    }
-                }
-
-                // 3. Column-level FK
-                if (col.ForeignKey != null && Validator != null)
-                {
-                    if (!await Validator.ValidateForeignKey(col.ForeignKey, new List<string> { col.ColumnName }, row))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Foreign key violation on column {col.ColumnName} (value: {val})");
-                        }
-                        else
-                        {
-                            errors.Add($"Foreign key violation on column {col.ColumnName} (value: {val})");
-                        }
-                    }
-                }
-
-                // 4. Column-level Unique
-                if (col.IsUnique || col.IsPrimaryKey)
-                {
-                    if (_index.IsDuplicate(new List<string> { col.ColumnName }, row, activeBatches))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
-                        }
-                        else
-                        {
-                            errors.Add($"Unique constraint violation on column {col.ColumnName} (value: {val})");
-                        }
-                    }
-                }
-            }
-
-            // 5. Table-level Constraints
-            foreach (var tc in TableConstraints)
-            {
-                if (tc is TableCheckConstraint c && Validator != null)
-                {
-                    if (!await Validator.ValidateCheckConstraint(c.Expression, row))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                        else
-                        {
-                            errors.Add($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                    }
-                }
-                else if (tc is TableForeignKeyConstraint fk && Validator != null)
-                {
-                    if (!await Validator.ValidateForeignKey(fk.Reference, fk.Columns, row))
-                    {
-                        var vals = string.Join(", ", fk.Columns.Select(col => row[col]?.ToString() ?? "NULL"));
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
-                        }
-                        else
-                        {
-                            errors.Add($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
-                        }
-                    }
-                }
-                else if (tc is TablePrimaryKeyConstraint pk)
-                {
-                    bool hasNull = false;
-                    foreach (var colName in pk.Columns)
-                    {
-                        var val = row[colName];
-                        if (val == null || val == DBNull.Value)
-                        {
-                            hasNull = true;
-                            if (ExecutionContext?.SkipError == true)
-                            {
-                                throw new RowSkipException($"Primary key column {colName} cannot be null.");
-                            }
-                            else
-                            {
-                                errors.Add($"Primary key column {colName} cannot be null.");
-                            }
-                        }
-                    }
-                    if (!hasNull && _index.IsDuplicate(pk.Columns, row, activeBatches))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                        else
-                        {
-                            errors.Add($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                    }
-                }
-                else if (tc is TableUniqueConstraint uk)
-                {
-                    if (_index.IsDuplicate(uk.Columns, row, activeBatches))
-                    {
-                        if (ExecutionContext?.SkipError == true)
-                        {
-                            throw new RowSkipException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                        else
-                        {
-                            errors.Add($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
-                        }
-                    }
-                }
-            }
-
-            if (errors.Count > 0)
-            {
-                throw new ExecutionException(string.Join(Environment.NewLine, errors));
-            }
-        }
-
-        public void SetSchema(IEnumerable<ColumnDefinition> columns, IEnumerable<TableConstraint>? tableConstraints = null)
-        {
-            Schema.Clear();
-            _columnOrder.Clear();
-            _index.Clear();
-            TableConstraints.Clear();
-
-            foreach (var col in columns)
-            {
-                Schema[col.ColumnName] = col;
-                _columnOrder.Add(col.ColumnName);
-                if (col.IsPrimaryKey)
-                {
-                    col.IsNullable = false;
-                    CreateIndex(col.ColumnName, true);
-                }
-                else if (col.IsUnique)
-                {
-                    CreateIndex(col.ColumnName, true);
-                }
-            }
-
-            if (tableConstraints != null)
-            {
-                TableConstraints.AddRange(tableConstraints);
-                foreach (var tc in TableConstraints)
-                {
-                    if (tc is TablePrimaryKeyConstraint pk)
-                    {
-                        foreach (var colName in pk.Columns)
-                        {
-                            if (Schema.TryGetValue(colName, out var col)) col.IsNullable = false;
-                        }
-                        CreateIndex(pk.Columns, true);
-                    }
-                    else if (tc is TableUniqueConstraint uk)
-                    {
-                        CreateIndex(uk.Columns, true);
-                    }
-                }
-            }
-        }
-
-        public void AddColumn(ColumnDefinition col)
-        {
-            if (Schema.ContainsKey(col.ColumnName))
-                throw new ExecutionException($"Column {col.ColumnName} already exists.");
-            Schema[col.ColumnName] = col;
-            _columnOrder.Add(col.ColumnName);
-
-            foreach (var batch in _batches)
-            {
-                batch.AddColumn(col.ColumnName);
-                // Note: The rows themselves already handle missing keys as null, 
-                // but we could explicitly add them here if we wanted to evaluate defaults for existing data.
-            }
-        }
-
-        public void DropColumn(string columnName)
-        {
-            if (!Schema.Remove(columnName))
-                throw new ExecutionException($"Column {columnName} not found.");
-            _columnOrder.RemoveAll(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-            _index.Remove(columnName);
-
-            foreach (var batch in _batches)
-            {
-                batch.RemoveColumn(columnName);
-                // In a high-perf scenario, we don't necessarily need to clear the underlying array storage immediately.
-                // It just becomes inaccessible via the schema.
-            }
-        }
-
-        public void RenameColumn(string oldName, string newName)
-        {
-            if (!Schema.TryGetValue(oldName, out var colDef))
-                throw new ExecutionException($"Column {oldName} not found.");
-            if (Schema.ContainsKey(newName))
-                throw new ExecutionException($"Column {newName} already exists.");
-
-            var newColDef = new ColumnDefinition(newName, colDef.DataType, colDef.IsIdentity, colDef.DefaultExpression);
-            Schema.Remove(oldName);
-            Schema[newName] = newColDef;
-
-            for (int i = 0; i < _columnOrder.Count; i++)
-            {
-                if (_columnOrder[i].Equals(oldName, StringComparison.OrdinalIgnoreCase))
-                {
-                    _columnOrder[i] = newName;
-                    break;
-                }
-            }
-
-            _index.RenameIndex(oldName, newName);
-
-            foreach (var batch in _batches)
-            {
-                batch.RenameColumn(oldName, newName);
-                // The new schema indices will map to the same slots in the row array.
-            }
-        }
-
-        public async Task TruncateAsync()
-        {
-            await _lock.WaitAsync();
-            try
-            {
-                _batches.Clear();
-                _totalRowCount = 0;
-                // Clear existing index data while preserving the index definitions
-                _index.Clear();
-
-                if (ExecutionContext != null)
-                {
-                    foreach (var chunk in _spillChunkNames)
-                    {
-                        ExecutionContext.SpillStore.DeleteChunk(chunk);
-                    }
-                }
-                _spillChunkNames.Clear();
-            }
-            finally
-            {
-                _lock.Release();
-            }
-        }
-
-        public void CreateIndex(string columnName, bool isUnique = false)
-        {
-            CreateIndex(new[] { columnName }, isUnique);
-        }
-
-        public void CreateIndex(IEnumerable<string> columns, bool isUnique = false)
-        {
-            var cols = columns.ToList();
-            var indexKey = _index.GetIndexKey(cols);
-            _index.AddIndexDefinition(indexKey, cols, isUnique);
-            _index.RebuildIndex(cols, _batches);
-        }
-
-        public List<Row>? Lookup(string columnName, object? value)
-        {
-            return _index.Lookup(columnName, value);
-        }
-
-        public bool HasIndex(string columnName) => _index.HasIndex(columnName);
-
-        public IDataSource WithTable(string tableName) => this;
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
-        {
-            // 1. Yield from disk spill first (if any)
-            List<string> chunks;
-            List<DataTable> memoryCopy;
-            await _lock.WaitAsync();
-            try
-            {
-                chunks = _spillChunkNames.ToList();
-                memoryCopy = _batches.ToList();
-            }
-            finally { _lock.Release(); }
-
-            if (ExecutionContext != null)
-            {
-                foreach (var spillName in chunks)
-                {
-                    if (ExecutionContext.SpillStore == null)
-                        throw new ExecutionException("Spill-to-disk operation failed: IExecutionContext.SpillStore is null but spilled data exists.");
-
-                    await using var reader = await ExecutionContext.SpillStore.CreateReaderAsync(spillName);
-                    var batch = new DataTable();
-                    batch.SetColumns(_columnOrder);
-
-                    await foreach (var row in reader.AsEnumerableAsync())
-                    {
-                        await batch.AddRowAsync(row);
-                        if (batch.Rows.Count >= batchSize)
-                        {
-                            yield return batch;
-                            batch = new DataTable();
-                            batch.SetColumns(_columnOrder);
-                        }
-                    }
-
-                    if (batch.Rows.Count > 0)
-                    {
-                        yield return batch;
-                    }
-                }
-            }
-
-            // 2. Yield from memory buffer
-            foreach (var b in memoryCopy) yield return b;
-        }
-
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
-        {
-            if (!append) await TruncateAsync();
-            await foreach (var b in batches)
-            {
-                if (_columnOrder.Count == 0)
-                {
-                    _columnOrder.AddRange(b.ColumnNames);
-                    foreach (var col in _columnOrder)
-                    {
-                        if (!Schema.ContainsKey(col))
-                            Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
-                    }
-                }
-
-                await _lock.WaitAsync();
                 try
                 {
-                    if (ReplaceOnConflict)
-                    {
-                        var uniqueKeys = new List<List<string>>();
-                        foreach (var kv in Schema)
-                        {
-                            if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
-                            {
-                                uniqueKeys.Add(new List<string> { kv.Key });
-                            }
-                        }
-                        foreach (var tc in TableConstraints)
-                        {
-                            if (tc is TablePrimaryKeyConstraint pk)
-                            {
-                                uniqueKeys.Add(pk.Columns);
-                            }
-                            else if (tc is TableUniqueConstraint uk)
-                            {
-                                uniqueKeys.Add(uk.Columns);
-                            }
-                        }
-
-                        var rowsToDelete = new List<Row>();
-                        foreach (var newRow in b.Rows)
-                        {
-                            foreach (var keyCols in uniqueKeys)
-                            {
-                                foreach (var batch in _batches)
-                                {
-                                    foreach (var existingRow in batch.Rows)
-                                    {
-                                        bool allMatch = true;
-                                        foreach (var col in keyCols)
-                                        {
-                                            var existVal = existingRow[col];
-                                            var newVal = newRow[col];
-                                            if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
-                                            {
-                                                allMatch = false;
-                                                break;
-                                            }
-                                            if (!IsSoftEqual(existVal, newVal))
-                                            {
-                                                allMatch = false;
-                                                break;
-                                            }
-                                        }
-                                        if (allMatch && !rowsToDelete.Contains(existingRow))
-                                        {
-                                            rowsToDelete.Add(existingRow);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (rowsToDelete.Count > 0)
-                        {
-                            foreach (var batch in _batches)
-                            {
-                                foreach (var r in rowsToDelete)
-                                {
-                                    if (batch.Rows.Remove(r))
-                                    {
-                                        _totalRowCount--;
-                                    }
-                                }
-                            }
-                            if (_index.Count > 0)
-                            {
-                                foreach (var col in _index.Keys.ToList())
-                                {
-                                    if (_index.TryGetColumns(col, out var cols))
-                                    {
-                                        _index.RebuildIndex(cols!, _batches);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    var processedBatch = new DataTable();
-                    processedBatch.SetColumns(_columnOrder);
-
-                    foreach (var row in b.Rows)
-                    {
-                        try
-                        {
-                            var rowClone = row.Clone();
-                            await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
-                            await processedBatch.AddRowAsync(rowClone);
-                        }
-                        catch (RowSkipException)
-                        {
-                            // Skip this row
-                        }
-                    }
-
-                    if (processedBatch.Rows.Count == 0) continue;
-
-                    long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
-
-                    if (_totalRowCount + processedBatch.Rows.Count > threshold)
-                    {
-                        if (ExecutionContext != null)
-                        {
-                            var chunkName = $"{Guid.NewGuid():N}.tmp";
-                            await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
-                            {
-                                await writer.WriteRowsAsync(processedBatch.Rows);
-                            }
-                            _spillChunkNames.Add(chunkName);
-                            _totalRowCount += processedBatch.Rows.Count;
-
-                            if (ExecutionContext.Telemetry.IsProfiling)
-                                ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
-
-                            continue;
-                        }
-                    }
-
-                    _batches.Add(processedBatch);
-                    _totalRowCount += processedBatch.Rows.Count;
-
-                    if (_index.Count > 0)
-                    {
-                        foreach (var col in _index.Keys.ToList())
-                        {
-                            if (_index.TryGetColumns(col, out var cols))
-                                _index.UpdateIndexWithBatch(cols!, processedBatch);
-                        }
-                    }
+                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
                 }
-                finally
-                {
-                    _lock.Release();
-                }
+                catch (ObjectDisposedException) { /* ignore during shutdown */ }
             }
-        }
-
-        public async Task<bool> ExistsAsync(List<string> columns, List<object?> values)
-        {
-            var key = new CompositeKey(values.ToArray());
-            var indexName = string.Join(",", columns);
-
-            await _lock.WaitAsync();
-            try
+            _executionContext = value;
+            if (_executionContext != null)
             {
-                if (_index.TryGetIndex(indexName, out var index))
+                try
                 {
-                    return index!.ContainsKey(key);
+                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
                 }
-
-                // If no index, fallback to linear scan
-                foreach (var b in _batches)
-                {
-                    foreach (var r in b.Rows)
-                    {
-                        bool match = true;
-                        for (int i = 0; i < columns.Count; i++)
-                        {
-                            if (!IsSoftEqual(r[columns[i]], values[i])) { match = false; break; }
-                        }
-                        if (match) return true;
-                    }
-                }
-                return false;
+                catch (ObjectDisposedException) { /* ignore during shutdown */ }
             }
-            finally { _lock.Release(); }
         }
 
-        private bool IsSoftEqual(object? a, object? b)
-        {
-            if (a == null || a == DBNull.Value) return b == null || b == DBNull.Value;
-            if (b == null || b == DBNull.Value) return false;
-            if (a.Equals(b)) return true;
-            return a.ToString() == b.ToString();
-        }
+    }
 
-        public async Task<List<Row>> DeleteRows(Func<Row, Task<bool>> predicate)
+    public long MemoryUsageBytes
+    {
+        get
         {
-            await _lock.WaitAsync();
-            try
+            // Simple estimation: 256 bytes per row (overhead + pointers)
+            // Plus index overhead
+            long batchBytes = _batches.Sum(b => (long)b.Rows.Count * 256);
+            long indexBytes = _index.Count * 128L; // Simplified
+            // Spilled chunks are ON DISK, so they don't count towards CURRENT RAM USAGE.
+            // This is critical for BufferManager to know how much RAM is actually reclaimable.
+            return batchBytes + indexBytes;
+        }
+    }
+
+    public string SpillToken => "InMemoryDataSource_" + (string.IsNullOrEmpty(Path) ? GetHashCode().ToString("X") : Path);
+
+    public async Task<bool> SpillAsync()
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            if (_batches.Count == 0 && _index.Count == 0) return false;
+            if (ExecutionContext == null) return false;
+
+            // Move all batches to spill store
+            foreach (var batch in _batches)
             {
-                var deleted = new List<Row>();
-                foreach (var batch in _batches)
+                var chunkName = $"{Guid.NewGuid():N}.spill";
+                await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
                 {
-                    for (int i = batch.Rows.Count - 1; i >= 0; i--)
-                    {
-                        var row = batch.Rows[i];
-                        if (await predicate(row))
-                        {
-                            batch.Rows.RemoveAt(i);
-                            deleted.Add(row);
-                        }
-                    }
+                    await writer.WriteRowsAsync(batch.Rows);
+                    SpillTotalBytes += writer.BytesWritten;
                 }
-                if (deleted.Count > 0 && _index.Count > 0)
-                {
-                    // Simplest to rebuild indexes for now if rows were deleted
-                    foreach (var col in _index.Keys.ToList())
-                    {
-                        if (_index.TryGetColumns(col, out var cols))
-                        {
-                            _index.RebuildIndex(cols!, _batches);
-                        }
-                    }
-                }
-                return deleted;
+                _spillChunkNames.Add(chunkName);
             }
-            finally
-            {
-                _lock.Release();
-            }
-        }
 
-        public async Task<List<(Row Before, Row After)>> UpdateRows(Func<Row, Task<bool>> predicate, Func<Row, Task> updateAction)
-        {
-            await _lock.WaitAsync();
-            try
-            {
-                var updated = new List<(Row Before, Row After)>();
-                foreach (var batch in _batches)
-                {
-                    for (int i = 0; i < batch.Rows.Count; i++)
-                    {
-                        var row = batch.Rows[i];
-                        if (await predicate(row))
-                        {
-                            var before = row.Clone();
-                            var after = row.Clone();
-
-                            // Perform update on the clone to ensure atomicity
-                            await updateAction(after);
-
-                            // Swap the row in the batch
-                            batch.Rows[i] = after;
-                            updated.Add((before, after));
-                        }
-                    }
-                }
-                if (updated.Count > 0 && _index.Count > 0)
-                {
-                    foreach (var col in _index.Keys.ToList())
-                    {
-                        if (_index.TryGetColumns(col, out var cols))
-                        {
-                            _index.RebuildIndex(cols!, _batches);
-                        }
-                    }
-                }
-                return updated;
-            }
-            finally
-            {
-                _lock.Release();
-            }
-        }
-
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(_columnOrder.Count > 0 ? (IEnumerable<string>)_columnOrder : (_batches.Any() ? _batches.First().ColumnNames : Enumerable.Empty<string>()));
-
-        public object? Snapshot()
-        {
-            return _batches.Select(b => b.Clone()).ToList();
-        }
-
-        public void Restore(object? snapshot)
-        {
-            if (snapshot is List<DataTable> s)
-            {
-                _batches.Clear();
-                _batches.AddRange(s);
-                if (_index.Count > 0)
-                {
-                    foreach (var col in _index.Keys.ToList())
-                    {
-                        if (_index.TryGetColumns(col, out var cols))
-                        {
-                            _index.RebuildIndex(cols!, _batches);
-                        }
-                    }
-                }
-            }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
             _batches.Clear();
             _index.Clear();
 
-            if (ExecutionContext != null && !ExecutionContext.IsPersistentSession)
+            return true;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    private int? GetMaxLen(string dataType)
+    {
+        if (string.IsNullOrEmpty(dataType)) return null;
+        int idx = dataType.IndexOf('(');
+        if (idx == -1) return null;
+        int endIdx = dataType.IndexOf(')', idx);
+        if (endIdx == -1) return null;
+        string lenStr = dataType.Substring(idx + 1, endIdx - idx - 1).Trim();
+        if (int.TryParse(lenStr, out int result)) return result;
+        return null;
+    }
+
+    public Task ValidateRow(Row row) => ValidateRow(row, _batches);
+
+    public async Task ValidateRow(Row row, IEnumerable<DataTable> activeBatches)
+    {
+        var errors = new List<string>();
+
+        foreach (var kv in Schema)
+        {
+            var col = kv.Value;
+            var val = row[col.ColumnName];
+
+            // 0. Type Coercion
+            if (val != null && val != DBNull.Value)
+            {
+                try
+                {
+                    row[col.ColumnName] = val = TypeConverter.Cast(val, col.DataType);
+                }
+                catch (Exception ex)
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        row[col.ColumnName] = val = null;
+                    }
+                    else
+                    {
+                        errors.Add($"Column '{col.ColumnName}' (value '{val}') cannot be converted to target type {col.DataType}. Detail: {ex.Message}");
+                    }
+                }
+            }
+
+            // 0b. String Truncation Check
+            if (val is string strVal)
+            {
+                var maxLen = GetMaxLen(col.DataType);
+                if (maxLen.HasValue && strVal.Length > maxLen.Value)
+                {
+                    if (ExecutionContext?.TruncateString == true)
+                    {
+                        row[col.ColumnName] = val = strVal.Substring(0, maxLen.Value);
+                    }
+                    else
+                    {
+                        errors.Add($"Column '{col.ColumnName}' is trying to insert a string with length {strVal.Length} into a {maxLen.Value} character column (Value: '{strVal}')");
+                    }
+                }
+            }
+
+            // 1. NOT NULL
+            if (!col.IsNullable && (val == null || val == DBNull.Value))
+            {
+                if (ExecutionContext?.SkipError == true)
+                {
+                    throw new RowSkipException($"Column '{col.ColumnName}' does not allow nulls.");
+                }
+                else
+                {
+                    errors.Add($"Column '{col.ColumnName}' does not allow nulls.");
+                }
+            }
+
+            // 2. Column-level CHECK
+            if (col.CheckConstraint != null && Validator != null)
+            {
+                if (!await Validator.ValidateCheckConstraint(col.CheckConstraint, row))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Check constraint violation on column {col.ColumnName}");
+                    }
+                    else
+                    {
+                        errors.Add($"Check constraint violation on column {col.ColumnName}");
+                    }
+                }
+            }
+
+            // 3. Column-level FK
+            if (col.ForeignKey != null && Validator != null)
+            {
+                if (!await Validator.ValidateForeignKey(col.ForeignKey, new List<string> { col.ColumnName }, row))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                    }
+                    else
+                    {
+                        errors.Add($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                    }
+                }
+            }
+
+            // 4. Column-level Unique
+            if (col.IsUnique || col.IsPrimaryKey)
+            {
+                if (_index.IsDuplicate(new List<string> { col.ColumnName }, row, activeBatches))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                    }
+                    else
+                    {
+                        errors.Add($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                    }
+                }
+            }
+        }
+
+        // 5. Table-level Constraints
+        foreach (var tc in TableConstraints)
+        {
+            if (tc is TableCheckConstraint c && Validator != null)
+            {
+                if (!await Validator.ValidateCheckConstraint(c.Expression, row))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                    else
+                    {
+                        errors.Add($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                }
+            }
+            else if (tc is TableForeignKeyConstraint fk && Validator != null)
+            {
+                if (!await Validator.ValidateForeignKey(fk.Reference, fk.Columns, row))
+                {
+                    var vals = string.Join(", ", fk.Columns.Select(col => row[col]?.ToString() ?? "NULL"));
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                    }
+                    else
+                    {
+                        errors.Add($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                    }
+                }
+            }
+            else if (tc is TablePrimaryKeyConstraint pk)
+            {
+                bool hasNull = false;
+                foreach (var colName in pk.Columns)
+                {
+                    var val = row[colName];
+                    if (val == null || val == DBNull.Value)
+                    {
+                        hasNull = true;
+                        if (ExecutionContext?.SkipError == true)
+                        {
+                            throw new RowSkipException($"Primary key column {colName} cannot be null.");
+                        }
+                        else
+                        {
+                            errors.Add($"Primary key column {colName} cannot be null.");
+                        }
+                    }
+                }
+                if (!hasNull && _index.IsDuplicate(pk.Columns, row, activeBatches))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                    else
+                    {
+                        errors.Add($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                }
+            }
+            else if (tc is TableUniqueConstraint uk)
+            {
+                if (_index.IsDuplicate(uk.Columns, row, activeBatches))
+                {
+                    if (ExecutionContext?.SkipError == true)
+                    {
+                        throw new RowSkipException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                    else
+                    {
+                        errors.Add($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                    }
+                }
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new ExecutionException(string.Join(Environment.NewLine, errors));
+        }
+    }
+
+    public void SetSchema(IEnumerable<ColumnDefinition> columns, IEnumerable<TableConstraint>? tableConstraints = null)
+    {
+        Schema.Clear();
+        _columnOrder.Clear();
+        _index.Clear();
+        TableConstraints.Clear();
+
+        foreach (var col in columns)
+        {
+            Schema[col.ColumnName] = col;
+            _columnOrder.Add(col.ColumnName);
+            if (col.IsPrimaryKey)
+            {
+                col.IsNullable = false;
+                CreateIndex(col.ColumnName, true);
+            }
+            else if (col.IsUnique)
+            {
+                CreateIndex(col.ColumnName, true);
+            }
+        }
+
+        if (tableConstraints != null)
+        {
+            TableConstraints.AddRange(tableConstraints);
+            foreach (var tc in TableConstraints)
+            {
+                if (tc is TablePrimaryKeyConstraint pk)
+                {
+                    foreach (var colName in pk.Columns)
+                    {
+                        if (Schema.TryGetValue(colName, out var col)) col.IsNullable = false;
+                    }
+                    CreateIndex(pk.Columns, true);
+                }
+                else if (tc is TableUniqueConstraint uk)
+                {
+                    CreateIndex(uk.Columns, true);
+                }
+            }
+        }
+    }
+
+    public void AddColumn(ColumnDefinition col)
+    {
+        if (Schema.ContainsKey(col.ColumnName))
+            throw new ExecutionException($"Column {col.ColumnName} already exists.");
+        Schema[col.ColumnName] = col;
+        _columnOrder.Add(col.ColumnName);
+
+        foreach (var batch in _batches)
+        {
+            batch.AddColumn(col.ColumnName);
+            // Note: The rows themselves already handle missing keys as null, 
+            // but we could explicitly add them here if we wanted to evaluate defaults for existing data.
+        }
+    }
+
+    public void DropColumn(string columnName)
+    {
+        if (!Schema.Remove(columnName))
+            throw new ExecutionException($"Column {columnName} not found.");
+        _columnOrder.RemoveAll(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+        _index.Remove(columnName);
+
+        foreach (var batch in _batches)
+        {
+            batch.RemoveColumn(columnName);
+            // In a high-perf scenario, we don't necessarily need to clear the underlying array storage immediately.
+            // It just becomes inaccessible via the schema.
+        }
+    }
+
+    public void RenameColumn(string oldName, string newName)
+    {
+        if (!Schema.TryGetValue(oldName, out var colDef))
+            throw new ExecutionException($"Column {oldName} not found.");
+        if (Schema.ContainsKey(newName))
+            throw new ExecutionException($"Column {newName} already exists.");
+
+        var newColDef = new ColumnDefinition(newName, colDef.DataType, colDef.IsIdentity, colDef.DefaultExpression);
+        Schema.Remove(oldName);
+        Schema[newName] = newColDef;
+
+        for (int i = 0; i < _columnOrder.Count; i++)
+        {
+            if (_columnOrder[i].Equals(oldName, StringComparison.OrdinalIgnoreCase))
+            {
+                _columnOrder[i] = newName;
+                break;
+            }
+        }
+
+        _index.RenameIndex(oldName, newName);
+
+        foreach (var batch in _batches)
+        {
+            batch.RenameColumn(oldName, newName);
+            // The new schema indices will map to the same slots in the row array.
+        }
+    }
+
+    public async Task TruncateAsync()
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            _batches.Clear();
+            _totalRowCount = 0;
+            // Clear existing index data while preserving the index definitions
+            _index.Clear();
+
+            if (ExecutionContext != null)
             {
                 foreach (var chunk in _spillChunkNames)
                 {
@@ -949,100 +558,489 @@ namespace ETL_SQL.Data
             }
             _spillChunkNames.Clear();
         }
-
-        public void Rehydrate(IEnumerable<ColumnDefinition> schema, IEnumerable<string> chunks)
+        finally
         {
-            SetSchema(schema);
-            _spillChunkNames.Clear();
-            _spillChunkNames.AddRange(chunks);
-            _totalRowCount = 0; // Will be recalculatable from chunks if needed, but for now we assume recovered
+            _lock.Release();
+        }
+    }
+
+    public void CreateIndex(string columnName, bool isUnique = false)
+    {
+        CreateIndex(new[] { columnName }, isUnique);
+    }
+
+    public void CreateIndex(IEnumerable<string> columns, bool isUnique = false)
+    {
+        var cols = columns.ToList();
+        var indexKey = _index.GetIndexKey(cols);
+        _index.AddIndexDefinition(indexKey, cols, isUnique);
+        _index.RebuildIndex(cols, _batches);
+    }
+
+    public List<Row>? Lookup(string columnName, object? value)
+    {
+        return _index.Lookup(columnName, value);
+    }
+
+    public bool HasIndex(string columnName) => _index.HasIndex(columnName);
+
+    public IDataSource WithTable(string tableName) => this;
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+    {
+        // 1. Yield from disk spill first (if any)
+        List<string> chunks;
+        List<DataTable> memoryCopy;
+        await _lock.WaitAsync();
+        try
+        {
+            chunks = _spillChunkNames.ToList();
+            memoryCopy = _batches.ToList();
+        }
+        finally { _lock.Release(); }
+
+        if (ExecutionContext != null)
+        {
+            foreach (var spillName in chunks)
+            {
+                if (ExecutionContext.SpillStore == null)
+                    throw new ExecutionException("Spill-to-disk operation failed: IExecutionContext.SpillStore is null but spilled data exists.");
+
+                await using var reader = await ExecutionContext.SpillStore.CreateReaderAsync(spillName);
+                var batch = new DataTable();
+                batch.SetColumns(_columnOrder);
+
+                await foreach (var row in reader.AsEnumerableAsync())
+                {
+                    await batch.AddRowAsync(row);
+                    if (batch.Rows.Count >= batchSize)
+                    {
+                        yield return batch;
+                        batch = new DataTable();
+                        batch.SetColumns(_columnOrder);
+                    }
+                }
+
+                if (batch.Rows.Count > 0)
+                {
+                    yield return batch;
+                }
+            }
         }
 
-        public IEnumerable<string> GetSpillChunks() => _spillChunkNames;
+        // 2. Yield from memory buffer
+        foreach (var b in memoryCopy) yield return b;
+    }
 
-        public async Task FlushToSpillAsync()
+    public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+    {
+        if (!append) await TruncateAsync();
+        await foreach (var b in batches)
         {
+            if (_columnOrder.Count == 0)
+            {
+                _columnOrder.AddRange(b.ColumnNames);
+                foreach (var col in _columnOrder)
+                {
+                    if (!Schema.ContainsKey(col))
+                        Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
+                }
+            }
+
             await _lock.WaitAsync();
             try
             {
-                if (_batches.Count == 0 || ExecutionContext?.SpillStore == null) return;
-
-                foreach (var batch in _batches)
+                if (ReplaceOnConflict)
                 {
-                    var chunkName = $"{Guid.NewGuid():N}.tmp";
-                    await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                    var uniqueKeys = new List<List<string>>();
+                    foreach (var kv in Schema)
                     {
-                        await writer.WriteRowsAsync(batch.Rows);
+                        if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
+                        {
+                            uniqueKeys.Add(new List<string> { kv.Key });
+                        }
                     }
-                    _spillChunkNames.Add(chunkName);
+                    foreach (var tc in TableConstraints)
+                    {
+                        if (tc is TablePrimaryKeyConstraint pk)
+                        {
+                            uniqueKeys.Add(pk.Columns);
+                        }
+                        else if (tc is TableUniqueConstraint uk)
+                        {
+                            uniqueKeys.Add(uk.Columns);
+                        }
+                    }
+
+                    var rowsToDelete = new List<Row>();
+                    foreach (var newRow in b.Rows)
+                    {
+                        foreach (var keyCols in uniqueKeys)
+                        {
+                            foreach (var batch in _batches)
+                            {
+                                foreach (var existingRow in batch.Rows)
+                                {
+                                    bool allMatch = true;
+                                    foreach (var col in keyCols)
+                                    {
+                                        var existVal = existingRow[col];
+                                        var newVal = newRow[col];
+                                        if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
+                                        {
+                                            allMatch = false;
+                                            break;
+                                        }
+                                        if (!IsSoftEqual(existVal, newVal))
+                                        {
+                                            allMatch = false;
+                                            break;
+                                        }
+                                    }
+                                    if (allMatch && !rowsToDelete.Contains(existingRow))
+                                    {
+                                        rowsToDelete.Add(existingRow);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (rowsToDelete.Count > 0)
+                    {
+                        foreach (var batch in _batches)
+                        {
+                            foreach (var r in rowsToDelete)
+                            {
+                                if (batch.Rows.Remove(r))
+                                {
+                                    _totalRowCount--;
+                                }
+                            }
+                        }
+                        if (_index.Count > 0)
+                        {
+                            foreach (var col in _index.Keys.ToList())
+                            {
+                                if (_index.TryGetColumns(col, out var cols))
+                                {
+                                    _index.RebuildIndex(cols!, _batches);
+                                }
+                            }
+                        }
+                    }
                 }
-                _batches.Clear();
-                _index.Clear();
-            }
-            finally { _lock.Release(); }
-        }
-    }
 
-    public class StreamingSubqueryDataSource : IDataSource
-    {
-        private IAsyncEnumerator<DataTable>? _enumerator;
-        private List<string>? _columns;
-        private DataTable? _firstBatch;
-        public string Path => "";
-        public Dictionary<string, string>? Options => null;
+                var processedBatch = new DataTable();
+                processedBatch.SetColumns(_columnOrder);
 
-        public StreamingSubqueryDataSource(IAsyncEnumerable<DataTable> batches)
-        {
-            _enumerator = batches.GetAsyncEnumerator();
-        }
-
-        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
-        {
-            if (_firstBatch != null)
-            {
-                yield return _firstBatch;
-                _firstBatch = null;
-            }
-            while (_enumerator != null && await _enumerator.MoveNextAsync())
-            {
-                if (_columns == null) _columns = _enumerator.Current.ColumnNames.ToList();
-                yield return _enumerator.Current;
-            }
-            if (_enumerator != null)
-            {
-                await _enumerator.DisposeAsync();
-                _enumerator = null;
-            }
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (_enumerator != null)
-            {
-                await _enumerator.DisposeAsync();
-                _enumerator = null;
-            }
-        }
-
-        public IDataSource WithTable(string tableName) => this;
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException();
-        public string ConnectorType => "STREAMING";
-
-        public async Task<IEnumerable<string>> GetColumnsAsync()
-        {
-            if (_columns != null) return _columns;
-            if (_firstBatch == null && _enumerator != null)
-            {
-                if (await _enumerator.MoveNextAsync())
+                foreach (var row in b.Rows)
                 {
-                    _firstBatch = _enumerator.Current;
-                    _columns = _firstBatch.ColumnNames.ToList();
+                    try
+                    {
+                        var rowClone = row.Clone();
+                        await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
+                        await processedBatch.AddRowAsync(rowClone);
+                    }
+                    catch (RowSkipException)
+                    {
+                        // Skip this row
+                    }
+                }
+
+                if (processedBatch.Rows.Count == 0) continue;
+
+                long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
+
+                if (_totalRowCount + processedBatch.Rows.Count > threshold)
+                {
+                    if (ExecutionContext != null)
+                    {
+                        var chunkName = $"{Guid.NewGuid():N}.tmp";
+                        await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                        {
+                            await writer.WriteRowsAsync(processedBatch.Rows);
+                        }
+                        _spillChunkNames.Add(chunkName);
+                        _totalRowCount += processedBatch.Rows.Count;
+
+                        if (ExecutionContext.Telemetry.IsProfiling)
+                            ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
+
+                        continue;
+                    }
+                }
+
+                _batches.Add(processedBatch);
+                _totalRowCount += processedBatch.Rows.Count;
+
+                if (_index.Count > 0)
+                {
+                    foreach (var col in _index.Keys.ToList())
+                    {
+                        if (_index.TryGetColumns(col, out var cols))
+                            _index.UpdateIndexWithBatch(cols!, processedBatch);
+                    }
                 }
             }
-            return _columns ?? Enumerable.Empty<string>();
+            finally
+            {
+                _lock.Release();
+            }
         }
-
-        public object? Snapshot() => null;
-        public void Restore(object? snapshot) { }
     }
+
+    public async Task<bool> ExistsAsync(List<string> columns, List<object?> values)
+    {
+        var key = new CompositeKey(values.ToArray());
+        var indexName = string.Join(",", columns);
+
+        await _lock.WaitAsync();
+        try
+        {
+            if (_index.TryGetIndex(indexName, out var index))
+            {
+                return index!.ContainsKey(key);
+            }
+
+            // If no index, fallback to linear scan
+            foreach (var b in _batches)
+            {
+                foreach (var r in b.Rows)
+                {
+                    bool match = true;
+                    for (int i = 0; i < columns.Count; i++)
+                    {
+                        if (!IsSoftEqual(r[columns[i]], values[i])) { match = false; break; }
+                    }
+                    if (match) return true;
+                }
+            }
+            return false;
+        }
+        finally { _lock.Release(); }
+    }
+
+    private bool IsSoftEqual(object? a, object? b)
+    {
+        if (a == null || a == DBNull.Value) return b == null || b == DBNull.Value;
+        if (b == null || b == DBNull.Value) return false;
+        if (a.Equals(b)) return true;
+        return a.ToString() == b.ToString();
+    }
+
+    public async Task<List<Row>> DeleteRows(Func<Row, Task<bool>> predicate)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            var deleted = new List<Row>();
+            foreach (var batch in _batches)
+            {
+                for (int i = batch.Rows.Count - 1; i >= 0; i--)
+                {
+                    var row = batch.Rows[i];
+                    if (await predicate(row))
+                    {
+                        batch.Rows.RemoveAt(i);
+                        deleted.Add(row);
+                    }
+                }
+            }
+            if (deleted.Count > 0 && _index.Count > 0)
+            {
+                // Simplest to rebuild indexes for now if rows were deleted
+                foreach (var col in _index.Keys.ToList())
+                {
+                    if (_index.TryGetColumns(col, out var cols))
+                    {
+                        _index.RebuildIndex(cols!, _batches);
+                    }
+                }
+            }
+            return deleted;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task<List<(Row Before, Row After)>> UpdateRows(Func<Row, Task<bool>> predicate, Func<Row, Task> updateAction)
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            var updated = new List<(Row Before, Row After)>();
+            foreach (var batch in _batches)
+            {
+                for (int i = 0; i < batch.Rows.Count; i++)
+                {
+                    var row = batch.Rows[i];
+                    if (await predicate(row))
+                    {
+                        var before = row.Clone();
+                        var after = row.Clone();
+
+                        // Perform update on the clone to ensure atomicity
+                        await updateAction(after);
+
+                        // Swap the row in the batch
+                        batch.Rows[i] = after;
+                        updated.Add((before, after));
+                    }
+                }
+            }
+            if (updated.Count > 0 && _index.Count > 0)
+            {
+                foreach (var col in _index.Keys.ToList())
+                {
+                    if (_index.TryGetColumns(col, out var cols))
+                    {
+                        _index.RebuildIndex(cols!, _batches);
+                    }
+                }
+            }
+            return updated;
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(_columnOrder.Count > 0 ? (IEnumerable<string>)_columnOrder : (_batches.Any() ? _batches.First().ColumnNames : Enumerable.Empty<string>()));
+
+    public object? Snapshot()
+    {
+        return _batches.Select(b => b.Clone()).ToList();
+    }
+
+    public void Restore(object? snapshot)
+    {
+        if (snapshot is List<DataTable> s)
+        {
+            _batches.Clear();
+            _batches.AddRange(s);
+            if (_index.Count > 0)
+            {
+                foreach (var col in _index.Keys.ToList())
+                {
+                    if (_index.TryGetColumns(col, out var cols))
+                    {
+                        _index.RebuildIndex(cols!, _batches);
+                    }
+                }
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _batches.Clear();
+        _index.Clear();
+
+        if (ExecutionContext != null && !ExecutionContext.IsPersistentSession)
+        {
+            foreach (var chunk in _spillChunkNames)
+            {
+                ExecutionContext.SpillStore.DeleteChunk(chunk);
+            }
+        }
+        _spillChunkNames.Clear();
+    }
+
+    public void Rehydrate(IEnumerable<ColumnDefinition> schema, IEnumerable<string> chunks)
+    {
+        SetSchema(schema);
+        _spillChunkNames.Clear();
+        _spillChunkNames.AddRange(chunks);
+        _totalRowCount = 0; // Will be recalculatable from chunks if needed, but for now we assume recovered
+    }
+
+    public IEnumerable<string> GetSpillChunks() => _spillChunkNames;
+
+    public async Task FlushToSpillAsync()
+    {
+        await _lock.WaitAsync();
+        try
+        {
+            if (_batches.Count == 0 || ExecutionContext?.SpillStore == null) return;
+
+            foreach (var batch in _batches)
+            {
+                var chunkName = $"{Guid.NewGuid():N}.tmp";
+                await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                {
+                    await writer.WriteRowsAsync(batch.Rows);
+                }
+                _spillChunkNames.Add(chunkName);
+            }
+            _batches.Clear();
+            _index.Clear();
+        }
+        finally { _lock.Release(); }
+    }
+}
+
+public class StreamingSubqueryDataSource : IDataSource
+{
+    private IAsyncEnumerator<DataTable>? _enumerator;
+    private List<string>? _columns;
+    private DataTable? _firstBatch;
+    public string Path => "";
+    public Dictionary<string, string>? Options => null;
+
+    public StreamingSubqueryDataSource(IAsyncEnumerable<DataTable> batches)
+    {
+        _enumerator = batches.GetAsyncEnumerator();
+    }
+
+    public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+    {
+        if (_firstBatch != null)
+        {
+            yield return _firstBatch;
+            _firstBatch = null;
+        }
+        while (_enumerator != null && await _enumerator.MoveNextAsync())
+        {
+            if (_columns == null) _columns = _enumerator.Current.ColumnNames.ToList();
+            yield return _enumerator.Current;
+        }
+        if (_enumerator != null)
+        {
+            await _enumerator.DisposeAsync();
+            _enumerator = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_enumerator != null)
+        {
+            await _enumerator.DisposeAsync();
+            _enumerator = null;
+        }
+    }
+
+    public IDataSource WithTable(string tableName) => this;
+    public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException();
+    public string ConnectorType => "STREAMING";
+
+    public async Task<IEnumerable<string>> GetColumnsAsync()
+    {
+        if (_columns != null) return _columns;
+        if (_firstBatch == null && _enumerator != null)
+        {
+            if (await _enumerator.MoveNextAsync())
+            {
+                _firstBatch = _enumerator.Current;
+                _columns = _firstBatch.ColumnNames.ToList();
+            }
+        }
+        return _columns ?? Enumerable.Empty<string>();
+    }
+
+    public object? Snapshot() => null;
+    public void Restore(object? snapshot) { }
 }

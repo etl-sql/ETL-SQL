@@ -5,29 +5,27 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles DROP VIEW for session-scoped query aliases.
+/// </summary>
+public class DropViewStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles DROP VIEW for session-scoped query aliases.
-    /// </summary>
-    public class DropViewStatementHandler(ILogger logger) : IStatementHandler
+    public Type SupportedStatementType => typeof(DropViewStatement);
+
+    public Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(DropViewStatement);
+        var stmt = (DropViewStatement)statement;
 
-        public Task Execute(Statement statement, IExecutionContext context)
+        if (context.IsWhatIf)
         {
-            var stmt = (DropViewStatement)statement;
-
-            if (context.IsWhatIf)
-            {
-                logger.WriteLine($"WHAT IF: Would drop view {stmt.ViewName}", ConsoleColor.Yellow);
-                return Task.CompletedTask;
-            }
-
-            if (!context.VarContext.RemoveView(stmt.ViewName) && !stmt.IfExists)
-                throw new ExecutionException($"View not found: {stmt.ViewName}");
-
+            logger.WriteLine($"WHAT IF: Would drop view {stmt.ViewName}", ConsoleColor.Yellow);
             return Task.CompletedTask;
         }
+
+        if (!context.VarContext.RemoveView(stmt.ViewName) && !stmt.IfExists)
+            throw new ExecutionException($"View not found: {stmt.ViewName}");
+
+        return Task.CompletedTask;
     }
 }

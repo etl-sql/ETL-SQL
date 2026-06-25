@@ -7,76 +7,74 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the SHOW SESSIONS statement, listing all managed session files.
+/// </summary>
+public class ShowSessionsStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the SHOW SESSIONS statement, listing all managed session files.
-    /// </summary>
-    public class ShowSessionsStatementHandler : IStatementHandler
+    public Type SupportedStatementType => typeof(ShowSessionsStatement);
+    private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
+
+    public ShowSessionsStatementHandler(ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
     {
-        public Type SupportedStatementType => typeof(ShowSessionsStatement);
-        private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
+        _sessionManager = sessionManager;
+    }
 
-        public ShowSessionsStatementHandler(ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        var stmt = (ShowSessionsStatement)statement;
+
+        var table = new DataTable();
+        table.AddColumn("SessionId");
+        table.AddColumn("Created");
+        table.AddColumn("LastModified");
+        table.AddColumn("Size_MB");
+        table.AddColumn("TempTables");
+        table.AddColumn("Variables");
+        table.AddColumn("LastScript");
+        table.AddColumn("User");
+        table.AddColumn("Machine");
+
+        var sessions = _sessionManager.GetSessions().OrderByDescending(s => s.LastModifiedAt);
+
+        foreach (var sess in sessions)
         {
-            _sessionManager = sessionManager;
+            var row = new Row();
+            row["SessionId"] = sess.SessionId;
+            row["Created"] = sess.CreatedAt;
+            row["LastModified"] = sess.LastModifiedAt;
+            row["Size_MB"] = (decimal)sess.SizeMB;
+            row["TempTables"] = sess.TempTableCount;
+            row["Variables"] = sess.VariableCount;
+            row["LastScript"] = sess.LastScriptSource ?? "";
+            row["User"] = sess.OwnerUser ?? "";
+            row["Machine"] = sess.OwnerMachine ?? "";
+            await table.AddRowAsync(row);
         }
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        if (stmt.IntoTable != null)
         {
-            var stmt = (ShowSessionsStatement)statement;
-
-            var table = new DataTable();
-            table.AddColumn("SessionId");
-            table.AddColumn("Created");
-            table.AddColumn("LastModified");
-            table.AddColumn("Size_MB");
-            table.AddColumn("TempTables");
-            table.AddColumn("Variables");
-            table.AddColumn("LastScript");
-            table.AddColumn("User");
-            table.AddColumn("Machine");
-
-            var sessions = _sessionManager.GetSessions().OrderByDescending(s => s.LastModifiedAt);
-
-            foreach (var sess in sessions)
-            {
-                var row = new Row();
-                row["SessionId"] = sess.SessionId;
-                row["Created"] = sess.CreatedAt;
-                row["LastModified"] = sess.LastModifiedAt;
-                row["Size_MB"] = (decimal)sess.SizeMB;
-                row["TempTables"] = sess.TempTableCount;
-                row["Variables"] = sess.VariableCount;
-                row["LastScript"] = sess.LastScriptSource ?? "";
-                row["User"] = sess.OwnerUser ?? "";
-                row["Machine"] = sess.OwnerMachine ?? "";
-                await table.AddRowAsync(row);
-            }
-
-            if (stmt.IntoTable != null)
-            {
-                await WriteToTempTable(stmt.IntoTable, table, context);
-            }
-            else
-            {
-                if (table.Rows.Count == 0)
-                {
-                    context.Log("0 rows returned.", ConsoleColor.Cyan);
-                }
-                context.LastResult = table;
-                context.LastResultSets.Add(table);
-            }
+            await WriteToTempTable(stmt.IntoTable, table, context);
         }
-
-        private async Task WriteToTempTable(string tableName, DataTable table, IExecutionContext context)
+        else
         {
-            if (!context.Connections.ContainsKey(tableName))
+            if (table.Rows.Count == 0)
             {
-                context.Connections[tableName] = new InMemoryDataSource();
+                context.Log("0 rows returned.", ConsoleColor.Cyan);
             }
-            var destination = await context.ResolveDataSourceAsync(new TableReference(tableName));
-            await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            context.LastResult = table;
+            context.LastResultSets.Add(table);
         }
+    }
+
+    private async Task WriteToTempTable(string tableName, DataTable table, IExecutionContext context)
+    {
+        if (!context.Connections.ContainsKey(tableName))
+        {
+            context.Connections[tableName] = new InMemoryDataSource();
+        }
+        var destination = await context.ResolveDataSourceAsync(new TableReference(tableName));
+        await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
     }
 }

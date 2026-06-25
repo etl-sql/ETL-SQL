@@ -10,134 +10,132 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles ALTER SUBSCRIPTION &lt;id&gt; SET ... — updates an existing Orchestrator subscription job.
+/// Schedule, format, active state, and parameters can each be changed independently.
+/// Parameters: null clause = leave unchanged; empty list = clear all; populated list = replace all.
+/// </summary>
+public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles ALTER SUBSCRIPTION &lt;id&gt; SET ... — updates an existing Orchestrator subscription job.
-    /// Schedule, format, active state, and parameters can each be changed independently.
-    /// Parameters: null clause = leave unchanged; empty list = clear all; populated list = replace all.
-    /// </summary>
-    public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logger) : IStatementHandler
+    public Type SupportedStatementType => typeof(AlterPortalSubscriptionStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(AlterPortalSubscriptionStatement);
+        var stmt = (AlterPortalSubscriptionStatement)statement;
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        // Find the matching SUB job by id suffix (naming convention: "SUB:{name}")
+        var jobs = (await store.GetActiveJobsAsync()).ToList();
+        var pattern = $"SUB-{stmt.SubscriptionId}:";
+        var job = jobs.FirstOrDefault(j => j.Name.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
+                   ?? jobs.FirstOrDefault(j => j.Name.Contains($":{stmt.SubscriptionId}:", StringComparison.OrdinalIgnoreCase));
+
+        if (job is null)
         {
-            var stmt = (AlterPortalSubscriptionStatement)statement;
-
-            // Find the matching SUB job by id suffix (naming convention: "SUB:{name}")
-            var jobs = (await store.GetActiveJobsAsync()).ToList();
-            var pattern = $"SUB-{stmt.SubscriptionId}:";
-            var job = jobs.FirstOrDefault(j => j.Name.StartsWith(pattern, StringComparison.OrdinalIgnoreCase))
-                       ?? jobs.FirstOrDefault(j => j.Name.Contains($":{stmt.SubscriptionId}:", StringComparison.OrdinalIgnoreCase));
-
-            if (job is null)
-            {
-                logger.WriteLine(
-                    $"Subscription {stmt.SubscriptionId} not found in job store.",
-                    ConsoleColor.Yellow);
-                return;
-            }
-
-            // Rebuild parameters from the existing script if needed
-            var existingParams = ExtractParametersFromScript(job.Script);
-
-            IReadOnlyList<SubscriptionParameter> finalParams = stmt.Parameters switch
-            {
-                null => existingParams,   // unchanged
-                { Count: 0 } => Array.Empty<SubscriptionParameter>(), // clear
-                IReadOnlyList<SubscriptionParameter> p => p          // replace
-            };
-
-            // Rewrite the script if parameters changed or format changed
-            if (stmt.Parameters is not null || stmt.NewFormat.HasValue)
-                RewriteScript(job.Script, finalParams, stmt.NewFormat);
-
-            var newSchedule = stmt.NewSchedule ?? job.Unit;
-            var (interval, unit) = ParseScheduleUnit(stmt.NewSchedule, job.Interval, job.Unit);
-            var isEnabled = stmt.SetActive ?? job.IsEnabled;
-
-            var updated = new JobDefinition(
-                Name: job.Name,
-                Script: job.Script,
-                Interval: interval,
-                Unit: unit,
-                AtTime: job.AtTime,
-                LastRun: job.LastRun,
-                NextRun: job.NextRun,
-                IsEnabled: isEnabled,
-                MaxRetries: job.MaxRetries,
-                RetryDelaySeconds: job.RetryDelaySeconds);
-
-            await store.SaveJobAsync(updated);
-
-            var paramsMsg = stmt.Parameters switch
-            {
-                null => "parameters unchanged",
-                { Count: 0 } => "parameters cleared",
-                var p => $"parameters updated ({p.Count})"
-            };
             logger.WriteLine(
-                $"Subscription {stmt.SubscriptionId} updated. " +
-                $"Schedule: {unit}. Active: {isEnabled}. {paramsMsg}.",
-                ConsoleColor.Green);
+                $"Subscription {stmt.SubscriptionId} not found in job store.",
+                ConsoleColor.Yellow);
+            return;
         }
 
-        private static IReadOnlyList<SubscriptionParameter> ExtractParametersFromScript(string scriptPath)
+        // Rebuild parameters from the existing script if needed
+        var existingParams = await ExtractParametersFromScriptAsync(job.Script);
+
+        IReadOnlyList<SubscriptionParameter> finalParams = stmt.Parameters switch
         {
-            if (!File.Exists(scriptPath)) return Array.Empty<SubscriptionParameter>();
-            var result = new List<SubscriptionParameter>();
-            foreach (var line in File.ReadAllLines(scriptPath))
-            {
-                var m = Regex.Match(line, @"^(?:SET|DECLARE)\s+(@\w+)(?:\s+STRING)?\s*=\s*'(.*)';\s*$", RegexOptions.IgnoreCase);
-                if (m.Success) result.Add(new SubscriptionParameter(m.Groups[1].Value, m.Groups[2].Value));
-            }
-            return result;
-        }
+            null => existingParams,   // unchanged
+            { Count: 0 } => Array.Empty<SubscriptionParameter>(), // clear
+            IReadOnlyList<SubscriptionParameter> p => p          // replace
+        };
 
-        private static void RewriteScript(string scriptPath, IReadOnlyList<SubscriptionParameter> parameters, PortalSubscriptionFormat? newFormat)
+        // Rewrite the script if parameters changed or format changed
+        if (stmt.Parameters is not null || stmt.NewFormat.HasValue)
+            await RewriteScriptAsync(job.Script, finalParams, stmt.NewFormat);
+
+        var newSchedule = stmt.NewSchedule ?? job.Unit;
+        var (interval, unit) = ParseScheduleUnit(stmt.NewSchedule, job.Interval, job.Unit);
+        var isEnabled = stmt.SetActive ?? job.IsEnabled;
+
+        var updated = new JobDefinition(
+            Name: job.Name,
+            Script: job.Script,
+            Interval: interval,
+            Unit: unit,
+            AtTime: job.AtTime,
+            LastRun: job.LastRun,
+            NextRun: job.NextRun,
+            IsEnabled: isEnabled,
+            MaxRetries: job.MaxRetries,
+            RetryDelaySeconds: job.RetryDelaySeconds);
+
+        await store.SaveJobAsync(updated);
+
+        var paramsMsg = stmt.Parameters switch
         {
-            if (!File.Exists(scriptPath)) return;
-            var lines = File.ReadAllLines(scriptPath).ToList();
+            null => "parameters unchanged",
+            { Count: 0 } => "parameters cleared",
+            var p => $"parameters updated ({p.Count})"
+        };
+        logger.WriteLine(
+            $"Subscription {stmt.SubscriptionId} updated. " +
+            $"Schedule: {unit}. Active: {isEnabled}. {paramsMsg}.",
+            ConsoleColor.Green);
+    }
 
-            // Remove old SET / DECLARE @param lines
-            lines.RemoveAll(l => Regex.IsMatch(l, @"^(?:SET|DECLARE)\s+@\w+(?:\s+STRING)?\s*=\s*'.*';\s*$", RegexOptions.IgnoreCase));
-
-            // Find insertion point: after comment block
-            int insertAt = 0;
-            while (insertAt < lines.Count && lines[insertAt].StartsWith("--")) insertAt++;
-            if (insertAt < lines.Count && lines[insertAt] == "") insertAt++;
-
-            // Insert new parameter DECLARE statements
-            var setLines = parameters.Select(p => $"DECLARE {p.Name} STRING = '{p.Value.Replace("'", "\\'")}';").ToList();
-            if (setLines.Count > 0)
-            {
-                setLines.Add("");
-                lines.InsertRange(insertAt, setLines);
-            }
-
-            // Update FORMAT if requested
-            if (newFormat.HasValue)
-            {
-                var formatStr = newFormat.Value == PortalSubscriptionFormat.Csv ? "CSV" : "PDF";
-                for (int i = 0; i < lines.Count; i++)
-                    lines[i] = Regex.Replace(lines[i], @"\bFORMAT\s+(PDF|CSV|BOTH)\b", $"FORMAT {formatStr}", RegexOptions.IgnoreCase);
-            }
-
-            File.WriteAllLines(scriptPath, lines);
-        }
-
-        private static (int interval, string unit) ParseScheduleUnit(string? newSchedule, int existingInterval, string existingUnit)
+    private static async Task<IReadOnlyList<SubscriptionParameter>> ExtractParametersFromScriptAsync(string scriptPath)
+    {
+        if (!File.Exists(scriptPath)) return Array.Empty<SubscriptionParameter>();
+        var result = new List<SubscriptionParameter>();
+        foreach (var line in await File.ReadAllLinesAsync(scriptPath))
         {
-            if (newSchedule is null) return (existingInterval, existingUnit);
-            return newSchedule.ToUpperInvariant() switch
-            {
-                "HOURLY" => (1, "HOUR"),
-                "DAILY" => (1, "DAY"),
-                "WEEKLY" => (1, "WEEK"),
-                "MONTHLY" => (1, "MONTH"),
-                _ => (existingInterval, existingUnit)
-            };
+            var m = Regex.Match(line, @"^(?:SET|DECLARE)\s+(@\w+)(?:\s+STRING)?\s*=\s*'(.*)';\s*$", RegexOptions.IgnoreCase);
+            if (m.Success) result.Add(new SubscriptionParameter(m.Groups[1].Value, m.Groups[2].Value));
         }
+        return result;
+    }
+
+    private static async Task RewriteScriptAsync(string scriptPath, IReadOnlyList<SubscriptionParameter> parameters, PortalSubscriptionFormat? newFormat)
+    {
+        if (!File.Exists(scriptPath)) return;
+        var lines = (await File.ReadAllLinesAsync(scriptPath)).ToList();
+
+        // Remove old SET / DECLARE @param lines
+        lines.RemoveAll(l => Regex.IsMatch(l, @"^(?:SET|DECLARE)\s+@\w+(?:\s+STRING)?\s*=\s*'.*';\s*$", RegexOptions.IgnoreCase));
+
+        // Find insertion point: after comment block
+        int insertAt = 0;
+        while (insertAt < lines.Count && lines[insertAt].StartsWith("--")) insertAt++;
+        if (insertAt < lines.Count && lines[insertAt] == "") insertAt++;
+
+        // Insert new parameter DECLARE statements
+        var setLines = parameters.Select(p => $"DECLARE {p.Name} STRING = '{p.Value.Replace("'", "\\'")}';").ToList();
+        if (setLines.Count > 0)
+        {
+            setLines.Add("");
+            lines.InsertRange(insertAt, setLines);
+        }
+
+        // Update FORMAT if requested
+        if (newFormat.HasValue)
+        {
+            var formatStr = newFormat.Value == PortalSubscriptionFormat.Csv ? "CSV" : "PDF";
+            for (int i = 0; i < lines.Count; i++)
+                lines[i] = Regex.Replace(lines[i], @"\bFORMAT\s+(PDF|CSV|BOTH)\b", $"FORMAT {formatStr}", RegexOptions.IgnoreCase);
+        }
+
+        await File.WriteAllLinesAsync(scriptPath, lines);
+    }
+
+    private static (int interval, string unit) ParseScheduleUnit(string? newSchedule, int existingInterval, string existingUnit)
+    {
+        if (newSchedule is null) return (existingInterval, existingUnit);
+        return newSchedule.ToUpperInvariant() switch
+        {
+            "HOURLY" => (1, "HOUR"),
+            "DAILY" => (1, "DAY"),
+            "WEEKLY" => (1, "WEEK"),
+            "MONTHLY" => (1, "MONTH"),
+            _ => (existingInterval, existingUnit)
+        };
     }
 }

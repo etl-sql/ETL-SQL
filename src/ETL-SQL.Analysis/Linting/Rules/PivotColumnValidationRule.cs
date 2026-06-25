@@ -3,158 +3,156 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace ETL_SQL.Analysis.Linting.Rules
+namespace ETL_SQL.Analysis.Linting.Rules;
+/// <summary>
+/// LINT-1: Validates that columns referenced in PIVOT and UNPIVOT clauses exist in the source table.
+/// </summary>
+public class PivotColumnValidationRule : ILintRule
 {
-    /// <summary>
-    /// LINT-1: Validates that columns referenced in PIVOT and UNPIVOT clauses exist in the source table.
-    /// </summary>
-    public class PivotColumnValidationRule : ILintRule
+    public string Name => "PivotColumnValidation";
+    public string Description => "Validates that columns referenced in PIVOT and UNPIVOT clauses exist in the source table.";
+
+    public async Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
-        public string Name => "PivotColumnValidation";
-        public string Description => "Validates that columns referenced in PIVOT and UNPIVOT clauses exist in the source table.";
+        var results = new List<LintResult>();
+        // We don't return early here because we might be validating subqueries that don't need external metadata.
 
-        public async Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+        foreach (var stmt in script.Statements)
         {
-            var results = new List<LintResult>();
-            // We don't return early here because we might be validating subqueries that don't need external metadata.
-
-            foreach (var stmt in script.Statements)
-            {
-                await AnalyzeStatementAsync(stmt, context, results);
-            }
-
-            return results;
+            await AnalyzeStatementAsync(stmt, context, results);
         }
 
-        private async Task AnalyzeStatementAsync(Statement stmt, ILintContext context, List<LintResult> results)
+        return results;
+    }
+
+    private async Task AnalyzeStatementAsync(Statement stmt, ILintContext context, List<LintResult> results)
+    {
+        if (stmt is SelectStatement sel)
         {
-            if (stmt is SelectStatement sel)
+            if (sel.FromTable != null) await AnalyzeTableRefAsync(sel.FromTable, context, results);
+            foreach (var join in sel.Joins) await AnalyzeTableRefAsync(join.Table, context, results);
+        }
+        else if (stmt is InsertStatement ins)
+        {
+            if (ins.TargetTable != null) await AnalyzeTableRefAsync(ins.TargetTable, context, results);
+            if (ins.SelectQuery != null) await AnalyzeStatementAsync(ins.SelectQuery, context, results);
+        }
+        else if (stmt is UpdateStatement upd)
+        {
+            if (upd.TargetTable != null) await AnalyzeTableRefAsync(upd.TargetTable, context, results);
+        }
+        else if (stmt is DeleteStatement del)
+        {
+            if (del.TargetTable != null) await AnalyzeTableRefAsync(del.TargetTable, context, results);
+        }
+        else if (stmt is BlockStatement block)
+        {
+            foreach (var s in block.Statements) await AnalyzeStatementAsync(s, context, results);
+        }
+    }
+
+    private async Task AnalyzeTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results)
+    {
+        if (tableRef.Subquery != null)
+        {
+            var subqueryColumns = DeriveColumnsFromSubquery(tableRef.Subquery);
+            if (subqueryColumns != null)
             {
-                if (sel.FromTable != null) await AnalyzeTableRefAsync(sel.FromTable, context, results);
-                foreach (var join in sel.Joins) await AnalyzeTableRefAsync(join.Table, context, results);
-            }
-            else if (stmt is InsertStatement ins)
-            {
-                if (ins.TargetTable != null) await AnalyzeTableRefAsync(ins.TargetTable, context, results);
-                if (ins.SelectQuery != null) await AnalyzeStatementAsync(ins.SelectQuery, context, results);
-            }
-            else if (stmt is UpdateStatement upd)
-            {
-                if (upd.TargetTable != null) await AnalyzeTableRefAsync(upd.TargetTable, context, results);
-            }
-            else if (stmt is DeleteStatement del)
-            {
-                if (del.TargetTable != null) await AnalyzeTableRefAsync(del.TargetTable, context, results);
-            }
-            else if (stmt is BlockStatement block)
-            {
-                foreach (var s in block.Statements) await AnalyzeStatementAsync(s, context, results);
+                await ValidateTableOperatorsAsync(tableRef, subqueryColumns, context, results);
+                return;
             }
         }
 
-        private async Task AnalyzeTableRefAsync(TableReference tableRef, ILintContext context, List<LintResult> results)
+        var connName = tableRef.ConnectionName ?? context.Metadata?.GetConnections().FirstOrDefault() ?? "DEFAULT";
+        var cols = context.Metadata == null ? null : (await context.Metadata.GetColumnsAsync(connName, tableRef.TableName))?.ToList();
+
+        if (cols == null || !cols.Any()) return;
+        await ValidateTableOperatorsAsync(tableRef, cols, context, results);
+    }
+
+    private async Task ValidateTableOperatorsAsync(TableReference tableRef, List<string> cols, ILintContext context, List<LintResult> results)
+    {
+        foreach (var op in tableRef.TableOperators)
         {
-            if (tableRef.Subquery != null)
+            if (op is PivotClause pivot)
             {
-                var subqueryColumns = DeriveColumnsFromSubquery(tableRef.Subquery);
-                if (subqueryColumns != null)
+                ValidatePivot(tableRef, pivot, cols, results);
+            }
+            else if (op is UnpivotClause unpivot)
+            {
+                ValidateUnpivot(tableRef, unpivot, cols, results);
+            }
+        }
+    }
+
+    private List<string>? DeriveColumnsFromSubquery(Statement subquery)
+    {
+        if (subquery is SelectStatement sel)
+        {
+            var cols = new List<string>();
+            foreach (var col in sel.Columns)
+            {
+                if (!string.IsNullOrEmpty(col.Alias))
                 {
-                    await ValidateTableOperatorsAsync(tableRef, subqueryColumns, context, results);
-                    return;
+                    cols.Add(col.Alias);
+                }
+                else if (col.Expression is IdentifierExpression id)
+                {
+                    cols.Add(id.Name);
+                }
+                else if (col.Expression is MemberAccessExpression ma)
+                {
+                    cols.Add(ma.MemberName);
                 }
             }
-
-            var connName = tableRef.ConnectionName ?? context.Metadata?.GetConnections().FirstOrDefault() ?? "DEFAULT";
-            var cols = context.Metadata == null ? null : (await context.Metadata.GetColumnsAsync(connName, tableRef.TableName))?.ToList();
-
-            if (cols == null || !cols.Any()) return;
-            await ValidateTableOperatorsAsync(tableRef, cols, context, results);
+            return cols.Any() ? cols : null;
         }
+        return null;
+    }
 
-        private async Task ValidateTableOperatorsAsync(TableReference tableRef, List<string> cols, ILintContext context, List<LintResult> results)
+    private void ValidatePivot(TableReference tableRef, PivotClause pivot, List<string> cols, List<LintResult> results)
+    {
+        // Validate Aggregate Column
+        if (!cols.Any(c => string.Equals(c, pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase)))
         {
-            foreach (var op in tableRef.TableOperators)
+            results.Add(new LintResult
             {
-                if (op is PivotClause pivot)
-                {
-                    ValidatePivot(tableRef, pivot, cols, results);
-                }
-                else if (op is UnpivotClause unpivot)
-                {
-                    ValidateUnpivot(tableRef, unpivot, cols, results);
-                }
-            }
+                RuleName = Name,
+                Severity = LintSeverity.Warning,
+                Message = $"Aggregate column '{pivot.AggregateColumn}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
+                LineNumber = pivot.Line,
+                ColumnNumber = pivot.Column
+            });
         }
 
-        private List<string>? DeriveColumnsFromSubquery(Statement subquery)
+        // Validate Pivot Column
+        if (!cols.Any(c => string.Equals(c, pivot.PivotColumn, StringComparison.OrdinalIgnoreCase)))
         {
-            if (subquery is SelectStatement sel)
+            results.Add(new LintResult
             {
-                var cols = new List<string>();
-                foreach (var col in sel.Columns)
-                {
-                    if (!string.IsNullOrEmpty(col.Alias))
-                    {
-                        cols.Add(col.Alias);
-                    }
-                    else if (col.Expression is IdentifierExpression id)
-                    {
-                        cols.Add(id.Name);
-                    }
-                    else if (col.Expression is MemberAccessExpression ma)
-                    {
-                        cols.Add(ma.MemberName);
-                    }
-                }
-                return cols.Any() ? cols : null;
-            }
-            return null;
+                RuleName = Name,
+                Severity = LintSeverity.Warning,
+                Message = $"Pivot column '{pivot.PivotColumn}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
+                LineNumber = pivot.Line,
+                ColumnNumber = pivot.Column
+            });
         }
+    }
 
-        private void ValidatePivot(TableReference tableRef, PivotClause pivot, List<string> cols, List<LintResult> results)
+    private void ValidateUnpivot(TableReference tableRef, UnpivotClause unpivot, List<string> cols, List<LintResult> results)
+    {
+        foreach (var col in unpivot.UnpivotColumns)
         {
-            // Validate Aggregate Column
-            if (!cols.Any(c => string.Equals(c, pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase)))
+            if (!cols.Any(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)))
             {
                 results.Add(new LintResult
                 {
                     RuleName = Name,
                     Severity = LintSeverity.Warning,
-                    Message = $"Aggregate column '{pivot.AggregateColumn}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
-                    LineNumber = pivot.Line,
-                    ColumnNumber = pivot.Column
+                    Message = $"Unpivot source column '{col}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
+                    LineNumber = unpivot.Line,
+                    ColumnNumber = unpivot.Column
                 });
-            }
-
-            // Validate Pivot Column
-            if (!cols.Any(c => string.Equals(c, pivot.PivotColumn, StringComparison.OrdinalIgnoreCase)))
-            {
-                results.Add(new LintResult
-                {
-                    RuleName = Name,
-                    Severity = LintSeverity.Warning,
-                    Message = $"Pivot column '{pivot.PivotColumn}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
-                    LineNumber = pivot.Line,
-                    ColumnNumber = pivot.Column
-                });
-            }
-        }
-
-        private void ValidateUnpivot(TableReference tableRef, UnpivotClause unpivot, List<string> cols, List<LintResult> results)
-        {
-            foreach (var col in unpivot.UnpivotColumns)
-            {
-                if (!cols.Any(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)))
-                {
-                    results.Add(new LintResult
-                    {
-                        RuleName = Name,
-                        Severity = LintSeverity.Warning,
-                        Message = $"Unpivot source column '{col}' not found in source {(tableRef.Subquery != null ? "subquery" : $"table '{tableRef.TableName}'")}.",
-                        LineNumber = unpivot.Line,
-                        ColumnNumber = unpivot.Column
-                    });
-                }
             }
         }
     }

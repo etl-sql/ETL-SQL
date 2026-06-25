@@ -1,10 +1,8 @@
 using ETL_SQL.Core.Formatting;
 
-namespace ETL_SQL.Core
+namespace ETL_SQL.Core;
+public record SetWhatIfStatement : Statement
 {
-    public record SetWhatIfStatement : Statement
-    {
-        public bool Enabled { get; init; }
-        public override string ToSql() => AstSerializer.Format(this);
-    }
+    public bool Enabled { get; init; }
+    public override string ToSql() => AstSerializer.Format(this);
 }

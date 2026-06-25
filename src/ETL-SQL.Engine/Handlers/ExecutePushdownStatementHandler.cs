@@ -9,212 +9,210 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles native SQL pushdown execution.
+/// Captures raw SQL between BEGIN and END and executes it directly on the remote system.
+/// </summary>
+public class ExecutePushdownStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles native SQL pushdown execution.
-    /// Captures raw SQL between BEGIN and END and executes it directly on the remote system.
-    /// </summary>
-    public class ExecutePushdownStatementHandler(ILogger logger) : IStatementHandler
+    private readonly ILogger _logger = logger;
+    public Type SupportedStatementType => typeof(ExecutePushdownStatement);
+
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        private readonly ILogger _logger = logger;
-        public Type SupportedStatementType => typeof(ExecutePushdownStatement);
+        var stmt = (ExecutePushdownStatement)statement;
+        var evaluator = (Evaluator)context;
 
-
-        public async Task Execute(Statement statement, IExecutionContext context)
+        if (string.IsNullOrWhiteSpace(stmt.SqlText))
         {
-            var stmt = (ExecutePushdownStatement)statement;
-            var evaluator = (Evaluator)context;
+            _logger.WriteLine("Pushdown SQL text is empty, skipping execution.", ConsoleColor.Yellow);
+            evaluator.LastResult = null;
+            evaluator.LastResultSets.Clear();
+            return;
+        }
 
-            if (string.IsNullOrWhiteSpace(stmt.SqlText))
+        var connectionNameObj = await context.EvaluateValue(stmt.ConnectionName, new Row());
+        string connectionName = connectionNameObj?.ToString() ?? throw new ExecutionException("Connection name evaluated to null.");
+
+        if (!evaluator.Connections.TryGetValue(connectionName, out var dataSource))
+            throw new ExecutionException($"Connection not found: {connectionName}");
+
+        if (dataSource is IPortalAdminConnection adminConn)
+        {
+            await ExecuteAdminBlockAsync(stmt, adminConn, connectionName, context);
+            return;
+        }
+
+        if (dataSource is not IDatabaseSource databaseSource)
+            throw new ExecutionException($"Connection '{connectionName}' does not support native SQL pushdown.");
+
+        var parameters = new List<object?>();
+        if (stmt.Parameters != null && stmt.Parameters.Count > 0)
+        {
+            foreach (var paramExpr in stmt.Parameters)
             {
-                _logger.WriteLine("Pushdown SQL text is empty, skipping execution.", ConsoleColor.Yellow);
-                evaluator.LastResult = null;
-                evaluator.LastResultSets.Clear();
-                return;
+                parameters.Add(await context.EvaluateValue(paramExpr, new Row()));
+            }
+        }
+
+        _logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
+
+        string sqlToExecute = stmt.SqlText;
+
+        // Strip the ETL-SQL connection prefix wherever it appears as a qualifier
+        // (e.g. "FROM m.dbo.Employee" → "FROM dbo.Employee"). Users sometimes write
+        // fully-qualified ETL-SQL names inside pushdown blocks for readability; the
+        // remote database does not know the ETL-SQL connection alias. Uses a word-boundary
+        // negative lookbehind to avoid corrupting SQL string literals that happen to
+        // contain the connection name followed by a dot.
+        string escapedName = Regex.Escape(connectionName);
+        var rewritten = Regex.Replace(sqlToExecute, $@"(?<![.\w]){escapedName}\.", "", RegexOptions.IgnoreCase);
+        if (!ReferenceEquals(rewritten, sqlToExecute) && rewritten != sqlToExecute)
+        {
+            _logger.Debug("Pushdown SQL prefix stripped for connection {ConnectionName}.\nOriginal: {Original}\nRewritten: {Rewritten}", connectionName, sqlToExecute, rewritten);
+            sqlToExecute = rewritten;
+        }
+
+        if (context.IsWhatIf)
+        {
+            _logger.WriteLine($"WHAT IF: Would execute native SQL on {connectionName}:\n{sqlToExecute}", ConsoleColor.Yellow);
+            return;
+        }
+
+        var resultMap = new Dictionary<int, DataTable>();
+        await foreach (var batch in databaseSource.ExecuteRawSql(sqlToExecute, parameters))
+        {
+            if (!resultMap.TryGetValue(batch.ResultSetIndex, out var resultTable))
+            {
+                resultTable = new DataTable { ResultSetIndex = batch.ResultSetIndex };
+                resultTable.SetColumns(batch.ColumnNames);
+                resultMap[batch.ResultSetIndex] = resultTable;
             }
 
-            var connectionNameObj = await context.EvaluateValue(stmt.ConnectionName, new Row());
-            string connectionName = connectionNameObj?.ToString() ?? throw new ExecutionException("Connection name evaluated to null.");
-
-            if (!evaluator.Connections.TryGetValue(connectionName, out var dataSource))
-                throw new ExecutionException($"Connection not found: {connectionName}");
-
-            if (dataSource is IPortalAdminConnection adminConn)
+            foreach (var row in batch.Rows)
             {
-                await ExecuteAdminBlockAsync(stmt, adminConn, connectionName, context);
-                return;
+                await resultTable.AddRowAsync(row);
             }
+        }
 
-            if (dataSource is not IDatabaseSource databaseSource)
-                throw new ExecutionException($"Connection '{connectionName}' does not support native SQL pushdown.");
+        var allResultSets = resultMap.Values.OrderBy(r => r.ResultSetIndex).ToList();
+        if (allResultSets.Count > 0)
+        {
+            evaluator.LastResult = allResultSets.Last();
+            evaluator.LastResultSets.Clear();
+            evaluator.LastResultSets.AddRange(allResultSets);
 
-            var parameters = new List<object?>();
-            if (stmt.Parameters != null && stmt.Parameters.Count > 0)
+            if (stmt.IntoTable != null)
             {
-                foreach (var paramExpr in stmt.Parameters)
-                {
-                    parameters.Add(await context.EvaluateValue(paramExpr, new Row()));
-                }
+                var lastResult = allResultSets.Last();
+
+                await LoadIntoTable(stmt.IntoTable, new List<DataTable> { lastResult }, evaluator);
+                RecordLineage(stmt, new List<DataTable> { lastResult }, evaluator);
             }
+        }
+        else
+        {
+            evaluator.LastResult = null;
+            evaluator.LastResultSets.Clear();
+        }
+    }
 
-            _logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
+    private async Task ExecuteAdminBlockAsync(ExecutePushdownStatement stmt, IPortalAdminConnection adminConn, string connectionName, IExecutionContext context)
+    {
+        if (string.IsNullOrWhiteSpace(stmt.SqlText))
+        {
+            _logger.WriteLine("Admin block is empty, skipping.", ConsoleColor.Yellow);
+            return;
+        }
 
-            string sqlToExecute = stmt.SqlText;
+        Script parsed;
+        try
+        {
+            var tokens = new Lexer(stmt.SqlText).Tokenize();
+            parsed = new Parser(tokens, stmt.SqlText).Parse();
+        }
+        catch (Exception ex)
+        {
+            throw new ExecutionException($"Failed to parse admin block for '{connectionName}': {ex.Message}");
+        }
 
-            // Strip the ETL-SQL connection prefix wherever it appears as a qualifier
-            // (e.g. "FROM m.dbo.Employee" → "FROM dbo.Employee"). Users sometimes write
-            // fully-qualified ETL-SQL names inside pushdown blocks for readability; the
-            // remote database does not know the ETL-SQL connection alias. Uses a word-boundary
-            // negative lookbehind to avoid corrupting SQL string literals that happen to
-            // contain the connection name followed by a dot.
-            string escapedName = Regex.Escape(connectionName);
-            var rewritten = Regex.Replace(sqlToExecute, $@"(?<![.\w]){escapedName}\.", "", RegexOptions.IgnoreCase);
-            if (!ReferenceEquals(rewritten, sqlToExecute) && rewritten != sqlToExecute)
-            {
-                _logger.Debug("Pushdown SQL prefix stripped for connection {ConnectionName}.\nOriginal: {Original}\nRewritten: {Rewritten}", connectionName, sqlToExecute, rewritten);
-                sqlToExecute = rewritten;
-            }
-
+        context.Log($"Executing admin block on {connectionName}...");
+        foreach (var innerStmt in parsed.Statements)
+        {
             if (context.IsWhatIf)
             {
-                _logger.WriteLine($"WHAT IF: Would execute native SQL on {connectionName}:\n{sqlToExecute}", ConsoleColor.Yellow);
-                return;
+                // Read-only validating dry-run (see ExecuteRemoteBlockStatementHandler).
+                var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context);
+                _logger.WriteLine(
+                    plan ?? $"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}",
+                    ConsoleColor.Yellow);
+                continue;
             }
+            await adminConn.ExecuteAdminStatementAsync(innerStmt, context);
+        }
+    }
 
-            var resultMap = new Dictionary<int, DataTable>();
-            await foreach (var batch in databaseSource.ExecuteRawSql(sqlToExecute, parameters))
+    private async Task LoadIntoTable(TableReference target, List<DataTable> results, Evaluator context)
+    {
+        string tableName = target.TableName;
+
+        // If it's a temp table and doesn't exist, create it from the first batch's schema
+        if (tableName.StartsWith("#") && !context.Connections.ContainsKey(tableName))
+        {
+            var firstBatch = results.FirstOrDefault();
+            if (firstBatch != null)
             {
-                if (!resultMap.TryGetValue(batch.ResultSetIndex, out var resultTable))
-                {
-                    resultTable = new DataTable { ResultSetIndex = batch.ResultSetIndex };
-                    resultTable.SetColumns(batch.ColumnNames);
-                    resultMap[batch.ResultSetIndex] = resultTable;
-                }
+                var mem = new InMemoryDataSource();
+                mem.Validator = context;
+                mem.ExecutionContext = context;
+                mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
 
-                foreach (var row in batch.Rows)
-                {
-                    await resultTable.AddRowAsync(row);
-                }
-            }
-
-            var allResultSets = resultMap.Values.OrderBy(r => r.ResultSetIndex).ToList();
-            if (allResultSets.Count > 0)
-            {
-                evaluator.LastResult = allResultSets.Last();
-                evaluator.LastResultSets.Clear();
-                evaluator.LastResultSets.AddRange(allResultSets);
-
-                if (stmt.IntoTable != null)
-                {
-                    var lastResult = allResultSets.Last();
-
-                    await LoadIntoTable(stmt.IntoTable, new List<DataTable> { lastResult }, evaluator);
-                    RecordLineage(stmt, new List<DataTable> { lastResult }, evaluator);
-                }
-            }
-            else
-            {
-                evaluator.LastResult = null;
-                evaluator.LastResultSets.Clear();
+                var columns = firstBatch.ColumnNames.Select(c => new ColumnDefinition(c, "ANY", false));
+                mem.SetSchema(columns);
+                context.Connections[tableName] = mem;
             }
         }
 
-        private async Task ExecuteAdminBlockAsync(ExecutePushdownStatement stmt, IPortalAdminConnection adminConn, string connectionName, IExecutionContext context)
+        if (context.Connections.TryGetValue(tableName, out var targetSource))
         {
-            if (string.IsNullOrWhiteSpace(stmt.SqlText))
+            // Simple truncate and load for EXECUTE ... INTO
+            await targetSource.TruncateAsync();
+
+            async IAsyncEnumerable<DataTable> GetBatches()
             {
-                _logger.WriteLine("Admin block is empty, skipping.", ConsoleColor.Yellow);
-                return;
+                foreach (var b in results) yield return b;
+                await Task.CompletedTask;
             }
 
-            Script parsed;
-            try
-            {
-                var tokens = new Lexer(stmt.SqlText).Tokenize();
-                parsed = new Parser(tokens, stmt.SqlText).Parse();
-            }
-            catch (Exception ex)
-            {
-                throw new ExecutionException($"Failed to parse admin block for '{connectionName}': {ex.Message}");
-            }
+            await targetSource.WriteBatches(GetBatches());
 
-            context.Log($"Executing admin block on {connectionName}...");
-            foreach (var innerStmt in parsed.Statements)
-            {
-                if (context.IsWhatIf)
-                {
-                    // Read-only validating dry-run (see ExecuteRemoteBlockStatementHandler).
-                    var plan = await adminConn.PlanAdminStatementAsync(innerStmt, context);
-                    _logger.WriteLine(
-                        plan ?? $"WHAT IF: Would execute portal admin statement {innerStmt.GetType().Name} on {connectionName}",
-                        ConsoleColor.Yellow);
-                    continue;
-                }
-                await adminConn.ExecuteAdminStatementAsync(innerStmt, context);
-            }
+            int totalRows = results.Sum(r => r.Rows.Count);
+            _logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
+            context.Telemetry.RowsProcessed += totalRows;
         }
-
-        private async Task LoadIntoTable(TableReference target, List<DataTable> results, Evaluator context)
+        else
         {
-            string tableName = target.TableName;
-
-            // If it's a temp table and doesn't exist, create it from the first batch's schema
-            if (tableName.StartsWith("#") && !context.Connections.ContainsKey(tableName))
-            {
-                var firstBatch = results.FirstOrDefault();
-                if (firstBatch != null)
-                {
-                    var mem = new InMemoryDataSource();
-                    mem.Validator = context;
-                    mem.ExecutionContext = context;
-                    mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
-
-                    var columns = firstBatch.ColumnNames.Select(c => new ColumnDefinition(c, "ANY", false));
-                    mem.SetSchema(columns);
-                    context.Connections[tableName] = mem;
-                }
-            }
-
-            if (context.Connections.TryGetValue(tableName, out var targetSource))
-            {
-                // Simple truncate and load for EXECUTE ... INTO
-                await targetSource.TruncateAsync();
-
-                async IAsyncEnumerable<DataTable> GetBatches()
-                {
-                    foreach (var b in results) yield return b;
-                    await Task.CompletedTask;
-                }
-
-                await targetSource.WriteBatches(GetBatches());
-
-                int totalRows = results.Sum(r => r.Rows.Count);
-                _logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
-                context.Telemetry.RowsProcessed += totalRows;
-            }
-            else
-            {
-                throw new ExecutionException($"Target table '{tableName}' not found for INTO clause.");
-            }
+            throw new ExecutionException($"Target table '{tableName}' not found for INTO clause.");
         }
+    }
 
-        private void RecordLineage(ExecutePushdownStatement stmt, List<DataTable> results, Evaluator context)
+    private void RecordLineage(ExecutePushdownStatement stmt, List<DataTable> results, Evaluator context)
+    {
+        if (stmt.IntoTable == null || results.Count == 0) return;
+
+        string target = (stmt.IntoTable.ConnectionName != null ? stmt.IntoTable.ConnectionName + "." + stmt.IntoTable.TableName : stmt.IntoTable.TableName);
+        var sources = stmt.GetSourceTables().ToList();
+        var lastBatch = results.Last();
+
+        // Record table-level lineage
+        context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN (ACTUAL)", line: stmt.Line, column: stmt.Column);
+
+        // Record column-level lineage from the actual result set
+        foreach (var colName in lastBatch.ColumnNames)
         {
-            if (stmt.IntoTable == null || results.Count == 0) return;
-
-            string target = (stmt.IntoTable.ConnectionName != null ? stmt.IntoTable.ConnectionName + "." + stmt.IntoTable.TableName : stmt.IntoTable.TableName);
-            var sources = stmt.GetSourceTables().ToList();
-            var lastBatch = results.Last();
-
-            // Record table-level lineage
-            context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN (ACTUAL)", line: stmt.Line, column: stmt.Column);
-
-            // Record column-level lineage from the actual result set
-            foreach (var colName in lastBatch.ColumnNames)
-            {
-                context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN COLUMN (ACTUAL)", targetColumn: colName, line: stmt.Line, column: stmt.Column);
-            }
+            context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN COLUMN (ACTUAL)", targetColumn: colName, line: stmt.Line, column: stmt.Column);
         }
     }
 }

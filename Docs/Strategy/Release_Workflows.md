@@ -9,6 +9,14 @@ ETL-SQL releases are local-first while the product remains owner-controlled. The
 5. Push only after local validation passes.
 6. Tag and publish release artifacts.
 
+## Release Artifact Verification (Checksums & SBOM)
+
+During the release publishing process (`scripts/publish_release.ps1`), the packaging runner automatically:
+1. **Generates SHA-256 Checksums**: Computes the cryptographic checksum for all binary bundles and installers, exporting them to `sha256sums.txt`.
+2. **Generates CycloneDX SBOM**: Invokes `scripts/generate-sbom.js` to scan central NuGet PackageReferences and npm/extension package specifications, exporting a unified JSON SBOM to `release/sbom.json`.
+
+These verification assets must be uploaded as part of the public release draft.
+
 GitHub Actions should remain a final packaging or publication helper, not the first validation environment. Heavier workflows are kept as dormant templates until hosted runner minutes are worth spending.
 
 ## Dormant Workflow Templates

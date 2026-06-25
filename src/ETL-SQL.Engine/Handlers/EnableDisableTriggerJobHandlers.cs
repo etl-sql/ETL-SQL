@@ -7,111 +7,109 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+internal static class JobRoutingHelper
 {
-    internal static class JobRoutingHelper
+    public static async Task<bool> RouteToRemoteIfSpecified(Statement stmt, string? atConn, IExecutionContext context)
     {
-        public static async Task<bool> RouteToRemoteIfSpecified(Statement stmt, string? atConn, IExecutionContext context)
+        if (atConn == null) return false;
+
+        IDataSource? conn = null;
+        // 1. Exact match
+        if (context.Connections.TryGetValue(atConn, out conn)) { }
+        // 2. Case-insensitive match
+        else
         {
-            if (atConn == null) return false;
-
-            IDataSource? conn = null;
-            // 1. Exact match
-            if (context.Connections.TryGetValue(atConn, out conn)) { }
-            // 2. Case-insensitive match
-            else
-            {
-                conn = context.Connections.FirstOrDefault(c => c.Key.Equals(atConn, StringComparison.OrdinalIgnoreCase)).Value;
-            }
-
-            if (conn == null)
-            {
-                var available = string.Join(", ", context.Connections.Keys);
-                throw new ExecutionException($"Connection '{atConn}' not found in current session. Registered connections: [{available}]");
-            }
-
-            if (conn is not IPortalAdminConnection adminConn)
-                throw new ExecutionException($"Connection '{atConn}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
-
-            await adminConn.ExecuteAdminStatementAsync(stmt, context);
-            return true;
+            conn = context.Connections.FirstOrDefault(c => c.Key.Equals(atConn, StringComparison.OrdinalIgnoreCase)).Value;
         }
+
+        if (conn == null)
+        {
+            var available = string.Join(", ", context.Connections.Keys);
+            throw new ExecutionException($"Connection '{atConn}' not found in current session. Registered connections: [{available}]");
+        }
+
+        if (conn is not IPortalAdminConnection adminConn)
+            throw new ExecutionException($"Connection '{atConn}' (Type: {conn.ConnectorType}) does not support orchestrator operations.");
+
+        await adminConn.ExecuteAdminStatementAsync(stmt, context);
+        return true;
     }
+}
 
-    /// <summary>
-    /// Handles ENABLE JOB and DISABLE JOB statements for the local job store.
-    /// </summary>
-    public class EnableJobStatementHandler : IStatementHandler
+/// <summary>
+/// Handles ENABLE JOB and DISABLE JOB statements for the local job store.
+/// </summary>
+public class EnableJobStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(EnableJobStatement);
+    private readonly IJobHistoryStore _store;
+
+    public EnableJobStatementHandler(IJobHistoryStore store) => _store = store;
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(EnableJobStatement);
-        private readonly IJobHistoryStore _store;
+        var stmt = (EnableJobStatement)statement;
+        if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
+            return;
 
-        public EnableJobStatementHandler(IJobHistoryStore store) => _store = store;
-
-        public async Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (EnableJobStatement)statement;
-            if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
-                return;
-
-            var existing = await _store.GetJobAsync(stmt.Name)
-                ?? throw new ExecutionException($"ENABLE JOB failed: job '{stmt.Name}' not found.");
-            await _store.SaveJobAsync(existing with { IsEnabled = true });
-            context.Log($"Job '{stmt.Name}' enabled.", ConsoleColor.Green);
-        }
+        var existing = await _store.GetJobAsync(stmt.Name)
+            ?? throw new ExecutionException($"ENABLE JOB failed: job '{stmt.Name}' not found.");
+        await _store.SaveJobAsync(existing with { IsEnabled = true });
+        context.Log($"Job '{stmt.Name}' enabled.", ConsoleColor.Green);
     }
+}
 
-    /// <summary>
-    /// Handles DISABLE JOB statements for the local job store.
-    /// </summary>
-    public class DisableJobStatementHandler : IStatementHandler
+/// <summary>
+/// Handles DISABLE JOB statements for the local job store.
+/// </summary>
+public class DisableJobStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(DisableJobStatement);
+    private readonly IJobHistoryStore _store;
+
+    public DisableJobStatementHandler(IJobHistoryStore store) => _store = store;
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(DisableJobStatement);
-        private readonly IJobHistoryStore _store;
+        var stmt = (DisableJobStatement)statement;
+        if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
+            return;
 
-        public DisableJobStatementHandler(IJobHistoryStore store) => _store = store;
-
-        public async Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (DisableJobStatement)statement;
-            if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
-                return;
-
-            var existing = await _store.GetJobAsync(stmt.Name)
-                ?? throw new ExecutionException($"DISABLE JOB failed: job '{stmt.Name}' not found.");
-            await _store.SaveJobAsync(existing with { IsEnabled = false });
-            context.Log($"Job '{stmt.Name}' disabled.", ConsoleColor.Yellow);
-        }
+        var existing = await _store.GetJobAsync(stmt.Name)
+            ?? throw new ExecutionException($"DISABLE JOB failed: job '{stmt.Name}' not found.");
+        await _store.SaveJobAsync(existing with { IsEnabled = false });
+        context.Log($"Job '{stmt.Name}' disabled.", ConsoleColor.Yellow);
     }
+}
 
-    /// <summary>
-    /// Handles TRIGGER JOB for the local scheduler — wakes the scheduler's trigger mechanism
-    /// or logs a message if no scheduler is attached to this execution context.
-    /// </summary>
-    public class TriggerJobStatementHandler : IStatementHandler
+/// <summary>
+/// Handles TRIGGER JOB for the local scheduler — wakes the scheduler's trigger mechanism
+/// or logs a message if no scheduler is attached to this execution context.
+/// </summary>
+public class TriggerJobStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(TriggerJobStatement);
+    private readonly IJobHistoryStore _store;
+
+    public TriggerJobStatementHandler(IJobHistoryStore store) => _store = store;
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(TriggerJobStatement);
-        private readonly IJobHistoryStore _store;
+        var stmt = (TriggerJobStatement)statement;
+        if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
+            return;
 
-        public TriggerJobStatementHandler(IJobHistoryStore store) => _store = store;
+        var existing = await _store.GetJobAsync(stmt.Name)
+            ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.");
 
-        public async Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (TriggerJobStatement)statement;
-            if (await JobRoutingHelper.RouteToRemoteIfSpecified(stmt, stmt.At, context))
-                return;
-
-            var existing = await _store.GetJobAsync(stmt.Name)
-                ?? throw new ExecutionException($"TRIGGER JOB failed: job '{stmt.Name}' not found.");
-
-            // TRIGGER JOB against the local store is informational — the scheduler loop
-            // is responsible for polling and immediate triggering requires an Orchestrator
-            // connection. This validates the job exists and advises the user.
-            context.Log(
-                $"TRIGGER JOB: job '{stmt.Name}' found locally. " +
-                "To trigger it immediately on a remote Orchestrator, use: " +
-                $"EXECUTE orch BEGIN TRIGGER JOB {stmt.Name}; END",
-                ConsoleColor.Cyan);
-        }
+        // TRIGGER JOB against the local store is informational — the scheduler loop
+        // is responsible for polling and immediate triggering requires an Orchestrator
+        // connection. This validates the job exists and advises the user.
+        context.Log(
+            $"TRIGGER JOB: job '{stmt.Name}' found locally. " +
+            "To trigger it immediately on a remote Orchestrator, use: " +
+            $"EXECUTE orch BEGIN TRIGGER JOB {stmt.Name}; END",
+            ConsoleColor.Cyan);
     }
 }

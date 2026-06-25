@@ -3,26 +3,24 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the DROP INDEX statement.
+/// </summary>
+public class DropIndexStatementHandler(ILogger logger) : IStatementHandler
 {
-    /// <summary>
-    /// Handles the DROP INDEX statement.
-    /// </summary>
-    public class DropIndexStatementHandler(ILogger logger) : IStatementHandler
+    private readonly ILogger _logger = logger;
+    public Type SupportedStatementType => typeof(DropIndexStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        private readonly ILogger _logger = logger;
-        public Type SupportedStatementType => typeof(DropIndexStatement);
+        var stmt = (DropIndexStatement)statement;
+        string connName = stmt.Table?.ConnectionName ?? stmt.Table?.TableName ?? "local";
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        _logger.Debug("Dropping index {IndexName} on {ConnectionName}", stmt.IndexName, connName);
+        if (context.EngineContext is Evaluator eval)
         {
-            var stmt = (DropIndexStatement)statement;
-            string connName = stmt.Table?.ConnectionName ?? stmt.Table?.TableName ?? "local";
-
-            _logger.Debug("Dropping index {IndexName} on {ConnectionName}", stmt.IndexName, connName);
-            if (context.EngineContext is Evaluator eval)
-            {
-                await eval.SchemaManager.EvaluateDropIndex(stmt, context.DataContext.Connections);
-            }
+            await eval.SchemaManager.EvaluateDropIndex(stmt, context.DataContext.Connections);
         }
     }
 }

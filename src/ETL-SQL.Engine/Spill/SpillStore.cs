@@ -14,8 +14,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Spill
-{
+namespace ETL_SQL.Engine.Spill;
     /// <summary>
     /// Implements encrypted, compressed storage for spilling large data sets to disk.
     /// This implementation is session-aware and dynamically reacts to changes in
@@ -164,9 +163,15 @@ namespace ETL_SQL.Engine.Spill
             var compress = _context.SpillCompressionEnabled;
 
             if (_context.SpillFormat == "Json")
-                return await Task.FromResult(new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress));
+            {
+                var reader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+                await reader.InitializeAsync();
+                return reader;
+            }
 
-            return await Task.FromResult(new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress));
+            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            await arrowReader.InitializeAsync();
+            return arrowReader;
         }
 
         public void DeleteChunk(string chunkName)
@@ -232,7 +237,7 @@ namespace ETL_SQL.Engine.Spill
             {
                 _chunkName = chunkName;
                 _context = context;
-                _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
                 try
                 {
@@ -305,40 +310,52 @@ namespace ETL_SQL.Engine.Spill
 
         private class SecureSpillReader : ISpillReader
         {
-            private readonly FileStream? _fileStream;
-            private readonly CryptoStream? _cryptoStream;
-            private readonly GZipStream? _gzipStream;
-            private readonly StreamReader? _reader;
+            private readonly string _path;
+            private readonly byte[] _key;
+            private readonly bool _encrypt;
+            private readonly bool _compress;
             private readonly string _chunkName;
+            private FileStream? _fileStream;
+            private CryptoStream? _cryptoStream;
+            private GZipStream? _gzipStream;
+            private StreamReader? _reader;
 
             public string ChunkName => _chunkName;
 
             public SecureSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
             {
+                _path = path;
                 _chunkName = chunkName;
-                if (!File.Exists(path))
+                _key = key;
+                _encrypt = encrypt;
+                _compress = compress;
+            }
+
+            public async Task InitializeAsync()
+            {
+                if (!File.Exists(_path))
                 {
-                    _fileStream = null!;
+                    _fileStream = null;
                     return;
                 }
 
-                _fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
                 try
                 {
                     Stream current = _fileStream;
 
-                    if (encrypt)
+                    if (_encrypt)
                     {
                         byte[] iv = new byte[16];
-                        _fileStream.ReadExactly(iv, 0, 16);
+                        await _fileStream.ReadExactlyAsync(iv, 0, 16);
 
                         using var aes = Aes.Create();
-                        var decryptor = aes.CreateDecryptor(key, iv);
+                        var decryptor = aes.CreateDecryptor(_key, iv);
                         _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
                         current = _cryptoStream;
                     }
 
-                    if (compress)
+                    if (_compress)
                     {
                         _gzipStream = new GZipStream(current, CompressionMode.Decompress);
                         current = _gzipStream;
@@ -348,7 +365,11 @@ namespace ETL_SQL.Engine.Spill
                 }
                 catch
                 {
-                    _fileStream.Dispose();
+                    if (_fileStream != null)
+                    {
+                        await _fileStream.DisposeAsync();
+                        _fileStream = null;
+                    }
                     throw;
                 }
             }
@@ -376,7 +397,6 @@ namespace ETL_SQL.Engine.Spill
                     yield return row;
                 }
             }
-
 
             public async ValueTask DisposeAsync()
             {
@@ -415,7 +435,7 @@ namespace ETL_SQL.Engine.Spill
                 _context = context;
                 _filePath = path;
                 _flushBatchSize = Math.Max(1, context.BatchSize);
-                _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
+                _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
                 try
                 {
@@ -641,11 +661,15 @@ namespace ETL_SQL.Engine.Spill
 
         private class ArrowSpillReader : ISpillReader
         {
-            private readonly FileStream? _fileStream;
-            private readonly CryptoStream? _cryptoStream;
-            private readonly GZipStream? _gzipStream;
-            private readonly ArrowStreamReader? _arrowReader;
+            private readonly string _path;
+            private readonly byte[] _key;
+            private readonly bool _encrypt;
+            private readonly bool _compress;
             private readonly string _chunkName;
+            private FileStream? _fileStream;
+            private CryptoStream? _cryptoStream;
+            private GZipStream? _gzipStream;
+            private ArrowStreamReader? _arrowReader;
 
             private RecordBatch? _currentBatch;
             private int _currentBatchRow;
@@ -654,29 +678,37 @@ namespace ETL_SQL.Engine.Spill
 
             public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
             {
+                _path = path;
                 _chunkName = chunkName;
-                if (!File.Exists(path))
+                _key = key;
+                _encrypt = encrypt;
+                _compress = compress;
+            }
+
+            public async Task InitializeAsync()
+            {
+                if (!File.Exists(_path))
                 {
-                    _fileStream = null!;
+                    _fileStream = null;
                     return;
                 }
 
-                _fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                _fileStream = new FileStream(_path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
                 try
                 {
                     Stream current = _fileStream;
 
-                    if (encrypt)
+                    if (_encrypt)
                     {
                         byte[] iv = new byte[16];
-                        _fileStream.ReadExactly(iv, 0, 16);
+                        await _fileStream.ReadExactlyAsync(iv, 0, 16);
                         using var aes = Aes.Create();
-                        var decryptor = aes.CreateDecryptor(key, iv);
+                        var decryptor = aes.CreateDecryptor(_key, iv);
                         _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
                         current = _cryptoStream;
                     }
 
-                    if (compress)
+                    if (_compress)
                     {
                         _gzipStream = new GZipStream(current, CompressionMode.Decompress);
                         current = _gzipStream;
@@ -686,7 +718,11 @@ namespace ETL_SQL.Engine.Spill
                 }
                 catch
                 {
-                    _fileStream.Dispose();
+                    if (_fileStream != null)
+                    {
+                        await _fileStream.DisposeAsync();
+                        _fileStream = null;
+                    }
                     throw;
                 }
             }
@@ -781,6 +817,5 @@ namespace ETL_SQL.Engine.Spill
             }
         }
     }
-}
 
 

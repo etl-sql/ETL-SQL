@@ -6,143 +6,141 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Engines
+namespace ETL_SQL.Engine.Engines;
+/// <summary>
+/// Handles PIVOT and UNPIVOT operations, transforming data between long and wide formats.
+/// </summary>
+public class PivotEngine
 {
-    /// <summary>
-    /// Handles PIVOT and UNPIVOT operations, transforming data between long and wide formats.
-    /// </summary>
-    public class PivotEngine
+    private readonly IExecutionContext _context;
+    private readonly AggregateEngine _aggregateEngine;
+    private readonly ILogger _logger;
+
+    public PivotEngine(IExecutionContext context, ILogger logger)
     {
-        private readonly IExecutionContext _context;
-        private readonly AggregateEngine _aggregateEngine;
-        private readonly ILogger _logger;
+        _context = context;
+        _logger = logger;
+        _aggregateEngine = new AggregateEngine(context, logger);
+    }
 
-        public PivotEngine(IExecutionContext context, ILogger logger)
+    /// <summary>Transforms a list of rows into a pivoted format based on the specified pivot clause.</summary>
+    public async Task<List<Row>> ApplyPivot(List<Row> rows, PivotClause pivot)
+    {
+        if (rows.Count == 0) return rows;
+
+
+
+        // 1. Identify grouping columns (all columns except AggregateColumn and PivotColumn)
+        var rawGroupingCols = rows[0].Columns.Keys.Where(c =>
+            !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) &&
+            !c.Equals(pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase) &&
+            !IsMatch(c, pivot.PivotColumn) &&
+            !IsMatch(c, pivot.AggregateColumn)
+        ).ToList();
+
+        // Deduplicate: if we have both "Col" and "Table.Col", only keep one (preferring the unprefixed short name for the final result set if possible, or just consistency)
+        var groupingCols = new List<string>();
+        var seenBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Sort by length so we see short names first or long names first? 
+        // If we keep short names, it looks cleaner.
+        foreach (var col in rawGroupingCols.OrderBy(c => c.Contains(".") ? 1 : 0))
         {
-            _context = context;
-            _logger = logger;
-            _aggregateEngine = new AggregateEngine(context, logger);
+            var baseName = col.Contains(".") ? col.Split('.').Last() : col;
+            if (seenBaseNames.Add(baseName))
+            {
+                groupingCols.Add(col);
+            }
         }
 
-        /// <summary>Transforms a list of rows into a pivoted format based on the specified pivot clause.</summary>
-        public async Task<List<Row>> ApplyPivot(List<Row> rows, PivotClause pivot)
+        // 2. Group by grouping columns
+        var groups = new Dictionary<string, List<Row>>();
+        foreach (var row in rows)
         {
-            if (rows.Count == 0) return rows;
+            var key = string.Join("|", groupingCols.Select(c => row[c]?.ToString() ?? "NULL"));
+            if (!groups.TryGetValue(key, out var list)) { list = new List<Row>(); groups[key] = list; }
+            list.Add(row);
+        }
 
+        // 3. Transform groups
+        var resultRows = new List<Row>();
+        var pivotValueNames = new List<string>();
+        var pivotValues = new List<object?>();
 
+        foreach (var valExpr in pivot.PivotValues)
+        {
+            var val = await _context.EvaluateValue(valExpr, new Row());
+            pivotValues.Add(val);
+            pivotValueNames.Add(val?.ToString() ?? "NULL");
+        }
 
-            // 1. Identify grouping columns (all columns except AggregateColumn and PivotColumn)
-            var rawGroupingCols = rows[0].Columns.Keys.Where(c =>
-                !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) &&
-                !c.Equals(pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase) &&
-                !IsMatch(c, pivot.PivotColumn) &&
-                !IsMatch(c, pivot.AggregateColumn)
-            ).ToList();
+        foreach (var groupRows in groups.Values)
+        {
+            var baseRow = new Row();
+            foreach (var col in groupingCols) baseRow[col] = groupRows[0][col];
 
-            // Deduplicate: if we have both "Col" and "Table.Col", only keep one (preferring the unprefixed short name for the final result set if possible, or just consistency)
-            var groupingCols = new List<string>();
-            var seenBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            // Sort by length so we see short names first or long names first? 
-            // If we keep short names, it looks cleaner.
-            foreach (var col in rawGroupingCols.OrderBy(c => c.Contains(".") ? 1 : 0))
+            for (int i = 0; i < pivot.PivotValues.Count; i++)
             {
-                var baseName = col.Contains(".") ? col.Split('.').Last() : col;
-                if (seenBaseNames.Add(baseName))
+                var pivotVal = pivotValues[i];
+                var targetColName = pivotValueNames[i];
+
+                var filteredRows = groupRows.Where(r =>
                 {
-                    groupingCols.Add(col);
-                }
+                    var rVal = FindValue(r, pivot.PivotColumn);
+                    return _context.CompareConstants(rVal, pivotVal) == 0;
+                }).ToList();
+
+                // Apply aggregation
+                var aggArgs = new List<Expression>();
+                if (pivot.AggregateColumn == "*") { /* COUNT(*) case */ }
+                else aggArgs.Add(new IdentifierExpression(pivot.AggregateColumn));
+
+                var aggExpr = new FunctionCallExpression(pivot.AggregateFunction, aggArgs);
+                baseRow[targetColName] = await _aggregateEngine.EvaluateAggregate(aggExpr, filteredRows);
             }
-
-            // 2. Group by grouping columns
-            var groups = new Dictionary<string, List<Row>>();
-            foreach (var row in rows)
-            {
-                var key = string.Join("|", groupingCols.Select(c => row[c]?.ToString() ?? "NULL"));
-                if (!groups.TryGetValue(key, out var list)) { list = new List<Row>(); groups[key] = list; }
-                list.Add(row);
-            }
-
-            // 3. Transform groups
-            var resultRows = new List<Row>();
-            var pivotValueNames = new List<string>();
-            var pivotValues = new List<object?>();
-
-            foreach (var valExpr in pivot.PivotValues)
-            {
-                var val = await _context.EvaluateValue(valExpr, new Row());
-                pivotValues.Add(val);
-                pivotValueNames.Add(val?.ToString() ?? "NULL");
-            }
-
-            foreach (var groupRows in groups.Values)
-            {
-                var baseRow = new Row();
-                foreach (var col in groupingCols) baseRow[col] = groupRows[0][col];
-
-                for (int i = 0; i < pivot.PivotValues.Count; i++)
-                {
-                    var pivotVal = pivotValues[i];
-                    var targetColName = pivotValueNames[i];
-
-                    var filteredRows = groupRows.Where(r =>
-                    {
-                        var rVal = FindValue(r, pivot.PivotColumn);
-                        return _context.CompareConstants(rVal, pivotVal) == 0;
-                    }).ToList();
-
-                    // Apply aggregation
-                    var aggArgs = new List<Expression>();
-                    if (pivot.AggregateColumn == "*") { /* COUNT(*) case */ }
-                    else aggArgs.Add(new IdentifierExpression(pivot.AggregateColumn));
-
-                    var aggExpr = new FunctionCallExpression(pivot.AggregateFunction, aggArgs);
-                    baseRow[targetColName] = await _aggregateEngine.EvaluateAggregate(aggExpr, filteredRows);
-                }
-                resultRows.Add(baseRow);
-            }
-
-            return resultRows;
+            resultRows.Add(baseRow);
         }
 
-        public async Task<List<Row>> ApplyUnpivot(List<Row> rows, UnpivotClause unpivot)
+        return resultRows;
+    }
+
+    public async Task<List<Row>> ApplyUnpivot(List<Row> rows, UnpivotClause unpivot)
+    {
+        if (rows.Count == 0) return rows;
+
+        var resultRows = new List<Row>();
+        var allCols = rows[0].Columns.Keys.ToList();
+        var colsToKeep = allCols.Where(c => !unpivot.UnpivotColumns.Any(uc => IsMatch(c, uc))).ToList();
+
+        foreach (var row in rows)
         {
-            if (rows.Count == 0) return rows;
-
-            var resultRows = new List<Row>();
-            var allCols = rows[0].Columns.Keys.ToList();
-            var colsToKeep = allCols.Where(c => !unpivot.UnpivotColumns.Any(uc => IsMatch(c, uc))).ToList();
-
-            foreach (var row in rows)
+            foreach (var unpivotCol in unpivot.UnpivotColumns)
             {
-                foreach (var unpivotCol in unpivot.UnpivotColumns)
-                {
-                    var newRow = new Row();
-                    foreach (var col in colsToKeep) newRow[col] = row[col];
+                var newRow = new Row();
+                foreach (var col in colsToKeep) newRow[col] = row[col];
 
-                    newRow[unpivot.NameColumn] = unpivotCol;
-                    newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
-                    resultRows.Add(newRow);
-                }
+                newRow[unpivot.NameColumn] = unpivotCol;
+                newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+                resultRows.Add(newRow);
             }
-
-            return resultRows;
         }
 
-        private bool IsMatch(string fullColName, string targetColName)
-        {
-            if (fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)) return true;
-            if (fullColName.EndsWith("." + targetColName, StringComparison.OrdinalIgnoreCase)) return true;
-            return false;
-        }
+        return resultRows;
+    }
 
-        private object? FindValue(Row row, string colName)
-        {
-            if (row.Columns.TryGetValue(colName, out var val)) return val;
-            var match = row.Columns.Keys.FirstOrDefault(k => k.EndsWith("." + colName, StringComparison.OrdinalIgnoreCase));
-            if (match != null) return row[match];
-            return null;
-        }
+    private bool IsMatch(string fullColName, string targetColName)
+    {
+        if (fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)) return true;
+        if (fullColName.EndsWith("." + targetColName, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    private object? FindValue(Row row, string colName)
+    {
+        if (row.Columns.TryGetValue(colName, out var val)) return val;
+        var match = row.Columns.Keys.FirstOrDefault(k => k.EndsWith("." + colName, StringComparison.OrdinalIgnoreCase));
+        if (match != null) return row[match];
+        return null;
     }
 }
 

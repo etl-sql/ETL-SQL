@@ -2,59 +2,57 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+public class SetNoSaveSensitiveStatementHandler : IStatementHandler
 {
-    public class SetNoSaveSensitiveStatementHandler : IStatementHandler
+    public Type SupportedStatementType => typeof(SetNoSaveSensitiveStatement);
+
+    public Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(SetNoSaveSensitiveStatement);
+        var stmt = (SetNoSaveSensitiveStatement)statement;
+        context.NoSaveSensitive = stmt.Enabled;
 
-        public Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (SetNoSaveSensitiveStatement)statement;
-            context.NoSaveSensitive = stmt.Enabled;
+        if (stmt.Enabled)
+            context.Log("Warning: NO_SAVE_SENSITIVE is ON. Save helpers will remove sensitive literals from saved source.", ConsoleColor.Yellow);
+        else if (context.IsVerbose)
+            context.Log("NO_SAVE_SENSITIVE set to OFF");
 
-            if (stmt.Enabled)
-                context.Log("Warning: NO_SAVE_SENSITIVE is ON. Save helpers will remove sensitive literals from saved source.", ConsoleColor.Yellow);
-            else if (context.IsVerbose)
-                context.Log("NO_SAVE_SENSITIVE set to OFF");
-
-            return Task.CompletedTask;
-        }
+        return Task.CompletedTask;
     }
+}
 
-    public class SetNoSaveConnectionStatementHandler : IStatementHandler
+public class SetNoSaveConnectionStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(SetNoSaveConnectionStatement);
+
+    public Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(SetNoSaveConnectionStatement);
+        var stmt = (SetNoSaveConnectionStatement)statement;
+        context.NoSaveConnection = stmt.Enabled;
 
-        public Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (SetNoSaveConnectionStatement)statement;
-            context.NoSaveConnection = stmt.Enabled;
+        if (stmt.Enabled)
+            context.Log("Warning: NO_SAVE_CONNECTION is ON. Save helpers will replace connection details with placeholders.", ConsoleColor.Yellow);
+        else if (context.IsVerbose)
+            context.Log("NO_SAVE_CONNECTION set to OFF");
 
-            if (stmt.Enabled)
-                context.Log("Warning: NO_SAVE_CONNECTION is ON. Save helpers will replace connection details with placeholders.", ConsoleColor.Yellow);
-            else if (context.IsVerbose)
-                context.Log("NO_SAVE_CONNECTION set to OFF");
-
-            return Task.CompletedTask;
-        }
+        return Task.CompletedTask;
     }
+}
 
-    public class SetConnectionEncryptionStatementHandler : IStatementHandler
+public class SetConnectionEncryptionStatementHandler : IStatementHandler
+{
+    public Type SupportedStatementType => typeof(SetConnectionEncryptionStatement);
+
+    public Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(SetConnectionEncryptionStatement);
+        var stmt = (SetConnectionEncryptionStatement)statement;
+        context.ConnectionEncryption = stmt.Enabled;
 
-        public Task Execute(Statement statement, IExecutionContext context)
-        {
-            var stmt = (SetConnectionEncryptionStatement)statement;
-            context.ConnectionEncryption = stmt.Enabled;
+        if (stmt.Enabled)
+            context.Log("CONNECTION_ENCRYPTION is ON. Save helpers will encrypt connection targets and string options.", ConsoleColor.Yellow);
+        else if (context.IsVerbose)
+            context.Log("CONNECTION_ENCRYPTION set to OFF");
 
-            if (stmt.Enabled)
-                context.Log("CONNECTION_ENCRYPTION is ON. Save helpers will encrypt connection targets and string options.", ConsoleColor.Yellow);
-            else if (context.IsVerbose)
-                context.Log("CONNECTION_ENCRYPTION set to OFF");
-
-            return Task.CompletedTask;
-        }
+        return Task.CompletedTask;
     }
 }

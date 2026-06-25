@@ -179,14 +179,16 @@ namespace ETL_SQL.Connectors
         private async IAsyncEnumerable<FileMetaData> ListFilesCoreAsync(string path)
         {
             var container = GetContainer();
-            await foreach (var blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, path, default))
+            var prefix = path ?? string.Empty;
+            await foreach (var blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, prefix, default))
             {
+                if (blob?.Name == null) continue;
                 yield return new FileMetaData
                 {
-                    Name = blob.Name.Split('/').Last(),
+                    Name = blob.Name.Split('/').Last() ?? string.Empty,
                     FullPath = blob.Name,
-                    Size = blob.Properties.ContentLength ?? 0,
-                    LastModified = blob.Properties.LastModified?.DateTime ?? DateTime.MinValue,
+                    Size = blob.Properties?.ContentLength ?? 0,
+                    LastModified = blob.Properties?.LastModified?.DateTime ?? DateTime.MinValue,
                     IsDirectory = false
                 };
             }

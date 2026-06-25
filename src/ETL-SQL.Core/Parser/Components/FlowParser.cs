@@ -2,149 +2,100 @@ using System;
 using System.Collections.Generic;
 using ETL_SQL.Core.Common.Exceptions;
 
-namespace ETL_SQL.Core.Parser.Components
+namespace ETL_SQL.Core.Parser.Components;
+public class FlowParser : ParserComponent
 {
-    public class FlowParser : ParserComponent
+    public FlowParser(IParser parser, StatementParser parent) : base(parser, parent) { }
+
+    public BlockStatement ParseBlock()
     {
-        public FlowParser(IParser parser, StatementParser parent) : base(parser, parent) { }
-
-        public BlockStatement ParseBlock()
+        var stmts = new List<Statement>();
+        while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
         {
-            var stmts = new List<Statement>();
-            while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
-            {
-                // Tolerate empty statements, mirroring the top-level Parse() loop. Most statement
-                // parsers consume their own trailing ';', but some (e.g. PUBLISH BUNDLE and other
-                // orchestrator/portal meta-statements) leave it; at top level that ';' is skipped
-                // here, so blocks must skip it too — otherwise it reaches ParseStatement as an
-                // "Unexpected SEMICOLON at start of statement" inside BEGIN/TRY/loop bodies.
-                if (_parser.Match(TokenType.SEMICOLON)) continue;
-                stmts.Add(_parser.ParseStatement());
-            }
-            Consume(TokenType.END, "Expected END to close BEGIN block");
-            Match(TokenType.SEMICOLON); // optional trailing ; after END (e.g. nested WHILE/IF-ELSE)
-            return new BlockStatement(stmts);
+            // Tolerate empty statements, mirroring the top-level Parse() loop. Most statement
+            // parsers consume their own trailing ';', but some (e.g. PUBLISH BUNDLE and other
+            // orchestrator/portal meta-statements) leave it; at top level that ';' is skipped
+            // here, so blocks must skip it too — otherwise it reaches ParseStatement as an
+            // "Unexpected SEMICOLON at start of statement" inside BEGIN/TRY/loop bodies.
+            if (_parser.Match(TokenType.SEMICOLON)) continue;
+            stmts.Add(_parser.ParseStatement());
         }
+        Consume(TokenType.END, "Expected END to close BEGIN block");
+        Match(TokenType.SEMICOLON); // optional trailing ; after END (e.g. nested WHILE/IF-ELSE)
+        return new BlockStatement(stmts);
+    }
 
-        public Statement ParseTryCatch()
+    public Statement ParseTryCatch()
+    {
+        var tryBody = ParseBlock();
+        if (_parser.Current.Value.Equals("TRY", StringComparison.OrdinalIgnoreCase))
+            Advance();
+        if (Match(TokenType.SEMICOLON)) { /* optional after END TRY */ }
+
+        Consume(TokenType.BEGIN, "Expected BEGIN after END TRY");
+        Consume(TokenType.CATCH, "Expected CATCH after BEGIN");
+        var catchBody = ParseBlock();
+        if (_parser.Current.Value.Equals("CATCH", StringComparison.OrdinalIgnoreCase))
+            Advance();
+        if (Match(TokenType.SEMICOLON)) { /* optional after END CATCH */ }
+
+        return new TryCatchStatement(tryBody, catchBody);
+    }
+
+    public Statement ParseIf(Token startToken)
+    {
+        var condition = ParseExpression();
+        var ifBody = _parser.ParseStatement();
+
+        List<ElseIfClause>? elseIfClauses = null;
+        Statement? elseBody = null;
+
+        while (Match(TokenType.ELSE))
         {
-            var tryBody = ParseBlock();
-            if (_parser.Current.Value.Equals("TRY", StringComparison.OrdinalIgnoreCase))
-                Advance();
-            if (Match(TokenType.SEMICOLON)) { /* optional after END TRY */ }
-
-            Consume(TokenType.BEGIN, "Expected BEGIN after END TRY");
-            Consume(TokenType.CATCH, "Expected CATCH after BEGIN");
-            var catchBody = ParseBlock();
-            if (_parser.Current.Value.Equals("CATCH", StringComparison.OrdinalIgnoreCase))
-                Advance();
-            if (Match(TokenType.SEMICOLON)) { /* optional after END CATCH */ }
-
-            return new TryCatchStatement(tryBody, catchBody);
-        }
-
-        public Statement ParseIf(Token startToken)
-        {
-            var condition = ParseExpression();
-            var ifBody = _parser.ParseStatement();
-
-            List<ElseIfClause>? elseIfClauses = null;
-            Statement? elseBody = null;
-
-            while (Match(TokenType.ELSE))
+            if (Match(TokenType.IF))
             {
-                if (Match(TokenType.IF))
-                {
-                    var elseIfCondition = ParseExpression();
-                    var elseIfBody = _parser.ParseStatement();
-                    if (elseIfClauses == null) elseIfClauses = new List<ElseIfClause>();
-                    elseIfClauses.Add(new ElseIfClause(elseIfCondition, elseIfBody));
-                }
-                else
-                {
-                    elseBody = _parser.ParseStatement();
-                    break;
-                }
-            }
-
-            return new IfStatement(condition, ifBody, elseIfClauses, elseBody)
-            {
-                Line = startToken.Line,
-                Column = startToken.Column,
-                EndLine = _parser.LastTokenEndLine,
-                EndColumn = _parser.LastTokenEndColumn
-            };
-        }
-
-        public Statement ParseWhile(Token startToken)
-        {
-            var condition = ParseExpression();
-            var body = _parser.ParseStatement();
-            return new WhileStatement(condition, body)
-            {
-                Line = startToken.Line,
-                Column = startToken.Column,
-                EndLine = _parser.LastTokenEndLine,
-                EndColumn = _parser.LastTokenEndColumn
-            };
-        }
-
-        public Statement ParseFor()
-        {
-            var startToken = _parser.Previous;
-            var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@' for FOR loop");
-
-            // FOR @row IN (query) — result-set iteration, same semantics as FOREACH @row IN (subquery)
-            if (Match(TokenType.IN))
-            {
-                var listExpr = ParseExpression();
-                var body = _parser.ParseStatement();
-                return new ForeachStatement(varToken.Value, listExpr, body)
-                {
-                    Line = startToken.Line,
-                    Column = startToken.Column,
-                    EndLine = _parser.LastTokenEndLine,
-                    EndColumn = _parser.LastTokenEndColumn
-                };
-            }
-
-            // FOR @i [= start] TO end [STEP n] — numeric range iteration
-            Expression startExpr;
-            bool isImplicit = false;
-            if (Match(TokenType.EQUALS))
-            {
-                startExpr = ParseExpression();
-                Consume(TokenType.TO, "Expected TO in FOR loop limits");
-            }
-            else if (Match(TokenType.TO))
-            {
-                // Implicit start at 1
-                startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
-                isImplicit = true;
+                var elseIfCondition = ParseExpression();
+                var elseIfBody = _parser.ParseStatement();
+                if (elseIfClauses == null) elseIfClauses = new List<ElseIfClause>();
+                elseIfClauses.Add(new ElseIfClause(elseIfCondition, elseIfBody));
             }
             else
             {
-                throw new SyntaxException("Expected '=' or 'IN' in FOR loop", _parser.Current.Line, _parser.Current.Column);
+                elseBody = _parser.ParseStatement();
+                break;
             }
-            var endExpr = ParseExpression();
-            Expression? stepExpr = null;
-            if (Match(TokenType.STEP)) stepExpr = ParseExpression();
-            var rangeBody = _parser.ParseStatement();
-            return new ForStatement(varToken.Value, startExpr, endExpr, stepExpr, rangeBody)
-            {
-                IsStartImplicit = isImplicit,
-                Line = startToken.Line,
-                Column = startToken.Column,
-                EndLine = _parser.LastTokenEndLine,
-                EndColumn = _parser.LastTokenEndColumn
-            };
         }
 
-        public Statement ParseForeach()
+        return new IfStatement(condition, ifBody, elseIfClauses, elseBody)
         {
-            var startToken = _parser.Previous;
-            var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@' for FOREACH loop");
-            Consume(TokenType.IN, "Expected IN for FOREACH loop parameter");
+            Line = startToken.Line,
+            Column = startToken.Column,
+            EndLine = _parser.LastTokenEndLine,
+            EndColumn = _parser.LastTokenEndColumn
+        };
+    }
+
+    public Statement ParseWhile(Token startToken)
+    {
+        var condition = ParseExpression();
+        var body = _parser.ParseStatement();
+        return new WhileStatement(condition, body)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column,
+            EndLine = _parser.LastTokenEndLine,
+            EndColumn = _parser.LastTokenEndColumn
+        };
+    }
+
+    public Statement ParseFor()
+    {
+        var startToken = _parser.Previous;
+        var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@' for FOR loop");
+
+        // FOR @row IN (query) — result-set iteration, same semantics as FOREACH @row IN (subquery)
+        if (Match(TokenType.IN))
+        {
             var listExpr = ParseExpression();
             var body = _parser.ParseStatement();
             return new ForeachStatement(varToken.Value, listExpr, body)
@@ -156,204 +107,251 @@ namespace ETL_SQL.Core.Parser.Components
             };
         }
 
-        public Statement ParseParallel(Token startToken)
+        // FOR @i [= start] TO end [STEP n] — numeric range iteration
+        Expression startExpr;
+        bool isImplicit = false;
+        if (Match(TokenType.EQUALS))
         {
-            int concurrencyLimit = 0;
-            if (Match(TokenType.LPAREN))
+            startExpr = ParseExpression();
+            Consume(TokenType.TO, "Expected TO in FOR loop limits");
+        }
+        else if (Match(TokenType.TO))
+        {
+            // Implicit start at 1
+            startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
+            isImplicit = true;
+        }
+        else
+        {
+            throw new SyntaxException("Expected '=' or 'IN' in FOR loop", _parser.Current.Line, _parser.Current.Column);
+        }
+        var endExpr = ParseExpression();
+        Expression? stepExpr = null;
+        if (Match(TokenType.STEP)) stepExpr = ParseExpression();
+        var rangeBody = _parser.ParseStatement();
+        return new ForStatement(varToken.Value, startExpr, endExpr, stepExpr, rangeBody)
+        {
+            IsStartImplicit = isImplicit,
+            Line = startToken.Line,
+            Column = startToken.Column,
+            EndLine = _parser.LastTokenEndLine,
+            EndColumn = _parser.LastTokenEndColumn
+        };
+    }
+
+    public Statement ParseForeach()
+    {
+        var startToken = _parser.Previous;
+        var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@' for FOREACH loop");
+        Consume(TokenType.IN, "Expected IN for FOREACH loop parameter");
+        var listExpr = ParseExpression();
+        var body = _parser.ParseStatement();
+        return new ForeachStatement(varToken.Value, listExpr, body)
+        {
+            Line = startToken.Line,
+            Column = startToken.Column,
+            EndLine = _parser.LastTokenEndLine,
+            EndColumn = _parser.LastTokenEndColumn
+        };
+    }
+
+    public Statement ParseParallel(Token startToken)
+    {
+        int concurrencyLimit = 0;
+        if (Match(TokenType.LPAREN))
+        {
+            concurrencyLimit = int.Parse(Consume(TokenType.NUMBER, "Expected concurrency limit number after '('").Value);
+            Consume(TokenType.RPAREN, "Expected ')' after concurrency limit");
+        }
+
+        // PARALLEL [n] FOR @i = start TO end [STEP n] BEGIN...END
+        if (Match(TokenType.FOR))
+        {
+            var varToken = Consume(TokenType.VARIABLE, "Expected loop variable after PARALLEL FOR");
+            Expression startExpr;
+            bool isImplicit = false;
+            if (Match(TokenType.EQUALS))
             {
-                concurrencyLimit = int.Parse(Consume(TokenType.NUMBER, "Expected concurrency limit number after '('").Value);
-                Consume(TokenType.RPAREN, "Expected ')' after concurrency limit");
+                startExpr = ParseExpression();
+                Consume(TokenType.TO, "Expected TO in PARALLEL FOR range");
             }
-
-            // PARALLEL [n] FOR @i = start TO end [STEP n] BEGIN...END
-            if (Match(TokenType.FOR))
+            else if (Match(TokenType.TO))
             {
-                var varToken = Consume(TokenType.VARIABLE, "Expected loop variable after PARALLEL FOR");
-                Expression startExpr;
-                bool isImplicit = false;
-                if (Match(TokenType.EQUALS))
-                {
-                    startExpr = ParseExpression();
-                    Consume(TokenType.TO, "Expected TO in PARALLEL FOR range");
-                }
-                else if (Match(TokenType.TO))
-                {
-                    startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
-                    isImplicit = true;
-                }
-                else
-                {
-                    throw new SyntaxException("Expected '=' or 'TO' in PARALLEL FOR range", _parser.Current.Line, _parser.Current.Column);
-                }
-                var endExpr = ParseExpression();
-                Expression? stepExpr = null;
-                if (Match(TokenType.STEP)) stepExpr = ParseExpression();
-                Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL FOR range");
-                var forBody = ParseBlock();
-                return new ParallelForStatement(varToken.Value, startExpr, endExpr, stepExpr, forBody, concurrencyLimit)
-                {
-                    IsStartImplicit = isImplicit,
-                    Line = startToken.Line,
-                    Column = startToken.Column
-                };
-            }
-
-            Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL");
-            var body = ParseBlock();
-            return new ParallelStatement(body, concurrencyLimit) { Line = startToken.Line, Column = startToken.Column };
-        }
-
-        public Statement ParseReturn()
-        {
-            Expression? returnValue = null;
-            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF &&
-                _parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.CATCH)
-                returnValue = ParseExpression();
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new ReturnStatement(returnValue);
-        }
-
-        public Statement ParseBreak()
-        {
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new BreakStatement();
-        }
-
-        public Statement ParseContinue()
-        {
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new ContinueStatement();
-        }
-
-        public Statement ParseRaiseError()
-        {
-            Consume(TokenType.LPAREN, "Expected '(' after RAISEERROR");
-            var message = ParseExpression();
-            Consume(TokenType.COMMA, "Expected severity after RAISEERROR message");
-            var severity = ParseExpression();
-
-            Expression? location = null;
-            List<Expression>? parameters = null;
-            if (Match(TokenType.COMMA))
-            {
-                location = ParseExpression();
-                while (Match(TokenType.COMMA))
-                {
-                    if (parameters == null) parameters = new List<Expression>();
-                    parameters.Add(ParseExpression());
-                }
-            }
-
-            Consume(TokenType.RPAREN, "Expected ')' after RAISEERROR arguments");
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new RaiseErrorStatement(message, severity, location, parameters);
-        }
-
-        public Statement ParseThrow()
-        {
-            Expression? errorNumber = null;
-            Expression? message = null;
-            Expression? state = null;
-
-            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF &&
-                _parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.CATCH)
-            {
-                errorNumber = ParseExpression();
-                if (Match(TokenType.COMMA))
-                {
-                    message = ParseExpression();
-                    Consume(TokenType.COMMA, "Expected comma after THROW message expression");
-                    state = ParseExpression();
-                }
-                else
-                {
-                    message = errorNumber;
-                    errorNumber = null;
-                }
-            }
-
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new ThrowStatement(errorNumber, message, state);
-        }
-
-        public Statement ParseAssert(Token startToken)
-        {
-            var condition = ParseExpression();
-            Expression? message = null;
-            if (Match(TokenType.COMMA)) message = ParseExpression();
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new AssertStatement(condition, message) { Line = startToken.Line, Column = startToken.Column };
-        }
-
-        public Statement ParseExpectSchema(Token startToken)
-        {
-            Consume(TokenType.SCHEMA, "Expected SCHEMA after EXPECT");
-            var target = ConsumeIdentifier("Expected table or connection name after EXPECT SCHEMA").Value;
-
-            List<ExpectedSchemaColumn>? columns = null;
-            string? schemaPath = null;
-
-            if (Match(TokenType.LPAREN))
-            {
-                columns = new List<ExpectedSchemaColumn>();
-                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
-                {
-                    var colName = ConsumeIdentifier("Expected column name").Value;
-                    string dataType = "VARCHAR";
-                    if (_parser.IsIdentifier(_parser.Current))
-                    {
-                        dataType = Advance().Value;
-                        if (Match(TokenType.LPAREN))
-                        {
-                            dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value;
-                            if (Match(TokenType.COMMA))
-                                dataType += "," + Consume(TokenType.NUMBER, "Expected scale").Value;
-                            dataType += ")";
-                            Consume(TokenType.RPAREN, "Expected ')' after type length");
-                        }
-                    }
-                    bool notNull = false;
-                    if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); notNull = true; }
-                    columns.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
-                    Match(TokenType.COMMA);
-                }
-                Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA column list");
-            }
-            else if (Match(TokenType.FROM))
-            {
-                schemaPath = Consume(TokenType.STRING_LITERAL, "Expected JSON specification file path after FROM").Value;
+                startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
+                isImplicit = true;
             }
             else
             {
-                throw new SyntaxException("Expected '(' or 'FROM' after target name in EXPECT SCHEMA", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected '=' or 'TO' in PARALLEL FOR range", _parser.Current.Line, _parser.Current.Column);
             }
-
-            bool warnOnDrift = false;
-            if (Match(TokenType.ON))
+            var endExpr = ParseExpression();
+            Expression? stepExpr = null;
+            if (Match(TokenType.STEP)) stepExpr = ParseExpression();
+            Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL FOR range");
+            var forBody = ParseBlock();
+            return new ParallelForStatement(varToken.Value, startExpr, endExpr, stepExpr, forBody, concurrencyLimit)
             {
-                if (_parser.Current.Type == TokenType.IDENTIFIER &&
-                    _parser.Current.Value.Equals("DRIFT", StringComparison.OrdinalIgnoreCase))
-                {
-                    Advance();
-                    if (_parser.Current.Type == TokenType.IDENTIFIER &&
-                        _parser.Current.Value.Equals("WARN", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Advance();
-                        warnOnDrift = true;
-                    }
-                }
-            }
-
-            Match(TokenType.SEMICOLON);
-            return new ExpectSchemaStatement
-            {
-                Target = target,
-                Columns = columns,
-                SchemaPath = schemaPath,
-                WarnOnDrift = warnOnDrift,
+                IsStartImplicit = isImplicit,
                 Line = startToken.Line,
                 Column = startToken.Column
             };
         }
+
+        Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL");
+        var body = ParseBlock();
+        return new ParallelStatement(body, concurrencyLimit) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    public Statement ParseReturn()
+    {
+        Expression? returnValue = null;
+        if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF &&
+            _parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.CATCH)
+            returnValue = ParseExpression();
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new ReturnStatement(returnValue);
+    }
+
+    public Statement ParseBreak()
+    {
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new BreakStatement();
+    }
+
+    public Statement ParseContinue()
+    {
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new ContinueStatement();
+    }
+
+    public Statement ParseRaiseError()
+    {
+        Consume(TokenType.LPAREN, "Expected '(' after RAISEERROR");
+        var message = ParseExpression();
+        Consume(TokenType.COMMA, "Expected severity after RAISEERROR message");
+        var severity = ParseExpression();
+
+        Expression? location = null;
+        List<Expression>? parameters = null;
+        if (Match(TokenType.COMMA))
+        {
+            location = ParseExpression();
+            while (Match(TokenType.COMMA))
+            {
+                if (parameters == null) parameters = new List<Expression>();
+                parameters.Add(ParseExpression());
+            }
+        }
+
+        Consume(TokenType.RPAREN, "Expected ')' after RAISEERROR arguments");
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new RaiseErrorStatement(message, severity, location, parameters);
+    }
+
+    public Statement ParseThrow()
+    {
+        Expression? errorNumber = null;
+        Expression? message = null;
+        Expression? state = null;
+
+        if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF &&
+            _parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.CATCH)
+        {
+            errorNumber = ParseExpression();
+            if (Match(TokenType.COMMA))
+            {
+                message = ParseExpression();
+                Consume(TokenType.COMMA, "Expected comma after THROW message expression");
+                state = ParseExpression();
+            }
+            else
+            {
+                message = errorNumber;
+                errorNumber = null;
+            }
+        }
+
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new ThrowStatement(errorNumber, message, state);
+    }
+
+    public Statement ParseAssert(Token startToken)
+    {
+        var condition = ParseExpression();
+        Expression? message = null;
+        if (Match(TokenType.COMMA)) message = ParseExpression();
+        if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+        return new AssertStatement(condition, message) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    public Statement ParseExpectSchema(Token startToken)
+    {
+        Consume(TokenType.SCHEMA, "Expected SCHEMA after EXPECT");
+        var target = ConsumeIdentifier("Expected table or connection name after EXPECT SCHEMA").Value;
+
+        List<ExpectedSchemaColumn>? columns = null;
+        string? schemaPath = null;
+
+        if (Match(TokenType.LPAREN))
+        {
+            columns = new List<ExpectedSchemaColumn>();
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                var colName = ConsumeIdentifier("Expected column name").Value;
+                string dataType = "VARCHAR";
+                if (_parser.IsIdentifier(_parser.Current))
+                {
+                    dataType = Advance().Value;
+                    if (Match(TokenType.LPAREN))
+                    {
+                        dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value;
+                        if (Match(TokenType.COMMA))
+                            dataType += "," + Consume(TokenType.NUMBER, "Expected scale").Value;
+                        dataType += ")";
+                        Consume(TokenType.RPAREN, "Expected ')' after type length");
+                    }
+                }
+                bool notNull = false;
+                if (Match(TokenType.NOT)) { Consume(TokenType.NULL, "Expected NULL after NOT"); notNull = true; }
+                columns.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA column list");
+        }
+        else if (Match(TokenType.FROM))
+        {
+            schemaPath = Consume(TokenType.STRING_LITERAL, "Expected JSON specification file path after FROM").Value;
+        }
+        else
+        {
+            throw new SyntaxException("Expected '(' or 'FROM' after target name in EXPECT SCHEMA", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        bool warnOnDrift = false;
+        if (Match(TokenType.ON))
+        {
+            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                _parser.Current.Value.Equals("DRIFT", StringComparison.OrdinalIgnoreCase))
+            {
+                Advance();
+                if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                    _parser.Current.Value.Equals("WARN", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    warnOnDrift = true;
+                }
+            }
+        }
+
+        Match(TokenType.SEMICOLON);
+        return new ExpectSchemaStatement
+        {
+            Target = target,
+            Columns = columns,
+            SchemaPath = schemaPath,
+            WarnOnDrift = warnOnDrift,
+            Line = startToken.Line,
+            Column = startToken.Column
+        };
     }
 }

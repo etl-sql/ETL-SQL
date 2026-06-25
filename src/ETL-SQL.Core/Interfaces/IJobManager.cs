@@ -1,10 +1,8 @@
 using System.Threading.Tasks;
 
-namespace ETL_SQL.Core
+namespace ETL_SQL.Core;
+public interface IJobManager
 {
-    public interface IJobManager
-    {
-        bool KillJob(long historyId);
-        Task<bool> TriggerJobAsync(string jobName);
-    }
+    bool KillJob(long historyId);
+    Task<bool> TriggerJobAsync(string jobName);
 }

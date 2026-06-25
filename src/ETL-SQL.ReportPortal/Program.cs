@@ -395,6 +395,20 @@ builder.WebHost.ConfigureKestrel(options =>
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
 
+if (Directory.Exists(app.Environment.WebRootPath))
+{
+    try
+    {
+        AssetFingerprinter.Apply(app.Environment.WebRootPath, ETL_SQL.Common.LanguageMetadata.EngineVersion);
+    }
+    catch (Exception ex)
+    {
+        app.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("AssetFingerprinter")
+            .LogWarning(ex, "Asset fingerprinter failed: {Message}", ex.Message);
+    }
+}
+
 // Surface server-side chart SSR failures (engine init / per-chart render) to the logger so a
 // missing V8 runtime or a bad chart option is diagnosable instead of silently degrading exports.
 ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>

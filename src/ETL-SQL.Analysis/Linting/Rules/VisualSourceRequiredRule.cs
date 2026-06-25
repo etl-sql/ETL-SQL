@@ -1,74 +1,72 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace ETL_SQL.Analysis.Linting.Rules
+namespace ETL_SQL.Analysis.Linting.Rules;
+/// <summary>
+/// Flags visuals that require a SOURCE clause but are missing it.
+/// Specifically flags SLICER and MULTISELECT which must have a source for options.
+/// </summary>
+public class VisualSourceRequiredRule : ILintRule
 {
-    /// <summary>
-    /// Flags visuals that require a SOURCE clause but are missing it.
-    /// Specifically flags SLICER and MULTISELECT which must have a source for options.
-    /// </summary>
-    public class VisualSourceRequiredRule : ILintRule
+    public string Name => "Visual Source Required";
+    public string Description => "Ensures visuals like Slicer and MultiSelect have a SOURCE clause.";
+
+    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
-        public string Name => "Visual Source Required";
-        public string Description => "Ensures visuals like Slicer and MultiSelect have a SOURCE clause.";
+        var results = new List<LintResult>();
 
-        public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+        foreach (var stmt in script.Statements)
         {
-            var results = new List<LintResult>();
+            if (stmt is not CreateVisualStatement visual) continue;
 
-            foreach (var stmt in script.Statements)
+            if (IsSourceRequired(visual.VisualType))
             {
-                if (stmt is not CreateVisualStatement visual) continue;
+                // Check if Source exists and is not "empty" (both query and table are null)
+                bool hasSource = visual.Source != null && (visual.Source.IsInlineSelect || !string.IsNullOrEmpty(visual.Source.TempTableName));
 
-                if (IsSourceRequired(visual.VisualType))
+                if (!hasSource)
                 {
-                    // Check if Source exists and is not "empty" (both query and table are null)
-                    bool hasSource = visual.Source != null && (visual.Source.IsInlineSelect || !string.IsNullOrEmpty(visual.Source.TempTableName));
-
-                    if (!hasSource)
+                    results.Add(new LintResult
                     {
-                        results.Add(new LintResult
-                        {
-                            RuleName = Name,
-                            Severity = LintSeverity.Error,
-                            Message = $"Visual '{visual.Name}' of type {visual.VisualType} requires a SOURCE clause.",
-                            LineNumber = visual.Line,
-                            ColumnNumber = visual.Column
-                        });
-                    }
+                        RuleName = Name,
+                        Severity = LintSeverity.Error,
+                        Message = $"Visual '{visual.Name}' of type {visual.VisualType} requires a SOURCE clause.",
+                        LineNumber = visual.Line,
+                        ColumnNumber = visual.Column
+                    });
                 }
             }
-
-            return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
-        private static bool IsSourceRequired(VisualType type)
+        return Task.FromResult<IEnumerable<LintResult>>(results);
+    }
+
+    private static bool IsSourceRequired(VisualType type)
+    {
+        return type switch
         {
-            return type switch
-            {
-                VisualType.Slicer => true,
-                VisualType.MultiSelect => true,
-                VisualType.Bar => true,
-                VisualType.Line => true,
-                VisualType.Scatter => true,
-                VisualType.Pie => true,
-                VisualType.Donut => true,
-                VisualType.HorizontalBar => true,
-                VisualType.BoxPlot => true,
-                VisualType.Treemap => true,
-                VisualType.HeatMap => true,
-                VisualType.Combo => true,
-                VisualType.Gauge => true,
-                VisualType.Funnel => true,
-                VisualType.Waterfall => true,
-                VisualType.Table => true,
-                VisualType.Card => true,
-                VisualType.Bubble => true,
-                VisualType.Radar => true,
-                VisualType.Candlestick => true,
-                VisualType.Map => true,
-                _ => false // Text, DatePicker, Slider, Search don't need source
-            };
-        }
+            VisualType.Slicer => true,
+            VisualType.MultiSelect => true,
+            VisualType.Bar => true,
+            VisualType.Line => true,
+            VisualType.Scatter => true,
+            VisualType.Pie => true,
+            VisualType.Donut => true,
+            VisualType.HorizontalBar => true,
+            VisualType.BoxPlot => true,
+            VisualType.Treemap => true,
+            VisualType.HeatMap => true,
+            VisualType.Combo => true,
+            VisualType.Gauge => true,
+            VisualType.Funnel => true,
+            VisualType.Waterfall => true,
+            VisualType.Table => true,
+            VisualType.Card => true,
+            VisualType.Bubble => true,
+            VisualType.Radar => true,
+            VisualType.Candlestick => true,
+            VisualType.Map => true,
+            _ => false // Text, DatePicker, Slider, Search don't need source
+        };
     }
 }

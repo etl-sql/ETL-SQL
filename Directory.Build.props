@@ -9,6 +9,7 @@
     <Copyright>Copyright © $([System.DateTime]::Now.Year) Charles Clemens</Copyright>
     <RepositoryUrl>https://github.com/etl-sql/ETL-SQL.git</RepositoryUrl>
     <PackageProjectUrl>https://github.com/etl-sql/ETL-SQL</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

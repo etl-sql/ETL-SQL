@@ -81,7 +81,7 @@ namespace ETL_SQL.Connectors.Odbc
             {
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = cmd.ExecuteReader();
+                using var reader = await cmd.ExecuteReaderAsync();
 
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -92,7 +92,7 @@ namespace ETL_SQL.Connectors.Odbc
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (reader.Read())
+                while (await reader.ReadAsync())
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -162,7 +162,7 @@ namespace ETL_SQL.Connectors.Odbc
                             var colName = batch.ColumnNames[i];
                             insertCmd!.Parameters[i].Value = row[colName] ?? DBNull.Value;
                         }
-                        insertCmd!.ExecuteNonQuery();
+                        await insertCmd!.ExecuteNonQueryAsync();
                     }
                 }
                 localTx?.Commit();
@@ -204,7 +204,7 @@ namespace ETL_SQL.Connectors.Odbc
                     }
                 }
 
-                using var reader = cmd.ExecuteReader();
+                using var reader = await cmd.ExecuteReaderAsync();
 
                 int resultSetIndex = 0;
                 do
@@ -218,7 +218,7 @@ namespace ETL_SQL.Connectors.Odbc
                     var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
                     currentBatch.SetColumns(columns);
 
-                    while (reader.Read())
+                    while (await reader.ReadAsync())
                     {
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
@@ -247,7 +247,7 @@ namespace ETL_SQL.Connectors.Odbc
                         yield return currentBatch;
                         resultSetIndex++;
                     }
-                } while (reader.NextResult());
+                } while (await reader.NextResultAsync());
             }
             finally
             {
@@ -319,7 +319,7 @@ namespace ETL_SQL.Connectors.Odbc
             {
                 var columns = new List<string>();
                 using var cmd = CreateCommand($"SELECT * FROM {OdbcSyntax.QuoteIdentifier(tableName)} WHERE 1=0", conn);
-                using var reader = cmd.ExecuteReader();
+                using var reader = await cmd.ExecuteReaderAsync();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
                     columns.Add(reader.GetName(i));

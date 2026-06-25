@@ -7,69 +7,67 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the SHOW TABLES statement, listing tables in a data source.
+/// </summary>
+public class ShowTablesStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the SHOW TABLES statement, listing tables in a data source.
-    /// </summary>
-    public class ShowTablesStatementHandler : IStatementHandler
+    public Type SupportedStatementType => typeof(ShowTablesStatement);
+
+    public async Task Execute(Statement statement, IExecutionContext context)
     {
-        public Type SupportedStatementType => typeof(ShowTablesStatement);
+        var stmt = (ShowTablesStatement)statement;
 
-        public async Task Execute(Statement statement, IExecutionContext context)
+        var table = new DataTable();
+        table.AddColumn("TableName");
+        table.AddColumn("Type");
+
+        IEnumerable<IDataSource> sourcesToQuery;
+        if (stmt.ConnectionName != null)
         {
-            var stmt = (ShowTablesStatement)statement;
+            var conn = context.Connections.FirstOrDefault(c => c.Key.Equals(stmt.ConnectionName, StringComparison.OrdinalIgnoreCase)).Value;
+            if (conn == null)
+            {
+                var available = string.Join(", ", context.Connections.Keys);
+                throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found in the current session. Available: [{available}]");
+            }
+            sourcesToQuery = new[] { conn };
+        }
+        else
+        {
+            sourcesToQuery = context.Connections.Values;
+        }
 
-            var table = new DataTable();
-            table.AddColumn("TableName");
-            table.AddColumn("Type");
+        foreach (var source in sourcesToQuery)
+        {
+            var tables = await source.GetTablesAsync();
+            foreach (var t in tables)
+            {
+                var row = new Row();
+                row["TableName"] = t;
+                row["Type"] = source.GetType().Name;
+                await table.AddRowAsync(row);
+            }
+        }
 
-            IEnumerable<IDataSource> sourcesToQuery;
-            if (stmt.ConnectionName != null)
+        if (stmt.IntoTable != null)
+        {
+            if (!context.Connections.ContainsKey(stmt.IntoTable))
             {
-                var conn = context.Connections.FirstOrDefault(c => c.Key.Equals(stmt.ConnectionName, StringComparison.OrdinalIgnoreCase)).Value;
-                if (conn == null)
-                {
-                    var available = string.Join(", ", context.Connections.Keys);
-                    throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found in the current session. Available: [{available}]");
-                }
-                sourcesToQuery = new[] { conn };
+                context.Connections[stmt.IntoTable] = new InMemoryDataSource();
             }
-            else
+            var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+            await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+        }
+        else
+        {
+            if (table.Rows.Count == 0)
             {
-                sourcesToQuery = context.Connections.Values;
+                context.Log("0 rows returned.", ConsoleColor.Cyan);
             }
-
-            foreach (var source in sourcesToQuery)
-            {
-                var tables = await source.GetTablesAsync();
-                foreach (var t in tables)
-                {
-                    var row = new Row();
-                    row["TableName"] = t;
-                    row["Type"] = source.GetType().Name;
-                    await table.AddRowAsync(row);
-                }
-            }
-
-            if (stmt.IntoTable != null)
-            {
-                if (!context.Connections.ContainsKey(stmt.IntoTable))
-                {
-                    context.Connections[stmt.IntoTable] = new InMemoryDataSource();
-                }
-                var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
-                await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
-            }
-            else
-            {
-                if (table.Rows.Count == 0)
-                {
-                    context.Log("0 rows returned.", ConsoleColor.Cyan);
-                }
-                context.LastResult = table;
-                context.LastResultSets.Add(table);
-            }
+            context.LastResult = table;
+            context.LastResultSets.Add(table);
         }
     }
 }

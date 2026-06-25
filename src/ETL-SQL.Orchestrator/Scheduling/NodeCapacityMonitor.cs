@@ -23,12 +23,18 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
     private readonly object _lock = new();
     private TimeSpan _lastCpu = Process.GetCurrentProcess().TotalProcessorTime;
     private DateTime _lastUtc = DateTime.UtcNow;
+    private NodeCapacitySnapshot? _cachedSnapshot;
 
     public NodeCapacitySnapshot Capture()
     {
         lock (_lock)
         {
             var now = DateTime.UtcNow;
+            if (_cachedSnapshot != null && (now - _cachedSnapshot.CapturedAtUtc).TotalSeconds < 1.0)
+            {
+                return _cachedSnapshot;
+            }
+
             using var process = Process.GetCurrentProcess();
             var cpu = process.TotalProcessorTime;
             var elapsed = Math.Max(0.001, (now - _lastUtc).TotalSeconds);
@@ -49,7 +55,7 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
                 ? Math.Clamp(gc.MemoryLoadBytes * 100.0 / totalMemory, 0, 100)
                 : 0;
 
-            return new NodeCapacitySnapshot(
+            _cachedSnapshot = new NodeCapacitySnapshot(
                 process.WorkingSet64,
                 GC.GetTotalMemory(forceFullCollection: false),
                 totalMemory,
@@ -58,6 +64,8 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
                 Environment.ProcessorCount,
                 memoryLoad >= 95 || cpuPercent >= 95,
                 now);
+
+            return _cachedSnapshot;
         }
     }
 }

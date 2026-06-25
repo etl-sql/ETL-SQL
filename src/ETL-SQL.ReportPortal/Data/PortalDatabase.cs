@@ -16,6 +16,9 @@ public static class PortalDatabase
     /// library, the default migrations assembly). Selected via MigrationsAssembly for Postgres.</summary>
     public const string PostgresMigrationsAssembly = "ETL-SQL.ReportPortal.Migrations.Postgres";
 
+    private static string? _lastConnectionString;
+    private static readonly object _poolLock = new();
+
     /// <summary>
     /// Configures <paramref name="builder"/> for the provider named in <paramref name="config"/>'s
     /// <c>Database</c> section. SQLite derives its connection from <see cref="PortalConfig.DatabasePath"/>
@@ -24,25 +27,49 @@ public static class PortalDatabase
     public static DbContextOptionsBuilder Configure(DbContextOptionsBuilder builder, PortalConfig config)
     {
         var provider = DatabaseProviderParser.Parse(config.Database.Provider);
+        string connectionString;
         switch (provider)
         {
             case DatabaseProvider.Sqlite:
-                var sqliteConn = !string.IsNullOrWhiteSpace(config.Database.ConnectionString)
+                connectionString = !string.IsNullOrWhiteSpace(config.Database.ConnectionString)
                     ? config.Database.ConnectionString!
                     : $"Data Source={Path.GetFullPath(config.DatabasePath)}";
-                builder.UseSqlite(sqliteConn);
+                builder.UseSqlite(connectionString);
                 break;
 
             case DatabaseProvider.Postgres:
-                var pgConn = config.Database.ConnectionString;
-                if (string.IsNullOrWhiteSpace(pgConn))
+                connectionString = config.Database.ConnectionString ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(connectionString))
                     throw new InvalidOperationException(
                         "Portal:Database:Provider=Postgres requires Portal:Database:ConnectionString to be set.");
-                builder.UseNpgsql(pgConn!, npg => npg.MigrationsAssembly(PostgresMigrationsAssembly));
+                builder.UseNpgsql(connectionString, npg => npg.MigrationsAssembly(PostgresMigrationsAssembly));
                 break;
 
             default:
                 throw new InvalidOperationException($"Unsupported database provider: {provider}.");
+        }
+
+        lock (_poolLock)
+        {
+            if (_lastConnectionString != null && _lastConnectionString != connectionString)
+            {
+                try
+                {
+                    if (provider == DatabaseProvider.Sqlite)
+                    {
+                        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+                    }
+                    else if (provider == DatabaseProvider.Postgres)
+                    {
+                        Npgsql.NpgsqlConnection.ClearAllPools();
+                    }
+                }
+                catch
+                {
+                    // Suppress any pool clearing issues if not supported
+                }
+            }
+            _lastConnectionString = connectionString;
         }
 
         return builder;

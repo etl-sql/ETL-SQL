@@ -11,464 +11,462 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
 using ETL_SQL.Engine.Storage;
 
-namespace ETL_SQL.Engine.Services
+namespace ETL_SQL.Engine.Services;
+/// <summary>
+/// Handles the resolution of table references to physical or virtual data sources.
+/// Manages temporary tables, subqueries, and table-level operators (PIVOT/UNPIVOT).
+/// </summary>
+public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
 {
-    /// <summary>
-    /// Handles the resolution of table references to physical or virtual data sources.
-    /// Manages temporary tables, subqueries, and table-level operators (PIVOT/UNPIVOT).
-    /// </summary>
-    public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
-    {
-        private readonly ILogger _logger = logger;
-        private readonly Evaluator _evaluator = evaluator;
-        private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
-        private readonly Stack<string> _viewResolutionStack = new();
+    private readonly ILogger _logger = logger;
+    private readonly Evaluator _evaluator = evaluator;
+    private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
+    private readonly Stack<string> _viewResolutionStack = new();
 
-        /// <summary>
-        /// Scans all active connections for #temp tables and prepares them for session persistence.
-        /// Flushes all in-memory batches to the spill store before returning metadata.
-        /// </summary>
-        public async Task<IEnumerable<ETL_SQL.Core.Execution.SavedTempTable>> GetTempTablesToSave()
+    /// <summary>
+    /// Scans all active connections for #temp tables and prepares them for session persistence.
+    /// Flushes all in-memory batches to the spill store before returning metadata.
+    /// </summary>
+    public async Task<IEnumerable<ETL_SQL.Core.Execution.SavedTempTable>> GetTempTablesToSave()
+    {
+        var result = new List<ETL_SQL.Core.Execution.SavedTempTable>();
+        foreach (var kvp in _evaluator.Connections)
         {
-            var result = new List<ETL_SQL.Core.Execution.SavedTempTable>();
-            foreach (var kvp in _evaluator.Connections)
+            if (kvp.Value is InMemoryDataSource mem && kvp.Key.StartsWith("#"))
             {
-                if (kvp.Value is InMemoryDataSource mem && kvp.Key.StartsWith("#"))
-                {
-                    await mem.FlushToSpillAsync();
-                    var chunks = mem.GetSpillChunks().ToList();
-                    result.Add(new ETL_SQL.Core.Execution.SavedTempTable(kvp.Key, mem.Schema.Values.ToList(), chunks));
-                }
+                await mem.FlushToSpillAsync();
+                var chunks = mem.GetSpillChunks().ToList();
+                result.Add(new ETL_SQL.Core.Execution.SavedTempTable(kvp.Key, mem.Schema.Values.ToList(), chunks));
             }
-            return result;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves a table reference to a functional IDataSource.
+    /// Handles subqueries, function calls, dual table, and temporary tables.
+    /// </summary>
+    public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
+    {
+        if (table.Subquery != null)
+        {
+            return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
         }
 
-        /// <summary>
-        /// Resolves a table reference to a functional IDataSource.
-        /// Handles subqueries, function calls, dual table, and temporary tables.
-        /// </summary>
-        public async Task<IDataSource> ResolveDataSourceAsync(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager)
+        string name = table.ConnectionName ?? table.TableName;
+        IDataSource? source = null;
+
+        if (_evaluator.LocalSources.TryGetValue(name, out source))
         {
-            if (table.Subquery != null)
+            // Found in local CTE scope
+        }
+        else if (connections.TryGetValue(name, out source))
+        {
+            // Found in global connections
+        }
+        else if (table.ConnectionName == null && (table.TableName.StartsWith("#") || table.TableName.StartsWith("&")))
+        {
+            var mem = new InMemoryDataSource();
+            mem.Validator = _evaluator;
+
+            // Configure spill-to-disk protection
+            mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+            mem.ExecutionContext = _evaluator;
+
+            // [STABILIZATION] Always register in global connections to ensure persistence 
+            // across statement boundaries within the session.
+            connections[name] = mem;
+            source = mem;
+        }
+        else if (table.ValuesRows != null)
+        {
+            return await BuildValuesDataSourceAsync(table);
+        }
+        else if (table.FunctionCall != null)
+        {
+            if (table.FunctionCall.FunctionName.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
             {
-                return new StreamingSubqueryDataSource(_evaluator.ExecuteQuery(table.Subquery));
+                string? targetTbl = table.FunctionCall.Arguments.Count > 0 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[0], new Row()))?.ToString() : null;
+                string? targetCol = table.FunctionCall.Arguments.Count > 1 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[1], new Row()))?.ToString() : null;
+                return new LineageDataSource(_evaluator.LineageTracker, targetTbl, targetCol);
             }
 
-            string name = table.ConnectionName ?? table.TableName;
-            IDataSource? source = null;
+            if (table.FunctionCall.FunctionName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase) &&
+                table.FunctionCall.JsonTable != null)
+            {
+                return await BuildJsonTableDataSourceAsync(table.FunctionCall);
+            }
 
-            if (_evaluator.LocalSources.TryGetValue(name, out source))
-            {
-                // Found in local CTE scope
-            }
-            else if (connections.TryGetValue(name, out source))
-            {
-                // Found in global connections
-            }
-            else if (table.ConnectionName == null && (table.TableName.StartsWith("#") || table.TableName.StartsWith("&")))
+            var result = await _expressionEvaluator.EvaluateInternal(table.FunctionCall, new Row());
+            if (result is DataTable dt)
             {
                 var mem = new InMemoryDataSource();
                 mem.Validator = _evaluator;
-
-                // Configure spill-to-disk protection
-                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
                 mem.ExecutionContext = _evaluator;
+                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
-                // [STABILIZATION] Always register in global connections to ensure persistence 
-                // across statement boundaries within the session.
-                connections[name] = mem;
-                source = mem;
+                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                return mem;
             }
-            else if (table.ValuesRows != null)
+            else if (result is System.Collections.IEnumerable list && !(result is string))
             {
-                return await BuildValuesDataSourceAsync(table);
+                var mem = new InMemoryDataSource();
+                mem.Validator = _evaluator;
+                mem.ExecutionContext = _evaluator;
+                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+
+                var dtResult = new DataTable();
+                dtResult.SetColumns(new[] { "Value" });
+                foreach (var item in list) await dtResult.AddRowAsync(new Row { ["Value"] = item });
+                await mem.WriteBatches(new[] { dtResult }.ToAsyncEnumerable());
+                return mem;
             }
-            else if (table.FunctionCall != null)
+            throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
+        }
+        else if (table.ConnectionName == null && _evaluator.TryGetView(name, out var view))
+        {
+            return new StreamingSubqueryDataSource(EvaluateViewBatches(name, view!.Query));
+        }
+        else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
+        {
+            return new LineageDataSource(_evaluator.LineageTracker);
+        }
+        else if (name.Equals("LINEAGE_TAGS", StringComparison.OrdinalIgnoreCase))
+        {
+            return new LineageTagsDataSource(_evaluator.LineageTracker);
+        }
+        else if (name.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
+
+        {
+            if (!connections.ContainsKey("DUAL"))
             {
-                if (table.FunctionCall.FunctionName.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
-                {
-                    string? targetTbl = table.FunctionCall.Arguments.Count > 0 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[0], new Row()))?.ToString() : null;
-                    string? targetCol = table.FunctionCall.Arguments.Count > 1 ? (await _expressionEvaluator.EvaluateInternal(table.FunctionCall.Arguments[1], new Row()))?.ToString() : null;
-                    return new LineageDataSource(_evaluator.LineageTracker, targetTbl, targetCol);
-                }
+                var dual = new InMemoryDataSource();
+                dual.Validator = _evaluator;
+                dual.ExecutionContext = _evaluator;
+                dual.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
-                if (table.FunctionCall.FunctionName.Equals("JSON_TABLE", StringComparison.OrdinalIgnoreCase) &&
-                    table.FunctionCall.JsonTable != null)
-                {
-                    return await BuildJsonTableDataSourceAsync(table.FunctionCall);
-                }
-
-                var result = await _expressionEvaluator.EvaluateInternal(table.FunctionCall, new Row());
-                if (result is DataTable dt)
-                {
-                    var mem = new InMemoryDataSource();
-                    mem.Validator = _evaluator;
-                    mem.ExecutionContext = _evaluator;
-                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-
-                    await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                    return mem;
-                }
-                else if (result is System.Collections.IEnumerable list && !(result is string))
-                {
-                    var mem = new InMemoryDataSource();
-                    mem.Validator = _evaluator;
-                    mem.ExecutionContext = _evaluator;
-                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-
-                    var dtResult = new DataTable();
-                    dtResult.SetColumns(new[] { "Value" });
-                    foreach (var item in list) await dtResult.AddRowAsync(new Row { ["Value"] = item });
-                    await mem.WriteBatches(new[] { dtResult }.ToAsyncEnumerable());
-                    return mem;
-                }
-                throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
+                var dualTable = new DataTable();
+                dualTable.SetColumns(new[] { "DUMMY" });
+                await dualTable.AddRowAsync(new Row { ["DUMMY"] = "X" });
+                await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable());
+                connections["DUAL"] = dual;
             }
-            else if (table.ConnectionName == null && _evaluator.TryGetView(name, out var view))
+            source = connections["DUAL"];
+        }
+        else if (name.StartsWith("@"))
+        {
+            var val = _evaluator.GetVariable(name);
+            if (val is System.Collections.IEnumerable list && !(val is string))
             {
-                return new StreamingSubqueryDataSource(EvaluateViewBatches(name, view!.Query));
-            }
-            else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
-            {
-                return new LineageDataSource(_evaluator.LineageTracker);
-            }
-            else if (name.Equals("LINEAGE_TAGS", StringComparison.OrdinalIgnoreCase))
-            {
-                return new LineageTagsDataSource(_evaluator.LineageTracker);
-            }
-            else if (name.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
+                var mem = new InMemoryDataSource();
+                mem.Validator = _evaluator;
+                mem.ExecutionContext = _evaluator;
+                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
-            {
-                if (!connections.ContainsKey("DUAL"))
-                {
-                    var dual = new InMemoryDataSource();
-                    dual.Validator = _evaluator;
-                    dual.ExecutionContext = _evaluator;
-                    dual.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-
-                    var dualTable = new DataTable();
-                    dualTable.SetColumns(new[] { "DUMMY" });
-                    await dualTable.AddRowAsync(new Row { ["DUMMY"] = "X" });
-                    await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable());
-                    connections["DUAL"] = dual;
-                }
-                source = connections["DUAL"];
-            }
-            else if (name.StartsWith("@"))
-            {
-                var val = _evaluator.GetVariable(name);
-                if (val is System.Collections.IEnumerable list && !(val is string))
-                {
-                    var mem = new InMemoryDataSource();
-                    mem.Validator = _evaluator;
-                    mem.ExecutionContext = _evaluator;
-                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-
-                    var dt = new DataTable();
-                    dt.SetColumns(new[] { "Value" });
-                    foreach (var item in list) await dt.AddRowAsync(new Row { ["Value"] = item });
-                    await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                    return mem;
-                }
-
-                // If it's used as a target in SELECT INTO, or if it's not a collection,
-                // return a VariableDataSource so it can be written to and updated in the session.
-                return new VariableDataSource(name, _evaluator);
+                var dt = new DataTable();
+                dt.SetColumns(new[] { "Value" });
+                foreach (var item in list) await dt.AddRowAsync(new Row { ["Value"] = item });
+                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                return mem;
             }
 
-
-            if (source == null)
-            {
-                throw new ExecutionException($"Unknown source: {name} at Line {table.Line}");
-            }
-
-            if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source);
-
-            if (table.ConnectionName != null) return source.WithTable(table.TableName);
-            return source;
+            // If it's used as a target in SELECT INTO, or if it's not a collection,
+            // return a VariableDataSource so it can be written to and updated in the session.
+            return new VariableDataSource(name, _evaluator);
         }
 
-        private async IAsyncEnumerable<DataTable> EvaluateViewBatches(string viewName, Statement query)
-        {
-            if (_viewResolutionStack.Any(v => v.Equals(viewName, StringComparison.OrdinalIgnoreCase)))
-            {
-                var chain = string.Join(" -> ", _viewResolutionStack.Reverse().Append(viewName));
-                throw new ExecutionException($"Recursive view reference detected: {chain}");
-            }
 
-            _viewResolutionStack.Push(viewName);
-            try
+        if (source == null)
+        {
+            throw new ExecutionException($"Unknown source: {name} at Line {table.Line}");
+        }
+
+        if (transactionManager.TranCount > 0) await transactionManager.EnlistDataSource(source);
+
+        if (table.ConnectionName != null) return source.WithTable(table.TableName);
+        return source;
+    }
+
+    private async IAsyncEnumerable<DataTable> EvaluateViewBatches(string viewName, Statement query)
+    {
+        if (_viewResolutionStack.Any(v => v.Equals(viewName, StringComparison.OrdinalIgnoreCase)))
+        {
+            var chain = string.Join(" -> ", _viewResolutionStack.Reverse().Append(viewName));
+            throw new ExecutionException($"Recursive view reference detected: {chain}");
+        }
+
+        _viewResolutionStack.Push(viewName);
+        try
+        {
+            await foreach (var batch in _evaluator.ExecuteQuery(query))
+                yield return batch;
+        }
+        finally
+        {
+            _viewResolutionStack.Pop();
+        }
+    }
+
+    private async Task<IDataSource> BuildValuesDataSourceAsync(TableReference table)
+    {
+        var rows = table.ValuesRows ?? new List<List<Expression>>();
+        if (rows.Count == 0)
+        {
+            throw new ExecutionException("VALUES table constructor requires at least one row.");
+        }
+
+        int columnCount = rows[0].Count;
+        if (columnCount == 0)
+        {
+            throw new ExecutionException("VALUES table constructor rows must contain at least one expression.");
+        }
+
+        foreach (var row in rows)
+        {
+            if (row.Count != columnCount)
             {
-                await foreach (var batch in _evaluator.ExecuteQuery(query))
-                    yield return batch;
-            }
-            finally
-            {
-                _viewResolutionStack.Pop();
+                throw new ExecutionException("All VALUES table constructor rows must have the same number of expressions.");
             }
         }
 
-        private async Task<IDataSource> BuildValuesDataSourceAsync(TableReference table)
+        var columnNames = table.ColumnAliases != null && table.ColumnAliases.Count > 0
+            ? table.ColumnAliases
+            : Enumerable.Range(1, columnCount).Select(i => $"column{i}").ToList();
+
+        if (columnNames.Count != columnCount)
         {
-            var rows = table.ValuesRows ?? new List<List<Expression>>();
-            if (rows.Count == 0)
-            {
-                throw new ExecutionException("VALUES table constructor requires at least one row.");
-            }
-
-            int columnCount = rows[0].Count;
-            if (columnCount == 0)
-            {
-                throw new ExecutionException("VALUES table constructor rows must contain at least one expression.");
-            }
-
-            foreach (var row in rows)
-            {
-                if (row.Count != columnCount)
-                {
-                    throw new ExecutionException("All VALUES table constructor rows must have the same number of expressions.");
-                }
-            }
-
-            var columnNames = table.ColumnAliases != null && table.ColumnAliases.Count > 0
-                ? table.ColumnAliases
-                : Enumerable.Range(1, columnCount).Select(i => $"column{i}").ToList();
-
-            if (columnNames.Count != columnCount)
-            {
-                throw new ExecutionException("VALUES table constructor column alias count must match the row value count.");
-            }
-
-            var result = new DataTable();
-            result.SetColumns(columnNames);
-            foreach (var valueRow in rows)
-            {
-                var dataRow = new Row(result.Schema);
-                for (int i = 0; i < valueRow.Count; i++)
-                {
-                    dataRow[columnNames[i]] = await _expressionEvaluator.EvaluateInternal(valueRow[i], new Row());
-                }
-                await result.AddRowAsync(dataRow);
-            }
-
-            var mem = new InMemoryDataSource();
-            mem.Validator = _evaluator;
-            mem.ExecutionContext = _evaluator;
-            mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-            await mem.WriteBatches(new[] { result }.ToAsyncEnumerable());
-            return mem;
+            throw new ExecutionException("VALUES table constructor column alias count must match the row value count.");
         }
 
-        private async Task<IDataSource> BuildJsonTableDataSourceAsync(FunctionCallExpression functionCall)
+        var result = new DataTable();
+        result.SetColumns(columnNames);
+        foreach (var valueRow in rows)
         {
-            string? json = functionCall.Arguments.Count > 0
-                ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[0], new Row()))?.ToString()
+            var dataRow = new Row(result.Schema);
+            for (int i = 0; i < valueRow.Count; i++)
+            {
+                dataRow[columnNames[i]] = await _expressionEvaluator.EvaluateInternal(valueRow[i], new Row());
+            }
+            await result.AddRowAsync(dataRow);
+        }
+
+        var mem = new InMemoryDataSource();
+        mem.Validator = _evaluator;
+        mem.ExecutionContext = _evaluator;
+        mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+        await mem.WriteBatches(new[] { result }.ToAsyncEnumerable());
+        return mem;
+    }
+
+    private async Task<IDataSource> BuildJsonTableDataSourceAsync(FunctionCallExpression functionCall)
+    {
+        string? json = functionCall.Arguments.Count > 0
+            ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[0], new Row()))?.ToString()
+            : null;
+        string? rowPath = functionCall.Arguments.Count > 1
+            ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[1], new Row()))?.ToString()
+            : "$";
+
+        var columns = new List<JsonFunctions.JsonTableColumn>();
+        foreach (var column in functionCall.JsonTable?.Columns ?? new List<JsonTableColumnSpec>())
+        {
+            string? path = column.Path != null
+                ? (await _expressionEvaluator.EvaluateInternal(column.Path, new Row()))?.ToString()
                 : null;
-            string? rowPath = functionCall.Arguments.Count > 1
-                ? (await _expressionEvaluator.EvaluateInternal(functionCall.Arguments[1], new Row()))?.ToString()
-                : "$";
+            object? defaultOnEmpty = column.DefaultOnEmpty != null
+                ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnEmpty, new Row())
+                : null;
+            object? defaultOnError = column.DefaultOnError != null
+                ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnError, new Row())
+                : null;
 
-            var columns = new List<JsonFunctions.JsonTableColumn>();
-            foreach (var column in functionCall.JsonTable?.Columns ?? new List<JsonTableColumnSpec>())
-            {
-                string? path = column.Path != null
-                    ? (await _expressionEvaluator.EvaluateInternal(column.Path, new Row()))?.ToString()
-                    : null;
-                object? defaultOnEmpty = column.DefaultOnEmpty != null
-                    ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnEmpty, new Row())
-                    : null;
-                object? defaultOnError = column.DefaultOnError != null
-                    ? await _expressionEvaluator.EvaluateInternal(column.DefaultOnError, new Row())
-                    : null;
-
-                columns.Add(new JsonFunctions.JsonTableColumn(
-                    column.Name,
-                    column.TypeName,
-                    path,
-                    column.ForOrdinality,
-                    column.Exists,
-                    defaultOnEmpty,
-                    defaultOnError));
-            }
-
-            var dt = await JsonFunctions.BuildJsonTableWithColumns(json, rowPath, columns);
-            var mem = new InMemoryDataSource();
-            mem.Validator = _evaluator;
-            mem.ExecutionContext = _evaluator;
-            mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
-            await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-            return mem;
+            columns.Add(new JsonFunctions.JsonTableColumn(
+                column.Name,
+                column.TypeName,
+                path,
+                column.ForOrdinality,
+                column.Exists,
+                defaultOnEmpty,
+                defaultOnError));
         }
 
-        /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
-        public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
+        var dt = await JsonFunctions.BuildJsonTableWithColumns(json, rowPath, columns);
+        var mem = new InMemoryDataSource();
+        mem.Validator = _evaluator;
+        mem.ExecutionContext = _evaluator;
+        mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+        await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+        return mem;
+    }
+
+    /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
+    public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
+    {
+        var ds = new InMemoryDataSource();
+        ds.Validator = _evaluator;
+        ds.ExecutionContext = _evaluator;
+
+        // Restore schema (full ColumnDefinitions and TableConstraints)
+        if (info.Columns != null && info.Columns.Count > 0)
         {
-            var ds = new InMemoryDataSource();
-            ds.Validator = _evaluator;
-            ds.ExecutionContext = _evaluator;
+            ds.SetSchema(info.Columns, MapToAst(info.Constraints));
+        }
 
-            // Restore schema (full ColumnDefinitions and TableConstraints)
-            if (info.Columns != null && info.Columns.Count > 0)
-            {
-                ds.SetSchema(info.Columns, MapToAst(info.Constraints));
-            }
-
-            // High-Performance Path: Restore from Persistent Spill Chunks
-            if (info.SpillChunkNames != null && info.SpillChunkNames.Count > 0)
-            {
-                ds.Rehydrate(info.Columns ?? new(), info.SpillChunkNames);
-                _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
-                return ds;
-            }
-
-            // Legacy/Snapshot Path: Restore from JSON file
-            if (File.Exists(info.DataFilePath))
-            {
-                try
-                {
-                    string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
-                    string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
-                    var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
-
-                    if (rows != null && rows.Count > 0)
-                    {
-                        var dt = new DataTable();
-                        dt.SetColumns(ds.Schema.Keys, info.Constraints);
-
-                        foreach (var rowDict in rows)
-                        {
-                            var row = dt.NewRow();
-                            foreach (var kvp in rowDict)
-                            {
-                                row[kvp.Key] = JsonToClr(kvp.Value);
-                            }
-                            await dt.AddRowAsync(row);
-                        }
-                        await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                        _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
-                }
-            }
-
+        // High-Performance Path: Restore from Persistent Spill Chunks
+        if (info.SpillChunkNames != null && info.SpillChunkNames.Count > 0)
+        {
+            ds.Rehydrate(info.Columns ?? new(), info.SpillChunkNames);
+            _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
             return ds;
         }
 
-        private List<TableConstraint> MapToAst(IEnumerable<TableConstraintInfo> constraints)
+        // Legacy/Snapshot Path: Restore from JSON file
+        if (File.Exists(info.DataFilePath))
         {
-            var result = new List<TableConstraint>();
-            foreach (var info in constraints)
+            try
             {
-                TableConstraint? tc = null;
-                switch (info.Type)
+                string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
+                string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
+                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
+
+                if (rows != null && rows.Count > 0)
                 {
-                    case ConstraintType.PrimaryKey:
-                        tc = new TablePrimaryKeyConstraint(info.Columns);
-                        break;
-                    case ConstraintType.Unique:
-                        tc = new TableUniqueConstraint(info.Columns);
-                        break;
-                    case ConstraintType.Check:
-                        tc = new TableCheckConstraint(info.Expression!);
-                        break;
-                    case ConstraintType.ForeignKey:
-                        tc = new TableForeignKeyConstraint(info.Columns, info.ForeignKey!);
-                        break;
-                }
-                if (tc != null)
-                {
-                    tc.ConstraintName = info.Name;
-                    result.Add(tc);
-                }
-            }
-            return result;
-        }
+                    var dt = new DataTable();
+                    dt.SetColumns(ds.Schema.Keys, info.Constraints);
 
-        private Expression ParseExpression(string sql)
-        {
-            var tokens = new Lexer(sql).Tokenize();
-            var parser = new Parser(tokens, sql);
-            return parser.ParseExpression();
-        }
-
-        private ForeignKeyReference ParseForeignKeyReference(string sql)
-        {
-            // The info.Expression for FK was Reference.ToSql() -> "REFERENCES Table(Col)"
-            var fkSql = sql.StartsWith("REFERENCES ", StringComparison.OrdinalIgnoreCase) ? sql.Substring(11) : sql;
-            var tokens = new Lexer(fkSql).Tokenize();
-            var parser = new Parser(tokens, fkSql);
-            var stmtParser = new StatementParser(parser);
-            return stmtParser.ParseForeignKeyReference();
-        }
-
-        private object? JsonToClr(object? val)
-        {
-            if (val is JsonElement elem)
-            {
-                switch (elem.ValueKind)
-                {
-                    case JsonValueKind.String: return elem.GetString();
-                    case JsonValueKind.Number:
-                        if (elem.TryGetInt32(out int i)) return i;
-                        if (elem.TryGetInt64(out long l)) return l;
-                        return elem.GetDouble();
-                    case JsonValueKind.True: return true;
-                    case JsonValueKind.False: return false;
-                    case JsonValueKind.Null: return null;
-                    default: return elem.ToString();
-                }
-            }
-            return val;
-        }
-
-        /// <summary>
-        /// Reads batches from a data source and applies high-level operators like PIVOT or UNPIVOT.
-        /// </summary>
-        public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
-        {
-            var source = await ResolveDataSourceAsync(table, connections, transactionManager);
-            var batches = source.ReadBatches(batchSize);
-
-            if (table.TableOperators.Count == 0)
-            {
-                await foreach (var b in batches) yield return b;
-                yield break;
-            }
-
-            // PIVOT/UNPIVOT currently requires buffering all data from the source to perform the transformation correctly
-            var allRows = new List<Row>();
-            string tableName = table.Alias ?? table.TableName;
-            await foreach (var batch in batches)
-            {
-                foreach (var row in batch.Rows)
-                {
-                    var r = row.Clone();
-                    // Prefix columns if not already prefixed
-                    foreach (var kv in row.Columns.ToList())
+                    foreach (var rowDict in rows)
                     {
-                        if (!kv.Key.Contains(".")) r[$"{tableName}.{kv.Key}"] = kv.Value;
+                        var row = dt.NewRow();
+                        foreach (var kvp in rowDict)
+                        {
+                            row[kvp.Key] = JsonToClr(kvp.Value);
+                        }
+                        await dt.AddRowAsync(row);
                     }
-                    allRows.Add(r);
+                    await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                    _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
                 }
             }
-
-            var pivotEngine = new Engines.PivotEngine(_evaluator, _logger);
-            var matchRecognizeEngine = new Engines.MatchRecognizeEngine(_evaluator);
-            foreach (var op in table.TableOperators)
+            catch (Exception ex)
             {
-                if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
-                else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
-                else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
+                _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
             }
-
-            var resultTable = new DataTable();
-            if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
-            foreach (var r in allRows) await resultTable.AddRowAsync(r);
-
-            yield return resultTable;
         }
+
+        return ds;
+    }
+
+    private List<TableConstraint> MapToAst(IEnumerable<TableConstraintInfo> constraints)
+    {
+        var result = new List<TableConstraint>();
+        foreach (var info in constraints)
+        {
+            TableConstraint? tc = null;
+            switch (info.Type)
+            {
+                case ConstraintType.PrimaryKey:
+                    tc = new TablePrimaryKeyConstraint(info.Columns);
+                    break;
+                case ConstraintType.Unique:
+                    tc = new TableUniqueConstraint(info.Columns);
+                    break;
+                case ConstraintType.Check:
+                    tc = new TableCheckConstraint(info.Expression!);
+                    break;
+                case ConstraintType.ForeignKey:
+                    tc = new TableForeignKeyConstraint(info.Columns, info.ForeignKey!);
+                    break;
+            }
+            if (tc != null)
+            {
+                tc.ConstraintName = info.Name;
+                result.Add(tc);
+            }
+        }
+        return result;
+    }
+
+    private Expression ParseExpression(string sql)
+    {
+        var tokens = new Lexer(sql).Tokenize();
+        var parser = new Parser(tokens, sql);
+        return parser.ParseExpression();
+    }
+
+    private ForeignKeyReference ParseForeignKeyReference(string sql)
+    {
+        // The info.Expression for FK was Reference.ToSql() -> "REFERENCES Table(Col)"
+        var fkSql = sql.StartsWith("REFERENCES ", StringComparison.OrdinalIgnoreCase) ? sql.Substring(11) : sql;
+        var tokens = new Lexer(fkSql).Tokenize();
+        var parser = new Parser(tokens, fkSql);
+        var stmtParser = new StatementParser(parser);
+        return stmtParser.ParseForeignKeyReference();
+    }
+
+    private object? JsonToClr(object? val)
+    {
+        if (val is JsonElement elem)
+        {
+            switch (elem.ValueKind)
+            {
+                case JsonValueKind.String: return elem.GetString();
+                case JsonValueKind.Number:
+                    if (elem.TryGetInt32(out int i)) return i;
+                    if (elem.TryGetInt64(out long l)) return l;
+                    return elem.GetDouble();
+                case JsonValueKind.True: return true;
+                case JsonValueKind.False: return false;
+                case JsonValueKind.Null: return null;
+                default: return elem.ToString();
+            }
+        }
+        return val;
+    }
+
+    /// <summary>
+    /// Reads batches from a data source and applies high-level operators like PIVOT or UNPIVOT.
+    /// </summary>
+    public async IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table, IDictionary<string, IDataSource> connections, TransactionManager transactionManager, int batchSize)
+    {
+        var source = await ResolveDataSourceAsync(table, connections, transactionManager);
+        var batches = source.ReadBatches(batchSize);
+
+        if (table.TableOperators.Count == 0)
+        {
+            await foreach (var b in batches) yield return b;
+            yield break;
+        }
+
+        // PIVOT/UNPIVOT currently requires buffering all data from the source to perform the transformation correctly
+        var allRows = new List<Row>();
+        string tableName = table.Alias ?? table.TableName;
+        await foreach (var batch in batches)
+        {
+            foreach (var row in batch.Rows)
+            {
+                var r = row.Clone();
+                // Prefix columns if not already prefixed
+                foreach (var kv in row.Columns.ToList())
+                {
+                    if (!kv.Key.Contains(".")) r[$"{tableName}.{kv.Key}"] = kv.Value;
+                }
+                allRows.Add(r);
+            }
+        }
+
+        var pivotEngine = new Engines.PivotEngine(_evaluator, _logger);
+        var matchRecognizeEngine = new Engines.MatchRecognizeEngine(_evaluator);
+        foreach (var op in table.TableOperators)
+        {
+            if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
+            else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
+            else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
+        }
+
+        var resultTable = new DataTable();
+        if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
+        foreach (var r in allRows) await resultTable.AddRowAsync(r);
+
+        yield return resultTable;
     }
 }

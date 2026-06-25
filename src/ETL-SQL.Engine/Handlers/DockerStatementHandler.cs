@@ -3,46 +3,44 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
-namespace ETL_SQL.Engine.Handlers
+namespace ETL_SQL.Engine.Handlers;
+/// <summary>
+/// Handles the DOCKER RUN statement, initializing and starting a new Docker container.
+/// </summary>
+public class DockerStatementHandler : IStatementHandler
 {
-    /// <summary>
-    /// Handles the DOCKER RUN statement, initializing and starting a new Docker container.
-    /// </summary>
-    public class DockerStatementHandler : IStatementHandler
+    private readonly ILogger _logger;
+    public Type SupportedStatementType => typeof(DockerStatement);
+
+    public DockerStatementHandler(ILogger logger)
     {
-        private readonly ILogger _logger;
-        public Type SupportedStatementType => typeof(DockerStatement);
+        _logger = logger;
+    }
 
-        public DockerStatementHandler(ILogger logger)
+    /// <summary>Executes the DOCKER RUN statement, resolving the image and starting the container.</summary>
+    public async Task Execute(Statement statement, IExecutionContext context)
+    {
+        if (statement is not DockerStatement dockerStmt) return;
+
+
+        var imageName = (await context.EvaluateValue(dockerStmt.ImageName, new Data.Row()))?.ToString();
+
+        if (string.IsNullOrEmpty(imageName))
         {
-            _logger = logger;
+            throw new ExecutionException("Docker image name cannot be null or empty.");
         }
 
-        /// <summary>Executes the DOCKER RUN statement, resolving the image and starting the container.</summary>
-        public async Task Execute(Statement statement, IExecutionContext context)
+        // Start the container and track it in the evaluator's manager
+        _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
+
+        if (context.IsWhatIf)
         {
-            if (statement is not DockerStatement dockerStmt) return;
-
-
-            var imageName = (await context.EvaluateValue(dockerStmt.ImageName, new Data.Row()))?.ToString();
-
-            if (string.IsNullOrEmpty(imageName))
-            {
-                throw new ExecutionException("Docker image name cannot be null or empty.");
-            }
-
-            // Start the container and track it in the evaluator's manager
-            _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
-
-            if (context.IsWhatIf)
-            {
-                _logger.WriteLine($"WHAT IF: Would start Docker container: {imageName}", ConsoleColor.Yellow);
-                return;
-            }
-
-            await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
-
-            _logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
+            _logger.WriteLine($"WHAT IF: Would start Docker container: {imageName}", ConsoleColor.Yellow);
+            return;
         }
+
+        await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
+
+        _logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
     }
 }
