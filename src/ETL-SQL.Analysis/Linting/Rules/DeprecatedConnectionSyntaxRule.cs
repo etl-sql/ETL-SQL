@@ -4,12 +4,14 @@ using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
 /// <summary>
-/// Flags usage of the deprecated 'FILE' connection type and suggests using 'FLATFILE'.
+/// Flags usage of deprecated connection syntax and emits migration diagnostics.
 /// </summary>
 public class DeprecatedConnectionSyntaxRule : ILintRule
 {
+    public const string FileConnectorDiagnosticCode = "ETLSQL-MIG001";
+
     public string Name => "Deprecated Connection Syntax";
-    public string Description => "Detects deprecated 'FILE' connector and suggests 'FLATFILE'.";
+    public string Description => "Detects deprecated connection syntax and reports canonical replacements.";
 
     public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
@@ -37,8 +39,9 @@ public class DeprecatedConnectionSyntaxRule : ILintRule
             results.Add(new LintResult
             {
                 RuleName = Name,
-                Severity = LintSeverity.Error,
-                Message = "Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.",
+                Code = FileConnectorDiagnosticCode,
+                Severity = LintSeverity.Warning,
+                Message = "Connection type 'FILE' is deprecated and will be removed after the compatibility window. Use 'FLATFILE' instead.",
                 LineNumber = stmt.Line,
                 ColumnNumber = stmt.Column
             });

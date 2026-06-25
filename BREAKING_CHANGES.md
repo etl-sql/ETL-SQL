@@ -9,6 +9,8 @@ This file is the canonical record of every behavioral change that could cause an
 - **What changed**: One sentence describing the old vs. new behavior.
 - **Who is affected**: Scripts using [syntax / feature / connector].
 - **Migration**: What a script author must change.
+- **Diagnostic**: Stable compatibility diagnostic code, or `N/A` when this is not detectable by linting.
+- **Earliest removal**: Version where the deprecated behavior may be removed, or `N/A` for immediate breaking changes.
 ```
 
 Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Parser`

@@ -29,8 +29,7 @@ ETL-SQL uses a strict deprecation policy for all language syntax, connector opti
 When introducing a deprecation or breaking change, developers must strictly adhere to the following protocol:
 
 1. **Inline Annotation**: Add a `// COMPAT_BREAK: x.y` or `// DEPRECATED_SYNTAX: x.y` comment directly above the modified line of code in the source, where `x.y` is the first release that warns.
-2. **Attribution Log**: Register the change in [BREAKING_CHANGES.md](../../BREAKING_CHANGES.md) at the repository root using this format:
-   `version | category | diagnostic | description | migration path | earliest removal`
+2. **Attribution Log**: Register the change in [BREAKING_CHANGES.md](../../BREAKING_CHANGES.md) at the repository root, including the diagnostic code and earliest removal version when the change is a deprecation.
 3. **Reference Update**: Update [Grammar.md](../Reference/Grammar.md), [Data_Connectors.md](../Reference/Data_Connectors.md), [Standard_Library.md](../Reference/Standard_Library.md), or the affected product guide in the same change.
 4. **Regression Testing**: Write a dedicated compatibility test proving both the deprecated form and replacement behavior. Mark the test class with the Xunit trait:
    `[Trait("CompatBreak", "x.y")]`

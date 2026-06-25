@@ -12,7 +12,7 @@ release begins.
 - [ ] **Phase 1: Language & Manifest Freeze**
   - **Sr. Developer:** Publish the canonical language grammar, connector options reference, and standard library docs.
   - [x] **Sr. Developer:** Define a strict deprecation policy for syntax and options. *(Documented in `Docs/Standards/Breaking_Change_Standards.md` and linked from the reference map.)*
-  - **Sr. Developer:** Implement script compatibility test corpus and a migration-linter.
+  - [x] **Sr. Developer:** Implement script compatibility test corpus and a migration-linter. *(Added parser corpus coverage and stable `ETLSQL-MIG001` migration diagnostic for deprecated `FILE` connections.)*
   - [x] **Gemini:** Implement `SHOW VERSION` and machine-readable compatibility diagnostics.
 - [ ] **Phase 2: Licensing & Contribution Policies**
   - [x] **Gemini:** Apply the **Apache-2.0 License** consistently across all projects, extension manifests, and installers.
