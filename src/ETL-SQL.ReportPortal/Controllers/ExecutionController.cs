@@ -23,7 +23,8 @@ public class ExecutionController(
     AuditService audit,
     PortalConfig portalConfig,
     FolderPermissionService folderPermissions,
-    ETL_SQL.Core.Storage.IArtifactStorage artifacts) : ControllerBase
+    ETL_SQL.Core.Storage.IArtifactStorage artifacts,
+    SnapshotPackageService snapshotPackages) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -136,7 +137,7 @@ public class ExecutionController(
         object? manifest = null;
         if (includeManifest && await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
         {
-            var json = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey);
+            var json = await snapshotPackages.LoadLayoutJsonAsync(manifestKey);
             manifest = JsonDocument.Parse(json).RootElement;
         }
 
@@ -181,7 +182,7 @@ public class ExecutionController(
         if (!await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey))
             return NotFound(new { error = "No snapshot available." });
 
-        var json = await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Snapshots, manifestKey);
+        var json = await snapshotPackages.LoadLayoutJsonAsync(manifestKey);
         return Content(json, "application/json");
     }
 

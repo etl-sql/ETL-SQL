@@ -15,7 +15,8 @@ namespace ETL_SQL.ReportPortal.Services;
 public class ReportScriptInspectionService(
     PortalConfig portalConfig,
     ILogger<ReportScriptInspectionService> logger,
-    IArtifactStorage artifacts)
+    IArtifactStorage artifacts,
+    SnapshotPackageService snapshotPackages)
 {
     public async Task<Dictionary<string, string>> ReadScriptMetadataAsync(string scriptPath)
     {
@@ -113,8 +114,7 @@ public class ReportScriptInspectionService(
 
         try
         {
-            var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, manifestKey);
-            var manifest = JsonSerializer.Deserialize<ReportManifest>(json);
+            var manifest = await snapshotPackages.LoadAsync(manifestKey);
             if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
 
             return manifest.Datasets
@@ -126,7 +126,7 @@ public class ReportScriptInspectionService(
                     d.RowCount))
                 .ToList();
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidDataException or InvalidOperationException)
         {
             logger.LogWarning(ex, "Failed to parse report manifest at {ManifestPath}", snapshot.ManifestPath);
             return Array.Empty<ReportDependencyManifestDatasetDto>();

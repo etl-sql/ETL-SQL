@@ -1127,7 +1127,14 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         var datasetFileName = $"export_{suffix}.parquet";
         var datasetFile = Path.Combine(_factory.TempDir, "datasets", datasetFileName);
 
-        var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(ETL_SQL.Core.Common.SystemExecutionContext.Instance, datasetFile);
+        var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(
+            ETL_SQL.Core.Common.SystemExecutionContext.Instance,
+            datasetFile,
+            new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "PASSWORD",
+                ["PASSWORD"] = HostedPortalFactory.DefaultAtRestKey
+            });
         var batch = new ETL_SQL.Data.DataTable();
         batch.ColumnNames.AddRange(new[] { "ID", "Name" });
         var r1 = new ETL_SQL.Data.Row(); r1["ID"] = 1L; r1["Name"] = "Alice";

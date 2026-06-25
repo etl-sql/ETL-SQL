@@ -288,6 +288,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
@@ -371,6 +372,7 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.RefreshTokenMain
 // Dataset at-rest key validation: fail closed if Portal:Dataset:AtRestKey is missing/weak in production
 // (unless Portal:Dataset:AllowMachineFallback is deliberately set for dev/standalone).
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyValidationService>();
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.SnapshotMigrationService>();
 
 // Phase 5 — subscriptions (backed by Orchestrator jobs)
 

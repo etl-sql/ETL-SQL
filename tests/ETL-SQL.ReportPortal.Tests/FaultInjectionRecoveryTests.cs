@@ -197,7 +197,12 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             DatabasePath = Path.Combine(_root, "portal-exec.db"),
             ScriptRootPath = scriptRoot,
             SnapshotDirectory = snapshotRoot,
-            DatasetRootPath = Path.Combine(_root, "datasets")
+            DatasetRootPath = Path.Combine(_root, "datasets"),
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            }
         };
         var services = new ServiceCollection()
             .AddDbContext<PortalDbContext>(options =>
@@ -285,7 +290,12 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             ScriptRootPath = scriptRoot,
             SnapshotDirectory = snapshotRootFile,
             DatasetRootPath = Path.Combine(_root, "fs-datasets"),
-            MapRootPath = Path.Combine(_root, "fs-maps")
+            MapRootPath = Path.Combine(_root, "fs-maps"),
+            Dataset = new DatasetConfig
+            {
+                AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                AtRestKeyVersion = "v1"
+            }
         };
         var services = new ServiceCollection()
             .AddDbContext<PortalDbContext>(options =>

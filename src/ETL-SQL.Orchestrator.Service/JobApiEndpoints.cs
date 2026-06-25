@@ -431,18 +431,28 @@ namespace ETL_SQL.Orchestrator.Service
         private static byte[]? _cachedApiKeyDigest;
         private static byte[][] _cachedPreviousApiKeyDigests = Array.Empty<byte[]>();
         private static string? _cachedScriptRoot;
+        private static string? _cachedConfigFingerprint;
         private static readonly object _configLock = new();
         private static bool _configInitialized = false;
 
         private static void InitializeCache(IConfiguration cfg)
         {
-            if (_configInitialized) return;
+            var apiKey = cfg["Orchestrator:ApiKey"];
+            var previousApiKeys = cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? Array.Empty<string>();
+            var scriptRoot = cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
+            var fingerprint = string.Join('\u001f', [apiKey ?? "", scriptRoot, .. previousApiKeys]);
+            if (_configInitialized && string.Equals(_cachedConfigFingerprint, fingerprint, StringComparison.Ordinal))
+                return;
+
             lock (_configLock)
             {
-                if (_configInitialized) return;
-                _cachedApiKey = cfg["Orchestrator:ApiKey"];
-                _cachedPreviousApiKeys = cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? Array.Empty<string>();
-                _cachedScriptRoot = cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
+                if (_configInitialized && string.Equals(_cachedConfigFingerprint, fingerprint, StringComparison.Ordinal))
+                    return;
+
+                _cachedApiKey = apiKey;
+                _cachedPreviousApiKeys = previousApiKeys;
+                _cachedScriptRoot = scriptRoot;
+                _cachedApiKeyDigest = null;
 
                 if (!string.IsNullOrWhiteSpace(_cachedApiKey))
                 {
@@ -456,6 +466,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
                 _cachedPreviousApiKeyDigests = digests.ToArray();
 
+                _cachedConfigFingerprint = fingerprint;
                 _configInitialized = true;
             }
         }

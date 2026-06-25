@@ -19,7 +19,8 @@ public class ExportController(
     PortalDbContext db,
     PortalConfig portalConfig,
     AuditService audit,
-    IArtifactStorage artifacts) : ControllerBase
+    IArtifactStorage artifacts,
+    SnapshotPackageService snapshotPackages) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -66,8 +67,7 @@ public class ExportController(
         if (!await artifacts.ExistsAsync(ArtifactArea.Snapshots, manifestKey))
             return (null, "No snapshot available", false);
 
-        var json = await artifacts.ReadAllTextAsync(ArtifactArea.Snapshots, manifestKey);
-        var manifest = JsonSerializer.Deserialize<ReportManifest>(json);
+        var manifest = await snapshotPackages.LoadAsync(manifestKey);
         return manifest is null ? (null, "Failed to load snapshot", false) : (manifest, null, false);
     }
 

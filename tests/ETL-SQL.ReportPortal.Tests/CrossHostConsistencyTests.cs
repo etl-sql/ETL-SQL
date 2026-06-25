@@ -220,7 +220,9 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         var pdfRes = await AuthGet(client, token, $"/api/reports/{reportId}/export/pdf");
         Assert.Equal(HttpStatusCode.OK, pdfRes.StatusCode);
         Assert.NotEmpty(await pdfRes.Content.ReadAsByteArrayAsync());
-        Assert.NotEmpty(Directory.GetFiles(Path.Combine(portalFactory.TempDir, "snapshots"), "*.snapshot.json"));
+        var snapshotRoot = Path.Combine(portalFactory.TempDir, "snapshots");
+        Assert.NotEmpty(Directory.GetFiles(snapshotRoot, "*.etlsnap"));
+        Assert.Empty(Directory.GetFiles(snapshotRoot, "*.snapshot.json"));
     }
 
     [Fact]

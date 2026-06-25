@@ -73,6 +73,8 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:Jwt:RefreshExpiryDays"] = "7",
                 ["Portal:RateLimit:AuthPermitLimit"] = authPermitLimit.ToString(),
                 ["Portal:RateLimit:AnonymousTokenPermitLimit"] = anonymousTokenPermitLimit.ToString(),
+                ["Portal:Dataset:AtRestKey"] = HostedPortalFactory.DefaultAtRestKey,
+                ["Portal:Dataset:AtRestKeyVersion"] = "v1",
                 ["Portal:FirstRun:AdminUsername"] = "admin",
                 ["Portal:FirstRun:AdminPassword"] = "Admin@12345!",
                 ["Portal:Resources:MaxConcurrentReportExecutions"] = "2",
@@ -107,6 +109,11 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 {
                     AuthPermitLimit = authPermitLimit,
                     AnonymousTokenPermitLimit = anonymousTokenPermitLimit
+                },
+                Dataset = new DatasetConfig
+                {
+                    AtRestKey = HostedPortalFactory.DefaultAtRestKey,
+                    AtRestKeyVersion = "v1"
                 },
                 FirstRun = new FirstRunConfig { AdminUsername = "admin", AdminPassword = "Admin@12345!" },
                 Orchestrator = new OrchestratorConfig { DatabasePath = orchDbPath },

@@ -64,13 +64,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private readonly SessionCache _sessions;
     private readonly IJobChannel _channel;
     private readonly IArtifactStorage _artifacts;
+    private readonly SnapshotPackageService _snapshotPackages;
     private readonly INodeCapacityMonitor _capacityMonitor;
-    private static readonly JsonSerializerOptions SnapshotJsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = null
-    };
-
     public ExecutionJobService(
         PortalConfig config,
         IServiceScopeFactory scopeFactory,
@@ -78,7 +73,8 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         SessionCache sessions,
         IJobChannel channel,
         IArtifactStorage? artifacts = null,
-        INodeCapacityMonitor? capacityMonitor = null)
+        INodeCapacityMonitor? capacityMonitor = null,
+        SnapshotPackageService? snapshotPackages = null)
     {
         _config = config;
         _scopeFactory = scopeFactory;
@@ -86,6 +82,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         _sessions = sessions;
         _channel = channel;
         _artifacts = artifacts ?? CreateDefaultArtifactStorage(config);
+        _snapshotPackages = snapshotPackages ?? new SnapshotPackageService(
+            config,
+            _artifacts,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
         _capacityMonitor = capacityMonitor ?? new NodeCapacityMonitor();
         _admission = new WeightedExecutionAdmission(
             config.Resources.MaxConcurrentReportExecutions,
@@ -301,9 +301,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
             // Timed out while queued — no global permit was retained, so only the job
             // bookkeeping needs unwinding (the refresh debounce must clear).
-            job.Status = JobStatus.Cancelled;
-            job.CompletedAt = DateTime.UtcNow;
             job.Error = "Execution timed out while waiting for an execution slot";
+            job.CompletedAt = DateTime.UtcNow;
+            job.Status = JobStatus.Cancelled;
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
@@ -337,7 +337,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 throw new UnauthorizedAccessException("Report script path is outside the configured script root.");
             scriptPath = resolvedScriptPath;
 
-            var manifestKey = $"report_{job.ReportId}_{job.Id}.snapshot.json";
+            var manifestKey = SnapshotPackageService.BuildSnapshotKey(job.ReportId, job.Id);
             var manifestPath = manifestKey;
             if (PortalPathGuard.ToSnapshotKey(_config, manifestKey) != manifestKey)
                 throw new UnauthorizedAccessException("Snapshot path is outside the configured snapshot directory.");
@@ -481,20 +481,20 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         }
         catch (OperationCanceledException)
         {
-            job.Status = JobStatus.Cancelled;
-            job.CompletedAt = DateTime.UtcNow;
             job.Error = _jobCancellationReasons.TryRemove(job.Id, out var reason)
                 ? reason
                 : "Execution timed out or was cancelled";
+            job.CompletedAt = DateTime.UtcNow;
+            job.Status = JobStatus.Cancelled;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
         }
         catch (Exception ex)
         {
-            job.Status = JobStatus.Failed;
-            job.CompletedAt = DateTime.UtcNow;
             job.Error = SecretRedactor.Redact(ex.Message);
+            job.CompletedAt = DateTime.UtcNow;
+            job.Status = JobStatus.Failed;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
             _log.LogError("Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
@@ -861,8 +861,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
     private Task SaveSnapshotManifestAsync(ReportManifest manifest, string manifestKey, CancellationToken ct)
     {
-        var json = JsonSerializer.Serialize(manifest, SnapshotJsonOptions);
-        return _artifacts.WriteAllTextAsync(ArtifactArea.Snapshots, manifestKey, json, ct: ct);
+        return _snapshotPackages.SaveAsync(manifest, manifestKey, ct);
     }
 
     private static IArtifactStorage CreateDefaultArtifactStorage(PortalConfig config) =>
