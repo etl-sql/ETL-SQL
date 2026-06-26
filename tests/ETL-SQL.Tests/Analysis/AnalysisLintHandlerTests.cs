@@ -186,5 +186,39 @@ namespace ETL_SQL.Tests.Analysis.Analysis
                 .FirstOrDefault(r => r["Rule"]?.ToString() == "UnusedConnection");
             Assert.NotNull(unusedFinding);
         }
+
+        [Fact]
+        public async Task Lint_RunScriptDependency_ParseFailure_ReturnsError()
+        {
+            WriteScript("child_bad.etlsql", "DECLARE @x INT = ");
+            var parent = WriteScript("parent_bad.etlsql", "RUN SCRIPT 'child_bad.etlsql';");
+
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse($"LINT '{parent}';"));
+
+            Assert.NotNull(eval.LastResult);
+            var finding = eval.LastResult!.Rows.FirstOrDefault(r =>
+                r["Rule"]?.ToString() == "RunScriptDependencyPreflight"
+                && r["Severity"]?.ToString() == "Error"
+                && r["Message"]?.ToString()?.Contains("failed to parse") == true);
+            Assert.NotNull(finding);
+        }
+
+        [Fact]
+        public async Task Lint_RunScriptDependency_UndeclaredVariable_ReturnsError()
+        {
+            WriteScript("child_undeclared.etlsql", "SELECT @missing AS Value;");
+            var parent = WriteScript("parent_undeclared.etlsql", "RUN SCRIPT 'child_undeclared.etlsql';");
+
+            var eval = NewEval();
+            await eval.Evaluate(TestHelpers.Parse($"LINT '{parent}';"));
+
+            Assert.NotNull(eval.LastResult);
+            var finding = eval.LastResult!.Rows.FirstOrDefault(r =>
+                r["Rule"]?.ToString() == "RunScriptDependencyPreflight"
+                && r["Severity"]?.ToString() == "Error"
+                && r["Message"]?.ToString()?.Contains("@missing") == true);
+            Assert.NotNull(finding);
+        }
     }
 }

@@ -30,6 +30,7 @@ public class LintStatementHandler : IStatementHandler
     {
         var lintStmt = (LintStatement)statement;
         string? sql = null;
+        string? lintDocumentUri = null;
 
         if (lintStmt.ScriptPath != null)
         {
@@ -45,6 +46,7 @@ public class LintStatementHandler : IStatementHandler
 
             _logger.Info("Linting script file: {Path}", fullPath);
             sql = await File.ReadAllTextAsync(fullPath);
+            lintDocumentUri = fullPath;
         }
         else
         {
@@ -60,7 +62,7 @@ public class LintStatementHandler : IStatementHandler
 
         var linter = LinterFactory.CreateWithAllRules();
 
-        var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+        var results = await linter.AnalyzeAsync(script, new DefaultLintContext { DocumentUri = lintDocumentUri ?? string.Empty });
 
         var table = new DataTable();
         table.AddColumn("Severity");
