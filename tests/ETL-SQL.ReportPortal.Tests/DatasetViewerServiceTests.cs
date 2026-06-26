@@ -121,6 +121,50 @@ public sealed class DatasetViewerServiceTests : IDisposable
         AssertSeedRows(rows);
     }
 
+    [Fact]
+    public async Task Query_FilteredUnsortedPage_ReturnsCountsWithoutChangingRows()
+    {
+        var parquet = WriteParquet("ds_page.parquet", encryptOptions: null);
+
+        await using var db = NewDb(out var config, atRestKey: null);
+        var id = AddDataset(db, "#page", parquet, DatasetEncryptionMode.None);
+
+        var result = await NewViewer(db, config).QueryAsync(
+            id,
+            page: 1,
+            pageSize: 1,
+            sort: null,
+            dir: null,
+            search: null,
+            [new DatasetColumnFilterDto("v", "gt", "10", null)]);
+
+        var rows = result.Rows.ToList();
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(1, result.FilteredCount);
+        Assert.Single(rows);
+        Assert.Equal(20L, rows[0]["v"]);
+    }
+
+    [Fact]
+    public async Task Stats_AndColumnValues_PreserveDatasetViewerSemantics()
+    {
+        var parquet = WriteParquet("ds_stats.parquet", encryptOptions: null);
+
+        await using var db = NewDb(out var config, atRestKey: null);
+        var id = AddDataset(db, "#stats", parquet, DatasetEncryptionMode.None);
+        var viewer = NewViewer(db, config);
+
+        var stats = (await viewer.GetStatsAsync(id, [])).Single(s => s.Name == "v");
+        Assert.Equal(0, stats.NullCount);
+        Assert.Equal(10d, stats.Min);
+        Assert.Equal(20d, stats.Max);
+        Assert.Equal(15d, stats.Avg);
+
+        var values = await viewer.GetColumnValuesAsync(id, "v", search: "2", limit: 10);
+        Assert.Equal(2, values.TotalDistinct);
+        Assert.Equal([20L], values.Values.ToList());
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private static void AssertSeedRows(List<Dictionary<string, object?>> rows)

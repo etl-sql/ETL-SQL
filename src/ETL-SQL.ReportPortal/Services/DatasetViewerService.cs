@@ -25,6 +25,8 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
     {
         var (rows, columns) = await LoadCachedAsync(id);
         var filteredList = Apply(rows, columns, search, filters);
+        var page1 = Math.Max(1, page);
+        var size = Math.Clamp(pageSize, 1, 1000);
 
         if (!string.IsNullOrWhiteSpace(sort) && columns.Any(c => c.Name.Equals(sort, StringComparison.OrdinalIgnoreCase)))
         {
@@ -32,18 +34,28 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
             filteredList = desc
                 ? filteredList.OrderByDescending(r => r.GetValueOrDefault(sort))
                 : filteredList.OrderBy(r => r.GetValueOrDefault(sort));
+
+            var materialized = filteredList.ToList();
+            return new DatasetRowsDto(
+                columns,
+                materialized.Skip((page1 - 1) * size).Take(size).ToList(),
+                rows.Count,
+                materialized.Count,
+                page1,
+                size);
         }
 
-        var materialized = filteredList.ToList();
+        var skip = (page1 - 1) * size;
+        var paged = new List<Dictionary<string, object?>>(size);
+        var filteredCount = 0L;
+        foreach (var row in filteredList)
+        {
+            if (filteredCount >= skip && paged.Count < size)
+                paged.Add(row);
+            filteredCount++;
+        }
 
-        long totalCount = rows.Count;
-        long filteredCount = materialized.Count;
-
-        var page1 = Math.Max(1, page);
-        var size = Math.Clamp(pageSize, 1, 1000);
-        var paged = materialized.Skip((page1 - 1) * size).Take(size).ToList();
-
-        return new DatasetRowsDto(columns, paged, totalCount, filteredCount, page1, size);
+        return new DatasetRowsDto(columns, paged, rows.Count, filteredCount, page1, size);
     }
 
     public async Task<(IEnumerable<Dictionary<string, object?>> rows, List<DatasetColumnDto> columns)> PrepareExportAsync(
@@ -88,26 +100,17 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         int id, IEnumerable<DatasetColumnFilterDto> filters)
     {
         var (rows, columns) = await LoadCachedAsync(id);
-        var filtered = Apply(rows, columns, null, filters).ToList();
+        var accumulators = columns
+            .Select(column => new ColumnStatsAccumulator(column.Name))
+            .ToArray();
 
-        return columns.Select(col =>
+        foreach (var row in Apply(rows, columns, null, filters))
         {
-            var values = filtered.Select(r => r.GetValueOrDefault(col.Name)).ToList();
-            long nulls = values.Count(v => v is null);
-            var nums = values.OfType<object>()
-                               .Select(v => TryParseDouble(v))
-                               .Where(v => v.HasValue)
-                               .Select(v => v!.Value)
-                               .ToList();
-            if (nums.Count > 0)
-                return new DatasetColumnStatsDto(col.Name, nulls, nums.Min(), nums.Max(), nums.Average());
+            foreach (var accumulator in accumulators)
+                accumulator.Add(row.GetValueOrDefault(accumulator.Name));
+        }
 
-            var strings = values.OfType<string>().Where(s => s.Length > 0).OrderBy(s => s).ToList();
-            if (strings.Count > 0)
-                return new DatasetColumnStatsDto(col.Name, nulls, strings.First(), strings.Last(), null);
-
-            return new DatasetColumnStatsDto(col.Name, nulls, null, null, null);
-        }).ToList();
+        return accumulators.Select(accumulator => accumulator.ToDto()).ToList();
     }
 
     public async Task<DatasetColumnValuesDto> GetColumnValuesAsync(
@@ -117,14 +120,23 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         if (!columns.Any(c => c.Name.Equals(colName, StringComparison.OrdinalIgnoreCase)))
             return new DatasetColumnValuesDto([], 0);
 
-        var all = rows.Select(r => r.GetValueOrDefault(colName)).Distinct().ToList();
-        long total = all.Count;
+        var size = Math.Max(1, limit);
+        var seen = new HashSet<object?>();
+        var values = new List<object?>(size);
+        foreach (var row in rows)
+        {
+            var value = row.GetValueOrDefault(colName);
+            if (!seen.Add(value))
+                continue;
 
-        if (!string.IsNullOrWhiteSpace(search))
-            all = all.Where(v => v?.ToString()?.Contains(search, StringComparison.OrdinalIgnoreCase) == true).ToList();
-
-        var paged = all.Take(Math.Max(1, limit)).ToList();
-        return new DatasetColumnValuesDto(paged, total);
+            if (values.Count < size
+                && (string.IsNullOrWhiteSpace(search)
+                    || value?.ToString()?.Contains(search, StringComparison.OrdinalIgnoreCase) == true))
+            {
+                values.Add(value);
+            }
+        }
+        return new DatasetColumnValuesDto(values, seen.Count);
     }
 
     // ── Cache + Parquet reader ────────────────────────────────────────────────
@@ -340,6 +352,62 @@ public class DatasetViewerService(PortalDbContext db, IMemoryCache cache, Portal
         if (v is int i) return i;
         if (v is long l) return l;
         return double.TryParse(v.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var r) ? r : null;
+    }
+
+    private sealed class ColumnStatsAccumulator(string name)
+    {
+        public string Name { get; } = name;
+        private long _nullCount;
+        private long _numericCount;
+        private double _numericSum;
+        private double? _numericMin;
+        private double? _numericMax;
+        private string? _stringMin;
+        private string? _stringMax;
+
+        public void Add(object? value)
+        {
+            if (value is null)
+            {
+                _nullCount++;
+                return;
+            }
+
+            var numeric = TryParseDouble(value);
+            if (numeric.HasValue)
+            {
+                var number = numeric.Value;
+                _numericCount++;
+                _numericSum += number;
+                _numericMin = _numericMin.HasValue ? Math.Min(_numericMin.Value, number) : number;
+                _numericMax = _numericMax.HasValue ? Math.Max(_numericMax.Value, number) : number;
+                return;
+            }
+
+            if (value is string { Length: > 0 } text)
+            {
+                if (_stringMin is null || string.Compare(text, _stringMin, StringComparison.Ordinal) < 0)
+                    _stringMin = text;
+                if (_stringMax is null || string.Compare(text, _stringMax, StringComparison.Ordinal) > 0)
+                    _stringMax = text;
+            }
+        }
+
+        public DatasetColumnStatsDto ToDto()
+        {
+            if (_numericCount > 0)
+                return new DatasetColumnStatsDto(
+                    Name,
+                    _nullCount,
+                    _numericMin,
+                    _numericMax,
+                    _numericSum / _numericCount);
+
+            if (_stringMin is not null)
+                return new DatasetColumnStatsDto(Name, _nullCount, _stringMin, _stringMax, null);
+
+            return new DatasetColumnStatsDto(Name, _nullCount, null, null, null);
+        }
     }
 
     private static string CsvQuote(string? s)
