@@ -403,9 +403,25 @@ public class JoinEngine
             yield break;
         }
 
+        await using var leftEnumerator = leftStream.GetAsyncEnumerator();
+        if (!await leftEnumerator.MoveNextAsync())
+        {
+            if (IsRightOuter(join.JoinType))
+            {
+                foreach (var right in joinRows)
+                    yield return right.Clone();
+            }
+            yield break;
+        }
+
+        var firstLeft = leftEnumerator.Current;
+        var leftRows = PrependRows(firstLeft, ContinueStream(leftEnumerator));
+        var leftColSet = BuildBareColumnSet(firstLeft);
+        var rightColSet = joinRows.Count > 0 ? BuildBareColumnSet(joinRows[0]) : null;
+
         var hashKeysLeft = new List<string>();
         var hashKeysRight = new List<string>();
-        bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
+        bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight, leftColSet, rightColSet);
 
         // If right side is large, delegate both sides to ExternalJoinEngine (hash-partition spill).
         // leftStream is still unconsumed here, so it can be passed directly.
@@ -414,7 +430,7 @@ public class JoinEngine
             _logger.WriteLine($"[yellow]HYPER-SCALE: Right side ({joinRows.Count} rows) exceeds threshold. Using ExternalJoinEngine.[/]");
             var externalJoin = new ExternalJoinEngine(_context, _logger);
             await foreach (var r in externalJoin.ApplyHashJoinExternal(
-                leftStream, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight))
+                leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight))
                 yield return r;
             yield break;
         }
@@ -425,21 +441,34 @@ public class JoinEngine
 
         if (algorithm == JoinHint.Hash)
         {
-            await foreach (var r in PerformHashJoinStream(leftStream, joinRows, join, hashKeysLeft, hashKeysRight)) yield return r;
+            await foreach (var r in PerformHashJoinStream(leftRows, joinRows, join, hashKeysLeft, hashKeysRight)) yield return r;
         }
         else if (algorithm == JoinHint.Merge)
         {
             // Merge requires both sides sorted. For simplicity in streaming, we buffer and sort.
             // In a production engine, we'd check if sides are already sorted by an index/ORDER BY.
             var leftBuffered = new List<Row>();
-            await foreach (var l in leftStream) leftBuffered.Add(l);
+            await foreach (var l in leftRows) leftBuffered.Add(l);
             var results = await PerformMergeJoin(leftBuffered, joinRows, join, hashKeysLeft, hashKeysRight);
             foreach (var r in results) yield return r;
         }
         else
         {
-            await foreach (var r in PerformNestedLoopJoinStream(leftStream, joinRows, join)) yield return r;
+            await foreach (var r in PerformNestedLoopJoinStream(leftRows, joinRows, join)) yield return r;
         }
+    }
+
+    private static async IAsyncEnumerable<Row> PrependRows(Row first, IAsyncEnumerable<Row> remaining)
+    {
+        yield return first;
+        await foreach (var row in remaining)
+            yield return row;
+    }
+
+    private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> enumerator)
+    {
+        while (await enumerator.MoveNextAsync())
+            yield return enumerator.Current;
     }
 
     private JoinHint GetBestAlgorithm(JoinClause join, int leftCount, int rightCount, bool hasEquality)

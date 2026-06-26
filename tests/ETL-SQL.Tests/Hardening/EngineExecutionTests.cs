@@ -45,6 +45,62 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task JoinEngine_StreamingUnqualifiedEquality_UsesHashJoin()
+        {
+            var e = NewEvaluator();
+            var logger = new CapturingLogger();
+            var engine = new JoinEngine(e, logger);
+
+            var right = new InMemoryDataSource { Validator = e, ExecutionContext = e };
+            var rightTable = new DataTable();
+            rightTable.SetColumns(new[] { "right_id", "payload" });
+            for (var i = 0; i < 64; i++)
+            {
+                var row = rightTable.NewRow();
+                row["right_id"] = i;
+                row["payload"] = $"r-{i}";
+                await rightTable.AddRowAsync(row);
+            }
+            await right.WriteBatches(new[] { rightTable }.ToAsyncEnumerable());
+            e.Connections["#right"] = right;
+
+            var leftSchema = new TableSchema(new[] { "left_id", "value" });
+            async IAsyncEnumerable<Row> LeftRows()
+            {
+                for (var i = 0; i < 64; i++)
+                {
+                    var row = new Row(leftSchema);
+                    row["left_id"] = i;
+                    row["value"] = $"l-{i}";
+                    yield return row;
+                }
+                await Task.CompletedTask;
+            }
+
+            var join = new JoinClause(
+                "INNER JOIN",
+                new TableReference("#right"),
+                new BinaryExpression(
+                    new IdentifierExpression("left_id"),
+                    TokenType.EQUALS,
+                    new IdentifierExpression("right_id")));
+
+            var stmt = new SelectStatement(
+                new List<SelectColumn> { new(new IdentifierExpression("left_id")) },
+                null,
+                new TableReference("#left"),
+                new List<JoinClause> { join },
+                null);
+
+            var result = await engine.ApplyJoinsStreaming(LeftRows(), stmt.Joins, stmt).ToListAsync();
+
+            Assert.Equal(64, result.Count);
+            Assert.Contains(logger.Messages, m =>
+                m.Level == LogLevel.Debug
+                && m.Message.Contains("Hash Join", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public async Task ExternalJoinEngine_SinglePartition_Correctness()
         {
             var e = NewEvaluator(externalPartitions: 1); // Exact override for degenerate case
@@ -225,6 +281,24 @@ namespace ETL_SQL.Tests.Hardening
 
             Assert.Single(result);
             Assert.Equal(100L, Convert.ToInt64(result[0]["Total"]));
+        }
+
+        private sealed class CapturingLogger : ILogger
+        {
+            public List<(LogLevel Level, string Message)> Messages { get; } = new();
+            public string? SessionId { get; set; }
+            public bool IsDebugEnabled => true;
+            public bool IsVerboseEnabled => false;
+            public bool IsVerbose { get; set; }
+            public bool SuppressConsole { get; set; } = true;
+            public bool IsJsonMode { get; set; }
+            public event Action<string, string?, ConsoleColor>? OnMessage;
+
+            public void Log(LogLevel level, string message, Exception? ex = null)
+            {
+                Messages.Add((level, message));
+                OnMessage?.Invoke(message, null, ConsoleColor.White);
+            }
         }
 
         [Fact]
