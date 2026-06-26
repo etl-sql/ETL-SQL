@@ -671,10 +671,12 @@ When the number of rows in a `SELECT` result exceeds `WINDOW_SPILL_THRESHOLD` (d
 **How it works:**
 
 1. Window functions in the same `SELECT` that share identical `PARTITION BY` + `ORDER BY` are grouped into a single processing pass.
-2. For each group, the input stream is hash-partitioned into `EXTERNAL_HASH_PARTITIONS` (default 32) buckets and written to disk as newline-delimited JSON.
-3. Each bucket is loaded and processed independently, keeping memory bounded regardless of total row count.
-4. If one partition exceeds the threshold and the group contains only `ROW_NUMBER`, `RANK`, or `DENSE_RANK`, a streaming *deep-spill* path is used — the partition is never fully materialized.
+2. For each group, the input stream is hash-partitioned into `EXTERNAL_HASH_PARTITIONS` (default 32) spill buckets.
+3. Oversized partitions use streaming, bounded-state, or replay paths for ranking functions; constant-offset `LAG`/`LEAD`; `FIRST_VALUE`/`LAST_VALUE`; cumulative and literal-bounded `ROWS` aggregates; and `PERCENT_RANK`/`CUME_DIST`/literal-bucket `NTILE`.
+4. Replay paths may perform additional external sorts and spill passes to preserve SQL ordering while bounding managed memory.
 5. When a `SELECT` mixes window functions with different signatures, each signature group is processed in sequence, spilling intermediate results between passes.
+
+Dynamic offsets or bucket counts, `RANGE`/`GROUPS` frames, frame exclusions, and frames ending in `FOLLOWING` currently use the compatibility path. That path materializes each hash bucket, so size `EXTERNAL_HASH_PARTITIONS` and `WINDOW_SPILL_THRESHOLD` conservatively when those forms operate on very large partitions.
 
 **Configuration:**
 

@@ -373,7 +373,7 @@ public class ExternalWindowEngine
         return f.FunctionName.ToUpperInvariant() switch
         {
             "COUNT" => f.Arguments.Count <= 1,
-            "SUM" or "AVG" => f.Arguments.Count == 1,
+            "SUM" or "AVG" or "MIN" or "MAX" => f.Arguments.Count == 1,
             _ => false
         };
     }
@@ -529,20 +529,43 @@ public class ExternalWindowEngine
 
     private sealed class SlidingWindowAggregate
     {
-        private readonly Queue<(bool Included, object? Value)> _values = new();
+        private readonly Queue<(long Sequence, bool Included, object? Value)> _values = new();
+        private readonly LinkedList<(long Sequence, object Value)> _minimums = new();
+        private readonly LinkedList<(long Sequence, object Value)> _maximums = new();
+        private long _sequence;
         private long _count;
         private long _nonNullCount;
         private long _nonIntegerCount;
         private decimal _sum;
 
-        public void Add(string functionName, object? value, bool included, bool countStar, int windowSize)
+        public void Add(string functionName, object? value, bool included, bool countStar, int windowSize, IExecutionContext context)
         {
-            _values.Enqueue((included, value));
+            var sequence = _sequence++;
+            _values.Enqueue((sequence, included, value));
             Apply(functionName, value, included, countStar, 1);
+            if (included && value is not null and not DBNull)
+            {
+                if (functionName.Equals("MIN", StringComparison.OrdinalIgnoreCase))
+                {
+                    while (_minimums.Last != null && context.CompareConstants(_minimums.Last.Value.Value, value) >= 0)
+                        _minimums.RemoveLast();
+                    _minimums.AddLast((sequence, value));
+                }
+                else if (functionName.Equals("MAX", StringComparison.OrdinalIgnoreCase))
+                {
+                    while (_maximums.Last != null && context.CompareConstants(_maximums.Last.Value.Value, value) <= 0)
+                        _maximums.RemoveLast();
+                    _maximums.AddLast((sequence, value));
+                }
+            }
             if (_values.Count > windowSize)
             {
                 var removed = _values.Dequeue();
                 Apply(functionName, removed.Value, removed.Included, countStar, -1);
+                if (_minimums.First?.Value.Sequence == removed.Sequence)
+                    _minimums.RemoveFirst();
+                if (_maximums.First?.Value.Sequence == removed.Sequence)
+                    _maximums.RemoveFirst();
             }
         }
 
@@ -553,6 +576,8 @@ public class ExternalWindowEngine
                 "COUNT" => (decimal)_count,
                 "SUM" => _nonNullCount == 0 ? null : _sum,
                 "AVG" => GetAverage(),
+                "MIN" => _minimums.First?.Value.Value,
+                "MAX" => _maximums.First?.Value.Value,
                 _ => null
             };
         }
@@ -719,7 +744,7 @@ public class ExternalWindowEngine
                     object? value = null;
                     if (f.Arguments.Count > 0)
                         value = await _context.EvaluateValue(f.Arguments[0], row);
-                    accumulator.Add(f.FunctionName, value, included, IsCountStar(f), preceding + 1);
+                    accumulator.Add(f.FunctionName, value, included, IsCountStar(f), preceding + 1, _context);
                     winVal = accumulator.GetValue(f.FunctionName);
                 }
                 else if (name_func == "FIRST_VALUE")

@@ -425,6 +425,8 @@ namespace ETL_SQL.Tests.Hardening
             var slidingSum = SlidingCall("SUM", new IdentifierExpression("Val"));
             var slidingAvg = SlidingCall("AVG", new IdentifierExpression("Val"));
             var slidingCount = SlidingCall("COUNT", new IdentifierExpression("*"));
+            var slidingMin = SlidingCall("MIN", new IdentifierExpression("Val"));
+            var slidingMax = SlidingCall("MAX", new IdentifierExpression("Val"));
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
@@ -438,7 +440,9 @@ namespace ETL_SQL.Tests.Hardening
                     new(nth, "ThirdVal"),
                     new(slidingSum, "RollingSum"),
                     new(slidingAvg, "RollingAvg"),
-                    new(slidingCount, "RollingCount")
+                    new(slidingCount, "RollingCount"),
+                    new(slidingMin, "RollingMin"),
+                    new(slidingMax, "RollingMax")
                 },
                 null,
                 new TableReference("#input"),
@@ -472,6 +476,8 @@ namespace ETL_SQL.Tests.Hardening
             var slidingSumKey = $"WINDOW_{slidingSum.ToSql().ToUpperInvariant()}";
             var slidingAvgKey = $"WINDOW_{slidingAvg.ToSql().ToUpperInvariant()}";
             var slidingCountKey = $"WINDOW_{slidingCount.ToSql().ToUpperInvariant()}";
+            var slidingMinKey = $"WINDOW_{slidingMin.ToSql().ToUpperInvariant()}";
+            var slidingMaxKey = $"WINDOW_{slidingMax.ToSql().ToUpperInvariant()}";
             for (var i = 0; i < result.Count; i++)
             {
                 var n = i + 1;
@@ -490,6 +496,8 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.Equal(frameSum, Convert.ToDecimal(result[i][slidingSumKey]));
                 Assert.Equal(frameSum / frameCount, Convert.ToDecimal(result[i][slidingAvgKey]));
                 Assert.Equal((decimal)frameCount, Convert.ToDecimal(result[i][slidingCountKey]));
+                Assert.Equal((decimal)frameStart, Convert.ToDecimal(result[i][slidingMinKey]));
+                Assert.Equal((decimal)n, Convert.ToDecimal(result[i][slidingMaxKey]));
             }
         }
 
