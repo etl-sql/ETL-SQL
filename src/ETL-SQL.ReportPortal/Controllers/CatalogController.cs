@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Security.Cryptography;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
@@ -314,16 +313,14 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds)
     {
         var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
-        var isStale = snapshot is not null
-            && System.IO.File.Exists(r.ScriptPath)
-            && System.IO.File.GetLastWriteTimeUtc(r.ScriptPath) > snapshot.BuiltAt;
-
+        var isStale = false;
         var scriptChanged = false;
-        if (!string.IsNullOrWhiteSpace(r.PublishedScriptHash) && System.IO.File.Exists(r.ScriptPath))
+        if (System.IO.File.Exists(r.ScriptPath))
         {
-            var currentHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(System.IO.File.ReadAllBytes(r.ScriptPath))).ToLowerInvariant();
-            scriptChanged = !string.Equals(currentHash, r.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+            var scriptLastWrite = System.IO.File.GetLastWriteTimeUtc(r.ScriptPath);
+            isStale = snapshot is not null && scriptLastWrite > snapshot.BuiltAt;
+            scriptChanged = !string.IsNullOrWhiteSpace(r.PublishedScriptHash)
+                && scriptLastWrite > r.ScriptLastModified;
         }
 
         return new CatalogSearchResultDto(

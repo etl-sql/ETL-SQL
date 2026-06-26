@@ -148,7 +148,7 @@ At small scales, query latencies, heap allocations, and lock contentions are neg
 
 ### Medium-Scale Perspective (100 Reports / 100 Jobs)
 At medium scales, structural patterns start introducing I/O wait times and thread pool blocking:
-- [ ] **Thread-Pool Block on List Hashing** — [ReportsController.cs:L88](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/ReportsController.cs#L88): Listing a folder with 100 reports triggers 100 synchronous file reads (`File.ReadAllBytes`) and 100 SHA-256 computations on the HTTP request threads. On shared network paths (HA clustered setups), this blocks threads for hundreds of milliseconds.
+- [x] **Thread-Pool Block on List Hashing** — [ReportsController.cs:L88](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/ReportsController.cs#L88): Report folder and catalog list DTOs now use script last-write metadata for stale/script-changed indicators instead of synchronously reading and hashing every script file. Exact hash checks remain on explicit validation/history paths.
   - *Solution*: Eliminate synchronous disk reads inside catalog mapping. Cache script write times and hashes in database columns and query them asynchronously or rely solely on DB columns.
 - [ ] **Process Creation CPU Overhead** — [ProcessJobExecutor.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs#L59): Launching 100 concurrent or sequential jobs via child processes triggers CLR/JIT boot overhead (100-300ms per startup), competing for CPU on low-spec VMs.
   - *Solution*: Implement process pooling (pre-warmed runner pool) or in-process thread execution for light scripts.

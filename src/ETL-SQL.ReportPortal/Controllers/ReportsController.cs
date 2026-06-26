@@ -88,19 +88,20 @@ public class ReportsController : ControllerBase
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
         bool isStale = false;
+        bool scriptChanged = false;
         if (snap is not null
             && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out var resolvedScriptPath)
             && System.IO.File.Exists(resolvedScriptPath))
-            isStale = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > snap.BuiltAt;
-
-        bool scriptChanged = false;
-        if (r.PublishedScriptHash is not null
+        {
+            var scriptLastWrite = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath);
+            isStale = scriptLastWrite > snap.BuiltAt;
+            scriptChanged = r.PublishedScriptHash is not null && scriptLastWrite > r.ScriptLastModified;
+        }
+        else if (r.PublishedScriptHash is not null
             && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out resolvedScriptPath)
             && System.IO.File.Exists(resolvedScriptPath))
         {
-            var currentHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(System.IO.File.ReadAllBytes(resolvedScriptPath))).ToLowerInvariant();
-            scriptChanged = !string.Equals(currentHash, r.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+            scriptChanged = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > r.ScriptLastModified;
         }
 
         return new ReportDto(
