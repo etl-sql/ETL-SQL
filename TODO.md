@@ -62,7 +62,7 @@ release begins.
 
 ## Future Performance & Scalability Enhancements
 - [x] **Priority 1: Guarded Parallel Visual Execution** — Report manifest generation now builds independent visuals with bounded concurrency, forked execution contexts, merged telemetry, deterministic visual ordering, and a sequential fallback for interaction refreshes.
-- [ ] **Priority 2: Warm Job Execution Path** — Consolidates process pooling and process creation CPU overhead. Start with a light/warm runner path or reusable process protocol before committing to a full worker pool.
+- [x] **Priority 2: Warm Job Execution Path** — Process-spawned orchestrator jobs can now opt into reusable `ETL-SQL runner` child processes (`Jobs:UseWarmRunner`) with a bounded runner pool, startup handshake, per-job timeout/cancellation kill behavior, and fallback to one-shot process execution if the warm path fails.
 - [ ] **Priority 3: Incremental Expression Hot-Path Compilation** — Compile common expression shapes once per statement and keep recursive interpretation as the compatible fallback.
 - [ ] **Priority 4: Remaining Select Materialization Boundaries** — Continue preserving streaming through non-blocking select stages; keep full materialization only where SQL semantics require blocking.
 - [ ] **Priority 5: Expanded External Window Spill Coverage** — Extend two-pass or segmented spill implementations to additional window functions and frame shapes that still buffer full partitions.
@@ -164,7 +164,7 @@ At small scales, query latencies, heap allocations, and lock contentions are neg
 At medium scales, structural patterns start introducing I/O wait times and thread pool blocking:
 - [x] **Thread-Pool Block on List Hashing** — [ReportsController.cs:L88](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.ReportPortal/Controllers/ReportsController.cs#L88): Report folder and catalog list DTOs now use script last-write metadata for stale/script-changed indicators instead of synchronously reading and hashing every script file. Exact hash checks remain on explicit validation/history paths.
   - *Solution*: Eliminate synchronous disk reads inside catalog mapping. Cache script write times and hashes in database columns and query them asynchronously or rely solely on DB columns.
-- [ ] **Process Creation CPU Overhead** — [ProcessJobExecutor.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs#L59): Launching 100 concurrent or sequential jobs via child processes triggers CLR/JIT boot overhead (100-300ms per startup), competing for CPU on low-spec VMs.
+- [x] **Process Creation CPU Overhead** — [ProcessJobExecutor.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Orchestrator/Execution/ProcessJobExecutor.cs#L59): Reusable warm runner processes now avoid repeated CLR/DI/JIT startup for process-spawned jobs while retaining process-level cancellation by killing the active runner on timeout.
   - *Priority*: Consolidated under Priority 2.
   - *Solution*: Implement process pooling (pre-warmed runner pool) or in-process thread execution for light scripts.
 

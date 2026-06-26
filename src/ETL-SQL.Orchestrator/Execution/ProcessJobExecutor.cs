@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -32,6 +35,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ILogger<ProcessJobExecutor> _logger;
         private static readonly object CleanupLock = new();
         private static DateTime _lastTempScriptCleanupUtc = DateTime.MinValue;
+        private static readonly ConcurrentDictionary<string, WarmRunnerPool> WarmRunnerPools = new(StringComparer.OrdinalIgnoreCase);
 
         public ProcessJobExecutor(
             IOptions<ProcessJobExecutorOptions> options,
@@ -44,6 +48,14 @@ namespace ETL_SQL.Orchestrator.Execution
             CleanupOldTempScripts(force: true);
         }
 
+        internal static void ClearWarmRunnerPoolsForTests()
+        {
+            foreach (var pool in WarmRunnerPools.Values)
+                pool.Dispose();
+
+            WarmRunnerPools.Clear();
+        }
+
         public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
         {
             CleanupOldTempScripts(force: false);
@@ -53,6 +65,18 @@ namespace ETL_SQL.Orchestrator.Execution
             try
             {
                 await File.WriteAllTextAsync(tempFile, scriptText, Encoding.UTF8, cancellationToken);
+                if (_options.UseWarmRunner)
+                {
+                    try
+                    {
+                        return await RunWarmProcessAsync(tempFile, sessionId, cancellationToken, jobName, queueWaitMs);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Warm job runner failed; falling back to one-shot process execution.");
+                    }
+                }
+
                 return await RunProcessAsync(tempFile, sessionId, cancellationToken, queueWaitMs);
             }
             finally
@@ -185,6 +209,44 @@ namespace ETL_SQL.Orchestrator.Execution
             return ParseResult(exitCode, stdout.ToString(), peakMemory, cpuSeconds);
         }
 
+        private async Task<ScriptExecutionResult> RunWarmProcessAsync(
+            string scriptFile,
+            string? sessionId,
+            CancellationToken ct,
+            string? jobName,
+            long queueWaitMs)
+        {
+            var exePath = ResolveExecutablePath();
+            var key = $"{Path.GetFullPath(exePath)}|{Math.Max(1, _options.WarmRunnerPoolSize)}|{Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)}";
+            var pool = WarmRunnerPools.GetOrAdd(key, _ => new WarmRunnerPool(
+                exePath,
+                Math.Max(1, _options.WarmRunnerPoolSize),
+                TimeSpan.FromSeconds(Math.Max(1, _options.WarmRunnerStartupTimeoutSeconds)),
+                _tracker,
+                _logger));
+
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            if (_options.TimeoutSeconds > 0)
+                cts.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
+
+            try
+            {
+                return await pool.ExecuteAsync(
+                    new WarmRunnerRequest(
+                        Guid.NewGuid().ToString("N"),
+                        scriptFile,
+                        sessionId,
+                        jobName,
+                        queueWaitMs,
+                        _options.WarmRunnerBatchSize),
+                    cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return new ScriptExecutionResult(false, 0, "Job execution was cancelled or timed out.");
+            }
+        }
+
         private ScriptExecutionResult ParseResult(int exitCode, string stdout, long peakMemory, double cpuSeconds)
         {
             // ETL-SQL.exe with --json writes a JSON envelope as the LAST non-empty line
@@ -290,5 +352,244 @@ namespace ETL_SQL.Orchestrator.Execution
         public int TimeoutSeconds { get; set; } = 3600;
         /// <summary>When true, SchedulerService uses ProcessJobExecutor instead of ScriptExecutorAdapter.</summary>
         public bool UseProcessSpawning { get; set; } = false;
+        /// <summary>When true, ProcessJobExecutor reuses warm ETL-SQL runner processes instead of launching a fresh process per job.</summary>
+        public bool UseWarmRunner { get; set; } = false;
+        /// <summary>Maximum warm runner processes kept for concurrent job execution.</summary>
+        public int WarmRunnerPoolSize { get; set; } = 2;
+        /// <summary>Seconds to wait for a newly spawned warm runner to publish its ready handshake.</summary>
+        public int WarmRunnerStartupTimeoutSeconds { get; set; } = 10;
+        /// <summary>Batch size passed to warm runner execution sessions. Values less than 1 use the engine default.</summary>
+        public int WarmRunnerBatchSize { get; set; } = 10000;
     }
+
+    internal sealed class WarmRunnerPool : IDisposable
+    {
+        private readonly string _exePath;
+        private readonly TimeSpan _startupTimeout;
+        private readonly ChildProcessTracker _tracker;
+        private readonly ILogger _logger;
+        private readonly SemaphoreSlim _slots;
+        private readonly ConcurrentBag<WarmRunnerClient> _idle = new();
+        private readonly ConcurrentBag<WarmRunnerClient> _all = new();
+
+        public WarmRunnerPool(
+            string exePath,
+            int poolSize,
+            TimeSpan startupTimeout,
+            ChildProcessTracker tracker,
+            ILogger logger)
+        {
+            _exePath = exePath;
+            _startupTimeout = startupTimeout;
+            _tracker = tracker;
+            _logger = logger;
+            _slots = new SemaphoreSlim(Math.Max(1, poolSize));
+        }
+
+        public async Task<ScriptExecutionResult> ExecuteAsync(WarmRunnerRequest request, CancellationToken ct)
+        {
+            await _slots.WaitAsync(ct);
+            WarmRunnerClient? client = null;
+            try
+            {
+                client = await RentAsync(ct);
+                _tracker.Register(client.ProcessId, request.ScriptFile);
+                try
+                {
+                    return await client.ExecuteAsync(request, ct);
+                }
+                finally
+                {
+                    _tracker.Unregister(client.ProcessId);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                client?.Kill();
+                throw;
+            }
+            catch
+            {
+                client?.Kill();
+                throw;
+            }
+            finally
+            {
+                if (client is { IsUsable: true })
+                    _idle.Add(client);
+                _slots.Release();
+            }
+        }
+
+        private async Task<WarmRunnerClient> RentAsync(CancellationToken ct)
+        {
+            while (_idle.TryTake(out var client))
+            {
+                if (client.IsUsable)
+                    return client;
+
+                client.Dispose();
+            }
+
+            var started = await WarmRunnerClient.StartAsync(_exePath, _startupTimeout, _logger, ct);
+            _all.Add(started);
+            return started;
+        }
+
+        public void Dispose()
+        {
+            while (_all.TryTake(out var client))
+            {
+                client.Kill();
+                client.Dispose();
+            }
+
+            _slots.Dispose();
+        }
+    }
+
+    internal sealed class WarmRunnerClient : IDisposable
+    {
+        private static readonly JsonSerializerOptions JsonOptions = new()
+        {
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        private readonly Process _process;
+        private readonly ILogger _logger;
+        private bool _killed;
+
+        private WarmRunnerClient(Process process, ILogger logger)
+        {
+            _process = process;
+            _logger = logger;
+        }
+
+        public int ProcessId => _process.Id;
+        public bool IsUsable => !_killed && !_process.HasExited;
+
+        public static async Task<WarmRunnerClient> StartAsync(string exePath, TimeSpan startupTimeout, ILogger logger, CancellationToken ct)
+        {
+            var psi = new ProcessStartInfo(exePath)
+            {
+                UseShellExecute = false,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                WorkingDirectory = Path.GetDirectoryName(exePath) ?? Directory.GetCurrentDirectory()
+            };
+            psi.ArgumentList.Add("runner");
+
+            var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (!string.IsNullOrWhiteSpace(e.Data))
+                    logger.LogDebug("Warm runner PID={Pid} stderr: {Line}", SafeProcessId(process), LogSanitizer.Clean(e.Data));
+            };
+
+            process.Start();
+            process.BeginErrorReadLine();
+
+            using var startupCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            startupCts.CancelAfter(startupTimeout);
+            while (true)
+            {
+                var line = await process.StandardOutput.ReadLineAsync(startupCts.Token);
+                if (line == null)
+                    throw new InvalidOperationException("Warm runner exited before ready handshake.");
+
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                if (root.TryGetProperty("type", out var type) &&
+                    string.Equals(type.GetString(), "ready", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogInformation("Warm job runner PID={Pid} is ready.", process.Id);
+                    return new WarmRunnerClient(process, logger);
+                }
+            }
+        }
+
+        public async Task<ScriptExecutionResult> ExecuteAsync(WarmRunnerRequest request, CancellationToken ct)
+        {
+            if (!IsUsable)
+                throw new InvalidOperationException("Warm runner is not running.");
+
+            var payload = JsonSerializer.Serialize(request, JsonOptions);
+            await _process.StandardInput.WriteLineAsync(payload.AsMemory(), ct);
+            await _process.StandardInput.FlushAsync(ct);
+
+            while (true)
+            {
+                var line = await _process.StandardOutput.ReadLineAsync(ct);
+                if (line == null)
+                    throw new InvalidOperationException("Warm runner exited before returning a result.");
+
+                WarmRunnerResponse? response;
+                try
+                {
+                    response = JsonSerializer.Deserialize<WarmRunnerResponse>(line, JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    throw new InvalidOperationException("Warm runner returned invalid JSON.", ex);
+                }
+
+                if (response == null ||
+                    !string.Equals(response.Type, "result", StringComparison.OrdinalIgnoreCase) ||
+                    !string.Equals(response.Id, request.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                return new ScriptExecutionResult(
+                    response.Success,
+                    response.RowsProcessed,
+                    response.ErrorMessage,
+                    response.PeakMemoryBytes,
+                    response.CpuTimeSeconds,
+                    response.SessionId);
+            }
+        }
+
+        public void Kill()
+        {
+            _killed = true;
+            try
+            {
+                if (!_process.HasExited)
+                    _process.Kill(entireProcessTree: true);
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            try { _process.Dispose(); } catch { }
+        }
+
+        private static int SafeProcessId(Process process)
+        {
+            try { return process.Id; } catch { return -1; }
+        }
+    }
+
+    internal sealed record WarmRunnerRequest(
+        string Id,
+        string ScriptFile,
+        string? SessionId,
+        string? JobName,
+        long QueueWaitMs,
+        int BatchSize);
+
+    internal sealed record WarmRunnerResponse(
+        string Type,
+        string Id,
+        bool Success,
+        long RowsProcessed,
+        string? ErrorMessage,
+        long PeakMemoryBytes,
+        double CpuTimeSeconds,
+        string? SessionId);
 }

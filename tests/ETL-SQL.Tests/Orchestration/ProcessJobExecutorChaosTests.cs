@@ -14,6 +14,47 @@ namespace ETL_SQL.Tests.Orchestration;
 public class ProcessJobExecutorChaosTests
 {
     [Fact]
+    public async Task WarmRunner_ExecutesMultipleJobs_AndClearsActiveProcessTracking()
+    {
+        var tempDir = NewTempDir();
+        var pidStore = Path.Combine(tempDir, "child-pids.json");
+        var tracker = new ChildProcessTracker(new Mock<ILogger<ChildProcessTracker>>().Object, pidStore);
+        var exePath = Path.Combine(AppContext.BaseDirectory,
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "ETL-SQL.exe" : "ETL-SQL");
+
+        Assert.True(File.Exists(exePath), $"Expected ETL-SQL apphost at {exePath}");
+
+        var executor = new ProcessJobExecutor(
+            Options.Create(new ProcessJobExecutorOptions
+            {
+                ExecutablePath = exePath,
+                TimeoutSeconds = 30,
+                UseWarmRunner = true,
+                WarmRunnerPoolSize = 1,
+                WarmRunnerStartupTimeoutSeconds = 20
+            }),
+            tracker,
+            new Mock<ILogger<ProcessJobExecutor>>().Object);
+
+        try
+        {
+            var first = await executor.ExecuteTextAsync("SELECT 1 AS Val;", sessionId: "warm-test-1", jobName: "WarmRunnerOne");
+            var second = await executor.ExecuteTextAsync("SELECT 2 AS Val;", sessionId: "warm-test-2", jobName: "WarmRunnerTwo");
+
+            Assert.True(first.Success, first.ErrorMessage);
+            Assert.True(second.Success, second.ErrorMessage);
+            Assert.Equal("warm-test-1", first.SessionId);
+            Assert.Equal("warm-test-2", second.SessionId);
+            Assert.Equal(0, tracker.ActiveCount);
+        }
+        finally
+        {
+            ProcessJobExecutor.ClearWarmRunnerPoolsForTests();
+            TryDelete(tempDir);
+        }
+    }
+
+    [Fact]
     public async Task Timeout_KillsChildProcess_AndClearsActiveProcessTracking()
     {
         var tempDir = NewTempDir();

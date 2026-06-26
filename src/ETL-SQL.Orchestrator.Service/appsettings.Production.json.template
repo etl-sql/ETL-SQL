@@ -1,7 +1,11 @@
 {
   "Jobs": {
     "UseProcessSpawning": true,
-    "MaxParallelJobs": 8
+    "UseWarmRunner": false,
+    "WarmRunnerPoolSize": 2,
+    "WarmRunnerStartupTimeoutSeconds": 10,
+    "WarmRunnerBatchSize": 10000,
+    "MaxConcurrentJobs": 8
   },
   "Kestrel": {
     "Endpoints": {

@@ -114,8 +114,12 @@ Controls task execution parameters and process boundaries.
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `Jobs:UseProcessSpawning` | boolean | `false` | — | When true, runs jobs in isolated OS sub-processes instead of thread tasks. |
+| `Jobs:UseWarmRunner` | boolean | `false` | — | When true with process spawning, reuses warm `ETL-SQL runner` child processes instead of launching a fresh process for every job. Falls back to one-shot spawning if a runner fails. |
 | `Jobs:ExecutablePath` | string | `""` | — | Absolute path to target `ETL-SQL.exe` engine when process spawning is active. |
 | `Jobs:TimeoutSeconds` | integer | `3600` | — | Maximum runtime permitted for a single job before terminating (1 hour). |
+| `Jobs:WarmRunnerPoolSize` | integer | `2` | — | Maximum number of reusable runner processes for concurrent job execution. |
+| `Jobs:WarmRunnerStartupTimeoutSeconds` | integer | `10` | — | Time allowed for a newly spawned warm runner to publish its ready handshake. |
+| `Jobs:WarmRunnerBatchSize` | integer | `10000` | — | Batch size passed into warm runner execution sessions. |
 | `Jobs:MaxConcurrentJobs` | integer | `0` | — | Process scale throttle. O denotes logical processor count. |
 
 ---

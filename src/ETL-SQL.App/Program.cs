@@ -55,9 +55,11 @@ namespace ETL_SQL
                 if (!isDoctorJson)
                     await Console.Error.WriteLineAsync("[DI_READY] Dependency injection logic completed.");
 
+                if (args.Length > 0 && string.Equals(args[0], "runner", StringComparison.OrdinalIgnoreCase))
+                    return await WarmJobRunner.RunAsync(ServiceProvider);
 
                 // Start scheduler only for interactive/daemon modes, not for one-shot script execution
-                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "doctor" || args[0] == "purge" || args[0] == "admin" || args[0] == "init");
+                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "runner" || args[0] == "doctor" || args[0] == "purge" || args[0] == "admin" || args[0] == "init");
                 if (!isOneShot)
                 {
                     try
