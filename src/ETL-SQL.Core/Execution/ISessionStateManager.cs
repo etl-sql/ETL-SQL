@@ -11,7 +11,7 @@ public interface ISessionStateManager
     Task SaveSession(string sessionId, object evaluator, string? scriptSource = null);
     Task<SessionState?> LoadSession(string sessionId);
     void ClearSession(string sessionId);
-    IEnumerable<SessionSummary> GetSessions();
+    IEnumerable<SessionSummary> GetSessions(bool includeSize = false);
     bool IsSessionInUse(string sessionId);
     void RegisterActiveSession(string sessionId);
     void UnregisterActiveSession(string sessionId);

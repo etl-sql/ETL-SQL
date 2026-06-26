@@ -23,7 +23,7 @@ public class NullSessionStateManager : ISessionStateManager
     public Task SaveSession(string sessionId, object evaluator, string? scriptSource = null) => Task.CompletedTask;
     public Task<Core.Data.SessionState?> LoadSession(string sessionId) => Task.FromResult<Core.Data.SessionState?>(null);
     public void ClearSession(string sessionId) { }
-    public IEnumerable<Core.Data.SessionSummary> GetSessions() => System.Linq.Enumerable.Empty<Core.Data.SessionSummary>();
+    public IEnumerable<Core.Data.SessionSummary> GetSessions(bool includeSize = false) => System.Linq.Enumerable.Empty<Core.Data.SessionSummary>();
     public bool IsSessionInUse(string sessionId) => false;
     public void RegisterActiveSession(string sessionId) { }
     public void UnregisterActiveSession(string sessionId) { }

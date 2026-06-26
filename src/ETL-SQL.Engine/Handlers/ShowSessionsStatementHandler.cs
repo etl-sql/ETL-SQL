@@ -44,7 +44,7 @@ public class ShowSessionsStatementHandler : IStatementHandler
             row["SessionId"] = sess.SessionId;
             row["Created"] = sess.CreatedAt;
             row["LastModified"] = sess.LastModifiedAt;
-            row["Size_MB"] = (decimal)sess.SizeMB;
+            row["Size_MB"] = sess.SizeMB.HasValue ? (decimal)sess.SizeMB.Value : null;
             row["TempTables"] = sess.TempTableCount;
             row["Variables"] = sess.VariableCount;
             row["LastScript"] = sess.LastScriptSource ?? "";

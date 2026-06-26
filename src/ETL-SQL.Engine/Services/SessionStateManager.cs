@@ -224,7 +224,7 @@ public class SessionStateManager : ISessionStateManager
     }
 
     /// <summary>Returns a list of all managed sessions on disk.</summary>
-    public IEnumerable<SessionSummary> GetSessions()
+    public IEnumerable<SessionSummary> GetSessions(bool includeSize = false)
     {
         if (!Directory.Exists(SessionRoot)) yield break;
 
@@ -237,14 +237,15 @@ public class SessionStateManager : ISessionStateManager
             var lastModified = File.GetLastWriteTime(dbPath);
             var createdAt = File.GetCreationTime(dbPath);
 
-            long totalSize = Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+            long totalSize = includeSize ? MeasureDirectorySize(dir) : 0;
 
             yield return new SessionSummary
             {
                 SessionId = sessionId,
                 CreatedAt = createdAt,
                 LastModifiedAt = lastModified,
-                TotalSizeBytes = totalSize
+                TotalSizeBytes = totalSize,
+                IsSizeCalculated = includeSize
             };
         }
     }
@@ -252,7 +253,7 @@ public class SessionStateManager : ISessionStateManager
     public void ReapStaleSessions(TimeSpan maxAge)
     {
         var now = DateTime.Now;
-        foreach (var summary in GetSessions())
+        foreach (var summary in GetSessions(includeSize: false))
         {
             if (now - summary.LastModifiedAt > maxAge && !IsSessionInUse(summary.SessionId))
             {
@@ -260,6 +261,10 @@ public class SessionStateManager : ISessionStateManager
             }
         }
     }
+
+    private static long MeasureDirectorySize(string directory)
+        => Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            .Sum(file => new FileInfo(file).Length);
     /// <summary>
     /// Scans the session root and deletes any session directories where the metadata 
     /// has not been touched within the configured TTL hours.

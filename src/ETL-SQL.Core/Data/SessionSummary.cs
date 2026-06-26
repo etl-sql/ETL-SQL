@@ -7,11 +7,14 @@ public record SessionSummary
     public DateTime CreatedAt { get; init; }
     public DateTime LastModifiedAt { get; init; }
     public long TotalSizeBytes { get; init; }
+    public bool IsSizeCalculated { get; init; }
     public int TempTableCount { get; init; }
     public int VariableCount { get; init; }
     public string? LastScriptSource { get; init; }
     public string? OwnerUser { get; init; }
     public string? OwnerMachine { get; init; }
 
-    public double SizeMB => Math.Round(TotalSizeBytes / (1024.0 * 1024.0), 2);
+    public double? SizeMB => IsSizeCalculated
+        ? Math.Round(TotalSizeBytes / (1024.0 * 1024.0), 2)
+        : null;
 }
