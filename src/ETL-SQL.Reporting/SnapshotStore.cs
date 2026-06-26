@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,9 +30,16 @@ namespace ETL_SQL.Reporting
             PropertyNamingPolicy = null
         };
 
-        /// <summary>Derives the default snapshot path from a script path.</summary>
-        public static string DefaultPath(string scriptPath) =>
-            Path.ChangeExtension(scriptPath, null) + ".etlsnap";
+        /// <summary>Derives a partitioned default snapshot path from a script path.</summary>
+        public static string DefaultPath(string scriptPath)
+        {
+            var fullScriptPath = Path.GetFullPath(scriptPath);
+            var scriptDir = Path.GetDirectoryName(fullScriptPath) ?? "";
+            var snapshotName = Path.GetFileNameWithoutExtension(fullScriptPath) + ".etlsnap";
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fullScriptPath)))
+                .ToLowerInvariant();
+            return Path.Combine(scriptDir, ".etlsnap", hash[..2], hash[2..4], snapshotName);
+        }
 
         /// <summary>Serialises the manifest to a JSON file atomically.</summary>
         public async Task SaveAsync(ReportManifest manifest, string outputPath)
@@ -112,6 +121,21 @@ namespace ETL_SQL.Reporting
                     // If .etlsnap requested but only legacy .snapshot.json or .json exists, load legacy
                     if (fullPath.EndsWith(".etlsnap", StringComparison.OrdinalIgnoreCase))
                     {
+                        var legacyPackagePath = LegacyFlatSnapshotPath(fullPath);
+                        if (legacyPackagePath is not null && await Task.Run(() => File.Exists(legacyPackagePath)))
+                        {
+                            var directory = Path.GetDirectoryName(legacyPackagePath) ?? "";
+                            var filename = Path.GetFileName(legacyPackagePath);
+                            var storage = new FileSystemArtifactStorage(new Dictionary<ArtifactArea, string> {
+                                { ArtifactArea.Snapshots, directory }
+                            });
+                            var service = new SnapshotPackageService(
+                                new PortalConfig(),
+                                storage,
+                                Microsoft.Extensions.Logging.Abstractions.NullLogger<SnapshotPackageService>.Instance);
+                            return await service.LoadAsync(filename);
+                        }
+
                         var legacyPath = Path.ChangeExtension(fullPath, ".snapshot.json");
                         if (await Task.Run(() => File.Exists(legacyPath)))
                         {
@@ -124,6 +148,23 @@ namespace ETL_SQL.Reporting
                         {
                             var json = await File.ReadAllTextAsync(jsonPath);
                             return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                        }
+
+                        if (legacyPackagePath is not null)
+                        {
+                            legacyPath = Path.ChangeExtension(legacyPackagePath, ".snapshot.json");
+                            if (await Task.Run(() => File.Exists(legacyPath)))
+                            {
+                                var json = await File.ReadAllTextAsync(legacyPath);
+                                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                            }
+
+                            jsonPath = Path.ChangeExtension(legacyPackagePath, ".json");
+                            if (await Task.Run(() => File.Exists(jsonPath)))
+                            {
+                                var json = await File.ReadAllTextAsync(jsonPath);
+                                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+                            }
                         }
                     }
                     return null;
@@ -167,8 +208,14 @@ namespace ETL_SQL.Reporting
         {
             if (!Directory.Exists(directory)) return;
 
-            // Match both old *.snapshot.json.tmp and new *.snapshot.json.tmp.<guid> patterns.
-            foreach (var file in Directory.GetFiles(directory, "*.snapshot.json.tmp*"))
+            // Match both old *.snapshot.json.tmp and new unique temp-file patterns under flat
+            // or partitioned snapshot directories.
+            foreach (var file in Directory.EnumerateFiles(directory, "*.snapshot.json.tmp*", SearchOption.AllDirectories))
+            {
+                try { File.Delete(file); } catch { /* ignore */ }
+            }
+
+            foreach (var file in Directory.EnumerateFiles(directory, "*.etlsnap.tmp*", SearchOption.AllDirectories))
             {
                 try { File.Delete(file); } catch { /* ignore */ }
             }
@@ -214,6 +261,18 @@ namespace ETL_SQL.Reporting
                 if (--_readerCount == 0) WriterLock.Release();
                 _readLock.Release();
             }
+        }
+
+        private static string? LegacyFlatSnapshotPath(string partitionedPath)
+        {
+            var leafDir = Directory.GetParent(partitionedPath);
+            var secondPartition = leafDir?.Parent;
+            var firstPartition = secondPartition?.Parent;
+            var root = firstPartition?.Parent;
+            return root is not null
+                && string.Equals(firstPartition!.Name, ".etlsnap", StringComparison.OrdinalIgnoreCase)
+                ? Path.Combine(root.FullName, Path.GetFileName(partitionedPath))
+                : null;
         }
     }
 }
