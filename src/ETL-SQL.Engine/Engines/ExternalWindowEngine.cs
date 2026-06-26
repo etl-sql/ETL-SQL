@@ -229,6 +229,7 @@ public class ExternalWindowEngine
             c.Expression is FunctionCallExpression f &&
             (new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant())
                 || IsRunningAggregateCompatible(f)
+                || IsSlidingAggregateCompatible(f)
                 || IsBoundedValueCompatible(f)));
     }
 
@@ -306,6 +307,21 @@ public class ExternalWindowEngine
         }
     }
 
+    private static bool TryGetNonNegativeLiteral(Expression? expression, out int value)
+    {
+        value = 0;
+        if (expression is not LiteralExpression literal) return false;
+        try
+        {
+            value = Convert.ToInt32(literal.Value);
+            return value >= 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool TryGetLagOffset(FunctionCallExpression f, out int offset)
         => TryGetOffset(f, out offset);
 
@@ -339,6 +355,25 @@ public class ExternalWindowEngine
         {
             "COUNT" => f.Arguments.Count <= 1,
             "SUM" or "AVG" or "MIN" or "MAX" => f.Arguments.Count == 1,
+            _ => false
+        };
+    }
+
+    private static bool IsSlidingAggregateCompatible(FunctionCallExpression f)
+    {
+        if (f.Window?.Frame is not WindowFrame frame) return false;
+        if (f.IsDistinct
+            || frame.Type != WindowFrameType.ROWS
+            || frame.StartBound != WindowFrameBoundType.PRECEDING
+            || !TryGetNonNegativeLiteral(frame.StartValue, out _)
+            || frame.EndBound is not null and not WindowFrameBoundType.CURRENT_ROW
+            || frame.Exclusion != WindowFrameExclusion.NoOthers)
+            return false;
+
+        return f.FunctionName.ToUpperInvariant() switch
+        {
+            "COUNT" => f.Arguments.Count <= 1,
+            "SUM" or "AVG" => f.Arguments.Count == 1,
             _ => false
         };
     }
@@ -485,10 +520,64 @@ public class ExternalWindowEngine
             return _allIntegers ? Math.Truncate(avg) : avg;
         }
 
-        private static bool IsIntegerValue(object value)
+        public static bool IsIntegerValue(object value)
         {
             return value is sbyte or byte or short or ushort or int or uint or long or ulong
                 or System.Numerics.BigInteger;
+        }
+    }
+
+    private sealed class SlidingWindowAggregate
+    {
+        private readonly Queue<(bool Included, object? Value)> _values = new();
+        private long _count;
+        private long _nonNullCount;
+        private long _nonIntegerCount;
+        private decimal _sum;
+
+        public void Add(string functionName, object? value, bool included, bool countStar, int windowSize)
+        {
+            _values.Enqueue((included, value));
+            Apply(functionName, value, included, countStar, 1);
+            if (_values.Count > windowSize)
+            {
+                var removed = _values.Dequeue();
+                Apply(functionName, removed.Value, removed.Included, countStar, -1);
+            }
+        }
+
+        public object? GetValue(string functionName)
+        {
+            return functionName.ToUpperInvariant() switch
+            {
+                "COUNT" => (decimal)_count,
+                "SUM" => _nonNullCount == 0 ? null : _sum,
+                "AVG" => GetAverage(),
+                _ => null
+            };
+        }
+
+        private void Apply(string functionName, object? value, bool included, bool countStar, int direction)
+        {
+            if (!included) return;
+            if (functionName.Equals("COUNT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (countStar || value is not null and not DBNull)
+                    _count += direction;
+                return;
+            }
+            if (value is null or DBNull) return;
+            _nonNullCount += direction;
+            if (!StreamingWindowAggregate.IsIntegerValue(value))
+                _nonIntegerCount += direction;
+            _sum += direction * Convert.ToDecimal(value);
+        }
+
+        private object? GetAverage()
+        {
+            if (_nonNullCount == 0) return null;
+            var average = _sum / _nonNullCount;
+            return _nonIntegerCount == 0 ? Math.Truncate(average) : average;
         }
     }
 
@@ -519,6 +608,7 @@ public class ExternalWindowEngine
         object?[]? prevPartitionKeys = null;
         object?[]? prevSortKeys = null;
         var runningAggregates = new Dictionary<string, StreamingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
+        var slidingAggregates = new Dictionary<string, SlidingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
         var maxLagOffset = group.Columns
             .Select(c => (FunctionCallExpression)c.Expression)
             .Where(f => f.FunctionName.Equals("LAG", StringComparison.OrdinalIgnoreCase))
@@ -564,6 +654,7 @@ public class ExternalWindowEngine
                 currentRank = 1;
                 currentDenseRank = 1;
                 runningAggregates.Clear();
+                slidingAggregates.Clear();
                 lagHistory.Clear();
                 firstPartitionRow = row;
                 nthRows.Clear();
@@ -613,6 +704,22 @@ public class ExternalWindowEngine
                         accumulator.Add(f.FunctionName, value, _context, IsCountStar(f));
                     }
 
+                    winVal = accumulator.GetValue(f.FunctionName);
+                }
+                else if (IsSlidingAggregateCompatible(f))
+                {
+                    var key = f.ToSql().ToUpperInvariant();
+                    if (!slidingAggregates.TryGetValue(key, out var accumulator))
+                    {
+                        accumulator = new SlidingWindowAggregate();
+                        slidingAggregates[key] = accumulator;
+                    }
+                    TryGetNonNegativeLiteral(f.Window!.Frame!.StartValue, out var preceding);
+                    var included = f.Filter == null || await _context.EvaluateCondition(f.Filter, row);
+                    object? value = null;
+                    if (f.Arguments.Count > 0)
+                        value = await _context.EvaluateValue(f.Arguments[0], row);
+                    accumulator.Add(f.FunctionName, value, included, IsCountStar(f), preceding + 1);
                     winVal = accumulator.GetValue(f.FunctionName);
                 }
                 else if (name_func == "FIRST_VALUE")

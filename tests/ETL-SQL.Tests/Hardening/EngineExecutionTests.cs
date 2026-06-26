@@ -411,6 +411,20 @@ namespace ETL_SQL.Tests.Hardening
                 "NTH_VALUE",
                 new IdentifierExpression("Val"),
                 new LiteralExpression(3, TokenType.NUMBER));
+            var slidingFrame = new WindowFrame(
+                WindowFrameType.ROWS,
+                WindowFrameBoundType.PRECEDING,
+                new LiteralExpression(2, TokenType.NUMBER),
+                WindowFrameBoundType.CURRENT_ROW);
+            var slidingWindow = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) },
+                slidingFrame);
+            FunctionCallExpression SlidingCall(string name, Expression argument)
+                => new(name, new List<Expression> { argument }) { Window = slidingWindow };
+            var slidingSum = SlidingCall("SUM", new IdentifierExpression("Val"));
+            var slidingAvg = SlidingCall("AVG", new IdentifierExpression("Val"));
+            var slidingCount = SlidingCall("COUNT", new IdentifierExpression("*"));
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
@@ -421,7 +435,10 @@ namespace ETL_SQL.Tests.Hardening
                     new(avg, "RunningAvg"),
                     new(min, "RunningMin"),
                     new(max, "RunningMax"),
-                    new(nth, "ThirdVal")
+                    new(nth, "ThirdVal"),
+                    new(slidingSum, "RollingSum"),
+                    new(slidingAvg, "RollingAvg"),
+                    new(slidingCount, "RollingCount")
                 },
                 null,
                 new TableReference("#input"),
@@ -452,6 +469,9 @@ namespace ETL_SQL.Tests.Hardening
             var minKey = $"WINDOW_{min.ToSql().ToUpperInvariant()}";
             var maxKey = $"WINDOW_{max.ToSql().ToUpperInvariant()}";
             var nthKey = $"WINDOW_{nth.ToSql().ToUpperInvariant()}";
+            var slidingSumKey = $"WINDOW_{slidingSum.ToSql().ToUpperInvariant()}";
+            var slidingAvgKey = $"WINDOW_{slidingAvg.ToSql().ToUpperInvariant()}";
+            var slidingCountKey = $"WINDOW_{slidingCount.ToSql().ToUpperInvariant()}";
             for (var i = 0; i < result.Count; i++)
             {
                 var n = i + 1;
@@ -464,6 +484,12 @@ namespace ETL_SQL.Tests.Hardening
                     Assert.Null(result[i][nthKey]);
                 else
                     Assert.Equal(3m, Convert.ToDecimal(result[i][nthKey]));
+                var frameStart = Math.Max(1, n - 2);
+                var frameCount = n - frameStart + 1;
+                var frameSum = (frameStart + n) * frameCount / 2m;
+                Assert.Equal(frameSum, Convert.ToDecimal(result[i][slidingSumKey]));
+                Assert.Equal(frameSum / frameCount, Convert.ToDecimal(result[i][slidingAvgKey]));
+                Assert.Equal((decimal)frameCount, Convert.ToDecimal(result[i][slidingCountKey]));
             }
         }
 
