@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -28,7 +29,7 @@ namespace ETL_SQL.ReportPortal.Tests;
 /// parameter-passing regression appears — this test will catch it.
 /// </summary>
 [Trait("Category", "Portal")]
-public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
+public class CrossHostConsistencyTests : IDisposable
 {
     private readonly HttpClient _client;
     private readonly PortalWebFactory _factory;
@@ -55,10 +56,16 @@ public class CrossHostConsistencyTests : IClassFixture<PortalWebFactory>
         );
         """;
 
-    public CrossHostConsistencyTests(PortalWebFactory factory)
+    public CrossHostConsistencyTests()
     {
-        _factory = factory;
-        _client = factory.CreateClient();
+        _factory = new PortalWebFactory();
+        _client = _factory.CreateClient();
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        _factory.Dispose();
     }
 
     [Fact]

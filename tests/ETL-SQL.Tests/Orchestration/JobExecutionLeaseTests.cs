@@ -133,8 +133,16 @@ namespace ETL_SQL.Tests.Orchestration
 
             var executor1 = new CountingExecutor();
             var executor2 = new CountingExecutor();
-            var scheduler1 = BuildScheduler(new SQLiteJobHistoryStore(_dbPath), executor1);
-            var scheduler2 = BuildScheduler(new SQLiteJobHistoryStore(_dbPath), executor2);
+            var scheduler1 = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                executor1,
+                new FixedCapacityMonitor(isOverloaded: false),
+                _dbPath);
+            var scheduler2 = BuildScheduler(
+                new SQLiteJobHistoryStore(_dbPath),
+                executor2,
+                new FixedCapacityMonitor(isOverloaded: false),
+                _dbPath);
 
             await Task.WhenAll(
                 InvokeExecuteJobAsync(scheduler1, job),
@@ -158,11 +166,13 @@ namespace ETL_SQL.Tests.Orchestration
             var overloadedScheduler = BuildScheduler(
                 new SQLiteJobHistoryStore(_dbPath),
                 overloadedExecutor,
-                new FixedCapacityMonitor(isOverloaded: true));
+                new FixedCapacityMonitor(isOverloaded: true),
+                _dbPath);
             var healthyScheduler = BuildScheduler(
                 new SQLiteJobHistoryStore(_dbPath),
                 healthyExecutor,
-                new FixedCapacityMonitor(isOverloaded: false));
+                new FixedCapacityMonitor(isOverloaded: false),
+                _dbPath);
 
             await InvokeExecuteJobAsync(overloadedScheduler, job);
             await InvokeExecuteJobAsync(healthyScheduler, job);
@@ -185,11 +195,13 @@ namespace ETL_SQL.Tests.Orchestration
             var overloadedScheduler = BuildScheduler(
                 new SQLiteJobHistoryStore(_dbPath),
                 overloadedExecutor,
-                new FixedCapacityMonitor(isOverloaded: true));
+                new FixedCapacityMonitor(isOverloaded: true),
+                _dbPath);
             var healthyScheduler = BuildScheduler(
                 new SQLiteJobHistoryStore(_dbPath),
                 healthyExecutor,
-                new FixedCapacityMonitor(isOverloaded: false));
+                new FixedCapacityMonitor(isOverloaded: false),
+                _dbPath);
 
             await Task.WhenAll(jobs.Select(job => Task.WhenAll(
                 InvokeExecuteJobAsync(overloadedScheduler, job),
@@ -209,26 +221,30 @@ namespace ETL_SQL.Tests.Orchestration
         private static SchedulerService BuildScheduler(
             IJobHistoryStore store,
             IScriptExecutor executor,
-            INodeCapacityMonitor? capacityMonitor = null)
+            INodeCapacityMonitor? capacityMonitor = null,
+            string? databasePath = null)
         {
             var services = new ServiceCollection();
             services.AddSingleton(executor);
             var serviceProvider = services.BuildServiceProvider();
 
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(databasePath is null
+                    ? Array.Empty<KeyValuePair<string, string?>>()
+                    : new[] { new KeyValuePair<string, string?>("Orchestrator:DatabasePath", databasePath) })
+                .Build();
+
             var throttle = new JobThrottle(
                 Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 4 }),
-                new Mock<ILogger<JobThrottle>>().Object);
-
-            var mockConfig = new Mock<IConfiguration>();
-            mockConfig.Setup(c => c.GetSection(It.IsAny<string>()))
-                .Returns(new Mock<IConfigurationSection>().Object);
+                new Mock<ILogger<JobThrottle>>().Object,
+                config);
 
             return new SchedulerService(
                 serviceProvider,
                 store,
                 new Mock<ILogger<SchedulerService>>().Object,
                 throttle,
-                mockConfig.Object,
+                config,
                 new Mock<ISessionStateManager>().Object,
                 capacityMonitor);
         }
