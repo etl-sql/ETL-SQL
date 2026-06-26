@@ -128,6 +128,39 @@ public class PivotEngine
         return resultRows;
     }
 
+    public async IAsyncEnumerable<Row> ApplyUnpivotStream(IAsyncEnumerable<Row> rows, UnpivotClause unpivot)
+    {
+        await using var enumerator = rows.GetAsyncEnumerator();
+        if (!await enumerator.MoveNextAsync())
+            yield break;
+
+        var first = enumerator.Current;
+        var allCols = first.Columns.Keys.ToList();
+        var colsToKeep = allCols.Where(c => !unpivot.UnpivotColumns.Any(uc => IsMatch(c, uc))).ToList();
+
+        foreach (var row in UnpivotRow(first, colsToKeep, unpivot))
+            yield return row;
+
+        while (await enumerator.MoveNextAsync())
+        {
+            foreach (var row in UnpivotRow(enumerator.Current, colsToKeep, unpivot))
+                yield return row;
+        }
+    }
+
+    private IEnumerable<Row> UnpivotRow(Row row, List<string> colsToKeep, UnpivotClause unpivot)
+    {
+        foreach (var unpivotCol in unpivot.UnpivotColumns)
+        {
+            var newRow = new Row();
+            foreach (var col in colsToKeep) newRow[col] = row[col];
+
+            newRow[unpivot.NameColumn] = unpivotCol;
+            newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
+            yield return newRow;
+        }
+    }
+
     private bool IsMatch(string fullColName, string targetColName)
     {
         if (fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)) return true;

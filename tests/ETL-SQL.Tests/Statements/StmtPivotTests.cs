@@ -93,6 +93,34 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task Unpivot_StreamsResultBatches()
+        {
+            var eval = _serviceProvider.GetRequiredService<Evaluator>();
+            eval.BatchSize = 2;
+
+            await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #QuarterlyStream (Category NVARCHAR(50), Q1 INT, Q2 INT);").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("INSERT INTO #QuarterlyStream (Category, Q1, Q2) VALUES ('A', 10, 20), ('B', 30, 40), ('C', 50, 60);").Tokenize()).Parse());
+
+            var sql = @"
+                SELECT * FROM #QuarterlyStream
+                UNPIVOT (
+                    Amount FOR Quarter IN (Q1, Q2)
+                ) AS Unpvt;
+            ";
+
+            var stmt = new Parser(new Lexer(sql).Tokenize()).Parse().Statements[0];
+            var batches = await eval.ExecuteQuery(stmt).ToListAsync();
+            var rows = batches.SelectMany(b => b.Rows).ToList();
+
+            Assert.True(batches.Count > 1);
+            Assert.All(batches, b => Assert.True(b.Rows.Count <= 2));
+            Assert.Equal(6, rows.Count);
+            Assert.Contains("Quarter", batches[0].ColumnNames);
+            Assert.Contains("Amount", batches[0].ColumnNames);
+            Assert.Contains(rows, r => r["Category"]?.ToString() == "C" && r["Quarter"]?.ToString() == "Q2" && Convert.ToInt32(r["Amount"]) == 60);
+        }
+
+        [Fact]
         public async Task Pivot_WithMultipleGroupingColumns()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();

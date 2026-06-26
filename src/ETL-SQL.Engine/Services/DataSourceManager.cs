@@ -449,6 +449,17 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
             yield break;
         }
 
+        if (table.TableOperators.Count == 1 && table.TableOperators[0] is UnpivotClause streamingUnpivot)
+        {
+            string streamingTableName = table.Alias ?? table.TableName;
+            var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
+            await foreach (var b in BatchRows(
+                streamingPivotEngine.ApplyUnpivotStream(PrefixRows(batches, streamingTableName), streamingUnpivot),
+                batchSize))
+                yield return b;
+            yield break;
+        }
+
         // PIVOT/UNPIVOT currently requires buffering all data from the source to perform the transformation correctly
         var allRows = new List<Row>();
         string tableName = table.Alias ?? table.TableName;
@@ -480,5 +491,54 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         foreach (var r in allRows) await resultTable.AddRowAsync(r);
 
         yield return resultTable;
+    }
+
+    private static async IAsyncEnumerable<Row> PrefixRows(IAsyncEnumerable<DataTable> batches, string tableName)
+    {
+        await foreach (var batch in batches)
+        {
+            foreach (var row in batch.Rows)
+            {
+                var r = row.Clone();
+                foreach (var kv in row.Columns.ToList())
+                {
+                    if (!kv.Key.Contains("."))
+                        r[$"{tableName}.{kv.Key}"] = kv.Value;
+                }
+                yield return r;
+            }
+        }
+    }
+
+    private static async IAsyncEnumerable<DataTable> BatchRows(IAsyncEnumerable<Row> rows, int batchSize)
+    {
+        DataTable? batch = null;
+        bool yielded = false;
+        await foreach (var row in rows)
+        {
+            if (batch == null)
+            {
+                batch = new DataTable();
+                batch.SetColumns(row.Columns.Keys);
+            }
+
+            await batch.AddRowAsync(row);
+            if (batch.Rows.Count >= batchSize)
+            {
+                yield return batch;
+                yielded = true;
+                batch = null;
+            }
+        }
+
+        if (batch != null)
+        {
+            yield return batch;
+            yielded = true;
+        }
+        else if (!yielded)
+        {
+            yield return new DataTable();
+        }
     }
 }
