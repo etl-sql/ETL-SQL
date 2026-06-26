@@ -403,6 +403,18 @@ public class SelectExecutionEngine
         bool canDeferWhere)
     {
         var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
+        var expressionKeys = hasPreEvaluatedColumns
+            ? finalColumns.Select(c => c.Expression.ToSql()).ToArray()
+            : Array.Empty<string>();
+        var aggregateKeys = hasPreEvaluatedColumns
+            ? expressionKeys.Select(k => $"AGG_{k.ToUpperInvariant()}").ToArray()
+            : Array.Empty<string>();
+        var windowKeys = hasPreEvaluatedColumns
+            ? finalColumns.Select(c =>
+                c.Expression is FunctionCallExpression f && f.Window != null
+                    ? $"WINDOW_{c.Expression.ToSql().ToUpperInvariant()}"
+                    : null).ToArray()
+            : Array.Empty<string?>();
         var batch = new DataTable();
         batch.SetColumns(colNames);
         bool yielded = false;
@@ -429,9 +441,8 @@ public class SelectExecutionEngine
                 var col = finalColumns[i];
                 // Window results are stored in the dynamic dict under WINDOW_ keys, not in the schema slot.
                 // Check before schemaMatches so GROUP BY + window queries resolve correctly.
-                if (hasPreEvaluatedColumns && col.Expression is FunctionCallExpression winFce && winFce.Window != null)
+                if (hasPreEvaluatedColumns && windowKeys[i] is { } winKey)
                 {
-                    var winKey = $"WINDOW_{winFce.ToSql().ToUpperInvariant()}";
                     if (row.HasColumn(winKey)) { resRow[i] = row[winKey]; continue; }
                 }
 
@@ -445,13 +456,13 @@ public class SelectExecutionEngine
                 {
                     resRow[i] = row[col.Alias];
                 }
-                else if (hasPreEvaluatedColumns && row.HasColumn(col.Expression.ToSql()))
+                else if (hasPreEvaluatedColumns && row.HasColumn(expressionKeys[i]))
                 {
-                    resRow[i] = row[col.Expression.ToSql()];
+                    resRow[i] = row[expressionKeys[i]];
                 }
-                else if (hasPreEvaluatedColumns && row.HasColumn($"AGG_{col.Expression.ToSql().ToUpperInvariant()}"))
+                else if (hasPreEvaluatedColumns && row.HasColumn(aggregateKeys[i]))
                 {
-                    resRow[i] = row[$"AGG_{col.Expression.ToSql().ToUpperInvariant()}"];
+                    resRow[i] = row[aggregateKeys[i]];
                 }
                 else
                 {

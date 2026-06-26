@@ -112,6 +112,7 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
   - *Solution*: Added async streaming formatter paths for batched `FOR JSON/XML` output and regression tests covering multi-batch serialization.
 - [ ] **Interpretive AST Traversal Bottleneck** — [ExpressionEvaluator.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/ExpressionEvaluator.cs): Evaluating variables, operators, and functions traverses the AST recursively on every row. For 50M rows, this recursive overhead slows processing significantly.
   - *Solution*: Compile AST structures into compiled delegates (`Func<Row, object?>`) once per statement using `System.Linq.Expressions` or dynamic code-generation.
+  - *Progress*: Final projection now precomputes expression, aggregate, and window lookup keys once per SELECT instead of repeatedly serializing AST expressions with `ToSql()` and uppercasing them for every projected row.
 - [x] **Flat File Char-by-Char Stream Parser** — [FlatFileDataSource.cs:L486](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs#L486): Custom row delimiters now use a buffered record reader that scans 16 KB character blocks instead of calling `StreamReader.Read()` per character. Standard newline delimiters continue using `ReadLineAsync`.
   - *Solution*: Maintain a reusable buffered reader across header skipping and data rows so custom delimiters can be found inside blocks without losing over-read characters.
 
