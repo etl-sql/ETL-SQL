@@ -26,31 +26,45 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             return BadRequest(new { error = "Search query is required." });
 
         limit = Math.Clamp(limit, 1, 100);
-        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+        var pattern = LikePattern(q);
 
-        var folders = await db.Folders
-            .Where(f => visibleFolderIds.Contains(f.Id))
+        var folders = await VisibleFoldersQuery()
+            .AsNoTracking()
+            .Where(f => EF.Functions.Like(f.Name, pattern, @"\")
+                || EF.Functions.Like(f.Path, pattern, @"\"))
             .OrderBy(f => f.Path)
+            .Take(limit)
             .ToListAsync();
 
-        var reports = await db.Reports
-            .Include(r => r.Folder)
-            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .Where(r => !r.IsDeleted && visibleFolderIds.Contains(r.FolderId))
-            .OrderBy(r => r.Folder.Path)
-            .ThenBy(r => r.Name)
-            .ToListAsync();
+        var remaining = limit - folders.Count;
+        var reports = remaining <= 0
+            ? new List<Report>()
+            : await VisibleReportsQuery()
+                .AsNoTracking()
+                .Include(r => r.Folder)
+                .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+                .Where(r => EF.Functions.Like(r.Name, pattern, @"\")
+                    || (r.Description != null && EF.Functions.Like(r.Description, pattern, @"\"))
+                    || EF.Functions.Like(r.Folder.Path, pattern, @"\")
+                    || (r.Tags != null && EF.Functions.Like(r.Tags, pattern, @"\"))
+                    || (r.Category != null && EF.Functions.Like(r.Category, pattern, @"\"))
+                    || (r.Owner != null && EF.Functions.Like(r.Owner, pattern, @"\"))
+                    || (r.Contact != null && EF.Functions.Like(r.Contact, pattern, @"\"))
+                    || (r.Domain != null && EF.Functions.Like(r.Domain, pattern, @"\"))
+                    || (r.Steward != null && EF.Functions.Like(r.Steward, pattern, @"\"))
+                    || (r.Certification != null && EF.Functions.Like(r.Certification, pattern, @"\")))
+                .OrderBy(r => r.Folder.Path)
+                .ThenBy(r => r.Name)
+                .Take(remaining)
+                .ToListAsync();
         var favoriteIds = await GetFavoriteReportIdsAsync();
 
         var results = folders
-            .Where(f => Matches(q, f.Name, f.Path))
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null))
             .Concat(reports
-                .Where(r => Matches(q, r.Name, r.Description, r.Folder.Path, r.Tags, r.Category, r.Owner, r.Contact, r.Domain, r.Steward, r.Certification))
                 .Select(r => ToCatalogResult(r, favoriteIds)))
-            .Take(limit)
             .ToList();
 
         return Ok(results);
@@ -60,12 +74,12 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     public async Task<IActionResult> Recent([FromQuery] int limit = 20)
     {
         limit = Math.Clamp(limit, 1, 100);
-        var visibleFolderIds = await GetVisibleFolderIdsAsync();
 
-        var reports = await db.Reports
+        var reports = await VisibleReportsQuery()
+            .AsNoTracking()
             .Include(r => r.Folder)
             .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .Where(r => !r.IsDeleted && r.LastViewedAt != null && visibleFolderIds.Contains(r.FolderId))
+            .Where(r => r.LastViewedAt != null)
             .OrderByDescending(r => r.LastViewedAt)
             .ThenBy(r => r.Name)
             .Take(limit)
@@ -79,15 +93,18 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     public async Task<IActionResult> Favorites([FromQuery] int limit = 50)
     {
         limit = Math.Clamp(limit, 1, 100);
-        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+        var userId = CurrentUserId;
 
-        var reports = await db.ReportFavorites
-            .Include(f => f.Report).ThenInclude(r => r.Folder)
-            .Include(f => f.Report).ThenInclude(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
-            .Where(f => f.UserId == CurrentUserId && !f.Report.IsDeleted && visibleFolderIds.Contains(f.Report.FolderId))
-            .OrderByDescending(f => f.CreatedAt)
+        var reports = await (
+                from favorite in db.ReportFavorites.AsNoTracking()
+                join report in VisibleReportsQuery() on favorite.ReportId equals report.Id
+                where favorite.UserId == userId
+                orderby favorite.CreatedAt descending
+                select report)
+            .AsNoTracking()
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
             .Take(limit)
-            .Select(f => f.Report)
             .ToListAsync();
 
         var favoriteIds = reports.Select(r => r.Id).ToHashSet();
@@ -133,8 +150,6 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
 
         limit = Math.Clamp(limit, 1, 200);
         var entries = await lineageCatalog.GetHistoryForSourceAsync(table, limit * 20);
-        var visibleFolderIds = await GetVisibleFolderIdsAsync();
-
         var reportIds = entries
             .Select(e => TryParseReportId(e.JobName))
             .Where(id => id.HasValue).Select(id => id!.Value)
@@ -142,9 +157,10 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
 
         var reports = reportIds.Count == 0
             ? new Dictionary<int, Report>()
-            : await db.Reports
+            : await VisibleReportsQuery()
+                .AsNoTracking()
                 .Include(r => r.Folder)
-                .Where(r => !r.IsDeleted && reportIds.Contains(r.Id) && visibleFolderIds.Contains(r.FolderId))
+                .Where(r => reportIds.Contains(r.Id))
                 .ToDictionaryAsync(r => r.Id);
 
         var result = entries
@@ -204,24 +220,32 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
         return Ok(await ToLineageDtosAsync(FilterRunWindow(entries, from, to).Take(limit)));
     }
 
-    private async Task<HashSet<int>> GetVisibleFolderIdsAsync()
+    private IQueryable<Folder> VisibleFoldersQuery()
     {
         if (IsAdmin)
-            return await db.Folders.Select(f => f.Id).ToHashSetAsync();
+            return db.Folders;
 
-        var groupIds = await db.UserGroups
-            .Where(ug => ug.UserId == CurrentUserId)
-            .Select(ug => ug.GroupId)
-            .ToListAsync();
-
-        return await db.FolderAcls
-            .Where(a => groupIds.Contains(a.GroupId) && a.Permission >= FolderPermission.Read)
-            .Select(a => a.FolderId)
-            .ToHashSetAsync();
+        var userId = CurrentUserId;
+        return db.Folders.Where(f => db.FolderAcls.Any(a =>
+            a.FolderId == f.Id
+            && a.Permission >= FolderPermission.Read
+            && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
     }
 
-    private static bool Matches(string query, params string?[] values) =>
-        values.Any(value => value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true);
+    private IQueryable<Report> VisibleReportsQuery()
+    {
+        if (IsAdmin)
+            return db.Reports.Where(r => !r.IsDeleted);
+
+        var userId = CurrentUserId;
+        return db.Reports.Where(r => !r.IsDeleted && db.FolderAcls.Any(a =>
+            a.FolderId == r.FolderId
+            && a.Permission >= FolderPermission.Read
+            && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
+    }
+
+    private static string LikePattern(string query) =>
+        $"%{query.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_")}%";
 
     private static string CombinePath(string folderPath, string reportName) =>
         folderPath.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}";
@@ -241,12 +265,12 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
             .Select(id => id!.Value)
             .ToHashSet();
 
-        var visibleFolderIds = await GetVisibleFolderIdsAsync();
         var reports = reportIds.Count == 0
             ? new Dictionary<int, Report>()
-            : await db.Reports
+            : await VisibleReportsQuery()
+                .AsNoTracking()
                 .Include(r => r.Folder)
-                .Where(r => !r.IsDeleted && reportIds.Contains(r.Id) && visibleFolderIds.Contains(r.FolderId))
+                .Where(r => reportIds.Contains(r.Id))
                 .ToDictionaryAsync(r => r.Id);
 
         return entryList

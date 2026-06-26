@@ -27,22 +27,26 @@ public class FoldersController(
     [HttpGet]
     public async Task<IActionResult> GetTree()
     {
-        var all = await db.Folders
-            .Include(f => f.Acls)
+        var folders = await VisibleFoldersQuery()
+            .AsNoTracking()
+            .OrderBy(f => f.Path)
+            .Select(f => new FolderTreeRow(f.Id, f.ParentId, f.Name, f.Path, f.Version))
             .ToListAsync();
 
-        var groupIds = IsAdmin ? null : await folderPermissions.GetUserGroupIdsAsync(User);
+        var visibleIds = folders.Select(f => f.Id).ToHashSet();
+        var childrenByParent = folders
+            .GroupBy(f => f.ParentId ?? 0)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var roots = folders
+            .Where(f => f.ParentId == null || !visibleIds.Contains(f.ParentId.Value))
+            .ToList();
 
-        var visible = IsAdmin
-            ? all
-            : all.Where(f => f.Acls.Any(a => groupIds!.Contains(a.GroupId))).ToList();
-
-        var visibleIds = new HashSet<int>(visible.Select(f => f.Id));
-        var roots = visible.Where(f => f.ParentId == null || !visibleIds.Contains(f.ParentId.Value)).ToList();
-
-        FolderDto ToDto(Folder f) => new(
+        FolderDto ToDto(FolderTreeRow f) => new(
             f.Id, f.ParentId, f.Name, f.Path,
-            visible.Where(c => c.ParentId == f.Id).Select(ToDto).ToList(), f.Version);
+            childrenByParent.TryGetValue(f.Id, out var children)
+                ? children.Select(ToDto).ToList()
+                : [],
+            f.Version);
 
         return Ok(roots.Select(ToDto));
     }
@@ -347,4 +351,18 @@ public class FoldersController(
         OptimisticConcurrency.SetETag(Response, folder.Version);
         return Ok(new { folder.Version });
     }
+
+    private IQueryable<Folder> VisibleFoldersQuery()
+    {
+        if (IsAdmin)
+            return db.Folders;
+
+        var userId = CurrentUserId;
+        return db.Folders.Where(f => db.FolderAcls.Any(a =>
+            a.FolderId == f.Id
+            && a.Permission >= FolderPermission.Read
+            && db.UserGroups.Any(ug => ug.UserId == userId && ug.GroupId == a.GroupId)));
+    }
+
+    private sealed record FolderTreeRow(int Id, int? ParentId, string Name, string Path, long Version);
 }
