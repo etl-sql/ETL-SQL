@@ -46,10 +46,15 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         var body = new StringBuilder();
 
         // ── Groups ────────────────────────────────────────────────────────────
-        var groups = await db.Groups.AsNoTracking().OrderBy(g => g.Name).ToListAsync(ct);
+        var groupCount = 0;
         AppendSection(body, "Groups");
-        foreach (var g in groups)
+        await foreach (var g in db.Groups.AsNoTracking()
+            .OrderBy(g => g.Name)
+            .Select(g => new { g.Name, g.Description, g.Provider, g.AdGroup })
+            .AsAsyncEnumerable()
+            .WithCancellation(ct))
         {
+            groupCount++;
             var options = new List<string>();
             if (!string.IsNullOrWhiteSpace(g.Description)) options.Add($"DESCRIPTION = {Q(g.Description)}");
             if (!string.IsNullOrWhiteSpace(g.Provider) && g.Provider != "Local") options.Add($"PROVIDER = {Q(g.Provider)}");
@@ -58,18 +63,34 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 ? $"    CREATE GROUP {Q(g.Name)};"
                 : $"    CREATE GROUP {Q(g.Name)} WITH ({string.Join(", ", options)});");
         }
-        emitted.Add($"{groups.Count} group(s)");
+        emitted.Add($"{groupCount} group(s)");
 
         // ── Users ─────────────────────────────────────────────────────────────
-        var users = await db.Users.AsNoTracking().OrderBy(u => u.UserName).ToListAsync(ct);
-        var roleByUser = await (
+        var roleByUser = (await (
             from ur in db.UserRoles
             join r in db.Roles on ur.RoleId equals r.Id
-            select new { ur.UserId, r.Name }).ToListAsync(ct);
+            select new { ur.UserId, r.Name }).ToListAsync(ct))
+            .GroupBy(role => role.UserId)
+            .ToDictionary(group => group.Key, group => group.First().Name);
+        var userCount = 0;
         AppendSection(body, "Users (passwords are never exported — supply each ${...} secret at import)");
-        foreach (var u in users)
+        await foreach (var u in db.Users.AsNoTracking()
+            .OrderBy(u => u.UserName)
+            .Select(u => new
+            {
+                u.Id,
+                u.UserName,
+                u.Email,
+                u.Provider,
+                u.FirstName,
+                u.LastName,
+                u.IsActive
+            })
+            .AsAsyncEnumerable()
+            .WithCancellation(ct))
         {
-            var role = roleByUser.FirstOrDefault(x => x.UserId == u.Id)?.Name ?? "Viewer";
+            userCount++;
+            var role = roleByUser.GetValueOrDefault(u.Id) ?? "Viewer";
             var isLdap = string.Equals(u.Provider, "LDAP", StringComparison.OrdinalIgnoreCase);
             var options = new List<string> { $"EMAIL = {Q(u.Email ?? $"{u.UserName}@example.invalid")}" };
             if (!isLdap)
@@ -86,44 +107,73 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             if (!u.IsActive)
                 body.AppendLine($"    ALTER USER {Q(u.UserName!)} SET DISABLE;");
         }
-        emitted.Add($"{users.Count} user(s)");
+        emitted.Add($"{userCount} user(s)");
 
         // ── Group memberships ────────────────────────────────────────────────
-        var memberships = await (
+        var membershipCount = 0;
+        var memberships = (
             from ug in db.UserGroups.AsNoTracking()
             join u in db.Users on ug.UserId equals u.Id
             join g in db.Groups on ug.GroupId equals g.Id
             orderby g.Name, u.UserName
-            select new { Username = u.UserName!, Group = g.Name }).ToListAsync(ct);
+            select new { Username = u.UserName!, Group = g.Name }).AsAsyncEnumerable();
         AppendSection(body, "Group memberships");
-        foreach (var m in memberships)
+        await foreach (var m in memberships.WithCancellation(ct))
+        {
+            membershipCount++;
             body.AppendLine($"    ADD USER {Q(m.Username)} TO GROUP {Q(m.Group)};");
-        emitted.Add($"{memberships.Count} group membership(s)");
+        }
+        emitted.Add($"{membershipCount} group membership(s)");
 
         // ── Folders (parents before children) ────────────────────────────────
-        var folders = await db.Folders.AsNoTracking().OrderBy(f => f.Path).ToListAsync(ct);
+        var folderCount = 0;
         AppendSection(body, "Folders");
-        foreach (var f in folders.OrderBy(f => f.Path.Count(c => c == '/')).ThenBy(f => f.Path))
-            body.AppendLine($"    CREATE FOLDER {Q(f.Path)};");
-        emitted.Add($"{folders.Count} folder(s)");
+        await foreach (var path in db.Folders.AsNoTracking()
+            .OrderBy(f => f.Path)
+            .Select(f => f.Path)
+            .AsAsyncEnumerable()
+            .WithCancellation(ct))
+        {
+            folderCount++;
+            body.AppendLine($"    CREATE FOLDER {Q(path)};");
+        }
+        emitted.Add($"{folderCount} folder(s)");
 
         // ── Folder ACLs ───────────────────────────────────────────────────────
-        var folderAcls = await (
+        var folderAclCount = 0;
+        var folderAcls = (
             from a in db.FolderAcls.AsNoTracking()
             join f in db.Folders on a.FolderId equals f.Id
             join g in db.Groups on a.GroupId equals g.Id
             orderby f.Path, g.Name
-            select new { f.Path, Group = g.Name, a.Permission }).ToListAsync(ct);
+            select new { f.Path, Group = g.Name, a.Permission }).AsAsyncEnumerable();
         AppendSection(body, "Folder permissions");
-        foreach (var a in folderAcls)
+        await foreach (var a in folderAcls.WithCancellation(ct))
+        {
+            folderAclCount++;
             body.AppendLine($"    GRANT {a.Permission.ToString().ToUpperInvariant()} ON FOLDER {Q(a.Path)} TO GROUP {Q(a.Group)};");
-        emitted.Add($"{folderAcls.Count} folder ACL(s)");
+        }
+        emitted.Add($"{folderAclCount} folder ACL(s)");
 
         // ── SMTP connections ──────────────────────────────────────────────────
-        var smtp = await db.SmtpConnections.AsNoTracking().OrderBy(s => s.Alias).ToListAsync(ct);
+        var smtpCount = 0;
         AppendSection(body, "SMTP connections (credentials are never exported)");
-        foreach (var s in smtp)
+        await foreach (var s in db.SmtpConnections.AsNoTracking()
+            .OrderBy(s => s.Alias)
+            .Select(s => new
+            {
+                s.Alias,
+                s.Host,
+                s.Port,
+                s.Username,
+                s.EncryptedPassword,
+                s.FromAddress,
+                s.UseSsl
+            })
+            .AsAsyncEnumerable()
+            .WithCancellation(ct))
         {
+            smtpCount++;
             var options = new List<string> { $"HOST = {Q(s.Host)}", $"PORT = {s.Port}" };
             if (!string.IsNullOrWhiteSpace(s.Username)) options.Add($"USERNAME = {Q(s.Username)}");
             if (!string.IsNullOrEmpty(s.EncryptedPassword))
@@ -136,36 +186,60 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             options.Add($"USE_SSL = {(s.UseSsl ? "TRUE" : "FALSE")}");
             body.AppendLine($"    CREATE SMTP CONNECTION {Q(s.Alias)} WITH ({string.Join(", ", options)});");
         }
-        emitted.Add($"{smtp.Count} SMTP connection(s)");
+        emitted.Add($"{smtpCount} SMTP connection(s)");
 
         // ── Reports (publication references — script files travel separately, P1.10) ─
-        var reports = await db.Reports.AsNoTracking()
-            .Include(r => r.Folder)
+        var reportCount = 0;
+        var reports = db.Reports.AsNoTracking()
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder!.Path).ThenBy(r => r.Name)
-            .ToListAsync(ct);
+            .Select(r => new
+            {
+                r.Name,
+                r.Description,
+                r.ScriptPath,
+                FolderPath = r.Folder!.Path
+            })
+            .AsAsyncEnumerable();
         AppendSection(body, "Reports (copy the referenced .rptsql script files before replay — see the export manifest)");
-        foreach (var r in reports)
+        await foreach (var r in reports.WithCancellation(ct))
         {
+            reportCount++;
             var withClause = string.IsNullOrWhiteSpace(r.Description)
                 ? ""
                 : $" WITH (DESCRIPTION = {Q(r.Description)})";
-            body.AppendLine($"    PUBLISH REPORT {Q(r.Name)} FROM {Q(r.ScriptPath)} IN FOLDER {Q(r.Folder!.Path)}{withClause};");
+            body.AppendLine($"    PUBLISH REPORT {Q(r.Name)} FROM {Q(r.ScriptPath)} IN FOLDER {Q(r.FolderPath)}{withClause};");
             // The PUBLISH statement references a .rptsql path that must already exist at the target.
             manifest.Add(new ContentManifestItem(
-                "ReportScript", $"{r.Folder.Path}/{r.Name}", r.ScriptPath,
+                "ReportScript", $"{r.FolderPath}/{r.Name}", r.ScriptPath,
                 "Copy this .rptsql file into the target portal's script root before replay."));
         }
-        emitted.Add($"{reports.Count} report publication(s)");
+        emitted.Add($"{reportCount} report publication(s)");
 
         // ── Dataset metadata + ACLs (datasets materialize when their report runs) ─
-        var datasets = await db.Datasets.AsNoTracking()
-            .Include(d => d.Acls).ThenInclude(a => a.Group)
+        var datasetCount = 0;
+        var datasetAclsByDataset = (await (
+            from acl in db.DatasetAcls.AsNoTracking()
+            join g in db.Groups on acl.GroupId equals g.Id
+            orderby g.Name
+            select new { acl.DatasetId, Group = g.Name, acl.Permission }).ToListAsync(ct))
+            .GroupBy(acl => acl.DatasetId)
+            .ToDictionary(group => group.Key, group => group.OrderBy(acl => acl.Group).ToList());
+        var datasets = db.Datasets.AsNoTracking()
             .OrderBy(d => d.Name)
-            .ToListAsync(ct);
+            .Select(d => new
+            {
+                d.Id,
+                d.Name,
+                d.FolderPath,
+                d.AccessLevel,
+                d.Ttl
+            })
+            .AsAsyncEnumerable();
         AppendSection(body, "Dataset metadata and grants (apply after each dataset first materializes)");
-        foreach (var d in datasets)
+        await foreach (var d in datasets.WithCancellation(ct))
         {
+            datasetCount++;
             // A dataset's cached parquet is content (and at-rest-encrypted), never configuration:
             // it must be re-materialized by running its producing report, or re-published from a
             // portable EXPORT DATASET file.
@@ -181,20 +255,34 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             var sets = new List<string> { $"ACCESS = {Q(d.AccessLevel.ToString())}" };
             if (!string.IsNullOrWhiteSpace(d.Ttl)) sets.Add($"TTL = {Q(d.Ttl)}");
             body.AppendLine($"    ALTER DATASET {Q(d.Name)} IN FOLDER {Q(d.FolderPath)} SET {string.Join(", ", sets)};");
-            foreach (var acl in d.Acls.OrderBy(a => a.Group.Name))
-                body.AppendLine($"    GRANT {acl.Permission.ToString().ToUpperInvariant()} ON DATASET {Q(d.Name)} IN FOLDER {Q(d.FolderPath)} TO GROUP {Q(acl.Group.Name)};");
+            foreach (var acl in datasetAclsByDataset.GetValueOrDefault(d.Id) ?? [])
+                body.AppendLine($"    GRANT {acl.Permission.ToString().ToUpperInvariant()} ON DATASET {Q(d.Name)} IN FOLDER {Q(d.FolderPath)} TO GROUP {Q(acl.Group)};");
         }
-        emitted.Add($"{datasets.Count} dataset metadata definition(s)");
+        emitted.Add($"{datasetCount} dataset metadata definition(s)");
 
         // ── Subscriptions ─────────────────────────────────────────────────────
-        var subscriptions = await db.Subscriptions.AsNoTracking()
-            .Include(s => s.Report).ThenInclude(r => r.Folder)
-            .Include(s => s.User)
+        var subscriptionCount = 0;
+        var subscriptions = db.Subscriptions.AsNoTracking()
             .OrderBy(s => s.Id)
-            .ToListAsync(ct);
+            .Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.Format,
+                s.DeliverOnRefresh,
+                s.Schedule,
+                s.Recipients,
+                s.SmtpAlias,
+                s.ParametersJson,
+                s.IsActive,
+                ReportName = s.Report.Name,
+                FolderPath = s.Report.Folder.Path
+            })
+            .AsAsyncEnumerable();
         AppendSection(body, "Subscriptions");
-        foreach (var s in subscriptions)
+        await foreach (var s in subscriptions.WithCancellation(ct))
         {
+            subscriptionCount++;
             var label = s.Name ?? $"subscription {s.Id}";
             if (s.Format is not (SubscriptionFormat.PDF or SubscriptionFormat.CSV))
             {
@@ -217,7 +305,7 @@ public sealed class ConfigurationExportService(PortalDbContext db)
             {
                 var exportedName = recipients.Count == 1 ? label : $"{label} [{recipient}]";
                 body.AppendLine($"    CREATE SUBSCRIPTION {Q(exportedName)}");
-                body.AppendLine($"        FOR REPORT {Q($"{s.Report.Folder!.Path}/{s.Report.Name}")}");
+                body.AppendLine($"        FOR REPORT {Q($"{s.FolderPath}/{s.ReportName}")}");
                 body.AppendLine($"        DELIVER TO {Q(recipient)}");
                 if (s.DeliverOnRefresh)
                     body.AppendLine("        ON REFRESH");
@@ -237,44 +325,64 @@ public sealed class ConfigurationExportService(PortalDbContext db)
                 body.AppendLine(";");
             }
         }
-        emitted.Add($"{subscriptions.Count} subscription(s) considered");
+        emitted.Add($"{subscriptionCount} subscription(s) considered");
 
         // ── Alerts (definition-only metadata, P0.5) ──────────────────────────
-        var alerts = await db.ReportAlerts.AsNoTracking()
-            .Include(a => a.Report).ThenInclude(r => r.Folder)
+        var alertCount = 0;
+        var alerts = db.ReportAlerts.AsNoTracking()
             .OrderBy(a => a.Report.Name).ThenBy(a => a.Name)
-            .ToListAsync(ct);
+            .Select(a => new
+            {
+                a.Name,
+                a.VisualName,
+                a.Operator,
+                a.Threshold,
+                a.Recipient,
+                a.SmtpAlias,
+                a.IsActive,
+                ReportName = a.Report.Name,
+                FolderPath = a.Report.Folder.Path
+            })
+            .AsAsyncEnumerable();
         AppendSection(body, "Alerts (definition-only metadata)");
-        foreach (var a in alerts)
+        await foreach (var a in alerts.WithCancellation(ct))
         {
-            var reportPath = $"{a.Report.Folder!.Path}/{a.Report.Name}";
+            alertCount++;
+            var reportPath = $"{a.FolderPath}/{a.ReportName}";
             body.Append($"    CREATE ALERT {Q(a.Name)} FOR REPORT {Q(reportPath)} WHEN VISUAL {Q(a.VisualName)} {a.Operator} {a.Threshold}");
             if (!string.IsNullOrWhiteSpace(a.Recipient)) body.Append($" DELIVER TO {Q(a.Recipient)}");
             if (!string.IsNullOrWhiteSpace(a.SmtpAlias)) body.Append($" AT {a.SmtpAlias}");
             if (!a.IsActive) body.Append(" DISABLE");
             body.AppendLine(";");
         }
-        emitted.Add($"{alerts.Count} alert(s)");
+        emitted.Add($"{alertCount} alert(s)");
 
         // ── Scheduled refresh jobs ────────────────────────────────────────────
-        var refreshJobs = await db.DatasetJobs.AsNoTracking()
-            .Include(j => j.Report).ThenInclude(r => r.Folder)
+        var refreshJobCount = 0;
+        var refreshJobs = db.DatasetJobs.AsNoTracking()
             .OrderBy(j => j.Report.Folder!.Path).ThenBy(j => j.Report.Name)
-            .ToListAsync(ct);
+            .Select(j => new
+            {
+                j.RefreshInterval,
+                ReportName = j.Report.Name,
+                FolderPath = j.Report.Folder.Path
+            })
+            .AsAsyncEnumerable();
         AppendSection(body, "Scheduled report refresh jobs");
-        foreach (var j in refreshJobs)
+        await foreach (var j in refreshJobs.WithCancellation(ct))
         {
             if (string.IsNullOrWhiteSpace(targetOrchestratorAlias))
             {
                 skipped.Add(
-                    $"refresh job for report '{j.Report.Name}': export again with a target Orchestrator alias");
+                    $"refresh job for report '{j.ReportName}': export again with a target Orchestrator alias");
                 continue;
             }
+            refreshJobCount++;
             body.AppendLine(
-                $"    CREATE REFRESH JOB FOR REPORT {Q($"{j.Report.Folder!.Path}/{j.Report.Name}")} " +
+                $"    CREATE REFRESH JOB FOR REPORT {Q($"{j.FolderPath}/{j.ReportName}")} " +
                 $"SCHEDULE {Q(j.RefreshInterval)} AT {targetOrchestratorAlias};");
         }
-        emitted.Add($"{(string.IsNullOrWhiteSpace(targetOrchestratorAlias) ? 0 : refreshJobs.Count)} refresh job(s)");
+        emitted.Add($"{refreshJobCount} refresh job(s)");
 
         skipped.Add("portal settings (JWT/dataset keys, Orchestrator API key/URL, branding): provisioned via configuration files, not script — see the administrators guide");
 
