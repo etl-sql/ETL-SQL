@@ -206,6 +206,13 @@ public class PushdownEngine(ILogger logger)
         {
             if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
 
+            DataTable? displayBatch = null;
+            if (!context.RedirectOutput)
+            {
+                displayBatch = new DataTable();
+                displayBatch.SetColumns(batch.ColumnNames);
+            }
+
             bool shouldStop = false;
             foreach (var r in batch.Rows)
             {
@@ -213,6 +220,7 @@ public class PushdownEngine(ILogger logger)
                 {
                     totalRows++;
                     await result.AddRowAsync(r);
+                    if (displayBatch != null) await displayBatch.AddRowAsync(r);
                 }
                 else if (!context.RedirectOutput)
                 {
@@ -236,9 +244,9 @@ public class PushdownEngine(ILogger logger)
                 }
             }
 
-            if (!context.RedirectOutput)
+            if (!context.RedirectOutput && displayBatch != null && displayBatch.Rows.Count > 0)
             {
-                ResultFormatter.PrintBatch(batch, isFirst);
+                ResultFormatter.PrintBatch(displayBatch, isFirst);
                 isFirst = false;
             }
 

@@ -23,6 +23,13 @@ public class ResultProcessor(ILogger logger)
         {
             if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
 
+            DataTable? displayBatch = null;
+            if (!context.RedirectOutput)
+            {
+                displayBatch = new DataTable();
+                displayBatch.SetColumns(batch.ColumnNames);
+            }
+
             bool shouldStop = false;
             foreach (var r in batch.Rows)
             {
@@ -46,18 +53,19 @@ public class ResultProcessor(ILogger logger)
                 if (result.Rows.Count < context.MaxLastResultRows)
                 {
                     await result.AddRowAsync(r);
+                    if (displayBatch != null) await displayBatch.AddRowAsync(r);
                 }
             }
 
-            if (!context.RedirectOutput)
+            if (!context.RedirectOutput && displayBatch != null && displayBatch.Rows.Count > 0)
             {
                 if (isForClause)
                 {
-                    foreach (var r in batch.Rows) _logger.WriteLine(r[0]?.ToString() ?? "");
+                    foreach (var r in displayBatch.Rows) _logger.WriteLine(r[0]?.ToString() ?? "");
                 }
                 else
                 {
-                    ResultFormatter.PrintBatch(batch, isFirst);
+                    ResultFormatter.PrintBatch(displayBatch, isFirst);
                     isFirst = false;
                 }
             }

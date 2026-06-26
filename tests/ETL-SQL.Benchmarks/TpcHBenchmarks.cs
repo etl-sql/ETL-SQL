@@ -101,6 +101,7 @@ namespace ETL_SQL.Benchmarks
                 var sp = services.BuildServiceProvider();
 
                 _evaluator = new Evaluator(handlers, sp, registry, tracker.Object, docker.Object, connectors, sessions, security, l, new LanguageHelpRegistry(), new EvaluatorComponentRegistry());
+                _evaluator.RedirectOutput = true;
 
                 Console.WriteLine("// TpcHBenchmarks.Setup: Evaluator initialized.");
 

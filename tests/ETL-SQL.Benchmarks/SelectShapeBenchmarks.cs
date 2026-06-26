@@ -103,6 +103,7 @@ namespace ETL_SQL.Benchmarks
                 var sp = services.BuildServiceProvider();
 
                 _evaluator = new Evaluator(handlers, sp, registry, tracker.Object, docker.Object, connectors, sessions, security, l, new LanguageHelpRegistry(), new EvaluatorComponentRegistry());
+                _evaluator.RedirectOutput = true;
 
                 var connSql = "CREATE CONNECTION shapes AS SHAPEMOCK(SupportsSqlPushdown = false);";
                 await _evaluator.Evaluate(new Parser(new Lexer(connSql).Tokenize()).Parse());

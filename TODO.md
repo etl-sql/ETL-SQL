@@ -75,6 +75,8 @@ release begins.
 
 ### Small-Scale Perspective (10k Rows)
 At small volumes, performance is dominated by I/O overhead and redundant task context transitions:
+- [x] **Benchmark Harness Console Rendering Noise** — [SelectShapeBenchmarks.cs:L104](file:///C:/Users/chuck/scratch/ETL-SQL/tests/ETL-SQL.Benchmarks/SelectShapeBenchmarks.cs#L104) and [TpcHBenchmarks.cs:L104](file:///C:/Users/chuck/scratch/ETL-SQL/tests/ETL-SQL.Benchmarks/TpcHBenchmarks.cs#L104): Performance benchmarks now run evaluators in redirected mode so BenchmarkDotNet measures engine execution instead of Spectre console table rendering.
+  - *Solution*: Set `RedirectOutput = true` in benchmark evaluator setup while still retaining `LastResult` for metric checks.
 - [x] **External Sort Spill Bypass** — [ExternalSortEngine.cs:L129](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs#L129): `SortStreamAsync` now yields the sorted in-memory run directly when the stream never crosses the external sort chunk threshold.
   - *Solution*: Yield the sorted memory buffer directly if total rows parsed are less than `ChunkSize`, avoiding Arrow serialization and file encryption/compression logic.
 - [x] **Redundant ADO.NET Async Operations** — [PostgresDataSource.cs:L115](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/Postgres/PostgresDataSource.cs#L115) (and SQL Server/MySQL equivalents): Data row loops now use synchronous `reader.IsDBNull(i)` after `ReadAsync` has buffered the current row.
