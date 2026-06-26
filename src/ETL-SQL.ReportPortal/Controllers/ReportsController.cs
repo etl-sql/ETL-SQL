@@ -87,22 +87,8 @@ public class ReportsController : ControllerBase
 
     private ReportDto ToDto(Report r, ReportSnapshot? snap, bool isFavorite = false)
     {
-        bool isStale = false;
-        bool scriptChanged = false;
-        if (snap is not null
-            && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out var resolvedScriptPath)
-            && System.IO.File.Exists(resolvedScriptPath))
-        {
-            var scriptLastWrite = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath);
-            isStale = scriptLastWrite > snap.BuiltAt;
-            scriptChanged = r.PublishedScriptHash is not null && scriptLastWrite > r.ScriptLastModified;
-        }
-        else if (r.PublishedScriptHash is not null
-            && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out resolvedScriptPath)
-            && System.IO.File.Exists(resolvedScriptPath))
-        {
-            scriptChanged = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > r.ScriptLastModified;
-        }
+        var isStale = snap is not null && r.ScriptLastModified > snap.BuiltAt;
+        var scriptChanged = false;
 
         return new ReportDto(
             r.Id, r.FolderId, r.Folder?.Path ?? "",

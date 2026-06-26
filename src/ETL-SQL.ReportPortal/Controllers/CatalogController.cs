@@ -337,15 +337,8 @@ public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageC
     private static CatalogSearchResultDto ToCatalogResult(Report r, ISet<int> favoriteIds)
     {
         var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
-        var isStale = false;
+        var isStale = snapshot is not null && r.ScriptLastModified > snapshot.BuiltAt;
         var scriptChanged = false;
-        if (System.IO.File.Exists(r.ScriptPath))
-        {
-            var scriptLastWrite = System.IO.File.GetLastWriteTimeUtc(r.ScriptPath);
-            isStale = snapshot is not null && scriptLastWrite > snapshot.BuiltAt;
-            scriptChanged = !string.IsNullOrWhiteSpace(r.PublishedScriptHash)
-                && scriptLastWrite > r.ScriptLastModified;
-        }
 
         return new CatalogSearchResultDto(
             "Report",
