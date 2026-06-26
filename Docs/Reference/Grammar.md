@@ -1308,6 +1308,8 @@ UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 
 `MATCH_RECOGNIZE` scans an ordered row sequence for named pattern variables. ETL-SQL supports partitioning, ordering, `MEASURES`, `ONE ROW PER MATCH`, `ALL ROWS PER MATCH`, linear `PATTERN` variables, and the `+`, `*`, and `?` quantifiers.
 
+`MATCH_RECOGNIZE` materializes and sorts each input partition in memory. When its input exceeds `Engine:JoinSpillThreshold`, the engine emits an operational warning but continues for compatibility. Pre-filter large sources and keep individual `PARTITION BY` groups within available memory; unlike PIVOT and UNPIVOT, pattern matching does not currently have a spill-backed execution path.
+
 ```sql
 SELECT start_ts, end_ts
 FROM #events

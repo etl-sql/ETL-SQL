@@ -460,9 +460,22 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
             yield break;
         }
 
-        // PIVOT/UNPIVOT currently requires buffering all data from the source to perform the transformation correctly
+        if (table.TableOperators.Count == 1 && table.TableOperators[0] is PivotClause streamingPivot)
+        {
+            string streamingTableName = table.Alias ?? table.TableName;
+            var streamingPivotEngine = new Engines.PivotEngine(_evaluator, _logger);
+            await foreach (var b in BatchRows(
+                streamingPivotEngine.ApplyPivotStream(PrefixRows(batches, streamingTableName), streamingPivot),
+                batchSize))
+                yield return b;
+            yield break;
+        }
+
+        // Chained table operators retain the compatibility path because each stage may change the next stage's schema.
         var allRows = new List<Row>();
         string tableName = table.Alias ?? table.TableName;
+        var containsMatchRecognize = table.TableOperators.Any(op => op is MatchRecognizeClause);
+        var warnedMatchRecognizeBuffering = false;
         await foreach (var batch in batches)
         {
             foreach (var row in batch.Rows)
@@ -474,6 +487,13 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
                     if (!kv.Key.Contains(".")) r[$"{tableName}.{kv.Key}"] = kv.Value;
                 }
                 allRows.Add(r);
+                if (containsMatchRecognize
+                    && !warnedMatchRecognizeBuffering
+                    && allRows.Count > _evaluator.JoinSpillThreshold)
+                {
+                    warnedMatchRecognizeBuffering = true;
+                    _logger.Warning($"MATCH_RECOGNIZE input exceeded {_evaluator.JoinSpillThreshold:N0} rows and requires in-memory partition matching. Pre-filter the source or increase available memory.");
+                }
             }
         }
 

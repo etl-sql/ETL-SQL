@@ -159,6 +159,7 @@ ETL-SQL does not use a global memory pool. Each external engine has its own memo
 - `ExternalAggregateEngine`: uses `OperatorMemoryGrantMB` as a soft cap before triggering hash-partition spill.
 - `ExternalJoinEngine`: triggers when the build-side (smaller) table exceeds `JoinSpillThreshold` rows. It partitions both sides and recursively re-partitions if a partition still exceeds the threshold.
 - `ExternalWindowEngine`: triggers per-partition when a partition exceeds `WindowSpillThreshold` rows. Partitions that fit in memory are processed in-memory; only oversized partitions spill.
+- Single `PIVOT` operators switch to spill-backed filtered aggregation after `JoinSpillThreshold`; chained table operators retain the in-memory compatibility path. `MATCH_RECOGNIZE` remains partition-materialized and emits a warning after the same threshold, so large sources should be pre-filtered.
 - `ExternalSortEngine`: divides the input into `ExternalSortChunkSize`-row chunks, sorts each chunk in memory, writes it to disk, then merges. Total disk usage is roughly `input_rows × avg_row_bytes`.
 
 There is no global spill coordinator — if a query triggers multiple external engines simultaneously, each one manages its own spill independently.

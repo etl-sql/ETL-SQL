@@ -149,6 +149,33 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task Pivot_LargeInput_UsesSpillBackedAggregation()
+        {
+            var eval = _serviceProvider.GetRequiredService<Evaluator>();
+            eval.JoinSpillThreshold = 2;
+            eval.BatchSize = 1;
+
+            await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #PivotSpill (Category NVARCHAR(20), Year INT, Amount INT);").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("INSERT INTO #PivotSpill VALUES ('A', 2021, 10), ('A', 2021, 15), ('A', 2022, 20), ('B', 2021, 30), ('B', 2022, 40), ('B', 2022, 5);").Tokenize()).Parse());
+
+            var sql = "SELECT * FROM #PivotSpill PIVOT (SUM(Amount) FOR Year IN (2021, 2022)) AS Pvt;";
+            var stmt = new Parser(new Lexer(sql).Tokenize()).Parse().Statements[0];
+            var spillBefore = eval.Telemetry.TotalSpilledBytes;
+            var batches = await eval.ExecuteQuery(stmt).ToListAsync();
+            var rows = batches.SelectMany(b => b.Rows).ToList();
+
+            Assert.True(eval.Telemetry.TotalSpilledBytes > spillBefore);
+            Assert.Equal(2, rows.Count);
+            Assert.All(batches, b => Assert.True(b.Rows.Count <= 1));
+            var categoryA = rows.Single(r => r["Category"]?.ToString() == "A");
+            var categoryB = rows.Single(r => r["Category"]?.ToString() == "B");
+            Assert.Equal(25m, Convert.ToDecimal(categoryA["2021"]));
+            Assert.Equal(20m, Convert.ToDecimal(categoryA["2022"]));
+            Assert.Equal(30m, Convert.ToDecimal(categoryB["2021"]));
+            Assert.Equal(45m, Convert.ToDecimal(categoryB["2022"]));
+        }
+
+        [Fact]
         public async Task Pivot_Chaining()
         {
             var eval = _serviceProvider.GetRequiredService<Evaluator>();

@@ -128,6 +128,64 @@ public class PivotEngine
         return resultRows;
     }
 
+    public async IAsyncEnumerable<Row> ApplyPivotStream(IAsyncEnumerable<Row> rows, PivotClause pivot)
+    {
+        await using var enumerator = rows.GetAsyncEnumerator();
+        var buffered = new List<Row>();
+        var threshold = Math.Max(1, _context.JoinSpillThreshold);
+        while (buffered.Count <= threshold && await enumerator.MoveNextAsync())
+            buffered.Add(enumerator.Current);
+
+        if (buffered.Count == 0)
+            yield break;
+
+        if (buffered.Count <= threshold)
+        {
+            foreach (var row in await ApplyPivot(buffered, pivot))
+                yield return row;
+            yield break;
+        }
+
+        _logger.WriteLine($"[yellow]HYPER-SCALE: PIVOT input exceeded {threshold:N0} rows. Switching to spill-backed filtered aggregation.[/]");
+        var groupingCols = GetGroupingColumns(buffered[0], pivot);
+        var groupBy = groupingCols.Select(c => (Expression)new IdentifierExpression(c)).ToList();
+        var finalColumns = groupingCols
+            .Select(c => new SelectColumn(new IdentifierExpression(c), c))
+            .ToList();
+        var colNames = groupingCols.ToList();
+
+        foreach (var valueExpression in pivot.PivotValues)
+        {
+            var pivotValue = await _context.EvaluateValue(valueExpression, new Row());
+            var targetName = pivotValue?.ToString() ?? "NULL";
+            var arguments = pivot.AggregateColumn == "*"
+                ? new List<Expression>()
+                : new List<Expression> { new IdentifierExpression(pivot.AggregateColumn) };
+            var aggregate = new FunctionCallExpression(pivot.AggregateFunction, arguments)
+            {
+                Filter = new BinaryExpression(
+                    new IdentifierExpression(pivot.PivotColumn),
+                    TokenType.EQUALS,
+                    valueExpression)
+            };
+            finalColumns.Add(new SelectColumn(aggregate, targetName));
+            colNames.Add(targetName);
+        }
+
+        async IAsyncEnumerable<Row> ReplayRows()
+        {
+            foreach (var row in buffered)
+                yield return row;
+            while (await enumerator.MoveNextAsync())
+                yield return enumerator.Current;
+        }
+
+        var externalAggregate = new ExternalAggregateEngine(_context, _logger);
+        await foreach (var row in externalAggregate.ApplyAggregationExternal(
+            ReplayRows(), groupBy, finalColumns, colNames))
+            yield return row;
+    }
+
     public async IAsyncEnumerable<Row> ApplyUnpivotStream(IAsyncEnumerable<Row> rows, UnpivotClause unpivot)
     {
         await using var enumerator = rows.GetAsyncEnumerator();
@@ -159,6 +217,30 @@ public class PivotEngine
             newRow[unpivot.ValueColumn] = FindValue(row, unpivotCol);
             yield return newRow;
         }
+    }
+
+    private static List<string> GetGroupingColumns(Row row, PivotClause pivot)
+    {
+        var rawGroupingCols = row.Columns.Keys.Where(c =>
+            !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) &&
+            !c.Equals(pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase) &&
+            !IsColumnMatch(c, pivot.PivotColumn) &&
+            !IsColumnMatch(c, pivot.AggregateColumn));
+        var groupingCols = new List<string>();
+        var seenBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in rawGroupingCols.OrderBy(c => c.Contains('.') ? 1 : 0))
+        {
+            var baseName = col.Contains('.') ? col.Split('.').Last() : col;
+            if (seenBaseNames.Add(baseName))
+                groupingCols.Add(col);
+        }
+        return groupingCols;
+    }
+
+    private static bool IsColumnMatch(string fullColName, string targetColName)
+    {
+        return fullColName.Equals(targetColName, StringComparison.OrdinalIgnoreCase)
+            || fullColName.EndsWith("." + targetColName, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsMatch(string fullColName, string targetColName)
