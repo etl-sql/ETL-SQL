@@ -101,6 +101,73 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task SelectExecutionEngine_SimpleJoinWithLimit_DoesNotMaterializeAllJoinedRows()
+        {
+            var e = NewEvaluator();
+            e.BatchSize = 2;
+
+            var right = new InMemoryDataSource { Validator = e, ExecutionContext = e };
+            var rightTable = new DataTable();
+            rightTable.SetColumns(new[] { "Id", "payload" });
+            for (var i = 0; i < 10; i++)
+            {
+                var row = rightTable.NewRow();
+                row["Id"] = i;
+                row["payload"] = $"r-{i}";
+                await rightTable.AddRowAsync(row);
+            }
+            await right.WriteBatches(new[] { rightTable }.ToAsyncEnumerable());
+            e.Connections["#right"] = right;
+
+            async IAsyncEnumerable<DataTable> LeftBatches()
+            {
+                for (var i = 0; i < 10; i++)
+                {
+                    if (i > 3)
+                        throw new InvalidOperationException("Join pipeline materialized past the LIMIT.");
+
+                    var batch = new DataTable();
+                    batch.SetColumns(new[] { "Id", "value" });
+                    var row = batch.NewRow();
+                    row["Id"] = i;
+                    row["value"] = $"l-{i}";
+                    await batch.AddRowAsync(row);
+                    yield return batch;
+                }
+            }
+
+            var stmt = new SelectStatement(
+                new List<SelectColumn> { new(new IdentifierExpression("l.Id")) },
+                null,
+                new TableReference("#left", alias: "l"),
+                new List<JoinClause>
+                {
+                    new(
+                        "INNER JOIN",
+                        new TableReference("#right", alias: "r"),
+                        new BinaryExpression(
+                            new IdentifierExpression("l.Id"),
+                            TokenType.EQUALS,
+                            new IdentifierExpression("r.Id")))
+                },
+                null)
+            {
+                LimitCount = new LiteralExpression(3, TokenType.NUMBER)
+            };
+
+            var engine = new SelectExecutionEngine(e, NullLogger.Instance);
+            var batches = await engine.ExecuteHeavyPipeline(
+                stmt,
+                LeftBatches(),
+                stmt.Columns,
+                new List<string> { "Id" }).ToListAsync();
+
+            var rows = batches.SelectMany(b => b.Rows).ToList();
+            Assert.Equal(3, rows.Count);
+            Assert.Equal(new[] { 0, 1, 2 }, rows.Select(r => Convert.ToInt32(r["Id"])).ToArray());
+        }
+
+        [Fact]
         public async Task ExternalJoinEngine_SinglePartition_Correctness()
         {
             var e = NewEvaluator(externalPartitions: 1); // Exact override for degenerate case

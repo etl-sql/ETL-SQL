@@ -125,6 +125,33 @@ public class SelectExecutionEngine
                 ? WhereStream(inputStream, CombineAnds(leftPreds), _context)
                 : inputStream;
 
+            bool canStreamJoinToProjection =
+                !hasPreEvaluatedColumns
+                && stmt.QualifyClause == null
+                && (stmt.OrderBy == null || stmt.OrderBy.Count == 0)
+                && !stmt.IsDistinct
+                && !stmt.IsTopPercent;
+
+            if (canStreamJoinToProjection)
+            {
+                IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+                if (!whereApplied && stmt.WhereClause != null)
+                {
+                    joinedStream = WhereStream(joinedStream, stmt.WhereClause, _context);
+                    whereApplied = true;
+                }
+
+                await foreach (var projectedBatch in ProjectAndBatch(
+                    ApplyLimitsStream(joinedStream, stmt),
+                    stmt,
+                    finalColumns,
+                    colNames,
+                    hasPreEvaluatedColumns,
+                    canDeferWhere: false))
+                    yield return projectedBatch;
+                yield break;
+            }
+
             allRows = await _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt).ToListAsync();
 
             // Phase 1b (runtime): Drop columns not referenced by any downstream clause.
