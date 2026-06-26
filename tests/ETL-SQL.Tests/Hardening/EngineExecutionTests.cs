@@ -334,12 +334,16 @@ namespace ETL_SQL.Tests.Hardening
                 new List<OrderByClause>());
             var sum = new FunctionCallExpression("SUM", new List<Expression> { new IdentifierExpression("Val") }) { Window = window };
             var count = new FunctionCallExpression("COUNT", new List<Expression> { new IdentifierExpression("*") }) { Window = window };
+            var first = new FunctionCallExpression("FIRST_VALUE", new List<Expression> { new IdentifierExpression("Val") }) { Window = window };
+            var last = new FunctionCallExpression("LAST_VALUE", new List<Expression> { new IdentifierExpression("Val") }) { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
                     new(new IdentifierExpression("Grp"), "Grp"),
                     new(sum, "Total"),
-                    new(count, "Rows")
+                    new(count, "Rows"),
+                    new(first, "FirstVal"),
+                    new(last, "LastVal")
                 },
                 null,
                 new TableReference("#input"),
@@ -362,15 +366,177 @@ namespace ETL_SQL.Tests.Hardening
             var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
 
             Assert.Equal(10, result.Count);
-            Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-AGG-SPILL", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-REPLAY-SPILL", StringComparison.OrdinalIgnoreCase));
 
             var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";
             var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";
+            var firstKey = $"WINDOW_{first.ToSql().ToUpperInvariant()}";
+            var lastKey = $"WINDOW_{last.ToSql().ToUpperInvariant()}";
             Assert.All(result, row =>
             {
                 Assert.Equal(55m, row[sumKey]);
                 Assert.Equal(10m, row[countKey]);
+                Assert.Equal(1m, Convert.ToDecimal(row[firstKey]));
+                Assert.Equal(10m, Convert.ToDecimal(row[lastKey]));
             });
+        }
+
+        [Fact]
+        public async Task ExternalWindowEngine_RunningAggregates_UseDeepSpillStreaming()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var frame = new WindowFrame(
+                WindowFrameType.ROWS,
+                WindowFrameBoundType.UNBOUNDED_PRECEDING,
+                endBound: WindowFrameBoundType.CURRENT_ROW);
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) },
+                frame);
+            FunctionCallExpression WindowCall(string name, params Expression[] args)
+                => new(name, args.ToList()) { Window = window };
+
+            var sum = WindowCall("SUM", new IdentifierExpression("Val"));
+            var count = WindowCall("COUNT", new IdentifierExpression("*"));
+            var avg = WindowCall("AVG", new IdentifierExpression("Val"));
+            var min = WindowCall("MIN", new IdentifierExpression("Val"));
+            var max = WindowCall("MAX", new IdentifierExpression("Val"));
+            var nth = WindowCall(
+                "NTH_VALUE",
+                new IdentifierExpression("Val"),
+                new LiteralExpression(3, TokenType.NUMBER));
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(new IdentifierExpression("Val"), "Val"),
+                    new(sum, "RunningSum"),
+                    new(count, "RunningCount"),
+                    new(avg, "RunningAvg"),
+                    new(min, "RunningMin"),
+                    new(max, "RunningMax"),
+                    new(nth, "ThirdVal")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                for (var i = 1; i <= 10; i++)
+                {
+                    var row = new Row(schema);
+                    row["Grp"] = "A";
+                    row["Val"] = i;
+                    yield return row;
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("DEEP-SPILL", StringComparison.OrdinalIgnoreCase));
+
+            var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";
+            var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";
+            var avgKey = $"WINDOW_{avg.ToSql().ToUpperInvariant()}";
+            var minKey = $"WINDOW_{min.ToSql().ToUpperInvariant()}";
+            var maxKey = $"WINDOW_{max.ToSql().ToUpperInvariant()}";
+            var nthKey = $"WINDOW_{nth.ToSql().ToUpperInvariant()}";
+            for (var i = 0; i < result.Count; i++)
+            {
+                var n = i + 1;
+                Assert.Equal((decimal)(n * (n + 1) / 2), result[i][sumKey]);
+                Assert.Equal((decimal)n, result[i][countKey]);
+                Assert.Equal((n + 1) / 2m, result[i][avgKey]);
+                Assert.Equal(1m, Convert.ToDecimal(result[i][minKey]));
+                Assert.Equal((decimal)n, Convert.ToDecimal(result[i][maxKey]));
+                if (n < 3)
+                    Assert.Null(result[i][nthKey]);
+                else
+                    Assert.Equal(3m, Convert.ToDecimal(result[i][nthKey]));
+            }
+        }
+
+        [Fact]
+        public async Task ExternalWindowEngine_LagAndFirstValue_UseBoundedDeepSpillState()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) });
+            var lag = new FunctionCallExpression("LAG", new List<Expression>
+            {
+                new IdentifierExpression("Val"),
+                new LiteralExpression(2, TokenType.NUMBER),
+                new LiteralExpression(-1, TokenType.NUMBER)
+            }) { Window = window };
+            var first = new FunctionCallExpression("FIRST_VALUE", new List<Expression>
+            {
+                new IdentifierExpression("Val")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(new IdentifierExpression("Val"), "Val"),
+                    new(lag, "PreviousTwo"),
+                    new(first, "FirstVal")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                foreach (var grp in new[] { "A", "B" })
+                {
+                    for (var i = 1; i <= 5; i++)
+                    {
+                        var row = new Row(schema);
+                        row["Grp"] = grp;
+                        row["Val"] = i;
+                        yield return row;
+                    }
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("DEEP-SPILL", StringComparison.OrdinalIgnoreCase));
+
+            var lagKey = $"WINDOW_{lag.ToSql().ToUpperInvariant()}";
+            var firstKey = $"WINDOW_{first.ToSql().ToUpperInvariant()}";
+            foreach (var partition in result.GroupBy(r => r["Grp"]?.ToString()))
+            {
+                var rows = partition.OrderBy(r => Convert.ToInt32(r["Val"])).ToList();
+                Assert.Equal(5, rows.Count);
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    Assert.Equal(1m, Convert.ToDecimal(rows[i][firstKey]));
+                    var expectedLag = i < 2 ? -1m : i - 1m;
+                    Assert.Equal(expectedLag, Convert.ToDecimal(rows[i][lagKey]));
+                }
+            }
         }
 
         [Fact]

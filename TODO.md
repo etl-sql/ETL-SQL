@@ -114,6 +114,10 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
   - *Priority*: Consolidated under Priority 5.
   - *Solution*: Add streaming or segmented implementations for additional window functions, or spill partition frames with bounded memory.
   - *Progress*: Full-partition `COUNT`/`SUM`/`AVG`/`MIN`/`MAX` windows without `ORDER BY`, frames, or `DISTINCT` now use a two-pass spill replay path for large partitions instead of loading the whole partition into memory.
+  - *Progress*: Explicit cumulative `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` `COUNT`/`SUM`/`AVG`/`MIN`/`MAX` windows now run in the sorted deep-spill pass with one accumulator per function and partition.
+  - *Progress*: `FIRST_VALUE` and `LAG` with a constant non-negative offset now run in deep spill with one retained first row and bounded lag history per partition.
+  - *Progress*: Unordered, unframed `FIRST_VALUE`/`LAST_VALUE` windows now share the two-pass partition replay path with full-partition aggregates, retaining only the first and last row rather than the whole partition.
+  - *Progress*: Constant positive-ordinal `NTH_VALUE` over cumulative `ROWS UNBOUNDED PRECEDING ... CURRENT ROW` frames now retains only the selected row per function during deep spill.
 - [ ] **PIVOT/UNPIVOT/MATCH_RECOGNIZE Full-Source Buffering** — [DataSourceManager.cs:L452](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/DataSourceManager.cs#L452): Table operators buffer every source row into `allRows` before applying PIVOT, UNPIVOT, or MATCH_RECOGNIZE. Large operator inputs bypass the normal spill pipeline and can exhaust memory.
   - *Priority*: Consolidated under Priority 6.
   - *Solution*: Add operator-specific streaming/spill paths or enforce documented row limits until spill-aware implementations exist.

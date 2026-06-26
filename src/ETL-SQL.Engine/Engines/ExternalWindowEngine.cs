@@ -161,10 +161,10 @@ public class ExternalWindowEngine
                         yield return row;
                     }
                 }
-                else if (useDeepSpill && IsPartitionAggregateCompatible(group))
+                else if (useDeepSpill && IsPartitionReplayCompatible(group))
                 {
-                    _logger.WriteLine($"[magenta]     * PARTITION-AGG-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via two-pass streaming aggregates.[/]");
-                    await foreach (var row in ProcessBucketPartitionAggregateSpill(info.Name, group))
+                    _logger.WriteLine($"[magenta]     * PARTITION-REPLAY-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via two-pass streaming state.[/]");
+                    await foreach (var row in ProcessBucketPartitionReplaySpill(info.Name, group))
                     {
                         yield return row;
                     }
@@ -203,10 +203,83 @@ public class ExternalWindowEngine
     {
         return group.Columns.All(c =>
             c.Expression is FunctionCallExpression f &&
-            new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant()));
+            (new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant())
+                || IsRunningAggregateCompatible(f)
+                || IsBoundedValueCompatible(f)));
     }
 
-    private static bool IsPartitionAggregateCompatible(WindowGroup group)
+    private static bool IsBoundedValueCompatible(FunctionCallExpression f)
+    {
+        return f.FunctionName.ToUpperInvariant() switch
+        {
+            "FIRST_VALUE" => f.Arguments.Count == 1,
+            "LAG" => f.Arguments.Count is >= 1 and <= 3 && TryGetLagOffset(f, out _),
+            "NTH_VALUE" => IsCumulativeRowsFrame(f.Window?.Frame)
+                && f.Arguments.Count == 2
+                && TryGetPositiveLiteral(f.Arguments[1], out _),
+            _ => false
+        };
+    }
+
+    private static bool IsCumulativeRowsFrame(WindowFrame? frame)
+    {
+        return frame != null
+            && frame.Type == WindowFrameType.ROWS
+            && frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING
+            && frame.EndBound is null or WindowFrameBoundType.CURRENT_ROW
+            && frame.Exclusion == WindowFrameExclusion.NoOthers;
+    }
+
+    private static bool TryGetPositiveLiteral(Expression expression, out int value)
+    {
+        value = 0;
+        if (expression is not LiteralExpression literal) return false;
+        try
+        {
+            value = Convert.ToInt32(literal.Value);
+            return value > 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetLagOffset(FunctionCallExpression f, out int offset)
+    {
+        offset = 1;
+        if (f.Arguments.Count < 2) return true;
+        if (f.Arguments[1] is not LiteralExpression literal) return false;
+        try
+        {
+            offset = Convert.ToInt32(literal.Value);
+            return offset >= 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsRunningAggregateCompatible(FunctionCallExpression f)
+    {
+        if (f.Window?.Frame is not WindowFrame frame) return false;
+        if (f.IsDistinct
+            || frame.Type != WindowFrameType.ROWS
+            || frame.StartBound != WindowFrameBoundType.UNBOUNDED_PRECEDING
+            || frame.EndBound is not null and not WindowFrameBoundType.CURRENT_ROW
+            || frame.Exclusion != WindowFrameExclusion.NoOthers)
+            return false;
+
+        return f.FunctionName.ToUpperInvariant() switch
+        {
+            "COUNT" => f.Arguments.Count <= 1,
+            "SUM" or "AVG" or "MIN" or "MAX" => f.Arguments.Count == 1,
+            _ => false
+        };
+    }
+
+    private static bool IsPartitionReplayCompatible(WindowGroup group)
     {
         return group.Columns.All(c =>
         {
@@ -218,19 +291,25 @@ public class ExternalWindowEngine
             {
                 "COUNT" => f.Arguments.Count <= 1,
                 "SUM" or "AVG" or "MIN" or "MAX" => f.Arguments.Count == 1,
+                "FIRST_VALUE" or "LAST_VALUE" => f.Arguments.Count == 1 && f.Filter == null,
                 _ => false
             };
         });
     }
 
-    private async IAsyncEnumerable<Row> ProcessBucketPartitionAggregateSpill(string name, WindowGroup group)
+    private async IAsyncEnumerable<Row> ProcessBucketPartitionReplaySpill(string name, WindowGroup group)
     {
         var accumulators = group.Columns
+            .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
             .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
             .ToList();
+        Row? firstRow = null;
+        Row? lastRow = null;
 
         await foreach (var row in ReadPartitionStream(name))
         {
+            firstRow ??= row;
+            lastRow = row;
             foreach (var (f, acc) in accumulators)
             {
                 if (f.Filter != null && !await _context.EvaluateCondition(f.Filter, row))
@@ -249,12 +328,32 @@ public class ExternalWindowEngine
             x => x.Accumulator.GetValue(x.Function.FunctionName),
             StringComparer.OrdinalIgnoreCase);
 
+        foreach (var column in group.Columns)
+        {
+            var f = (FunctionCallExpression)column.Expression;
+            var sourceRow = f.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
+                ? firstRow
+                : f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
+                    ? lastRow
+                    : null;
+            if (sourceRow != null)
+            {
+                results[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] =
+                    await _context.EvaluateValue(f.Arguments[0], sourceRow);
+            }
+        }
+
         await foreach (var row in ReadPartitionStream(name))
         {
             foreach (var (key, value) in results)
                 row[key] = value;
             yield return row;
         }
+    }
+
+    private static bool IsPartitionAggregate(FunctionCallExpression f)
+    {
+        return f.FunctionName.ToUpperInvariant() is "COUNT" or "SUM" or "AVG" or "MIN" or "MAX";
     }
 
     private static bool IsCountStar(FunctionCallExpression f)
@@ -355,6 +454,16 @@ public class ExternalWindowEngine
         Row? prevRow = null;
         object?[]? prevPartitionKeys = null;
         object?[]? prevSortKeys = null;
+        var runningAggregates = new Dictionary<string, StreamingWindowAggregate>(StringComparer.OrdinalIgnoreCase);
+        var maxLagOffset = group.Columns
+            .Select(c => (FunctionCallExpression)c.Expression)
+            .Where(f => f.FunctionName.Equals("LAG", StringComparison.OrdinalIgnoreCase))
+            .Select(f => TryGetLagOffset(f, out var offset) ? offset : 0)
+            .DefaultIfEmpty(0)
+            .Max();
+        var lagHistory = new Queue<Row>(Math.Max(1, maxLagOffset));
+        Row? firstPartitionRow = null;
+        var nthRows = new Dictionary<string, Row>(StringComparer.OrdinalIgnoreCase);
 
         await foreach (var row in bucketRows)
         {
@@ -390,6 +499,10 @@ public class ExternalWindowEngine
                 rowNumber = 1;
                 currentRank = 1;
                 currentDenseRank = 1;
+                runningAggregates.Clear();
+                lagHistory.Clear();
+                firstPartitionRow = row;
+                nthRows.Clear();
             }
             else
             {
@@ -418,17 +531,81 @@ public class ExternalWindowEngine
             {
                 var f = (FunctionCallExpression)col.Expression;
                 var name_func = f.FunctionName.ToUpperInvariant();
-                object? winVal = name_func switch
+                object? winVal;
+                if (IsRunningAggregateCompatible(f))
                 {
-                    "ROW_NUMBER" => (decimal)rowNumber,
-                    "RANK" => (decimal)currentRank,
-                    "DENSE_RANK" => (decimal)currentDenseRank,
-                    _ => null
-                };
+                    var key = f.ToSql().ToUpperInvariant();
+                    if (!runningAggregates.TryGetValue(key, out var accumulator))
+                    {
+                        accumulator = new StreamingWindowAggregate();
+                        runningAggregates[key] = accumulator;
+                    }
+
+                    if (f.Filter == null || await _context.EvaluateCondition(f.Filter, row))
+                    {
+                        object? value = null;
+                        if (f.Arguments.Count > 0)
+                            value = await _context.EvaluateValue(f.Arguments[0], row);
+                        accumulator.Add(f.FunctionName, value, _context, IsCountStar(f));
+                    }
+
+                    winVal = accumulator.GetValue(f.FunctionName);
+                }
+                else if (name_func == "FIRST_VALUE")
+                {
+                    winVal = firstPartitionRow != null
+                        ? await _context.EvaluateValue(f.Arguments[0], firstPartitionRow)
+                        : null;
+                }
+                else if (name_func == "LAG")
+                {
+                    TryGetLagOffset(f, out var offset);
+                    if (offset == 0)
+                    {
+                        winVal = await _context.EvaluateValue(f.Arguments[0], row);
+                    }
+                    else if (lagHistory.Count >= offset)
+                    {
+                        var lagRow = lagHistory.ElementAt(lagHistory.Count - offset);
+                        winVal = await _context.EvaluateValue(f.Arguments[0], lagRow);
+                    }
+                    else
+                    {
+                        winVal = f.Arguments.Count >= 3
+                            ? await _context.EvaluateValue(f.Arguments[2], row)
+                            : null;
+                    }
+                }
+                else if (name_func == "NTH_VALUE")
+                {
+                    TryGetPositiveLiteral(f.Arguments[1], out var nth);
+                    var key = f.ToSql().ToUpperInvariant();
+                    if (rowNumber == nth)
+                        nthRows[key] = row;
+                    winVal = nthRows.TryGetValue(key, out var nthRow)
+                        ? await _context.EvaluateValue(f.Arguments[0], nthRow)
+                        : null;
+                }
+                else
+                {
+                    winVal = name_func switch
+                    {
+                        "ROW_NUMBER" => (decimal)rowNumber,
+                        "RANK" => (decimal)currentRank,
+                        "DENSE_RANK" => (decimal)currentDenseRank,
+                        _ => null
+                    };
+                }
                 row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
             }
 
             yield return row;
+            if (maxLagOffset > 0)
+            {
+                lagHistory.Enqueue(row);
+                while (lagHistory.Count > maxLagOffset)
+                    lagHistory.Dequeue();
+            }
             prevRow = row;
             prevPartitionKeys = currentPartitionKeys;
             prevSortKeys = currentSortKeys;

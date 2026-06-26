@@ -213,6 +213,19 @@ namespace ETL_SQL.Benchmarks.Tests
             Assert.Contains(result.ColumnNames, c => c.Equals("rn", StringComparison.OrdinalIgnoreCase));
         }
 
+        [Fact]
+        public async Task SelectPipeline_ExternalWindowRunningState()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+            await bench.ExternalWindowRunningState();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(100, result.Rows.Count);
+            Assert.Contains(result.ColumnNames, c => c.Equals("RunningTotal", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("PreviousTwo", StringComparison.OrdinalIgnoreCase));
+        }
+
         // ── TPC-H snapshot test ─────────────────────────────────────────────────
 
         /// <summary>

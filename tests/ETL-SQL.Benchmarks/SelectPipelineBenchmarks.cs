@@ -24,6 +24,7 @@ public class SelectPipelineBenchmarks
     private Script _externalAggregateLimitScript = null!;
     private Script _externalAggregateOrderLimitScript = null!;
     private Script _externalWindowQualifyLimitScript = null!;
+    private Script _externalWindowRunningStateScript = null!;
 
     public SelectPipelineBenchmarks() => _rowCount = 50_000;
     public SelectPipelineBenchmarks(int rowCount) => _rowCount = rowCount;
@@ -73,6 +74,17 @@ public class SelectPipelineBenchmarks
             FROM #pipeline
             QUALIFY rn <= 2
             LIMIT 10;");
+
+        _externalWindowRunningStateScript = Parse(@"
+            SELECT ID, Grp, Val,
+                   SUM(Val) OVER (
+                       PARTITION BY Grp
+                       ORDER BY ID
+                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                   ) AS RunningTotal,
+                   LAG(Val, 2, -1) OVER (PARTITION BY Grp ORDER BY ID) AS PreviousTwo
+            FROM #pipeline
+            LIMIT 100;");
     }
 
     [Benchmark(Description = "ExternalAggregateLimit — spilled GROUP BY through LIMIT")]
@@ -83,6 +95,9 @@ public class SelectPipelineBenchmarks
 
     [Benchmark(Description = "ExternalWindowQualifyLimit — spilled window through QUALIFY and LIMIT")]
     public async Task ExternalWindowQualifyLimit() => await _evaluator.Evaluate(_externalWindowQualifyLimitScript);
+
+    [Benchmark(Description = "ExternalWindowRunningState — cumulative aggregate and bounded LAG")]
+    public async Task ExternalWindowRunningState() => await _evaluator.Evaluate(_externalWindowRunningStateScript);
 
     [GlobalCleanup]
     public void ReportExtraMetrics()
