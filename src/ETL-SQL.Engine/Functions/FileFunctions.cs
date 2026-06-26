@@ -173,9 +173,9 @@ namespace ETL_SQL.Engine.Functions
 
             if (!Directory.Exists(path)) return table;
 
-            var files = Directory.GetFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly));
-            foreach (var fPath in files)
+            foreach (var fPath in Directory.EnumerateFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)))
             {
+                context.CancellationToken.ThrowIfCancellationRequested();
                 var fi = new FileInfo(fPath);
                 await table.AddRowAsync(new Row
                 {

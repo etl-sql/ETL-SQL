@@ -82,33 +82,20 @@ public class SyncDirectoryStatementHandler : IStatementHandler
         if (context.IsVerbose)
             context.Log($"[SyncDirectory] Syncing '{source}' -> '{dest}' (Recursive: {recursive}, Overwrite: {overwrite}, DeleteExtra: {deleteExtra})");
 
-        var sourceFiles = Directory.GetFiles(source, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-        var destFiles = Directory.GetFiles(dest, "*", recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
-
-        if (recursive)
-        {
-            ValidateRecursiveDepth(context, source, sourceFiles);
-            ValidateRecursiveDepth(context, dest, destFiles);
-        }
-
-        var sourceFileMap = sourceFiles.ToDictionary(
-            f => Path.GetRelativePath(source, f),
-            f => f,
-            StringComparer.OrdinalIgnoreCase
-        );
-
-        var destFileMap = destFiles.ToDictionary(
+        var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
+        var destFileMap = EnumerateFiles(context, dest, recursive, searchOption).ToDictionary(
             f => Path.GetRelativePath(dest, f),
             f => f,
             StringComparer.OrdinalIgnoreCase
         );
+        var sourceSeen = deleteExtra ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
 
         // 1. Copy new or modified files
-        foreach (var kvp in sourceFileMap)
+        foreach (var sourceFile in EnumerateFiles(context, source, recursive, searchOption))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
-            string relativePath = kvp.Key;
-            string sourceFile = kvp.Value;
+            string relativePath = Path.GetRelativePath(source, sourceFile);
+            sourceSeen?.Add(relativePath);
             string targetFile = Path.Combine(dest, relativePath);
 
             bool needsCopy = false;
@@ -152,7 +139,7 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 string relativePath = kvp.Key;
                 string destFile = kvp.Value;
 
-                if (!sourceFileMap.ContainsKey(relativePath))
+                if (sourceSeen == null || !sourceSeen.Contains(relativePath))
                 {
                     context.SecurityService.ValidateWriteAccess(destFile);
                     context.SecurityService.ValidateFileType(destFile);
@@ -171,15 +158,22 @@ public class SyncDirectoryStatementHandler : IStatementHandler
         }
     }
 
-    private static void ValidateRecursiveDepth(IExecutionContext context, string root, IEnumerable<string> files)
+    private static IEnumerable<string> EnumerateFiles(IExecutionContext context, string root, bool recursive, SearchOption searchOption)
     {
-        foreach (var file in files)
+        foreach (var file in Directory.EnumerateFiles(root, "*", searchOption))
         {
-            var relative = Path.GetRelativePath(root, file);
-            var depth = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
-            if (depth > context.MaxRecursiveDepth && !context.AllowDeepRecursion)
-                throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {context.MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
+            context.CancellationToken.ThrowIfCancellationRequested();
+            if (recursive) ValidateRecursiveDepth(context, root, file);
+            yield return file;
         }
+    }
+
+    private static void ValidateRecursiveDepth(IExecutionContext context, string root, string file)
+    {
+        var relative = Path.GetRelativePath(root, file);
+        var depth = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries).Length - 1;
+        if (depth > context.MaxRecursiveDepth && !context.AllowDeepRecursion)
+            throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {context.MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
     }
 
     private static void DeleteEmptySubdirectories(IExecutionContext context, string directory)

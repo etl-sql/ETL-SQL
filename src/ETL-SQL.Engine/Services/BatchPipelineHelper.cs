@@ -43,21 +43,17 @@ internal sealed class BatchPipelineHelper
     }
 
     /// <summary>
-    /// Collects all batches and serializes them as a single FOR JSON or FOR XML result.
+    /// Serializes batches as a single FOR JSON or FOR XML scalar result.
     /// </summary>
     public async IAsyncEnumerable<DataTable> EvaluateForClause(
         IAsyncEnumerable<DataTable> batches,
         ForClause forClause,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var allRows = new List<Row>();
-        await foreach (var b in batches.WithCancellation(ct))
-            allRows.AddRange(b.Rows);
-
         if (forClause.Type == ForType.JSON)
         {
-            var json = ResultFormatter.FormatJson(
-                allRows, forClause.Mode, forClause.RootName,
+            var json = await ResultFormatter.FormatJsonAsync(
+                batches, forClause.Mode, forClause.RootName,
                 forClause.IncludeNullValues, forClause.WithoutArrayWrapper);
             var result = new DataTable();
             result.SetColumns(new[] { "JSON_F52E2B61" });
@@ -68,8 +64,8 @@ internal sealed class BatchPipelineHelper
         }
         else if (forClause.Type == ForType.XML)
         {
-            var xml = ResultFormatter.FormatXml(
-                allRows, forClause.Mode, forClause.RootName,
+            var xml = await ResultFormatter.FormatXmlAsync(
+                batches, forClause.Mode, forClause.RootName,
                 forClause.IncludeNullValues, forClause.UseElements);
             var result = new DataTable();
             result.SetColumns(new[] { "XML_F52E2B61" });

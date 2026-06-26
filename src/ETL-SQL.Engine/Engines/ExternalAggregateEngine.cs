@@ -38,6 +38,7 @@ public class ExternalAggregateEngine
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         bool yieldedAny = false;
         string[]? partitionPaths = null;
+        long[]? partitionRowCounts = null;
         try
         {
             // 1. Partition Phase (supports one-pass expansion for grouping sets)
@@ -59,12 +60,38 @@ public class ExternalAggregateEngine
             }
             else
             {
-                partitionPaths = await PartitionStream(inputStream, groupBy);
+                var partitioned = await PartitionStream(inputStream, groupBy);
+                partitionPaths = partitioned.Names;
+                partitionRowCounts = partitioned.RowCounts;
             }
 
             // 2. Aggregate Phase (one partition at a time)
-            foreach (var name in partitionPaths)
+            for (var partitionIndex = 0; partitionIndex < partitionPaths.Length; partitionIndex++)
             {
+                var name = partitionPaths[partitionIndex];
+                if (expandedSets == null)
+                {
+                    if (partitionRowCounts?[partitionIndex] == 0)
+                        continue;
+
+                    await using var directReader = await _context.SpillStore.CreateReaderAsync(name);
+                    var partResults = await _inMemoryEngine.ApplyAggregation(
+                        directReader.AsEnumerableAsync(),
+                        groupBy,
+                        finalColumns,
+                        colNames,
+                        havingClause);
+
+                    _context.Telemetry.AggregateGroupsCount += partResults.Count;
+                    foreach (var resRow in partResults)
+                    {
+                        yieldedAny = true;
+                        yield return resRow;
+                    }
+
+                    continue;
+                }
+
                 await using var reader = await _context.SpillStore.CreateReaderAsync(name);
                 var groups = new Dictionary<CompoundKey, (List<Row> Rows, int SetIndex)>();
 
@@ -177,9 +204,12 @@ public class ExternalAggregateEngine
         }
     }
 
-    private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? groupBy)
+    private sealed record PartitionResult(string[] Names, long[] RowCounts);
+
+    private async Task<PartitionResult> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? groupBy)
     {
         var names = new string[PartitionCount];
+        var rowCounts = new long[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
 
         var prefix = Guid.NewGuid().ToString("N");
@@ -206,6 +236,7 @@ public class ExternalAggregateEngine
                 }
 
                 row["__SET_IDX"] = 0;
+                rowCounts[pIdx]++;
                 await writers[pIdx].WriteRowAsync(row);
             }
         }
@@ -222,7 +253,7 @@ public class ExternalAggregateEngine
             }
             _context.Telemetry.PartitionsCount += used;
         }
-        return names;
+        return new PartitionResult(names, rowCounts);
     }
 
     private async Task<string[]> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
