@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
@@ -21,10 +22,12 @@ namespace ETL_SQL.Reporting
         private readonly VisualBuilder _visualBuilder;
         private readonly PageBuilder _pageBuilder;
         private readonly DatasetBuilder _datasetBuilder;
+        private readonly int _maxVisualParallelism;
 
-        public ManifestBuilder(IExecutionContext ctx)
+        public ManifestBuilder(IExecutionContext ctx, int? maxVisualParallelism = null)
         {
             _ctx = ctx;
+            _maxVisualParallelism = ResolveMaxVisualParallelism(ctx, maxVisualParallelism);
             var renderer = new EChartsRenderer();
             _styleBuilder = new StyleBuilder(ctx);
             _visualBuilder = new VisualBuilder(ctx, renderer, _styleBuilder);
@@ -60,17 +63,8 @@ namespace ETL_SQL.Reporting
                 Background = _ctx.ReportContext.ReportBackground,
                 Theme = _ctx.ReportContext.ReportTheme,
                 Navigation = _ctx.ReportContext.ReportNavigation,
-                Telemetry = new TelemetryManifest
-                {
-                    RowsProcessed = _ctx.Telemetry.RowsProcessed,
-                    TotalSpilledBytes = _ctx.Telemetry.TotalSpilledBytes,
-                    SubqueryCacheHits = _ctx.Telemetry.SubqueryCacheHits,
-                    SubqueryCacheMisses = _ctx.Telemetry.SubqueryCacheMisses,
-                    SubquerySpillCount = _ctx.Telemetry.SubquerySpillCount,
-                    SubquerySpilledBytes = _ctx.Telemetry.SubquerySpilledBytes,
-                    ExecutionTimeMs = _ctx.Telemetry.LastExecutionTimeMs
-                }
             };
+            RefreshTelemetry(manifest);
             var reportStyles = _styleBuilder.ResolveReportStyles();
             if (reportStyles.Count > 0)
                 manifest.Styles = reportStyles;
@@ -86,19 +80,8 @@ namespace ETL_SQL.Reporting
             var deferredVisuals = DetermineDeferredVisuals(runPages);
 
             // ── Visuals ──────────────────────────────────────────────────────
-            foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
-            {
-                try
-                {
-                    manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, deferredVisuals.Contains(name)));
-                }
-                catch (Exception ex)
-                {
-                    manifest.Messages ??= new();
-                    manifest.Messages.Add(new LogEntryManifest($"Failed to build visual '{name}': {ex.Message}", "Red", DateTime.UtcNow));
-                    manifest.Error = "One or more visuals failed to build.";
-                }
-            }
+            await BuildVisualsAsync(manifest, interactionValues, deferredVisuals);
+            RefreshTelemetry(manifest);
 
             // ── Pages ────────────────────────────────────────────────────────
             foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
@@ -259,14 +242,165 @@ namespace ETL_SQL.Reporting
             }
 
             // ── Messages ─────────────────────────────────────────────────────
+            var manifestMessages = manifest.Messages;
             manifest.Messages = _ctx.Messages
                 .Select(m => new LogEntryManifest(m.Message, m.Color.ToString().ToLowerInvariant(), m.Timestamp))
                 .ToList();
+            if (manifestMessages is { Count: > 0 })
+                manifest.Messages.AddRange(manifestMessages);
 
             manifest.ExecutionTree = _ctx.Telemetry.ExecutionTree.ToSnapshot();
 
             return manifest;
         }
+
+        private async Task BuildVisualsAsync(
+            ReportManifest manifest,
+            Dictionary<string, string>? interactionValues,
+            HashSet<string> deferredVisuals)
+        {
+            var visuals = _ctx.ReportContext.VisualDefinitions
+                .Select((entry, index) => new VisualBuildInput(index, entry.Key, entry.Value))
+                .ToList();
+
+            if (visuals.Count == 0)
+                return;
+
+            if (!CanBuildVisualsInParallel(visuals.Count, interactionValues))
+            {
+                foreach (var visual in visuals)
+                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals);
+                return;
+            }
+
+            var firstFork = _ctx.Fork();
+            if (ReferenceEquals(firstFork, _ctx))
+            {
+                foreach (var visual in visuals)
+                    await BuildVisualSequentialAsync(manifest, visual, interactionValues, deferredVisuals);
+                return;
+            }
+
+            using var throttler = new SemaphoreSlim(_maxVisualParallelism);
+            var tasks = visuals
+                .Select(visual => BuildVisualInForkAsync(
+                    visual,
+                    interactionValues,
+                    deferredVisuals.Contains(visual.Name),
+                    throttler,
+                    visual.Index == 0 ? firstFork : null))
+                .ToArray();
+
+            var results = await Task.WhenAll(tasks);
+            foreach (var result in results.OrderBy(r => r.Index))
+            {
+                if (result.Context != null && !ReferenceEquals(result.Context, _ctx))
+                    _ctx.Merge(result.Context);
+
+                if (result.Visual != null)
+                    manifest.Visuals.Add(result.Visual);
+
+                if (result.Message != null)
+                {
+                    manifest.Messages ??= new();
+                    manifest.Messages.Add(result.Message);
+                    manifest.Error = "One or more visuals failed to build.";
+                }
+            }
+        }
+
+        private async Task BuildVisualSequentialAsync(
+            ReportManifest manifest,
+            VisualBuildInput input,
+            Dictionary<string, string>? interactionValues,
+            HashSet<string> deferredVisuals)
+        {
+            try
+            {
+                manifest.Visuals.Add(await _visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, deferredVisuals.Contains(input.Name)));
+            }
+            catch (Exception ex)
+            {
+                manifest.Messages ??= new();
+                manifest.Messages.Add(new LogEntryManifest($"Failed to build visual '{input.Name}': {ex.Message}", "Red", DateTime.UtcNow));
+                manifest.Error = "One or more visuals failed to build.";
+            }
+        }
+
+        private async Task<VisualBuildResult> BuildVisualInForkAsync(
+            VisualBuildInput input,
+            Dictionary<string, string>? interactionValues,
+            bool skipDeferredVisuals,
+            SemaphoreSlim throttler,
+            IExecutionContext? visualContext)
+        {
+            await throttler.WaitAsync();
+            try
+            {
+                visualContext ??= _ctx.Fork();
+                if (ReferenceEquals(visualContext, _ctx))
+                    throw new InvalidOperationException("Execution context cannot be forked for parallel visual generation.");
+
+                var styleBuilder = new StyleBuilder(visualContext);
+                var visualBuilder = new VisualBuilder(visualContext, new EChartsRenderer(), styleBuilder);
+                var visual = await visualBuilder.BuildAsync(input.Name, input.Statement, interactionValues, skipDeferredVisuals);
+                return new VisualBuildResult(input.Index, visual, null, visualContext);
+            }
+            catch (Exception ex)
+            {
+                return new VisualBuildResult(
+                    input.Index,
+                    null,
+                    new LogEntryManifest($"Failed to build visual '{input.Name}': {ex.Message}", "Red", DateTime.UtcNow),
+                    visualContext);
+            }
+            finally
+            {
+                throttler.Release();
+            }
+        }
+
+        private bool CanBuildVisualsInParallel(int visualCount, Dictionary<string, string>? interactionValues)
+            => visualCount > 1
+               && _maxVisualParallelism > 1
+               && (interactionValues == null || interactionValues.Count == 0);
+
+        private static int ResolveMaxVisualParallelism(IExecutionContext ctx, int? requested)
+        {
+            var requestedValue = requested;
+            if (!requestedValue.HasValue)
+            {
+                var env = Environment.GetEnvironmentVariable("ETLSQL_REPORT_VISUAL_PARALLELISM");
+                if (int.TryParse(env, out var envValue))
+                    requestedValue = envValue;
+            }
+
+            var contextLimit = ctx.MaxParallelDegree > 0 ? ctx.MaxParallelDegree : 1;
+            var defaultLimit = Math.Min(4, contextLimit);
+            return Math.Max(1, Math.Min(requestedValue ?? defaultLimit, contextLimit));
+        }
+
+        private void RefreshTelemetry(ReportManifest manifest)
+        {
+            manifest.Telemetry = new TelemetryManifest
+            {
+                RowsProcessed = _ctx.Telemetry.RowsProcessed,
+                TotalSpilledBytes = _ctx.Telemetry.TotalSpilledBytes,
+                SubqueryCacheHits = _ctx.Telemetry.SubqueryCacheHits,
+                SubqueryCacheMisses = _ctx.Telemetry.SubqueryCacheMisses,
+                SubquerySpillCount = _ctx.Telemetry.SubquerySpillCount,
+                SubquerySpilledBytes = _ctx.Telemetry.SubquerySpilledBytes,
+                ExecutionTimeMs = _ctx.Telemetry.LastExecutionTimeMs
+            };
+        }
+
+        private sealed record VisualBuildInput(int Index, string Name, CreateVisualStatement Statement);
+
+        private sealed record VisualBuildResult(
+            int Index,
+            VisualManifest? Visual,
+            LogEntryManifest? Message,
+            IExecutionContext? Context);
 
         private HashSet<string> DetermineDeferredVisuals(IReadOnlySet<string>? runPages)
         {

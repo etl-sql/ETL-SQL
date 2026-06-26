@@ -88,5 +88,35 @@ namespace ETL_SQL.Tests
             Assert.Equal("dark", manifest.Theme);
             Assert.Equal("Side", manifest.Navigation);
         }
+
+        [Fact]
+        public async Task BuildAsync_ParallelVisuals_PreservesOrderAndRows()
+        {
+            var script = @"
+SELECT 1 AS Id, 'A' AS Label INTO #A;
+SELECT 2 AS Id, 'B' AS Label INTO #B;
+SELECT 3 AS Id, 'C' AS Label INTO #C;
+
+CREATE VISUAL First AS TABLE (SOURCE = #A);
+CREATE VISUAL Second AS TABLE (SOURCE = #B);
+CREATE VISUAL Third AS TABLE (SOURCE = #C);
+";
+
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.RedirectOutput = true;
+            evaluator.DisplayExecuteTree = false;
+
+            var parsedScript = new Parser(new Lexer(script).Tokenize(), script).Parse();
+            await evaluator.Evaluate(parsedScript);
+
+            var manifest = await new ManifestBuilder(evaluator, maxVisualParallelism: 2).BuildAsync("parallel.rptsql");
+
+            Assert.Equal(new[] { "First", "Second", "Third" }, manifest.Visuals.Select(v => v.Name).ToArray());
+            Assert.Null(manifest.Error);
+            Assert.All(manifest.Visuals, visual => Assert.Null(visual.Error));
+            Assert.Equal("1", manifest.Visuals[0].Rows[0][0]);
+            Assert.Equal("2", manifest.Visuals[1].Rows[0][0]);
+            Assert.Equal("3", manifest.Visuals[2].Rows[0][0]);
+        }
     }
 }
