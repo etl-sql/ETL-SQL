@@ -131,13 +131,13 @@ namespace ETL_SQL.Orchestrator.Execution
             using var conn = new SqliteConnection(_connectionString);
             await conn.OpenAsync();
 
+            await PurgeStaleSlotsAsync(conn);
+
             // BEGIN EXCLUSIVE locks the DB file for the duration of this check+insert,
             // preventing another process from racing through the same window.
             using var tx = conn.BeginTransaction(IsolationLevel.Serializable);
             try
             {
-                await PurgeStaleSlotsAsync(conn, tx);
-
                 using var countCmd = conn.CreateCommand();
                 countCmd.Transaction = tx;
                 countCmd.CommandText = "SELECT COUNT(*) FROM ThrottleSlots;";
@@ -177,12 +177,11 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private static async Task PurgeStaleSlotsAsync(SqliteConnection conn, SqliteTransaction tx)
+        private static async Task PurgeStaleSlotsAsync(SqliteConnection conn)
         {
             var pids = new List<int>();
             using (var cmd = conn.CreateCommand())
             {
-                cmd.Transaction = tx;
                 cmd.CommandText = "SELECT DISTINCT ProcessId FROM ThrottleSlots WHERE ProcessId != @own AND (MachineName = @machine OR MachineName IS NULL OR MachineName = '');";
                 cmd.Parameters.AddWithValue("@own", _pid);
                 cmd.Parameters.AddWithValue("@machine", Environment.MachineName);
@@ -190,6 +189,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 while (await r.ReadAsync()) pids.Add(r.GetInt32(0));
             }
 
+            var deadPids = new List<int>();
             foreach (var pid in pids)
             {
                 bool alive;
@@ -197,6 +197,16 @@ namespace ETL_SQL.Orchestrator.Execution
                 catch (ArgumentException) { alive = false; }
 
                 if (!alive)
+                    deadPids.Add(pid);
+            }
+
+            if (deadPids.Count == 0)
+                return;
+
+            try
+            {
+                using var tx = conn.BeginTransaction(IsolationLevel.Serializable);
+                foreach (var pid in deadPids)
                 {
                     using var del = conn.CreateCommand();
                     del.Transaction = tx;
@@ -204,8 +214,17 @@ namespace ETL_SQL.Orchestrator.Execution
                     del.Parameters.AddWithValue("@pid", pid);
                     del.Parameters.AddWithValue("@machine", Environment.MachineName);
                     await del.ExecuteNonQueryAsync();
-                    // Note: no logging inside the exclusive lock to keep it short
                 }
+
+                tx.Commit();
+            }
+            catch (SqliteException ex) when (ex.SqliteErrorCode == 5 /* SQLITE_BUSY */)
+            {
+                // Another process is claiming or releasing a slot. The next acquire poll will retry cleanup.
+            }
+            catch
+            {
+                throw;
             }
         }
 
