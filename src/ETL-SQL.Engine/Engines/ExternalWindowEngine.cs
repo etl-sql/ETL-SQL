@@ -153,7 +153,15 @@ public class ExternalWindowEngine
             {
                 bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
 
-                if (useDeepSpill && IsLeadSpillCompatible(group))
+                if (useDeepSpill && IsDistributionReplayCompatible(group))
+                {
+                    _logger.WriteLine($"[magenta]     * DISTRIBUTION-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via sorted cardinality replay.[/]");
+                    await foreach (var row in ProcessBucketDistributionReplay(info.Name, group))
+                    {
+                        yield return row;
+                    }
+                }
+                else if (useDeepSpill && IsLeadSpillCompatible(group))
                 {
                     _logger.WriteLine($"[magenta]     * LEAD-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via bounded lookahead.[/]");
                     await foreach (var row in ProcessBucketLeadSpill(info.Name, group))
@@ -224,6 +232,21 @@ public class ExternalWindowEngine
                 && f.FunctionName.Equals("LEAD", StringComparison.OrdinalIgnoreCase)
                 && f.Arguments.Count is >= 1 and <= 3
                 && TryGetOffset(f, out _));
+    }
+
+    private static bool IsDistributionReplayCompatible(WindowGroup group)
+    {
+        return group.Signature.OrderBy is { Count: > 0 }
+            && group.Columns.All(c =>
+            {
+                if (c.Expression is not FunctionCallExpression f) return false;
+                return f.FunctionName.ToUpperInvariant() switch
+                {
+                    "PERCENT_RANK" => f.Arguments.Count == 0,
+                    "NTILE" => f.Arguments.Count == 1 && TryGetPositiveLiteral(f.Arguments[0], out _),
+                    _ => false
+                };
+            });
     }
 
     private static bool IsBoundedValueCompatible(FunctionCallExpression f)
@@ -670,6 +693,97 @@ public class ExternalWindowEngine
             yield return await CompleteLeadRow(pending, group, useDefaults: true);
     }
 
+    private async IAsyncEnumerable<Row> ProcessBucketDistributionReplay(string name, WindowGroup group)
+    {
+        var sortedName = $"win_dist_{Guid.NewGuid():N}.tmp";
+        var sortCriteria = new List<OrderByClause>();
+        if (group.Signature.PartitionBy != null)
+        {
+            foreach (var expression in group.Signature.PartitionBy)
+                sortCriteria.Add(new OrderByClause(expression, false));
+        }
+        sortCriteria.AddRange(group.Signature.OrderBy!);
+
+        var partitionCounts = new List<long>();
+        object?[]? previousPartitionKeys = null;
+        try
+        {
+            await using (var writer = await _context.SpillStore.CreateWriterAsync(sortedName))
+            {
+                await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
+                {
+                    var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+                    if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys))
+                        partitionCounts.Add(0);
+                    partitionCounts[^1]++;
+                    previousPartitionKeys = keys;
+                    await writer.WriteRowAsync(row);
+                }
+            }
+
+            var partitionIndex = -1;
+            long rowIndex = 0;
+            long rank = 1;
+            previousPartitionKeys = null;
+            object?[]? previousSortKeys = null;
+            await foreach (var row in ReadPartitionStream(sortedName))
+            {
+                var partitionKeys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+                var sortKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
+                if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, partitionKeys))
+                {
+                    partitionIndex++;
+                    rowIndex = 0;
+                    rank = 1;
+                    previousSortKeys = null;
+                }
+                else if (previousSortKeys != null && !PartitionKeysEqual(previousSortKeys, sortKeys))
+                {
+                    rank = rowIndex + 1;
+                }
+
+                var partitionCount = partitionCounts[partitionIndex];
+                foreach (var column in group.Columns)
+                {
+                    var f = (FunctionCallExpression)column.Expression;
+                    object? value;
+                    if (f.FunctionName.Equals("PERCENT_RANK", StringComparison.OrdinalIgnoreCase))
+                    {
+                        value = partitionCount <= 1 ? 0m : (decimal)(rank - 1) / (partitionCount - 1);
+                    }
+                    else
+                    {
+                        TryGetPositiveLiteral(f.Arguments[0], out var bucketCount);
+                        var baseSize = partitionCount / bucketCount;
+                        var extraRows = partitionCount % bucketCount;
+                        value = baseSize == 0
+                            ? (decimal)(rowIndex + 1)
+                            : rowIndex < extraRows * (baseSize + 1)
+                                ? (decimal)(rowIndex / (baseSize + 1) + 1)
+                                : (decimal)((rowIndex - extraRows * (baseSize + 1)) / baseSize + extraRows + 1);
+                    }
+                    row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = value;
+                }
+
+                yield return row;
+                rowIndex++;
+                previousPartitionKeys = partitionKeys;
+                previousSortKeys = sortKeys;
+            }
+        }
+        finally
+        {
+            try
+            {
+                _context.SpillStore.DeleteChunk(sortedName);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Error cleaning up distribution window replay {sortedName}: {ex.Message}");
+            }
+        }
+    }
+
     private async Task<Row> CompleteLeadRow(Queue<Row> pending, WindowGroup group, bool useDefaults)
     {
         var row = pending.Peek();
@@ -701,6 +815,14 @@ public class ExternalWindowEngine
         if (expressions == null) return keys;
         for (var i = 0; i < expressions.Count; i++)
             keys[i] = await _context.EvaluateValue(expressions[i], row);
+        return keys;
+    }
+
+    private async Task<object?[]> EvaluateOrderKeys(List<OrderByClause> clauses, Row row)
+    {
+        var keys = new object?[clauses.Count];
+        for (var i = 0; i < clauses.Count; i++)
+            keys[i] = await _context.EvaluateValue(clauses[i].Expression, row);
         return keys;
     }
 

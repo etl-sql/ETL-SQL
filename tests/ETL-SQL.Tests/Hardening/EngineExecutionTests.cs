@@ -608,6 +608,69 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ExternalWindowEngine_PercentRankAndNtile_UseDistributionReplay()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) });
+            var percentRank = new FunctionCallExpression("PERCENT_RANK", new List<Expression>()) { Window = window };
+            var ntile = new FunctionCallExpression("NTILE", new List<Expression>
+            {
+                new LiteralExpression(3, TokenType.NUMBER)
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(new IdentifierExpression("Val"), "Val"),
+                    new(percentRank, "PercentRank"),
+                    new(ntile, "Bucket")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                foreach (var grp in new[] { "B", "A" })
+                {
+                    foreach (var value in new[] { 3, 1, 2, 3, 1 })
+                    {
+                        var row = new Row(schema);
+                        row["Grp"] = grp;
+                        row["Val"] = value;
+                        yield return row;
+                    }
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("DISTRIBUTION-SPILL", StringComparison.OrdinalIgnoreCase));
+            var percentRankKey = $"WINDOW_{percentRank.ToSql().ToUpperInvariant()}";
+            var ntileKey = $"WINDOW_{ntile.ToSql().ToUpperInvariant()}";
+            var expectedRanks = new[] { 0m, 0m, 0.5m, 0.75m, 0.75m };
+            var expectedBuckets = new[] { 1m, 1m, 2m, 2m, 3m };
+            foreach (var partition in result.GroupBy(r => r["Grp"]?.ToString()))
+            {
+                var rows = partition.ToList();
+                Assert.Equal(expectedRanks, rows.Select(r => Convert.ToDecimal(r[percentRankKey])));
+                Assert.Equal(expectedBuckets, rows.Select(r => Convert.ToDecimal(r[ntileKey])));
+            }
+        }
+
+        [Fact]
         public async Task ExternalAggregateEngine_PartitionIndexOverflow()
         {
             var e = NewEvaluator();
