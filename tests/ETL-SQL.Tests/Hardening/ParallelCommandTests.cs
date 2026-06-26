@@ -72,6 +72,30 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task Parallel_ShouldMergeOnlyChangedVariables()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+
+            string script = @"
+            DECLARE @x INT = 0;
+            DECLARE @y INT = 0;
+            PARALLEL BEGIN
+                BEGIN SET @x = 10; END
+                BEGIN SET @y = 20; END
+            END
+            ";
+
+            var lexer = new Lexer(script);
+            var statements = new Parser(lexer.Tokenize()).Parse().Statements;
+
+            foreach (var stmt in statements) await evaluator.EvaluateStatement(stmt);
+
+            Assert.Equal(10L, Convert.ToInt64(evaluator.Variables["@x"]));
+            Assert.Equal(20L, Convert.ToInt64(evaluator.Variables["@y"]));
+        }
+
+        [Fact]
         public async Task Parallel_ShouldBubbleExceptions()
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();

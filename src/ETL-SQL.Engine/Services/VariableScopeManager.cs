@@ -13,10 +13,10 @@ namespace ETL_SQL.Engine.Services;
 public class VariableScopeManager : IVariableContext
 {
     private readonly object _lock = new();
-    private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, VariableMetadata> _variableMetadata = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Stack<Dictionary<string, object?>> _scopeStack = new();
-    private readonly Stack<Dictionary<string, VariableMetadata>> _metadataStack = new();
+    private IDictionary<string, object?> _variables = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+    private IDictionary<string, VariableMetadata> _variableMetadata = new Dictionary<string, VariableMetadata>(StringComparer.OrdinalIgnoreCase);
+    private readonly Stack<IDictionary<string, object?>> _scopeStack = new();
+    private readonly Stack<IDictionary<string, VariableMetadata>> _metadataStack = new();
 
     private readonly Dictionary<string, CreateProcedureStatement> _procedures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CreateFunctionStatement> _functions = new(StringComparer.OrdinalIgnoreCase);
@@ -205,9 +205,11 @@ public class VariableScopeManager : IVariableContext
         lock (_lock)
         {
             var fork = new VariableScopeManager();
-            // Shallow copy global variables
-            foreach (var kvp in _variables) fork._variables[kvp.Key] = kvp.Value;
-            foreach (var kvp in _variableMetadata) fork._variableMetadata[kvp.Key] = kvp.Value;
+            // Forked evaluators read from the parent snapshot and record only local writes.
+            // This avoids copying 10k+ variables per PARALLEL iteration when most branches read
+            // shared state and modify only one or two loop-local values.
+            fork._variables = new CopyOnWriteDictionary<object?>(_variables);
+            fork._variableMetadata = new CopyOnWriteDictionary<VariableMetadata>(_variableMetadata);
 
             // Shallow copy procedure/function registries
             foreach (var kvp in _procedures) fork._procedures[kvp.Key] = kvp.Value;
@@ -221,8 +223,8 @@ public class VariableScopeManager : IVariableContext
             Array.Reverse(metas);
             for (int i = 0; i < scopes.Length; i++)
             {
-                fork.PushScope(new Dictionary<string, object?>(scopes[i], StringComparer.OrdinalIgnoreCase),
-                              new Dictionary<string, VariableMetadata>(metas[i], StringComparer.OrdinalIgnoreCase));
+                fork._scopeStack.Push(new CopyOnWriteDictionary<object?>(scopes[i]));
+                fork._metadataStack.Push(new CopyOnWriteDictionary<VariableMetadata>(metas[i]));
             }
             return fork;
         }
@@ -288,9 +290,16 @@ public class VariableScopeManager : IVariableContext
     {
         lock (_lock)
         {
-            // Sync ONLY the outermost scope or globals that changed?
-            // For now, let's just sync globals as it's common for parallel results
-            foreach (var kvp in spawned.Variables) _variables[kvp.Key] = kvp.Value;
+            if (spawned._variables is CopyOnWriteDictionary<object?> variables)
+            {
+                foreach (var kvp in variables.LocalValues)
+                    _variables[kvp.Key] = kvp.Value;
+            }
+            else
+            {
+                foreach (var kvp in spawned.Variables)
+                    _variables[kvp.Key] = kvp.Value;
+            }
         }
     }
     /// <summary>Purges all variables, procedures, functions, and scopes from the context.</summary>
@@ -305,6 +314,111 @@ public class VariableScopeManager : IVariableContext
             _procedures.Clear();
             _functions.Clear();
             _views.Clear();
+        }
+    }
+
+    private sealed class CopyOnWriteDictionary<T> : IDictionary<string, T>
+    {
+        private static readonly StringComparer Comparer = StringComparer.OrdinalIgnoreCase;
+        private readonly IDictionary<string, T> _parent;
+        private readonly Dictionary<string, T> _local = new(Comparer);
+        private readonly HashSet<string> _removed = new(Comparer);
+
+        public CopyOnWriteDictionary(IDictionary<string, T> parent)
+        {
+            _parent = parent;
+        }
+
+        public IEnumerable<KeyValuePair<string, T>> LocalValues => _local;
+
+        public T this[string key]
+        {
+            get
+            {
+                if (_local.TryGetValue(key, out var value))
+                    return value;
+                if (!_removed.Contains(key) && _parent.TryGetValue(key, out value))
+                    return value;
+                throw new KeyNotFoundException();
+            }
+            set
+            {
+                _removed.Remove(key);
+                _local[key] = value;
+            }
+        }
+
+        public ICollection<string> Keys => Enumerate().Select(kvp => kvp.Key).ToList();
+        public ICollection<T> Values => Enumerate().Select(kvp => kvp.Value).ToList();
+        public int Count => Enumerate().Count();
+        public bool IsReadOnly => false;
+
+        public void Add(string key, T value)
+        {
+            if (ContainsKey(key))
+                throw new ArgumentException($"An item with the same key has already been added. Key: {key}", nameof(key));
+            this[key] = value;
+        }
+
+        public bool ContainsKey(string key) =>
+            _local.ContainsKey(key) || (!_removed.Contains(key) && _parent.ContainsKey(key));
+
+        public bool Remove(string key)
+        {
+            var existed = ContainsKey(key);
+            _local.Remove(key);
+            _removed.Add(key);
+            return existed;
+        }
+
+        public bool TryGetValue(string key, out T value)
+        {
+            if (_local.TryGetValue(key, out value!))
+                return true;
+            if (!_removed.Contains(key) && _parent.TryGetValue(key, out value!))
+                return true;
+
+            value = default!;
+            return false;
+        }
+
+        public void Add(KeyValuePair<string, T> item) => Add(item.Key, item.Value);
+        public void Clear()
+        {
+            foreach (var key in _parent.Keys)
+                _removed.Add(key);
+            _local.Clear();
+        }
+
+        public bool Contains(KeyValuePair<string, T> item) =>
+            TryGetValue(item.Key, out var value) && EqualityComparer<T>.Default.Equals(value, item.Value);
+
+        public void CopyTo(KeyValuePair<string, T>[] array, int arrayIndex)
+        {
+            foreach (var item in Enumerate())
+                array[arrayIndex++] = item;
+        }
+
+        public bool Remove(KeyValuePair<string, T> item) =>
+            Contains(item) && Remove(item.Key);
+
+        public IEnumerator<KeyValuePair<string, T>> GetEnumerator() => Enumerate().GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private IEnumerable<KeyValuePair<string, T>> Enumerate()
+        {
+            var yielded = new HashSet<string>(Comparer);
+            foreach (var kvp in _local)
+            {
+                yielded.Add(kvp.Key);
+                yield return kvp;
+            }
+
+            foreach (var kvp in _parent)
+            {
+                if (!_removed.Contains(kvp.Key) && yielded.Add(kvp.Key))
+                    yield return kvp;
+            }
         }
     }
 }
