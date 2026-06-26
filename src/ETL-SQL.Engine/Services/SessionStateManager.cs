@@ -129,8 +129,9 @@ public class SessionStateManager : ISessionStateManager
             await store.SaveDockerStateAsync(dockerLast, dockerStrings);
 
             // 6. Save Temp Tables
-            var savedTables = await evaluator.DataSourceManager.GetTempTablesToSave();
+            var savedTables = (await evaluator.DataSourceManager.GetTempTablesToSave()).ToList();
             await store.SaveTempTablesAsync(savedTables);
+            PurgeUnreferencedSpillChunks(sessionId, savedTables);
 
             _logger.Info("[SESSION] Session {SessionId} persisted successfully (SQLite + Meta-Chunks)", sessionId);
         }
@@ -265,6 +266,41 @@ public class SessionStateManager : ISessionStateManager
     private static long MeasureDirectorySize(string directory)
         => Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
             .Sum(file => new FileInfo(file).Length);
+
+    private void PurgeUnreferencedSpillChunks(string sessionId, IReadOnlyCollection<SavedTempTable> savedTables)
+    {
+        var spillDir = Path.Combine(GetSessionDirectory(sessionId), "spill");
+        if (!Directory.Exists(spillDir))
+            return;
+
+        var liveChunks = savedTables
+            .SelectMany(table => table.ChunkNames)
+            .Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var removed = 0;
+
+        foreach (var path in Directory.EnumerateFiles(spillDir, "*", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(path);
+            if (liveChunks.Contains(fileName))
+                continue;
+
+            try
+            {
+                File.Delete(path);
+                removed++;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Failed to delete orphaned spill chunk {Path}: {Message}", path, ex.Message);
+            }
+        }
+
+        if (removed > 0)
+            _logger.Info("[SESSION] Removed {Count} orphaned spill chunks for session {SessionId}.", removed, sessionId);
+    }
+
     /// <summary>
     /// Scans the session root and deletes any session directories where the metadata 
     /// has not been touched within the configured TTL hours.

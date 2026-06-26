@@ -2,7 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +37,35 @@ public class SessionStateManagerScaleTests : IDisposable
         Assert.True(measured.IsSizeCalculated);
         Assert.True(measured.TotalSizeBytes >= 1026);
         Assert.NotNull(measured.SizeMB);
+    }
+
+    [Fact]
+    public void PurgeUnreferencedSpillChunks_RemovesOnlyUnreferencedFiles()
+    {
+        var sessionDir = Path.Combine(_root, "session-spill");
+        var spillDir = Path.Combine(sessionDir, "spill");
+        Directory.CreateDirectory(spillDir);
+        File.WriteAllText(Path.Combine(sessionDir, "metadata.db"), "db");
+        File.WriteAllText(Path.Combine(spillDir, "live.arrow"), "live");
+        File.WriteAllText(Path.Combine(spillDir, "orphan.arrow"), "orphan");
+
+        var manager = CreateManager();
+        var method = typeof(SessionStateManager).GetMethod(
+            "PurgeUnreferencedSpillChunks",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        method!.Invoke(manager, new object[]
+        {
+            "session-spill",
+            new List<SavedTempTable>
+            {
+                new("#t", [new ColumnDefinition("id", "INT", false)], ["live.arrow"])
+            }
+        });
+
+        Assert.True(File.Exists(Path.Combine(spillDir, "live.arrow")));
+        Assert.False(File.Exists(Path.Combine(spillDir, "orphan.arrow")));
     }
 
     private SessionStateManager CreateManager()
