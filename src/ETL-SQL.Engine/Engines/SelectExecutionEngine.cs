@@ -336,16 +336,50 @@ public class SelectExecutionEngine
         }
 
         // 6. OFFSET / LIMIT
-        // Phase 7: Flush any pending external engine stream (e.g. external agg with no ORDER BY).
+        // Phase 7: If a spill-backed operator still has a lazy stream, keep it lazy through
+        // OFFSET / LIMIT and final projection. TOP PERCENT requires a total row count, so it
+        // still materializes through the legacy ApplyLimits path.
+        if (externalEngineStream != null && !stmt.IsTopPercent)
+        {
+            await foreach (var projectedBatch in ProjectAndBatch(
+                ApplyLimitsStream(externalEngineStream, stmt),
+                stmt,
+                finalColumns,
+                colNames,
+                hasPreEvaluatedColumns,
+                canDeferWhere))
+                yield return projectedBatch;
+            yield break;
+        }
+
+        // Flush pending external streams only when a downstream semantic needs the full list.
         await MaterializeEngineStream();
         allRows = await ApplyLimits(allRows, stmt, colNames, finalColumns, hasPreEvaluatedColumns);
 
         // Final Projection & Batching
+        await foreach (var projectedBatch in ProjectAndBatch(
+            allRows.ToAsyncEnumerable(),
+            stmt,
+            finalColumns,
+            colNames,
+            hasPreEvaluatedColumns,
+            canDeferWhere))
+            yield return projectedBatch;
+    }
+
+    private async IAsyncEnumerable<DataTable> ProjectAndBatch(
+        IAsyncEnumerable<Row> rows,
+        SelectStatement stmt,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        bool hasPreEvaluatedColumns,
+        bool canDeferWhere)
+    {
         var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
         var batch = new DataTable();
         batch.SetColumns(colNames);
         bool yielded = false;
-        foreach (var row in allRows)
+        await foreach (var row in rows)
         {
             if (canDeferWhere && !await _context.EvaluateCondition(stmt.WhereClause!, row)) continue;
             var resRow = batch.NewRow();
@@ -421,6 +455,35 @@ public class SelectExecutionEngine
             }
         }
         if (batch.Rows.Count > 0 || !yielded) yield return batch;
+    }
+
+    private async IAsyncEnumerable<Row> ApplyLimitsStream(IAsyncEnumerable<Row> rows, SelectStatement stmt)
+    {
+        int offset = 0;
+        if (stmt.Offset != null)
+            offset = Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row()));
+
+        int? take = null;
+        if (stmt.TopCount != null)
+            take = Convert.ToInt32(await _context.EvaluateValue(stmt.TopCount, new Row()));
+        else if (stmt.LimitCount != null)
+            take = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount, new Row()));
+
+        var skipped = 0;
+        var yielded = 0;
+        await foreach (var row in rows)
+        {
+            if (skipped < offset)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (take.HasValue && yielded >= take.Value) yield break;
+
+            yielded++;
+            yield return row;
+        }
     }
 
     private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
