@@ -473,25 +473,25 @@
     "test:unit:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "vscode-languageclient": "^10.0.0"
+    "vscode-languageclient": "^10.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/jsdom": "^28.0.1",
     "@types/mocha": "^10.0.1",
-    "@types/node": "^25.9.1",
-    "@types/vscode": "^1.91.0",
-    "@typescript-eslint/eslint-plugin": "^8.60.0",
-    "@typescript-eslint/parser": "^8.60.0",
-    "@vitest/coverage-v8": "^4.1.2",
+    "@types/node": "^25.9.4",
+    "@types/vscode": "^1.125.0",
+    "@typescript-eslint/eslint-plugin": "^8.62.0",
+    "@typescript-eslint/parser": "^8.62.0",
+    "@vitest/coverage-v8": "^4.1.9",
     "@vscode/test-electron": "^2.5.2",
-    "eslint": "^10.4.0",
+    "eslint": "^10.6.0",
     "glob": "^13.0.6",
-    "globals": "^17.6.0",
+    "globals": "^17.7.0",
     "jsdom": "^29.0.2",
     "mocha": "^11.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.9"
   },
   "overrides": {
     "serialize-javascript": ">=7.0.5",
