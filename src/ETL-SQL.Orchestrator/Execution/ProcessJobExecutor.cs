@@ -370,7 +370,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly ILogger _logger;
         private readonly SemaphoreSlim _slots;
         private readonly ConcurrentBag<WarmRunnerClient> _idle = new();
-        private readonly ConcurrentBag<WarmRunnerClient> _all = new();
+        private readonly ConcurrentDictionary<WarmRunnerClient, byte> _all = new();
 
         public WarmRunnerPool(
             string exePath,
@@ -405,12 +405,26 @@ namespace ETL_SQL.Orchestrator.Execution
             }
             catch (OperationCanceledException)
             {
-                client?.Kill();
+                if (client != null)
+                {
+                    client.Kill();
+                    if (_all.TryRemove(client, out _))
+                    {
+                        client.Dispose();
+                    }
+                }
                 throw;
             }
             catch
             {
-                client?.Kill();
+                if (client != null)
+                {
+                    client.Kill();
+                    if (_all.TryRemove(client, out _))
+                    {
+                        client.Dispose();
+                    }
+                }
                 throw;
             }
             finally
@@ -428,21 +442,25 @@ namespace ETL_SQL.Orchestrator.Execution
                 if (client.IsUsable)
                     return client;
 
-                client.Dispose();
+                if (_all.TryRemove(client, out _))
+                {
+                    client.Dispose();
+                }
             }
 
             var started = await WarmRunnerClient.StartAsync(_exePath, _startupTimeout, _logger, ct);
-            _all.Add(started);
+            _all[started] = 0;
             return started;
         }
 
         public void Dispose()
         {
-            while (_all.TryTake(out var client))
+            foreach (var client in _all.Keys)
             {
                 client.Kill();
                 client.Dispose();
             }
+            _all.Clear();
 
             _slots.Dispose();
         }

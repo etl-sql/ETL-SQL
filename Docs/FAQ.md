@@ -16,7 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.12.0**.
+> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.13.0**.
 
 **Q: Where do I start?**
 > Read the [User Manual](User_Manual.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](Cookbook.md) for production-ready examples.

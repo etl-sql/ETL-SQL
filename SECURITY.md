@@ -46,6 +46,7 @@ The primary risks not fully solved by ETL-SQL are:
 | Regex timeout | 1000 ms | Configurable with `Security:RegexMatchTimeoutMs`. |
 | Script file writes | Blocked | `.etlsql`, `.rptsql`, `.sql`, `.py`, `.js`, `.sh`, `.bat`, `.cmd`, and `.etls` are write-blocked. |
 | Dangerous file types | Blocked | Executables, libraries, installers, shell/batch files, system files, and cert/key containers such as `.pfx` / `.cer`. |
+| Snapshot encryption at rest | AES-256-GCM | `.etlsnap` report packages are compressed and encrypted at rest with versioned key rotation. |
 
 These defaults are guardrails, not a replacement for least-privilege deployment. Production services should run under dedicated OS accounts with restricted filesystem, database, network, and SMTP permissions.
 
@@ -241,11 +242,17 @@ ETL-SQL supports:
 
 All key files and data files still need to pass path validation before script-level access.
 
-### 7.4 Masking and Leak Prevention
+### 7.4 Masking, Redaction, and Leak Prevention
 
-The engine masks known credential fields in connection metadata and diagnostics, including common password/token option names and `ENC:` values. The linter also warns on common credential leak patterns in `PRINT`, `SEND EMAIL`, and related output paths.
+To protect credentials from accidental exposure in logs, trace files, exception dumps, operator consoles, and audit trails, ETL-SQL applies system-wide sanitization via the `SecretRedactor` utility. 
 
-ETL-SQL reduces common accidental secret exposure, but a script author can intentionally place secrets in string literals, email bodies, report text, filenames, or generated rows. Security-sensitive deployments should combine ETL-SQL controls with code review, linting, limited service-account permissions, and log retention rules.
+Key features include:
+- **Last-Mile Redaction**: Strips raw secrets, API keys, tokens, Bearer authorization headers, and encrypted values (prefixed with `ENC:`, `DPAPI:`, `MACHINE:`, or `SECRET:`) and replaces them with a uniform mask (`********`).
+- **Exception Redaction**: Catches and wraps unhandled exceptions in a `RedactedException`, sanitizing credentials and sensitive values from both exception messages and raw stack traces before logging or displaying them.
+- **Diagnostics Masking**: Automatically masks known connection credential fields in connection string parsing, database options, and metadata diagnostics.
+- **Linter Warning Gates**: Checks script composition at compile time, warning on common leak patterns (e.g. referencing sensitive variables directly inside `PRINT` or `SEND EMAIL` bodies).
+
+While ETL-SQL significantly reduces the risk of accidental secret leaks, a script author can still bypass these checks (e.g. by encoding secrets or obfuscating text). Security-sensitive deployments should combine these engine controls with repository access controls, script review, and least-privilege service account configurations.
 
 ---
 
@@ -261,6 +268,21 @@ Controls include:
 - Portal publish and update flows validate script paths against configured script roots.
 - JWT secrets must be configured with sufficient length before production use.
 - Folder, report, and dataset permissions are enforced in portal controllers.
+
+### 8.1 Snapshot Packaging & At-Rest Encryption
+Report snapshots (`.etlsnap`) are packaged as compressed ZIP streams containing the report layout, metadata, and optional binary data tables.
+- **AES-256-GCM Encryption**: The compiled package is encrypted at rest using AES-256-GCM (Authenticated Encryption with Associated Data).
+- **Key Derivation & Rotation**: Cryptographic keys are derived from the configured `Portal:Dataset:AtRestKey` and mixed with versioning headers. The `SnapshotPackageService` supports versioned key rotation, resolving legacy keys from a configured dictionary (`Portal:Dataset:PreviousAtRestKeys`) to decrypt older snapshots.
+
+### 8.2 Identity and Authentication (OIDC)
+The Report Portal supports federated identity via OpenID Connect (OIDC) to standardize access:
+- **Token Validation**: Strictly validates OIDC signatures, issuer authority, and token audience.
+- **Group Claim Synchronization**: Dynamically maps OIDC group claims to portal roles and ACL permissions (folder, report, and dataset authorization), ensuring membership revocation propagates automatically.
+
+### 8.3 Data Minimization & Memory Safety (Apache Arrow)
+ETL-SQL utilizes the Apache Arrow columnar format to govern large payloads and optimize resource safety:
+- **On-Demand Lazy Loading**: Visuals with large row counts (exceeding 10,000 rows) are serialized as binary Apache Arrow IPC streams inside the encrypted snapshot. The web dashboard loads only a lightweight manifest; row segments are lazy-loaded on-demand, minimizing server and client memory overhead and reducing the risk of bulk memory extraction.
+- **Engine Temp Table Spilling**: To protect the host from memory exhaustion, active `#temp` tables that exceed memory ceilings are automatically spilled to the host filesystem as columnar Apache Arrow IPC packages, subject to path protection rules.
 
 Operational cautions:
 
@@ -290,7 +312,7 @@ Portal-level visibility includes:
 
 Portal audit guarantees and boundaries:
 
-- Security-sensitive portal mutations (user/role/password/token lifecycle, ownership transfer, group membership, folder and dataset ACLs, SMTP definitions, capability revocations, subscription delivery outcomes) commit their audit row in the same database transaction as the mutation — the change cannot succeed without its durable audit event.
+- **Transactional Audit Integrity**: Security-sensitive portal mutations (user/role/password/token lifecycle, ownership transfer, group membership, folder and dataset ACLs, SMTP definitions, capability revocations, subscription delivery outcomes) use transactional outbox patterns. The audit row commits in the same database transaction as the mutation—ensuring that a security policy modification cannot succeed without its corresponding audit record being durably written.
 - Audit retention is opt-in (`Portal:Audit:RetentionDays`; default keeps rows forever).
 - The audit table itself is mutable SQLite and is **not** tamper-proof. The supported enterprise posture is scheduled export/forwarding to external append-only storage; in-database tamper-evident hash chaining is an explicit non-goal for this release.
 
@@ -375,6 +397,6 @@ Where possible, include a minimal reproduction, the affected version, and an imp
 
 ---
 
-**Policy Version**: 0.12.0
-**Last Review Date**: 2026-06-14
+**Policy Version**: 0.13.0
+**Last Review Date**: 2026-06-26
 **Reference Standards**: NIST SP 800-132 for PBKDF2 parameter guidance, OWASP secure logging principles, and least-privilege service deployment practices.

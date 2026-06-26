@@ -70,7 +70,7 @@ internal static class MachineBoundCrypto
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
 
             var fileKey = GetMachineFileKey();
-            VerifyAuthenticatedFile(fsIn, iv, fileKey, cipherStart, cipherLength);
+            await VerifyAuthenticatedFileAsync(fsIn, iv, fileKey, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
 
             fsIn.Position = cipherStart;
             using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -231,7 +231,7 @@ internal static class MachineBoundCrypto
         await fsOut.WriteAsync(hmac.Hash!, cancellationToken).ConfigureAwait(false);
     }
 
-    private static void VerifyAuthenticatedFile(FileStream fsIn, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength)
+    private static async Task VerifyAuthenticatedFileAsync(FileStream fsIn, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength, CancellationToken cancellationToken)
     {
         using var hmac = new HMACSHA256(hmacKey);
         hmac.TransformBlock(FileMagicV2, 0, FileMagicV2.Length, null, 0);
@@ -241,7 +241,7 @@ internal static class MachineBoundCrypto
         var remaining = cipherLength;
         while (remaining > 0)
         {
-            var read = fsIn.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+            var read = await fsIn.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), cancellationToken).ConfigureAwait(false);
             if (read <= 0)
                 throw new CryptographicException("Ciphertext is too short to contain authenticated payload metadata.");
             hmac.TransformBlock(buffer, 0, read, null, 0);
@@ -250,7 +250,7 @@ internal static class MachineBoundCrypto
         hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
 
         var expectedTag = new byte[FileTagLength];
-        fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
+        await fsIn.ReadExactlyAsync(expectedTag.AsMemory(0, expectedTag.Length), cancellationToken).ConfigureAwait(false);
         if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
             throw new CryptographicException("Machine-bound encrypted file authentication failed.");
     }
@@ -297,6 +297,17 @@ internal static class MachineBoundCrypto
         {
             if (_remaining <= 0) return 0;
             var read = _inner.Read(buffer, offset, (int)Math.Min(count, _remaining));
+            _remaining -= read;
+            return read;
+        }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+        }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_remaining <= 0) return 0;
+            var read = await _inner.ReadAsync(buffer.Slice(0, (int)Math.Min(buffer.Length, _remaining)), cancellationToken).ConfigureAwait(false);
             _remaining -= read;
             return read;
         }

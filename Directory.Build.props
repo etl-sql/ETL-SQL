@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
-    <VersionPrefix>0.12.0</VersionPrefix>
+    <VersionPrefix>0.13.0</VersionPrefix>
     <Authors>Charles Clemens</Authors>
     <Company>ETL-SQL</Company>
     <Product>ETL-SQL Engine</Product>
@@ -15,6 +15,9 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)etl-sql.snk</AssemblyOriginatorKeyFile>
+    <AssemblyPublicKey>002400000480000014010000060200000024000052534131000800000100010029DC2605D5B42ABD3D078EBC749FA1AD4D0C080C7836CF7EB082FAA7EB80B884920A87AAC72B53E6F002FF5576E37E7BE23BF5079336DBFE4562536CB812B14203090D98FAC181707CF3AF0112AF714809A4E764E50BFBB120FF5B01322385E04D44D52043A047A505FE4CF3A1B7B2069C573EB4DE3E7081DD103AC696F6AABA1A56ABA92AB26CAEDBB445A549AB19D2C7DAC8BAE5418EE26DBDC91F6CE54554CEFC3D3DD1145BB2785F09B401D81F34B01DC2A920940AA2E6BA8CE3CF295D64DBAC2B781F40328A23F1F7BBA0930A54401A41E0DAF4E6825D2157C6FEA1081666C9C747497A6702667794A156573E5EFBE9EAD6007E4934928CDE2ED2342BA5</AssemblyPublicKey>
     
     <!-- Portability & Single-File Config (Only active when an RID is provided) -->
     <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>

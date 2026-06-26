@@ -322,6 +322,17 @@ public static class CryptoUtils
             _remaining -= read;
             return read;
         }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+        {
+            return ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+        }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_remaining <= 0) return 0;
+            var read = await _inner.ReadAsync(buffer.Slice(0, (int)Math.Min(buffer.Length, _remaining)), cancellationToken).ConfigureAwait(false);
+            _remaining -= read;
+            return read;
+        }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
@@ -427,7 +438,7 @@ public static class CryptoUtils
                     if (cipherLength < 0)
                         throw new ExecutionException("Invalid SSH encrypted file format.");
 
-                    VerifyAuthenticatedSshFile(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength);
+                    await VerifyAuthenticatedSshFileAsync(fsIn, encryptedKeyV2, ivV2, hmacKeyV2, cipherStart, cipherLength, cancellationToken).ConfigureAwait(false);
 
                     fsIn.Position = cipherStart;
                     using var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
@@ -492,7 +503,7 @@ public static class CryptoUtils
             await fsOut.WriteAsync(hmac.Hash!, cancellationToken).ConfigureAwait(false);
         }
 
-        private static void VerifyAuthenticatedSshFile(FileStream fsIn, byte[] encryptedKey, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength)
+        private static async Task VerifyAuthenticatedSshFileAsync(FileStream fsIn, byte[] encryptedKey, byte[] iv, byte[] hmacKey, long cipherStart, long cipherLength, CancellationToken cancellationToken)
         {
             using var hmac = new HMACSHA256(hmacKey);
             hmac.TransformBlock(SshFileMagicV2, 0, SshFileMagicV2.Length, null, 0);
@@ -505,7 +516,7 @@ public static class CryptoUtils
             var remaining = cipherLength;
             while (remaining > 0)
             {
-                var read = fsIn.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
+                var read = await fsIn.ReadAsync(buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)), cancellationToken).ConfigureAwait(false);
                 if (read <= 0)
                     throw new ExecutionException("Invalid SSH encrypted file format.");
                 hmac.TransformBlock(buffer, 0, read, null, 0);
@@ -514,7 +525,7 @@ public static class CryptoUtils
             hmac.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
 
             var expectedTag = new byte[FileTagSize];
-            fsIn.ReadExactly(expectedTag, 0, expectedTag.Length);
+            await fsIn.ReadExactlyAsync(expectedTag.AsMemory(0, expectedTag.Length), cancellationToken).ConfigureAwait(false);
             if (!CryptographicOperations.FixedTimeEquals(hmac.Hash!, expectedTag))
                 throw new CryptographicException("SSH encrypted file authentication failed.");
         }

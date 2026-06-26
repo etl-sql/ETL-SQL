@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Engines;
 /// <summary>
@@ -44,6 +45,17 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
             limit = Convert.ToInt32(limVal);
         }
 
+        var compiledWhere = stmt.WhereClause != null
+            && RowExpressionCompiler.TryCompilePredicate(_context, stmt.WhereClause, out var wherePredicate)
+                ? wherePredicate
+                : null;
+        var compiledColumns = new RowExpressionCompiler.RowValue?[finalColumns.Count];
+        for (int i = 0; i < finalColumns.Count; i++)
+        {
+            if (RowExpressionCompiler.TryCompileValue(_context, finalColumns[i].Expression, out var value))
+                compiledColumns[i] = value;
+        }
+
         string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         await foreach (var batch in batches)
         {
@@ -60,7 +72,13 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                     }
                 }
 
-                if (stmt.WhereClause != null && !await _context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
+                if (stmt.WhereClause != null)
+                {
+                    var passesWhere = compiledWhere != null
+                        ? compiledWhere(evalRow)
+                        : await _context.EvaluateCondition(stmt.WhereClause, evalRow);
+                    if (!passesWhere) continue;
+                }
 
                 if (rowsSkipped < offset)
                 {
@@ -73,7 +91,9 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 var resRow = resultBatch.NewRow();
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
-                    resRow[i] = await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
+                    resRow[i] = compiledColumns[i] != null
+                        ? compiledColumns[i]!(evalRow)
+                        : await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
                 }
 
                 await resultBatch.AddRowAsync(resRow);

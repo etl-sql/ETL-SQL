@@ -6,29 +6,24 @@ namespace ETL_SQL.Core.Common;
 /// Shared last-mile redaction for text that may leave the engine through logs,
 /// diagnostics, audit rows, result payloads, or operator-facing status.
 /// </summary>
-public static class SecretRedactor
+public static partial class SecretRedactor
 {
     public const string Mask = "********";
 
-    private static readonly Regex ProtectedValuePattern = new(
-        @"\b(ENC|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"\b(ENC|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ProtectedValuePattern();
 
-    private static readonly Regex SecretReferencePattern = new(
-        @"\bSECRET:[A-Za-z0-9_.:/@\-]+",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"\bSECRET:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex SecretReferencePattern();
 
-    private static readonly Regex BearerPattern = new(
-        @"\bBearer\s+[A-Za-z0-9._~+/=\-]+",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9._~+/=\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex BearerPattern();
 
-    private static readonly Regex JsonSecretPattern = new(
-        @"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex JsonSecretPattern();
 
-    private static readonly Regex AssignmentSecretPattern = new(
-        @"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    [GeneratedRegex(@"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex AssignmentSecretPattern();
 
     public static bool IsSensitiveKey(string? key)
     {
@@ -62,19 +57,19 @@ public static class SecretRedactor
     {
         if (string.IsNullOrEmpty(text)) return text;
 
-        var redacted = ProtectedValuePattern.Replace(text, match =>
+        var redacted = ProtectedValuePattern().Replace(text, match =>
         {
             var prefix = match.Value.Split(':', 2)[0];
             return $"{prefix}:{Mask}";
         });
-        redacted = SecretReferencePattern.Replace(redacted, $"SECRET:{Mask}");
-        redacted = BearerPattern.Replace(redacted, $"Bearer {Mask}");
-        redacted = JsonSecretPattern.Replace(redacted, match =>
+        redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
+        redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
+        redacted = JsonSecretPattern().Replace(redacted, match =>
         {
             var key = match.Groups[2].Value;
             return $"{match.Groups[1].Value}{key}{match.Groups[3].Value}:{match.Groups[4].Value}{Mask}{match.Groups[5].Value}";
         });
-        redacted = AssignmentSecretPattern.Replace(redacted, match =>
+        redacted = AssignmentSecretPattern().Replace(redacted, match =>
         {
             var key = match.Groups[1].Value;
             return $"{key}={match.Groups[2].Value}{Mask}{match.Groups[3].Value}";

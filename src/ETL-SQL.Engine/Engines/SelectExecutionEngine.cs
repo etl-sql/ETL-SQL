@@ -9,6 +9,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Planning;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Engines;
 /// <summary>
@@ -169,6 +170,7 @@ public class SelectExecutionEngine
 
             var bufferedForSpill = new List<Row>();
             var enumerator = aggInput.GetAsyncEnumerator();
+            bool enumeratorHandedOff = false;
             try
             {
                 int count = 0;
@@ -191,17 +193,21 @@ public class SelectExecutionEngine
                 {
                     _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.OperatorMemoryGrantMB);
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                    var combinedStream = PrependRows(bufferedForSpill, ContinueStream(enumerator));
-                    // Must materialize inside the try block: ContinueStream captures the enumerator,
-                    // which the finally clause disposes immediately after the try exits.
-                    allRows = await externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
+                    var combinedStream = PrependRows(bufferedForSpill, ContinueStreamAndDispose(enumerator));
+                    enumeratorHandedOff = true;
+                    externalEngineStream = externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    allRows = [];
                 }
                 else
                 {
                     allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                 }
             }
-            finally { await enumerator.DisposeAsync(); }
+            finally
+            {
+                if (!enumeratorHandedOff)
+                    await enumerator.DisposeAsync();
+            }
         }
         else
         {
@@ -261,7 +267,16 @@ public class SelectExecutionEngine
         if (!whereApplied && !canDeferWhere && stmt.WhereClause != null)
         {
             var filtered = new List<Row>();
-            foreach (var r in allRows) if (await _context.EvaluateCondition(stmt.WhereClause, r)) filtered.Add(r);
+            var compiledWhere = RowExpressionCompiler.TryCompilePredicate(_context, stmt.WhereClause, out var wherePredicate)
+                ? wherePredicate
+                : null;
+            foreach (var r in allRows)
+            {
+                var passesWhere = compiledWhere != null
+                    ? compiledWhere(r)
+                    : await _context.EvaluateCondition(stmt.WhereClause, r);
+                if (passesWhere) filtered.Add(r);
+            }
             allRows = filtered;
         }
 
@@ -305,32 +320,29 @@ public class SelectExecutionEngine
         // 4. QUALIFY
         if (stmt.QualifyClause != null)
         {
-            await MaterializeEngineStream();
-            // Temporarily add aliases to rows so QUALIFY can reference them by alias (e.g., QUALIFY rnk <= 1)
-            foreach (var row in allRows)
+            if (externalEngineStream != null)
             {
-                foreach (var col in stmt.Columns)
-                {
-                    if (col.Alias != null && WindowEngine.ContainsWindowFunction(col.Expression))
-                    {
-                        // If the column expression is a window function, find its computed value in the row
-                        // and attach it to the alias for the duration of the QUALIFY evaluation.
-                        var winCalls = WindowEngine.CollectWindowCalls(col.Expression);
-                        if (winCalls.Count == 1)
-                        {
-                            var winKey = $"WINDOW_{winCalls[0].ToSql().ToUpperInvariant()}";
-                            if (row.HasColumn(winKey))
-                            {
-                                row[col.Alias] = row[winKey];
-                            }
-                        }
-                    }
-                }
+                externalEngineStream = QualifyStream(externalEngineStream, stmt);
             }
+            else
+            {
+                // Temporarily add aliases to rows so QUALIFY can reference them by alias (e.g., QUALIFY rnk <= 1)
+                foreach (var row in allRows)
+                    AddQualifyAliases(row, stmt.Columns);
 
-            var filtered = new List<Row>();
-            foreach (var r in allRows) if (await _context.EvaluateCondition(stmt.QualifyClause, r)) filtered.Add(r);
-            allRows = filtered;
+                var filtered = new List<Row>();
+                var compiledQualify = RowExpressionCompiler.TryCompilePredicate(_context, stmt.QualifyClause, out var qualifyPredicate)
+                    ? qualifyPredicate
+                    : null;
+                foreach (var r in allRows)
+                {
+                    var passesQualify = compiledQualify != null
+                        ? compiledQualify(r)
+                        : await _context.EvaluateCondition(stmt.QualifyClause, r);
+                    if (passesQualify) filtered.Add(r);
+                }
+                allRows = filtered;
+            }
         }
 
         // 5. ORDER BY
@@ -417,10 +429,25 @@ public class SelectExecutionEngine
             : Array.Empty<string?>();
         var batch = new DataTable();
         batch.SetColumns(colNames);
+        var deferredWhere = canDeferWhere && RowExpressionCompiler.TryCompilePredicate(_context, stmt.WhereClause, out var compiledDeferredWhere)
+            ? compiledDeferredWhere
+            : null;
+        var compiledColumns = new RowExpressionCompiler.RowValue?[finalColumns.Count];
+        for (int i = 0; i < finalColumns.Count; i++)
+        {
+            if (RowExpressionCompiler.TryCompileValue(_context, finalColumns[i].Expression, out var value))
+                compiledColumns[i] = value;
+        }
         bool yielded = false;
         await foreach (var row in rows)
         {
-            if (canDeferWhere && !await _context.EvaluateCondition(stmt.WhereClause!, row)) continue;
+            if (canDeferWhere)
+            {
+                var passesWhere = deferredWhere != null
+                    ? deferredWhere(row)
+                    : await _context.EvaluateCondition(stmt.WhereClause!, row);
+                if (!passesWhere) continue;
+            }
             var resRow = batch.NewRow();
 
             bool schemaMatches = hasPreEvaluatedColumns && row.Schema != null && row.Schema.ColumnCount == finalColumns.Count;
@@ -466,7 +493,9 @@ public class SelectExecutionEngine
                 }
                 else
                 {
-                    resRow[i] = await _context.EvaluateValue(col.Expression, row);
+                    resRow[i] = compiledColumns[i] != null
+                        ? compiledColumns[i]!(row)
+                        : await _context.EvaluateValue(col.Expression, row);
                 }
             }
 
@@ -527,8 +556,10 @@ public class SelectExecutionEngine
     private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
         var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
+        var compiledOrderExpressions = CompileOrderExpressions(orderBy);
+        var compiledFinalColumns = CompileFinalColumnExpressions(finalColumns);
         foreach (var row in rows)
-            rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns)));
+            rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns, compiledOrderExpressions, compiledFinalColumns)));
 
         rowSortKeys.Sort((a, b) =>
         {
@@ -572,10 +603,12 @@ public class SelectExecutionEngine
                 }
                 return 0;
             }));
+        var compiledOrderExpressions = CompileOrderExpressions(orderBy);
+        var compiledFinalColumns = CompileFinalColumnExpressions(finalColumns);
 
         await foreach (var row in source)
         {
-            var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+            var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns, compiledOrderExpressions, compiledFinalColumns);
             var entry = (row, keys);
 
             if (heap.Count < keep)
@@ -605,6 +638,25 @@ public class SelectExecutionEngine
 
     private async Task<object?[]> ExtractSortKeys(Row row, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
+        return await ExtractSortKeys(
+            row,
+            orderBy,
+            colNames,
+            finalColumns,
+            hasPreEvaluatedColumns,
+            CompileOrderExpressions(orderBy),
+            CompileFinalColumnExpressions(finalColumns));
+    }
+
+    private async Task<object?[]> ExtractSortKeys(
+        Row row,
+        List<OrderByClause> orderBy,
+        List<string> colNames,
+        List<SelectColumn> finalColumns,
+        bool hasPreEvaluatedColumns,
+        RowExpressionCompiler.RowValue?[] compiledOrderExpressions,
+        RowExpressionCompiler.RowValue?[] compiledFinalColumns)
+    {
         var keys = new object?[orderBy.Count];
         for (int i = 0; i < orderBy.Count; i++)
         {
@@ -618,7 +670,9 @@ public class SelectExecutionEngine
                 // otherwise evaluate the SELECT expression on the pre-projection source row.
                 keys[i] = (hasPreEvaluatedColumns && row.HasColumn(colName))
                     ? row[colName]
-                    : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
+                    : compiledFinalColumns[colIdx] != null
+                        ? compiledFinalColumns[colIdx]!(row)
+                        : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
                 continue;
             }
             if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
@@ -629,21 +683,50 @@ public class SelectExecutionEngine
                 {
                     var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
                     keys[i] = colIdx >= 0
-                        ? await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
+                        ? compiledFinalColumns[colIdx] != null
+                            ? compiledFinalColumns[colIdx]!(row)
+                            : await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
                         : null;
                 }
             }
             else if (expr is IdentifierExpression idAlias
                 && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
             {
-                keys[i] = await _context.EvaluateValue(col.Expression, row);
+                var colIdx = finalColumns.IndexOf(col);
+                keys[i] = colIdx >= 0 && compiledFinalColumns[colIdx] != null
+                    ? compiledFinalColumns[colIdx]!(row)
+                    : await _context.EvaluateValue(col.Expression, row);
             }
             else
             {
-                keys[i] = await _context.EvaluateValue(expr, row);
+                keys[i] = compiledOrderExpressions[i] != null
+                    ? compiledOrderExpressions[i]!(row)
+                    : await _context.EvaluateValue(expr, row);
             }
         }
         return keys;
+    }
+
+    private RowExpressionCompiler.RowValue?[] CompileOrderExpressions(List<OrderByClause> orderBy)
+    {
+        var compiled = new RowExpressionCompiler.RowValue?[orderBy.Count];
+        for (int i = 0; i < orderBy.Count; i++)
+        {
+            if (RowExpressionCompiler.TryCompileValue(_context, orderBy[i].Expression, out var value))
+                compiled[i] = value;
+        }
+        return compiled;
+    }
+
+    private RowExpressionCompiler.RowValue?[] CompileFinalColumnExpressions(List<SelectColumn> finalColumns)
+    {
+        var compiled = new RowExpressionCompiler.RowValue?[finalColumns.Count];
+        for (int i = 0; i < finalColumns.Count; i++)
+        {
+            if (RowExpressionCompiler.TryCompileValue(_context, finalColumns[i].Expression, out var value))
+                compiled[i] = value;
+        }
+        return compiled;
     }
 
     private bool ShouldSpill(IReadOnlyList<Row> rows)
@@ -713,14 +796,62 @@ public class SelectExecutionEngine
         await foreach (var r in remaining) yield return r;
     }
 
-    private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> e)
+    private async IAsyncEnumerable<Row> QualifyStream(IAsyncEnumerable<Row> source, SelectStatement stmt)
     {
-        while (await e.MoveNextAsync()) yield return e.Current;
+        var compiledQualify = RowExpressionCompiler.TryCompilePredicate(_context, stmt.QualifyClause, out var qualifyPredicate)
+            ? qualifyPredicate
+            : null;
+        await foreach (var row in source)
+        {
+            AddQualifyAliases(row, stmt.Columns);
+            var passesQualify = compiledQualify != null
+                ? compiledQualify(row)
+                : await _context.EvaluateCondition(stmt.QualifyClause!, row);
+            if (passesQualify) yield return row;
+        }
+    }
+
+    private static void AddQualifyAliases(Row row, List<SelectColumn> columns)
+    {
+        foreach (var col in columns)
+        {
+            if (col.Alias == null || !WindowEngine.ContainsWindowFunction(col.Expression))
+                continue;
+
+            var winCalls = WindowEngine.CollectWindowCalls(col.Expression);
+            if (winCalls.Count != 1)
+                continue;
+
+            var winKey = $"WINDOW_{winCalls[0].ToSql().ToUpperInvariant()}";
+            if (row.HasColumn(winKey))
+                row[col.Alias] = row[winKey];
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> ContinueStreamAndDispose(IAsyncEnumerator<Row> e)
+    {
+        try
+        {
+            while (await e.MoveNextAsync()) yield return e.Current;
+        }
+        finally
+        {
+            await e.DisposeAsync();
+        }
     }
 
     private static async IAsyncEnumerable<Row> WhereStream(IAsyncEnumerable<Row> source, Expression clause, IExecutionContext context)
     {
-        await foreach (var r in source) if (await context.EvaluateCondition(clause, r)) yield return r;
+        var compiledWhere = RowExpressionCompiler.TryCompilePredicate(context, clause, out var predicate)
+            ? predicate
+            : null;
+        await foreach (var r in source)
+        {
+            var passesWhere = compiledWhere != null
+                ? compiledWhere(r)
+                : await context.EvaluateCondition(clause, r);
+            if (passesWhere) yield return r;
+        }
     }
 
     private async IAsyncEnumerable<Row> ConvertToAsyncEnumerable(List<Row> rows)

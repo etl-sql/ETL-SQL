@@ -1,6 +1,6 @@
 # ETL-SQL Presentation Layer Architecture
 
-**Applies to ETL-SQL 0.12.0**
+**Applies to ETL-SQL 0.13.0**
 
 This document describes the current presentation surfaces around the ETL-SQL engine: CLI output, JSON/REPL output for VS Code, the terminal UI, the language server, and the reporting browser runtime. It is intentionally descriptive. Do not treat this as a target design document.
 

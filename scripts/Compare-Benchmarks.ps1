@@ -13,7 +13,7 @@
             --exporters json --filter Category!=LargeScale
         .\scripts\Compare-Benchmarks.ps1 `
             -Baseline tests/tpch_data/baseline/benchmark_results.json `
-            -Current  (Get-Item BenchmarkDotNet.Artifacts/results/*-report-full*.json | Select-Object -Last 1)
+            -Current  (Get-ChildItem BenchmarkDotNet.Artifacts/runs -Recurse -Filter *-report-full*.json | Sort-Object LastWriteTime | Select-Object -Last 1)
 
 .PARAMETER Baseline
     Path to the baseline BenchmarkDotNet JSON file (checked into the repo).
@@ -28,7 +28,7 @@
 .EXAMPLE
     .\scripts\Compare-Benchmarks.ps1 `
         -Baseline tests/tpch_data/baseline/benchmark_results.json `
-        -Current  BenchmarkDotNet.Artifacts/results/ETL_SQL.Benchmarks.TpcHBenchmarks-report-full-compressed.json
+        -Current  BenchmarkDotNet.Artifacts/runs/20260626-131200/results/ETL_SQL.Benchmarks.TpcHBenchmarks-report-full-compressed.json
 #>
 [CmdletBinding()]
 param(

@@ -1,6 +1,6 @@
-# ETL-SQL Migration Guide (v0.12.0)
+# ETL-SQL Migration Guide (v0.13.0)
 
-ETL-SQL v0.12.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for repository maintainers, early testers, and anyone updating pre-release scripts from older branches.
+ETL-SQL v0.13.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for repository maintainers, early testers, and anyone updating pre-release scripts from older branches.
 
 For current syntax, prefer [User_Manual.md](User_Manual.md), [Reference/Grammar.md](Reference/Grammar.md), [Reference/Data_Connectors.md](Reference/Data_Connectors.md), and [Report_SQL_Guide.md](Report_SQL_Guide.md).
 

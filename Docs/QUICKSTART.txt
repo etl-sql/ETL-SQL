@@ -1,5 +1,5 @@
 ================================================================================
-  ETL-SQL v0.12.0 Quickstart Guide
+  ETL-SQL v0.13.0 Quickstart Guide
 ================================================================================
 
 Welcome to ETL-SQL, the script-first data orchestration engine for SQL, APIs,

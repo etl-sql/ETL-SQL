@@ -173,6 +173,46 @@ namespace ETL_SQL.Benchmarks.Tests
             Assert.Contains(result.ColumnNames, c => c.Equals("score", StringComparison.OrdinalIgnoreCase));
         }
 
+        // ── SELECT pipeline spill-streaming benchmark sanity tests ────────────────
+
+        [Fact]
+        public async Task SelectPipeline_ExternalAggregateLimit()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+            await bench.ExternalAggregateLimit();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(5, result.Rows.Count);
+            Assert.Contains(result.ColumnNames, c => c.Equals("Grp", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("Total", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectPipeline_ExternalAggregateOrderLimit()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+            await bench.ExternalAggregateOrderLimit();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(5, result.Rows.Count);
+            Assert.Contains(result.ColumnNames, c => c.Equals("Grp", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(result.ColumnNames, c => c.Equals("Total", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectPipeline_ExternalWindowQualifyLimit()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+            await bench.ExternalWindowQualifyLimit();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(10, result.Rows.Count);
+            Assert.Contains(result.ColumnNames, c => c.Equals("rn", StringComparison.OrdinalIgnoreCase));
+        }
+
         // ── TPC-H snapshot test ─────────────────────────────────────────────────
 
         /// <summary>
