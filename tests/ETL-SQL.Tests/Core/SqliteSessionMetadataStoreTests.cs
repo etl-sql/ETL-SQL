@@ -36,4 +36,40 @@ public sealed class SqliteSessionMetadataStoreTests
             try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task LoadAllTempTablesAsync_RoundTripsTablesAndChunksInSinglePassShape()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "etlsql-session-temp-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var store = new SqliteSessionMetadataStore("session-a", root, "test-entropy");
+            await store.InitializeAsync();
+
+            var schema = new List<ColumnDefinition>
+            {
+                new("id", "INT", false),
+                new("name", "TEXT", false)
+            };
+            await store.SaveTempTablesAsync([
+                new SavedTempTable("#empty", schema, []),
+                new SavedTempTable("#orders", schema, ["orders-1.arrow", "orders-2.arrow"]),
+                new SavedTempTable("#customers", schema, ["customers-1.arrow"])
+            ]);
+
+            var tables = (await store.LoadAllTempTablesAsync())
+                .OrderBy(t => t.TableName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Assert.Equal(["#customers", "#empty", "#orders"], tables.Select(t => t.TableName).ToArray());
+            Assert.Equal(["customers-1.arrow"], tables[0].ChunkNames);
+            Assert.Empty(tables[1].ChunkNames);
+            Assert.Equal(["orders-1.arrow", "orders-2.arrow"], tables[2].ChunkNames);
+            Assert.All(tables, table => Assert.Equal(["id", "name"], table.Schema.Select(c => c.ColumnName).ToArray()));
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }

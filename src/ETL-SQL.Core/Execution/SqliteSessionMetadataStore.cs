@@ -64,6 +64,8 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
                 chunk_name TEXT,
                 FOREIGN KEY(table_name) REFERENCES temp_tables(name)
             );
+            CREATE INDEX IF NOT EXISTS idx_temp_table_chunks_table_name
+                ON temp_table_chunks(table_name);
             CREATE TABLE IF NOT EXISTS connections (
                 name TEXT PRIMARY KEY,
                 info_json TEXT
@@ -199,40 +201,32 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
     public async Task<IEnumerable<SavedTempTable>> LoadAllTempTablesAsync()
     {
-        var result = new List<SavedTempTable>();
-        var tableRows = new List<(string Name, string SchemaJson)>();
+        var tables = new Dictionary<string, TempTableLoadRow>(StringComparer.OrdinalIgnoreCase);
 
-        using (var cmd = _connection!.CreateCommand())
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = @"
+            SELECT t.name, t.schema_json, c.chunk_name
+            FROM temp_tables t
+            LEFT JOIN temp_table_chunks c ON c.table_name = t.name
+            ORDER BY t.name, c.rowid";
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
         {
-            cmd.CommandText = "SELECT name, schema_json FROM temp_tables";
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
+            var name = reader.GetString(0);
+            if (!tables.TryGetValue(name, out var table))
             {
-                tableRows.Add((reader.GetString(0), reader.GetString(1)));
-            }
-        }
-
-        foreach (var row in tableRows)
-        {
-            var name = row.Name;
-            var schema = JsonSerializer.Deserialize<List<ColumnDefinition>>(row.SchemaJson) ?? new();
-
-            var chunks = new List<string>();
-            using (var chunkCmd = _connection!.CreateCommand())
-            {
-                chunkCmd.CommandText = "SELECT chunk_name FROM temp_table_chunks WHERE table_name = @name";
-                chunkCmd.Parameters.AddWithValue("@name", name);
-                using var chunkReader = await chunkCmd.ExecuteReaderAsync();
-                while (await chunkReader.ReadAsync())
-                {
-                    chunks.Add(chunkReader.GetString(0));
-                }
+                var schema = JsonSerializer.Deserialize<List<ColumnDefinition>>(reader.GetString(1)) ?? new();
+                table = new TempTableLoadRow(schema);
+                tables[name] = table;
             }
 
-            result.Add(new SavedTempTable(name, schema, chunks));
+            if (!reader.IsDBNull(2))
+                table.ChunkNames.Add(reader.GetString(2));
         }
 
-        return result;
+        return tables
+            .Select(kvp => new SavedTempTable(kvp.Key, kvp.Value.Schema, kvp.Value.ChunkNames))
+            .ToList();
     }
 
     public async Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections)
@@ -334,5 +328,10 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
             _connection.Dispose();
             _connection = null;
         }
+    }
+
+    private sealed record TempTableLoadRow(List<ColumnDefinition> Schema)
+    {
+        public List<string> ChunkNames { get; } = [];
     }
 }
