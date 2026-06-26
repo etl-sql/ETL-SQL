@@ -153,7 +153,15 @@ public class ExternalWindowEngine
             {
                 bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
 
-                if (useDeepSpill && IsDeepSpillCompatible(group))
+                if (useDeepSpill && IsLeadSpillCompatible(group))
+                {
+                    _logger.WriteLine($"[magenta]     * LEAD-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via bounded lookahead.[/]");
+                    await foreach (var row in ProcessBucketLeadSpill(info.Name, group))
+                    {
+                        yield return row;
+                    }
+                }
+                else if (useDeepSpill && IsDeepSpillCompatible(group))
                 {
                     _logger.WriteLine($"[magenta]     * DEEP-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via streaming.[/]");
                     await foreach (var row in ProcessBucketDeepSpill(info.Name, group, stmt))
@@ -208,6 +216,16 @@ public class ExternalWindowEngine
                 || IsBoundedValueCompatible(f)));
     }
 
+    private static bool IsLeadSpillCompatible(WindowGroup group)
+    {
+        return group.Signature.OrderBy is { Count: > 0 }
+            && group.Columns.All(c =>
+                c.Expression is FunctionCallExpression f
+                && f.FunctionName.Equals("LEAD", StringComparison.OrdinalIgnoreCase)
+                && f.Arguments.Count is >= 1 and <= 3
+                && TryGetOffset(f, out _));
+    }
+
     private static bool IsBoundedValueCompatible(FunctionCallExpression f)
     {
         return f.FunctionName.ToUpperInvariant() switch
@@ -246,6 +264,9 @@ public class ExternalWindowEngine
     }
 
     private static bool TryGetLagOffset(FunctionCallExpression f, out int offset)
+        => TryGetOffset(f, out offset);
+
+    private static bool TryGetOffset(FunctionCallExpression f, out int offset)
     {
         offset = 1;
         if (f.Arguments.Count < 2) return true;
@@ -610,6 +631,87 @@ public class ExternalWindowEngine
             prevPartitionKeys = currentPartitionKeys;
             prevSortKeys = currentSortKeys;
         }
+    }
+
+    private async IAsyncEnumerable<Row> ProcessBucketLeadSpill(string name, WindowGroup group)
+    {
+        var sortCriteria = new List<OrderByClause>();
+        if (group.Signature.PartitionBy != null)
+        {
+            foreach (var expression in group.Signature.PartitionBy)
+                sortCriteria.Add(new OrderByClause(expression, false));
+        }
+        sortCriteria.AddRange(group.Signature.OrderBy!);
+
+        var rows = _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria);
+        var maxOffset = group.Columns
+            .Select(c => (FunctionCallExpression)c.Expression)
+            .Select(f => TryGetOffset(f, out var offset) ? offset : 0)
+            .Max();
+        var pending = new Queue<Row>(maxOffset + 1);
+        object?[]? partitionKeys = null;
+
+        await foreach (var row in rows)
+        {
+            var currentKeys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+            if (partitionKeys != null && !PartitionKeysEqual(partitionKeys, currentKeys))
+            {
+                while (pending.Count > 0)
+                    yield return await CompleteLeadRow(pending, group, useDefaults: true);
+            }
+
+            partitionKeys = currentKeys;
+            pending.Enqueue(row);
+            if (pending.Count > maxOffset)
+                yield return await CompleteLeadRow(pending, group, useDefaults: false);
+        }
+
+        while (pending.Count > 0)
+            yield return await CompleteLeadRow(pending, group, useDefaults: true);
+    }
+
+    private async Task<Row> CompleteLeadRow(Queue<Row> pending, WindowGroup group, bool useDefaults)
+    {
+        var row = pending.Peek();
+        foreach (var column in group.Columns)
+        {
+            var f = (FunctionCallExpression)column.Expression;
+            TryGetOffset(f, out var offset);
+            object? value;
+            if (!useDefaults || offset < pending.Count)
+            {
+                var source = offset == 0 ? row : pending.ElementAt(offset);
+                value = await _context.EvaluateValue(f.Arguments[0], source);
+            }
+            else
+            {
+                value = f.Arguments.Count >= 3
+                    ? await _context.EvaluateValue(f.Arguments[2], row)
+                    : null;
+            }
+            row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = value;
+        }
+        pending.Dequeue();
+        return row;
+    }
+
+    private async Task<object?[]> EvaluatePartitionKeys(List<Expression>? expressions, Row row)
+    {
+        var keys = new object?[expressions?.Count ?? 0];
+        if (expressions == null) return keys;
+        for (var i = 0; i < expressions.Count; i++)
+            keys[i] = await _context.EvaluateValue(expressions[i], row);
+        return keys;
+    }
+
+    private bool PartitionKeysEqual(object?[] left, object?[] right)
+    {
+        for (var i = 0; i < left.Length; i++)
+        {
+            if (_context.CompareConstants(left[i], right[i]) != 0)
+                return false;
+        }
+        return true;
     }
 
     private async Task<PartitionInfo[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)

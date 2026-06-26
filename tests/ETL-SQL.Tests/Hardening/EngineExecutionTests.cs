@@ -540,6 +540,74 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ExternalWindowEngine_Lead_UsesBoundedLookaheadSpillState()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) });
+            FunctionCallExpression Lead(int offset, int defaultValue) => new("LEAD", new List<Expression>
+            {
+                new IdentifierExpression("Val"),
+                new LiteralExpression(offset, TokenType.NUMBER),
+                new LiteralExpression(defaultValue, TokenType.NUMBER)
+            }) { Window = window };
+            var leadTwo = Lead(2, -1);
+            var leadZero = Lead(0, -2);
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(new IdentifierExpression("Val"), "Val"),
+                    new(leadTwo, "NextTwo"),
+                    new(leadZero, "CurrentVal")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                foreach (var grp in new[] { "B", "A" })
+                {
+                    for (var i = 5; i >= 1; i--)
+                    {
+                        var row = new Row(schema);
+                        row["Grp"] = grp;
+                        row["Val"] = i;
+                        yield return row;
+                    }
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("LEAD-SPILL", StringComparison.OrdinalIgnoreCase));
+            var leadTwoKey = $"WINDOW_{leadTwo.ToSql().ToUpperInvariant()}";
+            var leadZeroKey = $"WINDOW_{leadZero.ToSql().ToUpperInvariant()}";
+            foreach (var partition in result.GroupBy(r => r["Grp"]?.ToString()))
+            {
+                var rows = partition.OrderBy(r => Convert.ToInt32(r["Val"])).ToList();
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    Assert.Equal((decimal)(i + 1), Convert.ToDecimal(rows[i][leadZeroKey]));
+                    var expected = i < 3 ? i + 3m : -1m;
+                    Assert.Equal(expected, Convert.ToDecimal(rows[i][leadTwoKey]));
+                }
+            }
+        }
+
+        [Fact]
         public async Task ExternalAggregateEngine_PartitionIndexOverflow()
         {
             var e = NewEvaluator();
