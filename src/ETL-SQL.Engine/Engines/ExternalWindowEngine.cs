@@ -251,6 +251,7 @@ public class ExternalWindowEngine
                 return f.FunctionName.ToUpperInvariant() switch
                 {
                     "PERCENT_RANK" => f.Arguments.Count == 0,
+                    "CUME_DIST" => f.Arguments.Count == 0,
                     "NTILE" => f.Arguments.Count == 1 && TryGetPositiveLiteral(f.Arguments[0], out _),
                     _ => false
                 };
@@ -715,6 +716,7 @@ public class ExternalWindowEngine
     private async IAsyncEnumerable<Row> ProcessBucketDistributionReplay(string name, WindowGroup group)
     {
         var sortedName = $"win_dist_{Guid.NewGuid():N}.tmp";
+        var annotatedName = $"win_cume_{Guid.NewGuid():N}.tmp";
         var sortCriteria = new List<OrderByClause>();
         if (group.Signature.PartitionBy != null)
         {
@@ -724,6 +726,8 @@ public class ExternalWindowEngine
         sortCriteria.AddRange(group.Signature.OrderBy!);
 
         var partitionCounts = new List<long>();
+        var hasCumeDist = group.Columns.Any(c =>
+            ((FunctionCallExpression)c.Expression).FunctionName.Equals("CUME_DIST", StringComparison.OrdinalIgnoreCase));
         object?[]? previousPartitionKeys = null;
         try
         {
@@ -740,12 +744,64 @@ public class ExternalWindowEngine
                 }
             }
 
+            IAsyncEnumerable<Row> replayRows = ReadPartitionStream(sortedName);
+            if (hasCumeDist)
+            {
+                var reverseCriteria = new List<OrderByClause>();
+                if (group.Signature.PartitionBy != null)
+                {
+                    foreach (var expression in group.Signature.PartitionBy)
+                        reverseCriteria.Add(new OrderByClause(expression, false));
+                }
+                reverseCriteria.AddRange(group.Signature.OrderBy!.Select(c =>
+                    new OrderByClause(c.Expression, !c.Descending)));
+
+                var reversePartitionIndex = -1;
+                long rowsSeen = 0;
+                decimal currentCumeDist = 0m;
+                previousPartitionKeys = null;
+                object?[]? previousReverseSortKeys = null;
+                await using (var writer = await _context.SpillStore.CreateWriterAsync(annotatedName))
+                {
+                    await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(sortedName), reverseCriteria))
+                    {
+                        var partitionKeys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+                        var sortKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
+                        if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, partitionKeys))
+                        {
+                            reversePartitionIndex++;
+                            rowsSeen = 0;
+                            currentCumeDist = 0m;
+                            previousReverseSortKeys = null;
+                        }
+
+                        var newPeer = previousReverseSortKeys == null
+                            || !PartitionKeysEqual(previousReverseSortKeys, sortKeys);
+                        var partitionCount = partitionCounts[reversePartitionIndex];
+                        if (newPeer)
+                            currentCumeDist = (decimal)(partitionCount - rowsSeen) / partitionCount;
+                        foreach (var column in group.Columns)
+                        {
+                            var f = (FunctionCallExpression)column.Expression;
+                            if (f.FunctionName.Equals("CUME_DIST", StringComparison.OrdinalIgnoreCase))
+                                row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = currentCumeDist;
+                        }
+
+                        await writer.WriteRowAsync(row);
+                        rowsSeen++;
+                        previousPartitionKeys = partitionKeys;
+                        previousReverseSortKeys = sortKeys;
+                    }
+                }
+                replayRows = _sortEngine.SortStreamAsync(ReadPartitionStream(annotatedName), sortCriteria);
+            }
+
             var partitionIndex = -1;
             long rowIndex = 0;
             long rank = 1;
             previousPartitionKeys = null;
             object?[]? previousSortKeys = null;
-            await foreach (var row in ReadPartitionStream(sortedName))
+            await foreach (var row in replayRows)
             {
                 var partitionKeys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
                 var sortKeys = await EvaluateOrderKeys(group.Signature.OrderBy!, row);
@@ -769,6 +825,10 @@ public class ExternalWindowEngine
                     if (f.FunctionName.Equals("PERCENT_RANK", StringComparison.OrdinalIgnoreCase))
                     {
                         value = partitionCount <= 1 ? 0m : (decimal)(rank - 1) / (partitionCount - 1);
+                    }
+                    else if (f.FunctionName.Equals("CUME_DIST", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
                     }
                     else
                     {
@@ -799,6 +859,17 @@ public class ExternalWindowEngine
             catch (Exception ex)
             {
                 _logger.Warning($"Error cleaning up distribution window replay {sortedName}: {ex.Message}");
+            }
+            if (hasCumeDist)
+            {
+                try
+                {
+                    _context.SpillStore.DeleteChunk(annotatedName);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Error cleaning up cumulative distribution replay {annotatedName}: {ex.Message}");
+                }
             }
         }
     }

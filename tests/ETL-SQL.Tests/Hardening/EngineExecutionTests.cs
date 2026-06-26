@@ -621,6 +621,7 @@ namespace ETL_SQL.Tests.Hardening
                 new List<Expression> { new IdentifierExpression("Grp") },
                 new List<OrderByClause> { new(new IdentifierExpression("Val"), false) });
             var percentRank = new FunctionCallExpression("PERCENT_RANK", new List<Expression>()) { Window = window };
+            var cumeDist = new FunctionCallExpression("CUME_DIST", new List<Expression>()) { Window = window };
             var ntile = new FunctionCallExpression("NTILE", new List<Expression>
             {
                 new LiteralExpression(3, TokenType.NUMBER)
@@ -631,6 +632,7 @@ namespace ETL_SQL.Tests.Hardening
                     new(new IdentifierExpression("Grp"), "Grp"),
                     new(new IdentifierExpression("Val"), "Val"),
                     new(percentRank, "PercentRank"),
+                    new(cumeDist, "CumeDist"),
                     new(ntile, "Bucket")
                 },
                 null,
@@ -659,13 +661,16 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Equal(10, result.Count);
             Assert.Contains(logger.Messages, m => m.Message.Contains("DISTRIBUTION-SPILL", StringComparison.OrdinalIgnoreCase));
             var percentRankKey = $"WINDOW_{percentRank.ToSql().ToUpperInvariant()}";
+            var cumeDistKey = $"WINDOW_{cumeDist.ToSql().ToUpperInvariant()}";
             var ntileKey = $"WINDOW_{ntile.ToSql().ToUpperInvariant()}";
             var expectedRanks = new[] { 0m, 0m, 0.5m, 0.75m, 0.75m };
+            var expectedCumeDist = new[] { 0.4m, 0.4m, 0.6m, 1m, 1m };
             var expectedBuckets = new[] { 1m, 1m, 2m, 2m, 3m };
             foreach (var partition in result.GroupBy(r => r["Grp"]?.ToString()))
             {
                 var rows = partition.ToList();
                 Assert.Equal(expectedRanks, rows.Select(r => Convert.ToDecimal(r[percentRankKey])));
+                Assert.Equal(expectedCumeDist, rows.Select(r => Convert.ToDecimal(r[cumeDistKey])));
                 Assert.Equal(expectedBuckets, rows.Select(r => Convert.ToDecimal(r[ntileKey])));
             }
         }
