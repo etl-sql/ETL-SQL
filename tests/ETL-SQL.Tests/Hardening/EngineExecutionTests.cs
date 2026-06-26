@@ -671,6 +671,69 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ExternalWindowEngine_OrderedFirstAndLastValue_UseSortedReplay()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause> { new(new IdentifierExpression("Val"), false) });
+            var first = new FunctionCallExpression("FIRST_VALUE", new List<Expression>
+            {
+                new IdentifierExpression("Val")
+            }) { Window = window };
+            var last = new FunctionCallExpression("LAST_VALUE", new List<Expression>
+            {
+                new IdentifierExpression("Val")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(new IdentifierExpression("Val"), "Val"),
+                    new(first, "FirstVal"),
+                    new(last, "LastVal")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                foreach (var grp in new[] { "B", "A" })
+                {
+                    for (var value = 5; value >= 1; value--)
+                    {
+                        var row = new Row(schema);
+                        row["Grp"] = grp;
+                        row["Val"] = value;
+                        yield return row;
+                    }
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("ORDERED-VALUE-SPILL", StringComparison.OrdinalIgnoreCase));
+            var firstKey = $"WINDOW_{first.ToSql().ToUpperInvariant()}";
+            var lastKey = $"WINDOW_{last.ToSql().ToUpperInvariant()}";
+            Assert.All(result, row =>
+            {
+                Assert.Equal(1m, Convert.ToDecimal(row[firstKey]));
+                Assert.Equal(5m, Convert.ToDecimal(row[lastKey]));
+            });
+        }
+
+        [Fact]
         public async Task ExternalAggregateEngine_PartitionIndexOverflow()
         {
             var e = NewEvaluator();

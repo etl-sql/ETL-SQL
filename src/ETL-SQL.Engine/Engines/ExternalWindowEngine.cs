@@ -153,7 +153,15 @@ public class ExternalWindowEngine
             {
                 bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
 
-                if (useDeepSpill && IsDistributionReplayCompatible(group))
+                if (useDeepSpill && IsOrderedPartitionValueReplayCompatible(group))
+                {
+                    _logger.WriteLine($"[magenta]     * ORDERED-VALUE-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via sorted value replay.[/]");
+                    await foreach (var row in ProcessBucketOrderedValueReplay(info.Name, group))
+                    {
+                        yield return row;
+                    }
+                }
+                else if (useDeepSpill && IsDistributionReplayCompatible(group))
                 {
                     _logger.WriteLine($"[magenta]     * DISTRIBUTION-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via sorted cardinality replay.[/]");
                     await foreach (var row in ProcessBucketDistributionReplay(info.Name, group))
@@ -247,6 +255,17 @@ public class ExternalWindowEngine
                     _ => false
                 };
             });
+    }
+
+    private static bool IsOrderedPartitionValueReplayCompatible(WindowGroup group)
+    {
+        return group.Signature.OrderBy is { Count: > 0 }
+            && group.Columns.All(c =>
+                c.Expression is FunctionCallExpression f
+                && f.FunctionName.ToUpperInvariant() is "FIRST_VALUE" or "LAST_VALUE"
+                && f.Arguments.Count == 1
+                && f.Filter == null
+                && f.Window?.Frame == null);
     }
 
     private static bool IsBoundedValueCompatible(FunctionCallExpression f)
@@ -780,6 +799,70 @@ public class ExternalWindowEngine
             catch (Exception ex)
             {
                 _logger.Warning($"Error cleaning up distribution window replay {sortedName}: {ex.Message}");
+            }
+        }
+    }
+
+    private async IAsyncEnumerable<Row> ProcessBucketOrderedValueReplay(string name, WindowGroup group)
+    {
+        var sortedName = $"win_value_{Guid.NewGuid():N}.tmp";
+        var sortCriteria = new List<OrderByClause>();
+        if (group.Signature.PartitionBy != null)
+        {
+            foreach (var expression in group.Signature.PartitionBy)
+                sortCriteria.Add(new OrderByClause(expression, false));
+        }
+        sortCriteria.AddRange(group.Signature.OrderBy!);
+
+        var partitionResults = new List<Dictionary<string, object?>>();
+        object?[]? previousPartitionKeys = null;
+        try
+        {
+            await using (var writer = await _context.SpillStore.CreateWriterAsync(sortedName))
+            {
+                await foreach (var row in _sortEngine.SortStreamAsync(ReadPartitionStream(name), sortCriteria))
+                {
+                    var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+                    var newPartition = previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys);
+                    if (newPartition)
+                        partitionResults.Add(new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase));
+
+                    var results = partitionResults[^1];
+                    foreach (var column in group.Columns)
+                    {
+                        var f = (FunctionCallExpression)column.Expression;
+                        var resultKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
+                        if (newPartition || f.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
+                            results[resultKey] = await _context.EvaluateValue(f.Arguments[0], row);
+                    }
+
+                    previousPartitionKeys = keys;
+                    await writer.WriteRowAsync(row);
+                }
+            }
+
+            var partitionIndex = -1;
+            previousPartitionKeys = null;
+            await foreach (var row in ReadPartitionStream(sortedName))
+            {
+                var keys = await EvaluatePartitionKeys(group.Signature.PartitionBy, row);
+                if (previousPartitionKeys == null || !PartitionKeysEqual(previousPartitionKeys, keys))
+                    partitionIndex++;
+                foreach (var (resultKey, value) in partitionResults[partitionIndex])
+                    row[resultKey] = value;
+                previousPartitionKeys = keys;
+                yield return row;
+            }
+        }
+        finally
+        {
+            try
+            {
+                _context.SpillStore.DeleteChunk(sortedName);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning($"Error cleaning up ordered value window replay {sortedName}: {ex.Message}");
             }
         }
     }

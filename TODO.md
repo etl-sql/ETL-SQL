@@ -120,6 +120,7 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
   - *Progress*: Constant positive-ordinal `NTH_VALUE` over cumulative `ROWS UNBOUNDED PRECEDING ... CURRENT ROW` frames now retains only the selected row per function during deep spill.
   - *Progress*: Ordered `LEAD` windows with constant non-negative offsets now use a bounded lookahead queue, delaying at most the largest requested offset and applying defaults when each partition ends.
   - *Progress*: Ordered `PERCENT_RANK` and positive literal-bucket `NTILE` windows now use a sorted cardinality replay, retaining only per-partition row counts and current ranking state.
+  - *Progress*: Ordered, unframed `FIRST_VALUE`/`LAST_VALUE` windows now sort and replay spilled partitions while retaining only their scalar boundary values.
 - [ ] **PIVOT/UNPIVOT/MATCH_RECOGNIZE Full-Source Buffering** — [DataSourceManager.cs:L452](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/DataSourceManager.cs#L452): Table operators buffer every source row into `allRows` before applying PIVOT, UNPIVOT, or MATCH_RECOGNIZE. Large operator inputs bypass the normal spill pipeline and can exhaust memory.
   - *Priority*: Consolidated under Priority 6.
   - *Solution*: Add operator-specific streaming/spill paths or enforce documented row limits until spill-aware implementations exist.
