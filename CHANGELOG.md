@@ -4,6 +4,80 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-06-25
+
+### Added
+
+**Apache Arrow Snapshot Integration**
+- Completed end-to-end Apache Arrow IPC snapshot support: the `SnapshotStore` now saves and loads secure `.etlsnap` zip packages by default in CLI and local execution contexts.
+- Implemented dev-default encryption key fallback for local snapshot packaging so developers can run without explicit key configuration.
+- The report runtime player now lazy-loads and decodes Arrow IPC streams on-demand with automatic fallback to JSON row endpoints for older clients.
+- Downloaded and bundled the minified Apache Arrow JS library (`arrow.min.js`); synchronized front-end runtime assets across Portal, Player, and VS Code extension.
+- Added test coverage verifying CLI/local `.etlsnap` roundtrip packaging.
+
+**Portal Execution Metrics & Observability**
+- Added persistence of per-execution resource metrics (CPU, memory, duration) to the Portal database so historical load can be trended over time (`AddPortalExecutionResourceMetrics` EF migration for both SQLite and PostgreSQL).
+- Exposed a historical execution load metrics endpoint on `AdminController` for operators and monitoring systems.
+- Added lazy-loading of Arrow snapshot rows in the Portal to avoid pulling large result payloads into memory until requested.
+
+**`SHOW PORTAL USAGE METRICS` and `SHOW PORTAL OPERATIONAL METRICS` Statements**
+- Added `SHOW PORTAL USAGE METRICS [INTO #t]` inside an `EXECUTE portal` block to return report view counts, unique viewers, refresh health, and subscription delivery failures for the requested period.
+- Added `SHOW PORTAL OPERATIONAL METRICS [INTO #t]` to return live queue depth, execution concurrency caps, recent failure counts, storage size, schema migration status, and last-24-hour execution load/resource buckets — complementing the existing `GET /health` endpoint with a scriptable, queryable form.
+- Wired both statements through the parser (`SystemParser`), AST (`ShowPortalUsageMetricsStatement`, `ShowPortalOperationalMetricsStatement`), and `ReportPortalDataSource`; updated `PORTAL_SHOW.md` help file, `Grammar.md`, and `Syntax_Index.md`.
+
+**`SHOW LOCKS` Statement**
+- Added `SHOW LOCKS` to display currently held engine-level and orchestrator-level resource locks, aiding live diagnosis of stalled pipelines and contention scenarios.
+- Documented `SHOW LOCKS` in `Grammar.md`, `Syntax_Index.md`, `User_Manual.md`, `PORTAL_SHOW.md` help file, and the `SHOW` keyword help document; wired a corresponding test in `SystemAndReportHandlerTests`.
+
+**LSP Cross-File Declaration Resolution**
+- Extended the Language Server's `DefinitionProvider` and `HoverProvider` to resolve `GO TO DEFINITION` and hover targets across all currently open files in the workspace, not just the active document.
+
+### Changed
+
+**Performance — Engine & Language Server**
+- Indexed lineage in `LineageTracker` and cached parameter scans in `ParameterScanner` to avoid repeated linear walks during analysis and execution.
+- Added parse-result caching to `RunScriptStatementHandler` so `RUN SCRIPT` targets that have not changed on disk are not re-parsed on every invocation.
+- Cached LSP definition declarations in `DefinitionProvider` and `DocumentStateStore` to avoid redundant re-analysis on every keystroke.
+- Hardened Portal metrics and scaled hot paths: added `AssetFingerprinter`, tuned spill-store and external sort/join engines, and improved scheduler throughput under load.
+
+**Machine-Aware Orchestrator Throttling & Startup Sweep**
+- `JobThrottle` now reads available logical processors and physical memory at startup to derive a machine-aware default concurrency ceiling, preventing over-subscription on small VMs.
+- Added `ChildProcessTracker` to associate child processes spawned by the Orchestrator with their parent job, enabling clean resource reclamation on job cancellation.
+- Added a startup temp-table sweep in `EngineRunner` to remove orphaned `#temp` working directories left by crashed sessions, preventing unbounded disk growth.
+
+**Stabilization & Refactoring (Engine, Analysis, Portal, TUI, Tooling)**
+- Completed a broad stabilization pass across the engine: audited and hardened all `ETL-SQL.Engine` statement handlers, `RelDateResolver`, `ResultFormatter`, `SessionStateManager`, `VariableScopeManager`, `CteManager`, `PushdownEngine`, `QueryCompiler`, `DataSourceManager`, `LineageManager`, and `SpillStore`.
+- Hardened the `AliasScanner`, `SnippetLibrary`, and `SnapshotStore` in `ETL-SQL.Core` and `ETL-SQL.Reporting`; made the `sync-assets.js` asset-sync script idempotent and banner-aware.
+- Tightened `AbsolutePathRule`, `CredentialLeakRule`, and `FileSystemSecurityRule` linting rules with additional corpus cases for path boundary and credential-leak scenarios; strengthened `SchemaValidationRule` in Analysis.
+- Hardened `CryptoUtils`, `MachineBoundCrypto`, and `LruCache` in `ETL-SQL.Core.Common`; hardened `SqliteSessionMetadataStore` with retry semantics and tighter WAL mode configuration.
+- Hardened engine cleanup and path handling across `RunScriptStatementHandler`, `ExecuteStatementHandler`, `BundleStatementHandlers`, `WaitForFileStatementHandler`, `CteManager`, `ProcedureExecutor`, and `SessionStateManager`.
+- Hardened async export and backup paths in `BackupRestoreService`, `EngineRunner`, `BrowserReportPdfExporter`, `ExportController`, and the TUI `ConsoleEditor`.
+- Added `AssetFingerprinter` to the Portal for cache-busting on static asset updates; added EF migration for PII column encryption on both SQLite and PostgreSQL providers.
+- Stabilized `JobApiEndpoints` with improved cancellation propagation and error surfacing; tightened `NodeCapacityMonitor` assertions and added `SchedulerService` queue-wait-time argument fixes.
+
+**TUI Frame Metadata Caching**
+- `EditorRenderer` now caches rendered frame metadata between redraws, reducing CPU usage during idle periods and making the status bar and key-binding overlays allocation-free on unchanged frames.
+
+**Documentation & Policy**
+- Reconciled identity configuration reference in `Administrators_Guide.md` to match shipped OIDC behavior.
+- Tightened contribution rules and compatibility policies in `CONTRIBUTING.md`.
+- Documented future performance and scalability enhancements in `TODO.md`.
+
+### Fixed
+
+- **Support bundle redaction**: `SupportBundleBuilder` now redacts connection-string passwords, API keys, and JWT secrets from all diagnostic fields before archiving; added corresponding `OperatorToolingTests` coverage.
+- **Portal database migration test failures**: Resolved a portal database upgrade migration ordering issue and fixed a metric timezone normalization bug that caused flaky test failures under certain locale configurations.
+- **SFTP connector `ConnectionStringBuilder`**: Corrected option serialization for `SFTP` connector key-file auth paths.
+- **TUI frame caching**: Fixed stale frame metadata being rendered after connection or tab changes in `EditorRenderer` and `StatusBar`.
+- **Migration lint corpus**: Added a migration lint corpus (`test(compat)`) to catch invalid dialect usage introduced across schema migration scripts.
+- **Scheduler test mock**: Fixed `SchedulerService` test mocks that passed an incorrect argument count for the queue-wait-time parameter after an API change.
+
+### Security
+
+- **PII column encryption at rest**: Portal database columns storing user PII (email addresses, display names in audit records) are now encrypted at rest using a key derived from the configured Data Protection key ring, applied via a background maintenance service and corresponding EF Core migration for both SQLite and PostgreSQL.
+- **Support bundle hardening**: Connection strings, JWT secrets, and API keys are now actively redacted from the support bundle rather than relying solely on config-key exclusion lists.
+- **Crypto hardening**: Strengthened `MachineBoundCrypto` key derivation and `CryptoUtils` authenticated-encryption paths; added additional test coverage for encrypt/decrypt roundtrips and tamper-detection.
+
 ## [0.12.0] — 2026-06-19
 
 ### Added
