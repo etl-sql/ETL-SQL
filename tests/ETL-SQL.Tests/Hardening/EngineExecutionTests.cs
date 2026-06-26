@@ -320,6 +320,60 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ExternalWindowEngine_FullPartitionAggregates_UseStreamingSpillReplay()
+        {
+            var e = NewEvaluator(externalPartitions: 1);
+            e.WindowSpillThreshold = 3;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause>());
+            var sum = new FunctionCallExpression("SUM", new List<Expression> { new IdentifierExpression("Val") }) { Window = window };
+            var count = new FunctionCallExpression("COUNT", new List<Expression> { new IdentifierExpression("*") }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(sum, "Total"),
+                    new(count, "Rows")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+
+            async IAsyncEnumerable<Row> Rows()
+            {
+                var schema = new TableSchema(new[] { "Grp", "Val" });
+                for (var i = 1; i <= 10; i++)
+                {
+                    var row = new Row(schema);
+                    row["Grp"] = "A";
+                    row["Val"] = i;
+                    yield return row;
+                }
+                await Task.CompletedTask;
+            }
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-AGG-SPILL", StringComparison.OrdinalIgnoreCase));
+
+            var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";
+            var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";
+            Assert.All(result, row =>
+            {
+                Assert.Equal(55m, row[sumKey]);
+                Assert.Equal(10m, row[countKey]);
+            });
+        }
+
+        [Fact]
         public async Task ExternalAggregateEngine_PartitionIndexOverflow()
         {
             var e = NewEvaluator();

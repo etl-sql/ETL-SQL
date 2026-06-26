@@ -161,6 +161,14 @@ public class ExternalWindowEngine
                         yield return row;
                     }
                 }
+                else if (useDeepSpill && IsPartitionAggregateCompatible(group))
+                {
+                    _logger.WriteLine($"[magenta]     * PARTITION-AGG-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via two-pass streaming aggregates.[/]");
+                    await foreach (var row in ProcessBucketPartitionAggregateSpill(info.Name, group))
+                    {
+                        yield return row;
+                    }
+                }
                 else
                 {
                     var bucketRows = await ReadPartitionStream(info.Name).ToListAsync();
@@ -196,6 +204,129 @@ public class ExternalWindowEngine
         return group.Columns.All(c =>
             c.Expression is FunctionCallExpression f &&
             new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant()));
+    }
+
+    private static bool IsPartitionAggregateCompatible(WindowGroup group)
+    {
+        return group.Columns.All(c =>
+        {
+            if (c.Expression is not FunctionCallExpression f || f.Window == null) return false;
+            if (f.IsDistinct || f.Window.Frame != null || f.Window.OrderBy.Count > 0) return false;
+
+            var name = f.FunctionName.ToUpperInvariant();
+            return name switch
+            {
+                "COUNT" => f.Arguments.Count <= 1,
+                "SUM" or "AVG" or "MIN" or "MAX" => f.Arguments.Count == 1,
+                _ => false
+            };
+        });
+    }
+
+    private async IAsyncEnumerable<Row> ProcessBucketPartitionAggregateSpill(string name, WindowGroup group)
+    {
+        var accumulators = group.Columns
+            .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
+            .ToList();
+
+        await foreach (var row in ReadPartitionStream(name))
+        {
+            foreach (var (f, acc) in accumulators)
+            {
+                if (f.Filter != null && !await _context.EvaluateCondition(f.Filter, row))
+                    continue;
+
+                object? value = null;
+                if (f.Arguments.Count > 0)
+                    value = await _context.EvaluateValue(f.Arguments[0], row);
+
+                acc.Add(f.FunctionName, value, _context, IsCountStar(f));
+            }
+        }
+
+        var results = accumulators.ToDictionary(
+            x => $"WINDOW_{x.Function.ToSql().ToUpperInvariant()}",
+            x => x.Accumulator.GetValue(x.Function.FunctionName),
+            StringComparer.OrdinalIgnoreCase);
+
+        await foreach (var row in ReadPartitionStream(name))
+        {
+            foreach (var (key, value) in results)
+                row[key] = value;
+            yield return row;
+        }
+    }
+
+    private static bool IsCountStar(FunctionCallExpression f)
+        => f.FunctionName.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
+            && (f.Arguments.Count == 0
+                || f.Arguments[0] is IdentifierExpression id && id.Name == "*");
+
+    private sealed class StreamingWindowAggregate
+    {
+        private long _count;
+        private long _nonNullCount;
+        private decimal _sum;
+        private object? _min;
+        private object? _max;
+        private bool _allIntegers = true;
+
+        public void Add(string functionName, object? value, IExecutionContext context, bool countStar)
+        {
+            var name = functionName.ToUpperInvariant();
+            if (name == "COUNT")
+            {
+                if (countStar || value is not null and not DBNull)
+                    _count++;
+                return;
+            }
+
+            if (value is null or DBNull) return;
+
+            _nonNullCount++;
+            switch (name)
+            {
+                case "SUM":
+                case "AVG":
+                    _sum += Convert.ToDecimal(value);
+                    _allIntegers &= IsIntegerValue(value);
+                    break;
+                case "MIN":
+                    if (_min == null || context.CompareConstants(value, _min) < 0)
+                        _min = value;
+                    break;
+                case "MAX":
+                    if (_max == null || context.CompareConstants(value, _max) > 0)
+                        _max = value;
+                    break;
+            }
+        }
+
+        public object? GetValue(string functionName)
+        {
+            return functionName.ToUpperInvariant() switch
+            {
+                "COUNT" => (decimal)_count,
+                "SUM" => _nonNullCount == 0 ? null : _sum,
+                "AVG" => GetAverage(),
+                "MIN" => _min,
+                "MAX" => _max,
+                _ => null
+            };
+        }
+
+        private object? GetAverage()
+        {
+            if (_nonNullCount == 0) return null;
+            var avg = _sum / _nonNullCount;
+            return _allIntegers ? Math.Truncate(avg) : avg;
+        }
+
+        private static bool IsIntegerValue(object value)
+        {
+            return value is sbyte or byte or short or ushort or int or uint or long or ulong
+                or System.Numerics.BigInteger;
+        }
     }
 
     private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string name, WindowGroup group, SelectStatement stmt)
