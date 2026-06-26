@@ -12,8 +12,13 @@ public static class DatasetStorageMaintenance
     public static async Task ReconcileAsync(
         PortalDbContext db,
         PortalConfig config,
-        ILogger logger)
+        ILogger logger,
+        bool deepOrphanScan = false,
+        int pageSize = 1_000)
     {
+        if (pageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), "Page size must be positive.");
+
         var root = Path.GetFullPath(config.DatasetRootPath);
         Directory.CreateDirectory(root);
 
@@ -25,35 +30,63 @@ public static class DatasetStorageMaintenance
             TryDelete(path, logger, "abandoned dataset staging file");
         }
 
-        var datasets = await db.Datasets.ToListAsync();
-        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var orphanRows = new List<Dataset>();
+        var referenced = deepOrphanScan
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : null;
+        var orphanRowIds = new List<int>(capacity: Math.Min(pageSize, 1_000));
+        var lastId = 0;
+        var removedRows = 0;
 
-        foreach (var dataset in datasets)
+        while (true)
         {
-            if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath))
+            var datasets = await db.Datasets
+                .AsNoTracking()
+                .Where(d => d.Id > lastId)
+                .OrderBy(d => d.Id)
+                .Select(d => new { d.Id, d.ParquetFilePath })
+                .Take(pageSize)
+                .ToListAsync();
+            if (datasets.Count == 0)
+                break;
+
+            foreach (var dataset in datasets)
             {
-                orphanRows.Add(dataset);
-                continue;
+                lastId = dataset.Id;
+
+                if (string.IsNullOrWhiteSpace(dataset.ParquetFilePath))
+                {
+                    orphanRowIds.Add(dataset.Id);
+                    continue;
+                }
+
+                if (!PortalPathGuard.TryResolveDataset(config, dataset.ParquetFilePath, out var resolved))
+                    continue;
+
+                if (File.Exists(resolved))
+                    referenced?.Add(resolved);
+                else
+                    orphanRowIds.Add(dataset.Id);
             }
 
-            if (!PortalPathGuard.TryResolveDataset(config, dataset.ParquetFilePath, out var resolved))
-                continue;
-
-            if (File.Exists(resolved))
-                referenced.Add(resolved);
-            else
-                orphanRows.Add(dataset);
+            if (orphanRowIds.Count > 0)
+            {
+                await db.Datasets
+                    .Where(d => orphanRowIds.Contains(d.Id))
+                    .ExecuteDeleteAsync();
+                removedRows += orphanRowIds.Count;
+                orphanRowIds.Clear();
+            }
         }
 
-        if (orphanRows.Count > 0)
+        if (removedRows > 0)
         {
-            db.Datasets.RemoveRange(orphanRows);
-            await db.SaveChangesAsync();
             logger.LogWarning(
                 "Removed {Count} dataset catalog rows whose managed cache file was missing.",
-                orphanRows.Count);
+                removedRows);
         }
+
+        if (!deepOrphanScan || referenced is null)
+            return;
 
         foreach (var path in Directory.EnumerateFiles(root, "*.parquet", SearchOption.TopDirectoryOnly))
         {

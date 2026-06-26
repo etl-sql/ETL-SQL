@@ -82,7 +82,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             ManagedRow("#missing", Path.Combine(datasetRoot, "missing_2.parquet")));
         await db.SaveChangesAsync();
 
-        await DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance);
+        await DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance, deepOrphanScan: true);
 
         // First pass: artifacts gone, last known-good intact.
         Assert.True(File.Exists(goodPath));
@@ -93,7 +93,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
 
         // Second pass: a true no-op — no throw, nothing removed, good cache and row preserved.
         var goodWriteTime = File.GetLastWriteTimeUtc(goodPath);
-        await DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance);
+        await DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance, deepOrphanScan: true);
         Assert.True(File.Exists(goodPath));
         Assert.Equal(goodWriteTime, File.GetLastWriteTimeUtc(goodPath));
         Assert.Equal(1, await db.Datasets.CountAsync());
@@ -121,7 +121,7 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
         using (var hold = new FileStream(lockedOrphan, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             var ex = await Record.ExceptionAsync(() =>
-                DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance));
+                DatasetStorageMaintenance.ReconcileAsync(db, config, NullLogger.Instance, deepOrphanScan: true));
             Assert.Null(ex);
         }
 
