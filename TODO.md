@@ -108,8 +108,8 @@ At large volumes, recursive interpreters and bulk data grouping hit memory bound
   - *Solution*: Added async streaming formatter paths for batched `FOR JSON/XML` output and regression tests covering multi-batch serialization.
 - [ ] **Interpretive AST Traversal Bottleneck** — [ExpressionEvaluator.cs](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/ExpressionEvaluator.cs): Evaluating variables, operators, and functions traverses the AST recursively on every row. For 50M rows, this recursive overhead slows processing significantly.
   - *Solution*: Compile AST structures into compiled delegates (`Func<Row, object?>`) once per statement using `System.Linq.Expressions` or dynamic code-generation.
-- [ ] **Flat File Char-by-Char Stream Parser** — [FlatFileDataSource.cs:L486](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs#L486): Reading files char-by-char with custom delimiters via `reader.Read()` stalls the CPU on multi-gigabyte files.
-  - *Solution*: Utilize Span-based block parsing to find delimiters inside buffers instead of character-by-character calls.
+- [x] **Flat File Char-by-Char Stream Parser** — [FlatFileDataSource.cs:L486](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Connectors/FlatFile/FlatFileDataSource.cs#L486): Custom row delimiters now use a buffered record reader that scans 16 KB character blocks instead of calling `StreamReader.Read()` per character. Standard newline delimiters continue using `ReadLineAsync`.
+  - *Solution*: Maintain a reusable buffered reader across header skipping and data rows so custom delimiters can be found inside blocks without losing over-read characters.
 
 ## Code Review: Script Parsing & Execution Performance Audit (v0.13.0)
 *Audit focused on three script scales: Small (100 lines), Large (20,000 lines), and Multi-File (10 files each 10,000 lines long).*

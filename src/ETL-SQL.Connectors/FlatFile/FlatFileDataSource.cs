@@ -404,8 +404,9 @@ namespace ETL_SQL.Connectors.FlatFile
             try
             {
                 using var reader = new StreamReader(effectivePath, _encoding);
+                var recordReader = new RecordReader(reader, _rowDelimiter);
 
-                for (int i = 0; i < _startAtRows; i++) await ReadRecordAsync(reader);
+                for (int i = 0; i < _startAtRows; i++) await recordReader.ReadRecordAsync();
 
                 string? headerLine = null;
                 if (_headerFile != null)
@@ -419,11 +420,11 @@ namespace ETL_SQL.Connectors.FlatFile
                         headerLine = _headerFile;
                     }
 
-                    if (_hasHeader) await ReadRecordAsync(reader);
+                    if (_hasHeader) await recordReader.ReadRecordAsync();
                 }
                 else
                 {
-                    headerLine = await ReadRecordAsync(reader);
+                    headerLine = await recordReader.ReadRecordAsync();
                 }
 
                 if (string.IsNullOrWhiteSpace(headerLine))
@@ -450,7 +451,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 var lineQueue = new Queue<string>();
                 string? line;
-                while ((line = await ReadRecordAsync(reader)) != null)
+                while ((line = await recordReader.ReadRecordAsync()) != null)
                 {
                     lineQueue.Enqueue(line);
                     if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
@@ -483,43 +484,59 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        private async Task<string?> ReadRecordAsync(StreamReader reader)
+        private sealed class RecordReader
         {
-            if (reader.Peek() == -1) return null;
+            private readonly StreamReader _reader;
+            private readonly string _rowDelimiter;
+            private readonly char[] _buffer = new char[16 * 1024];
+            private readonly StringBuilder _record = new();
+            private int _position;
+            private int _length;
 
-            if (_rowDelimiter == "\n" || _rowDelimiter == "\r\n" || _rowDelimiter == "\r")
+            public RecordReader(StreamReader reader, string rowDelimiter)
             {
-                return await reader.ReadLineAsync();
+                _reader = reader;
+                _rowDelimiter = rowDelimiter;
             }
 
-            var sb = new StringBuilder();
-            int delimIdx = 0;
-
-            while (reader.Peek() != -1)
+            public async Task<string?> ReadRecordAsync()
             {
-                int cInt = reader.Read();
-                if (cInt == -1) break;
-                char c = (char)cInt;
+                if (_rowDelimiter == "\n" || _rowDelimiter == "\r\n" || _rowDelimiter == "\r")
+                    return await _reader.ReadLineAsync();
 
-                sb.Append(c);
+                _record.Clear();
+                int delimIdx = 0;
 
-                if (c == _rowDelimiter[delimIdx])
+                while (true)
                 {
-                    delimIdx++;
-                    if (delimIdx == _rowDelimiter.Length)
+                    if (_position >= _length)
                     {
-                        sb.Length -= _rowDelimiter.Length;
-                        return sb.ToString();
+                        _length = await _reader.ReadAsync(_buffer, 0, _buffer.Length);
+                        _position = 0;
+                        if (_length == 0) return _record.Length > 0 ? _record.ToString() : null;
+                    }
+
+                    while (_position < _length)
+                    {
+                        char c = _buffer[_position++];
+                        _record.Append(c);
+
+                        if (c == _rowDelimiter[delimIdx])
+                        {
+                            delimIdx++;
+                            if (delimIdx == _rowDelimiter.Length)
+                            {
+                                _record.Length -= _rowDelimiter.Length;
+                                return _record.ToString();
+                            }
+                        }
+                        else
+                        {
+                            delimIdx = c == _rowDelimiter[0] ? 1 : 0;
+                        }
                     }
                 }
-                else
-                {
-                    delimIdx = 0;
-                    if (c == _rowDelimiter[0]) delimIdx = 1;
-                }
             }
-
-            return sb.Length > 0 ? sb.ToString() : null;
         }
 
         private async Task ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
