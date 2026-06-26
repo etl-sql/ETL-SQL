@@ -72,4 +72,51 @@ public sealed class SqliteSessionMetadataStoreTests
             try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
         }
     }
+
+    [Fact]
+    public async Task SaveVariablesAndConnections_BatchesLargeStateRoundTrip()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "etlsql-session-large-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var store = new SqliteSessionMetadataStore("session-a", root, "test-entropy");
+            await store.InitializeAsync();
+
+            var variables = Enumerable.Range(0, 750)
+                .ToDictionary(i => $"v{i:000}", i => (object?)i);
+            var metadata = variables.Keys.ToDictionary(
+                name => name,
+                name => new VariableMetadata { IsSensitive = name.EndsWith("0", StringComparison.Ordinal) });
+            var connections = Enumerable.Range(0, 475)
+                .Select(i => new ETL_SQL.Core.Data.ConnectionInfo
+                {
+                    Name = $"conn{i:000}",
+                    Type = "SQLITE",
+                    ConnectionString = $"Data Source=db{i:000}.sqlite",
+                    Options = new Dictionary<string, string> { ["mode"] = "readonly" }
+                })
+                .ToList();
+
+            await store.SaveVariablesAsync(variables, metadata);
+            await store.SaveConnectionsAsync(connections);
+
+            var (loadedVariables, loadedMetadata) = await store.LoadVariablesAsync();
+            var loadedConnections = (await store.LoadConnectionsAsync())
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            Assert.Equal(750, loadedVariables.Count);
+            Assert.Equal(749L, Convert.ToInt64(loadedVariables["v749"]));
+            Assert.True(loadedMetadata["v000"].IsSensitive);
+            Assert.False(loadedMetadata["v001"].IsSensitive);
+            Assert.Equal(475, loadedConnections.Count);
+            Assert.Equal("conn000", loadedConnections[0].Name);
+            Assert.Equal("Data Source=db474.sqlite", loadedConnections[^1].ConnectionString);
+            Assert.Equal("readonly", loadedConnections[^1].Options["mode"]);
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
 }

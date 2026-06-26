@@ -17,6 +17,7 @@ namespace ETL_SQL.Core.Execution;
 /// </summary>
 public class SqliteSessionMetadataStore : ISessionMetadataStore
 {
+    private const int MaxSqliteParametersPerCommand = 900;
     private readonly string _sessionId;
     private readonly string _dbPath;
     private readonly string _entropy;
@@ -80,18 +81,22 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
     public async Task SaveVariablesAsync(IDictionary<string, object?> variables, IDictionary<string, VariableMetadata> metadata)
     {
-        using var transaction = _connection!.BeginTransaction();
-        foreach (var kvp in variables)
+        var rows = variables.Select(kvp =>
         {
             var meta = metadata.TryGetValue(kvp.Key, out var m) ? m : new VariableMetadata();
-            using var cmd = _connection.CreateCommand();
-            cmd.Transaction = transaction;
-            cmd.CommandText = "INSERT OR REPLACE INTO variables (name, value_json, metadata_json) VALUES (@name, @val, @meta)";
-            cmd.Parameters.AddWithValue("@name", kvp.Key);
-            cmd.Parameters.AddWithValue("@val", JsonSerializer.Serialize(kvp.Value));
-            cmd.Parameters.AddWithValue("@meta", JsonSerializer.Serialize(meta));
-            await cmd.ExecuteNonQueryAsync();
-        }
+            return new[]
+            {
+                (object?)kvp.Key,
+                JsonSerializer.Serialize(kvp.Value),
+                JsonSerializer.Serialize(meta)
+            };
+        }).ToList();
+
+        using var transaction = _connection!.BeginTransaction();
+        await ExecuteBatchedInsertAsync(
+            transaction,
+            "INSERT OR REPLACE INTO variables (name, value_json, metadata_json) VALUES ",
+            rows);
         await transaction.CommitAsync();
     }
 
@@ -231,6 +236,17 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
 
     public async Task SaveConnectionsAsync(IEnumerable<ETL_SQL.Core.Data.ConnectionInfo> connections)
     {
+        var rows = connections.Select(conn =>
+        {
+            var json = JsonSerializer.Serialize(conn);
+            var protectedJson = ETL_SQL.Common.CryptoUtils.Protect(json, _entropy);
+            return new[]
+            {
+                (object?)conn.Name,
+                protectedJson
+            };
+        }).ToList();
+
         using var transaction = _connection!.BeginTransaction();
 
         using var clearCmd = _connection.CreateCommand();
@@ -238,19 +254,10 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         clearCmd.CommandText = "DELETE FROM connections";
         await clearCmd.ExecuteNonQueryAsync();
 
-        foreach (var conn in connections)
-        {
-            using var cmd = _connection.CreateCommand();
-            cmd.Transaction = transaction;
-            cmd.CommandText = "INSERT INTO connections (name, info_json) VALUES (@name, @json)";
-            cmd.Parameters.AddWithValue("@name", conn.Name);
-
-            var json = JsonSerializer.Serialize(conn);
-            var protectedJson = ETL_SQL.Common.CryptoUtils.Protect(json, _entropy);
-            cmd.Parameters.AddWithValue("@json", protectedJson);
-
-            await cmd.ExecuteNonQueryAsync();
-        }
+        await ExecuteBatchedInsertAsync(
+            transaction,
+            "INSERT INTO connections (name, info_json) VALUES ",
+            rows);
         await transaction.CommitAsync();
     }
 
@@ -333,5 +340,42 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
     private sealed record TempTableLoadRow(List<ColumnDefinition> Schema)
     {
         public List<string> ChunkNames { get; } = [];
+    }
+
+    private async Task ExecuteBatchedInsertAsync(
+        SqliteTransaction transaction,
+        string insertPrefix,
+        IReadOnlyList<object?[]> rows)
+    {
+        if (rows.Count == 0)
+            return;
+
+        var valuesPerRow = rows[0].Length;
+        var rowsPerBatch = Math.Max(1, MaxSqliteParametersPerCommand / valuesPerRow);
+
+        for (var offset = 0; offset < rows.Count; offset += rowsPerBatch)
+        {
+            var batchSize = Math.Min(rowsPerBatch, rows.Count - offset);
+            using var cmd = _connection!.CreateCommand();
+            cmd.Transaction = transaction;
+
+            var valueClauses = new List<string>(capacity: batchSize);
+            for (var rowIndex = 0; rowIndex < batchSize; rowIndex++)
+            {
+                var parameterNames = new List<string>(capacity: valuesPerRow);
+                var row = rows[offset + rowIndex];
+                for (var valueIndex = 0; valueIndex < valuesPerRow; valueIndex++)
+                {
+                    var parameterName = $"@p{rowIndex}_{valueIndex}";
+                    parameterNames.Add(parameterName);
+                    cmd.Parameters.AddWithValue(parameterName, row[valueIndex] ?? DBNull.Value);
+                }
+
+                valueClauses.Add($"({string.Join(", ", parameterNames)})");
+            }
+
+            cmd.CommandText = insertPrefix + string.Join(", ", valueClauses);
+            await cmd.ExecuteNonQueryAsync();
+        }
     }
 }
