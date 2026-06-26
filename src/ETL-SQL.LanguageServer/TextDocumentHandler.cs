@@ -40,7 +40,20 @@ namespace ETL_SQL.LSP
         private readonly IMetadataManager _metadata;
         private readonly DocumentStateStore _store;
         private ILanguageServerFacade? _server;
+
+        // Fast path: lex/parse/metadata/lineage fires after a short pause while typing.
         private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> _debouncers = new();
+
+        // Slow path: deep lint rules fire only after a longer pause to avoid blocking
+        // the LSP thread on expensive rule chains (CredentialLeak, SchemaValidation, etc.)
+        // during rapid editing of large scripts.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> _lintDebouncers = new();
+
+        /// <summary>Debounce for fast path: lex → parse → metadata → lineage → parser diagnostics.</summary>
+        private const int FastDebounceMs = 300;
+
+        /// <summary>Debounce for slow path: deep lint rules. Fires only after the user pauses typing.</summary>
+        private const int LintDebounceMs = 1500;
 
         public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store)
         {
@@ -73,46 +86,33 @@ namespace ETL_SQL.LSP
             var text = request.ContentChanges.First().Text;
             _logger.LogInformation("didChange for {Uri}. Length: {Length}", uri, text.Length);
 
-            // Sync text immediately so that completion/hover see the fresh text
+            // Sync text immediately so that completion/hover see the fresh text.
             _store.UpdateText(uri, text);
 
-            // Debounce the analysis to avoid high CPU load on typing
-            var newCts = new CancellationTokenSource();
-            var oldCts = _debouncers.AddOrUpdate(uri, newCts, (key, existing) =>
+            // ── Fast debounce (300 ms) ────────────────────────────────────────────
+            // Runs: lex → parse → metadata discovery → lineage → parser diagnostics.
+            // Cancelled and restarted on every keystroke.
+            ScheduleDebounced(_debouncers, uri, FastDebounceMs, async () =>
             {
-                _ = Task.Run(async () =>
-                {
-                    try { await existing.CancelAsync(); } catch {}
-                    try { existing.Dispose(); } catch {}
-                });
-                return newCts;
+                var parserDiags = await FastAnalyzeAsync(uri, text);
+                PublishDiagnostics(uri, parserDiags);
             });
 
-            _ = Task.Run(async () =>
+            // ── Slow debounce (1 500 ms) ──────────────────────────────────────────
+            // Runs: deep lint rules (CredentialLeak, SchemaValidation, AbsolutePath…).
+            // Fires only after the user pauses typing for 1.5 s, preventing the
+            // expensive lint chain from blocking the LSP thread during rapid edits
+            // of large scripts.
+            ScheduleDebounced(_lintDebouncers, uri, LintDebounceMs, async () =>
             {
-                try
-                {
-                    await Task.Delay(300, newCts.Token);
-                    if (!newCts.Token.IsCancellationRequested)
-                    {
-                        await AnalyzeAsync(uri, text);
-                    }
-                }
-                catch (TaskCanceledException)
-                {
-                    // Debounced
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in debounced AnalyzeAsync for {Uri}", uri);
-                }
-                finally
-                {
-                    // Clean up if we are still the current active CTS
-                    _debouncers.TryRemove(KeyValuePair.Create(uri, newCts));
-                    newCts.Dispose();
-                }
-            }, CancellationToken.None);
+                // Re-read the document state that the fast pass already stored.
+                var state = _store.GetState(uri);
+                if (state?.Script == null) return;
+                var lintDiags = await RunLintAsync(uri, state.Script);
+                // Merge with the latest parser diagnostics already published.
+                var parserDiags = _store.GetParserDiagnostics(uri);
+                PublishDiagnostics(uri, parserDiags.Concat(lintDiags).ToList());
+            });
 
             return MediatR.Unit.Value;
         }
@@ -132,8 +132,18 @@ namespace ETL_SQL.LSP
             return MediatR.Unit.Value;
         }
 
-        public override Task<MediatR.Unit> Handle(DidSaveTextDocumentParams request, CancellationToken cancellationToken)
-            => Task.FromResult(MediatR.Unit.Value);
+        public override async Task<MediatR.Unit> Handle(DidSaveTextDocumentParams request, CancellationToken cancellationToken)
+        {
+            // On save, run both the fast and slow paths immediately (no debounce).
+            // This gives instant lint feedback at the natural "I'm done editing" boundary.
+            var uri = request.TextDocument.Uri;
+            var text = _store.GetText(uri) ?? string.Empty;
+            var parserDiags = await FastAnalyzeAsync(uri, text);
+            var state = _store.GetState(uri);
+            var lintDiags = state?.Script != null ? await RunLintAsync(uri, state.Script) : new List<Diagnostic>();
+            PublishDiagnostics(uri, parserDiags.Concat(lintDiags).ToList());
+            return MediatR.Unit.Value;
+        }
 
         public override async Task<MediatR.Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
         {
@@ -159,24 +169,23 @@ namespace ETL_SQL.LSP
             return MediatR.Unit.Value;
         }
 
+        // ── Analysis pipeline (split into fast + slow) ───────────────────────────
+
         /// <summary>
-        /// Full analysis pipeline:
-        /// 1. Lex + Parse
-        /// 2. Connection and temp-table discovery
-        /// 3. Lineage analysis
-        /// 4. Lint
-        /// 5. Publish diagnostics
+        /// Fast analysis path (runs on the 300 ms debounce on every change):
+        /// lex → parse → connection/temp-table discovery → lineage → store state → return parser diagnostics.
+        /// Does NOT run lint rules.
         /// </summary>
-        public async Task AnalyzeAsync(DocumentUri uri, string text)
+        public async Task<List<Diagnostic>> FastAnalyzeAsync(DocumentUri uri, string text)
         {
-            _logger.LogInformation("Analyzing {Uri}.", uri);
+            _logger.LogInformation("FastAnalyze {Uri}.", uri);
             var diagnostics = new List<Diagnostic>();
             var fileLines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
             try
             {
                 if (_metadata.DebugMode)
-                    _logger.LogInformation("[DIAGNOSTIC] LSP: AnalyzeAsync started for {Uri}. Length: {Length}", uri, text.Length);
+                    _logger.LogInformation("[DIAGNOSTIC] LSP: FastAnalyzeAsync started for {Uri}. Length: {Length}", uri, text.Length);
 
                 var tokens = new Lexer(text).Tokenize();
                 var script = new ETL_SQL.Core.Parser.Parser(tokens).Parse();
@@ -225,35 +234,116 @@ namespace ETL_SQL.LSP
                 var analyzer = new LineageAnalyzer(tracker);
                 analyzer.Analyze(script);
                 _store.SetState(uri, text, script, analyzer.Tracker);
-                _logger.LogInformation("Analysis complete for {Uri}. Lineage entries: {Count}", uri, analyzer.Tracker.GetFullLineage().Count());
+                _logger.LogInformation("FastAnalyze complete for {Uri}. Lineage entries: {Count}", uri, analyzer.Tracker.GetFullLineage().Count());
 
-                diagnostics.AddRange(AnalysisDiagnosticBuilder
+                // Parser-level diagnostics only (syntax errors, undeclared references detected by the parser)
+                var parserDiags = AnalysisDiagnosticBuilder
                     .FromParserDiagnostics(script.Diagnostics, fileLines)
-                    .Select(ToLspDiagnostic));
+                    .Select(ToLspDiagnostic)
+                    .ToList();
 
-                // Lint diagnostics
+                // Cache so the lint pass can append to them without re-running parse
+                _store.SetParserDiagnostics(uri, parserDiags);
+                diagnostics.AddRange(parserDiags);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in FastAnalyzeAsync for {Uri}", uri);
+                diagnostics.Add(ToLspDiagnostic(AnalysisDiagnosticBuilder.FromException(ex, fileLines)));
+            }
+
+            return diagnostics;
+        }
+
+        /// <summary>
+        /// Slow lint path (runs on the 1 500 ms debounce after the user pauses typing):
+        /// applies all deep lint rules against the already-parsed script stored in the state store.
+        /// </summary>
+        private async Task<List<Diagnostic>> RunLintAsync(DocumentUri uri, Script script)
+        {
+            _logger.LogInformation("RunLint {Uri}.", uri);
+            var text = _store.GetText(uri) ?? string.Empty;
+            var fileLines = text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            try
+            {
                 var lintContext = new DefaultLintContext
                 {
                     Metadata = new LanguageServerMetadataProvider(_metadata, uri.ToString()),
                     DocumentUri = uri.ToString()
                 };
                 var lintResults = await _linter.AnalyzeAsync(script, lintContext);
-                diagnostics.AddRange(AnalysisDiagnosticBuilder
+                return AnalysisDiagnosticBuilder
                     .FromLintResults(lintResults, fileLines)
-                    .Select(ToLspDiagnostic));
+                    .Select(ToLspDiagnostic)
+                    .ToList();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in AnalyzeAsync for {Uri}", uri);
-                diagnostics.Add(ToLspDiagnostic(AnalysisDiagnosticBuilder.FromException(ex, fileLines)));
+                _logger.LogError(ex, "Error in RunLintAsync for {Uri}", uri);
+                return new List<Diagnostic> { ToLspDiagnostic(AnalysisDiagnosticBuilder.FromException(ex, fileLines)) };
             }
+        }
 
+        /// <summary>
+        /// Full combined analysis (fast + lint): used by didOpen and didSave where
+        /// immediate complete feedback is appropriate.
+        /// </summary>
+        public async Task AnalyzeAsync(DocumentUri uri, string text)
+        {
+            var parserDiags = await FastAnalyzeAsync(uri, text);
+            var state = _store.GetState(uri);
+            var lintDiags = state?.Script != null ? await RunLintAsync(uri, state.Script) : new List<Diagnostic>();
+            PublishDiagnostics(uri, parserDiags.Concat(lintDiags).ToList());
+        }
+
+        private void PublishDiagnostics(DocumentUri uri, IEnumerable<Diagnostic> diagnostics)
+        {
+            var list = diagnostics.ToList();
             _server?.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
             {
                 Uri = uri,
-                Diagnostics = diagnostics
+                Diagnostics = list
             });
-            _logger.LogDebug("Published {Count} diagnostics for {Uri}", diagnostics.Count, uri);
+            _logger.LogDebug("Published {Count} diagnostics for {Uri}", list.Count, uri);
+        }
+
+        /// <summary>
+        /// Schedules a debounced async action using the given dictionary as the token store.
+        /// Any in-flight task for the same URI is cancelled before the new delay starts.
+        /// </summary>
+        private static void ScheduleDebounced(
+            System.Collections.Concurrent.ConcurrentDictionary<DocumentUri, CancellationTokenSource> debouncers,
+            DocumentUri uri,
+            int delayMs,
+            Func<Task> action)
+        {
+            var newCts = new CancellationTokenSource();
+            debouncers.AddOrUpdate(uri, newCts, (_, existing) =>
+            {
+                var __ = Task.Run(async () =>
+                {
+                    try { await existing.CancelAsync(); } catch { }
+                    try { existing.Dispose(); } catch { }
+                });
+                return newCts;
+            });
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(delayMs, newCts.Token);
+                    if (!newCts.Token.IsCancellationRequested)
+                        await action();
+                }
+                catch (TaskCanceledException) { /* debounced */ }
+                catch (OperationCanceledException) { /* debounced */ }
+                finally
+                {
+                    debouncers.TryRemove(KeyValuePair.Create(uri, newCts));
+                    newCts.Dispose();
+                }
+            }, CancellationToken.None);
         }
 
         private static Diagnostic ToLspDiagnostic(AnalysisDiagnostic diagnostic)

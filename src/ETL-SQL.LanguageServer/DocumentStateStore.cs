@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 namespace ETL_SQL.LSP
 {
@@ -14,6 +15,10 @@ namespace ETL_SQL.LSP
     public class DocumentStateStore
     {
         private readonly ConcurrentDictionary<DocumentUri, DocumentState> _states = new();
+
+        // Stores only parser-level diagnostics so the slow lint pass can append to them
+        // without needing to re-run the full fast parse path.
+        private readonly ConcurrentDictionary<DocumentUri, List<Diagnostic>> _parserDiagnostics = new();
 
         /// <summary>Updates the stored state for a document after a successful parse + analysis cycle.</summary>
         public void SetState(DocumentUri uri, string text, Script script, ILineageTracker lineage)
@@ -41,6 +46,21 @@ namespace ETL_SQL.LSP
         /// <summary>Returns the raw text of a document, or null if the URI is not tracked.</summary>
         public string? GetDocumentText(DocumentUri uri)
             => _states.TryGetValue(uri, out var s) ? s.Text : null;
+
+        /// <summary>Convenience alias for <see cref="GetDocumentText"/> used by the debounced lint path.</summary>
+        public string? GetText(DocumentUri uri) => GetDocumentText(uri);
+
+        /// <summary>Returns the current document state, or null if the URI is not tracked.</summary>
+        public DocumentState? GetState(DocumentUri uri)
+            => _states.TryGetValue(uri, out var s) ? s : null;
+
+        /// <summary>Stores the parser-only diagnostics produced by <c>FastAnalyzeAsync</c>.</summary>
+        public void SetParserDiagnostics(DocumentUri uri, List<Diagnostic> diagnostics)
+            => _parserDiagnostics[uri] = diagnostics;
+
+        /// <summary>Returns the last cached parser diagnostics, or an empty list if none stored yet.</summary>
+        public List<Diagnostic> GetParserDiagnostics(DocumentUri uri)
+            => _parserDiagnostics.TryGetValue(uri, out var d) ? d : new List<Diagnostic>();
 
         private readonly ConcurrentDictionary<string, NotebookContext> _notebookContexts = new();
 
