@@ -321,7 +321,7 @@ public class Lexer
     /// <returns>A list of tokens extracted from the source.</returns>
     public List<Token> Tokenize()
     {
-        var tokens = new List<Token>();
+        var tokens = new List<Token>(Math.Min((_source.Length / 4) + 8, 65_536));
 
         while (_position < _source.Length)
         {
@@ -506,13 +506,11 @@ public class Lexer
                     Advance();
                     if (char.IsDigit(CurrentChar))
                     {
-                        var sb = new StringBuilder("?");
                         while (char.IsDigit(CurrentChar))
                         {
-                            sb.Append(CurrentChar);
                             Advance();
                         }
-                        tokens.Add(new Token(TokenType.PARAMETER, sb.ToString(), startLine, startColumn, _line, _column, startOffset, _position));
+                        tokens.Add(new Token(TokenType.PARAMETER, _source.Substring(startOffset, _position - startOffset), startLine, startColumn, _line, _column, startOffset, _position));
                     }
                     else
                     {
@@ -536,27 +534,22 @@ public class Lexer
 
     private Token ReadIdentifierOrKeyword(int line, int column, int startOffset)
     {
-        var sb = new StringBuilder();
-
         // Temporary table prefix support, variables, and Report-SQL datasets
         if (CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
         {
-            sb.Append(CurrentChar);
             Advance();
             if (CurrentChar == '@')
             {
-                sb.Append(CurrentChar);
                 Advance();
             }
         }
 
         while (char.IsLetterOrDigit(CurrentChar) || CurrentChar == '_')
         {
-            sb.Append(CurrentChar);
             Advance();
         }
 
-        var text = sb.ToString();
+        var text = _source.Substring(startOffset, _position - startOffset);
 
         // Optimization: Categorized lookup
         if (text.Length > 0)
@@ -574,15 +567,14 @@ public class Lexer
 
     private Token ReadNumber(int line, int column, int startOffset)
     {
-        var sb = new StringBuilder();
-
         // Hex literal: 0x... or 0X...
         if (CurrentChar == '0' && (Peek() == 'x' || Peek() == 'X'))
         {
             Advance(); Advance(); // skip "0x"
-            while (IsHexDigit(CurrentChar)) { sb.Append(CurrentChar); Advance(); }
+            var hexStart = _position;
+            while (IsHexDigit(CurrentChar)) Advance();
             // Convert hex string to decimal so the rest of the engine sees a plain number.
-            long hexValue = Convert.ToInt64(sb.ToString(), 16);
+            long hexValue = Convert.ToInt64(_source.Substring(hexStart, _position - hexStart), 16);
             return new Token(TokenType.NUMBER, hexValue.ToString(), line, column, _line, _column, startOffset, _position);
         }
 
@@ -590,11 +582,10 @@ public class Lexer
         while (char.IsDigit(CurrentChar) || (CurrentChar == '.' && !hasDecimal))
         {
             if (CurrentChar == '.') hasDecimal = true;
-            sb.Append(CurrentChar);
             Advance();
         }
 
-        return new Token(TokenType.NUMBER, sb.ToString(), line, column, _line, _column, startOffset, _position);
+        return new Token(TokenType.NUMBER, _source.Substring(startOffset, _position - startOffset), line, column, _line, _column, startOffset, _position);
     }
 
     private static bool IsHexDigit(char c) =>
