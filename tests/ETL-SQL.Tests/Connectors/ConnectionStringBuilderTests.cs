@@ -51,6 +51,7 @@ namespace ETL_SQL.Tests.Connectors
                 { "DATABASE", "TestDB" },
                 { "APPLICATION_INTENT", "READONLY" },
                 { "MULTI_SUBNET_FAILOVER", "TRUE" },
+                { "POOLING", "FALSE" },
                 { "MIN_POOL_SIZE", "10" },
                 { "MAX_POOL_SIZE", "100" },
                 { "CONNECT_TIMEOUT", "60" }
@@ -60,6 +61,7 @@ namespace ETL_SQL.Tests.Connectors
 
             Assert.True(cs.Contains("Application Intent=ReadOnly", StringComparison.OrdinalIgnoreCase), $"Expected 'Application Intent=ReadOnly' in: {cs}");
             Assert.True(cs.Contains("Multi Subnet Failover=True", StringComparison.OrdinalIgnoreCase), $"Expected 'Multi Subnet Failover=True' in: {cs}");
+            Assert.True(cs.Contains("Pooling=False", StringComparison.OrdinalIgnoreCase), $"Expected 'Pooling=False' in: {cs}");
             Assert.True(cs.Contains("Min Pool Size=10", StringComparison.OrdinalIgnoreCase), $"Expected 'Min Pool Size=10' in: {cs}");
             Assert.True(cs.Contains("Max Pool Size=100", StringComparison.OrdinalIgnoreCase), $"Expected 'Max Pool Size=100' in: {cs}");
             Assert.True(cs.Contains("Connect Timeout=60", StringComparison.OrdinalIgnoreCase), $"Expected 'Connect Timeout=60' in: {cs}");
@@ -188,6 +190,28 @@ namespace ETL_SQL.Tests.Connectors
             var cs = ConnectionStringBuilder.Build("SFTP", props);
 
             Assert.Equal("ftp.example.com", cs);
+        }
+
+        [Fact]
+        public void BuildMySql_PoolPressureOptions_CorrectlyBuilds()
+        {
+            var props = new Dictionary<string, string>
+            {
+                { "HOST", "mysqlserver" },
+                { "POOLING", "TRUE" },
+                { "MIN_POOL_SIZE", "0" },
+                { "MAX_POOL_SIZE", "12" },
+                { "CONNECTION_IDLE_TIMEOUT", "45" },
+                { "CONNECTION_LIFETIME", "300" }
+            };
+
+            var cs = ConnectionStringBuilder.Build("MYSQL", props);
+
+            Assert.Contains("Pooling=True", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Minimum Pool Size=0", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Maximum Pool Size=12", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Connection Idle Timeout=45", cs, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Connection Lifetime=300", cs, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]

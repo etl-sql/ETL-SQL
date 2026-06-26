@@ -67,7 +67,7 @@ release begins.
 - [ ] **Priority 4: Remaining Select Materialization Boundaries** — Continue preserving streaming through non-blocking select stages; keep full materialization only where SQL semantics require blocking.
 - [x] **Priority 5: Expanded External Window Spill Coverage** — Added bounded-state and replay implementations for common ranking, offset, value, distribution, cumulative, and rolling `ROWS` windows; documented the compatibility fallback for dynamic and non-`ROWS` frame shapes.
 - [x] **Priority 6: Spill-Aware Table Operators** — Single PIVOT uses a hybrid spill-backed aggregate path, UNPIVOT streams, and MATCH_RECOGNIZE now emits and documents its in-memory threshold warning; chained operators retain the documented compatibility path.
-- [ ] **Priority 7: Datasource Lifecycle and Pool Pressure Controls** — Consolidates datasource footprint and broad fan-out risks through idle disposal, active pool cleanup, and connector pool documentation.
+- [x] **Priority 7: Datasource Lifecycle and Pool Pressure Controls** — Connection declarations can remain fully lazy, provider pool bounds and idle/lifetime controls are exposed and documented, and session/transaction disposal returns active connections through their owning datasource lifecycle.
 - [ ] **Priority 8: Orchestrator Queue Wakeups and HA Validation** — Consolidates queue notification and PostgreSQL HA verification. Middle solution is configurable poll/backoff/jitter; full solution uses provider notifications where available.
 - [x] **Resource Profiling per Execution** — Portal execution jobs now persist rows processed, peak memory, and CPU time for report executions, including remote orchestrator runs surfaced through the job status contract.
 - [x] **Historical Load Profiling** — Operational metrics now expose last-24h hourly execution load buckets plus average execution duration and current queued-job age for schedule-shift planning.
@@ -211,9 +211,11 @@ At small scales, overhead is non-existent:
 
 ### Medium-Scale Perspective (20 Connections / 20 Temp Tables / 20 Visuals / 100 Variables)
 At medium scales, minor overheads begin to surface:
-- [ ] **Datasource Object and Pool Footprint After First Use** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Declaring 20 connections mainly stores long-lived datasource objects and connection strings; most database sockets are opened lazily by connector operations. The medium-scale risk is retained datasource state and provider pool pressure after connections are first queried, not immediate socket allocation at `CREATE CONNECTION`.
+- [x] **Datasource Object and Pool Footprint After First Use** — Datasource objects remain reusable configuration holders; declarations can skip all remote preview access, and provider-owned idle sockets are governed through documented pool bounds and idle/lifetime options.
   - *Priority*: Consolidated under Priority 7.
   - *Solution*: Track last-used datasource activity, dispose idle datasources, and document connector pool behavior.
+  - *Progress*: `CONNECTION_PREVIEW_LIMIT = 0` now bypasses schema and sample-row access entirely, allowing large connection catalogs to remain lazy until first use.
+  - *Progress*: SQL Server now exposes explicit pooling control, and MySQL exposes provider idle-timeout and connection-lifetime controls alongside existing pool-size bounds.
 - [x] **Connection Encryption Overhead During Session Save** — [SqliteSessionMetadataStore.cs:L255](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Execution/SqliteSessionMetadataStore.cs#L255): Connection JSON serialization and protection are now precomputed before opening the SQLite write transaction, then persisted with batched multi-row inserts to reduce lock duration and command churn.
   - *Solution*: Treat as part of the large-scale batch session-save work unless telemetry shows medium-scale regressions.
 - [x] **Visual Query Sequence Delay** — [ManifestBuilder.cs:L93](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Reporting/ManifestBuilder.cs#L93): Manifest generation now builds independent visuals in parallel with a configurable concurrency cap.
@@ -221,7 +223,7 @@ At medium scales, minor overheads begin to surface:
 
 ### Large-Scale Perspective (100 Connections / 100 Temp Tables / 100 Visuals / 10k Variables)
 At large scales, sequential processing, DPAPI loops, and N+1 query patterns trigger significant degradation:
-- [ ] **Connection Pool and File Descriptor Exhaustion After Broad Query Fan-Out** — [Evaluator.cs:L59](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Evaluator.cs#L59): Holding 100 declared datasource objects is not automatically 100 open sockets, but broad query fan-out across many database-backed connections can exhaust provider pools, OS file descriptors, sockets, or target database connection limits.
+- [x] **Connection Pool and File Descriptor Exhaustion After Broad Query Fan-Out** — Broad catalogs can remain unopened until use; SQL Server, PostgreSQL, MySQL, and Oracle expose bounded provider pool controls, while normal and transactional connection disposal follows explicit session lifecycle ownership.
   - *Priority*: Consolidated under Priority 7.
   - *Solution*: Implement aggressive connection pool timeouts, lazy connection resolution (only open connections when first queried), and active pool cleanup.
 - [x] **Heap Copying on Scope Forks** — [VariableScopeManager.cs:L203](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Services/VariableScopeManager.cs#L203): Forked variable scopes now use copy-on-write dictionaries for globals, metadata, and stacked scopes, so parallel branches share parent snapshots and record only local writes. Merging applies only changed global variables, which also prevents stale branch snapshots from overwriting earlier branch results.

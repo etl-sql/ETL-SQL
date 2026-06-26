@@ -187,5 +187,24 @@ namespace ETL_SQL.Tests.Hardening
 
             Assert.Equal(25, eval.PreviewLimit);
         }
+
+        [Fact]
+        public async Task ConnectionPreviewLimit_Zero_DefersDatasourceAccessUntilQuery()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var eval = services.GetRequiredService<Evaluator>();
+
+            await eval.EvaluateStatement(new SetThresholdStatement(
+                ThresholdType.ConnectionPreviewLimit,
+                new LiteralExpression(0, TokenType.NUMBER)));
+            await eval.Evaluate(new Parser(new Lexer("CREATE CONNECTION lazy_conn AS MOCKDB();").Tokenize()).Parse());
+
+            Assert.NotNull(eval.LastResult);
+            Assert.Empty(eval.LastResult.Rows);
+
+            await eval.Evaluate(new Parser(new Lexer("SELECT * FROM lazy_conn.Customers;").Tokenize()).Parse());
+            Assert.NotNull(eval.LastResult);
+            Assert.NotEmpty(eval.LastResult.ColumnNames);
+        }
     }
 }

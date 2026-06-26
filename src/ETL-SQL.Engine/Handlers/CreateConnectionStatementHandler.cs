@@ -180,6 +180,13 @@ public class CreateConnectionStatementHandler(
 
     private async Task<DataTable> BuildConnectionPreviewAsync(IDataSource ds, string connectionName, IExecutionContext context)
     {
+        int previewLimit = context.PreviewLimit ?? _config?.GetValue<int>("Engine:ConnectionPreviewLimit") ?? 10;
+        if (previewLimit <= 0)
+        {
+            _logger.Debug("CREATE CONNECTION: preview disabled for {ConnectionName}; datasource remains unopened.", connectionName);
+            return new DataTable { TotalRowsMatched = 0, ExecutionTimeMs = 0 };
+        }
+
         _logger.Debug("CREATE CONNECTION: Fetching columns for {ConnectionName}...", connectionName);
         context.CancellationToken.ThrowIfCancellationRequested();
         var preview = new DataTable();
@@ -187,7 +194,6 @@ public class CreateConnectionStatementHandler(
         _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, connectionName);
         if (cols.Any())
         {
-            int previewLimit = context.PreviewLimit ?? _config?.GetValue<int>("Engine:ConnectionPreviewLimit") ?? 10;
             preview.SetColumns(cols.Take(previewLimit));
             try
             {

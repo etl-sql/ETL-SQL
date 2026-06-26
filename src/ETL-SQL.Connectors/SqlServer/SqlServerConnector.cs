@@ -37,6 +37,7 @@ namespace ETL_SQL.Connectors.SqlServer
             "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
             "  APPLICATION_INTENT: READONLY or READWRITE.\n" +
             "  MULTI_SUBNET_FAILOVER: Set to TRUE for high-availability clusters.\n" +
+            "  POOLING: Set to TRUE or FALSE to control provider pooling.\n" +
             "  MIN_POOL_SIZE / MAX_POOL_SIZE: Connection pooling bounds.\n" +
             "  POOL_LIFETIME: Maximum duration (seconds) a connection remains in the pool.\n" +
             "  CONNECT_TIMEOUT: Maximum seconds to wait for a connection.\n" +
@@ -54,6 +55,7 @@ namespace ETL_SQL.Connectors.SqlServer
             { "TRUST_SERVER_CERTIFICATE", new[] { "TRUE", "FALSE" } },
             { "APPLICATION_INTENT", new[] { "READONLY", "READWRITE" } },
             { "MULTI_SUBNET_FAILOVER", new[] { "TRUE", "FALSE" } },
+            { "POOLING", new[] { "TRUE", "FALSE" } },
             { "MIN_POOL_SIZE", Array.Empty<string>() },
             { "MAX_POOL_SIZE", Array.Empty<string>() },
             { "POOL_LIFETIME", Array.Empty<string>() },

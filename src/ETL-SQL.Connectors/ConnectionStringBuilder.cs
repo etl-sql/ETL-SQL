@@ -161,6 +161,9 @@ namespace ETL_SQL.Connectors
                 builder.MultiSubnetFailover = failover.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
 
             // Production Options: Pooling
+            if (props.TryGetValue("POOLING", out var pooling) && pooling != null)
+                builder.Pooling = pooling.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+
             if (props.TryGetValue("MIN_POOL_SIZE", out var minPool) && int.TryParse(minPool, out var min))
                 builder.MinPoolSize = min;
 
@@ -236,6 +239,12 @@ namespace ETL_SQL.Connectors
 
             if (props.TryGetValue("MAX_POOL_SIZE", out var maxPool) && uint.TryParse(maxPool, out var max))
                 builder.MaximumPoolSize = max;
+
+            if (props.TryGetValue("CONNECTION_IDLE_TIMEOUT", out var idleTimeout) && uint.TryParse(idleTimeout, out var idle))
+                builder.ConnectionIdleTimeout = idle;
+
+            if (props.TryGetValue("CONNECTION_LIFETIME", out var lifetime) && uint.TryParse(lifetime, out var life))
+                builder.ConnectionLifeTime = life;
 
             // Production Options: Security
             if (props.TryGetValue("SSL_MODE", out var sslMode) && sslMode != null)

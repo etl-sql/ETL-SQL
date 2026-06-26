@@ -36,6 +36,8 @@ namespace ETL_SQL.Connectors.MySql
             "  PORT: Listening port (Default 3306).\n" +
             "  POOLING: Set to TRUE to enable connection pooling.\n" +
             "  MIN_POOL_SIZE / MAX_POOL_SIZE: Connection pooling bounds.\n" +
+            "  CONNECTION_IDLE_TIMEOUT: Seconds before idle pooled connections are removed.\n" +
+            "  CONNECTION_LIFETIME: Maximum age in seconds for pooled connections.\n" +
             "  SSL_MODE: None, Preferred, Required, VerifyCA, VerifyFull.\n" +
             "  ALLOW_PUBLIC_KEY_RETRIEVAL: Set to TRUE to allow public key retrieval.\n" +
             "  ALLOW_USER_VARIABLES: Set to TRUE to allow user-defined variables in queries.\n" +
@@ -54,6 +56,8 @@ namespace ETL_SQL.Connectors.MySql
             { "POOLING", new[] { "TRUE", "FALSE" } },
             { "MIN_POOL_SIZE", Array.Empty<string>() },
             { "MAX_POOL_SIZE", Array.Empty<string>() },
+            { "CONNECTION_IDLE_TIMEOUT", Array.Empty<string>() },
+            { "CONNECTION_LIFETIME", Array.Empty<string>() },
             { "SSL_MODE", new[] { "None", "Preferred", "Required", "VerifyCA", "VerifyFull" } },
             { "ALLOW_PUBLIC_KEY_RETRIEVAL", new[] { "TRUE", "FALSE" } },
             { "ALLOW_USER_VARIABLES", new[] { "TRUE", "FALSE" } },

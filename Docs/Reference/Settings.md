@@ -76,7 +76,7 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:TelemetryEnabled` | boolean | `true` | `SET TELEMETRY = ON\|OFF` | Transmits anonymous execution metrics to help refine optimization. |
 | `Engine:LineageEnabled` | boolean | `true` | `SET LINEAGE = ON\|OFF` | Automatically parses sources/targets to construct lineage maps. |
 | `Engine:AuditAdHocRuns` | boolean | `false` | — | When true, every script launched via local CLI is sent to the audit server. |
-| `Engine:ConnectionPreviewLimit` | integer | `10` | `SET CONNECTION_PREVIEW_LIMIT = n` | Rows previewed when validating connector definitions. |
+| `Engine:ConnectionPreviewLimit` | integer | `10` | `SET CONNECTION_PREVIEW_LIMIT = n` | Rows previewed when validating connector definitions. Set to `0` to skip schema/data access during declaration and keep connections lazy until first use. |
 | `Engine:DefaultHistoryLimit` | integer | `100` | — | Script run histories preserved in database storage. |
 | `Engine:StartOfWeek` | string | `Monday` | `SET WEEK_START_DAY = 'day'` | Start day used by date calculations (e.g. `DATEPART(WEEK, ...)`). |
 | `Engine:ScriptHashPolicy` | string | `Warn` | — | Behavior when running scripts with modified hashes (`Warn`, `Block`, or `Ignore`). |

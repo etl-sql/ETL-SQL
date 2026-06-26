@@ -670,6 +670,8 @@ All diagnostic logging from a connector must go through the injected `ILogger`, 
 | `InMemoryDataSource` reads/writes | Evaluator thread | `SemaphoreSlim(1,1)` used internally |
 | SQL connection pools | .NET pool manages thread safety | No additional synchronization needed |
 
+Datasource objects store connection configuration and normally do not hold an open database socket. Non-transactional operations open a provider connection for the operation and dispose it afterward, returning it to the provider pool. Transactional connections remain session-owned until commit, rollback, replacement/drop, reset, or evaluator disposal. Idle socket pruning therefore belongs to provider pool settings (`MAX_POOL_SIZE` plus connector-specific idle/lifetime options), not an engine timer that disposes reusable datasource definitions.
+
 **Key principle:** An `IDataSource` instance is owned by a single `Evaluator` instance. The evaluator is not shared across concurrent script executions. Therefore, `IDataSource` implementations do not need to be thread-safe at the instance level — the owning evaluator guarantees single-threaded access.
 
 ---

@@ -36,10 +36,14 @@ public class SetThresholdStatementHandler : IStatementHandler
                  s.Type == ThresholdType.ForeachPageSize ||
                  s.Type == ThresholdType.ExternalSortChunkSize ||
                  s.Type == ThresholdType.OperatorMemoryGrant ||
-                 s.Type == ThresholdType.ConnectionPreviewLimit ||
                  s.Type == ThresholdType.MaxMessages) && intVal < 1)
             {
                 throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
+            }
+
+            if (s.Type == ThresholdType.ConnectionPreviewLimit && intVal < 0)
+            {
+                throw new ExecutionException("CONNECTION_PREVIEW_LIMIT must be zero or greater.");
             }
 
             if (s.Type == ThresholdType.MaxSmtpEmailsPerScript && intVal < 0)

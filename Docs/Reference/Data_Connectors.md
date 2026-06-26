@@ -26,6 +26,10 @@ When the connector accepts a primary connection string plus additional settings:
 CREATE CONNECTION <name> AS <type>('<connection_string>', <option>=<value>, ...);
 ```
 
+For scripts that declare many connections, use `SET CONNECTION_PREVIEW_LIMIT = 0` before the declarations. This disables automatic schema and sample-row access, so network connections remain unopened until a query or metadata command first uses them.
+
+For broad fan-out workloads, keep `MIN_POOL_SIZE = 0`, set a per-connection `MAX_POOL_SIZE` that fits the database's total connection budget, and configure the provider's idle/lifetime option where available. Disable `POOLING` only for rarely used connections: repeated queries normally perform better with a small bounded pool. ETL-SQL disposes each non-transactional connection after an operation, returning it to its provider pool; active transaction connections remain owned by the session until commit, rollback, connection replacement/drop, or session disposal.
+
 > [!TIP]
 > All forms produce identical results. Mix them on a per-connection basis; there is no performance difference.
 
@@ -76,6 +80,7 @@ Aliases: `SQL`, `SQLSERVER`
 | `APPLICATION_INTENT` | `READWRITE` or `READONLY` (for AG replicas) | No |
 | `MULTI_SUBNET_FAILOVER` | Optimize failover for multi-subnet clusters (`TRUE`/`FALSE`) | No |
 | `CONNECT_TIMEOUT` | Seconds to wait for a connection (Default: `15`) | No |
+| `POOLING` | Enable provider connection pooling (`TRUE`/`FALSE`) | No |
 | `MIN_POOL_SIZE` | Minimum connections kept in the pool | No |
 | `MAX_POOL_SIZE` | Maximum connections allowed in the pool | No |
 | `POOL_LIFETIME` | Seconds before a pooled connection is recycled | No |
@@ -147,6 +152,8 @@ Native connector for MySQL and MariaDB databases. Supports full SQL pushdown, sc
 | `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
 | `MIN_POOL_SIZE` | Minimum pool size | No |
 | `MAX_POOL_SIZE` | Maximum pool size | No |
+| `CONNECTION_IDLE_TIMEOUT` | Seconds before idle pooled connections are removed | No |
+| `CONNECTION_LIFETIME` | Maximum age in seconds for a pooled connection | No |
 | `TABLE` | Default table context | No |
 
 *Examples:*
