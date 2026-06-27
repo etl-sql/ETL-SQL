@@ -37,8 +37,11 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         _logger.Info($"[SELECT] Executing SelectStatement. Session: {context.SessionId}");
 
         // 1. Handle Pushdown (Optimization: Push simple queries to DB)
-        // GROUP BY ALL is expanded later in EvaluateSelect; skip the early raw-statement pushdown for it.
-        if (statement is SelectStatement selPush && selPush.IntoTable == null && !selPush.GroupByAll)
+        // GROUP BY ALL / ORDER BY ALL / star modifiers are resolved locally in EvaluateSelect;
+        // skip the early raw-statement pushdown for them.
+        if (statement is SelectStatement selPush && selPush.IntoTable == null
+            && !selPush.GroupByAll && !selPush.OrderByAll
+            && !selPush.Columns.Any(c => c.Expression is StarExpression))
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
             {
@@ -154,8 +157,11 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             stmt = stmt with { GroupBy = groupCols, GroupByAll = false };
         }
 
-        // 1. Handle Remote Pushdown (delegate to PushdownEngine)
-        if (stmt.IntoTable == null && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
+        // 1. Handle Remote Pushdown (delegate to PushdownEngine). ORDER BY ALL and star modifiers
+        //    (EXCLUDE/REPLACE/RENAME) are resolved locally below, so they are not pushed down.
+        bool hasStarModifiers = stmt.Columns.Any(c => c.Expression is StarExpression);
+        if (stmt.IntoTable == null && !stmt.OrderByAll && !hasStarModifiers
+            && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
             yield break;
@@ -174,6 +180,12 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
         var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
 
+        // ORDER BY ALL: now that output columns are known, expand to one ORDER BY per column.
+        if (stmt.OrderByAll)
+        {
+            var ob = colNames.Select(n => new OrderByClause(new IdentifierExpression(n), stmt.OrderByAllDescending)).ToList();
+            stmt = stmt with { OrderBy = ob, OrderByAll = false };
+        }
 
         // 4. Strategy Selection
         bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;

@@ -579,13 +579,17 @@ public class Lexer
         }
 
         bool hasDecimal = false;
-        while (char.IsDigit(CurrentChar) || (CurrentChar == '.' && !hasDecimal))
+        // Allow underscores as digit separators between digits (e.g. 1_000_000); they are stripped below.
+        while (char.IsDigit(CurrentChar) || (CurrentChar == '.' && !hasDecimal)
+               || (CurrentChar == '_' && _position > startOffset && char.IsDigit(Peek())))
         {
             if (CurrentChar == '.') hasDecimal = true;
             Advance();
         }
 
-        return new Token(TokenType.NUMBER, _source.Substring(startOffset, _position - startOffset), line, column, _line, _column, startOffset, _position);
+        var raw = _source.Substring(startOffset, _position - startOffset);
+        var value = raw.IndexOf('_') >= 0 ? raw.Replace("_", "") : raw;
+        return new Token(TokenType.NUMBER, value, line, column, _line, _column, startOffset, _position);
     }
 
     private static bool IsHexDigit(char c) =>

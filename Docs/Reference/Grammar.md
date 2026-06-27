@@ -1088,7 +1088,7 @@ Clauses must appear in this syntactic order:
 
 ```sql
 SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
-    <columns>
+    <columns | * [EXCLUDE (cols)] [REPLACE (expr AS col)] [RENAME (col AS new)]>
 [INTO <target>]
 FROM <source> [AS alias]
 [JOIN | LEFT JOIN | RIGHT JOIN | FULL JOIN | CROSS JOIN
@@ -1111,12 +1111,45 @@ FROM <source> [AS alias]
     PATTERN (<pattern>)
     DEFINE <var> AS <condition> [, ...]
 ) AS <alias>]
-[ORDER BY <col | position> [ASC|DESC] [, ...]]
+[ORDER BY ALL | <col | position> [ASC|DESC] [, ...]]
 [OFFSET n ROWS]
 [FETCH NEXT n ROWS ONLY]
 [LIMIT n]
 [FOR JSON AUTO | PATH | RAW [, ROOT('name')] [, INCLUDE_NULL_VALUES] [, WITHOUT_ARRAY_WRAPPER]]
 [FOR XML  AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]];
+```
+
+### 5.1.1 Modern SELECT conveniences
+
+**Star modifiers** — adjust a `*` projection inline (applied in the order `EXCLUDE` → `REPLACE` → `RENAME`):
+```sql
+SELECT * EXCLUDE (password, internal_notes) FROM users;
+SELECT * REPLACE (UPPER(name) AS name) FROM users;      -- keep all columns, swap one expression
+SELECT * RENAME (id AS user_id) FROM users;
+```
+
+**`ORDER BY ALL`** — order by every output column, left to right (optionally `DESC`):
+```sql
+SELECT region, product, total FROM #sales ORDER BY ALL;
+SELECT region, product, total FROM #sales ORDER BY ALL DESC;
+```
+
+**`count()` shorthand** — a zero-argument `COUNT()` is treated as `COUNT(*)`:
+```sql
+SELECT count() FROM #orders;
+```
+
+**Underscore digit separators** — `_` may separate digits in numeric literals:
+```sql
+SELECT 1_000_000 AS one_million;
+```
+
+**Trailing commas** — an optional trailing comma is allowed in `SELECT`, `GROUP BY`, and `ORDER BY` lists (and function arguments):
+```sql
+SELECT region, total,
+FROM #sales
+GROUP BY region,
+ORDER BY region,;
 ```
 
 ### 5.2 `INTO` â€” Write Result to Target

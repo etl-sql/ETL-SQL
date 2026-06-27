@@ -1085,6 +1085,10 @@ Standard clauses available within a `SELECT` statement.
 | `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [Grammar.md](../Docs/Reference/Grammar.md#group-by-all) | [GROUP_BY_ALL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
 | `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `count()` | Shorthand for `COUNT(*)` | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md) | - |

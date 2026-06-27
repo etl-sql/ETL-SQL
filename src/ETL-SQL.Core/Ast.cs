@@ -340,6 +340,9 @@ public sealed record SelectStatement : Statement
     /// <summary>True for <c>GROUP BY ALL</c>. The engine expands this to every non-aggregate, non-window
     /// SELECT expression before execution, after which <see cref="GroupBy"/> holds the concrete list.</summary>
     public bool GroupByAll { get; init; }
+    /// <summary>True for <c>ORDER BY ALL</c>; the engine expands it to every output column once they are known.</summary>
+    public bool OrderByAll { get; init; }
+    public bool OrderByAllDescending { get; init; }
 
     public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)
     {
@@ -1672,6 +1675,27 @@ public sealed record ListExpression : Expression
     public ListExpression(List<Expression> items)
     {
         Items = items;
+    }
+}
+
+/// <summary>
+/// A <c>*</c> projection carrying DuckDB/Snowflake star modifiers: <c>* EXCLUDE (cols)</c>,
+/// <c>* REPLACE (expr AS col)</c>, and <c>* RENAME (col AS new)</c>. Expanded against the source
+/// columns during column expansion. <see cref="Qualifier"/> is set for a qualified <c>t.*</c>.
+/// </summary>
+public sealed record StarExpression : Expression
+{
+    public string? Qualifier { get; }
+    public List<string> Exclude { get; }
+    public List<(string Column, Expression Value)> Replace { get; }
+    public List<(string Column, string NewName)> Rename { get; }
+
+    public StarExpression(string? qualifier, List<string> exclude, List<(string, Expression)> replace, List<(string, string)> rename)
+    {
+        Qualifier = qualifier;
+        Exclude = exclude;
+        Replace = replace;
+        Rename = rename;
     }
 }
 

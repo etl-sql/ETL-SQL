@@ -170,6 +170,7 @@ public static class AstSerializer
         BinaryExpression e => FormatBinary(e),
         LiteralExpression e => FormatLiteral(e),
         IdentifierExpression e => e.Name,
+        StarExpression e => FormatStar(e),
         MemberAccessExpression e => $"{e.Expression.ToSql()}.{e.MemberName}",
         SubqueryExpression e => $"({e.Query.ToSql().TrimEnd(';')})",
         VariableExpression e => e.Name,
@@ -278,7 +279,8 @@ public static class AstSerializer
                            ? $" GROUP BY {string.Join(", ", s.GroupBy.Select(g => g.ToSql()))}"
                            : "";
         var having = s.HavingClause != null ? $" HAVING {s.HavingClause.ToSql()}" : "";
-        var order = s.OrderBy != null && s.OrderBy.Count > 0
+        var order = s.OrderByAll ? $" ORDER BY ALL{(s.OrderByAllDescending ? " DESC" : "")}"
+                     : s.OrderBy != null && s.OrderBy.Count > 0
                            ? $" ORDER BY {string.Join(", ", s.OrderBy.Select(o => o.ToSql()))}" : "";
         var limit = s.LimitCount != null ? $" LIMIT {s.LimitCount.ToSql()}" : "";
         var offset = s.Offset != null ? $" OFFSET {s.Offset.ToSql()} ROWS" : "";
@@ -893,6 +895,15 @@ public static class AstSerializer
     }
 
     // ── Non-AstNode type formatters ──────────────────────────────────────
+
+    private static string FormatStar(StarExpression e)
+    {
+        var sb = new System.Text.StringBuilder(e.Qualifier != null ? $"{e.Qualifier}.*" : "*");
+        if (e.Exclude.Count > 0) sb.Append($" EXCLUDE ({string.Join(", ", e.Exclude)})");
+        if (e.Replace.Count > 0) sb.Append($" REPLACE ({string.Join(", ", e.Replace.Select(r => $"{r.Value.ToSql()} AS {r.Column}"))})");
+        if (e.Rename.Count > 0) sb.Append($" RENAME ({string.Join(", ", e.Rename.Select(r => $"{r.Column} AS {r.NewName}"))})");
+        return sb.ToString();
+    }
 
     private static string FormatJoin(JoinClause join)
     {

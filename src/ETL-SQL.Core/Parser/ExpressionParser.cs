@@ -467,6 +467,7 @@ public partial class ExpressionParser
 
                     while (_parser.Match(TokenType.COMMA))
                     {
+                        if (_parser.Current.Type == TokenType.RPAREN) break; // tolerate trailing comma
                         if (_parser.Current.Type == TokenType.STAR)
                         {
                             var starToken = _parser.Advance();
@@ -477,6 +478,11 @@ public partial class ExpressionParser
                             args.Add(_parser.ParseExpression());
                         }
                     }
+                }
+                // DuckDB count() shorthand: treat a zero-argument COUNT as COUNT(*).
+                if (args.Count == 0 && name.Equals("COUNT", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    args.Add(new IdentifierExpression("*") { Line = t.Line, Column = t.Column });
                 }
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
                 var funcCall = new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn, IsDistinct = isFuncDistinct };

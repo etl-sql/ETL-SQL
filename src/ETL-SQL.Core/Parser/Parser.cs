@@ -386,17 +386,11 @@ public class Parser : IParser
         var columns = new List<SelectColumn>();
         TableReference? intoTable = null;
 
-        if (Match(TokenType.STAR))
+        columns.Add(ParseSelectColumn());
+        while (Match(TokenType.COMMA))
         {
-            columns.Add(new SelectColumn(new IdentifierExpression("*"), null, null));
-        }
-        else
-        {
+            if (AtClauseEnd()) break; // tolerate a trailing comma
             columns.Add(ParseSelectColumn());
-            while (Match(TokenType.COMMA))
-            {
-                columns.Add(ParseSelectColumn());
-            }
         }
 
         if (Match(TokenType.INTO))
@@ -505,6 +499,7 @@ public class Parser : IParser
                 groupBy.Add(ResolvePositionalReference(ParseExpression(), columns, "GROUP BY"));
                 while (Match(TokenType.COMMA))
                 {
+                    if (AtClauseEnd()) break; // tolerate a trailing comma
                     groupBy.Add(ResolvePositionalReference(ParseExpression(), columns, "GROUP BY"));
                 }
             }
@@ -523,27 +518,39 @@ public class Parser : IParser
         }
 
         List<OrderByClause>? orderBy = null;
+        bool orderByAll = false;
+        bool orderByAllDesc = false;
         if (Current.Type == TokenType.ORDER)
         {
             Advance(); // ORDER
             Consume(TokenType.BY, "Expected BY after ORDER");
-            orderBy = new List<OrderByClause>();
-            do
+            if (Current.Type == TokenType.ALL)
             {
-                var orderExpr = ResolvePositionalReference(ParseExpression(), columns, "ORDER BY");
-                bool descending = false;
-                if (Current.Type == TokenType.DESC)
-                {
-                    descending = true;
-                    Advance();
-                }
-                else if (Current.Type == TokenType.ASC)
-                {
-                    Advance(); // optional ASC
-                }
-                orderBy.Add(new OrderByClause(orderExpr, descending));
+                Advance(); // ORDER BY ALL — engine expands to every output column
+                orderByAll = true;
+                if (Match(TokenType.DESC)) orderByAllDesc = true;
+                else Match(TokenType.ASC);
             }
-            while (Match(TokenType.COMMA));
+            else
+            {
+                orderBy = new List<OrderByClause>();
+                do
+                {
+                    var orderExpr = ResolvePositionalReference(ParseExpression(), columns, "ORDER BY");
+                    bool descending = false;
+                    if (Current.Type == TokenType.DESC)
+                    {
+                        descending = true;
+                        Advance();
+                    }
+                    else if (Current.Type == TokenType.ASC)
+                    {
+                        Advance(); // optional ASC
+                    }
+                    orderBy.Add(new OrderByClause(orderExpr, descending));
+                }
+                while (Match(TokenType.COMMA) && !AtClauseEnd());
+            }
         }
 
         Expression? limitCount = null;
@@ -594,7 +601,9 @@ public class Parser : IParser
             Offset = offset,
             GroupingSet = groupingSet,
             QualifyClause = qualifyClause,
-            GroupByAll = isGroupByAll
+            GroupByAll = isGroupByAll,
+            OrderByAll = orderByAll,
+            OrderByAllDescending = orderByAllDesc
         };
 
         if (Match(TokenType.FOR))
@@ -1455,13 +1464,20 @@ public class Parser : IParser
 
     private bool IsKeyword(string value) => _reservedKeywords.Contains(value);
 
+    /// <summary>True when the current token closes a comma-separated clause list (used to tolerate trailing commas).</summary>
+    private bool AtClauseEnd() => Current.Type is TokenType.FROM or TokenType.INTO or TokenType.WHERE
+        or TokenType.GROUP or TokenType.HAVING or TokenType.QUALIFY or TokenType.ORDER
+        or TokenType.LIMIT or TokenType.OFFSET or TokenType.FETCH or TokenType.FOR
+        or TokenType.UNION or TokenType.EXCEPT or TokenType.INTERSECT
+        or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF;
+
     public SelectColumn ParseSelectColumn()
     {
         Expression expr;
         if (Current.Type == TokenType.STAR)
         {
             var t = Advance();
-            expr = new IdentifierExpression("*") { Line = t.Line, Column = t.Column };
+            expr = ParseStarModifiers(null, t);
         }
         else
         {
@@ -1500,6 +1516,77 @@ public class Parser : IParser
             EndColumn = LastTokenEndColumn
         };
         return col;
+    }
+
+    /// <summary>
+    /// Parses optional star modifiers after a consumed <c>*</c>: <c>EXCLUDE (cols)</c>,
+    /// <c>REPLACE (expr AS col)</c>, <c>RENAME (col AS new)</c> (in that order, DuckDB/Snowflake style).
+    /// Returns a plain <c>*</c> identifier when no modifiers are present.
+    /// </summary>
+    private Expression ParseStarModifiers(string? qualifier, Token starToken)
+    {
+        List<string>? exclude = null;
+        List<(string, Expression)>? replace = null;
+        List<(string, string)>? rename = null;
+
+        if (Current.Type == TokenType.EXCLUDE)
+        {
+            Advance();
+            Consume(TokenType.LPAREN, "Expected '(' after EXCLUDE");
+            exclude = new List<string> { ConsumeIdentifier("Expected column name in EXCLUDE").Value };
+            while (Match(TokenType.COMMA))
+            {
+                if (Current.Type == TokenType.RPAREN) break;
+                exclude.Add(ConsumeIdentifier("Expected column name in EXCLUDE").Value);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after EXCLUDE list");
+        }
+
+        if (Current.Type == TokenType.REPLACE)
+        {
+            Advance();
+            Consume(TokenType.LPAREN, "Expected '(' after REPLACE");
+            replace = new List<(string, Expression)>();
+            do
+            {
+                if (Current.Type == TokenType.RPAREN) break;
+                var rexpr = ParseExpression();
+                Consume(TokenType.AS, "Expected 'AS' in REPLACE (expression AS column)");
+                var rcol = ConsumeIdentifier("Expected column name after AS in REPLACE").Value;
+                replace.Add((rcol, rexpr));
+            } while (Match(TokenType.COMMA));
+            Consume(TokenType.RPAREN, "Expected ')' after REPLACE list");
+        }
+
+        if (Current.Type == TokenType.RENAME)
+        {
+            Advance();
+            Consume(TokenType.LPAREN, "Expected '(' after RENAME");
+            rename = new List<(string, string)>();
+            do
+            {
+                if (Current.Type == TokenType.RPAREN) break;
+                var from = ConsumeIdentifier("Expected column name in RENAME").Value;
+                Consume(TokenType.AS, "Expected 'AS' in RENAME (column AS new_name)");
+                var to = ConsumeIdentifier("Expected new name after AS in RENAME").Value;
+                rename.Add((from, to));
+            } while (Match(TokenType.COMMA));
+            Consume(TokenType.RPAREN, "Expected ')' after RENAME list");
+        }
+
+        if (exclude == null && replace == null && rename == null)
+        {
+            var starName = qualifier != null ? $"{qualifier}.*" : "*";
+            return new IdentifierExpression(starName) { Line = starToken.Line, Column = starToken.Column };
+        }
+
+        return new StarExpression(qualifier, exclude ?? new List<string>(), replace ?? new List<(string, Expression)>(), rename ?? new List<(string, string)>())
+        {
+            Line = starToken.Line,
+            Column = starToken.Column,
+            EndLine = LastTokenEndLine,
+            EndColumn = LastTokenEndColumn
+        };
     }
 
     public void ParseMetadataTags(string tagContent, Dictionary<string, string> metadata)

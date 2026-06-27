@@ -40,11 +40,7 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Carry through any explicit `ON <predicate>` (do not assume `ON true`) — LATERAL permits an arbitrary join condition that APPLY does not express.
   - Reuse existing `JoinClause.IsApply` / `JoinEngine`; no new execution path expected.
   - Tests + docs.
-- [ ] **`EXCLUDE` column selector (`SELECT * EXCLUDE (col1, col2)`)** — project all columns except the listed ones (also accept the single-column `EXCLUDE col` form).
-  - Parser/AST: extend the star projection with an exclude list.
-  - Engine: drop excluded columns at projection time after schema resolution.
-  - Build this first — it is the shared primitive for the generic UNPIVOT below.
-  - Tests + docs.
+- [x] **`EXCLUDE` column selector (`SELECT * EXCLUDE (col1, col2)`)** — project all columns except the listed ones. *(Done as part of the `StarExpression` star-modifier work; expanded in `QueryMetadataHelper.ExpandColumns`. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1 + `SELECT_MODIFIERS.md` + Syntax_Index.)*
 - [x] **DuckDB-style PIVOT / UNPIVOT** — add the cleaner DuckDB grammar alongside the existing MSSQL/Oracle `PIVOT`/`UNPIVOT` (keep the old syntax fully working). *(Done: statement forms `PIVOT src ON … [IN …] USING … [GROUP BY …]` and `UNPIVOT src ON … INTO NAME … VALUE …` desugar to `SELECT *` over an operator. New `DuckPivotClause` (multi-col, multi-agg, dynamic discovery via FILTER-ed aggregates) + extended `UnpivotClause` for `COLUMNS(* EXCLUDE (…))`. Existing MSSQL pivot untouched. Tests in `StmtDuckPivotTests`; Grammar §5.8 + PIVOT.md + Syntax_Index. NOTE: a general `SELECT * EXCLUDE` selector remains its own Tier-1 item.)*
   - `PIVOT tbl ON <cols> USING <agg> [GROUP BY <cols>]`, with dynamic value discovery when the `ON` list is not enumerated.
   - `UNPIVOT tbl ON <cols | COLUMNS(* EXCLUDE (id, dept))> INTO NAME <name_col> VALUE <value_col>`.
@@ -60,17 +56,11 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Verify GROUPS peer semantics and frame `EXCLUDE` options.
   - Document supported frame shapes and the large-partition spill fallback (cross-link the external window spill work).
   - Add/round out tests for value-based RANGE and GROUPS.
-- [ ] **SELECT * REPLACE / RENAME** — `SELECT * REPLACE (expr AS col)` to substitute a column's value within the star, and `SELECT * RENAME (col AS new)` to rename. Share the star-modifier path with `EXCLUDE`; clause order is `EXCLUDE` → `REPLACE` → `RENAME`.
-  - Parser/AST star-modifier list, engine projection rewrite, tests.
-  - Docs: Grammar, Syntax_Index, and the `SELECT` help page (`Resources/Help/Keywords/SELECT.md`).
-- [ ] **ORDER BY ALL** — order by every output column left-to-right; companion to GROUP BY ALL.
-  - Parser + binder expansion; tests; docs + help.
-- [ ] **Trailing commas** — tolerate an optional trailing comma after the final item in SELECT, GROUP BY, ORDER BY, function-argument, and VALUES lists.
-  - Parser tolerance only; tests; Grammar note.
-- [ ] **Underscore digit separators (`1_000_000`)** — lexer accepts `_` between digits in integer/decimal literals.
-  - Lexer; tests; Grammar note.
-- [ ] **`count()` shorthand** — treat `count()` as `count(*)`.
-  - Parser/function binding; tests; update `Resources/Help/Functions/COUNT.md`.
+- [x] **SELECT * REPLACE / RENAME** — `SELECT * REPLACE (expr AS col)` and `SELECT * RENAME (col AS new)`. *(Done: `StarExpression` AST node carries EXCLUDE/REPLACE/RENAME (order enforced); expanded in `ExpandColumns`; pushdown skips star modifiers. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1 + `SELECT_MODIFIERS.md` + Syntax_Index.)*
+- [x] **ORDER BY ALL** — order by every output column left-to-right; companion to GROUP BY ALL. *(Done: `OrderByAll`/`OrderByAllDescending` flags parsed; expanded to per-column `OrderByClause` after column expansion in `EvaluateSelect`; pushdown skips it. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1 + `SELECT_MODIFIERS.md` + Syntax_Index.)*
+- [x] **Trailing commas** — tolerate an optional trailing comma in SELECT, GROUP BY, ORDER BY, and function-argument lists. *(Done via `AtClauseEnd()` guard + RPAREN check in arg loop. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1. NOTE: VALUES lists not yet covered.)*
+- [x] **Underscore digit separators (`1_000_000`)** — lexer accepts `_` between digits, stripped from the value. *(Done in `Lexer.ReadNumber`. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1.)*
+- [x] **`count()` shorthand** — treat `count()` as `count(*)`. *(Done: zero-arg COUNT normalized to COUNT(*) in `ExpressionParser`. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1.)*
 - [ ] **UNION [ALL] BY NAME** — set union that aligns inputs by column name instead of position, filling absent columns with NULL.
   - Parser (`BY NAME` modifier on set ops), `SetOperationEngine` name-alignment path; tests; docs + `Resources/Help/Keywords/UNION.md`.
 - [ ] **Idempotent DDL/DML (OR REPLACE / OR IGNORE / BY NAME)** — `CREATE OR REPLACE TABLE|VIEW`, `INSERT OR IGNORE`, `INSERT OR REPLACE`, and `INSERT INTO ... BY NAME` (confirmed missing in the language parser today).
