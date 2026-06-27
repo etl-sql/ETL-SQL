@@ -1096,6 +1096,7 @@ FROM <source> [AS alias]
     [HASH | LOOP | MERGE]          -- join algorithm hint
     ON <condition>]
 [CROSS APPLY | OUTER APPLY (<subquery>) <alias>]
+[[CROSS] JOIN LATERAL | LEFT JOIN LATERAL (<subquery>) <alias> [ON <condition>]]   -- ANSI alias for APPLY
 [WHERE <condition>]
 [GROUP BY ALL | <columns | positions> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
@@ -1252,7 +1253,7 @@ FUZZY JOIN #reference b
 
 > See `Docs/Reference/Standard_Library.md §16` for `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and `NGRAMS/NGRAM_TOKENS` — the building blocks used in `FUZZY JOIN` expressions.
 
-### 5.6 `CROSS APPLY` / `OUTER APPLY`
+### 5.6 `CROSS APPLY` / `OUTER APPLY` (and `LATERAL`)
 ```sql
 SELECT o.OrderId, t.LineItem
 FROM Orders AS o
@@ -1262,6 +1263,29 @@ SELECT o.OrderId, t.LineItem
 FROM Orders AS o
 OUTER APPLY (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
 ```
+
+`LATERAL` is the ANSI/DuckDB/PostgreSQL spelling of the same operator — the right-hand subquery is correlated and may reference the left side:
+
+| `LATERAL` form | Equivalent |
+| :--- | :--- |
+| `CROSS JOIN LATERAL (<subquery>) AS t` | `CROSS APPLY` |
+| `, LATERAL (<subquery>) AS t` (comma form) | `CROSS APPLY` |
+| `[INNER] JOIN LATERAL (<subquery>) AS t ON <cond>` | `CROSS APPLY` + the `ON` predicate |
+| `LEFT [OUTER] JOIN LATERAL (<subquery>) AS t ON <cond>` | `OUTER APPLY` + the `ON` predicate |
+
+```sql
+-- Equivalent to the CROSS APPLY above
+SELECT o.OrderId, t.LineItem
+FROM Orders AS o
+CROSS JOIN LATERAL (SELECT * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
+
+-- OUTER APPLY equivalent; the idiomatic LATERAL outer form uses ON true
+SELECT o.OrderId, t.LineItem
+FROM Orders AS o
+LEFT JOIN LATERAL (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS t ON true;
+```
+
+Unlike `APPLY`, a `LATERAL` join may carry an explicit `ON <condition>`, which is applied as an additional filter over the correlated rows.
 
 `CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `NGRAMS`, and `NGRAM_TOKENS`:
 

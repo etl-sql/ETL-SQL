@@ -417,11 +417,13 @@ public class Parser : IParser
             }
 
             fromTable = ParseTableReference();
-            // SQL-89 comma-separated multi-table FROM (implicit CROSS JOINs)
+            // SQL-89 comma-separated multi-table FROM (implicit CROSS JOINs).
+            // `, LATERAL (<subquery>)` is the comma form of CROSS APPLY.
             while (Current.Type == TokenType.COMMA)
             {
                 Advance();
-                preJoins.Add(new JoinClause("CROSS JOIN", ParseTableReference(), new LiteralExpression(true, TokenType.NUMBER)));
+                var commaJoinType = Match(TokenType.LATERAL) ? "CROSS APPLY" : "CROSS JOIN";
+                preJoins.Add(new JoinClause(commaJoinType, ParseTableReference(), new LiteralExpression(true, TokenType.NUMBER)));
             }
 
             if (parenthesizedFrom)
@@ -1512,6 +1514,19 @@ public class Parser : IParser
             else if (Match(TokenType.APPLY)) { joinType = "CROSS APPLY"; }
             else if (Match(TokenType.JOIN)) { joinType = "INNER"; }
 
+            // LATERAL is the ANSI/DuckDB spelling of APPLY: `JOIN LATERAL`/`CROSS JOIN LATERAL`
+            // behave as CROSS APPLY, `LEFT JOIN LATERAL` as OUTER APPLY. The correlated right side
+            // is parsed identically; an explicit `ON <predicate>` (if present) is carried through.
+            if (Match(TokenType.LATERAL))
+            {
+                joinType = joinType switch
+                {
+                    "LEFT" => "OUTER APPLY",
+                    "INNER" or "CROSS JOIN" => "CROSS APPLY",
+                    _ => throw new SyntaxException($"LATERAL is only supported with [INNER] JOIN, LEFT JOIN, or CROSS JOIN (got '{joinType}').", Current.Line, Current.Column)
+                };
+            }
+
             var joinTable = ParseTableReference();
             Expression? onCondition = null;
             int? keepBest = null;
@@ -1520,8 +1535,14 @@ public class Parser : IParser
                 Consume(TokenType.ON, $"Expected 'ON' after {joinType} JOIN table");
                 onCondition = ParseExpression();
             }
-            else if (joinType == "CROSS JOIN" || joinType.Contains("APPLY"))
+            else if (joinType.Contains("APPLY") && Match(TokenType.ON))
             {
+                // LATERAL (or APPLY) with an explicit join predicate, e.g. `LEFT JOIN LATERAL (...) ON true`.
+                onCondition = ParseExpression();
+            }
+            else
+            {
+                // CROSS JOIN, or APPLY without an explicit predicate.
                 onCondition = new LiteralExpression(true, TokenType.NUMBER);
             }
 

@@ -30,7 +30,7 @@ public static class LanguageMetadata
 
     public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "FULL", "CROSS", "APPLY",
+        "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "FULL", "CROSS", "APPLY", "LATERAL",
         "UNION", "ALL", "EXCEPT", "INTERSECT",
         "FUZZY", "KEEP"
     };

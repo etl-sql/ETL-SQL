@@ -901,7 +901,12 @@ public static class AstSerializer
         if (join.JoinType == "LEFT" && join.Hint != JoinHint.None) return $"LEFT {hintStr}OUTER JOIN {join.Table.ToSql()} ON {join.Condition.ToSql()}";
         if (join.JoinType == "RIGHT" && join.Hint != JoinHint.None) return $"RIGHT {hintStr}OUTER JOIN {join.Table.ToSql()} ON {join.Condition.ToSql()}";
         if (join.JoinType == "FULL" && join.Hint != JoinHint.None) return $"FULL {hintStr}OUTER JOIN {join.Table.ToSql()} ON {join.Condition.ToSql()}";
-        return join.IsApply ? $"{join.JoinType} {join.Table.ToSql()}" : $"{join.JoinType} JOIN {join.Table.ToSql()} ON {join.Condition.ToSql()}";
+        if (join.IsApply)
+        {
+            bool condTrue = join.Condition is LiteralExpression lc && true.Equals(lc.Value);
+            return condTrue ? $"{join.JoinType} {join.Table.ToSql()}" : $"{join.JoinType} {join.Table.ToSql()} ON {join.Condition.ToSql()}";
+        }
+        return $"{join.JoinType} JOIN {join.Table.ToSql()} ON {join.Condition.ToSql()}";
     }
 
     private static string FormatGroupingSet(GroupingSetClause g)

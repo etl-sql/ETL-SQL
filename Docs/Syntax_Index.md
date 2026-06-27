@@ -1047,6 +1047,8 @@ Used in the `FROM` clause to combine rows from multiple sources.
 | `CROSS JOIN` | Type | Cartesian product of both tables |
 | `CROSS APPLY` | Type | Joins table to a table-valued function/subquery |
 | `OUTER APPLY` | Type | Left outer version of CROSS APPLY |
+| `JOIN LATERAL` / `, LATERAL` | Type | ANSI alias for `CROSS APPLY` (correlated subquery) |
+| `LEFT JOIN LATERAL` | Type | ANSI alias for `OUTER APPLY` |
 | `HASH JOIN` | Hint | Forces hash-based join algorithm |
 | `LOOP JOIN` | Hint | Forces nested-loop join algorithm |
 | `FUZZY JOIN` | Hint | Enables similarity-based matching |

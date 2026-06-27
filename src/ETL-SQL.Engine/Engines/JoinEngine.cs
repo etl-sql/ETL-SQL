@@ -328,22 +328,29 @@ public class JoinEngine
     {
         if (join.IsApply)
         {
+            // CROSS/OUTER APPLY (and their LATERAL spellings). The right side is correlated and
+            // evaluated per left row. An explicit ON predicate (e.g. `LEFT JOIN LATERAL ... ON cond`)
+            // is applied as a post-filter; the common `ON true` case short-circuits with no overhead.
+            bool conditionIsTrue = join.Condition is LiteralExpression lit && true.Equals(lit.Value);
             await foreach (var left in leftStream)
             {
                 _context.OuterRowStack.Push(left);
                 try
                 {
                     var rightBatches = _context.ResolveAndApplyOperators(join.Table);
-                    bool hasRight = false;
+                    bool hasMatch = false;
                     await foreach (var rb in rightBatches)
                     {
                         foreach (var rr in rb.Rows)
                         {
-                            hasRight = true;
-                            yield return CombineRows(left, rr);
+                            var combined = CombineRows(left, rr);
+                            if (!conditionIsTrue && !await _context.EvaluateCondition(join.Condition, combined))
+                                continue;
+                            hasMatch = true;
+                            yield return combined;
                         }
                     }
-                    if (!hasRight && join.JoinType.Equals("OUTER APPLY", StringComparison.OrdinalIgnoreCase))
+                    if (!hasMatch && join.JoinType.Equals("OUTER APPLY", StringComparison.OrdinalIgnoreCase))
                     {
                         yield return left.Clone();
                     }
