@@ -1110,6 +1110,8 @@ Operators that transform the shape of a table in the `FROM` clause.
 | :--- | :--- | :--- | :--- | :--- |
 | `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns | [Grammar.md](../Docs/Reference/Grammar.md#58-pivot--unpivot) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
 | `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [Grammar.md](../Docs/Reference/Grammar.md#58-pivot--unpivot) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `PIVOT` (DuckDB) | `PIVOT src ON cols [IN (...)] USING aggs [GROUP BY cols]` | Statement form; dynamic values, multi-col/agg | [Grammar.md](../Docs/Reference/Grammar.md#duckdb-style-statement-form) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
+| `UNPIVOT` (DuckDB) | `UNPIVOT src ON cols\|COLUMNS(* EXCLUDE (...)) INTO NAME n VALUE v` | Statement form; supports `COLUMNS(* EXCLUDE)` | [Grammar.md](../Docs/Reference/Grammar.md#duckdb-style-statement-form) | [PIVOT.md](../src/ETL-SQL.Core/Resources/Help/Keywords/PIVOT.md) |
 | `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [Grammar.md](../Docs/Reference/Grammar.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
 
 ---

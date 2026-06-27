@@ -1346,6 +1346,25 @@ FROM #quarterly_sales
 UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 ```
 
+#### DuckDB-style statement form
+A cleaner statement syntax is available alongside the SQL-standard clause above. It supports **dynamic value discovery** (omit `IN` and the distinct values become columns automatically), **multiple `ON` columns**, **multiple aggregates**, and the **`COLUMNS(* EXCLUDE …)`** selector for UNPIVOT.
+
+```sql
+-- PIVOT <source> ON <cols> [IN (<values>)] USING <agg>(<col>) [AS <name>] [, ...] [GROUP BY <cols>]
+PIVOT #sales ON quarter USING SUM(amount);                       -- dynamic: one column per distinct quarter
+PIVOT #sales ON quarter IN ('Q1','Q2') USING SUM(amount) GROUP BY region;
+PIVOT #sales ON quarter USING SUM(amount) AS total, COUNT(*) AS cnt;   -- columns: Q1_total, Q1_cnt, ...
+
+-- UNPIVOT <source> ON <cols | COLUMNS(* EXCLUDE (<cols>))> INTO NAME <name_col> VALUE <value_col>
+UNPIVOT #sales ON q1, q2, q3 INTO NAME quarter VALUE amount;
+UNPIVOT #sales ON COLUMNS(* EXCLUDE (region, name)) INTO NAME quarter VALUE amount;
+```
+
+Notes:
+- Column naming: with a single unnamed aggregate, output columns are the pivot values (`Q1`, `Q2`); multiple `ON` columns join with `_` (`2000_Q1`); multiple aggregates suffix the aggregate name (`Q1_total`, `Q1_cnt`).
+- Omitting `GROUP BY` groups by every column not consumed by `ON` or the aggregates.
+- `IN (...)` applies to a single `ON` column; use dynamic discovery for multiple `ON` columns.
+
 ### 5.9 `MATCH_RECOGNIZE`
 
 `MATCH_RECOGNIZE` scans an ordered row sequence for named pattern variables. ETL-SQL supports partitioning, ordering, `MEASURES`, `ONE ROW PER MATCH`, `ALL ROWS PER MATCH`, linear `PATTERN` variables, and the `+`, `*`, and `?` quantifiers.

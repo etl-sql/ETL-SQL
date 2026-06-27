@@ -17,6 +17,8 @@ public interface IParser
     Token ConsumeIdentifier(string message);
     Statement ParseStatement();
     Statement ParseQuery();
+    Statement ParseDuckPivotStatement();
+    Statement ParseDuckUnpivotStatement();
     Expression ParseExpression();
     string ParseType();
     TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true);

@@ -502,6 +502,7 @@ public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEv
         foreach (var op in table.TableOperators)
         {
             if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
+            else if (op is DuckPivotClause duckPivot) allRows = await pivotEngine.ApplyDuckPivot(allRows, duckPivot);
             else if (op is UnpivotClause unpivot) allRows = await pivotEngine.ApplyUnpivot(allRows, unpivot);
             else if (op is MatchRecognizeClause matchRecognize) allRows = await matchRecognizeEngine.Apply(allRows, matchRecognize);
         }

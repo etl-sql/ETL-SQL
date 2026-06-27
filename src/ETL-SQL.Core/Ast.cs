@@ -185,12 +185,57 @@ public sealed record UnpivotClause : AstNode
     public string NameColumn { get; }
     public List<string> UnpivotColumns { get; }
     public string? Alias { get; set; }
+    /// <summary>DuckDB <c>ON COLUMNS(* EXCLUDE (...))</c>: unpivot every source column except those in
+    /// <see cref="ExcludeColumns"/> (and the name/value columns), resolved at runtime. When true,
+    /// <see cref="UnpivotColumns"/> is ignored.</summary>
+    public bool AllColumnsExcept { get; init; }
+    public List<string>? ExcludeColumns { get; init; }
 
     public UnpivotClause(string valueColumn, string nameColumn, List<string> unpivotColumns)
     {
         ValueColumn = valueColumn;
         NameColumn = nameColumn;
         UnpivotColumns = unpivotColumns;
+    }
+}
+
+/// <summary>A single aggregate in a DuckDB-style PIVOT <c>USING</c> list, e.g. <c>SUM(amount) AS total</c>.</summary>
+public sealed record PivotAggregate
+{
+    public string Function { get; }
+    /// <summary>Aggregate argument column, or null/"*" for a no-argument aggregate such as <c>COUNT(*)</c>.</summary>
+    public string? Column { get; }
+    public string? Alias { get; }
+
+    public PivotAggregate(string function, string? column, string? alias)
+    {
+        Function = function;
+        Column = column;
+        Alias = alias;
+    }
+}
+
+/// <summary>
+/// DuckDB-style PIVOT table operator: <c>PIVOT src ON &lt;cols&gt; [IN (&lt;values&gt;)] USING &lt;aggs&gt; [GROUP BY &lt;cols&gt;]</c>.
+/// Distinct from the SQL-standard <see cref="PivotClause"/>; supports multiple pivot columns, multiple
+/// aggregates, dynamic value discovery (when <see cref="InValues"/> is null), and an explicit row grouping.
+/// </summary>
+public sealed record DuckPivotClause : AstNode
+{
+    public List<string> OnColumns { get; }
+    /// <summary>Explicit pivot values (single ON column only); null requests runtime discovery of distinct combinations.</summary>
+    public List<Expression>? InValues { get; }
+    public List<PivotAggregate> Aggregates { get; }
+    /// <summary>Explicit grouping (row) columns; null groups by all columns not consumed by ON or the aggregates.</summary>
+    public List<string>? GroupByColumns { get; }
+    public string? Alias { get; set; }
+
+    public DuckPivotClause(List<string> onColumns, List<Expression>? inValues, List<PivotAggregate> aggregates, List<string>? groupByColumns)
+    {
+        OnColumns = onColumns;
+        InValues = inValues;
+        Aggregates = aggregates;
+        GroupByColumns = groupByColumns;
     }
 }
 

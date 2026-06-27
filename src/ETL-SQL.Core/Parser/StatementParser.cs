@@ -218,6 +218,8 @@ public class StatementParser
         }
 
         if (type == TokenType.SELECT) return _parser.ParseQuery();
+        if (type == TokenType.PIVOT) return _parser.ParseDuckPivotStatement();
+        if (type == TokenType.UNPIVOT) return _parser.ParseDuckUnpivotStatement();
 
         if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ExtensionParser.ParseExecute();
 

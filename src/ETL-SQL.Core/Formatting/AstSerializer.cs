@@ -187,7 +187,13 @@ public static class AstSerializer
         SelectColumn n => n.Alias != null ? $"{n.Expression.ToSql()} AS {n.Alias}" : n.Expression.ToSql(),
         TableReference n => FormatTableReference(n),
         PivotClause n => $"PIVOT ({n.AggregateFunction}({n.AggregateColumn}) FOR {n.PivotColumn} IN ({string.Join(", ", n.PivotValues.Select(v => v.ToSql()))}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
-        UnpivotClause n => $"UNPIVOT ({n.ValueColumn} FOR {n.NameColumn} IN ({string.Join(", ", n.UnpivotColumns)}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
+        UnpivotClause n => n.AllColumnsExcept
+            ? $"UNPIVOT ({n.ValueColumn} FOR {n.NameColumn} IN (COLUMNS(* EXCLUDE ({string.Join(", ", n.ExcludeColumns ?? new List<string>())}))))" + (n.Alias != null ? $" AS {n.Alias}" : "")
+            : $"UNPIVOT ({n.ValueColumn} FOR {n.NameColumn} IN ({string.Join(", ", n.UnpivotColumns)}))" + (n.Alias != null ? $" AS {n.Alias}" : ""),
+        DuckPivotClause n => $"PIVOT ON {string.Join(", ", n.OnColumns)}"
+            + (n.InValues != null ? $" IN ({string.Join(", ", n.InValues.Select(v => v.ToSql()))})" : "")
+            + $" USING {string.Join(", ", n.Aggregates.Select(a => $"{a.Function}({a.Column ?? "*"})" + (a.Alias != null ? $" AS {a.Alias}" : "")))}"
+            + (n.GroupByColumns != null ? $" GROUP BY {string.Join(", ", n.GroupByColumns)}" : ""),
         MatchRecognizeClause n => FormatMatchRecognize(n),
         OutputClause n => $"OUTPUT {string.Join(", ", n.Columns.Select(c => c.ToSql()))}{(n.IntoTable != null ? $" INTO {n.IntoTable.ToSql()}" : "")}",
         ForClause n => FormatForClause(n),

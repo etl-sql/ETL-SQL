@@ -1191,6 +1191,113 @@ public class Parser : IParser
         return new UnpivotClause(valCol, nameCol, cols) { Alias = alias };
     }
 
+    private SelectStatement BuildSelectStar(TableReference source, Token start)
+    {
+        var columns = new List<SelectColumn> { new SelectColumn(new IdentifierExpression("*"), null, null) };
+        return new SelectStatement(columns, null, source, new List<JoinClause>(), null)
+        {
+            Line = start.Line,
+            Column = start.Column,
+            EndLine = LastTokenEndLine,
+            EndColumn = LastTokenEndColumn
+        };
+    }
+
+    private PivotAggregate ParsePivotAggregate()
+    {
+        var func = ConsumeIdentifier("Expected aggregate function name in USING").Value;
+        Consume(TokenType.LPAREN, "Expected '(' after aggregate function");
+        string? col = Match(TokenType.STAR) ? "*" : ConsumeIdentifier("Expected aggregate column or '*'").Value;
+        Consume(TokenType.RPAREN, "Expected ')' after aggregate argument");
+        string? alias = null;
+        if (Match(TokenType.AS)) alias = ConsumeIdentifier("Expected alias after AS").Value;
+        return new PivotAggregate(func, col, alias);
+    }
+
+    /// <summary>DuckDB statement form: PIVOT &lt;src&gt; ON &lt;cols&gt; [IN (&lt;vals&gt;)] USING &lt;aggs&gt; [GROUP BY &lt;cols&gt;].</summary>
+    public Statement ParseDuckPivotStatement()
+    {
+        var start = Current;
+        Consume(TokenType.PIVOT, "Expected 'PIVOT'");
+        var source = ParseTableReference();
+        Consume(TokenType.ON, "Expected 'ON' after PIVOT source table");
+
+        var onCols = new List<string> { ConsumeIdentifier("Expected pivot column name after ON").Value };
+        while (Match(TokenType.COMMA)) onCols.Add(ConsumeIdentifier("Expected pivot column name").Value);
+
+        List<Expression>? inValues = null;
+        if (Match(TokenType.IN))
+        {
+            if (onCols.Count > 1)
+                throw new SyntaxException("PIVOT ... IN (...) is only supported with a single ON column; omit IN for dynamic discovery with multiple ON columns.", start.Line, start.Column);
+            Consume(TokenType.LPAREN, "Expected '(' after IN");
+            inValues = new List<Expression> { ParseExpression() };
+            while (Match(TokenType.COMMA)) inValues.Add(ParseExpression());
+            Consume(TokenType.RPAREN, "Expected ')' after pivot values");
+        }
+
+        Consume(TokenType.USING, "Expected 'USING' with one or more aggregates in PIVOT");
+        var aggregates = new List<PivotAggregate> { ParsePivotAggregate() };
+        while (Match(TokenType.COMMA)) aggregates.Add(ParsePivotAggregate());
+
+        List<string>? groupBy = null;
+        if (Match(TokenType.GROUP))
+        {
+            Consume(TokenType.BY, "Expected 'BY' after 'GROUP'");
+            groupBy = new List<string> { ConsumeIdentifier("Expected GROUP BY column").Value };
+            while (Match(TokenType.COMMA)) groupBy.Add(ConsumeIdentifier("Expected GROUP BY column").Value);
+        }
+
+        source.TableOperators.Add(new DuckPivotClause(onCols, inValues, aggregates, groupBy));
+        return BuildSelectStar(source, start);
+    }
+
+    /// <summary>DuckDB statement form: UNPIVOT &lt;src&gt; ON &lt;cols | COLUMNS(* EXCLUDE (...))&gt; INTO NAME &lt;n&gt; VALUE &lt;v&gt;.</summary>
+    public Statement ParseDuckUnpivotStatement()
+    {
+        var start = Current;
+        Consume(TokenType.UNPIVOT, "Expected 'UNPIVOT'");
+        var source = ParseTableReference();
+        Consume(TokenType.ON, "Expected 'ON' after UNPIVOT source table");
+
+        bool allExcept = false;
+        List<string>? excludeCols = null;
+        var onCols = new List<string>();
+        if (Match(TokenType.COLUMNS))
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after COLUMNS");
+            Consume(TokenType.STAR, "Expected '*' in COLUMNS(*)");
+            allExcept = true;
+            excludeCols = new List<string>();
+            if (Match(TokenType.EXCLUDE))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after EXCLUDE");
+                excludeCols.Add(ConsumeIdentifier("Expected excluded column name").Value);
+                while (Match(TokenType.COMMA)) excludeCols.Add(ConsumeIdentifier("Expected excluded column name").Value);
+                Consume(TokenType.RPAREN, "Expected ')' after EXCLUDE list");
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close COLUMNS(...)");
+        }
+        else
+        {
+            onCols.Add(ConsumeIdentifier("Expected column name after ON").Value);
+            while (Match(TokenType.COMMA)) onCols.Add(ConsumeIdentifier("Expected column name").Value);
+        }
+
+        Consume(TokenType.INTO, "Expected 'INTO' in UNPIVOT");
+        ConsumeWord("NAME", "Expected 'NAME' after INTO");
+        var nameCol = ConsumeIdentifier("Expected name column").Value;
+        Consume(TokenType.VALUE, "Expected 'VALUE' after the name column");
+        var valueCol = ConsumeIdentifier("Expected value column").Value;
+
+        source.TableOperators.Add(new UnpivotClause(valueCol, nameCol, onCols)
+        {
+            AllColumnsExcept = allExcept,
+            ExcludeColumns = excludeCols
+        });
+        return BuildSelectStar(source, start);
+    }
+
     private MatchRecognizeClause ParseMatchRecognizeClause()
     {
         var clause = new MatchRecognizeClause();

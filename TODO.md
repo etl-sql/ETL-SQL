@@ -45,7 +45,7 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Engine: drop excluded columns at projection time after schema resolution.
   - Build this first — it is the shared primitive for the generic UNPIVOT below.
   - Tests + docs.
-- [ ] **DuckDB-style PIVOT / UNPIVOT** — add the cleaner DuckDB grammar alongside the existing MSSQL/Oracle `PIVOT`/`UNPIVOT` (keep the old syntax fully working).
+- [x] **DuckDB-style PIVOT / UNPIVOT** — add the cleaner DuckDB grammar alongside the existing MSSQL/Oracle `PIVOT`/`UNPIVOT` (keep the old syntax fully working). *(Done: statement forms `PIVOT src ON … [IN …] USING … [GROUP BY …]` and `UNPIVOT src ON … INTO NAME … VALUE …` desugar to `SELECT *` over an operator. New `DuckPivotClause` (multi-col, multi-agg, dynamic discovery via FILTER-ed aggregates) + extended `UnpivotClause` for `COLUMNS(* EXCLUDE (…))`. Existing MSSQL pivot untouched. Tests in `StmtDuckPivotTests`; Grammar §5.8 + PIVOT.md + Syntax_Index. NOTE: a general `SELECT * EXCLUDE` selector remains its own Tier-1 item.)*
   - `PIVOT tbl ON <cols> USING <agg> [GROUP BY <cols>]`, with dynamic value discovery when the `ON` list is not enumerated.
   - `UNPIVOT tbl ON <cols | COLUMNS(* EXCLUDE (id, dept))> INTO NAME <name_col> VALUE <value_col>`.
   - Depends on the `COLUMNS(* EXCLUDE (...))` selector (reuse the `EXCLUDE` work above).
