@@ -153,6 +153,15 @@ internal static class IdentifierQualifier
                         : new IsNullExpression(inner, isNull.Not);
                 }
 
+            case IsDistinctFromExpression idf:
+                {
+                    var qLeft = QualifyExpression(idf.Left, colToAlias);
+                    var qRight = QualifyExpression(idf.Right, colToAlias);
+                    return ReferenceEquals(qLeft, idf.Left) && ReferenceEquals(qRight, idf.Right)
+                        ? expr
+                        : new IsDistinctFromExpression(qLeft, qRight, idf.Not);
+                }
+
             case LikeExpression like:
                 {
                     var left = QualifyExpression(like.Left, colToAlias);

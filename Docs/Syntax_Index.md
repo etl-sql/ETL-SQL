@@ -1005,6 +1005,7 @@ Used inside `ACTIONS ( ... )` blocks for interactive reports.
 | `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=` | Comparison | Equality and range operators |
 | `AND`, `OR`, `NOT` | Logical | Boolean logic operators |
 | `IS NULL`, `IS NOT NULL` | Nullity | Testing for null values |
+| `IS [NOT] DISTINCT FROM` | Null-safe comparison | Compares treating `NULL` as a value; never returns `NULL` |
 | `LIKE`, `IN`, `BETWEEN`, `EXISTS` | Membership | SQL-style predicate operators |
 | `(` ... `)` | Grouping | Expression and function call grouping |
 | `,` | Separator | Argument and list separator |
@@ -1078,9 +1079,10 @@ Standard clauses available within a `SELECT` statement.
 | `OFFSET n` | Skips first N rows | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](../Docs/Reference/Grammar.md#53-top--limit--offset-fetch) | - |
 | `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](../Docs/Reference/Grammar.md#54-values-table-constructor) | - |
-| `GROUP BY` | Aggregates rows by column values | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [Grammar.md](../Docs/Reference/Grammar.md#group-by-all) | [GROUP_BY_ALL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
 | `HAVING` | Filters aggregated groups | [Grammar.md](../Docs/Reference/Grammar.md) | - |
-| `ORDER BY` | Sorts the final result set | [Grammar.md](../Docs/Reference/Grammar.md) | - |
+| `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `CUBE` | Grouping set extension for all permutations| [Grammar.md](../Docs/Reference/Grammar.md) | - |

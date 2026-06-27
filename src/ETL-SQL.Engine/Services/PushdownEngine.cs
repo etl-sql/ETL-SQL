@@ -73,6 +73,10 @@ public class PushdownEngine(ILogger logger)
         {
             return ContainsLocalOnlyEngineFunctions(nullExpr.Expression);
         }
+        else if (expr is IsDistinctFromExpression idf)
+        {
+            return ContainsLocalOnlyEngineFunctions(idf.Left) || ContainsLocalOnlyEngineFunctions(idf.Right);
+        }
         else if (expr is ListExpression list)
         {
             return list.Items.Any(ContainsLocalOnlyEngineFunctions);

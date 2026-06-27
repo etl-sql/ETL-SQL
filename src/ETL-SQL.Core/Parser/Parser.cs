@@ -447,6 +447,7 @@ public class Parser : IParser
 
         List<Expression>? groupBy = null;
         GroupingSetClause? groupingSet = null;
+        bool isGroupByAll = false;
         if (Match(TokenType.GROUP))
         {
             Consume(TokenType.BY, "Expected 'BY' after 'GROUP'");
@@ -491,13 +492,18 @@ public class Parser : IParser
                 // Collect all distinct expressions from the sets as the plain groupBy for compatibility
                 groupBy = sets.SelectMany(s => s).Distinct().ToList();
             }
+            else if (Current.Type == TokenType.ALL)
+            {
+                Advance(); // GROUP BY ALL — engine expands to all non-aggregate select expressions
+                isGroupByAll = true;
+            }
             else
             {
                 groupBy = new List<Expression>();
-                groupBy.Add(ParseExpression());
+                groupBy.Add(ResolvePositionalReference(ParseExpression(), columns, "GROUP BY"));
                 while (Match(TokenType.COMMA))
                 {
-                    groupBy.Add(ParseExpression());
+                    groupBy.Add(ResolvePositionalReference(ParseExpression(), columns, "GROUP BY"));
                 }
             }
         }
@@ -522,7 +528,7 @@ public class Parser : IParser
             orderBy = new List<OrderByClause>();
             do
             {
-                var orderExpr = ParseExpression();
+                var orderExpr = ResolvePositionalReference(ParseExpression(), columns, "ORDER BY");
                 bool descending = false;
                 if (Current.Type == TokenType.DESC)
                 {
@@ -585,7 +591,8 @@ public class Parser : IParser
             LimitCount = limitCount,
             Offset = offset,
             GroupingSet = groupingSet,
-            QualifyClause = qualifyClause
+            QualifyClause = qualifyClause,
+            GroupByAll = isGroupByAll
         };
 
         if (Match(TokenType.FOR))
@@ -599,6 +606,33 @@ public class Parser : IParser
         }
 
         return selectStmt;
+    }
+
+    /// <summary>
+    /// Resolves a positional reference (a bare integer literal) in GROUP BY / ORDER BY to the
+    /// corresponding expression in the SELECT list (1-based). Non-integer expressions are returned
+    /// unchanged, so <c>GROUP BY 1 + 1</c> remains an arithmetic expression rather than a position.
+    /// </summary>
+    private Expression ResolvePositionalReference(Expression expr, List<SelectColumn> columns, string clause)
+    {
+        if (expr is not LiteralExpression lit || lit.Type != TokenType.NUMBER
+            || lit.Value is not decimal d || d != decimal.Truncate(d))
+        {
+            return expr;
+        }
+
+        if (columns.Any(c => c.Expression is IdentifierExpression star && star.Name == "*"))
+        {
+            throw new SyntaxException($"{clause} positional reference cannot be used when the SELECT list contains '*'.", expr.Line, expr.Column);
+        }
+
+        int ordinal = (int)d;
+        if (ordinal < 1 || ordinal > columns.Count)
+        {
+            throw new SyntaxException($"{clause} position {ordinal} is out of range (1..{columns.Count}).", expr.Line, expr.Column);
+        }
+
+        return columns[ordinal - 1].Expression;
     }
 
     private List<Expression> ParseCommaSeparatedExpressions()

@@ -76,6 +76,11 @@ namespace ETL_SQL.Engine.Planning
                     Collect(isNull.Expression, required);
                     break;
 
+                case IsDistinctFromExpression idf:
+                    Collect(idf.Left, required);
+                    Collect(idf.Right, required);
+                    break;
+
                 case InExpression inExp:
                     Collect(inExp.Left, required);
                     Collect(inExp.Right, required);

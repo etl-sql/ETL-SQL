@@ -260,6 +260,7 @@ public class WindowEngine
             return c.WhenClauses.Any(w => ContainsWindowFunction(w.Condition) || ContainsWindowFunction(w.Result))
                 || ContainsWindowFunction(c.ElseResult);
         if (expr is IsNullExpression isn) return ContainsWindowFunction(isn.Expression);
+        if (expr is IsDistinctFromExpression idf) return ContainsWindowFunction(idf.Left) || ContainsWindowFunction(idf.Right);
         if (expr is InExpression inx) return ContainsWindowFunction(inx.Left) || ContainsWindowFunction(inx.Right);
         if (expr is LikeExpression lk) return ContainsWindowFunction(lk.Left) || ContainsWindowFunction(lk.Pattern);
         return false;
@@ -291,6 +292,7 @@ public class WindowEngine
             return;
         }
         if (expr is IsNullExpression isn) { CollectWindowCallsInner(isn.Expression, result); return; }
+        if (expr is IsDistinctFromExpression idf) { CollectWindowCallsInner(idf.Left, result); CollectWindowCallsInner(idf.Right, result); return; }
         if (expr is InExpression inx) { CollectWindowCallsInner(inx.Left, result); CollectWindowCallsInner(inx.Right, result); return; }
         if (expr is LikeExpression lk) { CollectWindowCallsInner(lk.Left, result); CollectWindowCallsInner(lk.Pattern, result); return; }
     }

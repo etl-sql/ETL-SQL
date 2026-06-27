@@ -175,6 +175,7 @@ public static class AstSerializer
         VariableExpression e => e.Name,
         ListExpression e => "(" + string.Join(", ", e.Items.Select(i => i.ToSql())) + ")",
         IsNullExpression e => $"{e.Expression.ToSql()} IS {(e.Not ? "NOT " : "")}NULL",
+        IsDistinctFromExpression e => $"{e.Left.ToSql()} IS {(e.Not ? "NOT " : "")}DISTINCT FROM {e.Right.ToSql()}",
         InExpression e => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}IN {e.Right.ToSql()}",
         BetweenExpression e => FormatBetween(e),
         LikeExpression e => FormatLike(e),
@@ -266,6 +267,7 @@ public static class AstSerializer
         var joins = s.Joins.Count > 0 ? " " + string.Join(" ", s.Joins.Select(j => j.ToSql())) : "";
         var where = s.WhereClause != null ? $" WHERE {s.WhereClause.ToSql()}" : "";
         var group = s.GroupingSet != null ? $" GROUP BY {s.GroupingSet.ToSql()}"
+                     : s.GroupByAll ? " GROUP BY ALL"
                      : s.GroupBy != null && s.GroupBy.Count > 0
                            ? $" GROUP BY {string.Join(", ", s.GroupBy.Select(g => g.ToSql()))}"
                            : "";

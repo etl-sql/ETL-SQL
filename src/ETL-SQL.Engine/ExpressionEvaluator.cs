@@ -383,6 +383,7 @@ public class ExpressionEvaluator
             BinaryExpression bin => await EvaluateBinary(bin, context, decryptSensitive),
             LikeExpression like => await EvaluateLikeExpr(like, context, decryptSensitive),
             IsNullExpression isNull => await EvaluateIsNull(isNull, context, decryptSensitive),
+            IsDistinctFromExpression idf => await EvaluateIsDistinctFrom(idf, context, decryptSensitive),
             CaseExpression c => await EvaluateCase(c, context, decryptSensitive),
             InExpression inExp => await EvaluateIn(inExp, context, decryptSensitive),
             BetweenExpression bet => await EvaluateBetween(bet, context, decryptSensitive),
@@ -1194,6 +1195,24 @@ public class ExpressionEvaluator
         var val = await EvaluateInternal(isNull.Expression, context, decryptSensitive);
         bool res = val == null || val == DBNull.Value || (val is string s && string.IsNullOrEmpty(s) && _context.VarContext.GetVariable("NULL_AS_EMPTY")?.ToString() == "TRUE");
         return isNull.Not ? !res : res;
+    }
+
+    /// <summary>
+    /// Evaluates a null-safe comparison. <c>IS DISTINCT FROM</c> returns true when the operands differ
+    /// (treating NULL as a value: both NULL = not distinct, exactly one NULL = distinct); <c>IS NOT
+    /// DISTINCT FROM</c> returns its negation (null-safe equality). Never yields NULL.
+    /// </summary>
+    private async ValueTask<object?> EvaluateIsDistinctFrom(IsDistinctFromExpression expr, Row context, bool decryptSensitive = false)
+    {
+        var left = await EvaluateInternal(expr.Left, context, decryptSensitive);
+        var right = await EvaluateInternal(expr.Right, context, decryptSensitive);
+        bool leftNull = left.IsNull();
+        bool rightNull = right.IsNull();
+        bool distinct = (leftNull || rightNull)
+            ? leftNull != rightNull          // exactly one NULL ⇒ distinct; both NULL ⇒ not distinct
+            : !IsSoftEqual(left, right);
+        // Not == true ⇒ IS NOT DISTINCT FROM ⇒ null-safe equality.
+        return expr.Not ? !distinct : distinct;
     }
 
     /// <summary>Evaluates a CASE expression.</summary>

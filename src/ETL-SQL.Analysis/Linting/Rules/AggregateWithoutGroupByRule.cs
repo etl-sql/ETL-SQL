@@ -32,7 +32,7 @@ public class AggregateWithoutGroupByRule : ILintRule
 
         if (statement is SelectStatement select)
         {
-            bool hasGroupBy = (select.GroupBy != null && select.GroupBy.Count > 0) || select.GroupingSet != null;
+            bool hasGroupBy = (select.GroupBy != null && select.GroupBy.Count > 0) || select.GroupingSet != null || select.GroupByAll;
             bool hasAggregates = select.Columns.Any(c => ContainsAggregate(c.Expression)) || ContainsAggregate(select.HavingClause);
             bool allColumnsAreAggregates = select.Columns.All(c => ContainsAggregate(c.Expression));
 
@@ -118,6 +118,7 @@ public class AggregateWithoutGroupByRule : ILintRule
         if (expr is InExpression i) return ContainsAggregate(i.Left) || ContainsAggregate(i.Right);
         if (expr is LikeExpression l) return ContainsAggregate(l.Left) || ContainsAggregate(l.Pattern);
         if (expr is IsNullExpression n) return ContainsAggregate(n.Expression);
+        if (expr is IsDistinctFromExpression idf) return ContainsAggregate(idf.Left) || ContainsAggregate(idf.Right);
         if (expr is SubqueryExpression s) return false; // Aggregate inside subquery doesn't affect outer query's grouping
 
         return false;

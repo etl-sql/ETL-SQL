@@ -260,6 +260,7 @@ namespace ETL_SQL.Engine.Planning
                     || caseExpr.WhenClauses.Any(w => ContainsSubquery(w.Condition) || ContainsSubquery(w.Result))
                     || ContainsSubquery(caseExpr.ElseResult),
                 IsNullExpression isNull => ContainsSubquery(isNull.Expression),
+                IsDistinctFromExpression idf => ContainsSubquery(idf.Left) || ContainsSubquery(idf.Right),
                 MemberAccessExpression mem => ContainsSubquery(mem.Expression),
                 ListExpression list => list.Items.Any(ContainsSubquery),
                 InExpression inExpr => ContainsSubquery(inExpr.Left) || ContainsSubquery(inExpr.Right),

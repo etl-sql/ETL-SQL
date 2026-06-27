@@ -111,6 +111,11 @@ public class SubqueryAnalyzer
         {
             CollectOuterReferences(isNull.Expression, outerRefs);
         }
+        else if (node is IsDistinctFromExpression idf)
+        {
+            CollectOuterReferences(idf.Left, outerRefs);
+            CollectOuterReferences(idf.Right, outerRefs);
+        }
         else if (node is MemberAccessExpression ma)
         {
             CollectOuterReferences(ma.Expression, outerRefs);

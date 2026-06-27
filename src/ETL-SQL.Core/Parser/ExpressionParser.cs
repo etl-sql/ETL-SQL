@@ -149,8 +149,17 @@ public partial class ExpressionParser
                 {
                     not = true;
                 }
-                _parser.Consume(TokenType.NULL, "Expected 'NULL' after IS [NOT]");
-                left = new IsNullExpression(left, not) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                if (_parser.Match(TokenType.DISTINCT))
+                {
+                    _parser.Consume(TokenType.FROM, "Expected 'FROM' after IS [NOT] DISTINCT");
+                    var rightExpr = ParseShift();
+                    left = new IsDistinctFromExpression(left, rightExpr, not) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                else
+                {
+                    _parser.Consume(TokenType.NULL, "Expected 'NULL' or 'DISTINCT FROM' after IS [NOT]");
+                    left = new IsNullExpression(left, not) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
             }
             else if (op == TokenType.IN)
             {

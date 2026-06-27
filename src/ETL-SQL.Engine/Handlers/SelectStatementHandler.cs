@@ -37,7 +37,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         _logger.Info($"[SELECT] Executing SelectStatement. Session: {context.SessionId}");
 
         // 1. Handle Pushdown (Optimization: Push simple queries to DB)
-        if (statement is SelectStatement selPush && selPush.IntoTable == null)
+        // GROUP BY ALL is expanded later in EvaluateSelect; skip the early raw-statement pushdown for it.
+        if (statement is SelectStatement selPush && selPush.IntoTable == null && !selPush.GroupByAll)
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
             {
@@ -140,6 +141,18 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
         var metadataHelper = new QueryMetadataHelper(_logger);
         var streamingEngine = new StreamingQueryEngine(context, _logger);
+
+        // 0. Expand GROUP BY ALL to the concrete set of non-aggregate, non-window SELECT expressions
+        //    so every downstream path (pushdown, routing, aggregation) sees a normal GROUP BY list.
+        if (stmt.GroupByAll)
+        {
+            var groupCols = stmt.Columns
+                .Where(c => !(c.Expression is IdentifierExpression star && star.Name == "*"))
+                .Where(c => !aggregateEngine.IsAggregate(c.Expression) && !windowEngine.IsWindowFunction(c.Expression))
+                .Select(c => c.Expression)
+                .ToList();
+            stmt = stmt with { GroupBy = groupCols, GroupByAll = false };
+        }
 
         // 1. Handle Remote Pushdown (delegate to PushdownEngine)
         if (stmt.IntoTable == null && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))

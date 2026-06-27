@@ -292,6 +292,9 @@ public sealed record SelectStatement : Statement
     public ForClause? ForClause { get; init; }
     public Expression? QualifyClause { get; init; }
     public bool IsRecursive { get; init; }
+    /// <summary>True for <c>GROUP BY ALL</c>. The engine expands this to every non-aggregate, non-window
+    /// SELECT expression before execution, after which <see cref="GroupBy"/> holds the concrete list.</summary>
+    public bool GroupByAll { get; init; }
 
     public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)
     {
@@ -1636,6 +1639,27 @@ public sealed record IsNullExpression : Expression
     {
         Expression = expression;
         Not = isNot;
+    }
+}
+
+/// <summary>
+/// Null-safe comparison. <c>a IS DISTINCT FROM b</c> treats NULL as an ordinary comparable value:
+/// it is true when the operands differ (including exactly one being NULL) and false when they are
+/// equal or both NULL. When <see cref="Not"/> is true the expression is <c>a IS NOT DISTINCT FROM b</c>
+/// (null-safe equality), the logical negation. Never yields NULL.
+/// </summary>
+public sealed record IsDistinctFromExpression : Expression
+{
+    public Expression Left { get; }
+    public Expression Right { get; }
+    /// <summary>True for <c>IS NOT DISTINCT FROM</c> (null-safe equals); false for <c>IS DISTINCT FROM</c> (null-safe not-equals).</summary>
+    public bool Not { get; }
+
+    public IsDistinctFromExpression(Expression left, Expression right, bool not)
+    {
+        Left = left;
+        Right = right;
+        Not = not;
     }
 }
 

@@ -1097,7 +1097,7 @@ FROM <source> [AS alias]
     ON <condition>]
 [CROSS APPLY | OUTER APPLY (<subquery>) <alias>]
 [WHERE <condition>]
-[GROUP BY <columns> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
+[GROUP BY ALL | <columns | positions> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
 [QUALIFY <condition>]
 [PIVOT  (<agg> FOR <col> IN (<vals>)) AS <alias>]
@@ -1110,7 +1110,7 @@ FROM <source> [AS alias]
     PATTERN (<pattern>)
     DEFINE <var> AS <condition> [, ...]
 ) AS <alias>]
-[ORDER BY <col> [ASC|DESC] [, ...]]
+[ORDER BY <col | position> [ASC|DESC] [, ...]]
 [OFFSET n ROWS]
 [FETCH NEXT n ROWS ONLY]
 [LIMIT n]
@@ -1291,6 +1291,24 @@ GROUP BY CUBE(Region, Product);
 SELECT Region, Product, SUM(Amount) AS Total
 FROM #sales
 GROUP BY GROUPING SETS((Region, Product), (Region), ());
+```
+
+#### `GROUP BY ALL`
+Groups by **every** SELECT expression that does not contain an aggregate (or window function) — no need to restate the non-aggregated columns:
+```sql
+-- Equivalent to GROUP BY Region, Product
+SELECT Region, Product, SUM(Amount) AS Total
+FROM #sales
+GROUP BY ALL;
+```
+
+#### Positional references (`GROUP BY` / `ORDER BY`)
+A bare integer refers to the Nth item in the SELECT list (1-based). A non-trivial expression such as `1 + 1` is **not** treated as a position. Positional references are rejected when the SELECT list contains `*`.
+```sql
+SELECT Region, SUM(Amount) AS Total
+FROM #sales
+GROUP BY 1        -- group by Region
+ORDER BY 2 DESC;  -- order by Total
 ```
 
 ### 5.8 `PIVOT` / `UNPIVOT`
@@ -1896,7 +1914,7 @@ ROLLBACK;            -- or ROLLBACK TRAN
 `AND`, `OR`, `NOT`
 
 ### 14.3 Comparison Operators
-`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`
+`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`
 
 #### `BETWEEN`
 Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).
@@ -1905,6 +1923,29 @@ Checks if a value is within an inclusive range (equivalent to `val >= start AND 
 SELECT * FROM #audit WHERE event_date BETWEEN '2024-01-01' AND '2024-06-30';
 SELECT * FROM #data WHERE id NOT BETWEEN @min AND @max;
 ```
+
+#### `IS [NOT] DISTINCT FROM`
+Null-safe comparison that treats `NULL` as an ordinary comparable value rather than producing `UNKNOWN`. Unlike `=`/`<>`, it never yields `NULL`.
+
+- `a IS DISTINCT FROM b` — `TRUE` when the operands differ, **including** when exactly one is `NULL`; `FALSE` when they are equal or **both** `NULL`.
+- `a IS NOT DISTINCT FROM b` — the logical negation: a null-safe equality (`NULL IS NOT DISTINCT FROM NULL` is `TRUE`).
+
+```sql
+-- Find rows whose value changed, counting NULL <-> value transitions as changes
+SELECT id FROM #staging s
+JOIN #target t ON s.id = t.id
+WHERE s.value IS DISTINCT FROM t.value;
+
+-- Null-safe equality (matches NULL rows, unlike `col = @p`)
+SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
+```
+
+| `a` | `b` | `a IS DISTINCT FROM b` | `a IS NOT DISTINCT FROM b` |
+| :-- | :-- | :--: | :--: |
+| `1` | `1` | `FALSE` | `TRUE` |
+| `1` | `2` | `TRUE` | `FALSE` |
+| `1` | `NULL` | `TRUE` | `FALSE` |
+| `NULL` | `NULL` | `FALSE` | `TRUE` |
 
 ### 14.4 Temporal Expressions
 

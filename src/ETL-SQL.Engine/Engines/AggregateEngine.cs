@@ -348,6 +348,7 @@ public class AggregateEngine
             return IsAggregate(c.ElseResult);
         }
         if (expr is IsNullExpression isnull) return IsAggregate(isnull.Expression);
+        if (expr is IsDistinctFromExpression idf) return IsAggregate(idf.Left) || IsAggregate(idf.Right);
         if (expr is InExpression inExpr)
         {
             if (IsAggregate(inExpr.Left)) return true;
@@ -415,6 +416,7 @@ public class AggregateEngine
             if (c.ElseResult != null) CollectAggregates(c.ElseResult, aggs);
         }
         else if (expr is IsNullExpression isnull) CollectAggregates(isnull.Expression, aggs);
+        else if (expr is IsDistinctFromExpression idf) { CollectAggregates(idf.Left, aggs); CollectAggregates(idf.Right, aggs); }
         else if (expr is InExpression inExpr)
         {
             CollectAggregates(inExpr.Left, aggs);
