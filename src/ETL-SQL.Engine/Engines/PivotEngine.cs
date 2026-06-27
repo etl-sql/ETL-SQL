@@ -167,10 +167,20 @@ public class PivotEngine
             .ToList();
 
         // Row (grouping) columns: explicit GROUP BY, else all columns not consumed by ON or the aggregates.
-        List<string> groupingCols = pivot.GroupByColumns ?? rows[0].Columns.Keys
+        List<string> rawGroupingCols = pivot.GroupByColumns ?? rows[0].Columns.Keys
             .Where(c => !pivot.OnColumns.Any(on => IsMatch(c, on) || c.Equals(on, StringComparison.OrdinalIgnoreCase)))
             .Where(c => !aggCols.Any(ac => IsMatch(c, ac) || c.Equals(ac, StringComparison.OrdinalIgnoreCase)))
             .ToList();
+
+        // Dedupe prefixed/unprefixed pairs (e.g. "t.region" vs "region"), preferring unprefixed.
+        var groupingCols = new List<string>();
+        var seenBase = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in rawGroupingCols.OrderBy(k => k.Contains('.') ? 1 : 0))
+        {
+            var bn = c.Contains('.') ? c.Split('.').Last() : c;
+            if (seenBase.Add(bn)) groupingCols.Add(c);
+        }
+        static string CleanName(string c) => c.Contains('.') ? c.Split('.').Last() : c;
 
         // Pivot value combinations: explicit IN list (single ON column) or distinct combinations from data.
         List<List<object?>> combos;
@@ -219,7 +229,20 @@ public class PivotEngine
             }
         }
 
-        return await _aggregateEngine.ApplyAggregation(rows.ToAsyncEnumerable(), groupByExprs, finalColumns, colNames);
+        var aggregated = await _aggregateEngine.ApplyAggregation(rows.ToAsyncEnumerable(), groupByExprs, finalColumns, colNames);
+
+        // Final projection: expose only the declared output columns with clean (unprefixed) grouping
+        // names, dropping the aggregate engine's AGG_* intermediate columns.
+        var pivotOutNames = colNames.Skip(groupingCols.Count).ToList();
+        var projected = new List<Row>(aggregated.Count);
+        foreach (var r in aggregated)
+        {
+            var nr = new Row();
+            foreach (var g in groupingCols) nr[CleanName(g)] = r[g];
+            foreach (var pn in pivotOutNames) nr[pn] = r[pn];
+            projected.Add(nr);
+        }
+        return projected;
     }
 
     private static int CompareCombo(List<object?>? a, List<object?>? b)
