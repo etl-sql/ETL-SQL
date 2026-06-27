@@ -34,7 +34,9 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
 
 ## Current Sprint Candidate
 
-No active sprint is selected. Promote the next actionable backlog phase into `TODO.md` when ready.
+The v0.13.0 stabilization and performance sprint is complete. No active sprint is selected.
+Promote the next actionable backlog phase into `TODO.md` only when implementation is intentionally scheduled.
+Data stewardship and debugger work remain unscheduled.
 
 ---
 
