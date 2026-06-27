@@ -121,33 +121,39 @@ namespace ETL_SQL.Tests.Connectors
         public async Task TestSecureConnections()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            string csv = "secure_test.csv";
-            string encCsv = "secure_test_enc.csv";
-            string zipCsv = "secure_test.zip";
+            string suffix = Guid.NewGuid().ToString("N");
+            string csv = $"secure_test_{suffix}.csv";
+            string encCsv = $"secure_test_{suffix}_enc.csv";
+            string zipCsv = $"secure_test_{suffix}.zip";
 
-            await File.WriteAllTextAsync(csv, "id,val\n1,secret");
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION RawCsv AS FLATFILE('{csv}');").TokenizeToScript());
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv AS FLATFILE('{encCsv}', ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
+            try
+            {
+                await File.WriteAllTextAsync(csv, "id,val\n1,secret");
+                await eval.Evaluate(new Lexer($"CREATE CONNECTION RawCsv AS FLATFILE('{csv}');").TokenizeToScript());
+                await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv AS FLATFILE('{encCsv}', ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
 
-            await eval.Evaluate(new Lexer("INSERT INTO EncryptedCsv SELECT * FROM RawCsv;").TokenizeToScript());
-            Assert.True(File.Exists(encCsv), "Encrypted file not created");
+                await eval.Evaluate(new Lexer("INSERT INTO EncryptedCsv SELECT * FROM RawCsv;").TokenizeToScript());
+                Assert.True(File.Exists(encCsv), "Encrypted file not created");
 
-            string rawContent = await File.ReadAllTextAsync(encCsv);
-            Assert.DoesNotContain("secret", rawContent);
+                string rawContent = await File.ReadAllTextAsync(encCsv);
+                Assert.DoesNotContain("secret", rawContent);
 
-            await eval.Evaluate(new Lexer("SELECT * FROM EncryptedCsv;").TokenizeToScript());
-            Assert.Equal("secret", eval.LastResult?.Rows[0]["val"]?.ToString());
+                await eval.Evaluate(new Lexer("SELECT * FROM EncryptedCsv;").TokenizeToScript());
+                Assert.Equal("secret", eval.LastResult?.Rows[0]["val"]?.ToString());
 
-            await eval.Evaluate(new Lexer($"CREATE CONNECTION CompressedCsv AS FLATFILE('{zipCsv}', COMPRESS='ON');").TokenizeToScript());
-            await eval.Evaluate(new Lexer("INSERT INTO CompressedCsv SELECT * FROM RawCsv;").TokenizeToScript());
-            Assert.True(File.Exists(zipCsv), "Compressed file not created");
+                await eval.Evaluate(new Lexer($"CREATE CONNECTION CompressedCsv AS FLATFILE('{zipCsv}', COMPRESS='ON');").TokenizeToScript());
+                await eval.Evaluate(new Lexer("INSERT INTO CompressedCsv SELECT * FROM RawCsv;").TokenizeToScript());
+                Assert.True(File.Exists(zipCsv), "Compressed file not created");
 
-            await eval.Evaluate(new Lexer("SELECT * FROM CompressedCsv;").TokenizeToScript());
-            Assert.Equal("secret", eval.LastResult?.Rows[0]["val"]?.ToString());
-
-            File.Delete(csv);
-            File.Delete(encCsv);
-            File.Delete(zipCsv);
+                await eval.Evaluate(new Lexer("SELECT * FROM CompressedCsv;").TokenizeToScript());
+                Assert.Equal("secret", eval.LastResult?.Rows[0]["val"]?.ToString());
+            }
+            finally
+            {
+                File.Delete(csv);
+                File.Delete(encCsv);
+                File.Delete(zipCsv);
+            }
         }
     }
 }

@@ -675,7 +675,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         {
             var reports = await db.Reports
                 .Where(value => interruptedReportIds.Contains(value.Id)
-                    && value.LastRefreshStatus == "Running")
+                    && (value.LastRefreshStatus == "Running" || value.LastRefreshStatus == null))
                 .ToListAsync(cancellationToken);
             foreach (var report in reports)
             {

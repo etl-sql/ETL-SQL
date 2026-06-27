@@ -23,8 +23,14 @@ public class SelectPipelineBenchmarks
     private Evaluator _evaluator = null!;
     private Script _externalAggregateLimitScript = null!;
     private Script _externalAggregateOrderLimitScript = null!;
+    private Script _externalAggregateFullOrderScript = null!;
     private Script _externalWindowQualifyLimitScript = null!;
     private Script _externalWindowRunningStateScript = null!;
+    private Script _joinAggregateScript = null!;
+    private Script _joinWindowScript = null!;
+    private Script _highCardinalityDistinctScript = null!;
+    private Script _topPercentScript = null!;
+    private Script _withTiesScript = null!;
 
     public SelectPipelineBenchmarks() => _rowCount = 50_000;
     public SelectPipelineBenchmarks(int rowCount) => _rowCount = rowCount;
@@ -62,11 +68,30 @@ public class SelectPipelineBenchmarks
         seed.Statements.Add(insert);
         await _evaluator.Evaluate(seed);
 
+        await Execute("CREATE TABLE #groups (Grp INT, Label VARCHAR);");
+        var lookupValues = new List<List<Expression>>(100);
+        for (var i = 0; i < 100; i++)
+            lookupValues.Add(new List<Expression>
+            {
+                new LiteralExpression(i, TokenType.NUMBER),
+                new LiteralExpression($"Group-{i}", TokenType.STRING)
+            });
+        var lookupInsert = new InsertStatement(
+            new TableReference("#groups"),
+            new List<string> { "Grp", "Label" },
+            lookupValues);
+        var lookupSeed = new Script();
+        lookupSeed.Statements.Add(lookupInsert);
+        await _evaluator.Evaluate(lookupSeed);
+
         _externalAggregateLimitScript = Parse(
             "SELECT Grp, SUM(Val) AS Total FROM #pipeline GROUP BY Grp LIMIT 5;");
 
         _externalAggregateOrderLimitScript = Parse(
             "SELECT Grp, SUM(Val) AS Total FROM #pipeline GROUP BY Grp ORDER BY Total DESC LIMIT 5;");
+
+        _externalAggregateFullOrderScript = Parse(
+            "SELECT Grp, SUM(Val) AS Total FROM #pipeline GROUP BY Grp ORDER BY Total DESC;");
 
         _externalWindowQualifyLimitScript = Parse(@"
             SELECT ID, Grp, Val,
@@ -85,6 +110,24 @@ public class SelectPipelineBenchmarks
                    LAG(Val, 2, -1) OVER (PARTITION BY Grp ORDER BY ID) AS PreviousTwo
             FROM #pipeline
             LIMIT 100;");
+
+        _joinAggregateScript = Parse(@"
+            SELECT g.Label, SUM(p.Val) AS Total
+            FROM #pipeline p JOIN #groups g ON p.Grp = g.Grp
+            GROUP BY g.Label ORDER BY Total DESC;");
+
+        _joinWindowScript = Parse(@"
+            SELECT p.ID, g.Label, p.Val,
+                   ROW_NUMBER() OVER (PARTITION BY g.Label ORDER BY p.Val DESC) AS rn
+            FROM #pipeline p JOIN #groups g ON p.Grp = g.Grp
+            QUALIFY rn <= 2;");
+
+        _highCardinalityDistinctScript = Parse(
+            "SELECT DISTINCT ID, Val FROM #pipeline ORDER BY ID DESC;");
+        _topPercentScript = Parse(
+            "SELECT TOP 10 PERCENT ID, Val FROM #pipeline ORDER BY Val DESC, ID;");
+        _withTiesScript = Parse(
+            "SELECT TOP 100 WITH TIES ID, Val FROM #pipeline ORDER BY Val DESC;");
     }
 
     [Benchmark(Description = "ExternalAggregateLimit — spilled GROUP BY through LIMIT")]
@@ -93,11 +136,29 @@ public class SelectPipelineBenchmarks
     [Benchmark(Description = "ExternalAggregateOrderLimit — spilled GROUP BY through Top-N")]
     public async Task ExternalAggregateOrderLimit() => await _evaluator.Evaluate(_externalAggregateOrderLimitScript);
 
+    [Benchmark(Description = "ExternalAggregateFullOrder — spilled GROUP BY streams into external sort")]
+    public async Task ExternalAggregateFullOrder() => await _evaluator.Evaluate(_externalAggregateFullOrderScript);
+
     [Benchmark(Description = "ExternalWindowQualifyLimit — spilled window through QUALIFY and LIMIT")]
     public async Task ExternalWindowQualifyLimit() => await _evaluator.Evaluate(_externalWindowQualifyLimitScript);
 
     [Benchmark(Description = "ExternalWindowRunningState — cumulative aggregate and bounded LAG")]
     public async Task ExternalWindowRunningState() => await _evaluator.Evaluate(_externalWindowRunningStateScript);
+
+    [Benchmark(Description = "JoinAggregate — streaming join into external aggregate")]
+    public async Task JoinAggregate() => await _evaluator.Evaluate(_joinAggregateScript);
+
+    [Benchmark(Description = "JoinWindow — streaming join into external window")]
+    public async Task JoinWindow() => await _evaluator.Evaluate(_joinWindowScript);
+
+    [Benchmark(Description = "HighCardinalityDistinct — projected hash partitions then sort")]
+    public async Task HighCardinalityDistinct() => await _evaluator.Evaluate(_highCardinalityDistinctScript);
+
+    [Benchmark(Description = "TopPercent — external sort count/replay")]
+    public async Task TopPercent() => await _evaluator.Evaluate(_topPercentScript);
+
+    [Benchmark(Description = "WithTies — external sort boundary-key streaming")]
+    public async Task WithTies() => await _evaluator.Evaluate(_withTiesScript);
 
     [GlobalCleanup]
     public void ReportExtraMetrics()

@@ -95,6 +95,11 @@ Configures concurrency limits, memory floors, and polling intervals for job exec
 | Key | Type | Default | Ad-Hoc SET Command | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `Orchestration:JobThrottle:MaxConcurrentJobs` | integer | `0` | — | Max concurrent scheduled jobs. `0` resolves dynamically to logical core count. |
+| `Orchestration:JobThrottle:PollInitialDelayMs` | integer | `100` | — | Initial delay before retrying a saturated cross-process throttle slot. |
+| `Orchestration:JobThrottle:PollMaxDelayMs` | integer | `2000` | — | Maximum throttle retry delay after exponential backoff. |
+| `Orchestration:JobThrottle:PollJitterRatio` | number | `0.2` | — | Symmetric jitter applied to throttle retries to prevent synchronized database polling. |
+| `Orchestration:JobThrottle:SlotLeaseSeconds` | integer | `60` | — | Expiry for an unrenewed throttle slot owned by another HA node. |
+| `Orchestration:JobThrottle:SlotHeartbeatSeconds` | integer | `20` | — | Renewal interval for an active cross-node throttle slot. Clamped below half the lease. |
 | `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | integer | `2048` | — | Memory floor threshold for scheduling new background tasks (2GB). |
 | `Orchestration:ResourceManagement:MaxStreamingCursors` | integer | `50` | — | Max open active cursors across all jobs. |
 | `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | integer | `600` | — | Duration jobs will wait in queue for RAM to free up before timing out. |

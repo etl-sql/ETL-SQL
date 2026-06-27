@@ -2,7 +2,11 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Storage;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -25,6 +29,29 @@ namespace ETL_SQL.Tests.Orchestration
 
         private RelationalJobHistoryStore NewStore() =>
             new(new NpgsqlOrchestratorDialect(_pg.GetConnectionString()));
+
+        private JobThrottle NewThrottle()
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Orchestrator:Database:Provider"] = "Postgres",
+                    ["Orchestrator:Database:ConnectionString"] = _pg.GetConnectionString()
+                })
+                .Build();
+            return new JobThrottle(
+                Options.Create(new JobThrottleOptions
+                {
+                    MaxConcurrentJobs = 1,
+                    PollInitialDelayMs = 20,
+                    PollMaxDelayMs = 50,
+                    PollJitterRatio = 0,
+                    SlotLeaseSeconds = 2,
+                    SlotHeartbeatSeconds = 1
+                }),
+                NullLogger<JobThrottle>.Instance,
+                configuration);
+        }
 
         private static JobDefinition Job(string name, bool enabled = true) =>
             new(name, "RUN SCRIPT 'x.etlsql';", 1, "DAY", "06:00", null, null, enabled);
@@ -76,6 +103,49 @@ namespace ETL_SQL.Tests.Orchestration
 
             await store.ReleaseJobLeaseAsync("lease-job", "owner-A");
             Assert.True(await store.TryAcquireJobLeaseAsync("lease-job", "owner-B", TimeSpan.FromMinutes(5)));
+        }
+
+        [Fact]
+        public async Task JobThrottle_CoordinatesAcrossPostgresInstances()
+        {
+            using var firstThrottle = NewThrottle();
+            using var secondThrottle = NewThrottle();
+            using var firstSlot = await firstThrottle.AcquireAsync("first");
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var secondAcquire = secondThrottle.AcquireAsync("second", timeout.Token);
+            await Task.Delay(2500, timeout.Token);
+            Assert.False(secondAcquire.IsCompleted);
+
+            firstSlot.Dispose();
+            using var secondSlot = await secondAcquire;
+            Assert.Equal(1, secondThrottle.GetMetrics().ActiveJobs);
+        }
+
+        [Fact]
+        public async Task JobThrottle_ReclaimsExpiredRemotePostgresSlot()
+        {
+            using (var initializer = NewThrottle())
+            using (var slot = await initializer.AcquireAsync("initialize"))
+            {
+            }
+            await Task.Delay(150);
+
+            await using (var connection = new Npgsql.NpgsqlConnection(_pg.GetConnectionString()))
+            {
+                await connection.OpenAsync();
+                await using var command = connection.CreateCommand();
+                command.CommandText = @"
+                    INSERT INTO ThrottleSlots (ProcessId, JobName, AcquiredAt, MachineName)
+                    VALUES (999999, 'abandoned', @at, 'remote-node');";
+                command.Parameters.AddWithValue("at", DateTime.UtcNow.AddMinutes(-5).ToString("O"));
+                await command.ExecuteNonQueryAsync();
+            }
+
+            using var throttle = NewThrottle();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var acquired = await throttle.AcquireAsync("replacement", timeout.Token);
+            Assert.Equal(1, throttle.GetMetrics().ActiveJobs);
         }
 
         [Fact]

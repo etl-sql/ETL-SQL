@@ -284,6 +284,49 @@ public class ExecutionJobServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task StartAsync_MarksReportInterrupted_WhenJobPersistedBeforeRunningStatus()
+    {
+        var (config, provider) = CreatePersistentServices();
+        await using var services = provider;
+        var scopes = provider.GetRequiredService<IServiceScopeFactory>();
+        int reportId;
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var folder = new Folder { Name = "restart-race", Path = "/restart-race" };
+            var report = new Report { Folder = folder, Name = "restart race", ScriptPath = "restart-race.rptsql" };
+            db.AddRange(folder, report);
+            await db.SaveChangesAsync();
+            reportId = report.Id;
+            db.PortalExecutionJobs.Add(new PortalExecutionJob
+            {
+                Id = "abandoned-race-job",
+                ReportId = reportId,
+                UserId = 1,
+                Kind = "Refresh",
+                Status = "Running",
+                StartedAt = DateTime.UtcNow.AddSeconds(-1)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sessions = new SessionCache(config, scopes, NullLogger<SessionCache>.Instance);
+        var channel = new HttpJobChannelClient(
+            new HttpClient(new NeverRespondingHandler()) { BaseAddress = new Uri("http://localhost:9") },
+            NullLogger<HttpJobChannelClient>.Instance);
+        using var service = new ExecutionJobService(
+            config, scopes, NullLogger<ExecutionJobService>.Instance, sessions, channel);
+
+        await service.StartAsync(CancellationToken.None);
+
+        await using var verifyScope = provider.CreateAsyncScope();
+        var reportState = await verifyScope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .Reports.FindAsync(reportId);
+        Assert.Equal("Cancelled", reportState!.LastRefreshStatus);
+        Assert.Contains("interrupted", reportState.LastRefreshError!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task NodeLeaseLoss_CancelsLocalRunningJobs()
     {
         var scriptPath = await HangScriptAsync();

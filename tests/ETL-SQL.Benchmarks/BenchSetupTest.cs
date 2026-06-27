@@ -202,6 +202,19 @@ namespace ETL_SQL.Benchmarks.Tests
         }
 
         [Fact]
+        public async Task SelectPipeline_ExternalAggregateFullOrder()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+            await bench.ExternalAggregateFullOrder();
+            var result = bench.LastResult;
+            Assert.NotNull(result);
+            Assert.Equal(100, result.Rows.Count);
+            var totals = result.Rows.Select(r => Convert.ToDecimal(r["Total"])).ToList();
+            Assert.Equal(totals.OrderByDescending(v => v), totals);
+        }
+
+        [Fact]
         public async Task SelectPipeline_ExternalWindowQualifyLimit()
         {
             var bench = new SelectPipelineBenchmarks(5_000);
@@ -224,6 +237,46 @@ namespace ETL_SQL.Benchmarks.Tests
             Assert.Equal(100, result.Rows.Count);
             Assert.Contains(result.ColumnNames, c => c.Equals("RunningTotal", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(result.ColumnNames, c => c.Equals("PreviousTwo", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task SelectPipeline_RemainingMaterializationBoundaries()
+        {
+            var bench = new SelectPipelineBenchmarks(5_000);
+            await bench.Setup();
+
+            await bench.JoinAggregate();
+            Assert.Equal(100, bench.LastResult!.Rows.Count);
+
+            await bench.JoinWindow();
+            Assert.Equal(200, bench.LastResult!.Rows.Count);
+
+            await bench.HighCardinalityDistinct();
+            Assert.Equal(5_000, bench.LastResult!.Rows.Count);
+
+            await bench.TopPercent();
+            Assert.Equal(500, bench.LastResult!.Rows.Count);
+
+            await bench.WithTies();
+            Assert.True(bench.LastResult!.Rows.Count >= 100);
+        }
+
+        [Fact]
+        public async Task RuntimeServices_SetupAndOperations()
+        {
+            var bench = new RuntimeServiceBenchmarks();
+            await bench.Setup();
+            try
+            {
+                await bench.SnapshotSave();
+                Assert.NotNull(await bench.SnapshotLoad());
+                Assert.Contains("Runtime Benchmark", bench.ReportRender());
+                await bench.OrchestratorSlot();
+            }
+            finally
+            {
+                await bench.Cleanup();
+            }
         }
 
         // ── TPC-H snapshot test ─────────────────────────────────────────────────

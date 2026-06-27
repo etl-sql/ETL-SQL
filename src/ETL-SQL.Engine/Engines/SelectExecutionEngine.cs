@@ -74,6 +74,7 @@ public class SelectExecutionEngine
         bool hasWindowInColumns = stmt.Columns.Any(c => _windowEngine.IsWindowFunction(c.Expression));
         bool hasGroupBy = stmt.GroupBy != null || stmt.GroupingSet != null;
         bool hasPreEvaluatedColumns = hasAggInColumns || hasWindowInColumns || hasGroupBy;
+        bool distinctApplied = false;
 
         _logger.Debug("[PIPELINE] Initializing Multi-Pass Engine Pipeline for {TableName}", fromName);
 
@@ -91,6 +92,8 @@ public class SelectExecutionEngine
 
         List<Row> allRows;
         bool whereApplied = false;
+        bool aggregateApplied = false;
+        bool windowApplied = false;
         // Phase 7: Tracks a lazy stream from an external engine (aggregate or window).
         // Downstream stages consume it directly without materializing, unless forced by QUALIFY,
         // ORDER BY without LIMIT, or the final projection loop.
@@ -153,11 +156,101 @@ public class SelectExecutionEngine
                 yield break;
             }
 
-            allRows = await _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt).ToListAsync();
+            IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
+            if (!whereApplied && stmt.WhereClause != null)
+            {
+                blockingJoinStream = WhereStream(blockingJoinStream, stmt.WhereClause, _context);
+                whereApplied = true;
+            }
 
-            // Phase 1b (runtime): Drop columns not referenced by any downstream clause.
-            // Reduces in-memory working set before GROUP BY / WINDOW / ORDER BY.
-            PruneColumns(allRows, logicalPlan.RequiredColumns);
+            if (hasGroupBy || hasAggInColumns)
+            {
+                var bufferedJoinRows = new List<Row>();
+                var joinEnumerator = blockingJoinStream.GetAsyncEnumerator();
+                bool joinEnumeratorHandedOff = false;
+                try
+                {
+                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    while (bufferedJoinRows.Count < _context.JoinSpillThreshold && await joinEnumerator.MoveNextAsync())
+                    {
+                        bufferedJoinRows.Add(joinEnumerator.Current);
+                        if (bufferedJoinRows.Count % 1000 == 0
+                            && RowWidthEstimator.EstimateTotalBytes(bufferedJoinRows) > grantBytes)
+                            break;
+                    }
+
+                    var bufferedBytes = RowWidthEstimator.EstimateTotalBytes(bufferedJoinRows);
+                    var needsSpill = bufferedJoinRows.Count >= _context.JoinSpillThreshold
+                        || bufferedBytes > grantBytes
+                        || _memLease.RegisterAndCheckSpill(bufferedBytes);
+                    if (needsSpill)
+                    {
+                        var externalAggregate = new ExternalAggregateEngine(_context, _logger);
+                        var aggregateInput = PrependRows(bufferedJoinRows, ContinueStreamAndDispose(joinEnumerator));
+                        joinEnumeratorHandedOff = true;
+                        externalEngineStream = externalAggregate.ApplyAggregationExternal(
+                            aggregateInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                        allRows = [];
+                    }
+                    else
+                    {
+                        allRows = await _aggregateEngine.ApplyAggregation(
+                            bufferedJoinRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    }
+                    aggregateApplied = true;
+                }
+                finally
+                {
+                    if (!joinEnumeratorHandedOff)
+                        await joinEnumerator.DisposeAsync();
+                }
+            }
+            else if (hasWindowInColumns)
+            {
+                var bufferedJoinRows = new List<Row>();
+                var joinEnumerator = blockingJoinStream.GetAsyncEnumerator();
+                bool joinEnumeratorHandedOff = false;
+                try
+                {
+                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    while (bufferedJoinRows.Count < _context.WindowSpillThreshold && await joinEnumerator.MoveNextAsync())
+                    {
+                        bufferedJoinRows.Add(joinEnumerator.Current);
+                        if (bufferedJoinRows.Count % 1000 == 0
+                            && RowWidthEstimator.EstimateTotalBytes(bufferedJoinRows) > grantBytes)
+                            break;
+                    }
+
+                    var bufferedBytes = RowWidthEstimator.EstimateTotalBytes(bufferedJoinRows);
+                    var needsSpill = bufferedJoinRows.Count >= _context.WindowSpillThreshold
+                        || bufferedBytes > grantBytes
+                        || _memLease.RegisterAndCheckSpill(bufferedBytes);
+                    if (needsSpill)
+                    {
+                        var windowInput = PrependRows(bufferedJoinRows, ContinueStreamAndDispose(joinEnumerator));
+                        joinEnumeratorHandedOff = true;
+                        externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
+                        allRows = [];
+                        windowApplied = true;
+                    }
+                    else
+                    {
+                        allRows = bufferedJoinRows;
+                    }
+                }
+                finally
+                {
+                    if (!joinEnumeratorHandedOff)
+                        await joinEnumerator.DisposeAsync();
+                }
+            }
+            else
+            {
+                allRows = await blockingJoinStream.ToListAsync();
+
+                // Drop columns not referenced by downstream clauses before blocking stages.
+                PruneColumns(allRows, logicalPlan.RequiredColumns);
+            }
         }
         else if (streamAggregate)
         {
@@ -236,18 +329,68 @@ public class SelectExecutionEngine
             }
             else
             {
-                allRows = new List<Row>();
-                if (!whereApplied && stmt.WhereClause != null)
+                var canHybridFullSort = stmt.OrderBy is { Count: > 0 }
+                    && !stmt.IsDistinct
+                    && stmt.QualifyClause == null && !hasAggInColumns && !hasWindowInColumns
+                    && (stmt.LimitCount == null && stmt.TopCount == null || stmt.IsTopPercent || stmt.WithTies);
+                if (canHybridFullSort)
                 {
-                    // Apply WHERE during materialization so unmatched rows are never buffered.
-                    // This matters most for ORDER BY / DISTINCT queries with selective predicates.
-                    await foreach (var r in WhereStream(inputStream, stmt.WhereClause, _context))
-                        allRows.Add(r);
-                    whereApplied = true;
+                    var sortInput = !whereApplied && stmt.WhereClause != null
+                        ? WhereStream(inputStream, stmt.WhereClause, _context)
+                        : inputStream;
+                    if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
+
+                    var sortPrefix = new List<Row>();
+                    var sortEnumerator = sortInput.GetAsyncEnumerator();
+                    bool sortEnumeratorHandedOff = false;
+                    try
+                    {
+                        while (sortPrefix.Count < _context.ExternalSortChunkSize && await sortEnumerator.MoveNextAsync())
+                            sortPrefix.Add(sortEnumerator.Current);
+                        if (sortPrefix.Count >= _context.ExternalSortChunkSize)
+                        {
+                            externalEngineStream = PrependRows(sortPrefix, ContinueStreamAndDispose(sortEnumerator));
+                            sortEnumeratorHandedOff = true;
+                            allRows = [];
+                        }
+                        else
+                        {
+                            allRows = sortPrefix;
+                        }
+                    }
+                    finally
+                    {
+                        if (!sortEnumeratorHandedOff)
+                            await sortEnumerator.DisposeAsync();
+                    }
                 }
                 else
                 {
-                    await foreach (var r in inputStream) allRows.Add(r);
+                    var canStreamDistinctSource = stmt.IsDistinct
+                        && stmt.QualifyClause == null && !hasAggInColumns && !hasWindowInColumns;
+                    if (canStreamDistinctSource)
+                    {
+                        externalEngineStream = !whereApplied && stmt.WhereClause != null
+                            ? WhereStream(inputStream, stmt.WhereClause, _context)
+                            : inputStream;
+                        if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
+                        allRows = [];
+                    }
+                    else
+                    {
+                        allRows = new List<Row>();
+                        if (!whereApplied && stmt.WhereClause != null)
+                        {
+                            // Apply WHERE during materialization so unmatched rows are never buffered.
+                            await foreach (var r in WhereStream(inputStream, stmt.WhereClause, _context))
+                                allRows.Add(r);
+                            whereApplied = true;
+                        }
+                        else
+                        {
+                            await foreach (var r in inputStream) allRows.Add(r);
+                        }
+                    }
                 }
             }
         }
@@ -281,7 +424,7 @@ public class SelectExecutionEngine
         }
 
         // 2. GROUP BY
-        if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
+        if (!streamAggregate && !aggregateApplied && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
         {
             if (ShouldSpill(allRows))
             {
@@ -297,7 +440,7 @@ public class SelectExecutionEngine
         }
 
         // 3. WINDOW FUNCTIONS
-        if (hasWindowInColumns)
+        if (hasWindowInColumns && !windowApplied)
         {
             if (externalEngineStream != null)
             {
@@ -345,19 +488,37 @@ public class SelectExecutionEngine
             }
         }
 
+        // DISTINCT is defined over projected rows and logically precedes ORDER BY.
+        if (stmt.IsDistinct)
+        {
+            var distinctInput = externalEngineStream ?? allRows.ToAsyncEnumerable();
+            externalEngineStream = new ExternalDistinctEngine(_context).ApplyAsync(
+                ProjectRows(distinctInput, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere));
+            allRows = [];
+            hasPreEvaluatedColumns = true;
+            whereApplied = true;
+            canDeferWhere = false;
+            distinctApplied = true;
+        }
+
         // 5. ORDER BY
         if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
         {
             // Phase 7: If an external engine stream is pending and the query has a LIMIT/TOP,
             // run the TopN heap directly on the stream to avoid full materialization.
             if (externalEngineStream != null
-                && !stmt.IsTopPercent && !stmt.WithTies && !stmt.IsDistinct
+                && !stmt.IsTopPercent && !stmt.WithTies
                 && (stmt.LimitCount != null || stmt.TopCount != null))
             {
                 int limit = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount ?? stmt.TopCount!, new Row()));
                 int topOffset = stmt.Offset != null ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row())) : 0;
                 allRows = await TopNFromStream(externalEngineStream, stmt.OrderBy, colNames, finalColumns, limit, topOffset, hasPreEvaluatedColumns);
                 externalEngineStream = null;
+            }
+            else if (externalEngineStream != null)
+            {
+                var externalSort = new ExternalSortEngine(_context, _logger);
+                externalEngineStream = externalSort.SortStreamAsync(externalEngineStream, stmt.OrderBy);
             }
             else
             {
@@ -376,17 +537,29 @@ public class SelectExecutionEngine
 
         // 6. OFFSET / LIMIT
         // Phase 7: If a spill-backed operator still has a lazy stream, keep it lazy through
-        // OFFSET / LIMIT and final projection. TOP PERCENT requires a total row count, so it
-        // still materializes through the legacy ApplyLimits path.
-        if (externalEngineStream != null && !stmt.IsTopPercent)
+        // OFFSET / LIMIT and final projection. Percentage limits count and replay through
+        // encrypted spill storage; WITH TIES retains only the boundary sort keys.
+        if (externalEngineStream != null)
         {
+            int? percentTake = null;
+            if (stmt.IsTopPercent)
+            {
+                var replay = await SpillForReplay(externalEngineStream);
+                externalEngineStream = replay.Rows;
+                var offset = stmt.Offset != null
+                    ? Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row()))
+                    : 0;
+                var percent = Convert.ToInt32(await _context.EvaluateValue(stmt.TopCount!, new Row()));
+                percentTake = (int)Math.Ceiling(Math.Max(0, replay.Count - offset) * percent / 100.0);
+            }
             await foreach (var projectedBatch in ProjectAndBatch(
-                ApplyLimitsStream(externalEngineStream, stmt),
+                ApplyLimitsStream(externalEngineStream, stmt, colNames, finalColumns, hasPreEvaluatedColumns, percentTake),
                 stmt,
                 finalColumns,
                 colNames,
                 hasPreEvaluatedColumns,
-                canDeferWhere))
+                canDeferWhere,
+                distinctApplied))
                 yield return projectedBatch;
             yield break;
         }
@@ -402,7 +575,8 @@ public class SelectExecutionEngine
             finalColumns,
             colNames,
             hasPreEvaluatedColumns,
-            canDeferWhere))
+            canDeferWhere,
+            distinctApplied))
             yield return projectedBatch;
     }
 
@@ -412,9 +586,37 @@ public class SelectExecutionEngine
         List<SelectColumn> finalColumns,
         List<string> colNames,
         bool hasPreEvaluatedColumns,
+        bool canDeferWhere,
+        bool alreadyProjected = false)
+    {
+        var projectedRows = alreadyProjected
+            ? rows
+            : ProjectRows(rows, stmt, finalColumns, colNames, hasPreEvaluatedColumns, canDeferWhere);
+        var batch = new DataTable();
+        batch.SetColumns(colNames);
+        bool yielded = false;
+        await foreach (var row in projectedRows)
+        {
+            await batch.AddRowAsync(row);
+            if (batch.Rows.Count >= _context.BatchSize)
+            {
+                yield return batch;
+                yielded = true;
+                batch = new DataTable();
+                batch.SetColumns(colNames);
+            }
+        }
+        if (batch.Rows.Count > 0 || !yielded) yield return batch;
+    }
+
+    private async IAsyncEnumerable<Row> ProjectRows(
+        IAsyncEnumerable<Row> rows,
+        SelectStatement stmt,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        bool hasPreEvaluatedColumns,
         bool canDeferWhere)
     {
-        var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
         var expressionKeys = hasPreEvaluatedColumns
             ? finalColumns.Select(c => c.Expression.ToSql()).ToArray()
             : Array.Empty<string>();
@@ -427,8 +629,8 @@ public class SelectExecutionEngine
                     ? $"WINDOW_{c.Expression.ToSql().ToUpperInvariant()}"
                     : null).ToArray()
             : Array.Empty<string?>();
-        var batch = new DataTable();
-        batch.SetColumns(colNames);
+        var projected = new DataTable();
+        projected.SetColumns(colNames);
         var deferredWhere = canDeferWhere && RowExpressionCompiler.TryCompilePredicate(_context, stmt.WhereClause, out var compiledDeferredWhere)
             ? compiledDeferredWhere
             : null;
@@ -438,7 +640,6 @@ public class SelectExecutionEngine
             if (RowExpressionCompiler.TryCompileValue(_context, finalColumns[i].Expression, out var value))
                 compiledColumns[i] = value;
         }
-        bool yielded = false;
         await foreach (var row in rows)
         {
             if (canDeferWhere)
@@ -448,7 +649,7 @@ public class SelectExecutionEngine
                     : await _context.EvaluateCondition(stmt.WhereClause!, row);
                 if (!passesWhere) continue;
             }
-            var resRow = batch.NewRow();
+            var resRow = projected.NewRow();
 
             bool schemaMatches = hasPreEvaluatedColumns && row.Schema != null && row.Schema.ColumnCount == finalColumns.Count;
             if (schemaMatches)
@@ -499,45 +700,31 @@ public class SelectExecutionEngine
                 }
             }
 
-            if (seenRows != null)
-            {
-                // Fix DISTINCT collapse: Use a unique sentinel for NULL to distinguish it from empty string
-                var key = string.Join("\0", Enumerable.Range(0, colNames.Count).Select(i =>
-                {
-                    var val = resRow[i];
-                    if (val == null || val == DBNull.Value) return "__NULL__";
-                    var s = val.ToString() ?? "";
-                    return s == "__NULL__" ? "__[NULL]__" : s; // Escape literal "__NULL__"
-                }));
-                if (!seenRows.Add(key)) continue;
-            }
-
-            await batch.AddRowAsync(resRow);
-            if (batch.Rows.Count >= _context.BatchSize)
-            {
-                yield return batch;
-                yielded = true;
-                batch = new DataTable();
-                batch.SetColumns(colNames);
-            }
+            yield return resRow;
         }
-        if (batch.Rows.Count > 0 || !yielded) yield return batch;
     }
 
-    private async IAsyncEnumerable<Row> ApplyLimitsStream(IAsyncEnumerable<Row> rows, SelectStatement stmt)
+    private async IAsyncEnumerable<Row> ApplyLimitsStream(
+        IAsyncEnumerable<Row> rows,
+        SelectStatement stmt,
+        List<string>? colNames = null,
+        List<SelectColumn>? finalColumns = null,
+        bool hasPreEvaluatedColumns = false,
+        int? takeOverride = null)
     {
         int offset = 0;
         if (stmt.Offset != null)
             offset = Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row()));
 
-        int? take = null;
-        if (stmt.TopCount != null)
+        int? take = takeOverride;
+        if (!take.HasValue && stmt.TopCount != null)
             take = Convert.ToInt32(await _context.EvaluateValue(stmt.TopCount, new Row()));
-        else if (stmt.LimitCount != null)
+        else if (!take.HasValue && stmt.LimitCount != null)
             take = Convert.ToInt32(await _context.EvaluateValue(stmt.LimitCount, new Row()));
 
         var skipped = 0;
         var yielded = 0;
+        object?[]? boundaryKeys = null;
         await foreach (var row in rows)
         {
             if (skipped < offset)
@@ -546,10 +733,53 @@ public class SelectExecutionEngine
                 continue;
             }
 
-            if (take.HasValue && yielded >= take.Value) yield break;
+            if (take.HasValue && yielded >= take.Value)
+            {
+                if (!stmt.WithTies || stmt.OrderBy == null || boundaryKeys == null
+                    || colNames == null || finalColumns == null) yield break;
+
+                var keys = await ExtractSortKeys(row, stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+                var tied = true;
+                for (var i = 0; i < keys.Length; i++)
+                    if (_context.CompareConstants(keys[i], boundaryKeys[i]) != 0) { tied = false; break; }
+                if (!tied) yield break;
+                yield return row;
+                continue;
+            }
 
             yielded++;
+            if (take.HasValue && yielded == take.Value && stmt.WithTies && stmt.OrderBy != null
+                && colNames != null && finalColumns != null)
+                boundaryKeys = await ExtractSortKeys(row, stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
             yield return row;
+        }
+    }
+
+    private async Task<(IAsyncEnumerable<Row> Rows, long Count)> SpillForReplay(IAsyncEnumerable<Row> rows)
+    {
+        var name = $"select_replay_{Guid.NewGuid():N}.tmp";
+        long count = 0;
+        await using (var writer = await _context.SpillStore.CreateWriterAsync(name))
+        {
+            await foreach (var row in rows)
+            {
+                await writer.WriteRowAsync(row);
+                count++;
+            }
+        }
+        return (ReadReplay(name), count);
+    }
+
+    private async IAsyncEnumerable<Row> ReadReplay(string name)
+    {
+        try
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            await foreach (var row in reader.AsEnumerableAsync()) yield return row;
+        }
+        finally
+        {
+            _context.SpillStore.DeleteChunk(name);
         }
     }
 
