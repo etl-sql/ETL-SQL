@@ -25,3 +25,9 @@ ui/tailwind.config.js
 ui/README.md
 ui/.gitignore
 ui/index.html
+# Dev/test artifacts that must not ship in the VSIX
+coverage/**
+logs/**
+test_output.txt
+vitest.config.js
+**/*.log
