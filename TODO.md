@@ -64,10 +64,8 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Depends on the `COLUMNS(* EXCLUDE (...))` selector (reuse the `EXCLUDE` work above).
   - Engine: branch/extend `PivotEngine`; dynamic pivot needs a value-collection pass over the source.
   - Tests + docs (new examples; clarify which dialect each syntax mirrors).
-- [ ] **ASOF JOIN** — nearest-match temporal/inequality join (e.g. `ASOF [LEFT] JOIN b ON a.id = b.id AND a.ts >= b.ts`) returning the closest qualifying row.
-  - Lexer/parser: `ASOF` join type with one inequality predicate plus optional equality keys.
+- [x] **ASOF JOIN** — nearest-match temporal/inequality join (e.g. `ASOF [LEFT] JOIN b ON a.id = b.id AND a.ts >= b.ts`) returning the closest qualifying row. *(Done: `ASOF` token; parser maps `ASOF [LEFT] JOIN` → join type; `JoinEngine.PerformAsofJoin` shared by both buffered and streaming paths picks the closest qualifying right row via the one inequality (`>=`/`>` → max, `<=`/`<` → min) after equality keys, using a combined schema so qualified columns resolve. Tests in `StmtAsofJoinTests`; Grammar §5.6.1 + `Help/Keywords/ASOF_JOIN.md` + Syntax_Index. NOTE: O(left×right), right side buffered — sort/merge + spill optimization is a follow-up.)*
   - Engine: new sorted/merge-style matching path; consider spill behavior for large inputs.
-  - Tests + docs (time-series examples).
 - [ ] **Window RANGE / GROUPS frames — verify & document** — frame parsing and in-memory execution already exist for ROWS/RANGE/GROUPS (`ExpressionParser`, `WindowEngine`); confirm completeness rather than build from scratch.
   - Verify value-based RANGE offsets, numeric and date/interval (e.g. `RANGE BETWEEN INTERVAL '5 days' PRECEDING AND CURRENT ROW`).
   - Verify GROUPS peer semantics and frame `EXCLUDE` options.

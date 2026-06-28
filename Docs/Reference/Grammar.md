@@ -1097,6 +1097,7 @@ FROM <source> [AS alias]
     ON <condition>]
 [CROSS APPLY | OUTER APPLY (<subquery>) <alias>]
 [[CROSS] JOIN LATERAL | LEFT JOIN LATERAL (<subquery>) <alias> [ON <condition>]]   -- ANSI alias for APPLY
+[ASOF [LEFT] JOIN <table> ON <equality-keys> AND <inequality>]                     -- nearest-match join
 [WHERE <condition>]
 [GROUP BY ALL | <columns | positions> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
@@ -1319,6 +1320,22 @@ LEFT JOIN LATERAL (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS 
 ```
 
 Unlike `APPLY`, a `LATERAL` join may carry an explicit `ON <condition>`, which is applied as an additional filter over the correlated rows.
+
+### 5.6.1 `ASOF JOIN`
+A nearest-match join (DuckDB/ClickHouse/kdb+ style). For each left row it returns the single closest right row that satisfies one inequality, after any equality keys. `ASOF JOIN` drops unmatched left rows; `ASOF LEFT JOIN` keeps them NULL-extended.
+
+```sql
+-- Most recent quote at or before each trade
+SELECT t.id, q.bid
+FROM trades t
+ASOF JOIN quotes q
+  ON t.symbol = q.symbol   -- zero or more equality keys
+  AND t.ts >= q.ts;        -- exactly one inequality
+```
+
+- The `ON` clause must contain **exactly one** inequality (`<`, `<=`, `>`, `>=`) plus zero or more equality predicates.
+- Direction follows the operator: `>=`/`>` pick the **largest** qualifying right value (most recent at/before); `<=`/`<` pick the **smallest** (nearest at/after).
+- The right side is buffered; matching is currently O(left × right). Use equality keys to narrow candidates on large inputs.
 
 `CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `NGRAMS`, and `NGRAM_TOKENS`:
 

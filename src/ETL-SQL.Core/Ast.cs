@@ -261,6 +261,7 @@ public sealed record JoinClause : AstNode
     public int? KeepBest { get; init; }  // FUZZY JOIN: KEEP BEST n; null = keep all above threshold
     public bool IsApply => JoinType.Contains("APPLY");
     public bool IsFuzzy => JoinType.Contains("FUZZY", StringComparison.OrdinalIgnoreCase);
+    public bool IsAsof => JoinType.StartsWith("ASOF", StringComparison.OrdinalIgnoreCase);
 
     public JoinClause(string joinType, TableReference table, Expression condition, JoinHint hint = JoinHint.None, int? keepBest = null)
     {

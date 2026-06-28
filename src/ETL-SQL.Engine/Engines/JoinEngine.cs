@@ -78,6 +78,14 @@ public class JoinEngine
                 ? TryEnrichCrossJoin(join, allBufferedRows, joinRows, wherePredicates)
                 : join;
 
+            if (effectiveJoin.IsAsof)
+            {
+                var asofRightAlias = effectiveJoin.Table.Alias ?? effectiveJoin.Table.TableName;
+                allBufferedRows = await PerformAsofJoin(allBufferedRows, joinRows, effectiveJoin, asofRightAlias);
+                if (wherePredicates.Count > 0)
+                    allBufferedRows = await ApplyResolvablePredicates(allBufferedRows, wherePredicates, effectiveJoin.JoinType);
+                continue;
+            }
             if (effectiveJoin.IsFuzzy)
             {
                 var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
@@ -311,6 +319,17 @@ public class JoinEngine
         }
     }
 
+    /// <summary>Orders ASOF candidate keys: same-typed IComparable values directly, else numeric, else ordinal string.</summary>
+    private static int CompareAsof(object? a, object? b)
+    {
+        if (a == null && b == null) return 0;
+        if (a == null) return -1;
+        if (b == null) return 1;
+        if (a.GetType() == b.GetType() && a is IComparable cmp) return cmp.CompareTo(b);
+        if (decimal.TryParse(a.ToString(), out var da) && decimal.TryParse(b.ToString(), out var db)) return da.CompareTo(db);
+        return string.Compare(a.ToString(), b.ToString(), StringComparison.Ordinal);
+    }
+
     public async IAsyncEnumerable<Row> ApplyJoinsStreaming(IAsyncEnumerable<Row> leftStream, List<JoinClause> joins, SelectStatement stmt)
     {
         var currentStream = leftStream;
@@ -407,6 +426,27 @@ public class JoinEngine
             var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
             var results = await fuzzyEngine.PerformFuzzyJoin(leftBuffered, joinRows, join);
             foreach (var r in results) yield return r;
+            yield break;
+        }
+
+        // ASOF JOIN — nearest-match join. For each left row, among right rows satisfying the equality
+        // keys, pick the single closest one satisfying the one inequality predicate. The right side is
+        // buffered (joinRows); matching is O(left x right) for this first implementation.
+        if (join.IsAsof)
+        {
+            // Buffer the left stream and alias-qualify bare columns (mirrors the buffered join path)
+            // so the ON predicate's left-side references resolve in the combined row.
+            var leftBuffered = new List<Row>();
+            var pending = new List<(string, object?)>();
+            await foreach (var l in leftStream)
+            {
+                pending.Clear();
+                l.ForEachColumn((k, v) => { if (!k.Contains('.')) pending.Add(($"{leftAlias}.{k}", v)); });
+                foreach (var (k, v) in pending) l[k] = v;
+                leftBuffered.Add(l);
+            }
+            foreach (var r in await PerformAsofJoin(leftBuffered, joinRows, join, rightAlias))
+                yield return r;
             yield break;
         }
 
@@ -568,6 +608,67 @@ public class JoinEngine
             finally { _context.OuterRowStack.Pop(); }
         }
         return nextRows;
+    }
+
+    /// <summary>
+    /// ASOF join: for each left row, among right rows satisfying the equality predicates, returns the
+    /// single closest one satisfying the inequality. <c>&gt;=</c>/<c>&gt;</c> pick the largest qualifying
+    /// right value; <c>&lt;=</c>/<c>&lt;</c> pick the smallest. ASOF LEFT keeps unmatched left rows.
+    /// Both inputs are expected alias-qualified. O(left x right) for this first implementation.
+    /// </summary>
+    private async Task<List<Row>> PerformAsofJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, string rightAlias)
+    {
+        var conjuncts = new List<Expression>();
+        FlattenAnds(join.Condition, conjuncts);
+        BinaryExpression? inequality = null;
+        var equalityParts = new List<Expression>();
+        foreach (var c in conjuncts)
+        {
+            if (inequality == null && c is BinaryExpression be
+                && be.Operator is TokenType.LESS_THAN or TokenType.LESS_EQUALS or TokenType.GREATER_THAN or TokenType.GREATER_EQUALS)
+                inequality = be;
+            else
+                equalityParts.Add(c);
+        }
+        if (inequality == null)
+            throw new ETL_SQL.Core.Common.Exceptions.ExecutionException("ASOF JOIN requires exactly one inequality predicate (<, <=, >, >=) in its ON clause.");
+
+        // The operand referencing the right table is the value that varies across candidate rows.
+        bool varOnLeft = inequality.Left.GetSourceTables().Any(t => string.Equals(t, rightAlias, StringComparison.OrdinalIgnoreCase));
+        var varExpr = varOnLeft ? inequality.Left : inequality.Right;
+        bool opIsLess = inequality.Operator is TokenType.LESS_THAN or TokenType.LESS_EQUALS;
+        bool pickMax = varOnLeft == opIsLess;
+
+        Expression? equalityPredicate = equalityParts.Count == 0 ? null
+            : equalityParts.Skip(1).Aggregate(equalityParts[0], (acc, p) => (Expression)new BinaryExpression(acc, TokenType.AND, p));
+        bool asofLeft = join.JoinType.Equals("ASOF LEFT", StringComparison.OrdinalIgnoreCase);
+
+        // A combined schema preserves the right side's qualified aliases (e.g. q.ts) so the ON
+        // predicate resolves them — a bare CombineRows would only carry canonical column names.
+        TableSchema? schema = leftRows.Count > 0 && rightRows.Count > 0
+            ? BuildCombinedSchema(leftRows[0], rightRows[0]) : null;
+
+        var results = new List<Row>();
+        foreach (var left in leftRows)
+        {
+            Row? best = null;
+            object? bestKey = null;
+            foreach (var right in rightRows)
+            {
+                var combined = CombineRows(left, right, schema);
+                if (equalityPredicate != null && !await _context.EvaluateCondition(equalityPredicate, combined)) continue;
+                if (!await _context.EvaluateCondition(inequality, combined)) continue;
+                var key = await _context.EvaluateValue(varExpr, combined);
+                if (best == null || (pickMax ? CompareAsof(key, bestKey) > 0 : CompareAsof(key, bestKey) < 0))
+                {
+                    best = combined;
+                    bestKey = key;
+                }
+            }
+            if (best != null) results.Add(best);
+            else if (asofLeft) results.Add(left.Clone());
+        }
+        return results;
     }
 
     private async Task<List<Row>> PerformSemiJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)

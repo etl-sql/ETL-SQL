@@ -1049,6 +1049,7 @@ Used in the `FROM` clause to combine rows from multiple sources.
 | `OUTER APPLY` | Type | Left outer version of CROSS APPLY |
 | `JOIN LATERAL` / `, LATERAL` | Type | ANSI alias for `CROSS APPLY` (correlated subquery) |
 | `LEFT JOIN LATERAL` | Type | ANSI alias for `OUTER APPLY` |
+| `ASOF [LEFT] JOIN` | Type | Nearest-match join on one inequality + optional equality keys |
 | `HASH JOIN` | Hint | Forces hash-based join algorithm |
 | `LOOP JOIN` | Hint | Forces nested-loop join algorithm |
 | `FUZZY JOIN` | Hint | Enables similarity-based matching |
