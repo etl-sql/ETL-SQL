@@ -369,11 +369,16 @@ public static class EnterprisePolicyRuntime
         {
             using var store = new X509Store(StoreName.My, location);
             store.Open(OpenFlags.ReadOnly);
-            var certificate = store.Certificates.OfType<X509Certificate2>().FirstOrDefault(value =>
-                value.HasPrivateKey && (string.Equals(value.Thumbprint, normalized, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(value.GetCertHashString(HashAlgorithmName.SHA256), normalized,
-                        StringComparison.OrdinalIgnoreCase)));
-            if (certificate is not null) return certificate;
+            foreach (var cert in store.Certificates)
+            {
+                if (cert.HasPrivateKey && (string.Equals(cert.Thumbprint, normalized, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(cert.GetCertHashString(HashAlgorithmName.SHA256), normalized,
+                        StringComparison.OrdinalIgnoreCase)))
+                {
+                    return cert;
+                }
+                cert.Dispose();
+            }
         }
         throw new InvalidOperationException(
             $"Enterprise client certificate '{normalized}' was not found with an accessible private key.");

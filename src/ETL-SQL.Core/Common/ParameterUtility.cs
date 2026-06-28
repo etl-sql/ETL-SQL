@@ -5,9 +5,10 @@ namespace ETL_SQL.Core.Common;
 /// <summary>
 /// Utility for processing SQL parameters, supporting standard '?' and indexed '?n' placeholders.
 /// </summary>
-public static class ParameterUtility
+public static partial class ParameterUtility
 {
-    private static readonly Regex ParameterRegex = new Regex(@"\?(?<index>[0-9]+)?|@p(?<pindex>[0-9]+)", RegexOptions.Compiled);
+    [GeneratedRegex(@"\?(?<index>[0-9]+)?|@p(?<pindex>[0-9]+)", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ParameterRegex();
 
     /// <summary>
     /// Processes the SQL text, replacing '?', '?n' (1-indexed), and '@pn' (0-indexed) with numbered parameter tokens (e.g., '@p0').
@@ -20,7 +21,7 @@ public static class ParameterUtility
         if (string.IsNullOrWhiteSpace(sqlText)) return sqlText;
 
         int sequentialIndex = 0;
-        return ParameterRegex.Replace(sqlText, match =>
+        return ParameterRegex().Replace(sqlText, match =>
         {
             if (match.Value.StartsWith("@p"))
             {
