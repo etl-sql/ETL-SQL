@@ -7,23 +7,23 @@ namespace ETL_SQL.App;
 
 internal static class EnterpriseEnrollmentManager
 {
-    public static Task<int> RunAsync(CliContext context, ILogger logger)
+    public static async Task<int> RunAsync(CliContext context, ILogger logger)
     {
         try
         {
             var store = new EnterpriseEnrollmentStore();
-            return Task.FromResult(context.Command switch
+            return context.Command switch
             {
                 "enterprise-enroll" => Enroll(context, store, logger),
-                "enterprise-status" => Status(store, logger),
+                "enterprise-status" => await StatusAsync(store, logger),
                 "enterprise-unenroll" => Unenroll(context, store, logger),
                 _ => throw new InvalidOperationException($"Unsupported enterprise command '{context.Command}'.")
-            });
+            };
         }
         catch (Exception ex)
         {
             logger.WriteLine($"Enterprise enrollment failed: {ex.Message}", ConsoleColor.Red);
-            return Task.FromResult(1);
+            return 1;
         }
     }
 
@@ -58,7 +58,7 @@ internal static class EnterpriseEnrollmentManager
         return 0;
     }
 
-    private static int Status(EnterpriseEnrollmentStore store, ILogger logger)
+    private static async Task<int> StatusAsync(EnterpriseEnrollmentStore store, ILogger logger)
     {
         var status = store.GetStatus();
         if (!status.IsEnrolled)
@@ -77,6 +77,10 @@ internal static class EnterpriseEnrollmentManager
 
         var value = status.Enrollment;
         logger.WriteLine("Enterprise enrollment: active", ConsoleColor.Green);
+        EffectiveEnterprisePolicy? policy = null;
+        string? policyError = null;
+        try { policy = await EnterprisePolicyRuntime.InitializeFromMachineAsync(store); }
+        catch (Exception ex) { policyError = ex.Message; }
         logger.WriteLine(JsonSerializer.Serialize(new
         {
             value.SchemaVersion,
@@ -90,9 +94,22 @@ internal static class EnterpriseEnrollmentManager
             value.MaxOfflineHours,
             value.FailClosed,
             value.EnrolledAtUtc,
-            bootstrapPath = status.Path
+            bootstrapPath = status.Path,
+            policy = policy is null ? null : new
+            {
+                policy.Status,
+                policy.IsAvailable,
+                policy.PolicyVersion,
+                policy.Source,
+                policy.IssuedAtUtc,
+                policy.ExpiresAtUtc,
+                policy.LoadedAtUtc,
+                governedKeys = policy.ConfigurationValues.Keys.OrderBy(key => key).ToArray(),
+                warning = policy.Error
+            },
+            policyError
         }, new JsonSerializerOptions { WriteIndented = true }));
-        return 0;
+        return policyError is null && policy?.IsAvailable == true ? 0 : 2;
     }
 
     private static int Unenroll(CliContext context, EnterpriseEnrollmentStore store, ILogger logger)

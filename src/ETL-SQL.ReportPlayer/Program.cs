@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.ReportHosting;
 using ETL_SQL.Reporting;
@@ -69,7 +70,7 @@ else
     }
 }
 
-ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,
@@ -148,6 +149,7 @@ app.MapGet("/third-party-notices", async (HttpContext ctx) =>
         ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
         : Results.Text(await File.ReadAllTextAsync(noticesPath, ctx.RequestAborted), "text/markdown; charset=utf-8");
 });
+builder.Configuration.AddEnterprisePolicy();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-report routes

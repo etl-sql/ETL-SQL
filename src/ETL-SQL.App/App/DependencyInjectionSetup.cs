@@ -21,6 +21,7 @@ using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
@@ -50,6 +51,7 @@ namespace ETL_SQL.App
                 .AddEnvironmentVariables();
             if (configOverrides != null)
                 builder.AddInMemoryCollection(configOverrides);
+            builder.AddEnterprisePolicy();
             var configuration = builder.Build();
 
             ETL_SQL.Core.Metadata.SnippetLibrary.Initialize(

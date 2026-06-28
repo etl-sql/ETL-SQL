@@ -33,6 +33,7 @@ public sealed record EnterpriseEnrollmentStatus(
 public interface IEnterpriseEnrollmentProtector
 {
     void ProtectDirectory(string directory, string? serviceIdentity);
+    void ProtectCacheDirectory(string directory, string? serviceIdentity);
     void ProtectFile(string file, string? serviceIdentity);
 }
 
@@ -168,6 +169,9 @@ public sealed class EnterpriseEnrollmentStore(
             _protector.ProtectFile(temporary, document.ServiceIdentity);
             File.Move(temporary, Path);
             _validator.Validate(Path);
+            var cacheDirectory = System.IO.Path.Combine(directory, "cache");
+            Directory.CreateDirectory(cacheDirectory);
+            _protector.ProtectCacheDirectory(cacheDirectory, document.ServiceIdentity);
         }
         finally
         {
@@ -247,13 +251,22 @@ public sealed class OsEnterpriseEnrollmentProtector : IEnterpriseEnrollmentProte
             File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
+    public void ProtectCacheDirectory(string directory, string? serviceIdentity)
+    {
+        if (OperatingSystem.IsWindows())
+            ProtectWindowsDirectory(directory, serviceIdentity, serviceCanWrite: true);
+        else
+            File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
     [SupportedOSPlatform("windows")]
-    private static void ProtectWindowsDirectory(string directory, string? serviceIdentity)
+    private static void ProtectWindowsDirectory(string directory, string? serviceIdentity,
+        bool serviceCanWrite = false)
     {
         var security = new DirectorySecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         AddWindowsRules(security, FileSystemRights.FullControl, serviceIdentity,
-            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit);
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, serviceCanWrite);
         new DirectoryInfo(directory).SetAccessControl(security);
     }
 
@@ -268,7 +281,7 @@ public sealed class OsEnterpriseEnrollmentProtector : IEnterpriseEnrollmentProte
 
     [SupportedOSPlatform("windows")]
     private static void AddWindowsRules(FileSystemSecurity security, FileSystemRights administrativeRights,
-        string? serviceIdentity, InheritanceFlags inheritance)
+        string? serviceIdentity, InheritanceFlags inheritance, bool serviceCanWrite = false)
     {
         security.AddAccessRule(new FileSystemAccessRule(
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), administrativeRights,
@@ -279,7 +292,8 @@ public sealed class OsEnterpriseEnrollmentProtector : IEnterpriseEnrollmentProte
         if (!string.IsNullOrWhiteSpace(serviceIdentity))
         {
             var sid = (SecurityIdentifier)new NTAccount(serviceIdentity).Translate(typeof(SecurityIdentifier));
-            security.AddAccessRule(new FileSystemAccessRule(sid, FileSystemRights.ReadAndExecute,
+            security.AddAccessRule(new FileSystemAccessRule(sid,
+                serviceCanWrite ? FileSystemRights.Modify : FileSystemRights.ReadAndExecute,
                 inheritance, PropagationFlags.None, AccessControlType.Allow));
         }
     }

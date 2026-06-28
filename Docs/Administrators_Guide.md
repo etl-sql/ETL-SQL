@@ -265,8 +265,9 @@ etl-sql enterprise enroll `
 ```
 
 The policy endpoint must be HTTPS without embedded credentials. The signing key must be RSA PEM with at
-least 2048 bits. The optional certificate thumbprint identifies the machine credential that later policy
-runtime phases use. `--service-identity` grants that Windows service identity read access to enrollment;
+least 2048 bits. The optional certificate thumbprint identifies the machine credential presented to the
+policy endpoint. `--service-identity` grants that Windows service identity read access to enrollment and
+write access only to the separate protected policy-cache directory;
 omit it when ETL-SQL runs as Local System. On Unix, install as root and arrange the service identity or
 service manager so it can read the root-owned bootstrap without making it group- or world-writable.
 
@@ -303,12 +304,51 @@ or running unrelated software. Environments requiring mandatory enforcement must
 launch through Windows Defender Application Control/AppLocker, managed software deployment, container
 admission policy, or equivalent operating-system controls.
 
-#### Organization policy documents
+#### Authoritative organization policy
 
-Governance policy documents use schema version `1.0`. Policy loaders accept local OS-protected JSON files and
-HTTPS endpoints, validate the document, and may use a protected offline cache only while it remains inside the
-configured offline window. If the live source cannot be loaded and the cache is missing, invalid, disabled, or
-expired, policy loading fails secure.
+On every normal process startup, an enrolled installation requests a signed policy envelope from the configured
+HTTPS endpoint. The request carries `X-ETL-SQL-Tenant`, `X-ETL-SQL-Enrollment`, and `X-ETL-SQL-Machine` headers
+and presents the enrolled client certificate when configured. The server must return JSON in this form:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "tenant": "corp-production",
+  "policyVersion": "2026-06-28.4",
+  "issuedAtUtc": "2026-06-28T12:00:00Z",
+  "expiresAtUtc": "2026-06-29T12:00:00Z",
+  "policyPayload": "<base64 UTF-8 policy JSON>",
+  "signature": "<base64 RSA-PSS SHA-256 signature>"
+}
+```
+
+The signature input is the UTF-8 encoding of these six values separated by a single LF (`\n`), with timestamps
+formatted as UTC round-trip (`O`) values:
+
+```text
+schemaVersion
+tenant
+policyVersion
+issuedAtUtc
+expiresAtUtc
+policyPayload
+```
+
+ETL-SQL verifies the enrolled tenant, issuance and expiry, RSA-PSS SHA-256 signature, and embedded policy schema.
+It rejects a live envelope issued before the currently cached envelope to prevent rollback. A verified live
+envelope is atomically stored under the protected `Enterprise/cache` directory and is fully re-verified before
+offline use. Cache use ends at the earlier of envelope expiry and `MaxOfflineHours` from caching. Missing,
+tampered, expired, or unsafe cache state fails startup when enrollment is fail-closed. The enrollment-only
+`--allow-offline-failure` option permits startup without policy and is intended only for explicitly accepted
+non-production risk.
+
+Long-running Portal, Report Player, and Orchestrator hosts refresh policy every five minutes. A newly verified
+policy reloads the enterprise configuration overlay. If live retrieval and verified cache recovery both fail
+under fail-closed enrollment, the host logs a critical error and stops rather than continuing beyond policy
+freshness. Supervise these processes with Windows Services, systemd, Kubernetes, or an equivalent service manager
+so an unhealthy policy dependency is visible and restart behavior follows organizational policy.
+
+Governance policy documents inside `policyPayload` use schema version `1.0`:
 
 ```json
 {
@@ -322,7 +362,8 @@ expired, policy loading fails secure.
   "execution": {
     "allowedModes": [ "Interactive", "Batch", "Scheduled" ],
     "maxParallelDegree": 4,
-    "maxFileOperationsPerScript": 100
+    "maxFileOperationsPerScript": 100,
+    "maxRecursiveNestingDepth": 50
   },
   "remoteExecution": {
     "mode": "TrustedOrchestrator",
@@ -336,9 +377,14 @@ expired, policy loading fails secure.
 }
 ```
 
-Local policy files must use fully qualified paths and must not be writable by broad principals. On Windows, write
-access for `Everyone`, `Users`, or `Authenticated Users` is rejected. On Unix-like systems, group-writable or
-other-writable policy files are rejected. Remote policy sources must use HTTPS.
+Verified policy values are added after JSON, environment variables, command-line configuration, and test/deployment
+overrides, giving the enterprise policy final configuration precedence. Lower-authority sources can no longer
+replace those effective values. Operation-boundary enforcement of every governed setting is delivered separately;
+administrators should not treat configuration precedence alone as complete filesystem or connector containment.
+
+Run `etl-sql enterprise status` to retrieve and verify policy and report `Live`, `Cached`, or `Unavailable`, the
+policy version, source, issuance, expiry, governed key names, and any live-retrieval warning. Trust keys,
+certificate thumbprints, signatures, and policy payload values are not printed.
 
 #### Durable audit outbox and remote collectors
 

@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Directory;
@@ -59,7 +60,7 @@ try
 {
     Log.Information("ETL-SQL Orchestrator Service starting up.");
 
-    ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+    await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
     var builder = WebApplication.CreateBuilder(args);
 
     // ── Replace default logging with Serilog ──────────────────────────────
@@ -83,7 +84,8 @@ try
         .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
         .AddEnvironmentVariables()
-        .AddSecureConfiguration();
+        .AddSecureConfiguration()
+        .AddEnterprisePolicy();
 
     var cfg = builder.Configuration;
 

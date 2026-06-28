@@ -37,7 +37,7 @@ namespace ETL_SQL
             try
             {
                 if (args.Length == 0 || !string.Equals(args[0], "enterprise", StringComparison.OrdinalIgnoreCase))
-                    ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+                    await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
                 var isHelpOnly = args.Any(a => a is "--help" or "-h" or "-?");
                 if (isHelpOnly && args.Length > 1)

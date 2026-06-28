@@ -156,6 +156,7 @@ public sealed class EnterpriseEnrollmentTests : IDisposable
     private sealed class NoOpProtector : IEnterpriseEnrollmentProtector
     {
         public void ProtectDirectory(string directory, string? serviceIdentity) { }
+        public void ProtectCacheDirectory(string directory, string? serviceIdentity) { }
         public void ProtectFile(string file, string? serviceIdentity) { }
     }
 }

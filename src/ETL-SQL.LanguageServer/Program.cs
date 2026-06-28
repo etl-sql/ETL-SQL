@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.MySql;
@@ -43,7 +44,7 @@ namespace ETL_SQL.LSP
     {
         static async Task Main(string[] args)
         {
-            ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+            await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
             var server = await LanguageServer.From(options =>
                 options
@@ -55,6 +56,7 @@ namespace ETL_SQL.LSP
                         var configuration = new ConfigurationBuilder()
                             .SetBasePath(AppContext.BaseDirectory)
                             .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+                            .AddEnterprisePolicy()
                             .Build();
                         services.AddSingleton<IConfiguration>(configuration);
 

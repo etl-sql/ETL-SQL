@@ -42,10 +42,15 @@ public sealed record OrganizationPolicyDocument
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
             values["Security:MaxFileOperationsPerScript"] = Execution.MaxFileOperationsPerScript.Value;
+        if (Execution.MaxRecursiveNestingDepth.HasValue)
+            values["Security:MaxRecursiveNestingDepth"] = Execution.MaxRecursiveNestingDepth.Value;
+        values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
+        values["Security:RemoteExecutionMode"] = RemoteExecution.Mode.ToString();
         if (RemoteExecution.AllowedHosts.Count > 0)
             values["Security:AllowedHosts"] = RemoteExecution.AllowedHosts;
-        if (MutationGuardrails.RequireRemoteAuditForMutations)
-            values["Audit:RemoteDeliveryRequired"] = true;
+        values["Security:RequireWhatIfForDestructiveStatements"] = MutationGuardrails.RequireWhatIfForDestructiveStatements;
+        values["Security:RequireTransactionForMutations"] = MutationGuardrails.RequireTransactionForMutations;
+        values["Audit:RemoteDeliveryRequired"] = MutationGuardrails.RequireRemoteAuditForMutations;
 
         return values;
     }
@@ -73,6 +78,7 @@ public sealed record ExecutionPolicySection
 
     public int? MaxParallelDegree { get; init; }
     public int? MaxFileOperationsPerScript { get; init; }
+    public int? MaxRecursiveNestingDepth { get; init; }
 }
 
 public sealed record RemoteExecutionPolicySection
@@ -187,6 +193,8 @@ public static class OrganizationPolicySchema
             errors.Add("Execution max parallel degree must be at least 1.");
         if (execution.MaxFileOperationsPerScript.HasValue && execution.MaxFileOperationsPerScript.Value < 0)
             errors.Add("Execution max file operations per script must be zero or greater.");
+        if (execution.MaxRecursiveNestingDepth.HasValue && execution.MaxRecursiveNestingDepth.Value < 0)
+            errors.Add("Execution max recursive nesting depth must be zero or greater.");
     }
 
     private static void ValidateRemoteExecution(RemoteExecutionPolicySection remote, List<string> errors)

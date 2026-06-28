@@ -33,7 +33,14 @@ configuration behavior and does not require network connectivity.
   - [x] Detect enrollment before normal application startup so JSON, environment variables, command-line arguments, and scripts cannot disable it; leave standalone behavior unchanged when enrollment is absent.
   - [x] Add tamper, permissions, invalid endpoint/key, startup, standalone-regression, and cross-platform storage tests.
   - [x] Document enrollment, service identity access, recovery, unenrollment, and OS application-control boundaries.
-- [ ] **Phase 2: Authoritative Policy Runtime** — signed retrieval, protected cache, freshness, precedence, effective-policy diagnostics, and versioning.
+- [x] **Phase 2: Authoritative Policy Runtime**
+  - [x] Define and verify tenant-bound, versioned RSA-PSS SHA-256 policy envelopes with issuance, expiry, and schema validation.
+  - [x] Retrieve policy over HTTPS with enrollment/machine identity headers and optional client-certificate authentication.
+  - [x] Persist only verified envelopes in a separate OS-protected cache; re-verify signatures, reject rollback, and enforce envelope/offline expiry.
+  - [x] Apply verified policy after JSON, environment, command-line, and deployment overrides while preserving standalone behavior when unenrolled.
+  - [x] Expose redacted effective-policy status, source, version, issuance/expiry, warnings, and governed key names through `enterprise status`.
+  - [x] Add signature, tamper, tenant, expiry, rollback, cache, HTTP contract, fail-closed/fail-open, and precedence coverage.
+  - [x] Document the policy endpoint, signing contract, client authentication, cache behavior, precedence, diagnostics, and enforcement boundary.
 - [ ] **Phase 3: Operation-Boundary Enforcement** — filesystem, network, connector, process, Docker, resource, and script-override controls.
 - [ ] **Phase 4: Central Security Events** — structured security events, durable SIEM delivery, backpressure, and optional fail-closed monitoring.
 - [ ] **Phase 5: Certification & Operations** — platform certification, outage/tamper drills, upgrades, recovery, and administrator runbooks.

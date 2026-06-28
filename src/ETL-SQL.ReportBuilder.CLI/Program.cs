@@ -20,7 +20,7 @@ namespace ETL_SQL.ReportBuilder.CLI
     {
         private static async Task<int> Main(string[] args)
         {
-            ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+            await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
             if (args.Length == 0)
             {

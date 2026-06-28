@@ -25,6 +25,7 @@ using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Orchestrator.Execution;
@@ -61,6 +62,7 @@ namespace ETL_SQL.TUI
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
                 .AddEnvironmentVariables()
+                .AddEnterprisePolicy()
                 .Build();
 
             ETL_SQL.Core.Metadata.SnippetLibrary.Initialize(

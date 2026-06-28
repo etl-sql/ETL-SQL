@@ -134,6 +134,38 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             minimumValue: 1);
 
         yield return new(
+            "Security:AllowedExecutionModes",
+            GovernancePolicyScope.Execution,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "Execution modes permitted by authoritative organization policy.");
+
+        yield return new(
+            "Security:RemoteExecutionMode",
+            GovernancePolicyScope.Execution,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Enum,
+            "Controls whether and how remote execution is permitted.",
+            defaultValue: "Disabled",
+            allowedValues: ["Disabled", "TrustedOrchestrator", "AllowedHosts"]);
+
+        yield return new(
+            "Security:RequireWhatIfForDestructiveStatements",
+            GovernancePolicyScope.Security,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Requires a what-if guard before destructive statements execute.",
+            defaultValue: true);
+
+        yield return new(
+            "Security:RequireTransactionForMutations",
+            GovernancePolicyScope.Security,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Boolean,
+            "Requires mutation statements to execute under transaction guardrails.",
+            defaultValue: true);
+
+        yield return new(
             "Security:MaxSmtpEmailsPerScript",
             GovernancePolicyScope.Connector,
             GovernancePolicyClassification.Constrained,

@@ -5,6 +5,7 @@ using System.Threading.RateLimiting;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.Orchestrator.Channels;
@@ -22,7 +23,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 
-ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends every
@@ -37,6 +38,7 @@ if (Microsoft.Extensions.Hosting.WindowsServices.WindowsServiceHelpers.IsWindows
 builder.Host.UseWindowsService(o => o.ServiceName = "ETL-SQL Report Portal");
 #endif
 builder.Configuration.AddSecureConfiguration();
+builder.Configuration.AddEnterprisePolicy();
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
