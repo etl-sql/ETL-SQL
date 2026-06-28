@@ -1499,8 +1499,11 @@ FROM sales_data;
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | All rows from the partition start to the current row |
 | `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
+| `RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Rows whose **ORDER BY value** is within ±1 of the current row's value (value-based, not row count) |
 | `GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW` | Current peer group and one prior peer group |
 | `EXCLUDE CURRENT ROW` / `EXCLUDE GROUP` / `EXCLUDE TIES` | Removes the current row, current peer group, or peer ties from the frame |
+
+`ROWS`, `RANGE`, and `GROUPS` frame units are all supported. `RANGE` offsets are value-based and require a single **numeric** `ORDER BY` key; date/interval `RANGE` offsets and other unsupported shapes fall back to the full partition.
 
 ### 5.11 `QUALIFY` â€” Filter Window Results
 The `QUALIFY` clause filters results based on window function values. It is evaluated after window functions are calculated, avoiding the need for a subquery to filter by a ranked or aggregated window value.

@@ -346,16 +346,70 @@ public class WindowEngine
         }
         else // RANGE
         {
-            if (frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING &&
-                (!frame.EndBound.HasValue || frame.EndBound == WindowFrameBoundType.CURRENT_ROW))
+            bool isDefaultRange = frame.StartBound == WindowFrameBoundType.UNBOUNDED_PRECEDING &&
+                (!frame.EndBound.HasValue || frame.EndBound == WindowFrameBoundType.CURRENT_ROW);
+
+            async Task<decimal?> RangeKey(Row r)
             {
+                if (window.OrderBy == null || window.OrderBy.Count != 1) return null;
+                var v = await _context.EvaluateValue(window.OrderBy[0].Expression, r);
+                if (v == null || v == DBNull.Value) return null;
+                try { return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture); }
+                catch { return null; }
+            }
+
+            decimal? curKey = isDefaultRange ? null : await RangeKey(partitionRows[currentIndex]);
+
+            if (isDefaultRange)
+            {
+                // Default frame: UNBOUNDED PRECEDING .. CURRENT ROW (inclusive of the current peer group).
                 start = 0;
                 end = currentIndex;
                 while (end + 1 < partitionRows.Count && await ArePeers(partitionRows[currentIndex], partitionRows[end + 1], window.OrderBy))
                     end++;
             }
+            else if (curKey.HasValue)
+            {
+                // Value-based RANGE: bounds are offsets in ORDER BY value space (numeric keys).
+                bool desc = window.OrderBy![0].Descending;
+                decimal cur = curKey.Value;
+
+                async Task<decimal> Offset(Expression? e)
+                {
+                    if (e == null) return 0m;
+                    var v = await _context.EvaluateValue(e, partitionRows[currentIndex]);
+                    return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture);
+                }
+                async Task<decimal> BoundVal(WindowFrameBoundType b, Expression? v) => b switch
+                {
+                    WindowFrameBoundType.UNBOUNDED_PRECEDING => decimal.MinValue,
+                    WindowFrameBoundType.UNBOUNDED_FOLLOWING => decimal.MaxValue,
+                    WindowFrameBoundType.CURRENT_ROW => cur,
+                    WindowFrameBoundType.PRECEDING => cur + (desc ? await Offset(v) : -await Offset(v)),
+                    WindowFrameBoundType.FOLLOWING => cur + (desc ? -await Offset(v) : await Offset(v)),
+                    _ => cur
+                };
+
+                decimal a = await BoundVal(frame.StartBound, frame.StartValue);
+                decimal b2 = frame.EndBound.HasValue ? await BoundVal(frame.EndBound.Value, frame.EndValue) : cur;
+                decimal lo = Math.Min(a, b2), hi = Math.Max(a, b2);
+
+                int s = -1, e = -1;
+                for (int i = 0; i < partitionRows.Count; i++)
+                {
+                    var k = await RangeKey(partitionRows[i]);
+                    if (k.HasValue && k.Value >= lo && k.Value <= hi)
+                    {
+                        if (s == -1) s = i;
+                        e = i;
+                    }
+                }
+                start = s == -1 ? currentIndex : s;
+                end = e == -1 ? currentIndex : e;
+            }
             else
             {
+                // Non-numeric ORDER BY key with explicit offsets: fall back to the whole partition.
                 start = 0;
                 end = partitionRows.Count - 1;
             }
