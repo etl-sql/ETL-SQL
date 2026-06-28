@@ -149,6 +149,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         //    (EXCLUDE/REPLACE/RENAME) are resolved locally below, so they are not pushed down.
         bool hasStarModifiers = stmt.Columns.Any(c => c.Expression is StarExpression);
         if (stmt.IntoTable == null && !stmt.OrderByAll && !stmt.GroupByAll && !hasStarModifiers && stmt.Sample == null
+            && !HasLateralColumnAlias(stmt.Columns)
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
@@ -167,6 +168,11 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
         var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
+
+        // Lateral column aliases: let a SELECT item reference an alias defined earlier in the same
+        // list (e.g. SELECT a+b AS total, total*2 AS dt). Resolved by inlining the earlier alias's
+        // expression; a real source column always wins over an alias of the same name.
+        finalColumns = ApplyLateralColumnAliases(finalColumns, firstBatch?.ColumnNames ?? new List<string>());
 
         // GROUP BY ALL: now that output columns are fully expanded, group by every non-aggregate, non-window column.
         if (stmt.GroupByAll)
@@ -243,6 +249,128 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             outB.SetColumns(cols ?? new List<string>());
             foreach (var r in reservoir) await outB.AddRowAsync(r);
             yield return outB;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites the SELECT list so a column may reference an alias defined by an earlier column
+    /// (lateral column alias), by inlining the earlier column's (already-inlined) expression. A real
+    /// source column always takes precedence over an alias of the same name, so existing queries are
+    /// unaffected.
+    /// </summary>
+    /// <summary>
+    /// Conservatively detects whether any SELECT item references an alias defined by an earlier
+    /// item (a lateral column alias). Such queries are resolved locally rather than pushed down,
+    /// because most remote dialects cannot resolve a SELECT alias laterally. Reuses
+    /// <see cref="InlineAliases"/> with an empty source set so detection exactly mirrors inlining
+    /// (qualified references are ignored, matching the feature's semantics).
+    /// </summary>
+    private static bool HasLateralColumnAlias(List<SelectColumn> columns)
+    {
+        var seen = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+        var emptySrc = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var col in columns)
+        {
+            if (seen.Count > 0 && !ReferenceEquals(InlineAliases(col.Expression, seen, emptySrc), col.Expression))
+                return true;
+            if (!string.IsNullOrEmpty(col.Alias) && !seen.ContainsKey(col.Alias))
+                seen[col.Alias] = col.Expression;
+        }
+        return false;
+    }
+
+    private static List<SelectColumn> ApplyLateralColumnAliases(List<SelectColumn> columns, List<string> sourceColumns)
+    {
+        var srcBase = new HashSet<string>(
+            sourceColumns.Select(c => c.Contains('.') ? c.Split('.').Last() : c),
+            StringComparer.OrdinalIgnoreCase);
+        var aliasMap = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<SelectColumn>(columns.Count);
+        foreach (var col in columns)
+        {
+            var rewritten = aliasMap.Count > 0 ? InlineAliases(col.Expression, aliasMap, srcBase) : col.Expression;
+            result.Add(ReferenceEquals(rewritten, col.Expression)
+                ? col
+                : new SelectColumn(rewritten, col.Alias) { Line = col.Line, Column = col.Column, EndLine = col.EndLine, EndColumn = col.EndColumn });
+            if (!string.IsNullOrEmpty(col.Alias) && !srcBase.Contains(col.Alias) && !aliasMap.ContainsKey(col.Alias))
+                aliasMap[col.Alias] = rewritten;
+        }
+        return result;
+    }
+
+    private static Expression InlineAliases(Expression expr, Dictionary<string, Expression> aliases, HashSet<string> srcBase)
+    {
+        switch (expr)
+        {
+            case IdentifierExpression id when !id.Name.Contains('.'):
+                return !srcBase.Contains(id.Name) && aliases.TryGetValue(id.Name, out var repl) ? repl : expr;
+            case BinaryExpression bin:
+                {
+                    var l = InlineAliases(bin.Left, aliases, srcBase);
+                    var r = InlineAliases(bin.Right, aliases, srcBase);
+                    return ReferenceEquals(l, bin.Left) && ReferenceEquals(r, bin.Right) ? expr : new BinaryExpression(l, bin.Operator, r);
+                }
+            case UnaryExpression un:
+                {
+                    var inner = InlineAliases(un.Expression, aliases, srcBase);
+                    return ReferenceEquals(inner, un.Expression) ? expr : new UnaryExpression(un.Operator, inner);
+                }
+            case FunctionCallExpression fn:
+                {
+                    bool changed = false;
+                    var newArgs = new List<Expression>(fn.Arguments.Count);
+                    foreach (var arg in fn.Arguments) { var q = InlineAliases(arg, aliases, srcBase); newArgs.Add(q); if (!ReferenceEquals(q, arg)) changed = true; }
+                    if (!changed) return expr;
+                    return new FunctionCallExpression(fn.FunctionName, newArgs)
+                    { IsDistinct = fn.IsDistinct, Window = fn.Window, WithinGroupOrderBy = fn.WithinGroupOrderBy, Filter = fn.Filter, JsonTable = fn.JsonTable };
+                }
+            case InExpression inExpr when inExpr.Subquery == null:
+                {
+                    var l = InlineAliases(inExpr.Left, aliases, srcBase);
+                    var r = InlineAliases(inExpr.Right, aliases, srcBase);
+                    return ReferenceEquals(l, inExpr.Left) && ReferenceEquals(r, inExpr.Right) ? expr : new InExpression(l, r, inExpr.IsNot);
+                }
+            case BetweenExpression bt:
+                {
+                    var l = InlineAliases(bt.Left, aliases, srcBase);
+                    var s = InlineAliases(bt.Start, aliases, srcBase);
+                    var e = InlineAliases(bt.End, aliases, srcBase);
+                    return ReferenceEquals(l, bt.Left) && ReferenceEquals(s, bt.Start) && ReferenceEquals(e, bt.End) ? expr : new BetweenExpression(l, s, e, bt.IsNot);
+                }
+            case IsNullExpression isn:
+                {
+                    var inner = InlineAliases(isn.Expression, aliases, srcBase);
+                    return ReferenceEquals(inner, isn.Expression) ? expr : new IsNullExpression(inner, isn.Not);
+                }
+            case IsDistinctFromExpression idf:
+                {
+                    var l = InlineAliases(idf.Left, aliases, srcBase);
+                    var r = InlineAliases(idf.Right, aliases, srcBase);
+                    return ReferenceEquals(l, idf.Left) && ReferenceEquals(r, idf.Right) ? expr : new IsDistinctFromExpression(l, r, idf.Not);
+                }
+            case LikeExpression like:
+                {
+                    var l = InlineAliases(like.Left, aliases, srcBase);
+                    return ReferenceEquals(l, like.Left) ? expr : new LikeExpression(l, like.Pattern, like.IsNot, like.EscapeChar, like.IsCaseInsensitive);
+                }
+            case CaseExpression ce:
+                {
+                    bool changed = false;
+                    var whens = new List<(Expression, Expression)>(ce.WhenClauses.Count);
+                    foreach (var (c, res) in ce.WhenClauses)
+                    {
+                        var qc = InlineAliases(c, aliases, srcBase);
+                        var qr = InlineAliases(res, aliases, srcBase);
+                        whens.Add((qc, qr));
+                        if (!ReferenceEquals(qc, c) || !ReferenceEquals(qr, res)) changed = true;
+                    }
+                    var ni = ce.InputExpression != null ? InlineAliases(ce.InputExpression, aliases, srcBase) : null;
+                    var ne = ce.ElseResult != null ? InlineAliases(ce.ElseResult, aliases, srcBase) : null;
+                    if (!changed && ReferenceEquals(ni, ce.InputExpression) && ReferenceEquals(ne, ce.ElseResult)) return expr;
+                    return new CaseExpression(whens, ne, ni);
+                }
+            default:
+                return expr;
         }
     }
 }

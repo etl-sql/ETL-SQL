@@ -1142,6 +1142,12 @@ SELECT region, product, total FROM #sales ORDER BY ALL;
 SELECT region, product, total FROM #sales ORDER BY ALL DESC;
 ```
 
+**Lateral column aliases** — a SELECT item may reference an alias defined by an *earlier* item in the same list; the earlier expression is inlined. `ORDER BY` may also reference an output alias. A real source column always wins over an alias of the same name:
+```sql
+SELECT a + b AS total, total * 2 AS doubled FROM #t;
+SELECT a, a * -1 AS neg FROM #t ORDER BY neg;
+```
+
 **`count()` shorthand** — a zero-argument `COUNT()` is treated as `COUNT(*)`:
 ```sql
 SELECT count() FROM #orders;

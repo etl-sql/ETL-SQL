@@ -1097,6 +1097,7 @@ Standard clauses available within a `SELECT` statement.
 | `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `count()` | Shorthand for `COUNT(*)` | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](../Docs/Reference/Grammar.md) | - |
