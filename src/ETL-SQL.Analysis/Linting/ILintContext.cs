@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Analysis.Linting;
+
 public interface IMetadataProvider
 {
     Task<IEnumerable<string>> GetTablesAsync(string connectionName);

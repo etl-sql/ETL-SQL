@@ -134,19 +134,22 @@ internal static class RowExpressionCompiler
                 var value = inner(row);
                 if (value == null || value == DBNull.Value) return null;
                 try { return !Convert.ToBoolean(value); } catch { return null; }
-            },
+            }
+            ,
             TokenType.MINUS => row =>
             {
                 var value = inner(row);
                 if (value == null || value == DBNull.Value) return null;
                 try { return -Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture); } catch { return null; }
-            },
+            }
+            ,
             TokenType.PLUS => row =>
             {
                 var value = inner(row);
                 if (value == null || value == DBNull.Value) return null;
                 try { return Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture); } catch { return value; }
-            },
+            }
+            ,
             _ => static _ => null
         };
 
@@ -172,7 +175,8 @@ internal static class RowExpressionCompiler
                 if (!IsNull(rightValue) && !Convert.ToBoolean(rightValue)) return false;
                 if (IsNull(leftValue) || IsNull(rightValue)) return null;
                 return true;
-            },
+            }
+            ,
             TokenType.OR => row =>
             {
                 var leftValue = left(row);
@@ -182,25 +186,29 @@ internal static class RowExpressionCompiler
                 if (!IsNull(rightValue) && Convert.ToBoolean(rightValue)) return true;
                 if (IsNull(leftValue) || IsNull(rightValue)) return null;
                 return false;
-            },
+            }
+            ,
             TokenType.PLUS or TokenType.MINUS or TokenType.STAR or TokenType.SLASH
                 or TokenType.MODULO or TokenType.LSHIFT or TokenType.RSHIFT => row =>
             {
                 var result = BinaryOperatorFactory.Execute(binary.Operator, left(row), right(row));
                 return result;
-            },
+            }
+            ,
             TokenType.EQUALS => row =>
             {
                 var leftValue = left(row);
                 var rightValue = right(row);
                 return IsNull(leftValue) || IsNull(rightValue) ? null : context.IsSoftEqual(leftValue, rightValue);
-            },
+            }
+            ,
             TokenType.NOT_EQUALS => row =>
             {
                 var leftValue = left(row);
                 var rightValue = right(row);
                 return IsNull(leftValue) || IsNull(rightValue) ? null : !context.IsSoftEqual(leftValue, rightValue);
-            },
+            }
+            ,
             TokenType.GREATER_THAN => row => Compare(context, left(row), right(row), static c => c > 0),
             TokenType.LESS_THAN => row => Compare(context, left(row), right(row), static c => c < 0),
             TokenType.GREATER_EQUALS => row => Compare(context, left(row), right(row), static c => c >= 0),

@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core.Services;
+
 public enum SuggestionType
 {
     Keyword,

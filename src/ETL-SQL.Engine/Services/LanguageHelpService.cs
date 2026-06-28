@@ -2,6 +2,7 @@ using System;
 using ETL_SQL.Core.Interfaces;
 
 namespace ETL_SQL.Engine.Services;
+
 public static class LanguageHelpService
 {
     public static void Initialize(ILanguageHelpRegistry registry)

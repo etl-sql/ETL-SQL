@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 namespace ETL_SQL.Core.Common;
+
 public record TreeLine(
     string Indent,
     string Connector,

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class SetNoSaveSensitiveStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(SetNoSaveSensitiveStatement);

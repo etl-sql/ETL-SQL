@@ -19,6 +19,7 @@ using ETL_SQL.Core.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Data;
+
 public struct CompositeKey : IEquatable<CompositeKey>
 {
     private readonly object?[] _values;

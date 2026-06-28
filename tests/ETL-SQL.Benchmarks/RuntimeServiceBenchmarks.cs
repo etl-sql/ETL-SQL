@@ -6,10 +6,10 @@ using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Reporting;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
-using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Benchmarks;
 

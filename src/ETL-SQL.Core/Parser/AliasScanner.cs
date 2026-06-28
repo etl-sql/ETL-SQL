@@ -6,6 +6,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Core.Parser;
+
 public record AliasInfo(string TableName, string? Alias = null)
 {
     public string? ConnectionName { get; init; }

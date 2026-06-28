@@ -2,6 +2,7 @@ using System;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
+
 public enum SubqueryResultType
 {
     Scalar,

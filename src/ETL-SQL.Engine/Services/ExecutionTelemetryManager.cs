@@ -3,6 +3,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Services;
+
 public class ExecutionTelemetryManager : ITelemetryContext
 {
     private long _rowsProcessed = 0;

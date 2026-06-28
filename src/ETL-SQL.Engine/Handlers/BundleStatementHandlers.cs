@@ -18,6 +18,7 @@ using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public sealed record BundlePreflightResult(
     string EntryPath,
     IReadOnlyList<BundlePublishFile> Files,

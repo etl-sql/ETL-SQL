@@ -1,4 +1,5 @@
 namespace ETL_SQL.Analysis.Linting;
+
 using ETL_SQL.Core.Governance;
 
 public enum LintSeverity

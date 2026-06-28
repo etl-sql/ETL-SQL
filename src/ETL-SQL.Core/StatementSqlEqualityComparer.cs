@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 
 namespace ETL_SQL.Core;
+
 public class StatementSqlEqualityComparer : IEqualityComparer<Statement>
 {
     public bool Equals(Statement? x, Statement? y)

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class AggregateWithoutGroupByRule : ILintRule
 {
     public string Name => "AggregateWithoutGroupBy";

@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Core.Interfaces;
 
 namespace ETL_SQL.Core.Metadata;
+
 public class LanguageHelpRegistry : ILanguageHelpRegistry
 {
     private readonly Dictionary<string, string> _topLevelHelp = new(StringComparer.OrdinalIgnoreCase);

@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Services;
+
 public enum PathProtectionMode
 {
     Unrestricted, // Block nothing

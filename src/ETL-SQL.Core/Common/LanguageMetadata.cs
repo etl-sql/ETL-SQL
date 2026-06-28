@@ -4,6 +4,7 @@ using System.Linq;
 
 
 namespace ETL_SQL.Common;
+
 public static class LanguageMetadata
 {
     public static readonly HashSet<string> DmlKeywords = new(StringComparer.OrdinalIgnoreCase)

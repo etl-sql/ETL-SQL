@@ -1,6 +1,7 @@
 using System;
 
 namespace ETL_SQL.Core;
+
 public enum SpillOptionType
 {
     Encryption,

@@ -8,6 +8,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class SchemaValidationRule : ILintRule
 {
     private readonly ILogger? _logger;

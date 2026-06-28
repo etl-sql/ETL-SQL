@@ -2,6 +2,7 @@ using System;
 using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Core.Common.Exceptions;
+
 public class ETLException : Exception
 {
     public ETLException(string message) : base(SecretRedactor.Redact(message) ?? string.Empty) { }

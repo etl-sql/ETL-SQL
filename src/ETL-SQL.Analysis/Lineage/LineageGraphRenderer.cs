@@ -5,6 +5,7 @@ using System.Text;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Analysis.Lineage;
+
 public class LineageGraphRenderer
 {
     public string Render(ILineageTracker tracker, string? targetTable = null, string? targetColumn = null)

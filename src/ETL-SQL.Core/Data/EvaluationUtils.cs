@@ -8,6 +8,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
+
 public static class EvaluationUtils
 {
     public static bool IsSoftEqual(object? a, object? b, ILogger? logger = null, bool caseSensitive = false)

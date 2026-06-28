@@ -1,4 +1,5 @@
 namespace ETL_SQL.Core;
+
 public enum TransformationKind
 {
     Unknown,

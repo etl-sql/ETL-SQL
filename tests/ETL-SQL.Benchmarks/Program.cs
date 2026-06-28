@@ -1,7 +1,7 @@
-using BenchmarkDotNet.Running;
 using System;
 using System.IO;
 using System.Linq;
+using BenchmarkDotNet.Running;
 
 namespace ETL_SQL.Benchmarks
 {

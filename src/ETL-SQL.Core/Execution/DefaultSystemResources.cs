@@ -1,6 +1,7 @@
 using System;
 
 namespace ETL_SQL.Core.Execution;
+
 public class DefaultSystemResources : ISystemResources
 {
     public long GetAvailableMemoryBytes()

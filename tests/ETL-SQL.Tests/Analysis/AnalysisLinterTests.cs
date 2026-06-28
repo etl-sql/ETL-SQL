@@ -1,11 +1,11 @@
-﻿using System.Collections.Generic;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Analysis.Linting;
-using ETL_SQL.Common;
 using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.App;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using Xunit;
 

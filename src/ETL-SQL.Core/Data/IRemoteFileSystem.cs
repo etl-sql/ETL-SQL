@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Data;
+
 public record FileMetaData
 {
     public string Name { get; init; } = "";

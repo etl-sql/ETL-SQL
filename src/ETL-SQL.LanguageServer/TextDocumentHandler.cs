@@ -152,8 +152,8 @@ namespace ETL_SQL.LSP
 
             if (_debouncers.TryRemove(uri, out var cts))
             {
-                try { await cts.CancelAsync(); } catch {}
-                try { cts.Dispose(); } catch {}
+                try { await cts.CancelAsync(); } catch { }
+                try { cts.Dispose(); } catch { }
             }
 
             // 1. Clear session metadata and temp tables for this document

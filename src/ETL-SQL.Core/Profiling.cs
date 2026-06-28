@@ -1,6 +1,7 @@
 using System;
 
 namespace ETL_SQL.Core;
+
 public class ExecutionMetrics
 {
     public string Sql { get; set; } = string.Empty;

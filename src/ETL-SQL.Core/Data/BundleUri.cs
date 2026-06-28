@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.Core.Data;
+
 public sealed record BundleUri(string BundleName, int? Version, string Path)
 {
     private static readonly Regex UriRegex = new(

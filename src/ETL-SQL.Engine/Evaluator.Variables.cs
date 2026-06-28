@@ -5,6 +5,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine;
+
 public partial class Evaluator
 {
     public IVariableContext VarContext => _variableScopeManager;

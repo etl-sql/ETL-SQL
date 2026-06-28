@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class ParallelForStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(ParallelForStatement);

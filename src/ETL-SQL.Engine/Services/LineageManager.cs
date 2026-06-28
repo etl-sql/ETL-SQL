@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Services;
+
 public class LineageManager(ILineageTracker tracker)
 {
     private readonly ILineageTracker _tracker = tracker;

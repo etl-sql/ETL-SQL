@@ -5,6 +5,7 @@ using System.Linq;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Core;
+
 public class LineageEntry
 {
     public string TargetTable { get; set; } = string.Empty;

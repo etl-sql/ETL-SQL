@@ -1,3 +1,4 @@
+using System.Net.Http.Json;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
@@ -9,7 +10,6 @@ using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Net.Http.Json;
 
 namespace ETL_SQL.ReportPortal.Tests;
 

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Parser.Components;
+
 public abstract class ParserComponent
 {
     protected readonly IParser _parser;

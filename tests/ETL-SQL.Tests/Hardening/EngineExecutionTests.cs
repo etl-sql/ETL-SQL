@@ -519,11 +519,13 @@ namespace ETL_SQL.Tests.Hardening
                 new IdentifierExpression("Val"),
                 new LiteralExpression(2, TokenType.NUMBER),
                 new LiteralExpression(-1, TokenType.NUMBER)
-            }) { Window = window };
+            })
+            { Window = window };
             var first = new FunctionCallExpression("FIRST_VALUE", new List<Expression>
             {
                 new IdentifierExpression("Val")
-            }) { Window = window };
+            })
+            { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
@@ -591,7 +593,8 @@ namespace ETL_SQL.Tests.Hardening
                 new IdentifierExpression("Val"),
                 new LiteralExpression(offset, TokenType.NUMBER),
                 new LiteralExpression(defaultValue, TokenType.NUMBER)
-            }) { Window = window };
+            })
+            { Window = window };
             var leadTwo = Lead(2, -1);
             var leadZero = Lead(0, -2);
             var stmt = new SelectStatement(
@@ -659,7 +662,8 @@ namespace ETL_SQL.Tests.Hardening
             var ntile = new FunctionCallExpression("NTILE", new List<Expression>
             {
                 new LiteralExpression(3, TokenType.NUMBER)
-            }) { Window = window };
+            })
+            { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
@@ -725,11 +729,13 @@ namespace ETL_SQL.Tests.Hardening
             var first = new FunctionCallExpression("FIRST_VALUE", new List<Expression>
             {
                 new IdentifierExpression("Val")
-            }) { Window = window };
+            })
+            { Window = window };
             var last = new FunctionCallExpression("LAST_VALUE", new List<Expression>
             {
                 new IdentifierExpression("Val")
-            }) { Window = window };
+            })
+            { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {

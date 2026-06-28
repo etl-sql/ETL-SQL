@@ -412,7 +412,8 @@ public sealed class ConfigurationRoundTripTests
             .ToListAsync()).ToHashSet();
         var rawSubscriptions = await db.Subscriptions
             .Where(s => s.Name != null && s.Name.EndsWith($"_{suffix}"))
-            .Select(s => new {
+            .Select(s => new
+            {
                 FolderPath = s.Report.Folder.Path,
                 ReportName = s.Report.Name,
                 s.Name,
@@ -433,7 +434,8 @@ public sealed class ConfigurationRoundTripTests
 
         var rawAlerts = await db.ReportAlerts
             .Where(a => a.Name.EndsWith($"_{suffix}"))
-            .Select(a => new {
+            .Select(a => new
+            {
                 FolderPath = a.Report.Folder.Path,
                 ReportName = a.Report.Name,
                 a.Name,

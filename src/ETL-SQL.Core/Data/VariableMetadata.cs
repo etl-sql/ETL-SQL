@@ -1,4 +1,5 @@
 namespace ETL_SQL.Data;
+
 public class VariableMetadata
 {
     public bool IsSensitive { get; set; }

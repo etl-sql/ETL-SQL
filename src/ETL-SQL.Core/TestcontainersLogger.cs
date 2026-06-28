@@ -3,6 +3,7 @@ using ETL_SQL.Common;
 using Microsoft.Extensions.Logging;
 
 namespace ETL_SQL.Core;
+
 public class TestcontainersLogger : Microsoft.Extensions.Logging.ILogger
 {
     private readonly string _categoryName;

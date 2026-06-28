@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class SetReportMetadataStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(SetReportMetadataStatement);

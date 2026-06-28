@@ -4,6 +4,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Parser.Components;
+
 public class ReportParser : ParserComponent
 {
     public ReportParser(IParser parser, StatementParser parent) : base(parser, parent) { }

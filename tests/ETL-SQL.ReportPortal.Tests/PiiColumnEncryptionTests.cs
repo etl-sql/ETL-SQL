@@ -93,7 +93,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
             command.CommandText = "SELECT Email, FirstName, LastName, PhoneNumber FROM AspNetUsers WHERE UserName = 'test_user_pii'";
             using var reader = await command.ExecuteReaderAsync();
             Assert.True(await reader.ReadAsync());
-            
+
             var emailVal = reader.GetString(0);
             var firstNameVal = reader.GetString(1);
             var lastNameVal = reader.GetString(2);

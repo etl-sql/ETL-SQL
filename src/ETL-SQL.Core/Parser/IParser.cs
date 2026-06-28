@@ -2,6 +2,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Core.Parser;
+
 public interface IParser
 {
     Token Current { get; }

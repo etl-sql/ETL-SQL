@@ -8,6 +8,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine;
+
 public partial class Evaluator
 {
     public async ValueTask<object?> ExecuteValue(string expression, Row? context = null, bool decryptSensitive = false)

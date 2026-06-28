@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Engine;
+
 public partial class Evaluator
 {
     [System.Obsolete("Use Telemetry.TotalSpilledBytes")]

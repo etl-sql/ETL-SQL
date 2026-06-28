@@ -9,6 +9,7 @@ using ETL_SQL.Data;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class ShowLineageHistoryForTableStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(ShowLineageHistoryForTableStatement);

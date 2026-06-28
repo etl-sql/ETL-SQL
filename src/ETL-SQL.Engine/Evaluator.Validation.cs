@@ -9,6 +9,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine;
+
 public partial class Evaluator
 {
     public Task<bool> ValidateCheckConstraint(Expression expression, Row row) =>

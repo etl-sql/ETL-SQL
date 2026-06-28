@@ -5,6 +5,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class UnknownTagLintRule : ILintRule
 {
     public string Name => "UnknownTag";

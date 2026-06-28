@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Core.Execution;
+
 public interface ISessionStateManager
 {
     string SessionRoot { get; }

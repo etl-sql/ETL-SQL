@@ -6,6 +6,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class SetThresholdStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(SetThresholdStatement);

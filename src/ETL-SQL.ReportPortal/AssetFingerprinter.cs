@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.ReportPortal;
+
 public static class AssetFingerprinter
 {
     public static void Apply(string webRoot, string version)
@@ -16,16 +17,16 @@ public static class AssetFingerprinter
 
             // 1. Match href="/..." or src="/..."
             // Example: href="/css/portal.css"
-            content = Regex.Replace(content, 
-                @"(href|src)=""/([^""]+?\.(?:js|css))(?:\?v=[^""]*)?""", 
-                $"$1=\"/$2?v={version}\"", 
+            content = Regex.Replace(content,
+                @"(href|src)=""/([^""]+?\.(?:js|css))(?:\?v=[^""]*)?""",
+                $"$1=\"/$2?v={version}\"",
                 RegexOptions.IgnoreCase);
 
             // 2. Match ES Module imports: from '/...'
             // Example: from '/designer/designer.js'
-            content = Regex.Replace(content, 
-                @"(from\s+['""])(/[^'""]+?\.(?:js|css))(?:\?v=[^'""]*)?(['""])", 
-                $"$1$2?v={version}$3", 
+            content = Regex.Replace(content,
+                @"(from\s+['""])(/[^'""]+?\.(?:js|css))(?:\?v=[^'""]*)?(['""])",
+                $"$1$2?v={version}$3",
                 RegexOptions.IgnoreCase);
 
             if (content != original)

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class AvoidSelectStarRule : ILintRule
 {
     public string Name => "AvoidSelectStar";

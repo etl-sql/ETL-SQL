@@ -1180,7 +1180,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-                var layout = GetLayout(_lastWidth, _lastHeight, editor._buffer.Lines.Count);
+            var layout = GetLayout(_lastWidth, _lastHeight, editor._buffer.Lines.Count);
 
             if (layout.InSidebar(x, y) && !ReportVisible)
             {

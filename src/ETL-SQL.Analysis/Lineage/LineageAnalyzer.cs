@@ -6,6 +6,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Analysis.Lineage;
+
 public class LineageAnalyzer
 {
     public ILineageTracker Tracker { get; }

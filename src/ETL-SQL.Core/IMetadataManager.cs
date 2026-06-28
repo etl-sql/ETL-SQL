@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
+
 public record ConnectionInfo(string Name, string Type, string ConnectionString, bool IsDocument);
 public record ColumnMetadata(string Name, string DataType);
 

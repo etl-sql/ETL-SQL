@@ -1,4 +1,5 @@
 namespace ETL_SQL.Core.Parser;
+
 public enum TokenType
 {
     // Keywords

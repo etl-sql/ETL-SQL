@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Core.Data;
+
 public record BundleVersionInfo(
     string BundleName,
     int Version,

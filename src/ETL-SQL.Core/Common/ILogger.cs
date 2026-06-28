@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.Common;
+
 public enum LogLevel
 {
     Debug,

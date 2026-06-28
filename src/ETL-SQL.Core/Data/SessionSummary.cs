@@ -1,6 +1,7 @@
 using System;
 
 namespace ETL_SQL.Core.Data;
+
 public record SessionSummary
 {
     public string SessionId { get; init; } = string.Empty;

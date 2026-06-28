@@ -19,6 +19,7 @@ using Testcontainers.Oracle;
 using Testcontainers.PostgreSql;
 
 namespace ETL_SQL.Core;
+
 public class DockerContainerManager : IDockerManager
 {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IContainer> _activeContainers = new(StringComparer.OrdinalIgnoreCase);
@@ -84,22 +85,22 @@ public class DockerContainerManager : IDockerManager
 
         if (imageName.Contains("mssql", StringComparison.OrdinalIgnoreCase))
         {
-                container = new MsSqlBuilder(imageName)
-                    .WithName(containerName)
-                    .WithPassword(credentials.Password)
-                    .WithLogger(_loggerFactory.CreateLogger<MsSqlBuilder>())
-                    .Build();
-            }
+            container = new MsSqlBuilder(imageName)
+                .WithName(containerName)
+                .WithPassword(credentials.Password)
+                .WithLogger(_loggerFactory.CreateLogger<MsSqlBuilder>())
+                .Build();
+        }
         else if (imageName.Contains("postgres", StringComparison.OrdinalIgnoreCase))
         {
-                container = new PostgreSqlBuilder(imageName)
-                    .WithName(containerName)
-                    .WithUsername(credentials.Username)
-                    .WithPassword(credentials.Password)
-                    .WithDatabase(credentials.Database)
-                    .WithLogger(_loggerFactory.CreateLogger<PostgreSqlBuilder>())
-                    .Build();
-            }
+            container = new PostgreSqlBuilder(imageName)
+                .WithName(containerName)
+                .WithUsername(credentials.Username)
+                .WithPassword(credentials.Password)
+                .WithDatabase(credentials.Database)
+                .WithLogger(_loggerFactory.CreateLogger<PostgreSqlBuilder>())
+                .Build();
+        }
         else if (imageName.Contains("oracle", StringComparison.OrdinalIgnoreCase))
         {
             container = new OracleBuilder(imageName)
@@ -109,37 +110,37 @@ public class DockerContainerManager : IDockerManager
         }
         else if (imageName.Contains("mysql", StringComparison.OrdinalIgnoreCase) || imageName.Contains("mariadb", StringComparison.OrdinalIgnoreCase))
         {
-                container = new MySqlBuilder(imageName)
-                    .WithName(containerName)
-                    .WithUsername(credentials.Username)
-                    .WithPassword(credentials.Password)
-                    .WithDatabase(credentials.Database)
-                    .WithLogger(_loggerFactory.CreateLogger<MySqlBuilder>())
-                    .Build();
-            }
+            container = new MySqlBuilder(imageName)
+                .WithName(containerName)
+                .WithUsername(credentials.Username)
+                .WithPassword(credentials.Password)
+                .WithDatabase(credentials.Database)
+                .WithLogger(_loggerFactory.CreateLogger<MySqlBuilder>())
+                .Build();
+        }
         else
         {
             throw new ExecutionException($"Unsupported Docker image for database: {imageName}. Currently supported: MsSql, Postgres, Oracle.");
         }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                await container.StartAsync(cancellationToken);
-            }
-            catch (Exception ex) when (ex.Message.Contains("already in use", StringComparison.OrdinalIgnoreCase))
-            {
-                // Final fallback if name exists but wasn't found by ListContainers
-                var retryConnStr = await GetExistingContainerConnectionString(containerName, imageName, credentials, cancellationToken);
-                if (retryConnStr != null) return retryConnStr;
-                await DisposeBuiltContainerAsync(container, key);
-                throw;
-            }
-            catch
-            {
-                await DisposeBuiltContainerAsync(container, key);
-                throw;
-            }
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            await container.StartAsync(cancellationToken);
+        }
+        catch (Exception ex) when (ex.Message.Contains("already in use", StringComparison.OrdinalIgnoreCase))
+        {
+            // Final fallback if name exists but wasn't found by ListContainers
+            var retryConnStr = await GetExistingContainerConnectionString(containerName, imageName, credentials, cancellationToken);
+            if (retryConnStr != null) return retryConnStr;
+            await DisposeBuiltContainerAsync(container, key);
+            throw;
+        }
+        catch
+        {
+            await DisposeBuiltContainerAsync(container, key);
+            throw;
+        }
 
         _activeContainers[key] = container;
 
@@ -170,7 +171,7 @@ public class DockerContainerManager : IDockerManager
                     using var client = new DockerClientBuilder()
                         .WithEndpoint(uri)
                         .Build();
-                        await client.System.PingAsync(cancellationToken); // Reliable check
+                    await client.System.PingAsync(cancellationToken); // Reliable check
                     return uri;
                 }
                 catch { /* Continue to next pipe */ }
@@ -202,14 +203,14 @@ public class DockerContainerManager : IDockerManager
                 if (portMap != null)
                 {
                     var host = "localhost";
-                        var publicPort = portMap.PublicPort;
+                    var publicPort = portMap.PublicPort;
 
-                        if (imageName.Contains("mssql"))
-                            return $"Server={host},{publicPort};Database=master;User Id=sa;Password={credentials.Password};Trusted_Connection=False;Encrypt=False;";
-                        if (imageName.Contains("postgres"))
-                            return $"Host={host};Port={publicPort};Database={credentials.Database};Username={credentials.Username};Password={credentials.Password}";
-                        if (imageName.Contains("mysql") || imageName.Contains("mariadb"))
-                            return $"Server={host};Port={publicPort};Database={credentials.Database};User ID={credentials.Username};Password={credentials.Password}";
+                    if (imageName.Contains("mssql"))
+                        return $"Server={host},{publicPort};Database=master;User Id=sa;Password={credentials.Password};Trusted_Connection=False;Encrypt=False;";
+                    if (imageName.Contains("postgres"))
+                        return $"Host={host};Port={publicPort};Database={credentials.Database};Username={credentials.Username};Password={credentials.Password}";
+                    if (imageName.Contains("mysql") || imageName.Contains("mariadb"))
+                        return $"Server={host};Port={publicPort};Database={credentials.Database};User ID={credentials.Username};Password={credentials.Password}";
                     if (imageName.Contains("oracle"))
                     {
                         if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))

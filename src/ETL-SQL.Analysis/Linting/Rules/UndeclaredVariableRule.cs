@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class UndeclaredVariableRule : ILintRule
 {
     public string Name => "UndeclaredVariable";

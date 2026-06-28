@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Core.Functions;
+
 public interface IFunctionRegistry
 {
     void Register(string name, Func<List<object?>, IExecutionContext, Task<object?>> implementation);

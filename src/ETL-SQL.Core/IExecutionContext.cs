@@ -9,6 +9,7 @@ using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
+
 public enum OperationType
 {
     /// <summary>Standard file system operations (Delete, Copy, Move, Rename, Zip, Encrypt).</summary>

@@ -4,6 +4,7 @@ using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Common;
+
 public static class ConfigurationExtensions
 {
     /// <summary>

@@ -5,6 +5,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class RequireVersionStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(RequireVersionStatement);

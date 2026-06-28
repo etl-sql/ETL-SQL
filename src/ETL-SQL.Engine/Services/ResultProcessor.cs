@@ -7,6 +7,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services;
+
 public class ResultProcessor(ILogger logger)
 {
     private readonly ILogger _logger = logger;

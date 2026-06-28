@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.Core;
+
 public class DataGenerator
 {
     private readonly int? _seed;

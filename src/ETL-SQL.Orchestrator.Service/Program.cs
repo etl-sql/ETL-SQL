@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Governance;
 using ETL_SQL.Connectors;
 using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Directory;
@@ -17,6 +16,7 @@ using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Connectors.Xml;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;

@@ -7,6 +7,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public static class OutputClauseHelper
 {
     public static async Task ProcessAsync(

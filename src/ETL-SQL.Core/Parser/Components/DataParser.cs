@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Parser.Components;
+
 public class DataParser : ParserComponent
 {
     public DataParser(IParser parser, StatementParser parent) : base(parser, parent) { }

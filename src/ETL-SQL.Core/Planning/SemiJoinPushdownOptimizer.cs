@@ -7,6 +7,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Planning;
+
 public static class SemiJoinPushdownOptimizer
 {
     public static async Task<SelectStatement> OptimizeAsync(SelectStatement stmt, IExecutionContext context)

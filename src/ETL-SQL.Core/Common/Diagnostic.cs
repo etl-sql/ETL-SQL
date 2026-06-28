@@ -1,6 +1,7 @@
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Core.Common;
+
 public enum DiagnosticSeverity
 {
     Error,

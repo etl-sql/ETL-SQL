@@ -6,6 +6,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
+
 public class SetTemplatePathStatementHandler(ILogger logger) : IStatementHandler
 {
     private readonly ILogger _logger = logger;

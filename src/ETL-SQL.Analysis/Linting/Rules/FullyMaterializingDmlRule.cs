@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.Analysis.Linting.Rules;
+
 public class FullyMaterializingDmlRule : ILintRule
 {
     public string Name => "FullyMaterializingDml";

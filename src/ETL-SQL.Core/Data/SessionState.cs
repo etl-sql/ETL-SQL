@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
+
 public class SessionState
 {
     public string SessionId { get; set; } = string.Empty;
