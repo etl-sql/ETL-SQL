@@ -4,7 +4,13 @@ const path = require('path');
 const crypto = require('crypto');
 
 const repoRoot = path.resolve(__dirname, '..');
-const version = "0.12.0";
+// Read the version from the single source of truth so the SBOM never goes stale on release.
+const version = (() => {
+  const props = fs.readFileSync(path.join(repoRoot, 'Directory.Build.props'), 'utf8');
+  const match = props.match(/<VersionPrefix>(\d+\.\d+\.\d+)<\/VersionPrefix>/);
+  if (!match) throw new Error('Could not read <VersionPrefix> from Directory.Build.props');
+  return match[1];
+})();
 
 const bundledAssets = [
   {
