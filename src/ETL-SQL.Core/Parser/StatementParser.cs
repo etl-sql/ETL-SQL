@@ -220,6 +220,12 @@ public class StatementParser
         if (type == TokenType.SELECT) return _parser.ParseQuery();
         if (type == TokenType.PIVOT) return _parser.ParseDuckPivotStatement();
         if (type == TokenType.UNPIVOT) return _parser.ParseDuckUnpivotStatement();
+        if (type == TokenType.DESCRIBE)
+        {
+            // DESCRIBE <table> — DuckDB-style alias for SHOW COLUMNS FOR <table>.
+            _parser.Advance();
+            return new ShowColumnsStatement(_parser.ParseTableReference());
+        }
 
         if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ExtensionParser.ParseExecute();
 

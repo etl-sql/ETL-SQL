@@ -298,6 +298,7 @@ public static class AstSerializer
             SetOpType.INTERSECT => "INTERSECT",
             _ => "UNION"
         };
+        if (s.ByName) op += " BY NAME";
         return $"({s.Left.ToSql().TrimEnd(';')}) {op} ({s.Right.ToSql().TrimEnd(';')});";
     }
 

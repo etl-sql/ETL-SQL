@@ -204,6 +204,7 @@ public class Parser : IParser
         || value.Equals("MERGE", StringComparison.OrdinalIgnoreCase)
         || value.Equals("UNION", StringComparison.OrdinalIgnoreCase)
         || value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("MINUS", StringComparison.OrdinalIgnoreCase)
         || value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsJoinStarterWord(string value)
@@ -284,12 +285,14 @@ public class Parser : IParser
         if (!Match(TokenType.SELECT)) throw new SyntaxException("Expected SELECT", Current.Line, Current.Column);
         var left = ParseSelectBody();
 
-        while (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT)
+        while (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT || IsMinusKeyword())
         {
             var op = SetOpType.UNION;
+            bool byName = false;
             if (Match(TokenType.UNION))
             {
                 op = Match(TokenType.ALL) ? SetOpType.UNION_ALL : SetOpType.UNION;
+                if (Current.Type == TokenType.BY) { Advance(); ConsumeWord("NAME", "Expected 'NAME' after 'BY'"); byName = true; }
             }
             else if (Match(TokenType.EXCEPT))
             {
@@ -299,10 +302,15 @@ public class Parser : IParser
             {
                 op = SetOpType.INTERSECT;
             }
+            else // MINUS — Oracle/DuckDB alias for EXCEPT
+            {
+                Advance();
+                op = SetOpType.EXCEPT;
+            }
 
             Consume(TokenType.SELECT, "Expected SELECT after set operator");
             var right = ParseSelectBody();
-            left = new SetOperationStatement(left, op, right);
+            left = new SetOperationStatement(left, op, right) { ByName = byName };
         }
 
         // Global semicolon consumption for top level queries
@@ -721,22 +729,29 @@ public class Parser : IParser
         };
     }
 
+    /// <summary>True when the current token is the word <c>MINUS</c> (Oracle/DuckDB alias for EXCEPT).</summary>
+    private bool IsMinusKeyword() => Current.Value.Equals("MINUS", StringComparison.OrdinalIgnoreCase)
+        && (Current.Type == TokenType.IDENTIFIER || Current.Type == TokenType.MINUS);
+
     private Statement ParseSetOperation(Statement left)
     {
         SetOpType op = SetOpType.UNION;
+        bool byName = false;
         if (Match(TokenType.UNION))
         {
             op = Match(TokenType.ALL) ? SetOpType.UNION_ALL : SetOpType.UNION;
+            if (Current.Type == TokenType.BY) { Advance(); ConsumeWord("NAME", "Expected 'NAME' after 'BY'"); byName = true; }
         }
         else if (Match(TokenType.EXCEPT)) op = SetOpType.EXCEPT;
         else if (Match(TokenType.INTERSECT)) op = SetOpType.INTERSECT;
+        else if (IsMinusKeyword()) { Advance(); op = SetOpType.EXCEPT; }
 
-        Consume(TokenType.SELECT, "Expected 'SELECT' after UNION/EXCEPT/INTERSECT");
+        Consume(TokenType.SELECT, "Expected 'SELECT' after UNION/EXCEPT/INTERSECT/MINUS");
         var right = ParseSelectBody(); // Parse only the body
-        var setStmt = new SetOperationStatement(left, op, right);
+        var setStmt = new SetOperationStatement(left, op, right) { ByName = byName };
 
         // Recursively check for more set operations
-        if (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT)
+        if (Current.Type == TokenType.UNION || Current.Type == TokenType.EXCEPT || Current.Type == TokenType.INTERSECT || IsMinusKeyword())
         {
             return ParseSetOperation(setStmt);
         }

@@ -76,8 +76,7 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
 - [x] **Trailing commas** — tolerate an optional trailing comma in SELECT, GROUP BY, ORDER BY, and function-argument lists. *(Done via `AtClauseEnd()` guard + RPAREN check in arg loop. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1. NOTE: VALUES lists not yet covered.)*
 - [x] **Underscore digit separators (`1_000_000`)** — lexer accepts `_` between digits, stripped from the value. *(Done in `Lexer.ReadNumber`. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1.)*
 - [x] **`count()` shorthand** — treat `count()` as `count(*)`. *(Done: zero-arg COUNT normalized to COUNT(*) in `ExpressionParser`. Tests in `StmtTier1SyntaxTests`; Grammar §5.1.1.)*
-- [ ] **UNION [ALL] BY NAME** — set union that aligns inputs by column name instead of position, filling absent columns with NULL.
-  - Parser (`BY NAME` modifier on set ops), `SetOperationEngine` name-alignment path; tests; docs + `Resources/Help/Keywords/UNION.md`.
+- [x] **UNION [ALL] BY NAME** — set union that aligns inputs by column name instead of position, filling absent columns with NULL. *(Done: `ByName` flag parsed on `UNION`/`UNION ALL`; `SetOperationEngine` name-aligns to union of column names. Tests in `StmtSetOpExtensionsTests`; Grammar §7 + Syntax_Index.)*
 - [ ] **Idempotent DDL/DML (OR REPLACE / OR IGNORE / BY NAME)** — `CREATE OR REPLACE TABLE|VIEW`, `INSERT OR IGNORE`, `INSERT OR REPLACE`, and `INSERT INTO ... BY NAME` (confirmed missing in the language parser today).
   - Parser + CREATE/INSERT handlers; conflict semantics for replace/ignore; tests; docs + help for CREATE and INSERT.
 - [ ] **Reusable & lateral column aliases** — reference a SELECT alias in WHERE/GROUP BY/HAVING/QUALIFY and in later SELECT expressions (lateral column alias).
@@ -88,5 +87,4 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Parser/AST COLUMNS selector; projection expansion; tests; docs.
 - [ ] **UNNEST / FLATTEN** — expand a LIST/array value into rows (`SELECT UNNEST(list_col)`); the table-producing complement to LISTAGG. (LIST type exists; STRUCT/MAP types are intentionally out of scope, and lambda-based list comprehensions are deferred to ROADMAP.)
   - Parser + engine row-expansion; interaction with sibling select items; tests; docs + help.
-- [ ] **Minor conveniences** — `LIKE ANY (...)` / `LIKE ALL (...)`, `MINUS` as an alias for `EXCEPT`, and `DESCRIBE <table|query>` schema summary (all confirmed missing; each small and self-contained).
-  - Parser + small engine/eval additions; tests; docs + help where a keyword page applies.
+- [x] **Minor conveniences** — `LIKE ANY (...)` / `LIKE ALL (...)`, `MINUS` as an alias for `EXCEPT`, and `DESCRIBE <table>` schema summary. *(Done: LIKE ANY/ALL desugar to OR/AND of LIKE (NOT wraps the group); MINUS parses as EXCEPT (reserved set-word so it isn't swallowed as an alias); DESCRIBE maps to `ShowColumnsStatement`. Tests in `StmtMinorConveniencesTests`/`StmtSetOpExtensionsTests`; Grammar §7/§8 + Syntax_Index. NOTE: DESCRIBE covers tables; `DESCRIBE <query>` not yet.)*

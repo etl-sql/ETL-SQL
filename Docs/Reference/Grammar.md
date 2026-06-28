@@ -1568,6 +1568,20 @@ SELECT id FROM #processed;
 SELECT id FROM #active
 INTERSECT
 SELECT id FROM #eligible;
+
+-- MINUS is an alias for EXCEPT
+SELECT id FROM #full_list
+MINUS
+SELECT id FROM #processed;
+
+-- UNION [ALL] BY NAME aligns inputs by column name (not position); missing columns become NULL
+SELECT 1 AS a, 2 AS b
+UNION BY NAME
+SELECT 20 AS b, 10 AS a;          -- columns a, b -> (1,2), (10,20)
+
+SELECT 1 AS a, 2 AS b
+UNION ALL BY NAME
+SELECT 3 AS a;                    -- (1,2), (3, NULL)
 ```
 
 ---
@@ -1592,6 +1606,15 @@ WHERE NOT EXISTS (SELECT 1 FROM #blocked  WHERE id = t.id)
 
 WHERE region IS NOT NULL
   AND notes  IS NULL
+
+-- LIKE ANY / LIKE ALL match against a list of patterns (OR / AND); ILIKE variants too
+WHERE name LIKE ANY ('A%', 'B%')      -- matches if any pattern matches
+  AND code NOT LIKE ALL ('TEST%', 'TMP%')
+```
+
+`DESCRIBE <table>` is a DuckDB-style alias for `SHOW COLUMNS FOR <table>`, returning the column metadata of a table:
+```sql
+DESCRIBE #employees;
 ```
 
 ### 8.1 Member Access (Dot Notation)

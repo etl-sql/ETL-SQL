@@ -400,6 +400,9 @@ public sealed record SetOperationStatement : Statement
     public Statement Left { get; }
     public SetOpType Operation { get; }
     public Statement Right { get; }
+    /// <summary>True for <c>UNION [ALL] BY NAME</c>: align inputs by column name rather than position,
+    /// filling columns missing from either side with NULL.</summary>
+    public bool ByName { get; init; }
 
     public SetOperationStatement(Statement left, SetOpType op, Statement right)
     {

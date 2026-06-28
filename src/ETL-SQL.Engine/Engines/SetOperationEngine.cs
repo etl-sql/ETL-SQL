@@ -24,6 +24,35 @@ public class SetOperationEngine
     /// <summary>Executes a set operation by buffering both sides and performing set logic.</summary>
     public async IAsyncEnumerable<DataTable> ApplySetOperation(SetOperationStatement setOp)
     {
+        if (setOp.ByName)
+        {
+            // UNION [ALL] BY NAME: align inputs by column name. Target columns = left's columns then
+            // any right-only columns; missing values are NULL. Buffer both sides to discover columns.
+            var lRows = await BufferAllRows(setOp.Left);
+            var rRows = await BufferAllRows(setOp.Right);
+
+            List<string> ColsOf(List<Row> rows) => rows.Count > 0
+                ? (rows[0].Schema?.ColumnNames.ToList() ?? rows[0].Columns.Keys.ToList())
+                : new List<string>();
+
+            var targetCols = new List<string>(ColsOf(lRows));
+            var seenCols = new HashSet<string>(targetCols, StringComparer.OrdinalIgnoreCase);
+            foreach (var c in ColsOf(rRows)) if (seenCols.Add(c)) targetCols.Add(c);
+
+            var byNameBatch = new DataTable();
+            byNameBatch.SetColumns(targetCols);
+            bool distinct = setOp.Operation == SetOpType.UNION; // UNION = distinct; UNION ALL = keep all
+            var seenRows = distinct ? new HashSet<CompoundKey>() : null;
+            foreach (var r in lRows.Concat(rRows))
+            {
+                var nr = new Row();
+                foreach (var c in targetCols) nr[c] = r.HasColumn(c) ? r[c] : null;
+                if (seenRows == null || seenRows.Add(ToKey(nr, targetCols))) await byNameBatch.AddRowAsync(nr);
+            }
+            yield return byNameBatch;
+            yield break;
+        }
+
         if (setOp.Operation == SetOpType.UNION_ALL)
         {
             _logger.Debug("[SET_OP] Executing streaming UNION ALL (no buffering)");

@@ -198,13 +198,40 @@ public partial class ExpressionParser
             }
             else if (op == TokenType.LIKE || op == TokenType.ILIKE)
             {
-                var right = ParseTerm();
-                Expression? escapeChar = null;
-                if (_parser.Match(TokenType.ESCAPE))
+                bool ilike = op == TokenType.ILIKE;
+                // LIKE ANY (...) / LIKE ALL (...): match against a list of patterns (OR / AND).
+                if (_parser.Current.Type == TokenType.ANY || _parser.Current.Type == TokenType.ALL)
                 {
-                    escapeChar = ParseTerm();
+                    bool isAll = _parser.Current.Type == TokenType.ALL;
+                    _parser.Advance();
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after LIKE ANY/ALL");
+                    var patterns = new List<Expression> { _parser.ParseExpression() };
+                    while (_parser.Match(TokenType.COMMA))
+                    {
+                        if (_parser.Current.Type == TokenType.RPAREN) break;
+                        patterns.Add(_parser.ParseExpression());
+                    }
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after LIKE ANY/ALL patterns");
+
+                    Expression? combined = null;
+                    foreach (var p in patterns)
+                    {
+                        Expression le = new LikeExpression(left, p, false, null, ilike) { Line = opToken.Line, Column = opToken.Column };
+                        combined = combined == null ? le : new BinaryExpression(combined, isAll ? TokenType.AND : TokenType.OR, le);
+                    }
+                    combined ??= new LiteralExpression(isAll, TokenType.NUMBER); // empty list: ALL→true, ANY→false
+                    left = isNot ? new UnaryExpression(TokenType.NOT, combined) { Line = opToken.Line, Column = opToken.Column } : combined;
                 }
-                left = new LikeExpression(left, right, isNot, escapeChar, op == TokenType.ILIKE) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                else
+                {
+                    var right = ParseTerm();
+                    Expression? escapeChar = null;
+                    if (_parser.Match(TokenType.ESCAPE))
+                    {
+                        escapeChar = ParseTerm();
+                    }
+                    left = new LikeExpression(left, right, isNot, escapeChar, ilike) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
             }
             else if (op == TokenType.BETWEEN)
             {

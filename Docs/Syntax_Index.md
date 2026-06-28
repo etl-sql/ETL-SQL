@@ -954,6 +954,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW BUNDLE DEPENDENCIES` | Orch | Lists packaged `RUN SCRIPT` dependencies |
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
+| `DESCRIBE <table>` | Diagnostics | Alias for `SHOW COLUMNS FOR <table>` |
 | `SHOW TAGS` | Lineage | Lists tags on a table/column |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |
@@ -1007,6 +1008,7 @@ Used inside `ACTIONS ( ... )` blocks for interactive reports.
 | `IS NULL`, `IS NOT NULL` | Nullity | Testing for null values |
 | `IS [NOT] DISTINCT FROM` | Null-safe comparison | Compares treating `NULL` as a value; never returns `NULL` |
 | `LIKE`, `IN`, `BETWEEN`, `EXISTS` | Membership | SQL-style predicate operators |
+| `LIKE ANY (...)` / `LIKE ALL (...)` | Membership | Match against a list of patterns (OR / AND) |
 | `(` ... `)` | Grouping | Expression and function call grouping |
 | `,` | Separator | Argument and list separator |
 | `;` | Terminator | Optional statement terminator |
@@ -1065,7 +1067,9 @@ Combine result sets from multiple `SELECT` statements.
 | :--- | :--- |
 | `UNION` | Returns distinct rows from both sets |
 | `UNION ALL` | Returns all rows from both sets (including duplicates) |
+| `UNION [ALL] BY NAME` | Aligns inputs by column name (not position); missing columns become NULL |
 | `EXCEPT` | Returns rows from first set not present in second |
+| `MINUS` | Alias for `EXCEPT` |
 | `INTERSECT` | Returns only rows present in both sets |
 
 ---
