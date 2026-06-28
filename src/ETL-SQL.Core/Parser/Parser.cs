@@ -1517,6 +1517,24 @@ public class Parser : IParser
             var t = Advance();
             expr = ParseStarModifiers(null, t);
         }
+        else if (Current.Type == TokenType.COLUMNS && Peek.Type == TokenType.LPAREN)
+        {
+            // COLUMNS(*) / COLUMNS(* EXCLUDE (...)) / COLUMNS('regex') — multi-column selector.
+            var t = Advance(); // COLUMNS
+            Consume(TokenType.LPAREN, "Expected '(' after COLUMNS");
+            if (Current.Type == TokenType.STRING_LITERAL)
+            {
+                var pattern = Advance().Value;
+                expr = new StarExpression(null, new List<string>(), new List<(string, Expression)>(), new List<(string, string)>())
+                { Pattern = pattern, Line = t.Line, Column = t.Column };
+            }
+            else
+            {
+                Consume(TokenType.STAR, "Expected '*' or a 'regex' string inside COLUMNS(...)");
+                expr = ParseStarModifiers(null, t);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close COLUMNS(...)");
+        }
         else
         {
             expr = ParseExpression();

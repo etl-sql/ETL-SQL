@@ -903,6 +903,7 @@ public static class AstSerializer
 
     private static string FormatStar(StarExpression e)
     {
+        if (e.Pattern != null) return $"COLUMNS('{e.Pattern}')";
         var sb = new System.Text.StringBuilder(e.Qualifier != null ? $"{e.Qualifier}.*" : "*");
         if (e.Exclude.Count > 0) sb.Append($" EXCLUDE ({string.Join(", ", e.Exclude)})");
         if (e.Replace.Count > 0) sb.Append($" REPLACE ({string.Join(", ", e.Replace.Select(r => $"{r.Value.ToSql()} AS {r.Column}"))})");

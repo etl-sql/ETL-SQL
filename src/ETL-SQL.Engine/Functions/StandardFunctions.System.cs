@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -20,6 +22,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("CAST", (args, ctx) => args.Count >= 2 ? EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING") : args[0], "CAST(expr AS type): Converts an expression to a target data type.");
             registry.RegisterWithHelp("COUNT", Count, "COUNT(col): Returns the number of items in a collection.");
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
+            registry.RegisterWithHelp("UNNEST", Unnest, "UNNEST(list): Table-valued — expands a list/array into one 'Value' row per element. Use in FROM or CROSS APPLY.");
+            registry.RegisterWithHelp("FLATTEN", Flatten, "FLATTEN(list): Like UNNEST but flattens one level of nested lists.");
             registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
 
@@ -121,6 +125,46 @@ namespace ETL_SQL.Engine.Functions
         private static object? Count(List<object?> args, IExecutionContext ctx)
         {
             return (args[0] is System.Collections.ICollection ic) ? (decimal)ic.Count : (args[0] is System.Collections.IEnumerable ie && args[0] is not string ? (decimal)Enumerable.Count(ie.Cast<object>()) : (args[0] == null ? 0m : 1m));
+        }
+
+        /// <summary>UNNEST(list) — table-valued; one 'Value' row per list element.</summary>
+        private static async Task<object?> Unnest(List<object?> args, IExecutionContext ctx)
+        {
+            var dt = new DataTable();
+            dt.SetColumns(new[] { "Value" });
+            if (args.Count > 0) await AddUnnestRows(dt, args[0], flatten: false);
+            return dt;
+        }
+
+        /// <summary>FLATTEN(list) — like UNNEST but flattens one level of nested lists.</summary>
+        private static async Task<object?> Flatten(List<object?> args, IExecutionContext ctx)
+        {
+            var dt = new DataTable();
+            dt.SetColumns(new[] { "Value" });
+            if (args.Count > 0) await AddUnnestRows(dt, args[0], flatten: true);
+            return dt;
+        }
+
+        private static async System.Threading.Tasks.Task AddUnnestRows(DataTable dt, object? value, bool flatten)
+        {
+            if (value == null) return;
+            if (value is DataTable inner)
+            {
+                foreach (var r in inner.Rows) await dt.AddRowAsync(new Row { ["Value"] = r[0] });
+                return;
+            }
+            if (value is System.Collections.IEnumerable en && value is not string)
+            {
+                foreach (var item in en)
+                {
+                    if (flatten && item is System.Collections.IEnumerable nested && item is not string)
+                        foreach (var sub in nested) await dt.AddRowAsync(new Row { ["Value"] = sub });
+                    else
+                        await dt.AddRowAsync(new Row { ["Value"] = item });
+                }
+                return;
+            }
+            await dt.AddRowAsync(new Row { ["Value"] = value }); // scalar → single row
         }
 
         private static object? GenerateSeries(List<object?> args, IExecutionContext ctx)

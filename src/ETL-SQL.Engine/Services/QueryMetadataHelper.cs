@@ -25,10 +25,14 @@ public class QueryMetadataHelper(ILogger logger)
                 var excl = new HashSet<string>(star.Exclude, StringComparer.OrdinalIgnoreCase);
                 var replaceMap = star.Replace.ToDictionary(r => r.Column, r => r.Value, StringComparer.OrdinalIgnoreCase);
                 var renameMap = star.Rename.ToDictionary(r => r.Column, r => r.NewName, StringComparer.OrdinalIgnoreCase);
+                System.Text.RegularExpressions.Regex? patternRegex = star.Pattern != null
+                    ? new System.Text.RegularExpressions.Regex(star.Pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+                    : null;
                 foreach (var sc in sourceColumns)
                 {
                     var baseName = sc.Contains('.') ? sc.Split('.').Last() : sc;
                     if (excl.Contains(sc) || excl.Contains(baseName)) continue;
+                    if (patternRegex != null && !patternRegex.IsMatch(baseName)) continue;
                     Expression colExpr = replaceMap.TryGetValue(baseName, out var rv) ? rv
                                        : replaceMap.TryGetValue(sc, out var rv2) ? rv2
                                        : new IdentifierExpression(sc);

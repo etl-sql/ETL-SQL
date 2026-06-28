@@ -1053,6 +1053,7 @@ Used in the `FROM` clause to combine rows from multiple sources.
 | `JOIN LATERAL` / `, LATERAL` | Type | ANSI alias for `CROSS APPLY` (correlated subquery) |
 | `LEFT JOIN LATERAL` | Type | ANSI alias for `OUTER APPLY` |
 | `ASOF [LEFT] JOIN` | Type | Nearest-match join on one inequality + optional equality keys |
+| `UNNEST(list)` / `FLATTEN(list)` | Table function | Expands a list/array into rows (use in FROM / CROSS APPLY) |
 | `HASH JOIN` | Hint | Forces hash-based join algorithm |
 | `LOOP JOIN` | Hint | Forces nested-loop join algorithm |
 | `FUZZY JOIN` | Hint | Enables similarity-based matching |
@@ -1094,6 +1095,7 @@ Standard clauses available within a `SELECT` statement.
 | `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `count()` | Shorthand for `COUNT(*)` | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
 | `ASC` / `DESC` | Sorting direction | [Grammar.md](../Docs/Reference/Grammar.md) | - |

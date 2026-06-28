@@ -1130,6 +1130,12 @@ SELECT * REPLACE (UPPER(name) AS name) FROM users;      -- keep all columns, swa
 SELECT * RENAME (id AS user_id) FROM users;
 ```
 
+**`COLUMNS(...)` selector** — select many columns at once in the projection: `COLUMNS(*)`, `COLUMNS(* EXCLUDE (a, b))`, or `COLUMNS('regex')` (case-insensitive name match):
+```sql
+SELECT COLUMNS('^amount') FROM #sales;     -- every column whose name starts with "amount"
+SELECT COLUMNS(* EXCLUDE (secret)) FROM #users;
+```
+
 **`ORDER BY ALL`** — order by every output column, left to right (optionally `DESC`):
 ```sql
 SELECT region, product, total FROM #sales ORDER BY ALL;
@@ -1344,7 +1350,7 @@ ASOF JOIN quotes q
 - Direction follows the operator: `>=`/`>` pick the **largest** qualifying right value (most recent at/before); `<=`/`<` pick the **smallest** (nearest at/after).
 - The right side is buffered; matching is currently O(left × right). Use equality keys to narrow candidates on large inputs.
 
-`CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `NGRAMS`, and `NGRAM_TOKENS`:
+`CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `UNNEST`/`FLATTEN` (expand a list/array into rows), `NGRAMS`, and `NGRAM_TOKENS`:
 
 ```sql
 -- Expand a delimited list column into rows

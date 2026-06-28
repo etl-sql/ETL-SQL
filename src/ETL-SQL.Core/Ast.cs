@@ -1700,6 +1700,8 @@ public sealed record StarExpression : Expression
     public List<string> Exclude { get; }
     public List<(string Column, Expression Value)> Replace { get; }
     public List<(string Column, string NewName)> Rename { get; }
+    /// <summary>When set (from <c>COLUMNS('regex')</c>), expand to source columns whose name matches this regex.</summary>
+    public string? Pattern { get; init; }
 
     public StarExpression(string? qualifier, List<string> exclude, List<(string, Expression)> replace, List<(string, string)> rename)
     {
