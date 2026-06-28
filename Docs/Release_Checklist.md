@@ -66,12 +66,17 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
 - [ ] Final report shows **Status: Passed** — `release-validation/latest/state.json` and the run's
       `pre-release-report.md`.
 
-The gate covers (in order): asset-drift check, `dotnet restore`, dependency-audit self-test,
-NuGet dependency audit (no known-vulnerable/deprecated packages), `dotnet build` (Release),
-`dotnet format --verify-no-changes` (auto-fixes drift), smoke lane, fast lane,
-**N→N+1 upgrade-path drill**, sample scripts, then optionally SLT, VS Code npm
+The gate covers (in order): asset-drift check, **secret scan**, `dotnet restore`, dependency-audit
+self-test, NuGet dependency audit (no known-vulnerable/deprecated packages), **SBOM generation**,
+`dotnet build` (Release), `dotnet format --verify-no-changes` (auto-fixes drift), smoke lane,
+fast lane, **N→N+1 upgrade-path drill**, sample scripts, then optionally SLT, VS Code npm
 (ci/audit/compile/**vsce package**/unit), scale certification (smoke + standard) with baseline
 regression checks, Docker integration, and installer builds.
+
+The PowerShell and Bash gates run the **same phases in the same order**; a few phases in the Bash
+gate bridge to the canonical PowerShell helpers via `pwsh`. Deep static security analysis (CodeQL)
+is intentionally **left to CI** (`codeql.yml` on every `main` push + schedule) rather than the local
+gate, as a full local CodeQL run is heavy.
 
 > The **VS Code VSIX package** phase runs the same `vsce package` that the tag-triggered
 > `release.yml` runs, so manifest/engine errors (e.g. `@types/vscode` greater than
@@ -89,7 +94,9 @@ and the safeguards added:
 | :--- | :--- | :--- |
 | Repo-wide `dotnet format` drift | gate only verified, then failed | Format phase now **auto-applies** the fix and tells you to commit |
 | `vsce package` failure (`@types/vscode` > `engines.vscode`) | gate compiled the extension but never packaged it | new **VS Code VSIX package** phase runs `vsce package` |
-| `generate-sbom.js` mis-stamped the version (hardcoded `0.12.0`) | nothing checked generated-file versions | SBOM version now **derived from `Directory.Build.props`** (single source of truth) |
+| `generate-sbom.js` mis-stamped the version (hardcoded `0.12.0`) | nothing checked generated-file versions | SBOM version now **derived from `Directory.Build.props`**; new **SBOM generation** phase asserts it |
+| CI asset-drift only on Windows (CRLF) | drift check passed on the dev's LF checkout | synced assets pinned to `text eol=lf` in `.gitattributes` (local == CI) |
+| Secret committed to a public repo | gate had no secret scan (only post-push GitGuardian) | new **secret scan** phase (`scripts/scan-secrets.js`) as an early local tripwire |
 
 Principle: any file that embeds the version should read it from `Directory.Build.props`, not hardcode
 it (`Set-Version.ps1` cannot find every hardcoded copy).

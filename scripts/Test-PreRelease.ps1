@@ -89,6 +89,7 @@ function Get-PlannedPreReleasePhases {
     $phases = New-Object System.Collections.Generic.List[object]
 
     $phases.Add([ordered]@{ Phase = "Asset drift check"; Command = "node .\scripts\sync-assets.js -Check"; Reason = "Shared report runtime files must match generated host copies." })
+    $phases.Add([ordered]@{ Phase = "Secret scan"; Command = "node scripts/scan-secrets.js"; Reason = "No real credentials (keys/provider tokens) reach the public repo — early local tripwire ahead of GitGuardian." })
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
@@ -547,6 +548,13 @@ try {
     Invoke-LoggedPhase "Asset drift check" `
         "node .\scripts\sync-assets.js -Check" `
         { & node ".\scripts\sync-assets.js" "-Check" } `
+        $previousPhaseMap $fingerprint $results
+
+    # Early, fast tripwire: catch real credentials (keys/provider tokens) before they reach the
+    # public repo (GitGuardian only fires post-push). High-signal patterns only; allowlist in the script.
+    Invoke-LoggedPhase "Secret scan" `
+        "node scripts/scan-secrets.js" `
+        { & node "scripts/scan-secrets.js"; if ($LASTEXITCODE -ne 0) { throw "Secret scan found potential secret(s) (exit $LASTEXITCODE)." } } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Dotnet restore" `

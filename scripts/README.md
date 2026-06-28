@@ -135,7 +135,7 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 > cert-baseline regression checks) via `pwsh`, so those phases require **PowerShell 7+ (`pwsh`)** on
 > `PATH` even on Linux/macOS. This keeps a single source of truth rather than a parallel Bash port.
 
-The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; restore; dependency-audit self-test; NuGet dependency audit; release build; format verify (auto-fixes drift); smoke lane; fast lane; N→N+1 upgrade-path drill; sample scripts; SLT lane; VS Code npm ci/audit/compile/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
+The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; secret scan; restore; dependency-audit self-test; NuGet dependency audit; SBOM generation; release build; format verify (auto-fixes drift); smoke lane; fast lane; N→N+1 upgrade-path drill; sample scripts; SLT lane; VS Code npm ci/audit/compile/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
 
 Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build_msi.ps1`:
 
