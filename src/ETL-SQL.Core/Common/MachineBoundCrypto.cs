@@ -14,7 +14,7 @@ namespace ETL_SQL.Core.Common;
 /// Linux/macOS: derives a machine-unique AES-256 key from <c>/etc/machine-id</c>
 /// (or the hostname as a fallback), then encrypts with authenticated AES-256-GCM.
 /// </summary>
-internal static class MachineBoundCrypto
+public static class MachineBoundCrypto
 {
     private static readonly byte[] MagicV2 = Encoding.ASCII.GetBytes("ETLSQLM2");
     private static readonly byte[] FileMagicV2 = Encoding.ASCII.GetBytes("ETLSQLMF2");
@@ -91,7 +91,12 @@ internal static class MachineBoundCrypto
 
     // ── Core protect/unprotect ────────────────────────────────────────────────
 
-    internal static byte[] Protect(byte[] data)
+    /// <summary>
+    /// Encrypts an in-memory payload bound to the current machine (DPAPI LocalMachine on Windows;
+    /// authenticated AES-256-GCM keyed from the machine id elsewhere). The result is not portable to
+    /// another host. Use for at-rest data when no portable, key-managed secret is configured.
+    /// </summary>
+    public static byte[] Protect(byte[] data)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return ProtectedData.Protect(data, null, DataProtectionScope.LocalMachine);
@@ -99,7 +104,8 @@ internal static class MachineBoundCrypto
         return AesEncrypt(data, GetMachineKey());
     }
 
-    internal static byte[] Unprotect(byte[] data)
+    /// <summary>Decrypts a payload produced by <see cref="Protect(byte[])"/> on the same machine.</summary>
+    public static byte[] Unprotect(byte[] data)
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             return ProtectedData.Unprotect(data, null, DataProtectionScope.LocalMachine);

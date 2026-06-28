@@ -14,6 +14,7 @@ using System.Text.Json.Serialization;
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 
@@ -37,8 +38,7 @@ public sealed class SnapshotPackageService(
         PropertyNamingPolicy = null
     };
 
-    private static readonly string DefaultDevAtRestKey =
-        Convert.ToBase64String(System.Linq.Enumerable.Range(1, 32).Select(value => (byte)value).ToArray());
+    private static int _machineFallbackWarned;
 
     public static string BuildSnapshotKey(int reportId, string jobId) =>
         $"report_{reportId}_{jobId}{Extension}";
@@ -214,6 +214,20 @@ public sealed class SnapshotPackageService(
 
     private byte[] Encrypt(byte[] plaintext)
     {
+        // No portal-managed key: fall back to the same host-bound ENCRYPT=MACHINE protection dataset
+        // caches use (DPAPI LocalMachine on Windows; authenticated AES-256-GCM keyed from the machine
+        // id elsewhere). Host-bound, so the package is not portable across hosts. Detected on read by
+        // the absence of the ETLSNAP1 magic header.
+        if (string.IsNullOrWhiteSpace(config.Dataset.AtRestKey))
+        {
+            if (Interlocked.Exchange(ref _machineFallbackWarned, 1) == 0)
+                logger.LogWarning(
+                    "Portal:Dataset:AtRestKey is not set — snapshot packages are protected with host-bound " +
+                    "machine encryption (not portable across hosts). Set Portal:Dataset:AtRestKey for portable, " +
+                    "key-managed snapshot encryption.");
+            return MachineBoundCrypto.Protect(plaintext);
+        }
+
         var keyVersion = string.IsNullOrWhiteSpace(config.Dataset.AtRestKeyVersion)
             ? "v1"
             : config.Dataset.AtRestKeyVersion;
@@ -242,9 +256,22 @@ public sealed class SnapshotPackageService(
 
     private byte[] Decrypt(byte[] package)
     {
-        if (package.Length < Magic.Length + 2 + NonceLength + TagLength
-            || !package.AsSpan(0, Magic.Length).SequenceEqual(Magic))
-            throw new InvalidDataException("Snapshot package is not a recognized ETL-SQL snapshot.");
+        // Packages written without a portal-managed key carry no ETLSNAP1 keyed envelope — they are
+        // host-bound machine-encrypted (see Encrypt). Route those to MachineBoundCrypto.
+        if (package.Length < Magic.Length || !package.AsSpan(0, Magic.Length).SequenceEqual(Magic))
+        {
+            try
+            {
+                return MachineBoundCrypto.Unprotect(package);
+            }
+            catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or ArgumentException or FormatException)
+            {
+                throw new InvalidDataException("Snapshot package is not a recognized ETL-SQL snapshot.", ex);
+            }
+        }
+
+        if (package.Length < Magic.Length + 2 + NonceLength + TagLength)
+            throw new InvalidDataException("Snapshot package is truncated.");
 
         var offset = Magic.Length;
         var keyVersionLength = BinaryPrimitives.ReadUInt16BigEndian(package.AsSpan(offset, 2));
@@ -284,9 +311,8 @@ public sealed class SnapshotPackageService(
     private static byte[] DeriveAesKey(string? base64Key, string configName)
     {
         if (string.IsNullOrWhiteSpace(base64Key))
-        {
-            base64Key = DefaultDevAtRestKey;
-        }
+            throw new InvalidOperationException(
+                $"{configName} is required to read this key-managed snapshot but is not configured.");
 
         try
         {

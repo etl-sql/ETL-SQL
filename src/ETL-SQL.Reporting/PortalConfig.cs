@@ -159,9 +159,10 @@ public class PortalSecurityConfig
 public class DatasetConfig
 {
     /// <summary>
-    /// Portal-managed at-rest key (base64) used to encrypt cached dataset parquet. Portable: back it
-    /// up with the portal config and move it with the portal — losing it makes every cached dataset
-    /// unreadable (they must be re-materialised). When unset, datasets fall back to host-bound
+    /// Portal-managed at-rest key (base64) used to encrypt cached dataset parquet <b>and report
+    /// snapshot (<c>.etlsnap</c>) packages</b>. Portable: back it up with the portal config and move
+    /// it with the portal — losing it makes every cached dataset and snapshot unreadable (they must be
+    /// re-materialised). When unset, both datasets and snapshots fall back to host-bound
     /// ENCRYPT=MACHINE encryption (not portable across hosts) — see <see cref="AllowMachineFallback"/>.
     /// </summary>
     public string? AtRestKey { get; set; }

@@ -43,6 +43,51 @@ public sealed class SnapshotPackageServiceTests
     }
 
     [Fact]
+    public async Task SaveAsync_WithNoAtRestKey_UsesHostBoundMachineEncryption_AndRoundTrips()
+    {
+        // When no portal-managed key is configured, snapshots must fall back to host-bound
+        // ENCRYPT=MACHINE protection (the same as dataset caches) — NOT a source-public constant key.
+        var storage = new InMemoryArtifactStorage();
+        var config = new PortalConfig { Dataset = new DatasetConfig { AtRestKey = null } };
+        var service = new SnapshotPackageService(
+            config,
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+
+        var manifest = CreateManifest("secret-customer-id-42");
+        await service.SaveAsync(manifest, "report_1_job.etlsnap");
+
+        var raw = await storage.ReadAllBytesAsync(ArtifactArea.Snapshots, "report_1_job.etlsnap");
+        // Payload is encrypted (no plaintext secret) and is NOT the ETLSNAP1 keyed envelope.
+        Assert.DoesNotContain("secret-customer-id-42", Encoding.UTF8.GetString(raw));
+        Assert.False(raw.AsSpan(0, Math.Min(8, raw.Length)).SequenceEqual("ETLSNAP1"u8));
+
+        // Round-trips on the same host.
+        var loaded = await service.LoadAsync("report_1_job.etlsnap");
+        Assert.NotNull(loaded);
+        Assert.Equal("secret-customer-id-42", loaded!.Visuals[0].Rows[0][0]);
+    }
+
+    [Fact]
+    public async Task LoadAsync_KeyedPackage_FailsClosed_WhenKeyLaterRemoved()
+    {
+        // A package written with a configured key must not silently decrypt once the key is removed.
+        var storage = new InMemoryArtifactStorage();
+        var keyed = new SnapshotPackageService(
+            new PortalConfig { Dataset = new DatasetConfig { AtRestKey = HostedPortalFactory.DefaultAtRestKey, AtRestKeyVersion = "v1" } },
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+        await keyed.SaveAsync(CreateManifest("secret"), "report_1_job.etlsnap");
+
+        var noKey = new SnapshotPackageService(
+            new PortalConfig { Dataset = new DatasetConfig { AtRestKey = null } },
+            storage,
+            NullLogger<SnapshotPackageService>.Instance);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => noKey.LoadAsync("report_1_job.etlsnap"));
+    }
+
+    [Fact]
     public async Task StartAsync_MigratesLegacySnapshotRows_AndDeletesPlaintextArtifact()
     {
         using var factory = new PortalWebFactory();
