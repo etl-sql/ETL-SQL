@@ -10,7 +10,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 **Apache Arrow Snapshot Integration**
 - Completed end-to-end Apache Arrow IPC snapshot support: the `SnapshotStore` now saves and loads secure `.etlsnap` zip packages by default in CLI and local execution contexts.
-- Implemented dev-default encryption key fallback for local snapshot packaging so developers can run without explicit key configuration.
+- Local and CLI snapshot packaging runs without explicit key configuration by falling back to host-bound at-rest encryption (see Security for the hardened behavior).
 - The report runtime player now lazy-loads and decodes Arrow IPC streams on-demand with automatic fallback to JSON row endpoints for older clients.
 - Downloaded and bundled the minified Apache Arrow JS library (`arrow.min.js`); synchronized front-end runtime assets across Portal, Player, and VS Code extension.
 - Added test coverage verifying CLI/local `.etlsnap` roundtrip packaging.
