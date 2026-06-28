@@ -108,6 +108,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
     print_plan_phase "$i" "Dependency-audit self-test" "./scripts/Test-DependencyAudit.ps1 (via pwsh)" "The dependency-audit helpers behave correctly (reliable fallback + hard failure)."; i=$((i + 1))
     print_plan_phase "$i" "NuGet dependency audit" "scripts/lib/DependencyAudit.ps1 Invoke-NuGetDependencyAudit (via pwsh)" "Release should not ship known vulnerable or deprecated packages."; i=$((i + 1))
+    print_plan_phase "$i" "SBOM generation" "node scripts/generate-sbom.js" "The released SBOM generates and its component version matches Directory.Build.props."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
@@ -342,6 +343,23 @@ nuget_dependency_audit_phase() {
 cert_baseline_phase() {
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
     "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
+}
+
+# ---------------------------------------------------------------------------
+# SBOM generation: the release attaches sbom.json; generate it and assert its
+# component version matches Directory.Build.props (single source of truth) so a
+# broken generator or a re-hardcoded version is caught before release.
+# ---------------------------------------------------------------------------
+sbom_generation_phase() {
+    node scripts/generate-sbom.js || return 1
+    local expected actual
+    expected="$(grep -oE '<VersionPrefix>[0-9.]+</VersionPrefix>' Directory.Build.props | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+    actual="$(node -e "console.log(require('./release/sbom.json').metadata.component.version)")"
+    if [[ "$expected" != "$actual" ]]; then
+        echo "SBOM version '$actual' does not match Directory.Build.props '$expected'." >&2
+        return 1
+    fi
+    echo "SBOM component version $actual matches Directory.Build.props."
 }
 
 # ---------------------------------------------------------------------------
@@ -591,6 +609,10 @@ run_phase "Dependency-audit self-test" \
 run_phase "NuGet dependency audit" \
     "dotnet list ETL-SQL.slnx package --outdated/--deprecated/--vulnerable (via scripts/lib/DependencyAudit.ps1)" \
     nuget_dependency_audit_phase
+
+run_phase "SBOM generation" \
+    "node scripts/generate-sbom.js (component version must match Directory.Build.props)" \
+    sbom_generation_phase
 
 run_phase "Dotnet build" \
     "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" \

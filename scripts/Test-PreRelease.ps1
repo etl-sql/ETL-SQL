@@ -92,6 +92,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Dotnet restore"; Command = "dotnet restore ETL-SQL.slnx"; Reason = "Package graph resolves before build and tests." })
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
+    $phases.Add([ordered]@{ Phase = "SBOM generation"; Command = "node scripts/generate-sbom.js"; Reason = "The released SBOM generates and its component version matches Directory.Build.props." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
     $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
@@ -566,6 +567,20 @@ try {
             # Keep the diagnostic lines in the phase log; drop only the returned summary object.
             Invoke-NuGetDependencyAudit -RepoRoot $RepoRoot -Solution "ETL-SQL.slnx" |
                 Where-Object { $_ -is [string] }
+        } `
+        $previousPhaseMap $fingerprint $results
+
+    # The release attaches sbom.json; generate it and assert its component version matches the single
+    # source of truth so a broken generator or a re-hardcoded version is caught before release.
+    Invoke-LoggedPhase "SBOM generation" `
+        "node scripts/generate-sbom.js (component version must match Directory.Build.props)" `
+        {
+            & node "scripts/generate-sbom.js"
+            if ($LASTEXITCODE -ne 0) { throw "generate-sbom.js failed with exit code $LASTEXITCODE" }
+            $expected = [regex]::Match((Get-Content "Directory.Build.props" -Raw), '<VersionPrefix>([\d.]+)</VersionPrefix>').Groups[1].Value
+            $actual = (Get-Content "release/sbom.json" -Raw | ConvertFrom-Json).metadata.component.version
+            if ($actual -ne $expected) { throw "SBOM version '$actual' does not match Directory.Build.props '$expected'." }
+            Write-Output "SBOM component version $actual matches Directory.Build.props."
         } `
         $previousPhaseMap $fingerprint $results
 
