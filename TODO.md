@@ -6,10 +6,10 @@ release begins.
 
 ---
 
-## Active Sprint (v0.13.0 Service Accounts)
+## Active Sprint (v0.13.0 Enterprise Hardening)
 
-The stabilization and performance work is complete. The final sprint phase adds narrowly scoped,
-non-interactive identities without starting the deferred stewardship, debugger, or approval-workflow work.
+The stabilization, performance, and service-account work is complete. Enterprise hardening remains
+opt-in so standalone installations retain their existing local behavior.
 
 - [x] **Phase 2: Service Accounts**
   - [x] Define the service-account security contract: immutable identity, owner, enabled/expiry state, explicit scopes, role/resource authorization interaction, and audit actor representation.
@@ -20,6 +20,23 @@ non-interactive identities without starting the deferred stewardship, debugger, 
   - [x] Attribute scheduled CLI/API executions and audit events to the service account, including correlation ID and effective scopes, without exposing credentials in logs, diagnostics, exports, or support bundles.
   - [x] Add unit, SQLite, PostgreSQL, HTTP integration, rotation/revocation, concurrency, and credential-redaction coverage.
   - [x] Document provisioning, scope selection, secret rotation, revocation, unattended CLI/API authentication, and migration/backup behavior.
+
+## Enterprise Policy & Security Monitoring
+
+Enterprise controls remain opt-in: an unenrolled standalone installation retains its existing local
+configuration behavior and does not require network connectivity.
+
+- [x] **Phase 1: Enterprise Enrollment Bootstrap**
+  - [x] Define a versioned machine enrollment contract for tenant, HTTPS policy endpoint, signing trust key, machine identity, policy-cache lifetime, and fail-closed behavior.
+  - [x] Store enrollment outside ordinary application configuration with administrator-owned Windows/Unix permissions and reject broadly writable or malformed enrollment state.
+  - [x] Add administrator CLI commands to enroll, inspect status, and unenroll with explicit confirmation and useful non-elevated diagnostics.
+  - [x] Detect enrollment before normal application startup so JSON, environment variables, command-line arguments, and scripts cannot disable it; leave standalone behavior unchanged when enrollment is absent.
+  - [x] Add tamper, permissions, invalid endpoint/key, startup, standalone-regression, and cross-platform storage tests.
+  - [x] Document enrollment, service identity access, recovery, unenrollment, and OS application-control boundaries.
+- [ ] **Phase 2: Authoritative Policy Runtime** — signed retrieval, protected cache, freshness, precedence, effective-policy diagnostics, and versioning.
+- [ ] **Phase 3: Operation-Boundary Enforcement** — filesystem, network, connector, process, Docker, resource, and script-override controls.
+- [ ] **Phase 4: Central Security Events** — structured security events, durable SIEM delivery, backpressure, and optional fail-closed monitoring.
+- [ ] **Phase 5: Certification & Operations** — platform certification, outage/tamper drills, upgrades, recovery, and administrator runbooks.
 
 ## Language Parity (DuckDB-inspired syntax)
 

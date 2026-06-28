@@ -212,6 +212,44 @@ namespace ETL_SQL.App
         {
             Description = "Verify counts and target schema compatibility without writing any data."
         };
+        private static readonly Option<string?> EnterpriseTenantOption = new("--tenant")
+        {
+            Description = "Enterprise tenant or environment identifier.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> EnterpriseEndpointOption = new("--policy-endpoint")
+        {
+            Description = "Authoritative HTTPS organization-policy endpoint.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> EnterpriseSigningKeyOption = new("--signing-key")
+        {
+            Description = "Path to the organization's RSA policy-signing public key in PEM format.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> EnterpriseCertificateOption = new("--client-certificate-thumbprint")
+        {
+            Description = "Optional SHA-1 or SHA-256 machine/client certificate thumbprint.",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        private static readonly Option<string?> EnterpriseServiceIdentityOption = new("--service-identity")
+        {
+            Description = "Optional Windows service identity granted read access to enrollment.",
+            Arity = ArgumentArity.ZeroOrOne
+        };
+        private static readonly Option<int> EnterpriseOfflineHoursOption = new("--max-offline-hours")
+        {
+            Description = "Maximum age of cached policy before secure startup fails (1-720).",
+            DefaultValueFactory = _ => 24
+        };
+        private static readonly Option<bool> EnterpriseAllowOfflineFailureOption = new("--allow-offline-failure")
+        {
+            Description = "Record non-fail-closed policy availability behavior for non-production enrollment."
+        };
+        private static readonly Option<bool> EnterpriseConfirmOption = new("--yes", new[] { "-y" })
+        {
+            Description = "Confirm the destructive enterprise unenrollment operation."
+        };
 
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
@@ -373,6 +411,29 @@ namespace ETL_SQL.App
             migrateDbCommand.SetAction(context => Dispatch(context, "admin-migrate-database", handler));
             adminCommand.Add(migrateDbCommand);
 
+            var enterpriseCommand = new Command("enterprise", "Manage machine-level enterprise policy enrollment");
+            var enterpriseEnrollCommand = new Command("enroll", "Enroll this machine in authoritative enterprise policy")
+            {
+                EnterpriseTenantOption,
+                EnterpriseEndpointOption,
+                EnterpriseSigningKeyOption,
+                EnterpriseCertificateOption,
+                EnterpriseServiceIdentityOption,
+                EnterpriseOfflineHoursOption,
+                EnterpriseAllowOfflineFailureOption
+            };
+            enterpriseEnrollCommand.SetAction(context => Dispatch(context, "enterprise-enroll", handler));
+            enterpriseCommand.Add(enterpriseEnrollCommand);
+            var enterpriseStatusCommand = new Command("status", "Inspect machine enterprise enrollment");
+            enterpriseStatusCommand.SetAction(context => Dispatch(context, "enterprise-status", handler));
+            enterpriseCommand.Add(enterpriseStatusCommand);
+            var enterpriseUnenrollCommand = new Command("unenroll", "Remove machine enterprise enrollment")
+            {
+                EnterpriseConfirmOption
+            };
+            enterpriseUnenrollCommand.SetAction(context => Dispatch(context, "enterprise-unenroll", handler));
+            enterpriseCommand.Add(enterpriseUnenrollCommand);
+
             // 14. INIT Command — scaffold a starter configuration and first script for CLI-first onboarding
             var initCommand = new Command("init", "Scaffold a starter configuration and first ETL-SQL script for new users")
             {
@@ -395,6 +456,7 @@ namespace ETL_SQL.App
             rootCommand.Add(genScriptCommand);
             rootCommand.Add(extractSpecCommand);
             rootCommand.Add(adminCommand);
+            rootCommand.Add(enterpriseCommand);
             rootCommand.Add(initCommand);
 
             return rootCommand;
@@ -517,6 +579,20 @@ namespace ETL_SQL.App
                 cliContext.MigrateTo = res.GetValue(MigrateToOption);
                 cliContext.MigrateDryRun = res.GetValue(MigrateDryRunOption);
             }
+            else if (commandName == "enterprise-enroll")
+            {
+                cliContext.EnterpriseTenant = res.GetValue(EnterpriseTenantOption);
+                cliContext.EnterprisePolicyEndpoint = res.GetValue(EnterpriseEndpointOption);
+                cliContext.EnterpriseSigningKeyPath = res.GetValue(EnterpriseSigningKeyOption);
+                cliContext.EnterpriseClientCertificateThumbprint = res.GetValue(EnterpriseCertificateOption);
+                cliContext.EnterpriseServiceIdentity = res.GetValue(EnterpriseServiceIdentityOption);
+                cliContext.EnterpriseMaxOfflineHours = res.GetValue(EnterpriseOfflineHoursOption);
+                cliContext.EnterpriseAllowOfflineFailure = res.GetValue(EnterpriseAllowOfflineFailureOption);
+            }
+            else if (commandName == "enterprise-unenroll")
+            {
+                cliContext.EnterpriseConfirm = res.GetValue(EnterpriseConfirmOption);
+            }
             else if (commandName == "init")
             {
                 var dir = res.GetValue(InitDirectoryArg);
@@ -579,6 +655,7 @@ namespace ETL_SQL.App
             table.AddRow("admin backup", "Back up portal/orchestrator state into split-custody data + keys archives.");
             table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir>).");
             table.AddRow("admin migrate-database", "Copy SQLite Portal/Orchestrator state into the configured PostgreSQL (--dry-run to verify only).");
+            table.AddRow("enterprise enroll|status|unenroll", "Manage protected machine-level enterprise policy enrollment.");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");
             table.AddRow($"gen-script [blue]-s <json> -o <etlsql>[/]", "Compile a schema JSON specification into an ETL-SQL script template.");

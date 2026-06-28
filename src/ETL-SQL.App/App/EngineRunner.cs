@@ -137,6 +137,11 @@ namespace ETL_SQL.App
                 return await DatabaseMigrationService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command.StartsWith("enterprise-", StringComparison.Ordinal))
+            {
+                return await EnterpriseEnrollmentManager.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command == "config-setup-jwt")
             {
                 return await RunSetupJwt(logger, ctx.UpdateConfig);

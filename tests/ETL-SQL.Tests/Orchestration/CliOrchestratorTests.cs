@@ -190,6 +190,53 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(capturedContext.RestoreValidateOnly);
         }
 
+        [Fact]
+        public async Task CliOrchestrator_EnterpriseEnrollParsesProtectedBootstrapOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "enterprise", "enroll",
+                "--tenant", "corp-prod",
+                "--policy-endpoint", "https://policy.example.test/etl-sql",
+                "--signing-key", "policy.pem",
+                "--client-certificate-thumbprint", new string('A', 40),
+                "--service-identity", "NT SERVICE\\ETL-SQL",
+                "--max-offline-hours", "12"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("enterprise-enroll", capturedContext!.Command);
+            Assert.Equal("corp-prod", capturedContext.EnterpriseTenant);
+            Assert.Equal("https://policy.example.test/etl-sql", capturedContext.EnterprisePolicyEndpoint);
+            Assert.Equal("policy.pem", capturedContext.EnterpriseSigningKeyPath);
+            Assert.Equal(12, capturedContext.EnterpriseMaxOfflineHours);
+            Assert.False(capturedContext.EnterpriseAllowOfflineFailure);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_EnterpriseUnenrollRequiresExplicitParsedConfirmation()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[] { "enterprise", "unenroll", "--yes" }, null)
+                .InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.Equal("enterprise-unenroll", capturedContext!.Command);
+            Assert.True(capturedContext.EnterpriseConfirm);
+        }
+
         [Theory]
         [InlineData(false, false, false, 0)]
         [InlineData(false, false, true, 0)]

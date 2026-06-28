@@ -15,6 +15,8 @@ namespace ETL_SQL.TUI
 
         static async Task<int> Main(string[] args)
         {
+            ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+
             try
             {
                 ServiceProvider = TuiDependencyInjectionSetup.BuildServiceProvider();

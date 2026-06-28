@@ -59,6 +59,7 @@ try
 {
     Log.Information("ETL-SQL Orchestrator Service starting up.");
 
+    ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
     var builder = WebApplication.CreateBuilder(args);
 
     // ── Replace default logging with Serilog ──────────────────────────────

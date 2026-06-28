@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 
+ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS
 // Running as a Windows Service, the working directory defaults to System32, which sends every

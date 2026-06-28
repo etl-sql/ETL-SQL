@@ -244,6 +244,65 @@ secrets fail closed with an error; ETL-SQL does not silently replace a missing s
 Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
 raw secret values and `SECRET:` references before persistence or display.
 
+#### Enterprise machine enrollment
+
+Enterprise policy is opt-in. When no machine enrollment exists, ETL-SQL remains in standalone mode:
+it uses local configuration, requires no policy-server connection, and applies only its built-in safety
+controls. Enterprise enrollment is deliberately stored outside `appsettings.json`, environment variables,
+and command-line configuration so those lower-authority sources cannot disable it.
+
+Generate or obtain the organization's RSA policy-signing key pair and place only the public PEM file on
+the machine being enrolled. Run enrollment from an elevated Administrator or root shell:
+
+```powershell
+etl-sql enterprise enroll `
+  --tenant corp-production `
+  --policy-endpoint https://policy.example.com/etl-sql/policy `
+  --signing-key C:\Install\etl-sql-policy-public.pem `
+  --client-certificate-thumbprint 0123456789ABCDEF0123456789ABCDEF01234567 `
+  --service-identity "NT SERVICE\ETL-SQL" `
+  --max-offline-hours 24
+```
+
+The policy endpoint must be HTTPS without embedded credentials. The signing key must be RSA PEM with at
+least 2048 bits. The optional certificate thumbprint identifies the machine credential that later policy
+runtime phases use. `--service-identity` grants that Windows service identity read access to enrollment;
+omit it when ETL-SQL runs as Local System. On Unix, install as root and arrange the service identity or
+service manager so it can read the root-owned bootstrap without making it group- or world-writable.
+
+Enrollment is stored at:
+
+- Windows: `%ProgramData%\ETL-SQL\Enterprise\enrollment.json`
+- Linux/macOS: `/etc/etl-sql/enterprise/enrollment.json`
+
+Windows grants control only to Local System and Administrators, plus read access to the optional service
+identity. Unix writes the directory as `0700` and the file as `0600`. Every ETL-SQL executable checks this
+fixed location before loading ordinary application configuration. If enrollment exists but is malformed,
+uses unsafe permissions, has an unsupported schema, or contains an invalid endpoint or trust key, normal
+startup fails closed.
+
+Inspect status without exposing the key or certificate value:
+
+```text
+etl-sql enterprise status
+```
+
+Remove enrollment only from an elevated shell with explicit confirmation:
+
+```text
+etl-sql enterprise unenroll --yes
+```
+
+The unenrollment command can remove a malformed but still OS-protected bootstrap for disaster recovery.
+If file permissions themselves are unsafe, repair ownership and permissions first; the command will not
+trust or delete a broadly writable bootstrap. Removing enrollment returns the installation to standalone
+mode. Organizations should monitor and restrict this administrative operation through endpoint management.
+
+Enrollment protects the trusted ETL-SQL installation. It cannot stop a user from downloading, compiling,
+or running unrelated software. Environments requiring mandatory enforcement must also restrict executable
+launch through Windows Defender Application Control/AppLocker, managed software deployment, container
+admission policy, or equivalent operating-system controls.
+
 #### Organization policy documents
 
 Governance policy documents use schema version `1.0`. Policy loaders accept local OS-protected JSON files and

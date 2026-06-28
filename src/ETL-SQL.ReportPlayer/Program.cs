@@ -69,6 +69,7 @@ else
     }
 }
 
+ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = args,

@@ -75,4 +75,14 @@ public class CliContext
     public string? MigrateFrom { get; set; }
     public string? MigrateTo { get; set; }
     public bool MigrateDryRun { get; set; }
+
+    // enterprise enrollment commands
+    public string? EnterpriseTenant { get; set; }
+    public string? EnterprisePolicyEndpoint { get; set; }
+    public string? EnterpriseSigningKeyPath { get; set; }
+    public string? EnterpriseClientCertificateThumbprint { get; set; }
+    public string? EnterpriseServiceIdentity { get; set; }
+    public int EnterpriseMaxOfflineHours { get; set; } = 24;
+    public bool EnterpriseAllowOfflineFailure { get; set; }
+    public bool EnterpriseConfirm { get; set; }
 }

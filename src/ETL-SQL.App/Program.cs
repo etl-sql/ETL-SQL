@@ -36,6 +36,9 @@ namespace ETL_SQL
 
             try
             {
+                if (args.Length == 0 || !string.Equals(args[0], "enterprise", StringComparison.OrdinalIgnoreCase))
+                    ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+
                 var isHelpOnly = args.Any(a => a is "--help" or "-h" or "-?");
                 if (isHelpOnly && args.Length > 1)
                 {
@@ -59,7 +62,7 @@ namespace ETL_SQL
                     return await WarmJobRunner.RunAsync(ServiceProvider);
 
                 // Start scheduler only for interactive/daemon modes, not for one-shot script execution
-                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "runner" || args[0] == "doctor" || args[0] == "purge" || args[0] == "admin" || args[0] == "init");
+                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run" || args[0] == "runner" || args[0] == "doctor" || args[0] == "purge" || args[0] == "admin" || args[0] == "init" || args[0] == "enterprise");
                 if (!isOneShot)
                 {
                     try

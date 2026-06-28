@@ -43,6 +43,8 @@ namespace ETL_SQL.LSP
     {
         static async Task Main(string[] args)
         {
+            ETL_SQL.Core.Governance.EnterpriseEnrollmentRuntime.ValidateBeforeStartup();
+
             var server = await LanguageServer.From(options =>
                 options
                     .WithInput(Console.OpenStandardInput())
