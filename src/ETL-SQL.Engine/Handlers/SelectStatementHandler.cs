@@ -40,7 +40,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // GROUP BY ALL / ORDER BY ALL / star modifiers are resolved locally in EvaluateSelect;
         // skip the early raw-statement pushdown for them.
         if (statement is SelectStatement selPush && selPush.IntoTable == null
-            && !selPush.GroupByAll && !selPush.OrderByAll
+            && !selPush.GroupByAll && !selPush.OrderByAll && selPush.Sample == null
             && !selPush.Columns.Any(c => c.Expression is StarExpression))
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
@@ -148,7 +148,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // 1. Handle Remote Pushdown (delegate to PushdownEngine). ORDER BY ALL, GROUP BY ALL, and star modifiers
         //    (EXCLUDE/REPLACE/RENAME) are resolved locally below, so they are not pushed down.
         bool hasStarModifiers = stmt.Columns.Any(c => c.Expression is StarExpression);
-        if (stmt.IntoTable == null && !stmt.OrderByAll && !stmt.GroupByAll && !hasStarModifiers
+        if (stmt.IntoTable == null && !stmt.OrderByAll && !stmt.GroupByAll && !hasStarModifiers && stmt.Sample == null
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
@@ -190,16 +190,59 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         bool hasWindow = finalColumns.Any(c => windowEngine.IsWindowFunction(c.Expression));
         bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct || stmt.QualifyClause != null;
 
+        IAsyncEnumerable<DataTable> output;
         if (!isComplex)
         {
             _logger.Debug("[SELECT] Execution Strategy: Fast Streaming");
-            await foreach (var batch in streamingEngine.ExecuteStreamingSelect(stmt, effectiveBatches, finalColumns, colNames)) yield return batch;
+            output = streamingEngine.ExecuteStreamingSelect(stmt, effectiveBatches, finalColumns, colNames);
         }
         else
         {
             _logger.Debug("[SELECT] Execution Strategy: Multi-Pass Pipeline");
             var executionEngine = new SelectExecutionEngine(context, _logger);
-            await foreach (var batch in executionEngine.ExecuteHeavyPipeline(stmt, effectiveBatches, finalColumns, colNames)) yield return batch;
+            output = executionEngine.ExecuteHeavyPipeline(stmt, effectiveBatches, finalColumns, colNames);
+        }
+
+        if (stmt.Sample != null) output = ApplySample(output, stmt.Sample);
+        await foreach (var batch in output) yield return batch;
+    }
+
+    /// <summary>Applies a <c>USING SAMPLE</c> clause: Bernoulli per-row sampling for PERCENT,
+    /// reservoir sampling for a fixed ROWS count. A seed makes the result repeatable.</summary>
+    private static async IAsyncEnumerable<DataTable> ApplySample(IAsyncEnumerable<DataTable> source, SampleClause sample)
+    {
+        var rng = sample.Seed.HasValue ? new Random(sample.Seed.Value) : new Random();
+        if (sample.IsPercent)
+        {
+            double p = (double)sample.Count / 100.0;
+            await foreach (var batch in source)
+            {
+                var outB = new DataTable();
+                outB.SetColumns(batch.ColumnNames.ToList());
+                foreach (var r in batch.Rows) if (rng.NextDouble() < p) await outB.AddRowAsync(r);
+                if (outB.Rows.Count > 0) yield return outB;
+            }
+        }
+        else
+        {
+            int n = (int)sample.Count;
+            var reservoir = new List<Row>(Math.Max(0, n));
+            List<string>? cols = null;
+            int seen = 0;
+            await foreach (var batch in source)
+            {
+                cols ??= batch.ColumnNames.ToList();
+                foreach (var r in batch.Rows)
+                {
+                    seen++;
+                    if (reservoir.Count < n) reservoir.Add(r);
+                    else { int j = rng.Next(seen); if (j < n) reservoir[j] = r; }
+                }
+            }
+            var outB = new DataTable();
+            outB.SetColumns(cols ?? new List<string>());
+            foreach (var r in reservoir) await outB.AddRowAsync(r);
+            yield return outB;
         }
     }
 }

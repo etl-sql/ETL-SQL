@@ -1116,6 +1116,7 @@ FROM <source> [AS alias]
 [OFFSET n ROWS]
 [FETCH NEXT n ROWS ONLY]
 [LIMIT n]
+[USING SAMPLE n PERCENT | n% | n ROWS [REPEATABLE (seed)]]
 [FOR JSON AUTO | PATH | RAW [, ROOT('name')] [, INCLUDE_NULL_VALUES] [, WITHOUT_ARRAY_WRAPPER]]
 [FOR XML  AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]];
 ```
@@ -1143,6 +1144,12 @@ SELECT count() FROM #orders;
 **Underscore digit separators** — `_` may separate digits in numeric literals:
 ```sql
 SELECT 1_000_000 AS one_million;
+```
+
+**`USING SAMPLE`** — return a random subset. `PERCENT`/`%` samples each row with the given probability (Bernoulli); `ROWS` returns a fixed-size random sample (reservoir). `REPEATABLE (seed)` makes it deterministic:
+```sql
+SELECT * FROM #events USING SAMPLE 10 PERCENT;
+SELECT * FROM #events USING SAMPLE 1000 ROWS REPEATABLE (42);
 ```
 
 **Trailing commas** — an optional trailing comma is allowed in `SELECT`, `GROUP BY`, and `ORDER BY` lists (and function arguments):

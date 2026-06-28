@@ -595,6 +595,28 @@ public class Parser : IParser
             Consume(TokenType.ONLY, "Expected ONLY after FETCH ROWS");
         }
 
+        // USING SAMPLE n PERCENT|% | n ROWS  [REPEATABLE (seed)]
+        SampleClause? sample = null;
+        if (Current.Type == TokenType.USING && Peek.Type == TokenType.SAMPLE)
+        {
+            Advance(); // USING
+            Advance(); // SAMPLE
+            var numTok = Consume(TokenType.NUMBER, "Expected a number after SAMPLE");
+            decimal count = decimal.Parse(numTok.Value);
+            bool isPercent = true;
+            if (Match(TokenType.MODULO)) isPercent = true;            // n%
+            else if (Match(TokenType.PERCENT)) isPercent = true;      // n PERCENT
+            else if (Match(TokenType.ROWS) || Match(TokenType.ROW)) isPercent = false; // n ROWS
+            int? seed = null;
+            if (Match(TokenType.REPEATABLE))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after REPEATABLE");
+                seed = (int)decimal.Parse(Consume(TokenType.NUMBER, "Expected seed number").Value);
+                Consume(TokenType.RPAREN, "Expected ')' after REPEATABLE seed");
+            }
+            sample = new SampleClause(count, isPercent, seed);
+        }
+
         var selectStmt = new SelectStatement(columns, intoTable, fromTable, joins, whereClause, groupBy, havingClause, orderBy)
         {
             Line = startToken.Line,
@@ -611,7 +633,8 @@ public class Parser : IParser
             QualifyClause = qualifyClause,
             GroupByAll = isGroupByAll,
             OrderByAll = orderByAll,
-            OrderByAllDescending = orderByAllDesc
+            OrderByAllDescending = orderByAllDesc,
+            Sample = sample
         };
 
         if (Match(TokenType.FOR))

@@ -285,7 +285,10 @@ public static class AstSerializer
         var limit = s.LimitCount != null ? $" LIMIT {s.LimitCount.ToSql()}" : "";
         var offset = s.Offset != null ? $" OFFSET {s.Offset.ToSql()} ROWS" : "";
         var forCl = s.ForClause != null ? $" {s.ForClause.ToSql()}" : "";
-        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{order}{limit}{offset}{forCl};";
+        var sample = s.Sample != null
+            ? $" USING SAMPLE {s.Sample.Count}{(s.Sample.IsPercent ? " PERCENT" : " ROWS")}" + (s.Sample.Seed.HasValue ? $" REPEATABLE ({s.Sample.Seed})" : "")
+            : "";
+        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{order}{limit}{offset}{sample}{forCl};";
     }
 
     private static string FormatSetOperation(SetOperationStatement s)

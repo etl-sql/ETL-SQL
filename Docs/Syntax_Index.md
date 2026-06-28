@@ -1085,6 +1085,7 @@ Standard clauses available within a `SELECT` statement.
 | `LIMIT n` | Limits results (Postgres style) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `OFFSET n` | Skips first N rows | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](../Docs/Reference/Grammar.md#53-top--limit--offset-fetch) | - |
+| `USING SAMPLE n PERCENT\|ROWS` | Random row sampling (`REPEATABLE (seed)` for determinism) | [Grammar.md](../Docs/Reference/Grammar.md#511-modern-select-conveniences) | - |
 | `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](../Docs/Reference/Grammar.md#54-values-table-constructor) | - |
 | `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Grammar.md](../Docs/Reference/Grammar.md) | - |
 | `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [Grammar.md](../Docs/Reference/Grammar.md#group-by-all) | [GROUP_BY_ALL.md](../src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |

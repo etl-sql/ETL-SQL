@@ -77,8 +77,7 @@ Documentation is a completion requirement, not a follow-up. Existing MSSQL/Oracl
   - Parser + CREATE/INSERT handlers; conflict semantics for replace/ignore; tests; docs + help for CREATE and INSERT.
 - [ ] **Reusable & lateral column aliases** — reference a SELECT alias in WHERE/GROUP BY/HAVING/QUALIFY and in later SELECT expressions (lateral column alias).
   - Binder/scope change: resolve select aliases before clause evaluation; guard ambiguity against real columns; tests; docs.
-- [ ] **SAMPLE / TABLESAMPLE** — return a random subset, e.g. `... USING SAMPLE 10%` / `TABLESAMPLE (n ROWS | p PERCENT)` with an optional deterministic seed.
-  - Parser + sampling operator in the select pipeline; tests; docs + help.
+- [x] **SAMPLE** — `... USING SAMPLE n PERCENT | n% | n ROWS [REPEATABLE (seed)]`. *(Done: `SampleClause` parsed at the select tail; `SelectStatementHandler.ApplySample` does Bernoulli per-row for PERCENT and reservoir sampling for ROWS; seed makes it repeatable; pushdown skips it. Tests in `StmtSampleTests`; Grammar §5.1.1 + Syntax_Index. NOTE: `TABLESAMPLE`-keyword spelling not added — `USING SAMPLE` only.)*
 - [ ] **General `COLUMNS()` expression** — apply an expression/pattern across many columns, e.g. `COLUMNS(* EXCLUDE (id))`, `COLUMNS('regex')`. Superset of the `COLUMNS(* EXCLUDE)` selector slated for UNPIVOT — build the selector once and reuse it in SELECT, PIVOT, and UNPIVOT.
   - Parser/AST COLUMNS selector; projection expansion; tests; docs.
 - [ ] **UNNEST / FLATTEN** — expand a LIST/array value into rows (`SELECT UNNEST(list_col)`); the table-producing complement to LISTAGG. (LIST type exists; STRUCT/MAP types are intentionally out of scope, and lambda-based list comprehensions are deferred to ROADMAP.)

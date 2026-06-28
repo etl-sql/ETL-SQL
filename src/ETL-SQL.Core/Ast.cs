@@ -344,6 +344,8 @@ public sealed record SelectStatement : Statement
     /// <summary>True for <c>ORDER BY ALL</c>; the engine expands it to every output column once they are known.</summary>
     public bool OrderByAll { get; init; }
     public bool OrderByAllDescending { get; init; }
+    /// <summary><c>USING SAMPLE</c> clause; null when absent.</summary>
+    public SampleClause? Sample { get; init; }
 
     public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)
     {
@@ -392,6 +394,9 @@ public sealed record GroupingSetClause : AstNode
         GroupSets = groupSets;
     }
 }
+
+/// <summary><c>USING SAMPLE n PERCENT|ROWS [REPEATABLE (seed)]</c> — random row sampling.</summary>
+public sealed record SampleClause(decimal Count, bool IsPercent, int? Seed) : AstNode;
 
 public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
 
