@@ -93,7 +93,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Dependency-audit self-test"; Command = ".\scripts\Test-DependencyAudit.ps1"; Reason = "The dependency-audit helpers behave correctly (reliable fallback + hard failure)." })
     $phases.Add([ordered]@{ Phase = "NuGet dependency audit"; Command = "dotnet list package --outdated/--deprecated/--vulnerable"; Reason = "Release should not ship known vulnerable or deprecated packages." })
     $phases.Add([ordered]@{ Phase = "Dotnet build"; Command = "dotnet build ETL-SQL.slnx --configuration $Configuration --no-restore"; Reason = "All projects compile in the release configuration." })
-    $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs." })
+    $phases.Add([ordered]@{ Phase = "Format verify"; Command = "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)"; Reason = "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run." })
     $phases.Add([ordered]@{ Phase = "Smoke lane"; Command = ".\scripts\test-lane.ps1 -Lane smoke"; Reason = "Critical startup, security, report, and portal checks." })
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Default local correctness lane across engine, language server, and portal." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
@@ -574,10 +574,22 @@ try {
         $previousPhaseMap $fingerprint $results
 
     # Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally
-    # (a fast static check) before the long test lanes run.
+    # (a fast static check) before the long test lanes run. On drift, the fix is applied automatically
+    # with 'dotnet format' so it never has to be run by hand — the phase then fails with an actionable
+    # message so the reformatted files are reviewed and committed (and thus reach CI), then re-run.
     Invoke-LoggedPhase "Format verify" `
-        "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore" `
-        { & dotnet format "ETL-SQL.slnx" "--verify-no-changes" "--no-restore" } `
+        "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" `
+        {
+            & dotnet format "ETL-SQL.slnx" "--verify-no-changes" "--no-restore"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Output "Formatting drift detected. Applying 'dotnet format' to fix it..."
+                & dotnet format "ETL-SQL.slnx" "--no-restore"
+                if ($LASTEXITCODE -ne 0) {
+                    throw "dotnet format failed to apply fixes (exit $LASTEXITCODE)."
+                }
+                throw "Formatting drift was found and automatically fixed in the working tree. Review and commit the reformatted files, then re-run (use -Resume)."
+            }
+        } `
         $previousPhaseMap $fingerprint $results
 
     Invoke-LoggedPhase "Smoke lane" `
