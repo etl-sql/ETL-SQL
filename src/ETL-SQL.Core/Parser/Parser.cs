@@ -632,9 +632,9 @@ public class Parser : IParser
             return expr;
         }
 
-        if (columns.Any(c => c.Expression is IdentifierExpression star && star.Name == "*"))
+        if (columns.Any(c => c.Expression is StarExpression || (c.Expression is IdentifierExpression id && (id.Name == "*" || id.Name.EndsWith(".*")))))
         {
-            throw new SyntaxException($"{clause} positional reference cannot be used when the SELECT list contains '*'.", expr.Line, expr.Column);
+            throw new SyntaxException($"{clause} positional reference cannot be used when the SELECT list contains a star projection.", expr.Line, expr.Column);
         }
 
         int ordinal = (int)d;
@@ -1621,12 +1621,20 @@ public class Parser : IParser
                Current.Type == TokenType.RIGHT || Current.Type == TokenType.OUTER || Current.Type == TokenType.FULL ||
                Current.Type == TokenType.CROSS || Current.Type == TokenType.APPLY || Current.Type == TokenType.SEMI ||
                Current.Type == TokenType.ANTI || Current.Type == TokenType.HASH || Current.Type == TokenType.LOOP || Current.Type == TokenType.MERGE ||
-               Current.Type == TokenType.FUZZY)
+               Current.Type == TokenType.FUZZY || Current.Type == TokenType.ASOF)
         {
             string joinType = "INNER";
             JoinHint hint = JoinHint.None;
 
-            if (Match(TokenType.FUZZY))
+            if (Match(TokenType.ASOF))
+            {
+                // ASOF JOIN / ASOF [LEFT] JOIN — nearest-match temporal/inequality join.
+                joinType = "ASOF";
+                if (Match(TokenType.LEFT)) { Match(TokenType.OUTER); joinType = "ASOF LEFT"; }
+                else Match(TokenType.INNER);
+                Consume(TokenType.JOIN, "Expected 'JOIN' after ASOF");
+            }
+            else if (Match(TokenType.FUZZY))
             {
                 joinType = "FUZZY";
                 Consume(TokenType.JOIN, "Expected 'JOIN' after FUZZY");

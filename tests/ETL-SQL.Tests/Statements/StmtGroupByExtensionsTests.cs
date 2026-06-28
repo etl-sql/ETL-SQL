@@ -99,7 +99,36 @@ namespace ETL_SQL.Tests.Statements
         {
             var sql = "SELECT * FROM (VALUES ('N', 1)) AS t(a, b) ORDER BY 1;";
             var script = Parse(sql);
-            Assert.Contains(script.Diagnostics, d => d.Message.Contains("'*'"));
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("star projection"));
+        }
+
+        [Fact]
+        public void Positional_WithQualifiedStarOrStarModifiers_ReportsDiagnostic()
+        {
+            var sql1 = "SELECT t.* FROM (VALUES ('N', 1)) AS t(a, b) ORDER BY 1;";
+            Assert.Contains(Parse(sql1).Diagnostics, d => d.Message.Contains("star projection"));
+
+            var sql2 = "SELECT * EXCLUDE (b) FROM (VALUES ('N', 1)) AS t(a, b) ORDER BY 1;";
+            Assert.Contains(Parse(sql2).Diagnostics, d => d.Message.Contains("star projection"));
+        }
+
+        [Fact]
+        public async Task GroupByAll_WithStarExclude_GroupsCorrectly()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var sql = @"
+                SELECT * EXCLUDE (amount), SUM(amount) AS total
+                FROM (VALUES ('N', 10), ('N', 30), ('S', 20)) AS t(region, amount)
+                GROUP BY ALL
+                ORDER BY region;";
+
+            var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).FirstAsync();
+
+            Assert.Equal(2, res.Rows.Count);
+            Assert.Equal("N", res.Rows[0]["region"]);
+            Assert.Equal(40m, res.Rows[0]["total"]);
+            Assert.Equal("S", res.Rows[1]["region"]);
+            Assert.Equal(20m, res.Rows[1]["total"]);
         }
 
         [Fact]

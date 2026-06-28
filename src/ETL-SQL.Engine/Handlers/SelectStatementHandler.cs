@@ -145,22 +145,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         var metadataHelper = new QueryMetadataHelper(_logger);
         var streamingEngine = new StreamingQueryEngine(context, _logger);
 
-        // 0. Expand GROUP BY ALL to the concrete set of non-aggregate, non-window SELECT expressions
-        //    so every downstream path (pushdown, routing, aggregation) sees a normal GROUP BY list.
-        if (stmt.GroupByAll)
-        {
-            var groupCols = stmt.Columns
-                .Where(c => !(c.Expression is IdentifierExpression star && star.Name == "*"))
-                .Where(c => !aggregateEngine.IsAggregate(c.Expression) && !windowEngine.IsWindowFunction(c.Expression))
-                .Select(c => c.Expression)
-                .ToList();
-            stmt = stmt with { GroupBy = groupCols, GroupByAll = false };
-        }
-
-        // 1. Handle Remote Pushdown (delegate to PushdownEngine). ORDER BY ALL and star modifiers
+        // 1. Handle Remote Pushdown (delegate to PushdownEngine). ORDER BY ALL, GROUP BY ALL, and star modifiers
         //    (EXCLUDE/REPLACE/RENAME) are resolved locally below, so they are not pushed down.
         bool hasStarModifiers = stmt.Columns.Any(c => c.Expression is StarExpression);
-        if (stmt.IntoTable == null && !stmt.OrderByAll && !hasStarModifiers
+        if (stmt.IntoTable == null && !stmt.OrderByAll && !stmt.GroupByAll && !hasStarModifiers
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
@@ -180,6 +168,16 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
         var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
 
+        // GROUP BY ALL: now that output columns are fully expanded, group by every non-aggregate, non-window column.
+        if (stmt.GroupByAll)
+        {
+            var groupCols = finalColumns
+                .Where(c => !aggregateEngine.IsAggregate(c.Expression) && !windowEngine.IsWindowFunction(c.Expression))
+                .Select(c => c.Expression)
+                .ToList();
+            stmt = stmt with { GroupBy = groupCols, GroupByAll = false };
+        }
+
         // ORDER BY ALL: now that output columns are known, expand to one ORDER BY per column.
         if (stmt.OrderByAll)
         {
@@ -188,8 +186,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         }
 
         // 4. Strategy Selection
-        bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
-        bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
+        bool hasAgg = finalColumns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
+        bool hasWindow = finalColumns.Any(c => windowEngine.IsWindowFunction(c.Expression));
         bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct || stmt.QualifyClause != null;
 
         if (!isComplex)
