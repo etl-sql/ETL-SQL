@@ -35,7 +35,7 @@ public abstract record Statement : AstNode
     public virtual string? GetCreatedTable() => null;
 }
 
-public enum ObjectCreationMode { Create, Alter, CreateOrAlter }
+public enum ObjectCreationMode { Create, Alter, CreateOrAlter, CreateOrReplace }
 
 public sealed record Script : AstNode
 {
@@ -927,6 +927,8 @@ public sealed record CreateTableStatement : Statement
     public bool IfNotExists { get; }
     public List<ColumnDefinition> Columns { get; }
     public List<TableConstraint> TableConstraints { get; } = new();
+    /// <summary>True for <c>CREATE OR REPLACE TABLE</c>: drop any existing table first, then create.</summary>
+    public bool OrReplace { get; init; }
 
     public CreateTableStatement(TableReference targetTable, bool ifNotExists, List<ColumnDefinition> columns)
     {

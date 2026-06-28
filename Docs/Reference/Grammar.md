@@ -1793,8 +1793,14 @@ CREATE TABLE #users (
 );
 ```
 
+```sql
+-- CREATE OR REPLACE drops any existing table/view first, then creates it
+CREATE OR REPLACE TABLE #staging (id INT, name VARCHAR(100));
+CREATE OR REPLACE VIEW active_users AS SELECT * FROM #users WHERE enabled = 1;
+```
+
 > [!NOTE]
-> `CREATE OR ALTER` is not supported for tables. Use `DROP TABLE IF EXISTS` followed by `CREATE TABLE`, or use the `IF NOT EXISTS` clause.
+> `CREATE OR ALTER` is not supported for tables (use `CREATE OR REPLACE`, `DROP TABLE IF EXISTS` + `CREATE TABLE`, or `IF NOT EXISTS`). `CREATE OR ALTER` remains available for views, procedures, and functions.
 
 ### 10.2 `ALTER TABLE`
 ```sql

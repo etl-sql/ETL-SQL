@@ -434,9 +434,10 @@ public static class AstSerializer
     private static string FormatCreateTable(CreateTableStatement s)
     {
         var ifNot = s.IfNotExists ? "IF NOT EXISTS " : "";
+        var orReplace = s.OrReplace ? "OR REPLACE " : "";
         var items = new List<string>(s.Columns.Select(c => c.ToSql()));
         items.AddRange(s.TableConstraints.Select(tc => tc.ToSql()));
-        return $"{ifNot}CREATE TABLE {s.TargetTable.ToSql()} ({string.Join(", ", items)});";
+        return $"CREATE {orReplace}TABLE {ifNot}{s.TargetTable.ToSql()} ({string.Join(", ", items)});";
     }
 
     private static string FormatAlterTable(AlterTableStatement s)

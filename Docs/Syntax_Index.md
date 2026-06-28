@@ -955,6 +955,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW TABLES` | Diagnostics | Lists tables in a connection |
 | `SHOW COLUMNS` | Diagnostics | Lists columns in a table |
 | `DESCRIBE <table>` | Diagnostics | Alias for `SHOW COLUMNS FOR <table>` |
+| `CREATE OR REPLACE TABLE\|VIEW` | DDL | Drops any existing object first, then creates |
 | `SHOW TAGS` | Lineage | Lists tags on a table/column |
 | `SHOW CONNECTION <conn> CONFIG` | Diagnostics | Lists configuration options for a specific connection |
 | `SHOW CONNECTIONS` | Diagnostics | Lists all active connections |

@@ -30,6 +30,13 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             return;
         }
 
+        // CREATE OR REPLACE TABLE: drop any existing relational table first. (Temp/in-memory tables are
+        // replaced by the overwrite below, so they need no explicit drop.)
+        if (stmt.OrReplace && !isTemp && connections.TryGetValue(connName, out var toReplace) && toReplace is IDatabaseSource replaceSql)
+        {
+            await foreach (var _ in replaceSql.ExecuteRawSql($"DROP TABLE IF EXISTS {_evaluator.GetSqlTableName(stmt.TargetTable, replaceSql.Dialect)};")) { }
+        }
+
         if (isTemp || !connections.ContainsKey(connName))
         {
             var mem = new InMemoryDataSource();

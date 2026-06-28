@@ -67,19 +67,23 @@ public class DataParser : ParserComponent
 
     public Statement ParseCreate(Token startToken)
     {
-        bool orAlter = false;
+        bool orAlter = false, orReplace = false;
         if (Match(TokenType.OR))
         {
-            Consume(TokenType.ALTER, "Expected ALTER after CREATE OR");
-            orAlter = true;
+            if (Match(TokenType.ALTER)) orAlter = true;
+            else if (Match(TokenType.REPLACE)) orReplace = true;
+            else throw new SyntaxException("Expected ALTER or REPLACE after CREATE OR", _parser.Current.Line, _parser.Current.Column);
         }
-        var mode = orAlter ? ObjectCreationMode.CreateOrAlter : ObjectCreationMode.Create;
+        var mode = orAlter ? ObjectCreationMode.CreateOrAlter
+                 : orReplace ? ObjectCreationMode.CreateOrReplace
+                 : ObjectCreationMode.Create;
 
         if (Match(TokenType.CONNECTION)) return ParseCreateConnection(startToken, mode);
         if (Match(TokenType.TABLE))
         {
             if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for TABLE.", _parser.Current.Line, _parser.Current.Column);
-            return ParseCreateTable(startToken);
+            var ct = (CreateTableStatement)ParseCreateTable(startToken);
+            return orReplace ? ct with { OrReplace = true } : ct;
         }
         if (Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, mode);
         if (Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, mode);
