@@ -15,6 +15,11 @@ promise are defined in
 in v0.13.0. Standalone installations must remain unenrolled, unrestricted by organization policy, and
 independent of network services.*
 
+> **Status (work started):** Phases 3–5 and the v0.14.0 release gates are now **active and tracked in
+> [`TODO.md`](TODO.md)** — that is the working copy. The detail below is retained here for reference.
+> **Phase 6 (Operations Control Plane) remains candidate scope** and stays in this roadmap; promote its
+> highest-value items into `TODO.md` only after Phases 3–5 expose the final operational requirements.
+
 ### Shipped foundation
 
 - Machine-level enrollment, protected bootstrap, trust key, machine identity, and enroll/status/unenroll CLI (`4850f3c0`).
