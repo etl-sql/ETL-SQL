@@ -107,7 +107,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
-    print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs."; i=$((i + 1))
+    print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
@@ -272,6 +272,26 @@ npm_dependency_audit_phase() {
     fi
 
     return "$any_failed"
+}
+
+# ---------------------------------------------------------------------------
+# Format phase: verify (CI parity) and auto-fix on drift
+# Runs the read-only --verify-no-changes check first; on drift it applies
+# 'dotnet format' automatically and fails with an actionable message so the
+# reformatted files are reviewed and committed (and thus reach CI), then re-run.
+# Mirrors the Format verify phase in Test-PreRelease.ps1.
+# ---------------------------------------------------------------------------
+format_verify_phase() {
+    if dotnet format "ETL-SQL.slnx" "--verify-no-changes" "--no-restore"; then
+        return 0
+    fi
+    echo "Formatting drift detected. Applying 'dotnet format' to fix it..."
+    if ! dotnet format "ETL-SQL.slnx" "--no-restore"; then
+        echo "dotnet format failed to apply fixes." >&2
+        return 1
+    fi
+    echo "Formatting drift was found and automatically fixed in the working tree. Review and commit the reformatted files, then re-run (use --resume)." >&2
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -519,10 +539,11 @@ run_phase "Dotnet build" \
     dotnet build "ETL-SQL.slnx" "--configuration" "$CONFIGURATION" "--no-restore"
 
 # Matches the CI 'dotnet format --verify-no-changes' gate so formatting drift fails locally
-# (a fast static check) before the long test lanes run.
+# (a fast static check) before the long test lanes run. On drift, format_verify_phase applies the
+# fix automatically and fails with an actionable message to commit the reformatted files, then re-run.
 run_phase "Format verify" \
-    "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore" \
-    dotnet format "ETL-SQL.slnx" "--verify-no-changes" "--no-restore"
+    "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" \
+    format_verify_phase
 
 run_phase "Smoke lane" \
     "./scripts/test-lane.sh --lane smoke --configuration $CONFIGURATION --no-restore --no-build" \
