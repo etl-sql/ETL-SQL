@@ -41,6 +41,9 @@ jobs:
             - '**/scripts/**'
             - '**/src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js'
             - '**/src/etl-sql-vscode/media/report-runtime.js'
+            # WiX/Windows Installer custom-action scripts are WSH JScript (e.g. Session.Property(x)=v,
+            # ActiveXObject), not standard ECMAScript — the CodeQL JS extractor cannot parse them.
+            - '**/src/ETL-SQL.Installer/*.js'
           query-filters:
             - exclude:
                 id:
