@@ -325,18 +325,21 @@ namespace ETL_SQL.Orchestrator.Service
                 if (string.IsNullOrWhiteSpace(path))
                     return Results.BadRequest(new { Error = "path query parameter is required." });
 
-                var root = GetScriptRoot(cfg);
-                // Prevent path traversal — resolve and verify it stays under root
-                var fullPath = Path.GetFullPath(Path.Combine(root, path));
-                var fullRoot = Path.GetFullPath(root);
-                var separator = Path.DirectorySeparatorChar.ToString();
-                var fullRootWithSeparator = fullRoot.EndsWith(separator) ? fullRoot : fullRoot + separator;
-                if (!fullPath.StartsWith(fullRootWithSeparator, StringComparison.OrdinalIgnoreCase))
-                    return Results.BadRequest(new { Error = "Invalid path." });
-                if (!File.Exists(fullPath))
+                var fullRoot = Path.GetFullPath(GetScriptRoot(cfg));
+                if (!Directory.Exists(fullRoot))
                     return Results.NotFound(new { Error = $"Script '{path}' not found." });
 
-                var content = await File.ReadAllTextAsync(fullPath);
+                // Allowlist: only an actual *.etlsql script under the configured root may be read. The
+                // request value is used solely to select a match; the path handed to the reader comes
+                // from the directory enumeration, never directly from the request. This both prevents
+                // traversal outside the root and reading non-script files.
+                var requested = Path.GetFullPath(Path.Combine(fullRoot, path));
+                var match = Directory.EnumerateFiles(fullRoot, "*.etlsql", SearchOption.AllDirectories)
+                    .FirstOrDefault(f => string.Equals(Path.GetFullPath(f), requested, StringComparison.OrdinalIgnoreCase));
+                if (match is null)
+                    return Results.NotFound(new { Error = $"Script '{path}' not found." });
+
+                var content = await File.ReadAllTextAsync(match);
                 return Results.Ok(new { Path = path, Content = content });
             }).WithName("getScriptContent");
 
