@@ -55,5 +55,29 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
 
         var loaded = await db.Groups.SingleAsync(g => g.Name == "finance");
         Assert.Equal("Finance team", loaded.Description);
+
+        var owner = new PortalUser
+        {
+            UserName = "service-owner",
+            NormalizedUserName = "SERVICE-OWNER",
+            IsActive = true
+        };
+        db.Users.Add(owner);
+        await db.SaveChangesAsync();
+        db.ServiceAccounts.Add(new ServiceAccount
+        {
+            Name = "postgres-runner",
+            NormalizedName = "POSTGRES-RUNNER",
+            ClientId = "sa_" + Guid.NewGuid().ToString("N"),
+            OwnerUserId = owner.Id,
+            SecretHash = "one-way-test-hash",
+            Scopes = "portal.read"
+        });
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var account = await db.ServiceAccounts.SingleAsync();
+        Assert.Equal(owner.Id, account.OwnerUserId);
+        Assert.Equal("portal.read", account.Scopes);
     }
 }

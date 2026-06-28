@@ -272,7 +272,13 @@ public class DatasetController(
                 dataset.OwningReport.Id,
                 CurrentUserId,
                 dataset.OwningReport.ScriptPath,
-                isAdministrator: IsAdmin);
+                isAdministrator: IsAdmin,
+                actorType: User.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType
+                    ? "ServiceAccount" : "User",
+                actorId: User.FindFirstValue(TokenService.ServiceAccountIdClaim) ?? CurrentUserId.ToString(),
+                effectiveScopes: string.Join(' ', User.FindAll(TokenService.ScopeClaim)
+                    .Select(value => value.Value).OrderBy(value => value)),
+                correlationId: HttpContext.TraceIdentifier);
             await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
             Response.Headers.Append("Location", $"/api/jobs/{jobId}");
             return Accepted(new { triggered = true, jobId });

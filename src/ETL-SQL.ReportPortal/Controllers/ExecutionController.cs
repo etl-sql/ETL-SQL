@@ -29,6 +29,14 @@ public class ExecutionController(
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
+    private bool IsServiceAccount => User.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType;
+    private string ActorType => IsServiceAccount ? "ServiceAccount" : "User";
+    private string ActorId => IsServiceAccount
+        ? User.FindFirstValue(TokenService.ServiceAccountIdClaim)!
+        : CurrentUserId.ToString();
+    private string? EffectiveScopes => IsServiceAccount
+        ? string.Join(' ', User.FindAll(TokenService.ScopeClaim).Select(value => value.Value).OrderBy(value => value))
+        : null;
 
     private Task<FolderPermission?> GetEffectivePermissionAsync(int folderId) =>
         folderPermissions.GetEffectivePermissionAsync(folderId, User);
@@ -59,7 +67,11 @@ public class ExecutionController(
             CurrentUserId,
             resolvedScriptPath,
             req?.Parameters,
-            isAdministrator: IsAdmin);
+            isAdministrator: IsAdmin,
+            actorType: ActorType,
+            actorId: ActorId,
+            effectiveScopes: EffectiveScopes,
+            correlationId: HttpContext.TraceIdentifier);
         await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT", "Report", id.ToString(), scriptHash);
 
         return Accepted(new { jobId });
@@ -255,7 +267,11 @@ public class ExecutionController(
                 id,
                 CurrentUserId,
                 resolvedScriptPath,
-                isAdministrator: IsAdmin);
+                isAdministrator: IsAdmin,
+                actorType: ActorType,
+                actorId: ActorId,
+                effectiveScopes: EffectiveScopes,
+                correlationId: HttpContext.TraceIdentifier);
 
         if (!alreadyRunning)
             await audit.LogAsync(CurrentUserId, "REFRESH_REPORT", "Report", id.ToString());

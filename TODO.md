@@ -11,15 +11,15 @@ release begins.
 The stabilization and performance work is complete. The final sprint phase adds narrowly scoped,
 non-interactive identities without starting the deferred stewardship, debugger, or approval-workflow work.
 
-- [ ] **Phase 2: Service Accounts**
-  - [ ] Define the service-account security contract: immutable identity, owner, enabled/expiry state, explicit scopes, role/resource authorization interaction, and audit actor representation.
-  - [ ] Add provider-neutral service-account persistence and SQLite/PostgreSQL migrations; store only protected or one-way-derived client secrets and never return a secret after initial creation or rotation.
-  - [ ] Add admin APIs to create, list, rotate, disable, and revoke service accounts with one-time secret display, validation, least-privilege defaults, and atomic audit records.
-  - [ ] Add a client-credentials token endpoint that authenticates service accounts, emits short-lived JWTs with service identity and scope claims, and fails closed for disabled, expired, revoked, or malformed credentials.
-  - [ ] Enforce explicit scopes on supported API and scheduled-execution operations while retaining existing role and resource permission checks; reject service identities from interactive-only and human-administration flows.
-  - [ ] Attribute scheduled CLI/API executions and audit events to the service account, including correlation ID and effective scopes, without exposing credentials in logs, diagnostics, exports, or support bundles.
-  - [ ] Add unit, SQLite, PostgreSQL, HTTP integration, rotation/revocation, concurrency, and credential-redaction coverage.
-  - [ ] Document provisioning, scope selection, secret rotation, revocation, unattended CLI/API authentication, and migration/backup behavior.
+- [x] **Phase 2: Service Accounts**
+  - [x] Define the service-account security contract: immutable identity, owner, enabled/expiry state, explicit scopes, role/resource authorization interaction, and audit actor representation.
+  - [x] Add provider-neutral service-account persistence and SQLite/PostgreSQL migrations; store only protected or one-way-derived client secrets and never return a secret after initial creation or rotation.
+  - [x] Add admin APIs to create, list, rotate, disable, and revoke service accounts with one-time secret display, validation, least-privilege defaults, and atomic audit records.
+  - [x] Add a client-credentials token endpoint that authenticates service accounts, emits short-lived JWTs with service identity and scope claims, and fails closed for disabled, expired, revoked, or malformed credentials.
+  - [x] Enforce explicit scopes on supported API and scheduled-execution operations while retaining existing role and resource permission checks; reject service identities from interactive-only and human-administration flows.
+  - [x] Attribute scheduled CLI/API executions and audit events to the service account, including correlation ID and effective scopes, without exposing credentials in logs, diagnostics, exports, or support bundles.
+  - [x] Add unit, SQLite, PostgreSQL, HTTP integration, rotation/revocation, concurrency, and credential-redaction coverage.
+  - [x] Document provisioning, scope selection, secret rotation, revocation, unattended CLI/API authentication, and migration/backup behavior.
 
 ## Language Parity (DuckDB-inspired syntax)
 

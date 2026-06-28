@@ -229,6 +229,10 @@ public class PortalExecutionJob
     public string Id { get; set; } = "";
     public int ReportId { get; set; }
     public int UserId { get; set; }
+    public string ActorType { get; set; } = "User";
+    public string? ActorId { get; set; }
+    public string? EffectiveScopes { get; set; }
+    public string? CorrelationId { get; set; }
     public string Kind { get; set; } = "Execution";
     public string Status { get; set; } = "Pending";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -239,6 +243,28 @@ public class PortalExecutionJob
     public long RowsProcessed { get; set; }
     public long PeakMemoryBytes { get; set; }
     public double CpuTimeSeconds { get; set; }
+}
+
+public class ServiceAccount : IVersionedEntity
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string ClientId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string NormalizedName { get; set; } = "";
+    public string? Description { get; set; }
+    public int OwnerUserId { get; set; }
+    public PortalUser OwnerUser { get; set; } = null!;
+    public string SecretHash { get; set; } = "";
+    public string Scopes { get; set; } = "";
+    public string RoleNames { get; set; } = "";
+    public bool IsEnabled { get; set; } = true;
+    public DateTime? ExpiresAt { get; set; }
+    public DateTime? RevokedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastUsedAt { get; set; }
+    public string SecurityStamp { get; set; } = Guid.NewGuid().ToString("N");
+    public long Version { get; set; } = 1;
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────
@@ -329,6 +355,9 @@ public class AuditLog
 {
     public int Id { get; set; }
     public int? UserId { get; set; }
+    public string ActorType { get; set; } = "User";
+    public string? ActorId { get; set; }
+    public string? EffectiveScopes { get; set; }
     public string Action { get; set; } = "";
     public string? ResourceType { get; set; }
     public string? ResourceId { get; set; }
@@ -349,6 +378,9 @@ public class AuditOutboxMessage
     public int? AuditLogId { get; set; }
     public AuditLog? AuditLog { get; set; }
     public int? UserId { get; set; }
+    public string ActorType { get; set; } = "User";
+    public string? ActorId { get; set; }
+    public string? EffectiveScopes { get; set; }
     public string Action { get; set; } = "";
     public string? ResourceType { get; set; }
     public string? ResourceId { get; set; }

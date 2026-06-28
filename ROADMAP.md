@@ -34,9 +34,9 @@ See `CHANGELOG.md` for the exact version where shipped work is packaged.
 
 ## Current Sprint Candidate
 
-The v0.13.0 stabilization and performance sprint is complete. No active sprint is selected.
-Promote the next actionable backlog phase into `TODO.md` only when implementation is intentionally scheduled.
-Data stewardship and debugger work remain unscheduled.
+The v0.13.0 stabilization and performance work is complete. Enterprise Identity Phase 2,
+Service Accounts, is now active in `TODO.md`. Data stewardship, debugger, and approval-workflow
+work remain unscheduled.
 
 ---
 
@@ -45,10 +45,10 @@ Data stewardship and debugger work remain unscheduled.
 ### Enterprise Identity Follow-ons
 *Builds on the shipped certified OIDC authentication path with non-interactive identities and approval workflows.*
 
-#### Candidate phases:
-- [ ] **Phase 2: Service Accounts**
-  - Implement non-interactive service account identities for scheduled CLI jobs and API access.
-  - Assign explicit OAuth scopes and rotation patterns.
+#### Active phase:
+- **Phase 2: Service Accounts** — Promoted to `TODO.md` for the active v0.13.0 sprint.
+
+#### Remaining candidate phase:
 - [ ] **Phase 3: Approval Workflows (Four-Eyes)**
   - Implement approval requests for critical actions (publishing reports, modifying production scheduled jobs).
   - Enforce segregation of duties (a user cannot approve their own changes).

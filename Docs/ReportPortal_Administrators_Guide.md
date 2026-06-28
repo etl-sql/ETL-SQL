@@ -1454,6 +1454,8 @@ Click **Export CSV** to download up to 10,000 most-recent entries as a UTF-8 CSV
 
 ## 11. Security Model
 
+For non-interactive API and CLI identities, see [Service Accounts](Reference/Service_Accounts.md).
+
 ### 11.1 Authentication
 
 The portal uses **JWT Bearer tokens** with HMAC-SHA256 signing.

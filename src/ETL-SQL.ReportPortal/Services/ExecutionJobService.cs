@@ -22,7 +22,11 @@ public record ExecutionJob(
     int ReportId,
     int UserId,
     bool IsAdministrator = false,
-    bool TrustedDatasetExecution = false)
+    bool TrustedDatasetExecution = false,
+    string ActorType = "User",
+    string? ActorId = null,
+    string? EffectiveScopes = null,
+    string? CorrelationId = null)
 {
     public JobStatus Status { get; set; } = JobStatus.Pending;
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
@@ -199,11 +203,15 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     /// <summary>Queues a new execution job and starts it in the background.</summary>
     public async Task<string> EnqueueExecutionAsync(int reportId, int userId, string scriptPath,
         Dictionary<string, string>? parameters = null,
-        bool isAdministrator = false)
+        bool isAdministrator = false,
+        string actorType = "User", string? actorId = null, string? effectiveScopes = null,
+        string? correlationId = null)
     {
         EvictExpiredJobs();
         var jobId = Guid.NewGuid().ToString("N");
-        var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator);
+        var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator,
+            ActorType: actorType, ActorId: actorId, EffectiveScopes: effectiveScopes,
+            CorrelationId: correlationId);
         _jobs[jobId] = job;
         await PersistNewJobAsync(job, "Execution");
 
@@ -220,7 +228,9 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         int userId,
         string scriptPath,
         bool isAdministrator = false,
-        bool trustedDatasetExecution = false)
+        bool trustedDatasetExecution = false,
+        string actorType = "User", string? actorId = null, string? effectiveScopes = null,
+        string? correlationId = null)
     {
         EvictExpiredJobs();
         var existingPersisted = await GetActiveRefreshJobIdAsync(reportId);
@@ -241,7 +251,11 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             reportId,
             userId,
             IsAdministrator: isAdministrator,
-            TrustedDatasetExecution: trustedDatasetExecution);
+            TrustedDatasetExecution: trustedDatasetExecution,
+            ActorType: actorType,
+            ActorId: actorId,
+            EffectiveScopes: effectiveScopes,
+            CorrelationId: correlationId);
         _jobs[jobId] = job;
 
         if (!await TryPersistRefreshJobAsync(job))
@@ -756,6 +770,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         Id = job.Id,
         ReportId = job.ReportId,
         UserId = job.UserId,
+        ActorType = job.ActorType,
+        ActorId = job.ActorId,
+        EffectiveScopes = job.EffectiveScopes,
+        CorrelationId = job.CorrelationId,
         Kind = kind,
         Status = job.Status.ToString(),
         CreatedAt = job.CreatedAt,
@@ -770,7 +788,11 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
 
     private static ExecutionJob FromEntity(PortalExecutionJob stored)
     {
-        var job = new ExecutionJob(stored.Id, stored.ReportId, stored.UserId)
+        var job = new ExecutionJob(stored.Id, stored.ReportId, stored.UserId,
+            ActorType: stored.ActorType,
+            ActorId: stored.ActorId,
+            EffectiveScopes: stored.EffectiveScopes,
+            CorrelationId: stored.CorrelationId)
         {
             Status = Enum.TryParse<JobStatus>(stored.Status, out var status) ? status : JobStatus.Failed,
             CreatedAt = stored.CreatedAt,

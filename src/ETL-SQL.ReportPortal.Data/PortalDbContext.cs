@@ -30,6 +30,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportEmbedToken> ReportEmbedTokens => Set<ReportEmbedToken>();
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
+    public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -84,6 +85,31 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
         });
 
+        builder.Entity<ServiceAccount>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.ClientId).IsUnique();
+            e.HasIndex(x => x.NormalizedName).IsUnique();
+            e.HasIndex(x => x.OwnerUserId);
+            e.Property(x => x.Id).HasMaxLength(32);
+            e.Property(x => x.ClientId).HasMaxLength(35);
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.NormalizedName).HasMaxLength(100);
+            e.Property(x => x.Description).HasMaxLength(500);
+            e.Property(x => x.SecretHash).HasMaxLength(512);
+            e.Property(x => x.Scopes).HasMaxLength(256);
+            e.Property(x => x.RoleNames).HasMaxLength(512);
+            e.Property(x => x.SecurityStamp).HasMaxLength(32);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasOne(x => x.OwnerUser).WithMany().HasForeignKey(x => x.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<PortalExecutionJob>(e =>
+        {
+            e.Property(x => x.ActorType).HasDefaultValue("User");
+        });
+
         builder.Entity<ReportFavorite>(e =>
         {
             e.HasIndex(x => new { x.UserId, x.ReportId }).IsUnique();
@@ -135,6 +161,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
 
         builder.Entity<AuditOutboxMessage>(e =>
         {
+            e.Property(x => x.ActorType).HasDefaultValue("User");
             e.HasIndex(x => x.EventId).IsUnique();
             e.HasIndex(x => new { x.Status, x.NextAttemptAt });
             e.HasIndex(x => x.AuditLogId);
@@ -142,6 +169,11 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
                 .WithMany(x => x.OutboxMessages)
                 .HasForeignKey(x => x.AuditLogId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        builder.Entity<AuditLog>(e =>
+        {
+            e.Property(x => x.ActorType).HasDefaultValue("User");
         });
 
         builder.Entity<Group>(e =>

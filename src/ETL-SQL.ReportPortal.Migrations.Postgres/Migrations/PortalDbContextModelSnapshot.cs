@@ -17,7 +17,7 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -34,10 +34,22 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("User");
+
                     b.Property<string>("CorrelationId")
                         .HasColumnType("text");
 
                     b.Property<string>("Detail")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EffectiveScopes")
                         .HasColumnType("text");
 
                     b.Property<string>("ResourceId")
@@ -69,6 +81,15 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("User");
+
                     b.Property<int>("Attempts")
                         .HasColumnType("integer");
 
@@ -83,6 +104,9 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
 
                     b.Property<DateTime?>("DeliveredAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EffectiveScopes")
+                        .HasColumnType("text");
 
                     b.Property<string>("EventId")
                         .IsRequired()
@@ -367,14 +391,29 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("text");
 
+                    b.Property<string>("ActorId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("User");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CorrelationId")
+                        .HasColumnType("text");
 
                     b.Property<double>("CpuTimeSeconds")
                         .HasColumnType("double precision");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EffectiveScopes")
+                        .HasColumnType("text");
 
                     b.Property<string>("Error")
                         .HasColumnType("text");
@@ -912,6 +951,89 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("SavedReportViews");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ServiceAccount", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ClientId")
+                        .IsRequired()
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("NormalizedName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OwnerUserId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RoleNames")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Scopes")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId")
+                        .IsUnique();
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique();
+
+                    b.HasIndex("OwnerUserId");
+
+                    b.ToTable("ServiceAccounts");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1403,6 +1525,17 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Navigation("Report");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.ServiceAccount", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalUser", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OwnerUser");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>

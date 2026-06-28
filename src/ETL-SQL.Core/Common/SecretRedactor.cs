@@ -19,6 +19,9 @@ public static partial class SecretRedactor
     [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9._~+/=\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex BearerPattern();
 
+    [GeneratedRegex(@"\bsas_[A-Za-z0-9_-]{40,}", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ServiceAccountSecretPattern();
+
     [GeneratedRegex(@"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex JsonSecretPattern();
 
@@ -64,6 +67,7 @@ public static partial class SecretRedactor
         });
         redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
         redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
+        redacted = ServiceAccountSecretPattern().Replace(redacted, $"sas_{Mask}");
         redacted = JsonSecretPattern().Replace(redacted, match =>
         {
             var key = match.Groups[2].Value;

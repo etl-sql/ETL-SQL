@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Security.Claims;
 using ETL_SQL.Core.Common;
 using ETL_SQL.ReportPortal.Data;
 
@@ -17,16 +18,34 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
     /// </summary>
     public void Stage(int? userId, string action,
         string? resourceType = null, string? resourceId = null, string? detail = null,
-        string? correlationId = null)
+        string? correlationId = null, string? actorType = null, string? actorId = null,
+        string? effectiveScopes = null)
     {
         var occurredAt = DateTime.UtcNow;
         var safeResourceId = SecretRedactor.Redact(resourceId);
         var safeDetail = SecretRedactor.Redact(detail);
         var effectiveCorrelationId = correlationId ?? httpContext.HttpContext?.TraceIdentifier;
+        var principal = httpContext.HttpContext?.User;
+        var effectiveActorType = actorType ??
+            (principal?.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType
+                ? "ServiceAccount" : "User");
+        var effectiveActorId = actorId ??
+            (effectiveActorType == "ServiceAccount"
+                ? principal?.FindFirstValue(TokenService.ServiceAccountIdClaim)
+                : userId?.ToString());
+        var resolvedEffectiveScopes = effectiveScopes ?? (effectiveActorType == "ServiceAccount"
+            ? string.Join(' ', (principal?.FindAll(TokenService.ScopeClaim) ?? [])
+                .Select(claim => claim.Value)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(scope => scope, StringComparer.Ordinal))
+            : null);
 
         var auditLog = new AuditLog
         {
             UserId = userId,
+            ActorType = effectiveActorType,
+            ActorId = effectiveActorId,
+            EffectiveScopes = resolvedEffectiveScopes,
             Action = action,
             ResourceType = resourceType,
             ResourceId = safeResourceId,
@@ -40,6 +59,9 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
         {
             AuditLog = auditLog,
             UserId = userId,
+            ActorType = effectiveActorType,
+            ActorId = effectiveActorId,
+            EffectiveScopes = resolvedEffectiveScopes,
             Action = action,
             ResourceType = resourceType,
             ResourceId = safeResourceId,
@@ -48,6 +70,9 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
             PayloadJson = JsonSerializer.Serialize(new
             {
                 userId,
+                actorType = effectiveActorType,
+                actorId = effectiveActorId,
+                effectiveScopes = resolvedEffectiveScopes,
                 action,
                 resourceType,
                 resourceId = safeResourceId,
@@ -69,9 +94,11 @@ public class AuditService(PortalDbContext db, IHttpContextAccessor httpContext)
     /// </summary>
     public async Task LogAsync(int? userId, string action,
         string? resourceType = null, string? resourceId = null, string? detail = null,
-        string? correlationId = null)
+        string? correlationId = null, string? actorType = null, string? actorId = null,
+        string? effectiveScopes = null)
     {
-        Stage(userId, action, resourceType, resourceId, detail, correlationId);
+        Stage(userId, action, resourceType, resourceId, detail, correlationId, actorType, actorId,
+            effectiveScopes);
         await db.SaveChangesAsync();
     }
 }

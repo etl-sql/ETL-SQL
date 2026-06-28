@@ -142,6 +142,8 @@ builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
 })
 .AddEntityFrameworkStores<PortalDbContext>()
 .AddDefaultTokenProviders();
+builder.Services.AddScoped<IPasswordHasher<ServiceAccount>, PasswordHasher<ServiceAccount>>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ServiceAccountSecurityStateCache>();
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
 // Use a zero-filled placeholder when no secret is configured so the service can start.
@@ -179,6 +181,33 @@ builder.Services.AddAuthentication(opt =>
     {
         OnTokenValidated = async context =>
         {
+            var services = context.HttpContext.RequestServices;
+            if (context.Principal?.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType)
+            {
+                var accountId = context.Principal.FindFirstValue(TokenService.ServiceAccountIdClaim);
+                if (string.IsNullOrWhiteSpace(accountId))
+                {
+                    context.Fail("Invalid service identity.");
+                    return;
+                }
+                var db = services.GetRequiredService<PortalDbContext>();
+                var state = await services.GetRequiredService<ETL_SQL.ReportPortal.Services.ServiceAccountSecurityStateCache>()
+                    .GetAsync(accountId, db);
+                var serviceIssuedStamp = context.Principal.FindFirstValue(TokenService.SecurityStampClaim);
+                if (state is null || !state.IsEnabled || state.RevokedAt is not null
+                    || (state.ExpiresAt is { } expiresAt && expiresAt <= DateTime.UtcNow)
+                    || !string.Equals(serviceIssuedStamp, state.SecurityStamp, StringComparison.Ordinal))
+                {
+                    context.Fail("Service account is disabled, expired, or revoked.");
+                    return;
+                }
+                var owner = await services.GetRequiredService<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>()
+                    .GetAsync(state.OwnerUserId, db);
+                if (owner is null || !owner.IsActive)
+                    context.Fail("Service account owner is disabled.");
+                return;
+            }
+
             var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(userIdValue, out var userId))
             {
@@ -186,7 +215,6 @@ builder.Services.AddAuthentication(opt =>
                 return;
             }
 
-            var services = context.HttpContext.RequestServices;
             var user = await services
                 .GetRequiredService<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>()
                 .GetAsync(userId, services.GetRequiredService<PortalDbContext>());
@@ -571,6 +599,7 @@ app.UseStaticFiles(staticFileOptions);
 app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<ETL_SQL.ReportPortal.Middleware.ServiceAccountScopeMiddleware>();
 app.Use(async (context, next) =>
 {
     if (context.User.Identity?.IsAuthenticated == true

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Identity;
 
 namespace ETL_SQL.ReportPortal.Middleware;
@@ -22,6 +23,7 @@ public class MustChangePasswordMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext ctx)
     {
         if (ctx.User.Identity?.IsAuthenticated == true
+            && ctx.User.FindFirstValue(TokenService.IdentityTypeClaim) != TokenService.ServiceIdentityType
             && ctx.Request.Path.StartsWithSegments("/api")
             && !_allowed.Contains(ctx.Request.Path.Value ?? ""))
         {

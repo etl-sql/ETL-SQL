@@ -11,7 +11,8 @@ public sealed class SecretRedactorTests
     {
         var text = "PASSWORD='p@ss'; API_KEY=abc123; Authorization: Bearer token-123; " +
                    "{\"client_secret\":\"super-secret\",\"account_key\":\"acct\"}; " +
-                   "value=ENC:abc123==; ref=SECRET:prod/db/password";
+                   "value=ENC:abc123==; ref=SECRET:prod/db/password; " +
+                   "raw=sas_Abcdefghijklmnopqrstuvwxyz0123456789_-ABCD";
 
         var redacted = SecretRedactor.Redact(text)!;
 
@@ -21,6 +22,7 @@ public sealed class SecretRedactorTests
         Assert.DoesNotContain("super-secret", redacted);
         Assert.DoesNotContain("acct", redacted);
         Assert.DoesNotContain("prod/db/password", redacted);
+        Assert.DoesNotContain("sas_Abcdefghijklmnopqrstuvwxyz0123456789_-ABCD", redacted);
         Assert.Contains("PASSWORD='********'", redacted);
         Assert.Contains("AUTHORIZATION", redacted, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("SECRET:********", redacted);
