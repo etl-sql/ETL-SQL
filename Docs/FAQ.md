@@ -77,7 +77,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 >     WITH(DSN='Firebird_DSN', USER='etl', PASSWORD='...');
 > -- or with a driver string
 > CREATE CONNECTION firebird_src AS ODBC()
->     WITH(CONNECTION_STRING='Driver={Firebird/InterBase(r) driver};Dbname=localhost:C:\Data\mydb.fdb;User=SYSDBA;Password=masterkey;');
+>     WITH(CONNECTION_STRING='Driver={Firebird/InterBase(r) driver};Dbname=localhost:C:\Data\mydb.fdb;User=SYSDBA;Password=<password>;');
 > ```
 
 

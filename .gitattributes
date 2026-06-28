@@ -2,3 +2,16 @@
 # (`bad interpreter`) and systemd unit parsing on Linux. Pin them regardless of core.autocrlf.
 *.sh        text eol=lf
 *.service   text eol=lf
+
+# Shared browser/runtime assets are copied verbatim from
+# src/ETL-SQL.ReportRuntime/Resources/Shared/ to host copies (VS Code, Player, Portal). Pin them to
+# LF so the canonical and host copies stay byte-identical on every platform — otherwise a Windows CI
+# checkout (core.autocrlf=true) converts them to CRLF and the `sync-assets.js -Check` drift gate fails.
+*.min.js            text eol=lf
+*.min.css           text eol=lf
+*.geojson           text eol=lf
+report-runtime.js   text eol=lf
+report-runtime.css  text eol=lf
+designer.js         text eol=lf
+designer.css        text eol=lf
+arrow.min.js        text eol=lf
