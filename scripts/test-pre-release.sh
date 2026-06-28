@@ -106,10 +106,13 @@ show_pre_release_plan() {
     local i=1
     print_plan_phase "$i" "Asset drift check" "node ./scripts/sync-assets.js -Check" "Shared report runtime files must match generated host copies."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet restore" "dotnet restore ETL-SQL.slnx" "Package graph resolves before build and tests."; i=$((i + 1))
+    print_plan_phase "$i" "Dependency-audit self-test" "./scripts/Test-DependencyAudit.ps1 (via pwsh)" "The dependency-audit helpers behave correctly (reliable fallback + hard failure)."; i=$((i + 1))
+    print_plan_phase "$i" "NuGet dependency audit" "scripts/lib/DependencyAudit.ps1 Invoke-NuGetDependencyAudit (via pwsh)" "Release should not ship known vulnerable or deprecated packages."; i=$((i + 1))
     print_plan_phase "$i" "Dotnet build" "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" "All projects compile in the release configuration."; i=$((i + 1))
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
+    print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
 
     if [[ "$INCLUDE_SLT" == true ]]; then
@@ -126,6 +129,7 @@ show_pre_release_plan() {
 
     if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 (via pwsh)" "Smoke certification metrics have not regressed."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
@@ -134,6 +138,7 @@ show_pre_release_plan() {
 
     if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 (via pwsh)" "Standard certification metrics have not regressed."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
@@ -305,6 +310,38 @@ vsce_package_phase() {
     local code=$?
     rm -f "$out"
     return "$code"
+}
+
+# ---------------------------------------------------------------------------
+# PowerShell bridge: the dependency-audit and cert-baseline phases reuse the
+# canonical PowerShell helpers (scripts/lib/DependencyAudit.ps1,
+# Compare-CertBaseline.ps1, Test-DependencyAudit.ps1) so there is a single
+# source of truth shared with Test-PreRelease.ps1 (no parallel bash port to
+# drift). PowerShell 7+ (pwsh) is cross-platform; these phases require it.
+# ---------------------------------------------------------------------------
+resolve_pwsh() {
+    local p
+    p="$(command -v pwsh || command -v powershell || true)"
+    if [[ -z "$p" ]]; then
+        echo "PowerShell (pwsh) is required for this phase but was not found on PATH. Install PowerShell 7+ or run the PowerShell gate (Test-PreRelease.ps1)." >&2
+        return 1
+    fi
+    printf '%s' "$p"
+}
+
+dependency_audit_selftest_phase() {
+    local pwsh; pwsh="$(resolve_pwsh)" || return 1
+    "$pwsh" -NoProfile -File ./scripts/Test-DependencyAudit.ps1
+}
+
+nuget_dependency_audit_phase() {
+    local pwsh; pwsh="$(resolve_pwsh)" || return 1
+    "$pwsh" -NoProfile -Command "\$ErrorActionPreference='Stop'; . ./scripts/lib/DependencyAudit.ps1; Invoke-NuGetDependencyAudit -RepoRoot '$REPO_ROOT' -Solution 'ETL-SQL.slnx' | Where-Object { \$_ -is [string] }"
+}
+
+cert_baseline_phase() {
+    local pwsh; pwsh="$(resolve_pwsh)" || return 1
+    "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
 }
 
 # ---------------------------------------------------------------------------
@@ -547,6 +584,14 @@ run_phase "Dotnet restore" \
     "dotnet restore ETL-SQL.slnx" \
     dotnet restore "ETL-SQL.slnx"
 
+run_phase "Dependency-audit self-test" \
+    "./scripts/Test-DependencyAudit.ps1 (via pwsh)" \
+    dependency_audit_selftest_phase
+
+run_phase "NuGet dependency audit" \
+    "dotnet list ETL-SQL.slnx package --outdated/--deprecated/--vulnerable (via scripts/lib/DependencyAudit.ps1)" \
+    nuget_dependency_audit_phase
+
 run_phase "Dotnet build" \
     "dotnet build ETL-SQL.slnx --configuration $CONFIGURATION --no-restore" \
     dotnet build "ETL-SQL.slnx" "--configuration" "$CONFIGURATION" "--no-restore"
@@ -565,6 +610,12 @@ run_phase "Smoke lane" \
 run_phase "Fast lane" \
     "./scripts/test-lane.sh --lane fast --configuration $CONFIGURATION --no-restore --no-build" \
     bash "./scripts/test-lane.sh" "--lane" "fast" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+
+# Explicit release gate: prove the in-place N->N+1 upgrade drill independently (it is also Category=Portal
+# so the fast lane exercises it, but this named phase makes the upgrade gate visible and separately logged).
+run_phase "N->N+1 upgrade-path drill" \
+    "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" \
+    dotnet test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
 run_phase "Sample scripts" \
     "./scripts/test-all-samples.sh" \
@@ -604,6 +655,10 @@ if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
     run_phase "Scale certification smoke" \
         "./scripts/test-scale-certification.sh --tier Smoke" \
         bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
+
+    run_phase "Cert baseline regression check (smoke)" \
+        "./scripts/Compare-CertBaseline.ps1 (via pwsh)" \
+        cert_baseline_phase
 fi
 
 if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
@@ -616,6 +671,10 @@ if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
     run_phase "Scale certification standard" \
         "./scripts/test-scale-certification.sh --tier Standard" \
         bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
+
+    run_phase "Cert baseline regression check (standard)" \
+        "./scripts/Compare-CertBaseline.ps1 (via pwsh)" \
+        cert_baseline_phase
 fi
 
 if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then

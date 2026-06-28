@@ -130,7 +130,12 @@ Reports and logs are written to `release-validation/`. Use `-Resume` / `--resume
 
 `-Explain` / `--explain` prints the phase list without running it. `-Quick` / `--quick` skips Node, scale, Docker, and installer phases. `-IncludeSlt` / `--include-slt` adds the SQL Logic Test lane to the local release gate.
 
-The full PowerShell plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; restore; NuGet dependency audit; release build; smoke lane; fast lane; sample scripts; SLT lane; VS Code npm install/audit/compile/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
+> The PowerShell and Bash gates run the **same phases in the same order**. The Bash gate reuses the
+> canonical PowerShell helpers for a few phases (dependency-audit self-test, NuGet dependency audit,
+> cert-baseline regression checks) via `pwsh`, so those phases require **PowerShell 7+ (`pwsh`)** on
+> `PATH` even on Linux/macOS. This keeps a single source of truth rather than a parallel Bash port.
+
+The full plan with `-IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64` is: asset drift check; restore; dependency-audit self-test; NuGet dependency audit; release build; format verify (auto-fixes drift); smoke lane; fast lane; N→N+1 upgrade-path drill; sample scripts; SLT lane; VS Code npm ci/audit/compile/VSIX-package/unit tests; smoke scale certification and baseline check; Docker integration lane; standard scale certification and baseline check; publish artifacts; Windows MSI.
 
 Windows MSI packaging requires WiX Toolset v3.x (`candle.exe` and `light.exe`). On a clean Windows CI runner, install it before `build_msi.ps1`:
 
