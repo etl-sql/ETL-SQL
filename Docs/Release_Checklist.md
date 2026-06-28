@@ -68,9 +68,31 @@ This is the gate. Green CI is **not** a substitute — CI does not run the Docke
 
 The gate covers (in order): asset-drift check, `dotnet restore`, dependency-audit self-test,
 NuGet dependency audit (no known-vulnerable/deprecated packages), `dotnet build` (Release),
-`dotnet format --verify-no-changes`, smoke lane, fast lane, **N→N+1 upgrade-path drill**,
-sample scripts, then optionally SLT, VS Code npm (ci/audit/compile/unit), scale certification
-(smoke + standard) with baseline regression checks, Docker integration, and installer builds.
+`dotnet format --verify-no-changes` (auto-fixes drift), smoke lane, fast lane,
+**N→N+1 upgrade-path drill**, sample scripts, then optionally SLT, VS Code npm
+(ci/audit/compile/**vsce package**/unit), scale certification (smoke + standard) with baseline
+regression checks, Docker integration, and installer builds.
+
+> The **VS Code VSIX package** phase runs the same `vsce package` that the tag-triggered
+> `release.yml` runs, so manifest/engine errors (e.g. `@types/vscode` greater than
+> `engines.vscode`, missing icon/README) fail the *local* gate instead of the expensive
+> cross-platform release build.
+
+### Lessons learned (keep the gate ahead of the release build)
+
+The tag-triggered `release.yml` is the only thing that actually builds the cross-platform
+artifacts; a failure there is slow and public. Every step `release.yml` performs that *can* be
+validated locally should have a counterpart in `Test-PreRelease.ps1`/`.sh`. Gaps found in v0.13.0
+and the safeguards added:
+
+| What slipped through | Why the gate missed it | Safeguard now in place |
+| :--- | :--- | :--- |
+| Repo-wide `dotnet format` drift | gate only verified, then failed | Format phase now **auto-applies** the fix and tells you to commit |
+| `vsce package` failure (`@types/vscode` > `engines.vscode`) | gate compiled the extension but never packaged it | new **VS Code VSIX package** phase runs `vsce package` |
+| `generate-sbom.js` mis-stamped the version (hardcoded `0.12.0`) | nothing checked generated-file versions | SBOM version now **derived from `Directory.Build.props`** (single source of truth) |
+
+Principle: any file that embeds the version should read it from `Directory.Build.props`, not hardcode
+it (`Set-Version.ps1` cannot find every hardcoded copy).
 
 ## Phase 4 — Build & package artifacts
 

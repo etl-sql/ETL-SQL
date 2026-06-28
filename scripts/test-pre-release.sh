@@ -120,6 +120,7 @@ show_pre_release_plan() {
         print_plan_phase "$i" "VS Code npm ci" "npm ci" "Extension dependencies install from lockfile."; i=$((i + 1))
         print_plan_phase "$i" "VS Code npm audit" "npm outdated / npm audit" "Extension dependency risk is visible before release."; i=$((i + 1))
         print_plan_phase "$i" "VS Code compile" "npm run compile" "TypeScript extension compiles."; i=$((i + 1))
+        print_plan_phase "$i" "VS Code VSIX package" "npx @vscode/vsce package --target linux-x64" "VSIX packages cleanly — same vsce step release.yml runs; catches manifest/engine errors before the release build."; i=$((i + 1))
         print_plan_phase "$i" "VS Code unit tests" "npm run test:unit" "Extension unit tests pass."; i=$((i + 1))
     fi
 
@@ -292,6 +293,18 @@ format_verify_phase() {
     fi
     echo "Formatting drift was found and automatically fixed in the working tree. Review and commit the reformatted files, then re-run (use --resume)." >&2
     return 1
+}
+
+# ---------------------------------------------------------------------------
+# VSIX packaging validation: runs the same 'vsce package' as release.yml so
+# manifest/engine errors are caught locally, not in the cross-platform build.
+# ---------------------------------------------------------------------------
+vsce_package_phase() {
+    local out="${TMPDIR:-/tmp}/etl-sql-vsce-validate.vsix"
+    ( cd "$REPO_ROOT/src/etl-sql-vscode" && npx @vscode/vsce package --target linux-x64 --out "$out" )
+    local code=$?
+    rm -f "$out"
+    return "$code"
 }
 
 # ---------------------------------------------------------------------------
@@ -575,6 +588,12 @@ if [[ "$EFFECTIVE_SKIP_NODE" != true ]]; then
     run_phase "VS Code compile" \
         "npm run compile (src/etl-sql-vscode)" \
         bash -c "cd '$REPO_ROOT/src/etl-sql-vscode' && npm run compile"
+
+    # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
+    # so packaging/manifest errors are caught locally instead of failing the release build.
+    run_phase "VS Code VSIX package" \
+        "npx @vscode/vsce package --target linux-x64 (manifest/packaging validation)" \
+        vsce_package_phase
 
     run_phase "VS Code unit tests" \
         "npm run test:unit (src/etl-sql-vscode)" \

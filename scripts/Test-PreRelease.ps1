@@ -107,6 +107,7 @@ function Get-PlannedPreReleasePhases {
         $phases.Add([ordered]@{ Phase = "VS Code npm ci"; Command = "npm ci"; Reason = "Extension dependencies install from lockfile." })
         $phases.Add([ordered]@{ Phase = "VS Code npm audit"; Command = "npm outdated / npm audit"; Reason = "Extension dependency risk is visible before release." })
         $phases.Add([ordered]@{ Phase = "VS Code compile"; Command = "npm run compile"; Reason = "TypeScript extension compiles." })
+        $phases.Add([ordered]@{ Phase = "VS Code VSIX package"; Command = "npx @vscode/vsce package --target win32-x64"; Reason = "VSIX packages cleanly — same vsce step release.yml runs; catches manifest/engine errors before the release build." })
         $phases.Add([ordered]@{ Phase = "VS Code unit tests"; Command = "npm run test:unit"; Reason = "Extension unit tests pass." })
     }
 
@@ -673,6 +674,24 @@ try {
         Invoke-LoggedPhase "VS Code compile" `
             "npm run compile (src\etl-sql-vscode)" `
             { Push-Location "src\etl-sql-vscode"; try { & npm run compile } finally { Pop-Location } } `
+            $previousPhaseMap $fingerprint $results
+
+        # Exercise the same 'vsce package' the tag-triggered release.yml runs (via publish_vsix.ps1),
+        # so packaging/manifest errors (e.g. @types/vscode > engines.vscode, missing icon/README) are
+        # caught locally and cheaply instead of failing the expensive cross-platform release build.
+        Invoke-LoggedPhase "VS Code VSIX package" `
+            "npx @vscode/vsce package --target win32-x64 (manifest/packaging validation)" `
+            {
+                Push-Location "src\etl-sql-vscode"
+                try {
+                    $vsixOut = Join-Path ([System.IO.Path]::GetTempPath()) "etl-sql-vsce-validate.vsix"
+                    & npx "@vscode/vsce" package "--target" "win32-x64" "--out" $vsixOut
+                    $code = $LASTEXITCODE
+                    Remove-Item $vsixOut -Force -ErrorAction SilentlyContinue
+                    if ($code -ne 0) { throw "vsce package validation failed with exit code $code" }
+                }
+                finally { Pop-Location }
+            } `
             $previousPhaseMap $fingerprint $results
 
         Invoke-LoggedPhase "VS Code unit tests" `
