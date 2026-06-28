@@ -83,6 +83,8 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - **Client certificate store handle leak cleanup**: Resolved an OS handle leak in `EnterprisePolicyRuntime` during OIDC/HTTPS policy certificate store searches by disposing non-matching certificate instances.
 - **Egress sanitization & parameter utility ReDoS hardening**: Hardened regular expressions in `ConnectorExceptionWrapper` and `ParameterUtility` to use source-generated regex `[GeneratedRegex]` with a `1000ms` timeout to protect against catastrophic backtracking.
 - **Snapshot at-rest encryption fallback hardening**: When `Portal:Dataset:AtRestKey` is unset, report snapshot (`.etlsnap`) packages now fall back to the same host-bound `ENCRYPT=MACHINE` protection used for dataset caches (DPAPI LocalMachine on Windows; authenticated AES-256-GCM keyed from the machine id elsewhere), instead of a source-public default key. Reading a key-managed snapshot now fails closed if the key is absent. `MachineBoundCrypto.Protect/Unprotect` are exposed for reuse, and a one-time warning is logged when the host-bound fallback is in effect.
+- **Authenticated machine-bound generic encryption**: `CryptoUtils` machine-key protection on platforms without DPAPI is now encrypt-then-MAC (HKDF-SHA256 encryption/MAC sub-keys + HMAC-SHA256 verified in constant time) instead of unauthenticated AES-CBC; legacy CBC-only payloads remain readable.
+- **`machine.key` permissions**: the generated machine key file is now created owner read/write only (`0600`, directory `0700`) on Unix, atomically, so it is never briefly world-readable.
 
 ## [0.12.0] — 2026-06-19
 

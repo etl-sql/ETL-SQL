@@ -241,6 +241,42 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
+        public void MachineGenericEncryption_RoundTrips_AndDetectsTampering()
+        {
+            var plain = System.Text.Encoding.UTF8.GetBytes("host-bound machine secret payload");
+
+            var protectedBytes = CryptoUtils.ProtectGeneric(plain, entropy: null);
+            Assert.Equal(plain, CryptoUtils.UnprotectGeneric(protectedBytes, entropy: null));
+
+            // Authenticated: flipping any ciphertext/tag byte must fail closed, not return garbage.
+            var tampered = (byte[])protectedBytes.Clone();
+            tampered[^1] ^= 0xFF;
+            Assert.ThrowsAny<Exception>(() => CryptoUtils.UnprotectGeneric(tampered, entropy: null));
+        }
+
+        [Fact]
+        public void MachineGenericEncryption_ReadsLegacyCbcOnlyBlob()
+        {
+            var plain = System.Text.Encoding.UTF8.GetBytes("legacy session state");
+
+            // Reproduce the pre-hardening format: raw machine key as the AES key, IV prepended, no MAC.
+            byte[] key = CryptoUtils.GetMachineKey(entropy: null);
+            using var aes = Aes.Create();
+            aes.Key = key;
+            aes.GenerateIV();
+            using var ms = new System.IO.MemoryStream();
+            ms.Write(aes.IV, 0, aes.IV.Length);
+            using (var enc = aes.CreateEncryptor())
+            using (var cs = new CryptoStream(ms, enc, CryptoStreamMode.Write))
+            {
+                cs.Write(plain, 0, plain.Length);
+            }
+            var legacyBlob = ms.ToArray();
+
+            Assert.Equal(plain, CryptoUtils.UnprotectGeneric(legacyBlob, entropy: null));
+        }
+
+        [Fact]
         public void TestScriptImmutability()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);

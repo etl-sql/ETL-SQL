@@ -601,49 +601,119 @@ public static class CryptoUtils
         return ProtectedData.Unprotect(cipherBytes, entropyBytes, DataProtectionScope.CurrentUser);
     }
 
-    private static byte[] ProtectGeneric(byte[] plainBytes, string? entropy)
+    // Authenticated (encrypt-then-MAC) machine-bound payload format:
+    //   [MachineMagicG2 (8)] [IV (16)] [AES-CBC ciphertext] [HMAC-SHA256 tag (32)]
+    // The HMAC covers magic||IV||ciphertext. Pre-magic payloads are legacy CBC-only (no MAC) and are
+    // still read for backward compatibility — see UnprotectGeneric.
+    private static readonly byte[] MachineMagicG2 = Encoding.ASCII.GetBytes("ETLSQLG2");
+
+    internal static byte[] ProtectGeneric(byte[] plainBytes, string? entropy)
     {
-        byte[] key = GetMachineKey(entropy);
+        var (encKey, macKey) = DeriveMachineSubKeys(GetMachineKey(entropy));
         using var aes = Aes.Create();
-        aes.Key = key;
+        aes.Key = encKey;
         aes.GenerateIV();
+        byte[] iv = aes.IV;
 
-        using var encryptor = aes.CreateEncryptor();
-        using var ms = new MemoryStream();
-        ms.Write(aes.IV, 0, aes.IV.Length); // Prepend IV
-
-        using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
+        byte[] ciphertext;
+        using (var encryptor = aes.CreateEncryptor())
+        using (var msCipher = new MemoryStream())
         {
-            cs.Write(plainBytes, 0, plainBytes.Length);
+            using (var cs = new CryptoStream(msCipher, encryptor, CryptoStreamMode.Write))
+            {
+                cs.Write(plainBytes, 0, plainBytes.Length);
+            }
+            ciphertext = msCipher.ToArray();
+        }
+
+        using var ms = new MemoryStream(MachineMagicG2.Length + iv.Length + ciphertext.Length + 32);
+        ms.Write(MachineMagicG2);
+        ms.Write(iv);
+        ms.Write(ciphertext);
+        using (var hmac = new HMACSHA256(macKey))
+        {
+            byte[] tag = hmac.ComputeHash(ms.GetBuffer(), 0, (int)ms.Length);
+            ms.Write(tag);
         }
         return ms.ToArray();
     }
 
-    private static byte[] UnprotectGeneric(byte[] cipherBytes, string? entropy)
+    internal static byte[] UnprotectGeneric(byte[] cipherBytes, string? entropy)
     {
-        byte[] key = GetMachineKey(entropy);
-        using var aes = Aes.Create();
-        aes.Key = key;
+        byte[] material = GetMachineKey(entropy);
 
-        byte[] iv = new byte[aes.BlockSize / 8];
-        Buffer.BlockCopy(cipherBytes, 0, iv, 0, iv.Length);
-        aes.IV = iv;
-
-        using var decryptor = aes.CreateDecryptor();
-        using var msOut = new MemoryStream();
-        using (var msIn = new MemoryStream(cipherBytes, iv.Length, cipherBytes.Length - iv.Length))
-        using (var cs = new CryptoStream(msIn, decryptor, CryptoStreamMode.Read))
+        if (cipherBytes.Length >= MachineMagicG2.Length
+            && cipherBytes.AsSpan(0, MachineMagicG2.Length).SequenceEqual(MachineMagicG2))
         {
-            cs.CopyTo(msOut);
+            var (encKey, macKey) = DeriveMachineSubKeys(material);
+            const int ivLength = 16;
+            int tagOffset = cipherBytes.Length - 32;
+            if (tagOffset < MachineMagicG2.Length + ivLength)
+                throw new ExecutionException("Machine-protected payload is too short.");
+
+            using (var hmac = new HMACSHA256(macKey))
+            {
+                byte[] expected = hmac.ComputeHash(cipherBytes, 0, tagOffset);
+                if (!CryptographicOperations.FixedTimeEquals(expected, cipherBytes.AsSpan(tagOffset, 32)))
+                    throw new ExecutionException("Machine-protected payload authentication failed.");
+            }
+
+            byte[] iv = new byte[ivLength];
+            Buffer.BlockCopy(cipherBytes, MachineMagicG2.Length, iv, 0, ivLength);
+            int cipherStart = MachineMagicG2.Length + ivLength;
+
+            using var aes = Aes.Create();
+            aes.Key = encKey;
+            aes.IV = iv;
+            using var decryptor = aes.CreateDecryptor();
+            using var msOut = new MemoryStream();
+            using (var msIn = new MemoryStream(cipherBytes, cipherStart, tagOffset - cipherStart))
+            using (var cs = new CryptoStream(msIn, decryptor, CryptoStreamMode.Read))
+            {
+                cs.CopyTo(msOut);
+            }
+            return msOut.ToArray();
         }
-        return msOut.ToArray();
+
+        // Legacy CBC-only payloads (IV prepended, no MAC) used the raw machine key directly. Kept for
+        // read compatibility with data protected before authenticated machine encryption was added.
+        if (cipherBytes.Length < 16)
+            throw new ExecutionException("Machine-protected payload is too short.");
+        using var legacyAes = Aes.Create();
+        legacyAes.Key = material;
+        byte[] legacyIv = new byte[16];
+        Buffer.BlockCopy(cipherBytes, 0, legacyIv, 0, legacyIv.Length);
+        legacyAes.IV = legacyIv;
+        using var legacyDecryptor = legacyAes.CreateDecryptor();
+        using var legacyOut = new MemoryStream();
+        using (var msIn = new MemoryStream(cipherBytes, legacyIv.Length, cipherBytes.Length - legacyIv.Length))
+        using (var cs = new CryptoStream(msIn, legacyDecryptor, CryptoStreamMode.Read))
+        {
+            cs.CopyTo(legacyOut);
+        }
+        return legacyOut.ToArray();
     }
 
-    private static byte[] GetMachineKey(string? entropy)
+    private static (byte[] EncKey, byte[] MacKey) DeriveMachineSubKeys(byte[] material)
     {
+        byte[] encKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, material, 32, info: "etl-sql-machine-generic-aes"u8.ToArray());
+        byte[] macKey = HKDF.DeriveKey(HashAlgorithmName.SHA256, material, 32, info: "etl-sql-machine-generic-hmac"u8.ToArray());
+        return (encKey, macKey);
+    }
+
+    internal static byte[] GetMachineKey(string? entropy)
+    {
+        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         string etlSqlDir = Path.Combine(appData, "etl-sql");
-        if (!Directory.Exists(etlSqlDir)) Directory.CreateDirectory(etlSqlDir);
+        if (!Directory.Exists(etlSqlDir))
+        {
+            // Owner-only directory on Unix (no-op flag on Windows, where the per-user profile already scopes it).
+            if (isWindows)
+                Directory.CreateDirectory(etlSqlDir);
+            else
+                Directory.CreateDirectory(etlSqlDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
 
         string keyPath = Path.Combine(etlSqlDir, "machine.key");
         byte[] baseKey;
@@ -655,7 +725,23 @@ public static class CryptoUtils
         else
         {
             baseKey = RandomNumberGenerator.GetBytes(32);
-            File.WriteAllBytes(keyPath, baseKey);
+            if (isWindows)
+            {
+                File.WriteAllBytes(keyPath, baseKey);
+            }
+            else
+            {
+                // Create owner read/write only (0600) atomically so the key is never briefly world-readable.
+                var options = new FileStreamOptions
+                {
+                    Mode = FileMode.CreateNew,
+                    Access = FileAccess.Write,
+                    Share = FileShare.None,
+                    UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite
+                };
+                using var fs = new FileStream(keyPath, options);
+                fs.Write(baseKey);
+            }
         }
 
         if (entropy == null) return baseKey;
