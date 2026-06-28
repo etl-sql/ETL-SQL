@@ -41,9 +41,9 @@ configuration behavior and does not require network connectivity.
   - [x] Expose redacted effective-policy status, source, version, issuance/expiry, warnings, and governed key names through `enterprise status`.
   - [x] Add signature, tamper, tenant, expiry, rollback, cache, HTTP contract, fail-closed/fail-open, and precedence coverage.
   - [x] Document the policy endpoint, signing contract, client authentication, cache behavior, precedence, diagnostics, and enforcement boundary.
-- [ ] **Phase 3: Operation-Boundary Enforcement** — filesystem, network, connector, process, Docker, resource, and script-override controls.
-- [ ] **Phase 4: Central Security Events** — structured security events, durable SIEM delivery, backpressure, and optional fail-closed monitoring.
-- [ ] **Phase 5: Certification & Operations** — platform certification, outage/tamper drills, upgrades, recovery, and administrator runbooks.
+
+Remaining enterprise enforcement, monitoring, and certification work is planned for v0.14.0 in
+`ROADMAP.md`.
 
 ## Language Parity (DuckDB-inspired syntax)
 
