@@ -71,12 +71,17 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - **TUI frame caching**: Fixed stale frame metadata being rendered after connection or tab changes in `EditorRenderer` and `StatusBar`.
 - **Migration lint corpus**: Added a migration lint corpus (`test(compat)`) to catch invalid dialect usage introduced across schema migration scripts.
 - **Scheduler test mock**: Fixed `SchedulerService` test mocks that passed an incorrect argument count for the queue-wait-time parameter after an API change.
+- **GROUP BY ALL column expansion**: Resolved a bug in `SelectStatementHandler` where `GroupByAll` was expanded before output column expansion, resulting in engine crashes when star-modifiers (`* EXCLUDE (...)`) or qualified stars (`t.*`) were present in the query.
+- **Positional reference star projection checks**: Hardened positional reference checks in `Parser.ResolvePositionalReference` to correctly identify and block qualified star and star-modifier projections from bypassing positional sorting/grouping syntax checks.
 
 ### Security
 
 - **PII column encryption at rest**: Portal database columns storing user PII (email addresses, display names in audit records) are now encrypted at rest using a key derived from the configured Data Protection key ring, applied via a background maintenance service and corresponding EF Core migration for both SQLite and PostgreSQL.
 - **Support bundle hardening**: Connection strings, JWT secrets, and API keys are now actively redacted from the support bundle rather than relying solely on config-key exclusion lists.
 - **Crypto hardening**: Strengthened `MachineBoundCrypto` key derivation and `CryptoUtils` authenticated-encryption paths; added additional test coverage for encrypt/decrypt roundtrips and tamper-detection.
+- **Service Account token exchange timing mitigation**: Hardened the service-credentials token endpoint against client-ID enumeration timing attacks by always executing password verification against a dummy hash when the Client ID is not found or is inactive.
+- **Client certificate store handle leak cleanup**: Resolved an OS handle leak in `EnterprisePolicyRuntime` during OIDC/HTTPS policy certificate store searches by disposing non-matching certificate instances.
+- **Egress sanitization & parameter utility ReDoS hardening**: Hardened regular expressions in `ConnectorExceptionWrapper` and `ParameterUtility` to use source-generated regex `[GeneratedRegex]` with a `1000ms` timeout to protect against catastrophic backtracking.
 
 ## [0.12.0] — 2026-06-19
 
