@@ -122,29 +122,29 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 ### ETL-SQL.Core
 - [x] **[Bug · Med-High] `Parser/Parser.cs:850`** — subquery alias was generated with `"Sub_" + new Random().Next(1000,9999)` (clock-seeded per call, 9,000 values → collisions → ambiguous/incorrect resolution). *(Fixed: monotonic per-parser `_generatedAliasCounter`. 69 subquery/derived tests pass.)*
-- [ ] **[Logging · Low] obsolete `Logger.Instance`** in places that should use the injected `ILogger` (CLAUDE.md marks `Logger.Instance` obsolete).
+- [x] **[Logging · Low] obsolete `Logger.Instance`** in places that should use the injected `ILogger` (CLAUDE.md marks `Logger.Instance` obsolete).
 
 ### ETL-SQL.Engine
-- [ ] **[Logging · Low] `Console.Write*` in library code** — `ResultFormatter.cs`, `Handlers/BundleStatementHandlers.cs` write to `Console` instead of `ILogger`. (`Services/PasswordPrompt.cs` console prompt is legitimate.)
+- [x] **[Logging · Low] `Console.Write*` in library code** — `ResultFormatter.cs`, `Handlers/BundleStatementHandlers.cs` write to `Console` instead of `ILogger`. (`Services/PasswordPrompt.cs` console prompt is legitimate.)
 - _Verified non-issue:_ the `.Result` hits first flagged in `AggregateEngine`/`WindowEngine`/`ExpressionEvaluator`/`PushdownEngine` are the `WhenClause.Result` **AST property**, not `Task.Result` — no sync-over-async there (comments confirm sort keys are pre-evaluated to avoid it).
 
 ### ETL-SQL.Connectors
-- [ ] **[Logging · Low] `Console.Write*` in connectors** — `AzureBlobConnector`, `SharePoint/SharePointConnector`, `ActiveDirectory/ActiveDirectoryConnector`, `FtpConnector`, `SftpConnector`, `S3/S3Connector` log via `Console`; connector libraries should use injected `ILogger`.
+- [x] **[Logging · Low] `Console.Write*` in connectors** — `AzureBlobConnector`, `SharePoint/SharePointConnector`, `ActiveDirectory/ActiveDirectoryConnector`, `FtpConnector`, `SftpConnector`, `S3/S3Connector` log via `Console`; connector libraries should use injected `ILogger`.
 - [ ] **[Security · Low-Med · verify] Snowflake identifier interpolation** — `Snowflake/SnowflakeDataSource.cs:138,284,354` build `SELECT * FROM {QuoteIdentifier(table)}`. Confirm `QuoteIdentifier` fully escapes and that table names come from trusted connection config, not raw user query text.
 
 ### ETL-SQL.Orchestrator
 - [ ] **[Security · Low · verify] DDL/PRAGMA interpolation** — `Storage/SQLiteJobHistoryStore.cs:349` (`ALTER TABLE ... ADD COLUMN {ddl}`) and `Storage/SqliteOrchestratorDialect.cs:51` (`PRAGMA table_info({table})`). Identifiers/PRAGMA can't be parameterized; verify `ddl`/`table` come only from the internal schema, never external input.
 
 ### ETL-SQL.Reporting
-- [ ] **[Perf · Low-Med] `EChartsSsrRenderer.cs:127`** — `_poolSemaphore.Wait()` blocks a thread in an async-capable path; use `await WaitAsync(ct)`.
-- [ ] **[Perf · Low-Med] `PdfExporter.cs:150`** — `stream.CopyToAsync(memory).GetAwaiter().GetResult()` blocks inside the export; `await` it.
-- [ ] **[Perf · Low] sync facade wrappers** — `PdfExporter.cs:41`, `BrowserReportPdfExporter.cs:27` (`ExportAsync(...).GetAwaiter().GetResult()`): acceptable as sync APIs, but prefer async callers.
+- [x] **[Perf · Low-Med] `EChartsSsrRenderer.cs:127`** — `_poolSemaphore.Wait()` blocks a thread in an async-capable path; use `await WaitAsync(ct)`.
+- [x] **[Perf · Low-Med] `PdfExporter.cs:150`** — `stream.CopyToAsync(memory).GetAwaiter().GetResult()` blocks inside the export; `await` it.
+- [x] **[Perf · Low] sync facade wrappers** — `PdfExporter.cs:41`, `BrowserReportPdfExporter.cs:27` (`ExportAsync(...).GetAwaiter().GetResult()`): acceptable as sync APIs, but prefer async callers.
 
 ### ETL-SQL.Analysis
-- [ ] **[Perf · Low] `Linting/Rules/RunScriptDependencyPreflightRule.cs:74`** — `AnalyzeAsync(...).GetAwaiter().GetResult()` inside a `foreach` (sync-over-async in lint preflight); make the rule path async.
+- [x] **[Perf · Low] `Linting/Rules/RunScriptDependencyPreflightRule.cs:74`** — `AnalyzeAsync(...).GetAwaiter().GetResult()` inside a `foreach` (sync-over-async in lint preflight); make the rule path async.
 
 ### ETL-SQL.LanguageServer
-- [ ] **[Logging · Low] obsolete `Logger.Instance`** in `TextDocumentHandler.cs`, `Program.cs`, `DocumentStateStore.cs` → injected `ILogger`. (stdin/stdout wiring in `Program.cs` is correct — no JSON-RPC corruption.)
+- [x] **[Logging · Low] obsolete `Logger.Instance`** in `TextDocumentHandler.cs`, `Program.cs`, `DocumentStateStore.cs` → injected `ILogger`. (stdin/stdout wiring in `Program.cs` is correct — no JSON-RPC corruption.)
 
 ### App / TUI / ReportPlayer / ReportBuilder.CLI
 - _No findings:_ `Console` output is the intended CLI/TUI/console UI here (not a logging smell).

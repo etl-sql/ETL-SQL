@@ -139,16 +139,7 @@ namespace ETL_SQL.Reporting
 
             private static byte[] ReadFontBytes(string path)
             {
-                using var stream = new FileStream(
-                    path,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read,
-                    bufferSize: 64 * 1024,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
-                using var memory = new MemoryStream();
-                stream.CopyToAsync(memory).GetAwaiter().GetResult();
-                return memory.ToArray();
+                return File.ReadAllBytes(path);
             }
         }
 
@@ -277,7 +268,7 @@ namespace ETL_SQL.Reporting
         {
             // Prefer real ECharts (SSR) so every chart type matches the on-screen report;
             // fall back to the static SVG renderer when there's no chart option or SSR fails.
-            var svgStr = EChartsSsrRenderer.Shared.RenderSvg(v) ?? _svg.Render(v);
+            var svgStr = await EChartsSsrRenderer.Shared.RenderSvgAsync(v, cancellationToken: cancellationToken) ?? _svg.Render(v);
             if (svgStr != null)
             {
                 var png = SvgToPng(svgStr);

@@ -14,6 +14,13 @@ namespace ETL_SQL.LSP
     /// </summary>
     public class DocumentStateStore
     {
+        private readonly ETL_SQL.Common.ILogger _logger;
+
+        public DocumentStateStore(ETL_SQL.Common.ILogger? logger = null)
+        {
+            _logger = logger ?? ETL_SQL.Common.NullLogger.Instance;
+        }
+
         private readonly ConcurrentDictionary<DocumentUri, DocumentState> _states = new();
 
         // Stores only parser-level diagnostics so the slow lint pass can append to them
@@ -31,7 +38,7 @@ namespace ETL_SQL.LSP
         public void UpdateText(DocumentUri uri, string text)
         {
             _states.AddOrUpdate(uri,
-                _ => new DocumentState(text, new Script(), new LineageTracker(ETL_SQL.Common.NullLogger.Instance)),
+                _ => new DocumentState(text, new Script(), new LineageTracker(_logger)),
                 (_, oldState) => oldState with { Text = text });
         }
 

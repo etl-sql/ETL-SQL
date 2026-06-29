@@ -36,6 +36,7 @@ namespace ETL_SQL.LSP
     public class TextDocumentHandler : TextDocumentSyncHandlerBase, IOnLanguageServerStarted
     {
         private readonly ILogger<TextDocumentHandler> _logger;
+        private readonly Common.ILogger _engineLogger;
         private readonly Linter _linter;
         private readonly IMetadataManager _metadata;
         private readonly DocumentStateStore _store;
@@ -55,9 +56,10 @@ namespace ETL_SQL.LSP
         /// <summary>Debounce for slow path: deep lint rules. Fires only after the user pauses typing.</summary>
         private const int LintDebounceMs = 1500;
 
-        public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store)
+        public TextDocumentHandler(ILoggerFactory loggerFactory, IMetadataManager metadata, DocumentStateStore store, Common.ILogger? engineLogger = null)
         {
             _logger = loggerFactory.CreateLogger<TextDocumentHandler>();
+            _engineLogger = engineLogger ?? Common.NullLogger.Instance;
             _metadata = metadata;
             _store = store;
             _linter = new Linter();
@@ -230,7 +232,7 @@ namespace ETL_SQL.LSP
                 });
 
                 // Lineage analysis — store result in DocumentStateStore
-                var tracker = new LineageTracker(NullLogger.Instance);
+                var tracker = new LineageTracker(_engineLogger);
                 var analyzer = new LineageAnalyzer(tracker);
                 analyzer.Analyze(script);
                 _store.SetState(uri, text, script, analyzer.Tracker);

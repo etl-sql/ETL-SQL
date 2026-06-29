@@ -109,7 +109,11 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<TextDocumentHandler>();
 
                         // Engine Services
-                        services.AddSingleton<Common.ILogger>(Common.NullLogger.Instance);
+                        services.AddSingleton<Common.ILogger>(sp =>
+                        {
+                            var logger = sp.GetRequiredService<ILogger<LspEngineLogger>>();
+                            return new LspEngineLogger(logger);
+                        });
                         services.AddSingleton<ILineageTracker, LineageTracker>();
                         services.AddSingleton<IDockerManager, DockerContainerManager>();
                         services.AddSingleton<ISessionStateManager, Engine.Services.SessionStateManager>();

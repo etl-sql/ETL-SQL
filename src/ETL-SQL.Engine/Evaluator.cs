@@ -721,7 +721,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             var tokens = new Lexer(viewDdl).Tokenize();
             var viewScript = new ETL_SQL.Core.Parser.Parser(tokens, viewDdl).Parse();
-            var viewTracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+            var viewTracker = new LineageTracker(_logger);
             new LineageAnalyzer(viewTracker).Analyze(viewScript);
 
             foreach (var entry in viewTracker.GetFullLineage())
