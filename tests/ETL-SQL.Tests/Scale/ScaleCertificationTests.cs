@@ -52,8 +52,20 @@ namespace ETL_SQL.Tests.Scale
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        private static Evaluator NewEvaluator() =>
-            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        private static Evaluator NewEvaluator()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            // The cert runs on dev workstations / CI agents (not dedicated DB hosts) and drives large
+            // inputs, so cap the RAM-governor ceiling to a modest value rather than inheriting the
+            // production auto (~80% of physical RAM) default. This keeps even a 50M run within a few GB
+            // and actively exercises the governor's spill/repartition paths. Override with
+            // CERT_MEMORY_GRANT_MB; set it to 0 to fall back to the production default.
+            var raw = Environment.GetEnvironmentVariable("CERT_MEMORY_GRANT_MB");
+            if (!int.TryParse(raw, out var grantMb)) grantMb = 2048;
+            if (grantMb > 0)
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)grantMb * 1024 * 1024;
+            return ev;
+        }
 
         private static int ScaleRows(int baseRows)
         {
@@ -79,48 +91,13 @@ namespace ETL_SQL.Tests.Scale
             return ev;
         }
 
-        private static async Task<InMemoryDataSource> SourceWithRows(int rowCount, int groups = 10)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "grp", "val" });
+        // Streaming generator sources — the rows are produced lazily one batch at a time, so the input
+        // never materializes in memory (critical for the 50M Huge tier; see StreamingRowSource).
+        private static Task<IDataSource> SourceWithRows(int rowCount, int groups = 10)
+            => Task.FromResult<IDataSource>(new StreamingRowSource(rowCount, groups));
 
-            for (int i = 0; i < rowCount; i++)
-            {
-                var r = new Row(table.Schema);
-                r["grp"] = i % groups;
-                r["val"] = (decimal)(i + 1);
-                await table.AddRowAsync(r);
-            }
-
-            var src = new InMemoryDataSource();
-            await src.WriteBatches(new[] { table }.ToAsyncEnumerable());
-            return src;
-        }
-
-        private static async Task<InMemoryDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "grp", "bucket", "val" });
-
-            for (int i = 0; i < rowCount; i++)
-            {
-                var r = new Row(table.Schema);
-                r["grp"] = i % groups;
-                r["bucket"] = (i / groups) % buckets;
-                r["val"] = (decimal)(i + 1);
-                await table.AddRowAsync(r);
-            }
-
-            var src = new InMemoryDataSource();
-            await src.WriteBatches(new[] { table }.ToAsyncEnumerable());
-            return src;
-        }
-
-        private static async Task<DataTable> TableWithRows(int rowCount, int groups = 10)
-        {
-            var src = await SourceWithRows(rowCount, groups);
-            return await src.ReadBatches(rowCount).FirstAsync();
-        }
+        private static Task<IDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
+            => Task.FromResult<IDataSource>(new StreamingRowSource(rowCount, groups, buckets));
 
         private static async Task<(long Count, decimal Sum)> CountAndSum(IAsyncEnumerable<DataTable> batches, string valueColumn = "val")
         {
@@ -599,10 +576,10 @@ namespace ETL_SQL.Tests.Scale
 
             try
             {
-                var source = await TableWithRows(Rows);
+                var source = await SourceWithRows(Rows);
                 var writer = new FlatFileDataSource(SystemExecutionContext.Instance, path,
                     new Dictionary<string, string> { ["HEADER"] = "ON" });
-                await writer.WriteBatches(new[] { source }.ToAsyncEnumerable());
+                await writer.WriteBatches(source.ReadBatches(10_000));
 
                 var reader = new FlatFileDataSource(SystemExecutionContext.Instance, path,
                     new Dictionary<string, string> { ["HEADER"] = "ON" });
@@ -636,9 +613,9 @@ namespace ETL_SQL.Tests.Scale
 
             try
             {
-                var source = await TableWithRows(Rows);
+                var source = await SourceWithRows(Rows);
                 var writer = new ParquetDataSource(SystemExecutionContext.Instance, path);
-                await writer.WriteBatches(new[] { source }.ToAsyncEnumerable());
+                await writer.WriteBatches(source.ReadBatches(10_000));
 
                 var reader = new ParquetDataSource(SystemExecutionContext.Instance, path);
 
