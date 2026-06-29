@@ -80,6 +80,41 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task SortExternal_ExceedsMergeFanIn_MultiPassMergeProducesCorrectOrder()
+        {
+            // chunkSize 2 over 300 rows -> 150 spill chunks, which exceeds the 64-way
+            // MaxMergeFanIn cap and forces a multi-pass (reduction) merge. The output must
+            // still be fully and correctly ordered with no rows lost or duplicated.
+            var (eval, logger) = BuildContext(chunkSize: 2);
+            var engine = new ExternalSortEngine(eval, logger);
+
+            const int n = 300;
+            // Deterministic shuffle so the test is reproducible but not pre-sorted.
+            var ids = Enumerable.Range(1, n).ToList();
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i * 137 + 53) % n;
+                (ids[i], ids[j]) = (ids[j], ids[i]);
+            }
+
+            var rows = ids.Select(i => new Row { ["id"] = i, ["val"] = $"val-{i}" }).ToList();
+
+            var orderBy = new List<OrderByClause>
+            {
+                new OrderByClause(new IdentifierExpression("id"), false) // ASC
+            };
+
+            var sorted = await engine.SortExternal(rows, orderBy);
+
+            Assert.Equal(n, sorted.Count);
+            for (int i = 0; i < n; i++)
+            {
+                Assert.Equal((decimal)(i + 1), Convert.ToDecimal(sorted[i]["id"]));
+                Assert.Equal($"val-{i + 1}", sorted[i]["val"]); // row payload travels with its key
+            }
+        }
+
+        [Fact]
         public async Task SortExternal_MultiColumnSort_ProducesCorrectOrder()
         {
             var (eval, logger) = BuildContext(chunkSize: 2);
