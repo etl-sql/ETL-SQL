@@ -165,7 +165,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 ### Round 2 — deep performance pass (engine execution paths + Portal EF)
 
 **Engine — findings:**
-- [ ] **[Perf · Med] `Engines/SelectExecutionEngine.cs:884-935`** (per-row sort-key extraction) — for every row, ORDER BY key resolution repeats **row-invariant** column lookups: `colNames.Contains`/`FindIndex`, `finalColumns.FirstOrDefault`/`IndexOf`. That's O(rows × orderKeys × columns). Precompute a per-query resolution plan once (each ORDER BY expr → resolved column index / compiled delegate), then the per-row loop is O(orderKeys) direct lookups. Largest win on big sorted result sets.
+- [x] **[Perf · Med] `Engines/SelectExecutionEngine.cs` per-row sort-key extraction** — ORDER BY key resolution repeated row-invariant column lookups per row, and a 5-arg `ExtractSortKeys` overload **recompiled every order/column expression per call** (used in the WITH TIES tail loop → per-row recompilation). *(Fixed: new `SortKeyExtractor` built once per sort via `BuildSortKeyExtractor` — resolves each ORDER BY expr to a column-name/compiled-delegate/fallback plan once; per-row extraction is now O(orderKeys) with no scans or recompilation. All 5 call sites (in-memory sort, Top-N heap, streaming + post-sort WITH TIES) updated. 143 sort/Top/WithTies tests + full 3893 suite pass.)*
 
 **Engine — verified well-optimized (no action):**
 - Expressions are **pre-compiled once** via `RowExpressionCompiler` (`StreamingQueryEngine`, `SelectExecutionEngine` build `compiled*` arrays before the row loop) — no per-row recompilation.
@@ -181,4 +181,23 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 **Still owed (lower priority — not yet read line-by-line):**
 - [ ] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries.
 - [ ] Connector streaming vs full-buffer reads on large payloads (per-connector).
+
+---
+
+## VS Code Extension Code Review Findings (v0.14.0)
+
+### Performance & Usability
+- [ ] **[Perf/Usability · Med] Duplicated executable path resolution & missing shadow-copy in Notebooks**: `notebookController.ts` implements its own `_getExecutablePath` which misses the shadow-copying mechanism (`shadowCopyExecutable`). Executing `.etlnb` cells runs the engine directly from `extensionPath/bin/ETL-SQL.exe`, locking the binary folder and causing VS Code updates or extension uninstalls to fail. It should reuse `getExecutablePath` from `extension.ts`.
+- [ ] **[Perf · Low] Synchronous I/O in UI Panel creation**: `WelcomeView.ts` and `resultsPanel.ts` load HTML content using synchronous `fs.readFileSync` during activation/initialization. This blocks the VS Code extension host main thread and should use async file reading or inline/pre-cached templates.
+- [ ] **[Usability · Low] Missing robust shell escaping in Terminal command builder**: `terminalCommandBuilder.ts` wraps arguments with spaces in double-quotes but does not handle or escape nested double-quotes, backslashes, or shell-specific control characters. This could cause execution truncation or syntax errors if paths contain shell-special characters.
+
+### Security & Privacy
+- [ ] **[Security · Med] Insecure session token storage in globalState**: `portalPublishCommand.ts` saves the Portal authentication access token (`portalToken_${portalUrl}`) directly in `context.globalState` which is serialized as plain text on disk. Secure credentials and session tokens must be stored in `context.secrets` (VS Code's secure keychain wrapper).
+- [ ] **[Security/Logging · Low-Med] Leak of API Key in logs on fetch network error**: `generateScriptFromSpec.ts` builds the Gemini URL with the API key in the query string (`?key=${apiKey}`). On connection failures, the Node.js `fetch` client throws a `TypeError` containing the full URL with the query string. This is caught and logged directly to the output channel/log files via `logger.log`, leaking the raw API key in plain text.
+- [ ] **[Security/Logging · Low-Med] Secrets / ENC keys printed to VS Code output channel**: In `logger.ts`, `logger.log()` prints unredacted logs directly to the OutputChannel (`channel.appendLine(formatted)`), only redacting them for the memory buffer. Furthermore, in `ReplManager.ts`, stdout and stderr from the engine process are written directly to the output channel without running through `redactSecrets`, potentially leaking passwords, connection strings, or decrypted keys during run failures.
+- [ ] **[Security/Usability · Med-High] System-wide taskkill on deactivation**: In `extension.ts:deactivate()`, `forceKillProcesses()` executes `taskkill /F /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe ...` on Windows and `pkill -9` on Unix. In multi-user systems (terminal servers, shared VMs, Citrix), this terminates the ETL-SQL/LSP processes of all other active developers on the machine, causing data loss. It should filter Windows taskkill by username (`/FI "USERNAME eq %USERNAME%"`) or use tracked PIDs.
+
+### Bugs
+- [ ] **[Bug · Med] ConnectionsProvider.getConnections() returns empty array**: In `connectionsProvider.ts`, `getConnections()` is hardcoded to return `[]`. Because of this, when `syncConnectionsToLsp` runs, it sends an empty list to the LSP client and sidebar explorer, effectively clearing the connection cache upon LSP restarts. It should aggregate all active connections from `scriptConnectionsByUri`.
+
 

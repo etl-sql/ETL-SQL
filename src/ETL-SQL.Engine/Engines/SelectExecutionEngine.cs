@@ -725,6 +725,10 @@ public class SelectExecutionEngine
         var skipped = 0;
         var yielded = 0;
         object?[]? boundaryKeys = null;
+        // Build the WITH TIES sort-key extractor once (was recompiled per tied row via the 5-arg overload).
+        SortKeyExtractor? tieExtractor = (stmt.WithTies && stmt.OrderBy != null && colNames != null && finalColumns != null)
+            ? BuildSortKeyExtractor(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns)
+            : null;
         await foreach (var row in rows)
         {
             if (skipped < offset)
@@ -738,7 +742,7 @@ public class SelectExecutionEngine
                 if (!stmt.WithTies || stmt.OrderBy == null || boundaryKeys == null
                     || colNames == null || finalColumns == null) yield break;
 
-                var keys = await ExtractSortKeys(row, stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+                var keys = await tieExtractor!.ExtractAsync(row);
                 var tied = true;
                 for (var i = 0; i < keys.Length; i++)
                     if (_context.CompareConstants(keys[i], boundaryKeys[i]) != 0) { tied = false; break; }
@@ -750,7 +754,7 @@ public class SelectExecutionEngine
             yielded++;
             if (take.HasValue && yielded == take.Value && stmt.WithTies && stmt.OrderBy != null
                 && colNames != null && finalColumns != null)
-                boundaryKeys = await ExtractSortKeys(row, stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+                boundaryKeys = await tieExtractor!.ExtractAsync(row);
             yield return row;
         }
     }
@@ -786,10 +790,9 @@ public class SelectExecutionEngine
     private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
         var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
-        var compiledOrderExpressions = CompileOrderExpressions(orderBy);
-        var compiledFinalColumns = CompileFinalColumnExpressions(finalColumns);
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
         foreach (var row in rows)
-            rowSortKeys.Add((row, await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns, compiledOrderExpressions, compiledFinalColumns)));
+            rowSortKeys.Add((row, await extractor.ExtractAsync(row)));
 
         rowSortKeys.Sort((a, b) =>
         {
@@ -833,12 +836,11 @@ public class SelectExecutionEngine
                 }
                 return 0;
             }));
-        var compiledOrderExpressions = CompileOrderExpressions(orderBy);
-        var compiledFinalColumns = CompileFinalColumnExpressions(finalColumns);
+        var extractor = BuildSortKeyExtractor(orderBy, colNames, finalColumns, hasPreEvaluatedColumns);
 
         await foreach (var row in source)
         {
-            var keys = await ExtractSortKeys(row, orderBy, colNames, finalColumns, hasPreEvaluatedColumns, compiledOrderExpressions, compiledFinalColumns);
+            var keys = await extractor.ExtractAsync(row);
             var entry = (row, keys);
 
             if (heap.Count < keep)
@@ -866,75 +868,85 @@ public class SelectExecutionEngine
         return sorted;
     }
 
-    private async Task<object?[]> ExtractSortKeys(Row row, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
+    /// <summary>
+    /// Builds a reusable sort-key extractor: each ORDER BY expression is resolved ONCE to its column
+    /// name / compiled delegate / fallback expression, so per-row extraction does no repeated
+    /// column-name scans and no expression recompilation. Build once per sort, then call
+    /// <see cref="SortKeyExtractor.ExtractAsync"/> for each row.
+    /// </summary>
+    private SortKeyExtractor BuildSortKeyExtractor(
+        List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns, bool hasPreEvaluatedColumns)
     {
-        return await ExtractSortKeys(
-            row,
-            orderBy,
-            colNames,
-            finalColumns,
-            hasPreEvaluatedColumns,
-            CompileOrderExpressions(orderBy),
-            CompileFinalColumnExpressions(finalColumns));
-    }
-
-    private async Task<object?[]> ExtractSortKeys(
-        Row row,
-        List<OrderByClause> orderBy,
-        List<string> colNames,
-        List<SelectColumn> finalColumns,
-        bool hasPreEvaluatedColumns,
-        RowExpressionCompiler.RowValue?[] compiledOrderExpressions,
-        RowExpressionCompiler.RowValue?[] compiledFinalColumns)
-    {
-        var keys = new object?[orderBy.Count];
+        var compiledOrder = CompileOrderExpressions(orderBy);
+        var compiledFinal = CompileFinalColumnExpressions(finalColumns);
+        var resolvers = new SortKeyExtractor.Resolver[orderBy.Count];
         for (int i = 0; i < orderBy.Count; i++)
         {
             var expr = orderBy[i].Expression;
             if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER
                 && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
             {
+                // Positional: direct lookup when already projected (post-agg/window), else evaluate the
+                // SELECT expression on the pre-projection source row.
                 var colIdx = (int)num - 1;
-                var colName = colNames[colIdx];
-                // Use direct lookup when the column is already projected (post-agg/window),
-                // otherwise evaluate the SELECT expression on the pre-projection source row.
-                keys[i] = (hasPreEvaluatedColumns && row.HasColumn(colName))
-                    ? row[colName]
-                    : compiledFinalColumns[colIdx] != null
-                        ? compiledFinalColumns[colIdx]!(row)
-                        : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
-                continue;
+                resolvers[i] = new SortKeyExtractor.Resolver(
+                    hasPreEvaluatedColumns ? colNames[colIdx] : null, compiledFinal[colIdx], finalColumns[colIdx].Expression);
             }
-            if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
+            else if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
             {
-                if (hasPreEvaluatedColumns && row.HasColumn(id.Name))
-                    keys[i] = row[id.Name];
-                else
-                {
-                    var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
-                    keys[i] = colIdx >= 0
-                        ? compiledFinalColumns[colIdx] != null
-                            ? compiledFinalColumns[colIdx]!(row)
-                            : await _context.EvaluateValue(finalColumns[colIdx].Expression, row)
-                        : null;
-                }
+                var colIdx = colNames.FindIndex(c => c.Equals(id.Name, StringComparison.OrdinalIgnoreCase));
+                resolvers[i] = new SortKeyExtractor.Resolver(
+                    hasPreEvaluatedColumns ? id.Name : null,
+                    colIdx >= 0 ? compiledFinal[colIdx] : null,
+                    colIdx >= 0 ? finalColumns[colIdx].Expression : null);
             }
             else if (expr is IdentifierExpression idAlias
                 && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
             {
                 var colIdx = finalColumns.IndexOf(col);
-                keys[i] = colIdx >= 0 && compiledFinalColumns[colIdx] != null
-                    ? compiledFinalColumns[colIdx]!(row)
-                    : await _context.EvaluateValue(col.Expression, row);
+                resolvers[i] = new SortKeyExtractor.Resolver(
+                    null, colIdx >= 0 ? compiledFinal[colIdx] : null, col.Expression);
             }
             else
             {
-                keys[i] = compiledOrderExpressions[i] != null
-                    ? compiledOrderExpressions[i]!(row)
-                    : await _context.EvaluateValue(expr, row);
+                resolvers[i] = new SortKeyExtractor.Resolver(null, compiledOrder[i], expr);
             }
         }
-        return keys;
+        return new SortKeyExtractor(_context, resolvers);
+    }
+
+    /// <summary>Per-row ORDER BY key extractor driven by a precomputed plan (see <see cref="BuildSortKeyExtractor"/>).</summary>
+    private sealed class SortKeyExtractor
+    {
+        internal readonly record struct Resolver(
+            string? DirectColName, RowExpressionCompiler.RowValue? Compiled, Expression? FallbackExpr);
+
+        private readonly IExecutionContext _ctx;
+        private readonly Resolver[] _resolvers;
+
+        public SortKeyExtractor(IExecutionContext ctx, Resolver[] resolvers)
+        {
+            _ctx = ctx;
+            _resolvers = resolvers;
+        }
+
+        public async Task<object?[]> ExtractAsync(Row row)
+        {
+            var keys = new object?[_resolvers.Length];
+            for (int i = 0; i < _resolvers.Length; i++)
+            {
+                var r = _resolvers[i];
+                if (r.DirectColName != null && row.HasColumn(r.DirectColName))
+                    keys[i] = row[r.DirectColName];
+                else if (r.Compiled != null)
+                    keys[i] = r.Compiled(row);
+                else if (r.FallbackExpr != null)
+                    keys[i] = await _ctx.EvaluateValue(r.FallbackExpr, row);
+                else
+                    keys[i] = null;
+            }
+            return keys;
+        }
     }
 
     private RowExpressionCompiler.RowValue?[] CompileOrderExpressions(List<OrderByClause> orderBy)
@@ -1004,10 +1016,11 @@ public class SelectExecutionEngine
         if (stmt.WithTies && stmt.OrderBy != null && colNames != null && finalColumns != null && take < rows.Count)
         {
             var taken = rows.Take(take).ToList();
-            var lastKeys = await ExtractSortKeys(taken[^1], stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+            var tieExtractor = BuildSortKeyExtractor(stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+            var lastKeys = await tieExtractor.ExtractAsync(taken[^1]);
             for (int i = take; i < rows.Count; i++)
             {
-                var keys = await ExtractSortKeys(rows[i], stmt.OrderBy, colNames, finalColumns, hasPreEvaluatedColumns);
+                var keys = await tieExtractor.ExtractAsync(rows[i]);
                 bool tied = true;
                 for (int j = 0; j < stmt.OrderBy.Count; j++)
                     if (_context.CompareConstants(keys[j], lastKeys[j]) != 0) { tied = false; break; }
