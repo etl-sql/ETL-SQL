@@ -55,10 +55,34 @@ Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x" -ForegroundColor Gray
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
+# ── 0. Clear leftover test hosts ────────────────────────────────────────────────
+# A lingering test host from a previous run keeps the test DLLs locked, so the build below
+# silently reuses a STALE binary (e.g. one missing live-progress reporting or recent engine
+# fixes) instead of failing. Clear them first so every run uses freshly built code.
+$leftoverHosts = Get-Process -Name testhost -ErrorAction SilentlyContinue
+if ($leftoverHosts) {
+    Write-Host ("Stopping {0} leftover test host(s) so the build isn't blocked: {1}" -f `
+        $leftoverHosts.Count, ($leftoverHosts.Id -join ', ')) -ForegroundColor Yellow
+    $leftoverHosts | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+}
+
 # ── 1. Build ──────────────────────────────────────────────────────────────────
 Write-Host "Building solution..." -ForegroundColor Yellow
 dotnet build "$RepoRoot/ETL-SQL.slnx" -c Debug --no-restore -v quiet
 if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
+
+# Sanity check: the test binary must be at least as new as its sources, or the run would
+# silently execute stale code (the exact trap that makes the live HUD appear frozen at 0/0).
+$testDll = Join-Path $RepoRoot 'tests/ETL-SQL.Tests/bin/Debug/net10.0/ETL-SQL.Tests.dll'
+if (Test-Path $testDll) {
+    $newestSrc = Get-ChildItem (Join-Path $RepoRoot 'tests/ETL-SQL.Tests') -Recurse -Filter *.cs -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($newestSrc -and (Get-Item $testDll).LastWriteTime -lt $newestSrc.LastWriteTime) {
+        Write-Warning ("Test binary ({0}) is older than source ({1}) — the build may not have updated it; results may run stale code." -f `
+            (Get-Item $testDll).LastWriteTime, $newestSrc.LastWriteTime)
+    }
+}
 
 # ── 2. Run tests ──────────────────────────────────────────────────────────────
 $filterExpr = if ($Tier -eq 'All') {
@@ -127,10 +151,27 @@ while (-not $proc.HasExited) {
             Measure-Object Length -Sum).Sum / 1GB), 2)
     }
 
-    $idx = 0; $tot = 0; $scn = 'starting'
+    $idx = 0; $tot = 0; $scn = ''
     if (Test-Path $progressFile) {
         $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
         if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
+    }
+
+    # Live engine/test activity: the side-channel only updates at scenario boundaries, so within a
+    # long-running scenario (e.g. 50M data generation or a spilling operator) this tail shows what's
+    # actually happening — and keeps the HUD informative even if the side-channel never updates.
+    $act = ''
+    if (Test-Path $rawLog) {
+        $last = Get-Content $rawLog -Tail 6 -ErrorAction SilentlyContinue |
+            Where-Object { $_ -match '\S' } | Select-Object -Last 1
+        if ($last) {
+            # Strip ANSI escape sequences, Spectre.Console markup tags, and non-printable bytes that
+            # leak into the redirected (non-TTY) output, then collapse whitespace and truncate.
+            $act = ($last -replace '\x1b\[[0-9;]*[A-Za-z]', '' `
+                          -replace '\[[a-zA-Z/][a-zA-Z0-9 ]*\]', '' `
+                          -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ').Trim()
+            if ($act.Length -gt 46) { $act = $act.Substring(0, 46) }
+        }
     }
 
     $elapsed = (Get-Date) - $runStart
@@ -140,10 +181,13 @@ while (-not $proc.HasExited) {
         $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
     }
 
+    # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
+    # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
+    $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
     $warn = if ($freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
-    $line = ('[{0:hh\:mm\:ss}] {1}/{2} {3,-26} | RAM {4}GB free {5}GB | spill {6}GB | ETA {7}{8}' `
-        -f $elapsed, $idx, $tot, $scn, $procGB, $freeGB, $spillGB, $eta, $warn)
-    Write-Host ("`r" + $line.PadRight(115)) -NoNewline
+    $line = ('[{0:hh\:mm\:ss}] {1,-26} | RAM {2}GB free {3}GB | spill {4}GB | ETA {5} | {6}{7}' `
+        -f $elapsed, $phase, $procGB, $freeGB, $spillGB, $eta, $act, $warn)
+    Write-Host ("`r" + $line.PadRight(150)) -NoNewline
 }
 $proc.WaitForExit()
 Write-Host ""  # finish the in-place status line
