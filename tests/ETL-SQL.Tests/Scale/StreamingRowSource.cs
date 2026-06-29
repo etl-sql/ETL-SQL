@@ -8,27 +8,28 @@ using ETL_SQL.Data;
 namespace ETL_SQL.Tests.Scale
 {
     /// <summary>
-    /// Read-only data source that <b>generates</b> its rows lazily, one batch at a time, instead of
-    /// materializing them in memory like <see cref="InMemoryDataSource"/>. This is what makes the
-    /// large scale tiers (e.g. 50M rows) viable: the engine streams batches through its governed,
-    /// spilling operators while the input itself never occupies more than one batch of RAM.
+    /// Read-only data source that <b>generates</b> its rows lazily, one batch at a time, from a set of
+    /// per-column generator functions — instead of materializing them in memory like
+    /// <see cref="InMemoryDataSource"/>. This is what makes the large scale tiers (50M+ rows) viable:
+    /// the engine streams batches through its governed, spilling operators while the input itself never
+    /// occupies more than one batch of RAM.
     ///
     /// Generation is deterministic and stateless, so the engine may read it any number of times
     /// (e.g. a self-join) and always get identical data.
     /// </summary>
     internal sealed class StreamingRowSource : IDataSource
     {
-        private readonly int _rowCount;
-        private readonly int _groups;
-        private readonly int _buckets; // <= 0 => no "bucket" column (plain grp/val shape)
-        private readonly string[] _columns;
+        private readonly long _rowCount;
+        private readonly (string Name, Func<long, object?> Gen)[] _columns;
+        private readonly string[] _columnNames;
 
-        public StreamingRowSource(int rowCount, int groups, int buckets = 0)
+        /// <param name="rowCount">Number of rows to generate.</param>
+        /// <param name="columns">Column name + a generator invoked with the 0-based row index.</param>
+        public StreamingRowSource(long rowCount, params (string Name, Func<long, object?> Gen)[] columns)
         {
             _rowCount = rowCount;
-            _groups = Math.Max(1, groups);
-            _buckets = buckets;
-            _columns = buckets > 0 ? new[] { "grp", "bucket", "val" } : new[] { "grp", "val" };
+            _columns = columns;
+            _columnNames = columns.Select(c => c.Name).ToArray();
         }
 
         public string Path => "";
@@ -38,18 +39,16 @@ namespace ETL_SQL.Tests.Scale
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (batchSize <= 0) batchSize = 10000;
-            int produced = 0;
+            long produced = 0;
             while (produced < _rowCount)
             {
                 var table = new DataTable();
-                table.SetColumns(_columns);
-                int n = Math.Min(batchSize, _rowCount - produced);
+                table.SetColumns(_columnNames);
+                int n = (int)Math.Min(batchSize, _rowCount - produced);
                 for (int j = 0; j < n; j++, produced++)
                 {
                     var r = new Row(table.Schema);
-                    r["grp"] = produced % _groups;
-                    if (_buckets > 0) r["bucket"] = (produced / _groups) % _buckets;
-                    r["val"] = (decimal)(produced + 1);
+                    foreach (var (name, gen) in _columns) r[name] = gen(produced);
                     await table.AddRowAsync(r);
                 }
                 yield return table;
@@ -60,11 +59,21 @@ namespace ETL_SQL.Tests.Scale
             => throw new NotSupportedException("StreamingRowSource is read-only.");
 
         public Task<IEnumerable<string>> GetColumnsAsync()
-            => Task.FromResult<IEnumerable<string>>(_columns.ToArray());
+            => Task.FromResult<IEnumerable<string>>(_columnNames.ToArray());
 
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        // ── Convenience factories for the standard cert shapes ─────────────────
+        public static StreamingRowSource GrpVal(long rowCount, int groups) => new(rowCount,
+            ("grp", i => (int)(i % groups)),
+            ("val", i => (decimal)(i + 1)));
+
+        public static StreamingRowSource GrpBucketVal(long rowCount, int groups, int buckets) => new(rowCount,
+            ("grp", i => (int)(i % groups)),
+            ("bucket", i => (int)((i / groups) % buckets)),
+            ("val", i => (decimal)(i + 1)));
     }
 }

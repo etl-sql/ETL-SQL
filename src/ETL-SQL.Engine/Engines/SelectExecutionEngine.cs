@@ -368,6 +368,13 @@ public class SelectExecutionEngine
                 {
                     var canStreamDistinctSource = stmt.IsDistinct
                         && stmt.QualifyClause == null && !hasAggInColumns && !hasWindowInColumns;
+                    // Window queries: prefix-buffer hybrid (mirrors the sort hybrid above). Small inputs
+                    // stay in-memory (the in-memory window engine normalizes partition values); large
+                    // inputs stream through the external window engine, which partitions/spills internally
+                    // (ProcessBucketDeepSpill streams ranking funcs). This avoids materializing the whole
+                    // input into allRows — the dominant memory cost at scale (ROW_NUMBER over one huge
+                    // partition was OOMing).
+                    bool canHybridWindow = hasWindowInColumns && !hasAggInColumns && stmt.QualifyClause == null;
                     if (canStreamDistinctSource)
                     {
                         externalEngineStream = !whereApplied && stmt.WhereClause != null
@@ -375,6 +382,37 @@ public class SelectExecutionEngine
                             : inputStream;
                         if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
                         allRows = [];
+                    }
+                    else if (canHybridWindow)
+                    {
+                        var winInput = !whereApplied && stmt.WhereClause != null
+                            ? WhereStream(inputStream, stmt.WhereClause, _context)
+                            : inputStream;
+                        if (!whereApplied && stmt.WhereClause != null) whereApplied = true;
+
+                        var winPrefix = new List<Row>();
+                        var winEnumerator = winInput.GetAsyncEnumerator();
+                        bool winHandedOff = false;
+                        int winCap = Math.Max(1, _context.WindowSpillThreshold);
+                        try
+                        {
+                            while (winPrefix.Count < winCap && await winEnumerator.MoveNextAsync())
+                                winPrefix.Add(winEnumerator.Current);
+                            if (winPrefix.Count >= winCap)
+                            {
+                                externalEngineStream = PrependRows(winPrefix, ContinueStreamAndDispose(winEnumerator));
+                                winHandedOff = true;
+                                allRows = [];
+                            }
+                            else
+                            {
+                                allRows = winPrefix;
+                            }
+                        }
+                        finally
+                        {
+                            if (!winHandedOff) await winEnumerator.DisposeAsync();
+                        }
                     }
                     else
                     {

@@ -94,10 +94,10 @@ namespace ETL_SQL.Tests.Scale
         // Streaming generator sources — the rows are produced lazily one batch at a time, so the input
         // never materializes in memory (critical for the 50M Huge tier; see StreamingRowSource).
         private static Task<IDataSource> SourceWithRows(int rowCount, int groups = 10)
-            => Task.FromResult<IDataSource>(new StreamingRowSource(rowCount, groups));
+            => Task.FromResult<IDataSource>(StreamingRowSource.GrpVal(rowCount, groups));
 
         private static Task<IDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
-            => Task.FromResult<IDataSource>(new StreamingRowSource(rowCount, groups, buckets));
+            => Task.FromResult<IDataSource>(StreamingRowSource.GrpBucketVal(rowCount, groups, buckets));
 
         private static async Task<(long Count, decimal Sum)> CountAndSum(IAsyncEnumerable<DataTable> batches, string valueColumn = "val")
         {
@@ -418,29 +418,14 @@ namespace ETL_SQL.Tests.Scale
             var ev = NewEvaluator();
             ev.JoinSpillThreshold = 5_000;  // force external hash join
 
-            var left = new DataTable();
-            left.SetColumns(new[] { "id", "val" });
-            var right = new DataTable();
-            right.SetColumns(new[] { "id", "score" });
-
-            for (int i = 1; i <= Rows; i++)
-            {
-                var lr = new Row(left.Schema);
-                lr["id"] = i; lr["val"] = $"v{i}";
-                await left.AddRowAsync(lr);
-
-                var rr = new Row(right.Schema);
-                rr["id"] = i; rr["score"] = (decimal)i * 2;
-                await right.AddRowAsync(rr);
-            }
-
-            var lSrc = new InMemoryDataSource();
-            await lSrc.WriteBatches(new[] { left }.ToAsyncEnumerable());
-            ev.Connections["#certL"] = lSrc;
-
-            var rSrc = new InMemoryDataSource();
-            await rSrc.WriteBatches(new[] { right }.ToAsyncEnumerable());
-            ev.Connections["#certR"] = rSrc;
+            // Stream both join inputs (id = 1..Rows; score = id*2) so they never materialize in
+            // memory — at the Huge tier the old in-memory build of both sides was the dominant hog.
+            ev.Connections["#certL"] = new StreamingRowSource(Rows,
+                ("id", i => (int)(i + 1)),
+                ("val", i => "v" + (i + 1)));
+            ev.Connections["#certR"] = new StreamingRowSource(Rows,
+                ("id", i => (int)(i + 1)),
+                ("score", i => (decimal)(i + 1) * 2));
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();
