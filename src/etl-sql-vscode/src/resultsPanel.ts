@@ -32,7 +32,7 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         }
     }
 
-    public resolveWebviewView(
+    public async resolveWebviewView(
         webviewView: vscode.WebviewView
     ) {
         this._view = webviewView;
@@ -44,7 +44,7 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
             ]
         };
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+        webviewView.webview.html = await this._getHtmlForWebview(webviewView.webview);
 
         webviewView.webview.onDidReceiveMessage(message => {
             if (message.type === 'ready') {
@@ -83,14 +83,14 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         }
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
+    private async _getHtmlForWebview(webview: vscode.Webview) {
         const nonce = getNonce();
         
         try {
             // Path to the built React app (single-file mode via vite-plugin-singlefile)
             const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
             if (!ResultsPanel._rawHtmlCache) {
-                ResultsPanel._rawHtmlCache = fs.readFileSync(indexPath.fsPath, 'utf8');
+                ResultsPanel._rawHtmlCache = await fs.promises.readFile(indexPath.fsPath, 'utf8');
             }
             let html = ResultsPanel._rawHtmlCache;
 
