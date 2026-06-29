@@ -182,6 +182,32 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries.
 - [ ] Connector streaming vs full-buffer reads on large payloads (per-connector).
 
+## Scale & operator-algorithm assessment (large-tier behavior)
+
+*Verdict: the engine has genuinely strong algorithms for SORT and JOIN; the weak spots at the very
+large (≈50M) tier are GROUP BY and DISTINCT memory scaling, plus sort merge fan-in. FILTER/EXCLUDE
+are fine. The scale cert proves spill works functionally (it force-shrinks memory grants at small row
+counts) but does not exercise a true 50M tier, so these are reasoned from the code, not measured.*
+
+**Sound at scale (no change needed):**
+- **WHERE / FILTER** — streamed, compiled predicate per row, O(1)/row, constant memory. Scales arbitrarily.
+- **SELECT * EXCLUDE / projection** — column-level, O(columns)/row, bounded. "Large EXCLUDE" isn't a data-scale concern (columns are bounded).
+- **ORDER BY** — true external **k-way merge sort** (sorted runs → min-heap merge, native typed keys, streamed output). Correct algorithm.
+- **JOIN** — **grace hash join with recursive repartitioning** (partitions both sides; re-partitions oversized partitions with a depth-salted hash up to depth 8 for skew). Best-in-class.
+
+**Algorithmic gaps to address (where "large hurts"):**
+- [ ] **[Perf · High @50M] GROUP BY buffers rows, not accumulators** — `ExternalAggregateEngine` keeps `Dictionary<CompoundKey, (List<Row> Rows, …)>` — it buffers **every input row per group** (O(rows)), not running aggregate state (O(groups)). Cert: 1M rows / 10 groups = 289 MB; ≈50M / few groups → multi-GB → OOM. Fix: incremental accumulators (SUM/COUNT/AVG/MIN/MAX/etc.) keyed by group; buffer rows only for holistic aggregates (MEDIAN/PERCENTILE/STRING_AGG/COUNT DISTINCT). Biggest large-tier win, esp. **low-cardinality** GROUP BY.
+- [ ] **[Perf · Med @50M] DISTINCT and GROUP BY are single-level partitioned (no recursion)** — `ExternalDistinctEngine` / `ExternalAggregateEngine` partition once into 32 then build an in-memory set/dict per partition. Unlike the join, an oversized partition is **not** recursively repartitioned, so high-cardinality input (~rows/32 distinct per partition) can still blow a partition's memory. Fix: reuse the join's recursive-repartition pattern (depth-salted hash) for distinct/aggregate partitions over threshold.
+- [ ] **[Perf · Med @50M] External sort merge fan-in is unbounded** — `ExternalSortEngine` opens **all** chunk readers at once (≈5,000 open spill readers/file-handles at 50M / 10k chunk). Cap concurrent fan-in and do a multi-pass merge when chunk count exceeds a limit.
+- [ ] **[Perf · Low] non-streaming sort entry** — `SelectExecutionEngine:528-529` calls `SortExternal(List<Row>)`, which materializes the whole input before spilling (vs the streaming `SortStreamAsync` at :521). Confirm the large-data path always takes the streaming branch.
+- [ ] **[Correctness · verify @scale] RIGHT/FULL OUTER via external hash join** — `ExternalJoinEngine.JoinPartitionDirect` only emits unmatched **LEFT** rows. Confirm RIGHT/FULL OUTER joins are swapped to LEFT (or otherwise emit unmatched right rows) before routing to the spilling path, or they will drop unmatched right rows at scale.
+- [ ] **[Perf · note] WINDOW** buffers per partition (inherent to frame computation) — cert: 500k rows = 867 MB. Largest single partition bounds memory; document the per-partition limit / consider partition-streaming for frames that allow it.
+
+**Other scale dimensions (the user's matrix):**
+- [ ] **Script size** (10k lines × 10) — verify lexer/parser is O(n) and AST memory is bounded for very large scripts; `RUN SCRIPT` parse-caching already helps repeated targets.
+- [ ] **Object count per script** (10/50/100 CONNECTION/VISUAL/@param/#temp) — agree with capping via policy limits (ties into v0.14.0 Phase 3.5 resource ceilings); 100 live connections in one script is an anti-pattern → guidance + a configurable limit rather than an algorithm change.
+- [ ] **Server/orchestrator scale** (20/100/1000 reports/jobs) — the EF findings above (N+1, `AsNoTracking`, client-eval) are the relevant levers; verify scheduler/job-history queries paginate and index well at 1000 jobs.
+
 ---
 
 ## VS Code Extension Code Review Findings (v0.14.0)
