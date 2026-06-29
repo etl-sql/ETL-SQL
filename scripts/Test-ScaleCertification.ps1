@@ -88,13 +88,68 @@ if ($Tier -eq 'Standard') {
     $env:CERT_PROVIDER_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 1.0 }
 }
 
-dotnet test "$RepoRoot/ETL-SQL.slnx" `
-    --filter $filterExpr `
-    --logger "console;verbosity=detailed" `
-    --no-build `
-    2>&1 | Tee-Object -FilePath $rawLog
+# Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
+# inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
+$spillRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'ETL-SQL-Spill'
+if (Test-Path $spillRoot) {
+    try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+}
 
-$testExitCode = $LASTEXITCODE
+# Live progress side-channel (the test writes the current scenario here immediately, since
+# ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
+# host runs with a different working directory than this script.
+$progressFile = [System.IO.Path]::GetFullPath((Join-Path $OutDir 'progress.txt'))
+Remove-Item $progressFile -ErrorAction SilentlyContinue
+$env:CERT_PROGRESS_FILE = $progressFile
+
+$errLog = "$rawLog.err"
+$dotnetArgs = @('test', "$RepoRoot/ETL-SQL.slnx", '--filter', $filterExpr,
+    '--logger', 'console;verbosity=detailed', '--no-build')
+
+Write-Host "Live status (full output -> $rawLog):" -ForegroundColor Gray
+$proc = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
+    -RedirectStandardOutput $rawLog -RedirectStandardError $errLog -NoNewWindow -PassThru
+$runStart = Get-Date
+
+while (-not $proc.HasExited) {
+    Start-Sleep -Seconds 4
+
+    $os = Get-CimInstance Win32_OperatingSystem
+    $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+
+    $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
+        Sort-Object WorkingSet64 -Descending | Select-Object -First 1
+    $procGB = if ($tp) { [math]::Round($tp.WorkingSet64 / 1GB, 2) } else { 0 }
+
+    $spillGB = 0
+    if (Test-Path $spillRoot) {
+        $spillGB = [math]::Round((((Get-ChildItem $spillRoot -Recurse -File -ErrorAction SilentlyContinue) |
+            Measure-Object Length -Sum).Sum / 1GB), 2)
+    }
+
+    $idx = 0; $tot = 0; $scn = 'starting'
+    if (Test-Path $progressFile) {
+        $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
+        if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
+    }
+
+    $elapsed = (Get-Date) - $runStart
+    $eta = '~--'
+    if ($idx -gt 1 -and $tot -gt 0) {
+        $perScn = $elapsed.TotalSeconds / ($idx - 1)
+        $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
+    }
+
+    $warn = if ($freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
+    $line = ('[{0:hh\:mm\:ss}] {1}/{2} {3,-26} | RAM {4}GB free {5}GB | spill {6}GB | ETA {7}{8}' `
+        -f $elapsed, $idx, $tot, $scn, $procGB, $freeGB, $spillGB, $eta, $warn)
+    Write-Host ("`r" + $line.PadRight(115)) -NoNewline
+}
+$proc.WaitForExit()
+Write-Host ""  # finish the in-place status line
+if (Test-Path $errLog) { Get-Content $errLog | Add-Content $rawLog }
+
+$testExitCode = $proc.ExitCode
 
 # ── 3. Parse CERT_METRIC lines ────────────────────────────────────────────────
 $metrics = Get-Content $rawLog |

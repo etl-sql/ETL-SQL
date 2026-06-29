@@ -176,27 +176,58 @@ namespace ETL_SQL.Tests.Scale
             Environment.SetEnvironmentVariable("CERT_ROW_SCALE", rowScale.ToString(CultureInfo.InvariantCulture));
             Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", certificationTier);
 
+            // Ordered scenario list so we can report live progress (which scenario, X of N) to a
+            // side-channel file — ITestOutputHelper buffers until the whole [Fact] finishes, so it
+            // cannot drive a live HUD during a multi-hour Huge run.
+            var scenarios = new (string Name, Func<Task> Run)[]
+            {
+                ("ExternalSort", Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized),
+                ("ExternalAggregate", Cert_Smoke_ExternalAggregate_100kRows_CorrectSums),
+                ("ExternalJoin", Cert_Smoke_ExternalJoin_50kRows_CorrectResults),
+                ("TempTableSpill", Cert_Smoke_TempTableSpill_50kRows_CorrectCount),
+                ("StreamingSelect", Cert_Smoke_StreamingSelect_ResultCapEnforced),
+                ("WindowFunction", Cert_Smoke_WindowFunction_50kRows_CorrectRankValues),
+                ("CsvIngest", Cert_Smoke_CsvIngest_50kRows_CorrectChecksum),
+                ("ParquetRoundTrip", Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum),
+                ("ReportDatasetSnapshotReload", Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum),
+                ("CubeGroupingSets", Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum),
+                ("ScalarSubqueryCache", Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys),
+                ("SpillCleanup_Success", Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles),
+                ("SpillCleanup_Failure", Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles),
+            };
+
             try
             {
-                await Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized();
-                await Cert_Smoke_ExternalAggregate_100kRows_CorrectSums();
-                await Cert_Smoke_ExternalJoin_50kRows_CorrectResults();
-                await Cert_Smoke_TempTableSpill_50kRows_CorrectCount();
-                await Cert_Smoke_StreamingSelect_ResultCapEnforced();
-                await Cert_Smoke_WindowFunction_50kRows_CorrectRankValues();
-                await Cert_Smoke_CsvIngest_50kRows_CorrectChecksum();
-                await Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum();
-                await Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum();
-                await Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum();
-                await Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys();
-                await Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles();
-                await Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles();
+                for (int i = 0; i < scenarios.Length; i++)
+                {
+                    WriteProgress(certificationTier, i + 1, scenarios.Length, scenarios[i].Name);
+                    await scenarios[i].Run();
+                }
+                WriteProgress(certificationTier, scenarios.Length, scenarios.Length, "done");
             }
             finally
             {
                 Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
                 Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", previousTier);
             }
+        }
+
+        /// <summary>
+        /// Best-effort live progress to the file named by CERT_PROGRESS_FILE (set by
+        /// Test-ScaleCertification.ps1). Written immediately (unlike ITestOutputHelper, which buffers
+        /// until the test completes) so an external HUD can show the current scenario and X/N progress.
+        /// No-op when the env var is unset, so normal test runs are unaffected.
+        /// </summary>
+        private static void WriteProgress(string tier, int index, int total, string scenario)
+        {
+            var file = Environment.GetEnvironmentVariable("CERT_PROGRESS_FILE");
+            if (string.IsNullOrEmpty(file)) return;
+            try
+            {
+                File.WriteAllText(file,
+                    $"{tier}|{index}|{total}|{scenario}|{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+            }
+            catch { /* progress reporting must never affect the run */ }
         }
 
         private async Task RunProviderScenarioSetWithScale(double rowScale)
