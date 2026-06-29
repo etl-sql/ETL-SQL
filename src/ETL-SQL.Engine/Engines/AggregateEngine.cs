@@ -804,6 +804,9 @@ public class AggregateEngine
             "ANY" => new BooleanAggregateState(requireAll: false),
             "SOME" => new BooleanAggregateState(requireAll: false),
             "APPROX_COUNT_DISTINCT" => new ApproxCountDistinctState(),
+            "VAR" or "VAR_SAMP" or "VARP" or "VAR_POP"
+                or "STDEV" or "STDDEV" or "STDDEV_SAMP" or "STDEVP" or "STDDEV_POP" => new VarianceState(name),
+            "COVAR_SAMP" or "COVAR_POP" or "CORR" => new CovarianceState(name),
             _ => new GenericState(f)
         };
     }
@@ -1125,6 +1128,104 @@ public class AggregateEngine
         public async ValueTask<object?> Finalize(AggregateEngine engine)
         {
             return await engine.EvaluateAggregate(_f, _rows);
+        }
+    }
+
+    /// <summary>
+    /// Incremental single-pass VAR/VAR_SAMP/VARP/VAR_POP/STDEV/STDDEV(_SAMP/_POP)/STDEVP state via
+    /// Welford's online algorithm — O(1) memory per group instead of buffering every row through
+    /// <see cref="GenericState"/>. Accumulates in double for numerical stability and returns decimal.
+    /// </summary>
+    private sealed class VarianceState : IAggregateState
+    {
+        private readonly bool _population;
+        private readonly bool _sqrt;
+        private long _n;
+        private double _mean;
+        private double _m2;
+
+        public VarianceState(string name)
+        {
+            var u = name.ToUpperInvariant();
+            _sqrt = u.StartsWith("STDEV", StringComparison.Ordinal) || u.StartsWith("STDDEV", StringComparison.Ordinal);
+            _population = u is "VARP" or "VAR_POP" or "STDEVP" or "STDDEV_POP";
+        }
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            var val = await context.EvaluateValue(f.Arguments[0], row);
+            if (val == null) return;
+            double x = (double)SafeToDecimal(val, context);
+            _n++;
+            double delta = x - _mean;
+            _mean += delta / _n;
+            _m2 += delta * (x - _mean);
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_n == 0 || (!_population && _n == 1)) return new ValueTask<object?>((object?)null);
+            double variance = _population ? _m2 / _n : _m2 / (_n - 1);
+            if (variance < 0) variance = 0; // clamp tiny negative drift from floating-point rounding
+            double result = _sqrt ? Math.Sqrt(variance) : variance;
+            return new ValueTask<object?>((object?)(decimal)result);
+        }
+    }
+
+    /// <summary>
+    /// Incremental single-pass COVAR_SAMP/COVAR_POP/CORR state via the online co-moment algorithm.
+    /// Pairs are counted only when both arguments are non-null (matching the buffered semantics).
+    /// O(1) memory per group; correlation uses population co-moments (the per-n factors cancel).
+    /// </summary>
+    private sealed class CovarianceState : IAggregateState
+    {
+        private readonly bool _population;
+        private readonly bool _correlation;
+        private long _n;
+        private double _meanX;
+        private double _meanY;
+        private double _c;
+        private double _m2x;
+        private double _m2y;
+
+        public CovarianceState(string name)
+        {
+            var u = name.ToUpperInvariant();
+            _correlation = u == "CORR";
+            _population = _correlation || u == "COVAR_POP";
+        }
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            var xv = await context.EvaluateValue(f.Arguments[0], row);
+            var yv = await context.EvaluateValue(f.Arguments[1], row);
+            if (xv == null || yv == null) return;
+            double x = (double)SafeToDecimal(xv, context);
+            double y = (double)SafeToDecimal(yv, context);
+            _n++;
+            double dx = x - _meanX;
+            double dy = y - _meanY;
+            _meanX += dx / _n;
+            _meanY += dy / _n;
+            _c += dx * (y - _meanY);
+            _m2x += dx * (x - _meanX);
+            _m2y += dy * (y - _meanY);
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_correlation)
+            {
+                if (_n == 0) return new ValueTask<object?>((object?)null);
+                double denom = Math.Sqrt(_m2x * _m2y);
+                if (denom == 0 || double.IsNaN(denom)) return new ValueTask<object?>((object?)null);
+                return new ValueTask<object?>((object?)(decimal)(_c / denom));
+            }
+            if (_n == 0 || (!_population && _n == 1)) return new ValueTask<object?>((object?)null);
+            double cov = _population ? _c / _n : _c / (_n - 1);
+            return new ValueTask<object?>((object?)(decimal)cov);
         }
     }
 }
