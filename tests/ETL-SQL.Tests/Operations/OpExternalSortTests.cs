@@ -115,6 +115,34 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task SortExternal_UnderMemoryPressure_EarlyFlushesAndSortsCorrectly()
+        {
+            // Large chunk size (no row-count flush) but a 1-byte governor ceiling: the memory guard
+            // must early-flush chunks so the build never grows unbounded, and the multi-pass merge
+            // must still produce fully ordered output.
+            var (eval, logger) = BuildContext(chunkSize: 1_000_000);
+            long saved = ETL_SQL.Core.MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            ETL_SQL.Core.MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                var engine = new ExternalSortEngine(eval, logger);
+                const int n = 30000;
+                var ids = Enumerable.Range(1, n).ToList();
+                for (int i = 0; i < n; i++) { int j = (i * 911 + 13) % n; (ids[i], ids[j]) = (ids[j], ids[i]); }
+                var rows = ids.Select(i => new Row { ["id"] = i }).ToList();
+
+                var orderBy = new List<OrderByClause> { new OrderByClause(new IdentifierExpression("id"), false) };
+                var startSpill = eval.Telemetry.TotalSpilledBytes;
+                var sorted = await engine.SortExternal(rows, orderBy);
+
+                Assert.Equal(n, sorted.Count);
+                for (int i = 0; i < n; i++) Assert.Equal((decimal)(i + 1), Convert.ToDecimal(sorted[i]["id"]));
+                Assert.True(eval.Telemetry.TotalSpilledBytes > startSpill, "governor should have forced early chunk spills");
+            }
+            finally { ETL_SQL.Core.MemoryGrantArbiter.Shared.TotalBudgetBytes = saved; }
+        }
+
+        [Fact]
         public async Task SortExternal_MultiColumnSort_ProducesCorrectOrder()
         {
             var (eval, logger) = BuildContext(chunkSize: 2);

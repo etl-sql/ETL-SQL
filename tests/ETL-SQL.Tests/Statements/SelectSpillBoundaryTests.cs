@@ -2,6 +2,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Tests.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -91,6 +92,49 @@ public class SelectSpillBoundaryTests
         Assert.Equal(4, result.Rows.Count);
         Assert.Equal(100m, result.Rows[0]["score"]);
         Assert.All(result.Rows.Skip(1), row => Assert.Equal(90m, row["score"]));
+    }
+
+    [Fact]
+    public async Task Distinct_Governor_SpillOrFail_UnsplittablePartition_Throws()
+    {
+        var evaluator = CreateEvaluator();
+        evaluator.JoinSpillThreshold = 10000;          // forces the disk-spill distinct path
+        evaluator.ExternalHashPartitions = 2;
+        evaluator.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+        long saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+        MemoryGrantArbiter.Shared.TotalBudgetBytes = 1; // any heap growth trips the governor
+        try
+        {
+            // 12000 identical rows → one partition that can't be split → SpillOrFail aborts.
+            var inserts = string.Join(",", Enumerable.Repeat("(7)", 12000));
+            await TestHelpers.Execute(evaluator, $"CREATE TABLE #t (v INT); INSERT INTO #t VALUES {inserts};");
+
+            await Assert.ThrowsAsync<ExecutionException>(async () =>
+                await Query(evaluator, "SELECT DISTINCT v FROM #t;"));
+        }
+        finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = saved; }
+    }
+
+    [Fact]
+    public async Task Distinct_Governor_SpillOnly_Churns_ProducesCorrectResult()
+    {
+        var evaluator = CreateEvaluator();
+        evaluator.JoinSpillThreshold = 10000;
+        evaluator.ExternalHashPartitions = 2;
+        evaluator.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+        long saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+        MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+        try
+        {
+            var inserts = string.Join(",", Enumerable.Repeat("(7)", 12000));
+            await TestHelpers.Execute(evaluator, $"CREATE TABLE #t (v INT); INSERT INTO #t VALUES {inserts};");
+
+            var result = await Query(evaluator, "SELECT DISTINCT v FROM #t;");
+
+            Assert.Single(result.Rows);
+            Assert.Equal(7m, System.Convert.ToDecimal(result.Rows[0]["v"]));
+        }
+        finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = saved; }
     }
 
     private static Evaluator CreateEvaluator()

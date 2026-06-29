@@ -68,34 +68,97 @@ internal sealed class ExternalDistinctEngine
     private async IAsyncEnumerable<Row> ProcessPartitionAsync(string name, long rowCount, int depth, List<string> tempFiles)
     {
         var threshold = Math.Max(1, _context.JoinSpillThreshold);
+        long ceiling = MemoryGovernor.Ceiling(_context);
+        bool canRepartition = PartitionCount > 1 && depth < MaxRecursivePartitionDepth;
 
-        if (rowCount <= threshold || depth >= MaxRecursivePartitionDepth || PartitionCount <= 1)
+        // Clearly large by row count → split up front (avoids building a huge set to then discard it).
+        if (rowCount > threshold && canRepartition)
+        {
+            var sub = await TryRepartition(name, depth + 1, rowCount, tempFiles);
+            if (sub != null)
+            {
+                await foreach (var row in RecurseSubPartitions(sub.Value, depth + 1, tempFiles))
+                    yield return row;
+                yield break;
+            }
+        }
+
+        // Governor off → original streaming dedup (no extra buffering).
+        if (ceiling <= 0)
         {
             await foreach (var row in DedupInMemory(name))
                 yield return row;
             yield break;
         }
 
-        var nextDepth = depth + 1;
-        var sub = await PartitionAsync(ReadPartition(name), nextDepth, tempFiles);
-        var usedSubPartitions = sub.Counts.Count(c => c > 0);
-        var largestSub = sub.Counts.Length == 0 ? 0 : sub.Counts.Max();
-
-        // If repartitioning failed to split the partition (e.g. every row shares the same key),
-        // recursion can't help — dedup directly. An identical-key partition has a tiny distinct
-        // set regardless of row count, so the in-memory fallback is safe.
-        if (usedSubPartitions <= 1 || largestSub >= rowCount)
+        // Governor on → build with a memory backstop so wide rows under the row threshold still
+        // can't blow the ceiling. On pressure (null), try to repartition; if that can't help,
+        // apply the governor policy.
+        var built = await DedupToList(name, ceiling);
+        if (built != null)
         {
-            await foreach (var row in DedupInMemory(name))
-                yield return row;
+            foreach (var row in built) yield return row;
             yield break;
         }
 
+        if (canRepartition)
+        {
+            var sub = await TryRepartition(name, depth + 1, rowCount, tempFiles);
+            if (sub != null)
+            {
+                await foreach (var row in RecurseSubPartitions(sub.Value, depth + 1, tempFiles))
+                    yield return row;
+                yield break;
+            }
+        }
+
+        MemoryGovernor.EnforcePolicy(_context,
+            "DISTINCT exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be " +
+            "reduced further by repartitioning. Increase the ceiling, reduce cardinality, or set " +
+            "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
+
+        // SpillOnly churn: stream-dedup without the guard.
+        await foreach (var row in DedupInMemory(name))
+            yield return row;
+    }
+
+    private async IAsyncEnumerable<Row> RecurseSubPartitions(PartitionSet sub, int depth, List<string> tempFiles)
+    {
         for (var i = 0; i < sub.Names.Length; i++)
         {
-            await foreach (var row in ProcessPartitionAsync(sub.Names[i], sub.Counts[i], nextDepth, tempFiles))
+            if (sub.Counts[i] == 0) continue;
+            await foreach (var row in ProcessPartitionAsync(sub.Names[i], sub.Counts[i], depth, tempFiles))
                 yield return row;
         }
+    }
+
+    /// <summary>Repartitions a partition; returns the sub-set only if it actually split (else null).</summary>
+    private async Task<PartitionSet?> TryRepartition(string name, int depth, long originalRowCount, List<string> tempFiles)
+    {
+        var sub = await PartitionAsync(ReadPartition(name), depth, tempFiles);
+        var used = sub.Counts.Count(c => c > 0);
+        var largest = sub.Counts.Length == 0 ? 0 : sub.Counts.Max();
+        // No split (e.g. every row shares the same key) → caller falls back to in-memory/policy.
+        if (used <= 1 || largest >= originalRowCount) return null;
+        return sub;
+    }
+
+    /// <summary>
+    /// Builds the distinct rows of a partition into a list, returning null if managed-heap growth
+    /// crosses the governor ceiling mid-build so the caller can repartition or apply policy.
+    /// </summary>
+    private async Task<List<Row>?> DedupToList(string name, long ceiling)
+    {
+        var seen = new HashSet<CompoundKey>();
+        var result = new List<Row>();
+        var guard = new HeapGrowthGuard(ceiling);
+        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        await foreach (var row in reader.AsEnumerableAsync())
+        {
+            if (seen.Add(Key(row))) result.Add(row);
+            if (guard.Exceeded()) return null;
+        }
+        return result;
     }
 
     private async IAsyncEnumerable<Row> DedupInMemory(string name)

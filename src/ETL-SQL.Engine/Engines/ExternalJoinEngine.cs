@@ -89,51 +89,84 @@ public class ExternalJoinEngine
         int depth,
         List<string> tempFiles)
     {
+        // Row-count-driven repartition (grace hash join): split an oversized build side up front.
         if (ShouldRepartition(rightRowCount, depth))
         {
-            var nextDepth = depth + 1;
-            var leftPartitions = await RepartitionPartition(leftName, leftKeys, $"left_d{nextDepth}", nextDepth, tempFiles);
-            var rightPartitions = await RepartitionPartition(rightName, rightKeys, $"right_d{nextDepth}", nextDepth, tempFiles);
-            var largestRightPartition = rightPartitions.Counts.Length == 0 ? 0 : rightPartitions.Counts.Max();
-            var usedRightPartitions = rightPartitions.Counts.Count(c => c > 0);
-
-            if (usedRightPartitions > 1 && largestRightPartition < rightRowCount)
+            var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
+            if (split != null)
             {
-                _logger.Debug(
-                    "Recursively repartitioned external join partition at depth {Depth}. Rows: left={LeftRows}, right={RightRows}, largestRight={LargestRight}",
-                    nextDepth,
-                    leftRowCount,
-                    rightRowCount,
-                    largestRightPartition);
-
-                for (int i = 0; i < PartitionCount; i++)
-                {
-                    await foreach (var row in JoinPartition(
-                        leftPartitions.Names[i],
-                        rightPartitions.Names[i],
-                        leftPartitions.Counts[i],
-                        rightPartitions.Counts[i],
-                        join,
-                        leftKeys,
-                        rightKeys,
-                        nextDepth,
-                        tempFiles))
-                    {
-                        yield return row;
-                    }
-                }
-
+                await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles))
+                    yield return row;
                 yield break;
             }
 
             _logger.Debug(
-                "External join partition at depth {Depth} could not be reduced further. Falling back to direct partition join for {RightRows} right rows.",
+                "External join partition at depth {Depth} could not be reduced further by row count. Falling back to a memory-guarded direct join for {RightRows} right rows.",
                 depth,
                 rightRowCount);
         }
 
-        await foreach (var row in JoinPartitionDirect(leftName, rightName, join, leftKeys, rightKeys))
+        // Memory-guarded direct join. The (right) build side is read fully before any probe row is
+        // emitted, so if heap growth crosses the governor ceiling mid-build (e.g. wide rows under the
+        // row threshold) we can repartition or apply policy without having yielded anything.
+        long ceiling = MemoryGovernor.Ceiling(_context);
+        var hashTable = await BuildJoinHashTable(rightName, rightKeys, new HeapGrowthGuard(ceiling));
+
+        if (hashTable == null)
+        {
+            if (depth < MaxRecursivePartitionDepth && PartitionCount > 1)
+            {
+                var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
+                if (split != null)
+                {
+                    await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles))
+                        yield return row;
+                    yield break;
+                }
+            }
+
+            MemoryGovernor.EnforcePolicy(_context,
+                "JOIN build side exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be " +
+                "reduced further by repartitioning. Increase the ceiling, reduce join-key skew, or set " +
+                "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
+
+            // SpillOnly churn: rebuild unguarded and continue.
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, new HeapGrowthGuard(0));
+        }
+
+        await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys))
             yield return row;
+    }
+
+    /// <summary>Recurses into the per-partition joins produced by a repartition step.</summary>
+    private async IAsyncEnumerable<Row> JoinSubPartitions(PartitionSet left, PartitionSet right, JoinClause join, List<string> leftKeys, List<string> rightKeys, int depth, List<string> tempFiles)
+    {
+        for (int i = 0; i < PartitionCount; i++)
+        {
+            await foreach (var row in JoinPartition(left.Names[i], right.Names[i], left.Counts[i], right.Counts[i], join, leftKeys, rightKeys, depth, tempFiles))
+                yield return row;
+        }
+    }
+
+    /// <summary>
+    /// Repartitions both sides at the given depth (depth-salted hash). Returns the pair only if the
+    /// build side actually split (more than one used partition, all smaller than the original) so the
+    /// caller can recurse; returns null when recursion can't help (e.g. severe key skew).
+    /// </summary>
+    private async Task<(PartitionSet Left, PartitionSet Right)?> TryRepartitionBothSides(
+        string leftName, string rightName, List<string> leftKeys, List<string> rightKeys,
+        long rightRowCount, int nextDepth, List<string> tempFiles)
+    {
+        var left = await RepartitionPartition(leftName, leftKeys, $"left_d{nextDepth}", nextDepth, tempFiles);
+        var right = await RepartitionPartition(rightName, rightKeys, $"right_d{nextDepth}", nextDepth, tempFiles);
+        var largestRight = right.Counts.Length == 0 ? 0 : right.Counts.Max();
+        var usedRight = right.Counts.Count(c => c > 0);
+        if (usedRight > 1 && largestRight < rightRowCount)
+        {
+            _logger.Debug("Recursively repartitioned external join partition at depth {Depth}. largestRight={LargestRight}", nextDepth, largestRight);
+            return (left, right);
+        }
+        return null;
     }
 
     private bool ShouldRepartition(long rightRowCount, int depth)
@@ -143,21 +176,31 @@ public class ExternalJoinEngine
             && rightRowCount > Math.Max(1, _context.JoinSpillThreshold);
     }
 
-    private async IAsyncEnumerable<Row> JoinPartitionDirect(string leftName, string rightName, JoinClause join, List<string> leftKeys, List<string> rightKeys)
+    /// <summary>
+    /// Builds the in-memory hash table from the (right) build side. Returns null if managed-heap
+    /// growth crosses the governor ceiling mid-build, so the caller can repartition or apply policy
+    /// before any probe row has been emitted.
+    /// </summary>
+    private async Task<Dictionary<CompoundKey, List<Row>>?> BuildJoinHashTable(string rightName, List<string> rightKeys, HeapGrowthGuard guard)
     {
-        await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
-        await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
-
         var hashTable = new Dictionary<CompoundKey, List<Row>>();
+        await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
         await foreach (var rightRow in rightReader.AsEnumerableAsync())
         {
             var key = GetHashKey(rightRow, rightKeys);
             if (!hashTable.TryGetValue(key, out var bucket)) { bucket = new List<Row>(); hashTable[key] = bucket; }
             bucket.Add(rightRow);
+            if (guard.Exceeded()) return null;
         }
+        return hashTable;
+    }
 
+    /// <summary>Streams the probe (left) side against a built hash table, emitting join results.</summary>
+    private async IAsyncEnumerable<Row> ProbeJoin(string leftName, Dictionary<CompoundKey, List<Row>> hashTable, JoinClause join, List<string> leftKeys)
+    {
         bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase);
 
+        await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         await foreach (var left in leftReader.AsEnumerableAsync())
         {
             var key = GetHashKey(left, leftKeys);

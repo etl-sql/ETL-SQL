@@ -93,9 +93,12 @@ public class ExternalSortEngine
                 return 0;
             }
 
-            // 2. Consume stream and spill chunks
+            // 2. Consume stream and spill chunks. The memory guard flushes the current chunk early
+            // when managed-heap growth crosses the governor ceiling, so a chunk of very wide rows
+            // can't exceed the budget even if its row count is under ChunkSize.
             var currentChunk = new List<(Row Row, object?[] Keys)>();
             int chunkCounter = 0;
+            var memGuard = new HeapGrowthGuard(MemoryGovernor.Ceiling(_context));
             await foreach (var row in inputStream)
             {
                 var keys = new object?[orderBy.Count];
@@ -107,7 +110,7 @@ public class ExternalSortEngine
 
                 currentChunk.Add((row, keys));
 
-                if (currentChunk.Count >= ChunkSize)
+                if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && memGuard.Exceeded()))
                 {
                     currentChunk.Sort(Compare);
                     var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
@@ -117,6 +120,7 @@ public class ExternalSortEngine
                     _context.Telemetry.SortSpillCount++;
                     _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
+                    memGuard.Reset();
                 }
             }
 
