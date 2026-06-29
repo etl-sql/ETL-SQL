@@ -184,10 +184,13 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 ## Scale & operator-algorithm assessment (large-tier behavior)
 
-*Verdict: the engine has genuinely strong algorithms for SORT and JOIN; the weak spots at the very
-large (≈50M) tier are GROUP BY and DISTINCT memory scaling, plus sort merge fan-in. FILTER/EXCLUDE
-are fine. The scale cert proves spill works functionally (it force-shrinks memory grants at small row
-counts) but does not exercise a true 50M tier, so these are reasoned from the code, not measured.*
+*Verdict: SORT and JOIN have genuinely strong algorithms; **plain GROUP BY is already single-pass
+incremental (O(groups))** — correcting an earlier draft that wrongly called it a gap. The real
+remaining weak spots at the ≈50M tier are: DISTINCT single-level partitioning; sort merge fan-in;
+statistical/holistic aggregates (VARIANCE/STDDEV/COVAR/CORR/PERCENTILE/STRING_AGG) that still buffer
+rows via `GenericState`; and the external aggregate spilling even when in-memory would fit.
+FILTER/EXCLUDE are fine. The scale cert proves spill works functionally (it force-shrinks memory
+grants at small row counts) but does not exercise a true 50M tier — these are reasoned from the code.*
 
 **Sound at scale (no change needed):**
 - **WHERE / FILTER** — streamed, compiled predicate per row, O(1)/row, constant memory. Scales arbitrarily.
@@ -196,7 +199,10 @@ counts) but does not exercise a true 50M tier, so these are reasoned from the co
 - **JOIN** — **grace hash join with recursive repartitioning** (partitions both sides; re-partitions oversized partitions with a depth-salted hash up to depth 8 for skew). Best-in-class.
 
 **Algorithmic gaps to address (where "large hurts"):**
-- [ ] **[Perf · High @50M] GROUP BY buffers rows, not accumulators** — `ExternalAggregateEngine` keeps `Dictionary<CompoundKey, (List<Row> Rows, …)>` — it buffers **every input row per group** (O(rows)), not running aggregate state (O(groups)). Cert: 1M rows / 10 groups = 289 MB; ≈50M / few groups → multi-GB → OOM. Fix: incremental accumulators (SUM/COUNT/AVG/MIN/MAX/etc.) keyed by group; buffer rows only for holistic aggregates (MEDIAN/PERCENTILE/STRING_AGG/COUNT DISTINCT). Biggest large-tier win, esp. **low-cardinality** GROUP BY.
+- [x] **[Perf — RE-ASSESSED; original claim was wrong for the common path]** — `AggregateEngine.ApplyAggregation` is **already single-pass incremental**: `Dictionary<CompoundKey, IAggregateState[]>` with incremental states for SUM/TOTAL/COUNT/AVG/MIN/MAX/EVERY/ANY/SOME/APPROX_COUNT_DISTINCT (O(groups); DISTINCT keeps an O(distinct) set, inherent). The external engine delegates to it per partition, so **plain GROUP BY does not buffer rows** — no OOM there. The cert's 289 MB is partition/spill overhead, not per-group row buffering. *Real, narrower gaps remain:*
+  - [ ] **[Perf · Med] Algebraic stats buffer rows** — `VARIANCE/VAR_*/STDDEV/STDEV/COVAR_*/CORR` fall to `GenericState` (`List<Row>` per group, O(rows)) yet are algebraic → give them incremental states (Welford for var/stdev; running co-moments for covar/corr).
+  - [ ] **[Perf · Low-Med] Holistic aggregates buffer whole rows** — `PERCENTILE_CONT/DISC`, `MEDIAN`, `STRING_AGG`, `GROUP_CONCAT`, `ARRAY_AGG` must buffer, but `GenericState` buffers full `Row` objects; buffer only the argument value(s) to cut memory.
+  - [ ] **[Perf · Med] External aggregate always spills when triggered** — it partitions all input to disk even when incremental in-memory aggregation would fit (low/medium cardinality). Try in-memory incremental first; partition/spill only when the group-state set exceeds a memory bound.
 - [ ] **[Perf · Med @50M] DISTINCT and GROUP BY are single-level partitioned (no recursion)** — `ExternalDistinctEngine` / `ExternalAggregateEngine` partition once into 32 then build an in-memory set/dict per partition. Unlike the join, an oversized partition is **not** recursively repartitioned, so high-cardinality input (~rows/32 distinct per partition) can still blow a partition's memory. Fix: reuse the join's recursive-repartition pattern (depth-salted hash) for distinct/aggregate partitions over threshold.
 - [ ] **[Perf · Med @50M] External sort merge fan-in is unbounded** — `ExternalSortEngine` opens **all** chunk readers at once (≈5,000 open spill readers/file-handles at 50M / 10k chunk). Cap concurrent fan-in and do a multi-pass merge when chunk count exceeds a limit.
 - [ ] **[Perf · Low] non-streaming sort entry** — `SelectExecutionEngine:528-529` calls `SortExternal(List<Row>)`, which materializes the whole input before spilling (vs the streaming `SortStreamAsync` at :521). Confirm the large-data path always takes the streaming branch.
