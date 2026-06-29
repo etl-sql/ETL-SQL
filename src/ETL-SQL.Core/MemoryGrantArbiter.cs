@@ -1,6 +1,29 @@
 using System;
 
 namespace ETL_SQL.Core;
+
+/// <summary>
+/// Controls what the RAM governor does when an in-memory operator's footprint would breach the
+/// configured memory ceiling (<c>Engine:TotalMemoryGrantMB</c>) and the operator cannot reduce it
+/// further by spilling/repartitioning.
+/// </summary>
+public enum MemoryGovernorPolicy
+{
+    /// <summary>
+    /// Default. Relieve pressure by spilling/repartitioning where possible; if an operator still
+    /// cannot fit under the ceiling (e.g. repartitioning hits the depth limit), abort the query
+    /// with a clear error rather than consuming all machine RAM.
+    /// </summary>
+    SpillOrFail,
+
+    /// <summary>
+    /// "Churn" mode. Relieve pressure by spilling/repartitioning where possible, but never fail on
+    /// memory — if an operator cannot be reduced further, let it proceed (slow, higher RAM) until
+    /// it completes. For users who do not care about time and want the result regardless.
+    /// </summary>
+    SpillOnly
+}
+
 /// <summary>
 /// Process-wide arbiter that bounds the <em>total</em> committed in-memory buffer footprint
 /// of concurrently executing queries. Each query acquires an <see cref="IMemoryGrantLease"/>

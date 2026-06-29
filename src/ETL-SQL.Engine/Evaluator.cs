@@ -283,6 +283,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public int ExternalSortChunkSize { get => _options.ExternalSortChunkSize; set => _options.ExternalSortChunkSize = value; }
     public int WindowSpillThreshold { get => _options.WindowSpillThreshold; set => _options.WindowSpillThreshold = value; }
     public int OperatorMemoryGrantMB { get => _options.OperatorMemoryGrantMB; set => _options.OperatorMemoryGrantMB = value; }
+    public MemoryGovernorPolicy MemoryGovernorPolicy { get => _options.MemoryGovernorPolicy; set => _options.MemoryGovernorPolicy = value; }
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
@@ -517,6 +518,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
         // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
         MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        MemoryGovernorPolicy = DefaultThresholds.MemoryGovernorPolicy(config);
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
 
         _options.BatchSize = BatchSize;

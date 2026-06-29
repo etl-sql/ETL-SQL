@@ -211,6 +211,12 @@ public interface IDataContext
     /// Defaults to the shared instance; unbounded until <c>Engine:TotalMemoryGrantMB</c> is set.
     /// </summary>
     IMemoryGrantArbiter MemoryArbiter => MemoryGrantArbiter.Shared;
+    /// <summary>
+    /// RAM governor policy: what an in-memory operator does when it would breach the memory ceiling
+    /// (<c>Engine:TotalMemoryGrantMB</c>, via <see cref="MemoryArbiter"/>) and cannot spill further.
+    /// Defaults to <see cref="MemoryGovernorPolicy.SpillOrFail"/>.
+    /// </summary>
+    MemoryGovernorPolicy MemoryGovernorPolicy => MemoryGovernorPolicy.SpillOrFail;
     /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
     int MaxInMemoryBatches { get; set; }
     /// <summary>Number of rows before subquery results spill to disk.</summary>

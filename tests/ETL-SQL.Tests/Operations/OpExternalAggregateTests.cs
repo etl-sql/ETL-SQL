@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
@@ -200,6 +201,117 @@ namespace ETL_SQL.Tests.Operations.Operations
             // Global aggregate (no group by) should return a single row with count = 50
             Assert.Single(result);
             Assert.Equal(50m, Convert.ToDecimal(result[0]["cnt"]));
+        }
+
+        // ── RAM governor ──────────────────────────────────────────────────────
+        // These force a tiny memory ceiling so the in-memory build trips the governor.
+        // ExternalHashPartitions=2 keeps a depth-0 partition above the 8192-row sampling
+        // interval so the heap-growth check actually fires.
+
+        private static IAsyncEnumerable<Row> MakeGroupedRows(int count, int distinctGroups)
+        {
+            return Create(count, distinctGroups).ToAsyncEnumerable();
+            static IEnumerable<Row> Create(int n, int groups)
+            {
+                for (int i = 0; i < n; i++)
+                    yield return new Row { ["category"] = "g" + (i % groups), ["value"] = (decimal)(i + 1) };
+            }
+        }
+
+        private static (List<Expression> groupBy, List<SelectColumn> cols, List<string> names) CountSumByCategory()
+        {
+            var groupBy = new List<Expression> { new IdentifierExpression("category") };
+            var cols = new List<SelectColumn>
+            {
+                new SelectColumn(new IdentifierExpression("category"), "category"),
+                new SelectColumn(new FunctionCallExpression("COUNT", new List<Expression>{ new IdentifierExpression("value") }), "cnt"),
+                new SelectColumn(new FunctionCallExpression("SUM", new List<Expression>{ new IdentifierExpression("value") }), "s"),
+            };
+            return (groupBy, cols, new List<string> { "category", "cnt", "s" });
+        }
+
+        [Fact]
+        public async Task Governor_SpillOrFail_HighCardinality_CompletesViaRepartition()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1; // 1 byte → any heap growth trips the governor
+            try
+            {
+                const int rows = 30000, groups = 3000;
+                var (groupBy, cols, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    MakeGroupedRows(rows, groups), groupBy, cols, names).ToListAsync();
+
+                // High cardinality CAN be split, so SpillOrFail completes via recursive repartition.
+                Assert.Equal(groups, result.Count);
+                Assert.All(result, r => Assert.Equal(10m, Convert.ToDecimal(r["cnt"]))); // each group appears rows/groups times
+                decimal totalSum = result.Sum(r => Convert.ToDecimal(r["s"]));
+                Assert.Equal((decimal)rows * (rows + 1) / 2, totalSum); // no rows lost or duplicated
+            }
+            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
+        }
+
+        // A single-group holistic GROUP_CONCAT buffers every row (GenericState), so its live heap
+        // growth is large and unambiguous — making the governor trigger deterministic regardless of
+        // GC timing (unlike an O(1) COUNT whose live state is a handful of bytes).
+        private static (List<Expression> groupBy, List<SelectColumn> cols, List<string> names) ConcatByCategory()
+        {
+            var groupBy = new List<Expression> { new IdentifierExpression("category") };
+            var cols = new List<SelectColumn>
+            {
+                new SelectColumn(new IdentifierExpression("category"), "category"),
+                new SelectColumn(new FunctionCallExpression("GROUP_CONCAT", new List<Expression>{ new IdentifierExpression("value") }), "g"),
+            };
+            return (groupBy, cols, new List<string> { "category", "g" });
+        }
+
+        [Fact]
+        public async Task Governor_SpillOrFail_UnsplittablePartition_Throws()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                // One group → all rows hash to one partition that can't be split → SpillOrFail aborts.
+                var (groupBy, cols, names) = ConcatByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
+                    await engine.ApplyAggregationExternal(
+                        MakeGroupedRows(20000, distinctGroups: 1), groupBy, cols, names).ToListAsync());
+            }
+            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
+        }
+
+        [Fact]
+        public async Task Governor_SpillOnly_Churns_ProducesCorrectResult()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                // Same unsplittable single group + holistic buffering, but churn mode completes.
+                var (groupBy, cols, names) = ConcatByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    MakeGroupedRows(20000, distinctGroups: 1), groupBy, cols, names).ToListAsync();
+
+                Assert.Single(result);
+                Assert.False(string.IsNullOrEmpty(result[0]["g"]?.ToString()));
+            }
+            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
         }
 
         [Fact]

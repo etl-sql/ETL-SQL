@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
@@ -17,6 +19,11 @@ namespace ETL_SQL.Engine.Engines;
 /// </summary>
 public class ExternalAggregateEngine
 {
+    // Mirrors ExternalJoinEngine/ExternalDistinctEngine: cap recursive repartition depth so a
+    // partition that cannot be split (e.g. a single huge group) falls back to the governor policy
+    // instead of recursing forever.
+    private const int MaxRecursivePartitionDepth = 8;
+
     private readonly IExecutionContext _context;
     private readonly ILogger _logger;
     private readonly AggregateEngine _inMemoryEngine;
@@ -40,6 +47,7 @@ public class ExternalAggregateEngine
         string[]? partitionPaths = null;
         long[]? partitionRowCounts = null;
         long[][]? setCounts = null; // per-(partition, set) counts for the grouping-set path
+        var tempFiles = new List<string>(); // sub-partition files created by governor repartitioning
         try
         {
             // 1. Partition Phase (supports one-pass expansion for grouping sets)
@@ -77,16 +85,8 @@ public class ExternalAggregateEngine
                     if (partitionRowCounts?[partitionIndex] == 0)
                         continue;
 
-                    await using var directReader = await _context.SpillStore.CreateReaderAsync(name);
-                    var partResults = await _inMemoryEngine.ApplyAggregation(
-                        directReader.AsEnumerableAsync(),
-                        groupBy,
-                        finalColumns,
-                        colNames,
-                        havingClause);
-
-                    _context.Telemetry.AggregateGroupsCount += partResults.Count;
-                    foreach (var resRow in partResults)
+                    await foreach (var resRow in AggregatePartitionGoverned(
+                        name, groupBy, finalColumns, colNames, havingClause, depth: 0, tempFiles))
                     {
                         yieldedAny = true;
                         yield return resRow;
@@ -170,21 +170,152 @@ public class ExternalAggregateEngine
         }
         finally
         {
-            if (partitionPaths != null)
+            var allPartitionFiles = new List<string>(tempFiles);
+            if (partitionPaths != null) allPartitionFiles.AddRange(partitionPaths);
+            foreach (var path in allPartitionFiles)
             {
-                foreach (var path in partitionPaths)
+                try
                 {
-                    try
-                    {
-                        _context.SpillStore.DeleteChunk(path);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Warning($"Error cleaning up external aggregate partition {path}: {ex.Message}");
-                    }
+                    _context.SpillStore.DeleteChunk(path);
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warning($"Error cleaning up external aggregate partition {path}: {ex.Message}");
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Aggregates one spilled partition under the RAM governor. The partition is built in memory with
+    /// a heap-growth ceiling (<c>Engine:TotalMemoryGrantMB</c>); if that ceiling is breached the
+    /// partition is recursively repartitioned (depth-salted hash, so identical group keys co-locate)
+    /// until each sub-partition fits, or — when it cannot be split further — the governor policy
+    /// applies (SpillOrFail throws; SpillOnly churns the build to completion ungoverned).
+    /// </summary>
+    private async IAsyncEnumerable<Row> AggregatePartitionGoverned(
+        string name, List<Expression>? groupBy, List<SelectColumn> finalColumns,
+        List<string> colNames, Expression? havingClause, int depth, List<string> tempFiles)
+    {
+        long ceiling = _context.MemoryArbiter?.TotalBudgetBytes ?? 0;
+
+        // Governor off (no ceiling configured): original unbounded behavior.
+        if (ceiling <= 0)
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            var plain = await _inMemoryEngine.ApplyAggregation(
+                reader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause);
+            _context.Telemetry.AggregateGroupsCount += plain.Count;
+            foreach (var r in plain) yield return r;
+            yield break;
+        }
+
+        List<Row>? results = null;
+        try
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            results = await _inMemoryEngine.ApplyAggregation(
+                reader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause, null, ceiling);
+        }
+        catch (AggregateMemoryPressureException)
+        {
+            // results stays null → repartition / policy below.
+        }
+
+        if (results != null)
+        {
+            _context.Telemetry.AggregateGroupsCount += results.Count;
+            foreach (var r in results) yield return r;
+            yield break;
+        }
+
+        // Under memory pressure. Try to split this partition further (only useful for multi-group
+        // partitions; a single huge group routes entirely to one sub-partition and won't reduce).
+        if (PartitionCount > 1 && depth < MaxRecursivePartitionDepth && groupBy != null && groupBy.Count > 0)
+        {
+            var sub = await RepartitionAggPartition(name, groupBy, depth + 1, tempFiles);
+            var usedSub = sub.RowCounts.Count(c => c > 0);
+            var largestSub = sub.RowCounts.Length == 0 ? 0 : sub.RowCounts.Max();
+            var originalCount = sub.RowCounts.Sum();
+
+            if (usedSub > 1 && largestSub < originalCount)
+            {
+                _logger.Debug("[MEMORY_GOVERNOR] Repartitioned aggregate partition at depth {Depth} into {Used} sub-partitions under memory pressure.", depth + 1, usedSub);
+                for (var i = 0; i < sub.Names.Length; i++)
+                {
+                    if (sub.RowCounts[i] == 0) continue;
+                    await foreach (var r in AggregatePartitionGoverned(sub.Names[i], groupBy, finalColumns, colNames, havingClause, depth + 1, tempFiles))
+                        yield return r;
+                }
+                yield break;
+            }
+        }
+
+        // Cannot reduce further → apply governor policy.
+        if (_context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail)
+        {
+            throw new ExecutionException(
+                "GROUP BY exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be reduced further by repartitioning. " +
+                "Increase Engine:TotalMemoryGrantMB, reduce grouping cardinality, or set Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
+        }
+
+        _logger.Warning("[MEMORY_GOVERNOR] Aggregate partition could not be reduced under the memory ceiling; churning to completion (MemoryGovernorPolicy=SpillOnly).");
+        await using var churnReader = await _context.SpillStore.CreateReaderAsync(name);
+        var churn = await _inMemoryEngine.ApplyAggregation(
+            churnReader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause);
+        _context.Telemetry.AggregateGroupsCount += churn.Count;
+        foreach (var r in churn) yield return r;
+    }
+
+    /// <summary>
+    /// Re-partitions an already-spilled aggregate partition into <see cref="PartitionCount"/> new
+    /// sub-partitions using a depth-salted hash of the GROUP BY keys, so identical group keys still
+    /// co-locate while different keys spread across sub-partitions.
+    /// </summary>
+    private async Task<PartitionResult> RepartitionAggPartition(string sourceName, List<Expression> groupBy, int depth, List<string> tempFiles)
+    {
+        var names = new string[PartitionCount];
+        var rowCounts = new long[PartitionCount];
+        var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
+        var prefix = Guid.NewGuid().ToString("N");
+        for (int i = 0; i < PartitionCount; i++)
+        {
+            names[i] = $"agg_d{depth}_{prefix}_{i}.tmp";
+            tempFiles.Add(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+        }
+
+        try
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(sourceName);
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                var vals = new object?[groupBy.Count];
+                for (int i = 0; i < groupBy.Count; i++)
+                {
+                    var rawVal = await _context.EvaluateValue(groupBy[i], row);
+                    vals[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(rawVal);
+                }
+                int pIdx = (new ETL_SQL.Data.CompoundKey(depth, vals).GetHashCode() & 0x7FFFFFFF) % PartitionCount;
+                rowCounts[pIdx]++;
+                await writers[pIdx].WriteRowAsync(row);
+            }
+        }
+        finally
+        {
+            int used = 0;
+            foreach (var w in writers)
+            {
+                if (w != null)
+                {
+                    used++;
+                    await w.DisposeAsync();
+                }
+            }
+            _context.Telemetry.PartitionsCount += used;
+        }
+
+        return new PartitionResult(names, rowCounts);
     }
 
     private sealed record PartitionResult(string[] Names, long[] RowCounts);

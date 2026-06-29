@@ -1,4 +1,5 @@
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine.Services;
@@ -46,6 +47,19 @@ public static class DefaultThresholds
     /// </summary>
     public static int TotalMemoryGrantMB(IConfiguration? config)
         => config?.GetValue<int?>("Engine:TotalMemoryGrantMB") ?? 0;
+
+    /// <summary>
+    /// RAM governor policy when an in-memory operator would breach the <see cref="TotalMemoryGrantMB"/>
+    /// ceiling and cannot spill further: <c>SpillOrFail</c> (default — abort with a clear error) or
+    /// <c>SpillOnly</c> (churn: keep going regardless of time/RAM).
+    /// </summary>
+    public static MemoryGovernorPolicy MemoryGovernorPolicy(IConfiguration? config)
+    {
+        var s = config?.GetValue<string>("Engine:MemoryGovernorPolicy");
+        return Enum.TryParse<MemoryGovernorPolicy>(s, ignoreCase: true, out var policy)
+            ? policy
+            : Core.MemoryGovernorPolicy.SpillOrFail;
+    }
 
     public static long TempTableSpillThresholdRows(IConfiguration? config)
         => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;

@@ -10,11 +10,27 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines;
+
+/// <summary>
+/// Internal signal raised by <see cref="AggregateEngine.ApplyAggregation"/> when its in-memory
+/// group state grows past the RAM governor ceiling. The external aggregate engine catches this to
+/// repartition the offending partition (or apply the governor policy), rather than letting the
+/// in-memory build consume unbounded RAM.
+/// </summary>
+internal sealed class AggregateMemoryPressureException : Exception
+{
+    public AggregateMemoryPressureException(string message) : base(message) { }
+}
+
 /// <summary>
 /// Core engine for performing in-memory aggregations (SUM, AVG, MIN, MAX, COUNT, etc.) with GROUP BY and HAVING support.
 /// </summary>
 public class AggregateEngine
 {
+    // How often (in rows consumed) the single-pass build samples managed heap growth against the
+    // governor ceiling. Sampling is cheap but not free, so we only check periodically.
+    private const int MemoryCheckRowInterval = 8192;
+
     private readonly IExecutionContext _context;
     private readonly ILogger _logger;
 
@@ -25,7 +41,13 @@ public class AggregateEngine
     }
 
     /// <summary>Applies aggregation logic to a stream of rows, grouping them and calculating aggregate functions.</summary>
-    public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
+    /// <param name="memoryCeilingBytes">
+    /// When &gt; 0, the single-pass group build samples managed-heap growth and throws
+    /// <see cref="AggregateMemoryPressureException"/> once this operation's heap growth exceeds the
+    /// ceiling, so the caller (external aggregate engine) can repartition instead of growing
+    /// unbounded. 0 (default) disables the check — all existing callers are unaffected.
+    /// </param>
+    public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long memoryCeilingBytes = 0)
     {
         // When groupingSet is present, expand into multiple GROUP BY passes and union the results.
         if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
@@ -39,7 +61,7 @@ public class AggregateEngine
             foreach (var activeGroupBy in expandedSets)
             {
                 // Pass the materialized list to avoid further materialization in recursive calls
-                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null);
+                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null, memoryCeilingBytes);
 
                 // Mark which columns were NULL-substituted (GROUPING() support)
                 var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
@@ -123,8 +145,21 @@ public class AggregateEngine
         // Single-Pass Aggregation
         var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
 
+        // RAM governor: sample managed-heap growth for this build and bail out (so the caller can
+        // repartition) before the in-memory group state / buffered rows consume unbounded RAM.
+        long heapBaseline = memoryCeilingBytes > 0 ? GC.GetTotalMemory(false) : 0;
+        int rowsSinceMemoryCheck = 0;
+
         await foreach (var row in inputStream)
         {
+            if (memoryCeilingBytes > 0 && ++rowsSinceMemoryCheck >= MemoryCheckRowInterval)
+            {
+                rowsSinceMemoryCheck = 0;
+                if (GC.GetTotalMemory(false) - heapBaseline > memoryCeilingBytes)
+                    throw new AggregateMemoryPressureException(
+                        $"Aggregation in-memory state exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB of growth).");
+            }
+
             CompoundKey key;
             if (groupBy != null && groupBy.Count > 0)
             {
