@@ -11,21 +11,23 @@
       ./certification-results/cert-report.md       — human-readable table
 
 .PARAMETER Tier
-    Run only tests for a specific tier: Smoke (default), Standard, Stress, Provider, or All.
+    Run only tests for a specific tier: Smoke (default), Standard, Stress, Huge, Provider, or All.
+    Huge (~50M+ rows, 1000x) is opt-in only — it is NOT included in 'All' because it requires a
+    capable host (large RAM, free disk for spill, and significant time).
 
 .PARAMETER OutDir
     Directory to write report files (default: ./certification-results).
 
 .PARAMETER RowCountScale
     Multiplier applied to row counts. When omitted or <= 0, defaults by tier:
-    Smoke=1.0, Standard=10.0, Stress=100.0, Provider=1.0, All=1.0.
+    Smoke=1.0, Standard=10.0, Stress=100.0, Huge=1000.0, Provider=1.0, All=1.0.
 
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
 #>
 param(
-    [ValidateSet('Smoke', 'Standard', 'Stress', 'Provider', 'All')]
+    [ValidateSet('Smoke', 'Standard', 'Stress', 'Huge', 'Provider', 'All')]
     [string]$Tier = 'Smoke',
 
     [string]$OutDir = './certification-results',
@@ -42,6 +44,7 @@ if ($RowCountScale -le 0) {
     $RowCountScale = switch ($Tier) {
         'Standard' { 10.0 }
         'Stress'   { 100.0 }
+        'Huge'     { 1000.0 }
         default    { 1.0 }
     }
 }
@@ -75,6 +78,8 @@ if ($Tier -eq 'Standard') {
     $env:CERT_STANDARD_ROW_SCALE = $RowCountScale
 } elseif ($Tier -eq 'Stress') {
     $env:CERT_STRESS_ROW_SCALE = $RowCountScale
+} elseif ($Tier -eq 'Huge') {
+    $env:CERT_HUGE_ROW_SCALE = $RowCountScale
 } elseif ($Tier -eq 'Provider') {
     $env:CERT_PROVIDER_ROW_SCALE = $RowCountScale
 } elseif ($Tier -eq 'All') {

@@ -301,6 +301,22 @@ namespace ETL_SQL.Tests.Scale
         }
 
         [Fact]
+        [Trait("Tier", "Huge")]
+        public Task Cert_Huge_SmokeScenarioSet_RowScale1000()
+        {
+            // ~50M+ rows (1000x of the 50k base). Very heavy — opt-in only, and needs a capable host
+            // (lots of RAM, free disk for spill, and time). Run with a real 50M tier to measure the
+            // large-tier behavior (external sort merge fan-in, DISTINCT high-cardinality partitions,
+            // statistical/holistic aggregate buffering, external-aggregate spill).
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CERT_HUGE_ROW_SCALE")))
+            {
+                _out.WriteLine("SKIP: Set CERT_HUGE_ROW_SCALE to run huge-tier scale tests (1000x ~= 50M+ rows; capable host required).");
+                return Task.CompletedTask;
+            }
+            return RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_HUGE_ROW_SCALE", 1000.0), "Huge");
+        }
+
+        [Fact]
         [Trait("Tier", "Provider")]
         [Trait("CertificationClass", "LocalReal")]
         public Task Cert_Provider_LocalFileConnectors_RowScale1()
