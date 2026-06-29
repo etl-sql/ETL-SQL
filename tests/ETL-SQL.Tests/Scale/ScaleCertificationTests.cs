@@ -202,6 +202,9 @@ namespace ETL_SQL.Tests.Scale
                 {
                     WriteProgress(certificationTier, i + 1, scenarios.Length, scenarios[i].Name);
                     await scenarios[i].Run();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
                 }
                 WriteProgress(certificationTier, scenarios.Length, scenarios.Length, "done");
             }

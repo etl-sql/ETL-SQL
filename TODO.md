@@ -179,7 +179,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [x] **[Perf · Med] `AsNoTracking` gap** — was 32 `AsNoTracking` vs 89 `ToListAsync`. *(Fixed: Added AsNoTracking to all read-only query paths in ReportsController, SubscriptionsController, and DatasetController to eliminate EF change-tracking overhead.)*
 
 - [x] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries. *(Fixed: Audited and optimized Reports, Subscriptions, and Datasets controllers. Optimized report matches lookup in SubscriptionsController to run case-insensitive matching on the DB instead of loading all reports in memory.)*
-- [ ] Connector streaming vs full-buffer reads on large payloads (per-connector).
+- [x] Connector streaming vs full-buffer reads on large payloads (per-connector). *(Verified: All key relational (Postgres, SqlServer, MySql, Oracle, Odbc, Sqlite, Snowflake) and file/API (REST, Excel, FlatFile, AzureBlob, SFTP, FTP, S3) connectors implement ReadBatchesCore via IAsyncEnumerable and stream rows incrementally using ReadAsync / stream-parsing rather than buffering the entire payload.)*
 
 ## Scale & operator-algorithm assessment (large-tier behavior)
 
