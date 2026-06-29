@@ -1,6 +1,10 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Pin transitive package versions to the central versions too, so test-only transitive deps
+         can't drag in a different patch (e.g. System.CommandLine/Microsoft.Data.Sqlite/System.Data.Odbc
+         10.0.8 next to the 10.0.9 the src projects use) and trigger MSB3277 assembly-conflict warnings. -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <PropertyGroup>
     <MicrosoftExtensionsVersion>10.0.9</MicrosoftExtensionsVersion>
