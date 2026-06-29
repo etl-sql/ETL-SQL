@@ -454,7 +454,11 @@ namespace ETL_SQL.Connectors.Postgres
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
             {
-                if (p.StartsWith("\"")) return p;
+                if (p.StartsWith('"') && p.EndsWith('"') && p.Length >= 2)
+                {
+                    var unquoted = p.Substring(1, p.Length - 2).Replace("\"", "\"\"");
+                    return $"\"{unquoted}\"";
+                }
                 // For Postgres, we only quote if the identifier contains special characters 
                 // that REQUIRE quoting. This prevents accidental case-sensitivity issues.
                 bool needsQuoting = p.Any(c => !char.IsLetterOrDigit(c) && c != '_');

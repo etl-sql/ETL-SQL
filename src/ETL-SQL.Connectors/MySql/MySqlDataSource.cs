@@ -463,7 +463,11 @@ namespace ETL_SQL.Connectors.MySql
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
             {
-                if (p.StartsWith("`")) return p;
+                if (p.StartsWith('`') && p.EndsWith('`') && p.Length >= 2)
+                {
+                    var unquoted = p.Substring(1, p.Length - 2).Replace("`", "``");
+                    return $"`{unquoted}`";
+                }
                 bool needsQuoting = p.Any(c => !char.IsLetterOrDigit(c) && c != '_');
                 return needsQuoting ? $"`{p.Replace("`", "``")}`" : p;
             }));

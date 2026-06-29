@@ -396,7 +396,14 @@ namespace ETL_SQL.Connectors.BigQuery
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
-                p.StartsWith('`') ? p : $"`{p.Replace("`", "\\`")}`"));
+            {
+                if (p.StartsWith('`') && p.EndsWith('`') && p.Length >= 2)
+                {
+                    var unquoted = p.Substring(1, p.Length - 2).Replace("`", "\\`");
+                    return $"`{unquoted}`";
+                }
+                return $"`{p.Replace("`", "\\`")}`";
+            }));
         }
     }
 }

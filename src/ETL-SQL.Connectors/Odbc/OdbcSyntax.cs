@@ -36,8 +36,22 @@ namespace ETL_SQL.Connectors.Odbc
         public static string QuoteIdentifier(string identifier)
         {
             if (string.IsNullOrWhiteSpace(identifier)) return identifier;
-            if (identifier.StartsWith("\"") || identifier.StartsWith("[")) return identifier;
-            return $"\"{identifier}\"";
+
+            // Handle bracketed identifiers: e.g. [my_table]
+            if (identifier.StartsWith('[') && identifier.EndsWith(']') && identifier.Length >= 2)
+            {
+                var unquoted = identifier.Substring(1, identifier.Length - 2).Replace("]", "]]");
+                return $"[{unquoted}]";
+            }
+
+            // Handle double-quoted identifiers: e.g. "my_table"
+            if (identifier.StartsWith('"') && identifier.EndsWith('"') && identifier.Length >= 2)
+            {
+                var unquoted = identifier.Substring(1, identifier.Length - 2).Replace("\"", "\"\"");
+                return $"\"{unquoted}\"";
+            }
+
+            return $"\"{identifier.Replace("\"", "\"\"")}\"";
         }
     }
 }

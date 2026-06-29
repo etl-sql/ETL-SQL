@@ -48,7 +48,7 @@ namespace ETL_SQL.Orchestrator.Storage
             // (PostgreSQL folds unquoted identifiers to lower case).
             var columns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             using var cmd = connection.CreateCommand();
-            cmd.CommandText = $"PRAGMA table_info({table});";
+            cmd.CommandText = $"PRAGMA table_info(\"{table.Replace("\"", "\"\"")}\");";
             using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct)) columns.Add(reader.GetString(1));
             return columns;
