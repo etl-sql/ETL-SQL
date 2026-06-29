@@ -39,6 +39,7 @@ public class ExternalAggregateEngine
         bool yieldedAny = false;
         string[]? partitionPaths = null;
         long[]? partitionRowCounts = null;
+        long[][]? setCounts = null; // per-(partition, set) counts for the grouping-set path
         try
         {
             // 1. Partition Phase (supports one-pass expansion for grouping sets)
@@ -47,7 +48,9 @@ public class ExternalAggregateEngine
             if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
             {
                 expandedSets = _inMemoryEngine.ExpandGroupingSets(groupingSet);
-                partitionPaths = await PartitionStreamMultiSet(inputStream, expandedSets);
+                var multiSet = await PartitionStreamMultiSet(inputStream, expandedSets);
+                partitionPaths = multiSet.Names;
+                setCounts = multiSet.SetCounts;
 
                 // Ensure we have a reference list of ALL participating columns for NULL substitution later
                 if (groupBy == null || groupBy.Count == 0)
@@ -92,46 +95,26 @@ public class ExternalAggregateEngine
                     continue;
                 }
 
-                await using var reader = await _context.SpillStore.CreateReaderAsync(name);
-                var groups = new Dictionary<CompoundKey, (List<Row> Rows, int SetIndex)>();
-
-                await foreach (var row in reader.AsEnumerableAsync())
+                // Aggregate each grouping set incrementally: stream the partition once per set into the
+                // (already single-pass, O(groups)) in-memory engine, instead of buffering every partition
+                // row in a Dictionary<key, List<Row>>. The old buffering was O(rows-in-partition) and the
+                // main RAM risk for CUBE/ROLLUP at scale; this trades a per-set re-read of the partition
+                // file for bounded memory.
+                for (int setIdx = 0; setIdx < expandedSets.Count; setIdx++)
                 {
-                    // Extract metadata (SetIndex) stored in the partition row
-                    int setIndex = Convert.ToInt32(row["__SET_IDX"] ?? 0);
-                    var activeGroupBy = expandedSets != null ? expandedSets[setIndex] : groupBy;
+                    // Skip (partition, set) pairs with no rows — calling the in-memory engine on an empty
+                    // stream would emit a spurious global-aggregate row.
+                    if (setCounts != null && setCounts[partitionIndex][setIdx] == 0) continue;
 
-                    CompoundKey key;
-                    if (activeGroupBy != null && activeGroupBy.Count > 0)
-                    {
-                        var vals = new object?[activeGroupBy.Count];
-                        for (int i = 0; i < activeGroupBy.Count; i++)
-                        {
-                            var colKey = activeGroupBy[i].ToSql();
-                            var rawVal = row.Columns.TryGetValue(colKey, out var v) ? v : await _context.EvaluateValue(activeGroupBy[i], row);
-                            vals[i] = SpillSerializationHelper.UnwrapValue(rawVal);
-                        }
-                        key = new CompoundKey(setIndex, vals);
-                    }
-                    else key = new CompoundKey(setIndex, "GLOBAL");
+                    var activeGroupBy = expandedSets[setIdx];
+                    var partResults = await _inMemoryEngine.ApplyAggregation(
+                        ReadPartitionForSet(name, setIdx), activeGroupBy, finalColumns, colNames, havingClause);
 
-                    if (!groups.TryGetValue(key, out var bucket))
-                    {
-                        bucket = (new List<Row>(), setIndex);
-                        groups[key] = bucket;
-                    }
-                    bucket.Rows.Add(row);
-                }
-
-                foreach (var bucket in groups.Values)
-                {
-                    var activeGroupBy = expandedSets != null ? expandedSets[bucket.SetIndex] : groupBy;
-                    var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause);
-
+                    if (partResults.Count == 0) continue;
                     _context.Telemetry.AggregateGroupsCount += partResults.Count;
 
                     // Handle GROUPING() / NULL substitution for sub-sets
-                    if (expandedSets != null && groupBy != null)
+                    if (groupBy != null)
                     {
                         var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
                         foreach (var row in partResults)
@@ -256,10 +239,15 @@ public class ExternalAggregateEngine
         return new PartitionResult(names, rowCounts);
     }
 
-    private async Task<string[]> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
+    private async Task<MultiSetPartitionResult> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
     {
         var names = new string[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
+        // Per-(partition, set) row counts so the aggregate phase can skip empty (partition, set) pairs
+        // — otherwise an empty per-set stream would trigger the in-memory engine's "no rows but
+        // aggregates → emit a global row" fallback and produce spurious result rows.
+        var setCounts = new long[PartitionCount][];
+        for (int i = 0; i < PartitionCount; i++) setCounts[i] = new long[sets.Count];
         var prefix = Guid.NewGuid().ToString("N");
         for (int i = 0; i < PartitionCount; i++)
         {
@@ -298,6 +286,7 @@ public class ExternalAggregateEngine
                     // and doesn't interfere with other sets or buffered writers.
                     var rowToStore = row.Clone();
                     rowToStore["__SET_IDX"] = sIdx;
+                    setCounts[pIdx][sIdx]++;
                     await writers[pIdx].WriteRowAsync(rowToStore);
                 }
             }
@@ -317,10 +306,23 @@ public class ExternalAggregateEngine
             if (totalInput > 0) _context.Telemetry.AggregateExpansionRatio = (double)totalExpanded / totalInput;
             _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.Telemetry.AggregateExpansionRatio);
         }
-        return names;
+        return new MultiSetPartitionResult(names, setCounts);
     }
 
+    private sealed record MultiSetPartitionResult(string[] Names, long[][] SetCounts);
 
+
+
+    /// <summary>Streams a spilled partition, yielding only the rows tagged with the given grouping-set index.</summary>
+    private async IAsyncEnumerable<Row> ReadPartitionForSet(string name, int setIdx)
+    {
+        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        await foreach (var row in reader.AsEnumerableAsync())
+        {
+            if (Convert.ToInt32(row["__SET_IDX"] ?? 0) == setIdx)
+                yield return row;
+        }
+    }
 
     private string NormalizedToSql(Expression e)
     {
