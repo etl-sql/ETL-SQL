@@ -162,8 +162,23 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] **[Security · Low · verify] `Process.Start` sites** — `App/EngineRunner.cs:1125,1573` spawn external executables (by design for script `exec`/Docker — this is exactly what v0.14.0 Phase 3.5 process-enforcement must gate; cross-reference). `UseShellExecute=true` URL/path launchers in `TUI/ConsoleEditor.cs:657,659`, `TUI/ReportLauncher.cs`, `ReportPlayer/Program.cs`, `ReportBuilder.CLI/Program.cs` open local files/URLs — confirm targets are trusted/local, not attacker-influenced.
 - _Verified non-issues:_ no `BinaryFormatter`/`TypeNameHandling`/`JavaScriptSerializer`; `XmlDataSource.cs:148` is **XXE-safe** (on .NET Core+/.NET 10 `XmlReaderSettings` defaults to `DtdProcessing.Prohibit` + `XmlResolver = null`); large `ReadToEnd`/`ReadAllBytes` hits are bounded (decrypt buffers, 32-byte key file, small embedded resources); no `new Regex` over **user input without a timeout** at match time except the `ValidationRegex` item above.
 
-### Round 2 — deeper per-file review still owed (likely where the performance bulk is)
-- [ ] **Engine performance pass** — `Evaluator`, `ExpressionEvaluator`, `SelectExecutionEngine`, and the external `Aggregate`/`Window`/`Join`/`Sort`/`Distinct` engines: unbounded `.ToList()` materialization in streaming paths, repeated enumeration, per-row allocations/boxing, redundant re-parse/re-analysis.
-- [ ] **ReportPortal / ReportPortal.Data EF review** — N+1 queries, missing `AsNoTracking()` on read paths, client-side evaluation, and index coverage for the hot admin/metrics/audit queries.
-- [ ] **Connector streaming** — full-buffer reads (`ReadAllBytes`/`ReadToEnd`) on large payloads vs. streaming; per-row boxing.
+### Round 2 — deep performance pass (engine execution paths + Portal EF)
+
+**Engine — findings:**
+- [ ] **[Perf · Med] `Engines/SelectExecutionEngine.cs:884-935`** (per-row sort-key extraction) — for every row, ORDER BY key resolution repeats **row-invariant** column lookups: `colNames.Contains`/`FindIndex`, `finalColumns.FirstOrDefault`/`IndexOf`. That's O(rows × orderKeys × columns). Precompute a per-query resolution plan once (each ORDER BY expr → resolved column index / compiled delegate), then the per-row loop is O(orderKeys) direct lookups. Largest win on big sorted result sets.
+
+**Engine — verified well-optimized (no action):**
+- Expressions are **pre-compiled once** via `RowExpressionCompiler` (`StreamingQueryEngine`, `SelectExecutionEngine` build `compiled*` arrays before the row loop) — no per-row recompilation.
+- GROUP BY keys use a `CompoundKey` **struct** with 1/2/3-arg specializations (`AggregateEngine`) — no per-row string-key allocation/boxing.
+- Results **stream** as `IAsyncEnumerable<DataTable>` batches; external Aggregate/Window/Join/Sort engines spill, and their `.ToList()` calls operate on bounded chunks, not the whole result.
+- No string concatenation in hot loops (the `+=` sites are numeric accumulators); `JoinEngine` `IndexOf` is per-batch schema building, not per-row.
+
+**ReportPortal EF — findings:**
+- [ ] **[Perf · Med] `Controllers/AdminController.cs:134-151`** (user search) — when a search term is present it loads the **entire** users table with `Include(UserGroups).ThenInclude(Group)` into memory, then filters and paginates in C#. Root cause: `Contains(term, StringComparison.OrdinalIgnoreCase)` is not EF-translatable, forcing client-side evaluation. Fix: filter server-side with `EF.Functions.Like(...)` (or `.Contains(term)` relying on the column collation) and `Skip/Take` in SQL, as the non-search branch already does.
+- [ ] **[Perf · Med] `AdminController.cs:294` N+1** — `BulkUpdateUserStatus` queries each user individually in a loop (also re-confirmed here); batch with `Where(u => ids.Contains(u.Id))`. Re-check `users/bulk-status`, group member add/remove for the same shape.
+- [ ] **[Perf · Med] `AsNoTracking` gap** — 32 `AsNoTracking` vs 89 `ToListAsync` across the Portal; add `AsNoTracking()` to read-only endpoints (admin lists, metrics, catalogs, audit) so EF skips change tracking on data that is never saved.
+
+**Still owed (lower priority — not yet read line-by-line):**
+- [ ] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries.
+- [ ] Connector streaming vs full-buffer reads on large payloads (per-connector).
 
