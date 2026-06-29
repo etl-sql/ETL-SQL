@@ -40,13 +40,36 @@ public static class DefaultThresholds
         => config?.GetValue<int?>("Engine:OperatorMemoryGrantMB") ?? 256;
 
     /// <summary>
-    /// Process-wide ceiling (MB) on the summed in-memory buffer footprint across concurrent
-    /// operators and jobs. 0 (the default when unset) means unbounded — only the per-operator
-    /// grant and row-count backstops apply. Generous by design so single queries are unaffected;
-    /// it engages under genuine concurrent multi-GB pressure.
+    /// Process-wide RAM-governor ceiling (MB) on the summed in-memory buffer footprint across
+    /// concurrent operators and jobs (the external engines spill/repartition to stay under it).
+    /// Resolution of <c>Engine:TotalMemoryGrantMB</c>:
+    /// <list type="bullet">
+    /// <item><b>&gt; 0</b> — explicit absolute ceiling in MB (overrides auto; use for containers/shared hosts).</item>
+    /// <item><b>0</b> — unbounded; the governor is off (power-user escape hatch — risks consuming all RAM).</item>
+    /// <item><b>unset or &lt; 0</b> — auto: ~80% of physical RAM (honors container limits), floored at 512 MB.</item>
+    /// </list>
     /// </summary>
     public static int TotalMemoryGrantMB(IConfiguration? config)
-        => config?.GetValue<int?>("Engine:TotalMemoryGrantMB") ?? 0;
+    {
+        var configured = config?.GetValue<int?>("Engine:TotalMemoryGrantMB");
+        if (configured is int v && v >= 0) return v; // >0 absolute, 0 = unbounded
+        return AutoMemoryGrantMB();                   // null or negative => auto
+    }
+
+    /// <summary>
+    /// Auto memory-grant ceiling: ~80% of physical RAM, floored at 512 MB. Uses the GC's view of
+    /// available memory, which honors container/cgroup limits, so it scales from a 2 GB container to
+    /// a 128 GB server without per-host tuning.
+    /// </summary>
+    internal static int AutoMemoryGrantMB()
+    {
+        long totalBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        if (totalBytes <= 0) return 4096; // unknown environment — safe fallback
+        long autoMB = (long)(totalBytes * 0.80 / (1024 * 1024));
+        if (autoMB < 512) autoMB = 512;
+        if (autoMB > int.MaxValue) autoMB = int.MaxValue;
+        return (int)autoMB;
+    }
 
     /// <summary>
     /// RAM governor policy when an in-memory operator would breach the <see cref="TotalMemoryGrantMB"/>

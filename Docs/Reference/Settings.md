@@ -65,7 +65,8 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:ExternalSortChunkSize` | integer | `10000` | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | Run size in rows for sorting buffers spilled to disk. |
 | `Engine:WindowSpillThreshold` | integer | `10000` | `SET WINDOW_SPILL_THRESHOLD = n` | Rows in a partition before window functions spill to disk. |
 | `Engine:OperatorMemoryGrantMB` | integer | `256` | `SET OPERATOR_MEMORY_GRANT = n` | RAM granted per execution operator in MB. |
-| `Engine:TotalMemoryGrantMB` | integer | `4096` | — | RAM ceiling allocated to the engine execution process (4GB). |
+| `Engine:TotalMemoryGrantMB` | integer | `-1` (auto) | — | RAM-governor ceiling for the engine's in-memory operator state; spilling/repartitioning keeps the process under it. `-1` (or unset) = auto: ~80% of physical RAM (honors container limits), floored at 512 MB. A value `> 0` sets an explicit ceiling in MB. `0` disables the governor (unbounded — can consume all RAM). |
+| `Engine:MemoryGovernorPolicy` | string | `SpillOrFail` | — | Behaviour when an operator hits the ceiling and cannot reduce further: `SpillOrFail` aborts with a clear error; `SpillOnly` churns to completion (slower, higher RAM). |
 | `Engine:TempTableSpillThresholdRows` | integer | `1000000` | `SET TEMP_TABLE_SPILL_THRESHOLD = n` | Rows stored in `#temp` tables before shifting from memory to disk. |
 | `Engine:SubqueryCacheSize` | integer | `5000` | — | Number of unique subquery results stored in the evaluator cache. |
 | `Engine:MaxLastResultRows` | integer | `5000` | `SET MAX_LAST_RESULT_ROWS = n` | Cap on visual rows kept in memory for client preview fetches. |
