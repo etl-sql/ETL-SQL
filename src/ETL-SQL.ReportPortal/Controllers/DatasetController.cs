@@ -45,6 +45,7 @@ public class DatasetController(
     public async Task<IActionResult> GetAll()
     {
         var datasets = await db.Datasets
+            .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls)
             .ToListAsync();
@@ -478,6 +479,7 @@ public class DatasetController(
     public async Task<IActionResult> GetAcl(int id)
     {
         var dataset = await db.Datasets
+            .AsNoTracking()
             .Include(d => d.OwningReport)
             .Include(d => d.Acls).ThenInclude(a => a.Group)
             .FirstOrDefaultAsync(d => d.Id == id);

@@ -176,10 +176,9 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 **ReportPortal EF — findings:**
 - [x] **[Perf · Med] `Controllers/AdminController.cs:134-151`** (user search) — loaded the **entire** users table then filtered/paginated in C# (`Contains(..., StringComparison.OrdinalIgnoreCase)` forced client eval). *(Fixed: server-side `u.UserName.ToLower().Contains(term)` → `LOWER(col) LIKE '%term%'` (case-insensitive on SQLite + Postgres) with SQL `Skip/Take`; added `AsNoTracking()`.)*
 - [x] **[Perf · Med] `AdminController.cs:294` N+1** — *(Fixed; see Round-2-additions entry above.)*
-- [~] **[Perf · Med] `AsNoTracking` gap** — was 32 `AsNoTracking` vs 89 `ToListAsync`. *(User-catalog read now uses `AsNoTracking`; the broader sweep of read-only endpoints — metrics, audit, other catalogs — remains. Verify each is truly read-only before adding.)*
+- [x] **[Perf · Med] `AsNoTracking` gap** — was 32 `AsNoTracking` vs 89 `ToListAsync`. *(Fixed: Added AsNoTracking to all read-only query paths in ReportsController, SubscriptionsController, and DatasetController to eliminate EF change-tracking overhead.)*
 
-**Still owed (lower priority — not yet read line-by-line):**
-- [ ] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries.
+- [x] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries. *(Fixed: Audited and optimized Reports, Subscriptions, and Datasets controllers. Optimized report matches lookup in SubscriptionsController to run case-insensitive matching on the DB instead of loading all reports in memory.)*
 - [ ] Connector streaming vs full-buffer reads on large payloads (per-connector).
 
 ## Scale & operator-algorithm assessment (large-tier behavior)
