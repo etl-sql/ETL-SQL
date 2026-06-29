@@ -214,6 +214,18 @@ grants at small row counts) but does not exercise a true 50M tier — these are 
 - [ ] **Object count per script** (10/50/100 CONNECTION/VISUAL/@param/#temp) — agree with capping via policy limits (ties into v0.14.0 Phase 3.5 resource ceilings); 100 live connections in one script is an anti-pattern → guidance + a configurable limit rather than an algorithm change.
 - [ ] **Server/orchestrator scale** (20/100/1000 reports/jobs) — the EF findings above (N+1, `AsNoTracking`, client-eval) are the relevant levers; verify scheduler/job-history queries paginate and index well at 1000 jobs.
 
+### Measured: Stress tier (5M, 100x) — 2026-06-29
+
+All 13 scenarios **passed** at 5M (correctness holds at scale; validates the ORDER BY sort-key refactor). Observations:
+- **Streaming ops scale excellently** — `StreamingSelect`, `CsvIngest`, `ParquetRoundTrip` ran in 1–4 s with **0 spill**. Confirms FILTER/projection are not data-scale-bound.
+- **Heaviest = `CUBE` grouping sets** (160 s, 2.24 GB spill) — consistent with the one real row-buffering path (external grouping-set `List<Row>` per group). **Top aggregate optimization target.**
+- **Join slowest single op** (130 s / 5M, grace hash + repartition) — works; the perf cost of spilling joins.
+- **Sort** handled 5M (66 s, 876 MB) with the cert's forced 5k chunk size = ~1000 spill readers open at merge; validates the **merge fan-in** concern is latent for 50M (~5–10k readers).
+- [ ] **Investigate: peak process memory climbed monotonically to ~10 GB** across the 13 sequential 5M scenarios (876 MB → ~10 GB, with partial GC dips). Could be a Debug/no-server-GC artifact or real cross-scenario retention (static `LastResult`/session/registry state). Re-measure with server GC / `GC.Collect` between scenarios to distinguish.
+
+### 50M (Huge tier) — could not complete in this environment
+Wired and attempted twice; both runs were killed at the identical point with **no OOM/exception** — the agent's background runner kills tasks during the multi-minute **silent** 50M row-generation stretches (no stdout). **Not an engine fault.** Partial observation: the engine **generated 50M rows and switched to `ExternalAggregateEngine` without OOM**. To get full 50M metrics + `baseline-huge.json`, run on a capable host in the **foreground**: `pwsh ./scripts/Test-ScaleCertification.ps1 -Tier Huge`.
+
 ---
 
 ## VS Code Extension Code Review Findings (v0.14.0)
