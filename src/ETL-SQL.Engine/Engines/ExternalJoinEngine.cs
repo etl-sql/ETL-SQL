@@ -198,7 +198,9 @@ public class ExternalJoinEngine
     /// <summary>Streams the probe (left) side against a built hash table, emitting join results.</summary>
     private async IAsyncEnumerable<Row> ProbeJoin(string leftName, Dictionary<CompoundKey, List<Row>> hashTable, JoinClause join, List<string> leftKeys)
     {
-        bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase);
+        bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
+        bool isRightJoin = join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
+        var matchedRightRows = isRightJoin ? new HashSet<Row>() : null;
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         await foreach (var left in leftReader.AsEnumerableAsync())
@@ -215,12 +217,27 @@ public class ExternalJoinEngine
                     {
                         yield return combined;
                         producedMatch = true;
+                        matchedRightRows?.Add(right);
                     }
                 }
             }
 
             if (!producedMatch && isLeftJoin)
                 yield return left.Clone();
+        }
+
+        if (isRightJoin && matchedRightRows != null)
+        {
+            foreach (var bucket in hashTable.Values)
+            {
+                foreach (var right in bucket)
+                {
+                    if (!matchedRightRows.Contains(right))
+                    {
+                        yield return CombineRows(null, right);
+                    }
+                }
+            }
         }
     }
 
@@ -305,10 +322,10 @@ public class ExternalJoinEngine
         return new CompoundKey(depth, values);
     }
 
-    private Row CombineRows(Row left, Row right)
+    private Row CombineRows(Row? left, Row right)
     {
         var combined = new Row();
-        left.ForEachColumn((name, value) => combined[name] = value);
+        left?.ForEachColumn((name, value) => combined[name] = value);
         right.ForEachColumn((name, value) => combined[name] = value);
         return combined;
     }
