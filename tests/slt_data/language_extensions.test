@@ -1,0 +1,208 @@
+# Language Extensions Test
+
+statement ok
+CREATE TABLE items(id INT, name STRING, price DECIMAL, quantity INT, category STRING);
+
+statement ok
+INSERT INTO items VALUES
+  (1, 'Notebook', 4.99, 10, 'Stationery'),
+  (2, 'Pen', 1.50, 50, 'Stationery'),
+  (3, 'Backpack', 45.00, 5, 'Gear'),
+  (4, 'Marker', 2.25, 30, 'Stationery'),
+  (5, 'Water Bottle', 15.00, 15, 'Gear');
+
+# GROUP BY ALL
+query TI
+SELECT category, SUM(quantity) FROM items GROUP BY ALL ORDER BY category;
+----
+Gear
+20
+Stationery
+90
+
+query TII
+SELECT category, category = 'Gear' AS is_gear, COUNT(*) FROM items GROUP BY ALL ORDER BY category, is_gear;
+----
+Gear
+1
+2
+Stationery
+0
+3
+
+# ORDER BY ALL
+query TT
+SELECT category, name FROM items ORDER BY ALL;
+----
+Gear
+Backpack
+Gear
+Water Bottle
+Stationery
+Marker
+Stationery
+Notebook
+Stationery
+Pen
+
+# ORDER BY ALL DESC
+query TT
+SELECT category, name FROM items ORDER BY ALL DESC;
+----
+Stationery
+Pen
+Stationery
+Notebook
+Stationery
+Marker
+Gear
+Water Bottle
+Gear
+Backpack
+
+# Star Exclude
+query IIT
+SELECT * EXCLUDE (name, price) FROM items ORDER BY id;
+----
+1
+10
+Stationery
+2
+50
+Stationery
+3
+5
+Gear
+4
+30
+Stationery
+5
+15
+Gear
+
+query ITRI
+SELECT * EXCLUDE (category) FROM items ORDER BY id;
+----
+1
+Notebook
+4.990
+10
+2
+Pen
+1.500
+50
+3
+Backpack
+45.000
+5
+4
+Marker
+2.250
+30
+5
+Water Bottle
+15.000
+15
+
+# Star Replace
+query ITRI
+SELECT * EXCLUDE (category) REPLACE (price * 2 AS price) FROM items ORDER BY id;
+----
+1
+Notebook
+9.980
+10
+2
+Pen
+3.000
+50
+3
+Backpack
+90.000
+5
+4
+Marker
+4.500
+30
+5
+Water Bottle
+30.000
+15
+
+# Star Rename
+query ITRIT
+SELECT * RENAME (name AS item_name, price AS item_price) FROM items ORDER BY id;
+----
+1
+Notebook
+4.990
+10
+Stationery
+2
+Pen
+1.500
+50
+Stationery
+3
+Backpack
+45.000
+5
+Gear
+4
+Marker
+2.250
+30
+Stationery
+5
+Water Bottle
+15.000
+15
+Gear
+
+# Star Exclude, Replace, and Rename combined
+query ITIT
+SELECT * EXCLUDE (price) REPLACE (quantity * 10 AS quantity) RENAME (name AS item_name) FROM items ORDER BY id;
+----
+1
+Notebook
+100
+Stationery
+2
+Pen
+500
+Stationery
+3
+Backpack
+50
+Gear
+4
+Marker
+300
+Stationery
+5
+Water Bottle
+150
+Gear
+
+# USING SAMPLE row count checks (robust & deterministic)
+query I
+SELECT COUNT(*) FROM (SELECT * FROM items USING SAMPLE 3 ROWS) AS s;
+----
+3
+
+query I
+SELECT COUNT(*) FROM (SELECT * FROM items USING SAMPLE 100 PERCENT) AS s;
+----
+5
+
+query I
+SELECT COUNT(*) FROM (SELECT * FROM items USING SAMPLE 0 PERCENT) AS s;
+----
+0
+
+# USING SAMPLE with seed (repeatable check)
+query I
+SELECT id FROM items ORDER BY id USING SAMPLE 2 ROWS REPEATABLE (42);
+----
+5
+2
