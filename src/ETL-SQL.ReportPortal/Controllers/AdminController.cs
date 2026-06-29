@@ -131,35 +131,27 @@ public class AdminController(
 
         if (!string.IsNullOrWhiteSpace(q))
         {
-            var allFilteredUsers = await query
-                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-                .OrderBy(u => u.UserName)
-                .ToListAsync();
-
-            var term = q.Trim();
-            var matchedUsers = allFilteredUsers.Where(u =>
-                (u.UserName != null && u.UserName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.Email != null && u.Email.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.FirstName != null && u.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.LastName != null && u.LastName.Contains(term, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
-
-            total = matchedUsers.Count;
-            users = matchedUsers
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            // Filter server-side so the database does the matching and pagination instead of loading the
+            // whole users table into memory. ToLower()+Contains translates to LOWER(col) LIKE '%term%',
+            // which is case-insensitive on both SQLite and PostgreSQL (the previous
+            // Contains(..., StringComparison.OrdinalIgnoreCase) overload is not EF-translatable, so it
+            // forced full materialization + client-side filtering/paging).
+            var term = q.Trim().ToLower();
+            query = query.Where(u =>
+                (u.UserName != null && u.UserName.ToLower().Contains(term)) ||
+                (u.Email != null && u.Email.ToLower().Contains(term)) ||
+                (u.FirstName != null && u.FirstName.ToLower().Contains(term)) ||
+                (u.LastName != null && u.LastName.ToLower().Contains(term)));
         }
-        else
-        {
-            total = await query.CountAsync();
-            users = await query
-                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-                .OrderBy(u => u.UserName)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-        }
+
+        total = await query.CountAsync();
+        users = await query
+            .AsNoTracking()
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .OrderBy(u => u.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
         var items = new List<UserDto>();
         foreach (var u in users)
@@ -289,10 +281,14 @@ public class AdminController(
 
         var results = new List<BulkMutationResult>();
         var updatedIds = new List<int>();
+        // Fetch all targeted users in one query (was an N+1 — one round-trip per item). Entities stay
+        // tracked; the per-user SaveChangesAsync below is intentional so one optimistic-concurrency
+        // conflict does not fail the whole batch.
+        var requestedIds = items.Select(item => item.Id).ToList();
+        var usersById = await db.Users.Where(u => requestedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
         foreach (var item in items)
         {
-            var user = await db.Users.FirstOrDefaultAsync(candidate => candidate.Id == item.Id);
-            if (user is null)
+            if (!usersById.TryGetValue(item.Id, out var user))
             {
                 results.Add(new(item.Id, "NotFound"));
                 continue;

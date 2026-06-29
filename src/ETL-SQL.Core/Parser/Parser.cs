@@ -16,6 +16,10 @@ public class Parser : IParser
     private readonly List<Token> _tokens;
     private int _position;
     private readonly string _source;
+    // Monotonic counter for generated aliases of unnamed subqueries. A per-parser counter guarantees
+    // uniqueness within a parse; the previous `new Random().Next(1000,9999)` was clock-seeded per call
+    // over only 9,000 values and could collide (producing ambiguous aliases / wrong resolution).
+    private int _generatedAliasCounter;
     private readonly ExpressionParser _expressionParser;
     private readonly StatementParser _statementParser;
 
@@ -847,7 +851,7 @@ public class Parser : IParser
                 }
                 else
                 {
-                    alias = "Sub_" + new Random().Next(1000, 9999);
+                    alias = "Sub_" + (++_generatedAliasCounter);
                 }
 
                 tableRef = new TableReference("SUBQUERY", null, null, null, alias, subquery);

@@ -121,7 +121,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 *is the next layer. Every item below was verified at the cited file:line.*
 
 ### ETL-SQL.Core
-- [ ] **[Bug · Med-High] `Parser/Parser.cs:850`** — subquery alias is generated with `"Sub_" + new Random().Next(1000,9999)`: a fresh clock-seeded `Random` per call over only 9,000 values. Two subqueries parsed close together can collide on the same alias → ambiguous/incorrect resolution. Fix: monotonic per-parser counter (or GUID suffix).
+- [x] **[Bug · Med-High] `Parser/Parser.cs:850`** — subquery alias was generated with `"Sub_" + new Random().Next(1000,9999)` (clock-seeded per call, 9,000 values → collisions → ambiguous/incorrect resolution). *(Fixed: monotonic per-parser `_generatedAliasCounter`. 69 subquery/derived tests pass.)*
 - [ ] **[Logging · Low] obsolete `Logger.Instance`** in places that should use the injected `ILogger` (CLAUDE.md marks `Logger.Instance` obsolete).
 
 ### ETL-SQL.Engine
@@ -156,8 +156,8 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - **Empty `catch {}`:** ~85 across `src`, predominantly best-effort cleanup/dispose; spot-review for any that swallow a real error (not individually flagged).
 
 ### Round 2 additions (double-check pass — missed in round 1)
-- [ ] **[Perf · Med] `ReportPortal` EF read paths** — only **32 `AsNoTracking`** vs **89 `ToListAsync`**; ~57 read-only materializations carry EF change-tracking overhead. Audit read endpoints (admin user/group lists, metrics, catalogs) and add `AsNoTracking()`.
-- [ ] **[Perf · Med] `Controllers/AdminController.cs:294` N+1** — `BulkUpdateUserStatus` loops over the request items and runs `db.Users.FirstOrDefaultAsync(... == item.Id)` once per user. Batch it: `db.Users.Where(u => ids.Contains(u.Id)).ToListAsync()`, then process in memory. (Check the other bulk endpoints — groups/members — for the same shape.)
+- [~] **[Perf · Med] `ReportPortal` EF read paths** — was **32 `AsNoTracking`** vs **89 `ToListAsync`**; ~57 read-only materializations carry change-tracking overhead. *(User-catalog read fixed; broader audit of metrics/audit/other read endpoints remains.)*
+- [x] **[Perf · Med] `Controllers/AdminController.cs:294` N+1** — `BulkUpdateUserStatus` queried each user individually in a loop. *(Fixed: single `Where(u => requestedIds.Contains(u.Id)).ToDictionaryAsync`; per-user `SaveChangesAsync` kept for conflict isolation. Still TODO: check groups/members bulk endpoints for the same shape.)*
 - [ ] **[Security · Low-Med · verify] user-supplied `ValidationRegex` ReDoS** — `App/PipelineGenerator.cs:1166` only *compiles* the column `ValidationRegex` to validate it (safe). Verify that wherever that regex is later *applied to data* it uses a `Regex` **match timeout** (the project already hardened `ParameterUtility`/`ConnectorExceptionWrapper` with `[GeneratedRegex]` + 1000 ms in v0.13.0 — apply the same here).
 - [ ] **[Security · Low · verify] `Process.Start` sites** — `App/EngineRunner.cs:1125,1573` spawn external executables (by design for script `exec`/Docker — this is exactly what v0.14.0 Phase 3.5 process-enforcement must gate; cross-reference). `UseShellExecute=true` URL/path launchers in `TUI/ConsoleEditor.cs:657,659`, `TUI/ReportLauncher.cs`, `ReportPlayer/Program.cs`, `ReportBuilder.CLI/Program.cs` open local files/URLs — confirm targets are trusted/local, not attacker-influenced.
 - _Verified non-issues:_ no `BinaryFormatter`/`TypeNameHandling`/`JavaScriptSerializer`; `XmlDataSource.cs:148` is **XXE-safe** (on .NET Core+/.NET 10 `XmlReaderSettings` defaults to `DtdProcessing.Prohibit` + `XmlResolver = null`); large `ReadToEnd`/`ReadAllBytes` hits are bounded (decrypt buffers, 32-byte key file, small embedded resources); no `new Regex` over **user input without a timeout** at match time except the `ValidationRegex` item above.
@@ -174,9 +174,9 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - No string concatenation in hot loops (the `+=` sites are numeric accumulators); `JoinEngine` `IndexOf` is per-batch schema building, not per-row.
 
 **ReportPortal EF — findings:**
-- [ ] **[Perf · Med] `Controllers/AdminController.cs:134-151`** (user search) — when a search term is present it loads the **entire** users table with `Include(UserGroups).ThenInclude(Group)` into memory, then filters and paginates in C#. Root cause: `Contains(term, StringComparison.OrdinalIgnoreCase)` is not EF-translatable, forcing client-side evaluation. Fix: filter server-side with `EF.Functions.Like(...)` (or `.Contains(term)` relying on the column collation) and `Skip/Take` in SQL, as the non-search branch already does.
-- [ ] **[Perf · Med] `AdminController.cs:294` N+1** — `BulkUpdateUserStatus` queries each user individually in a loop (also re-confirmed here); batch with `Where(u => ids.Contains(u.Id))`. Re-check `users/bulk-status`, group member add/remove for the same shape.
-- [ ] **[Perf · Med] `AsNoTracking` gap** — 32 `AsNoTracking` vs 89 `ToListAsync` across the Portal; add `AsNoTracking()` to read-only endpoints (admin lists, metrics, catalogs, audit) so EF skips change tracking on data that is never saved.
+- [x] **[Perf · Med] `Controllers/AdminController.cs:134-151`** (user search) — loaded the **entire** users table then filtered/paginated in C# (`Contains(..., StringComparison.OrdinalIgnoreCase)` forced client eval). *(Fixed: server-side `u.UserName.ToLower().Contains(term)` → `LOWER(col) LIKE '%term%'` (case-insensitive on SQLite + Postgres) with SQL `Skip/Take`; added `AsNoTracking()`.)*
+- [x] **[Perf · Med] `AdminController.cs:294` N+1** — *(Fixed; see Round-2-additions entry above.)*
+- [~] **[Perf · Med] `AsNoTracking` gap** — was 32 `AsNoTracking` vs 89 `ToListAsync`. *(User-catalog read now uses `AsNoTracking`; the broader sweep of read-only endpoints — metrics, audit, other catalogs — remains. Verify each is truly read-only before adding.)*
 
 **Still owed (lower priority — not yet read line-by-line):**
 - [ ] Remaining Portal controllers/services beyond `AdminController` (Reports, Subscriptions, Datasets) for the same EF patterns; index coverage for the hot audit/metrics queries.
