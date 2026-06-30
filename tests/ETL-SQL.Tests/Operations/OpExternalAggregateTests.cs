@@ -204,9 +204,11 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         // ── RAM governor ──────────────────────────────────────────────────────
-        // These force a tiny memory ceiling so the in-memory build trips the governor.
-        // ExternalHashPartitions=2 keeps a depth-0 partition above the 8192-row sampling
-        // interval so the heap-growth check actually fires.
+        // These force a small memory ceiling so the in-memory group build trips the governor.
+        // The governor uses precise byte accounting (bytes added per new group), so the ceiling must
+        // be feasible — large enough that a sufficiently-split partition fits, but smaller than the
+        // full group set — for SpillOrFail to complete by recursive repartitioning. ExternalHashPartitions=2
+        // makes each repartition step roughly halve a partition's group count.
 
         private static IAsyncEnumerable<Row> MakeGroupedRows(int count, int distinctGroups)
         {
@@ -237,7 +239,10 @@ namespace ETL_SQL.Tests.Operations.Operations
             eval.ExternalHashPartitions = 2;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
             long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1; // 1 byte → any heap growth trips the governor
+            // 64 KB holds only a few hundred groups, so the 3000-group input trips the governor at
+            // depth 0 and must recursively repartition (halving group count per level) until each
+            // sub-partition fits — the path this test exercises.
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64 * 1024;
             try
             {
                 const int rows = 30000, groups = 3000;

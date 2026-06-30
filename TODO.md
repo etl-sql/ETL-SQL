@@ -208,6 +208,74 @@ grants at small row counts) but does not exercise a true 50M tier — these are 
 - [x] **[Correctness · verify @scale] RIGHT/FULL OUTER via external hash join** — `ExternalJoinEngine.JoinPartitionDirect` only emits unmatched **LEFT** rows. *(Fixed: Added matched right rows tracking and emission of unmatched right rows per partition inside ExternalJoinEngine.ProbeJoin to support RIGHT and FULL outer joins correctly at scale.)*
 - [ ] **[Perf · note] WINDOW** buffers per partition (inherent to frame computation) — cert: 500k rows = 867 MB. Largest single partition bounds memory; document the per-partition limit / consider partition-streaming for frames that allow it.
 
+### RAM-representation strategy — scaling to billions without eating the machine (2026-06-29)
+
+*Context: the 50M Huge cert still pins the whole box even though the **algorithms** are already the
+textbook DB playbook (grace hash join + recursive repartition; partitioned single-pass hash
+aggregate; k-way merge sort; memory-guarded builds). The algorithm is not the problem — the
+**per-row in-memory representation**, the **imprecise governor**, and **fixed partition fan-out** are.
+Real engines (Postgres `work_mem`, SQL Server memory grants, DuckDB/Spark vectorized columnar) bound
+the working set by **bytes**, not by row-count luck, and keep tuples packed/columnar rather than as
+boxed object graphs. Plan: do B then A (proves the approach on the cheapest, safest change first),
+then C, D, E.*
+
+**Root cause — the build-side tuple is ~6–7× fatter than the data it holds.** A `Row`
+(`DataModel.cs:139`) is a `TableSchema` + `object?[]` of **boxed** values, and per the runtime rule
+*every* number is stored as `decimal` (INT/BIGINT included). A 5-number logical row (~40 B of data)
+becomes ~250–300 B once in the join/aggregate `Dictionary<CompoundKey, List<Row>>`: ~64 B array +
+~5×32 B boxed decimals + `Row`/`List`/bucket overhead. Hold 50M build rows → ~13 GB for data that is
+~2 GB on disk. That is the "ate my 31 GB box."
+
+- [x] **(B) [Perf · LOW effort · DONE 2026-06-29] Precise byte accounting, not GC sampling.** Replaced
+  `HeapGrowthGuard` (GC sampling) with `MemoryBudgetGuard` (per-operator byte counter) in
+  `MemoryGovernor.cs`; added allocation-free `Row.EstimateHeapBytes()` + `Row.EstimateValueBytes()`
+  (Core) and `RowMemory.EstimateKeyBytes/EstimateValuesBytes` (Engine). Wired into
+  `ExternalJoinEngine.BuildJoinHashTable` (per-row + per-new-key), `AggregateEngine.ApplyAggregation`
+  (per-new-group key + fixed per-state cost — O(groups), the real agg memory), `ExternalSortEngine`
+  (per chunk row + sort key), `ExternalDistinctEngine.DedupToList` (per retained row + seen-set key).
+  Detection is now deterministic and per-operator, *before* allocation. The two governor tests that
+  used a 1-byte ceiling sentinel were updated to feasible ceilings (agg 64 KB, join 256 KB) — under
+  byte accounting a 1-byte ceiling is infeasible (can't fit one group/row), so "completes via
+  repartition" required a ceiling that fits once split; correctness assertions unchanged. 18 scale-cert
+  + 327 agg/join/sort/distinct + 43 governor/external tests pass. *Holistic aggregates (GenericState
+  row buffering) still grow beyond the per-group estimate — unchanged, tracked separately above.*
+- [x] **(A) [Perf · HIGH leverage · JOIN DONE 2026-06-29] Shrink the build-side tuple (packed byte[]).**
+  New `RowPacker` (`Engine/Engines/RowPacker.cs`): type-tagged, lossless per-row binary codec
+  (null/bool/decimal/double/DateTime+Kind/string + JSON fallback; integrals stored as decimal; one
+  reused `MemoryStream` per build). `ExternalJoinEngine` build side is now a `PackedBuildTable`
+  (column order captured once + flat `List<byte[]>` + `Dictionary<CompoundKey,List<int>>` index); a blob
+  is decoded to a `Row` only on a probe-key match. LEFT/RIGHT/FULL outer preserved via a per-index
+  `bool[]` matched bitset (more correct than the old reference-identity `HashSet<Row>`). Byte accounting
+  now uses the exact blob length. 95 join + 5 RowPacker codec + 18 scale-cert tests pass.
+  *Approach chosen: packed byte[] (low risk), not runtime de-boxing.*
+  - **Aggregate build needs no packing:** `Dictionary<CompoundKey, IAggregateState[]>` holds incremental
+    states (O(groups)), not rows — the common path never retains rows. (Holistic `GenericState` row
+    buffering is the separate item above.)
+  - [x] **DISTINCT packed too (2026-06-29)** — `ExternalDistinctEngine.DedupToList` now returns
+    `PackedRows` (captured columns + `List<byte[]>`) instead of `List<Row>`; blobs decode to a `Row`
+    only on yield. The `seen` `HashSet<CompoundKey>` stays (needed for the duplicate check); only the
+    retained output rows are packed. Byte accounting uses exact blob length. 24 distinct tests pass.
+  - [ ] **(A-better, deferred/risky) De-box numerics at the source** — carry native `long`/`double` in
+    `Row` where the column type allows, reserving `decimal` for DECIMAL columns. Largest win (CPU too)
+    but touches the deep "every number is decimal at runtime" invariant and many tests; own effort.
+- [ ] **(C) [Perf · MED · LOW effort] Size partition fan-out from an input estimate.** `PartitionCount`
+  is static (`Engine:ExternalHashPartitions`, default 32). On a billion-row input each partition is
+  still huge → forced recursive repartition, and every recursion level is a full re-read + re-write to
+  disk. Choose `PartitionCount ≈ estimatedBytes / perPartitionBudget` up front (or after the first
+  pass) so each partition fits the grant in **one** pass — turns 3-pass operations into 1-pass.
+- [ ] **(D) [Perf · MED] Avoid the columnar→boxed `Row` round-trip on spill re-read.** *Correction to
+  an earlier verbal claim: disk spill is **already Arrow columnar by default** (`SpillFormat=Arrow`,
+  `appsettings.json:40`); JSON is only a legacy fallback for reading old persistent spill files — so
+  this is not "switch to columnar."* The real gap is the **read side**: `ArrowSpillReader.ExtractValue`
+  (`SpillStore.cs:768`) re-boxes every value into `object?` and converts native `Int64` back to
+  `decimal` (`:774`), throwing away the columnar advantage in memory. For the partition→re-read→rebuild
+  loop, aggregate/probe directly against the Arrow `RecordBatch` where possible instead of
+  `ExtractRow` → boxed `Row` → re-hash.
+- [ ] **(E) [Perf · HIGHEST ceiling · ROADMAP, not now] Vectorized/columnar execution.** Batch-at-a-time
+  column-vector operators (process 1–4K-row vectors) — how DuckDB does billions on a laptop. Real
+  engine rewrite; B–D are the incremental path that captures most of the RAM win without it. Park in
+  `ROADMAP.md` once B–D land.
+
 **Other scale dimensions (the user's matrix):**
 - [ ] **Script size** (10k lines × 10) — verify lexer/parser is O(n) and AST memory is bounded for very large scripts; `RUN SCRIPT` parse-caching already helps repeated targets.
 - [ ] **Object count per script** (10/50/100 CONNECTION/VISUAL/@param/#temp) — agree with capping via policy limits (ties into v0.14.0 Phase 3.5 resource ceilings); 100 live connections in one script is an anti-pattern → guidance + a configurable limit rather than an algorithm change.

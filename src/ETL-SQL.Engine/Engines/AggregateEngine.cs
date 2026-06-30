@@ -27,10 +27,6 @@ internal sealed class AggregateMemoryPressureException : Exception
 /// </summary>
 public class AggregateEngine
 {
-    // How often (in rows consumed) the single-pass build samples managed heap growth against the
-    // governor ceiling. Sampling is cheap but not free, so we only check periodically.
-    private const int MemoryCheckRowInterval = 8192;
-
     private readonly IExecutionContext _context;
     private readonly ILogger _logger;
 
@@ -42,10 +38,13 @@ public class AggregateEngine
 
     /// <summary>Applies aggregation logic to a stream of rows, grouping them and calculating aggregate functions.</summary>
     /// <param name="memoryCeilingBytes">
-    /// When &gt; 0, the single-pass group build samples managed-heap growth and throws
-    /// <see cref="AggregateMemoryPressureException"/> once this operation's heap growth exceeds the
-    /// ceiling, so the caller (external aggregate engine) can repartition instead of growing
-    /// unbounded. 0 (default) disables the check — all existing callers are unaffected.
+    /// When &gt; 0, the single-pass group build tracks the live group-state footprint by precise byte
+    /// accounting (the real memory of incremental aggregation is O(groups), not O(rows)) and throws
+    /// <see cref="AggregateMemoryPressureException"/> once it exceeds the ceiling, so the caller (the
+    /// external aggregate engine) can repartition instead of growing unbounded. 0 (default) disables
+    /// the check — all existing callers are unaffected. Note: holistic aggregates that buffer whole
+    /// rows per group (GenericState) grow beyond this per-group estimate; bounding those is tracked
+    /// separately (TODO "Holistic aggregates buffer whole rows").
     /// </param>
     public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long memoryCeilingBytes = 0)
     {
@@ -145,21 +144,14 @@ public class AggregateEngine
         // Single-Pass Aggregation
         var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
 
-        // RAM governor: sample managed-heap growth for this build and bail out (so the caller can
-        // repartition) before the in-memory group state / buffered rows consume unbounded RAM.
-        long heapBaseline = memoryCeilingBytes > 0 ? GC.GetTotalMemory(false) : 0;
-        int rowsSinceMemoryCheck = 0;
+        // RAM governor (precise byte accounting): track the live group-state footprint and bail out
+        // (so the external engine can repartition) before it consumes unbounded RAM. We count bytes as
+        // groups are created — O(groups) is the real memory of incremental aggregation — instead of
+        // sampling the GC heap, which was process-wide and reactive.
+        var budget = new MemoryBudgetGuard(memoryCeilingBytes);
 
         await foreach (var row in inputStream)
         {
-            if (memoryCeilingBytes > 0 && ++rowsSinceMemoryCheck >= MemoryCheckRowInterval)
-            {
-                rowsSinceMemoryCheck = 0;
-                if (GC.GetTotalMemory(false) - heapBaseline > memoryCeilingBytes)
-                    throw new AggregateMemoryPressureException(
-                        $"Aggregation in-memory state exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB of growth).");
-            }
-
             CompoundKey key;
             if (groupBy != null && groupBy.Count > 0)
             {
@@ -190,6 +182,16 @@ public class AggregateEngine
                 var hStates = havingAggSpecs.Select(s => CreateState(s.Function)).ToArray();
                 states = (sStates, hStates);
                 groupStates[key] = states;
+
+                if (budget.Enabled)
+                {
+                    // Each new group adds its key plus a fixed per-state cost (most states are O(1)
+                    // running accumulators) plus dictionary-entry overhead.
+                    budget.Add(RowMemory.EstimateKeyBytes(key) + (sStates.Length + hStates.Length) * 64L + 48L);
+                    if (budget.Exceeded())
+                        throw new AggregateMemoryPressureException(
+                            $"Aggregation in-memory group state exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB).");
+                }
             }
 
             // Update states

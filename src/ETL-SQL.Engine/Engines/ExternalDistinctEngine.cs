@@ -97,7 +97,7 @@ internal sealed class ExternalDistinctEngine
         var built = await DedupToList(name, ceiling);
         if (built != null)
         {
-            foreach (var row in built) yield return row;
+            foreach (var blob in built.Blobs) yield return RowPacker.Unpack(blob, built.Columns);
             yield break;
         }
 
@@ -144,21 +144,40 @@ internal sealed class ExternalDistinctEngine
     }
 
     /// <summary>
-    /// Builds the distinct rows of a partition into a list, returning null if managed-heap growth
-    /// crosses the governor ceiling mid-build so the caller can repartition or apply policy.
+    /// Builds the distinct rows of a partition, holding each retained row as a compact packed
+    /// <c>byte[]</c> (see <see cref="RowPacker"/>) rather than a fat <see cref="Row"/> object graph; a
+    /// blob is decoded back to a <see cref="Row"/> only when it is yielded. Returns null if the
+    /// accumulated build footprint (precise byte accounting, using the exact blob lengths) crosses the
+    /// governor ceiling so the caller can repartition or apply policy. Only retained (newly distinct)
+    /// rows count against the budget — a duplicate adds nothing to the in-memory set. The duplicate
+    /// check still needs the <see cref="CompoundKey"/> in <c>seen</c>; only the output rows are packed.
     /// </summary>
-    private async Task<List<Row>?> DedupToList(string name, long ceiling)
+    private async Task<PackedRows?> DedupToList(string name, long ceiling)
     {
         var seen = new HashSet<CompoundKey>();
-        var result = new List<Row>();
-        var guard = new HeapGrowthGuard(ceiling);
+        var packed = new PackedRows();
+        var packer = new RowPacker();
+        bool columnsCaptured = false;
+        var guard = new MemoryBudgetGuard(ceiling);
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
         await foreach (var row in reader.AsEnumerableAsync())
         {
-            if (seen.Add(Key(row))) result.Add(row);
-            if (guard.Exceeded()) return null;
+            var key = Key(row);
+            if (seen.Add(key))
+            {
+                // Uniform partition schema → capture the column order once (matches the join build).
+                if (!columnsCaptured)
+                {
+                    packed.Columns.AddRange(row.GetColumnNames());
+                    columnsCaptured = true;
+                }
+                var blob = packer.Pack(row, packed.Columns);
+                packed.Blobs.Add(blob);
+                guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key)); // blob + seen-set key
+                if (guard.Exceeded()) return null;
+            }
         }
-        return result;
+        return packed;
     }
 
     private async IAsyncEnumerable<Row> DedupInMemory(string name)
@@ -244,4 +263,12 @@ internal sealed class ExternalDistinctEngine
     }
 
     private readonly record struct PartitionSet(string[] Names, long[] Counts);
+
+    /// <summary>The distinct rows of a partition held as compact packed blobs plus the shared column
+    /// order captured from the first retained row, used to decode each blob back to a <see cref="Row"/>.</summary>
+    private sealed class PackedRows
+    {
+        public readonly List<string> Columns = new();
+        public readonly List<byte[]> Blobs = new();
+    }
 }

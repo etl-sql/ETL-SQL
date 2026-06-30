@@ -110,7 +110,10 @@ namespace ETL_SQL.Tests.Operations.Operations
             eval.JoinSpillThreshold = 10_000_000;   // disable row-count repartition
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
             long saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            // Precise byte accounting: 256 KB is well below the ~3 MB build side, so the depth-0 build
+            // trips the governor and must recursively repartition (4000 distinct keys split cleanly)
+            // until each sub-partition's build fits — the path this test exercises.
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 256 * 1024;
             try
             {
                 // left: 4000 distinct keys once each (probe). right: same 4000 keys ×5 (build, 20000 rows).

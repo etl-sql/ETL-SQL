@@ -110,7 +110,7 @@ public class ExternalJoinEngine
         // emitted, so if heap growth crosses the governor ceiling mid-build (e.g. wide rows under the
         // row threshold) we can repartition or apply policy without having yielded anything.
         long ceiling = MemoryGovernor.Ceiling(_context);
-        var hashTable = await BuildJoinHashTable(rightName, rightKeys, new HeapGrowthGuard(ceiling));
+        var hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(ceiling));
 
         if (hashTable == null)
         {
@@ -131,7 +131,7 @@ public class ExternalJoinEngine
                 "Engine:MemoryGovernorPolicy = SpillOnly to churn to completion.");
 
             // SpillOnly churn: rebuild unguarded and continue.
-            hashTable = await BuildJoinHashTable(rightName, rightKeys, new HeapGrowthGuard(0));
+            hashTable = await BuildJoinHashTable(rightName, rightKeys, new MemoryBudgetGuard(0));
         }
 
         await foreach (var row in ProbeJoin(leftName, hashTable!, join, leftKeys))
@@ -177,30 +177,54 @@ public class ExternalJoinEngine
     }
 
     /// <summary>
-    /// Builds the in-memory hash table from the (right) build side. Returns null if managed-heap
-    /// growth crosses the governor ceiling mid-build, so the caller can repartition or apply policy
-    /// before any probe row has been emitted.
+    /// Builds the hash table from the (right) build side, holding each build row as a compact packed
+    /// <c>byte[]</c> (see <see cref="RowPacker"/>) rather than a fat <see cref="Row"/> object graph —
+    /// the dominant memory cost of a large hash-join build. Rows are decoded back to a <see cref="Row"/>
+    /// only on a probe-key match. Returns null if the accumulated build footprint (precise byte
+    /// accounting, using the exact blob lengths) crosses the governor ceiling mid-build, so the caller
+    /// can repartition or apply policy before any probe row has been emitted.
     /// </summary>
-    private async Task<Dictionary<CompoundKey, List<Row>>?> BuildJoinHashTable(string rightName, List<string> rightKeys, HeapGrowthGuard guard)
+    private async Task<PackedBuildTable?> BuildJoinHashTable(string rightName, List<string> rightKeys, MemoryBudgetGuard guard)
     {
-        var hashTable = new Dictionary<CompoundKey, List<Row>>();
+        var table = new PackedBuildTable();
+        var packer = new RowPacker();
+        bool columnsCaptured = false;
         await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
         await foreach (var rightRow in rightReader.AsEnumerableAsync())
         {
+            // The build side has a uniform schema; capture the column order once (matches how the
+            // Arrow spill writer infers its schema from the first row).
+            if (!columnsCaptured)
+            {
+                table.Columns.AddRange(rightRow.GetColumnNames());
+                columnsCaptured = true;
+            }
+
             var key = GetHashKey(rightRow, rightKeys);
-            if (!hashTable.TryGetValue(key, out var bucket)) { bucket = new List<Row>(); hashTable[key] = bucket; }
-            bucket.Add(rightRow);
+            var blob = packer.Pack(rightRow, table.Columns);
+            int idx = table.Rows.Count;
+            table.Rows.Add(blob);
+
+            if (!table.Index.TryGetValue(key, out var bucket))
+            {
+                bucket = new List<int>();
+                table.Index[key] = bucket;
+                guard.Add(RowMemory.EstimateKeyBytes(key) + 48); // new key + dictionary/list overhead
+            }
+            bucket.Add(idx);
+            guard.Add(blob.Length + 24); // contiguous blob + array header + index slot
             if (guard.Exceeded()) return null;
         }
-        return hashTable;
+        return table;
     }
 
-    /// <summary>Streams the probe (left) side against a built hash table, emitting join results.</summary>
-    private async IAsyncEnumerable<Row> ProbeJoin(string leftName, Dictionary<CompoundKey, List<Row>> hashTable, JoinClause join, List<string> leftKeys)
+    /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>
+    private async IAsyncEnumerable<Row> ProbeJoin(string leftName, PackedBuildTable table, JoinClause join, List<string> leftKeys)
     {
         bool isLeftJoin = join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
         bool isRightJoin = join.JoinType.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || join.JoinType.Contains("FULL", StringComparison.OrdinalIgnoreCase);
-        var matchedRightRows = isRightJoin ? new HashSet<Row>() : null;
+        // Track matched build rows by physical index (one bit per packed blob) for RIGHT/FULL outer.
+        var matched = isRightJoin ? new bool[table.Rows.Count] : null;
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
         await foreach (var left in leftReader.AsEnumerableAsync())
@@ -208,16 +232,17 @@ public class ExternalJoinEngine
             var key = GetHashKey(left, leftKeys);
             bool producedMatch = false;
 
-            if (hashTable.TryGetValue(key, out var matches))
+            if (table.Index.TryGetValue(key, out var matches))
             {
-                foreach (var right in matches)
+                foreach (var idx in matches)
                 {
+                    var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
                     var combined = CombineRows(left, right);
                     if (await _context.EvaluateCondition(join.Condition, combined))
                     {
                         yield return combined;
                         producedMatch = true;
-                        matchedRightRows?.Add(right);
+                        if (matched != null) matched[idx] = true;
                     }
                 }
             }
@@ -226,17 +251,12 @@ public class ExternalJoinEngine
                 yield return left.Clone();
         }
 
-        if (isRightJoin && matchedRightRows != null)
+        if (isRightJoin && matched != null)
         {
-            foreach (var bucket in hashTable.Values)
+            for (int idx = 0; idx < table.Rows.Count; idx++)
             {
-                foreach (var right in bucket)
-                {
-                    if (!matchedRightRows.Contains(right))
-                    {
-                        yield return CombineRows(null, right);
-                    }
-                }
+                if (!matched[idx])
+                    yield return CombineRows(null, RowPacker.Unpack(table.Rows[idx], table.Columns));
             }
         }
     }
@@ -331,5 +351,18 @@ public class ExternalJoinEngine
     }
 
     private readonly record struct PartitionSet(string[] Names, long[] Counts);
+
+    /// <summary>
+    /// The probe-side hash table: build rows held as compact packed blobs (<see cref="Rows"/>) with a
+    /// key index (<see cref="Index"/>) mapping each join key to the physical row indices that carry it.
+    /// <see cref="Columns"/> is the shared column order captured from the first build row, used to
+    /// decode a blob back into a <see cref="Row"/> on a probe match.
+    /// </summary>
+    private sealed class PackedBuildTable
+    {
+        public readonly List<string> Columns = new();
+        public readonly List<byte[]> Rows = new();
+        public readonly Dictionary<CompoundKey, List<int>> Index = new();
+    }
 }
 

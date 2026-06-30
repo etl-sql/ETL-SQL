@@ -226,6 +226,45 @@ public class Row
         }
     }
 
+    /// <summary>
+    /// Estimates this row's managed-heap footprint in bytes, allocation-free. Used by the external
+    /// engines' memory governor to bound an in-memory build by real bytes rather than by sampling the
+    /// GC heap (which is process-wide and reactive). Deliberately an approximation — its job is to
+    /// track byte growth proportionally, not to be exact. Covers both schema-backed values and
+    /// dynamic columns (rows re-read from spill carry their columns as dynamic entries).
+    /// </summary>
+    public long EstimateHeapBytes()
+    {
+        long bytes = 64; // Row object + values array / dictionary header overhead (approximate)
+        if (_values != null)
+        {
+            for (int i = 0; i < _values.Length; i++)
+                bytes += 8 + EstimateValueBytes(_values[i]);
+        }
+        if (_dynamicColumns != null)
+        {
+            foreach (var kvp in _dynamicColumns)
+                bytes += 24 + 2L * kvp.Key.Length + 8 + EstimateValueBytes(kvp.Value);
+        }
+        return bytes;
+    }
+
+    /// <summary>
+    /// Estimates the boxed managed-heap cost of a single cell value. Numerics box at runtime (every
+    /// number is a boxed <see cref="decimal"/> on the common path), strings cost header + UTF-16 chars.
+    /// Shared with the external engines so key/array footprints use the same sizing.
+    /// </summary>
+    public static long EstimateValueBytes(object? value) => value switch
+    {
+        null => 0L,
+        string s => 24L + 2L * s.Length,
+        decimal => 32L,
+        DateTime => 24L,
+        bool => 24L,
+        double or float or long or ulong or int or uint or short or ushort or byte or sbyte => 24L,
+        _ => 32L
+    };
+
     private void EnsureValuesCapacity(int capacity)
     {
         if (_values == null)

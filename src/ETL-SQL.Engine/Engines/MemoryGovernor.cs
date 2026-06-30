@@ -1,6 +1,7 @@
 using System;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines;
 
@@ -29,37 +30,64 @@ internal static class MemoryGovernor
 }
 
 /// <summary>
-/// Samples managed-heap growth since construction (or the last <see cref="Reset"/>), checking at most
-/// once per <see cref="Interval"/> calls so the per-row overhead is negligible. Lets the external
-/// engines bound an in-memory build by actual memory, not just a row-count threshold. Disabled (always
-/// returns false) when constructed with a ceiling &lt;= 0.
+/// Bounds an in-memory build by <b>precise byte accounting</b>: callers add an estimated tuple
+/// footprint as each row enters the build (via <see cref="Add"/>) and the guard trips deterministically
+/// once the running total crosses the ceiling. This replaces the old GC-heap sampling approach, which
+/// was process-wide (it could not attribute memory to this operator and was perturbed by other
+/// operators and uncollected garbage) and reactive (it detected pressure only <i>after</i> over-allocating).
+/// Disabled (always returns false) when constructed with a ceiling &lt;= 0.
 /// </summary>
-internal sealed class HeapGrowthGuard
+internal sealed class MemoryBudgetGuard
 {
-    private const int Interval = 8192;
     private readonly long _ceiling;
-    private long _baseline;
-    private int _sinceCheck;
+    private long _bytes;
 
-    public HeapGrowthGuard(long ceilingBytes)
+    public MemoryBudgetGuard(long ceilingBytes)
     {
         _ceiling = ceilingBytes;
-        _baseline = ceilingBytes > 0 ? GC.GetTotalMemory(false) : 0;
     }
 
-    /// <summary>Re-baselines growth tracking (call after a flush/spill that frees the buffered set).</summary>
-    public void Reset()
+    /// <summary>True when a ceiling is configured (governor on).</summary>
+    public bool Enabled => _ceiling > 0;
+
+    /// <summary>Bytes accumulated against the budget so far.</summary>
+    public long BytesAccumulated => _bytes;
+
+    /// <summary>Adds an estimated footprint (in bytes) for a tuple just added to the in-memory build.</summary>
+    public void Add(long bytes)
     {
-        if (_ceiling > 0) _baseline = GC.GetTotalMemory(false);
-        _sinceCheck = 0;
+        if (_ceiling > 0 && bytes > 0) _bytes += bytes;
     }
 
-    /// <summary>Call once per accumulated row; returns true when heap growth has exceeded the ceiling.</summary>
-    public bool Exceeded()
+    /// <summary>Resets the running total (call after a flush/spill that frees the buffered set).</summary>
+    public void Reset() => _bytes = 0;
+
+    /// <summary>Returns true once accumulated bytes exceed the ceiling.</summary>
+    public bool Exceeded() => _ceiling > 0 && _bytes > _ceiling;
+}
+
+/// <summary>
+/// Byte-footprint estimates for the build structures the external engines hold in memory (hash-table
+/// keys and sort/dedup key arrays). Reuses <see cref="Row.EstimateValueBytes"/> so every estimate
+/// uses the same per-value sizing.
+/// </summary>
+internal static class RowMemory
+{
+    /// <summary>Estimated managed-heap cost of a <see cref="CompoundKey"/> held in a hash set / dictionary.</summary>
+    public static long EstimateKeyBytes(CompoundKey key)
     {
-        if (_ceiling <= 0) return false;
-        if (++_sinceCheck < Interval) return false;
-        _sinceCheck = 0;
-        return GC.GetTotalMemory(false) - _baseline > _ceiling;
+        long bytes = 32; // CompoundKey object + values array header (approximate)
+        for (int i = 0; i < key.Length; i++)
+            bytes += 8 + Row.EstimateValueBytes(key[i]);
+        return bytes;
+    }
+
+    /// <summary>Estimated managed-heap cost of a raw value array (e.g. a sort key tuple).</summary>
+    public static long EstimateValuesBytes(object?[] values)
+    {
+        long bytes = 24; // array header (approximate)
+        for (int i = 0; i < values.Length; i++)
+            bytes += 8 + Row.EstimateValueBytes(values[i]);
+        return bytes;
     }
 }
