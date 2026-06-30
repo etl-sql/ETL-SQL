@@ -6,6 +6,19 @@ release begins.
 
 ---
 
+## Active priority override — Billion-row execution performance
+
+**Decision (2026-06-30):** pause new Enterprise Phase 3–5 feature work after the already-committed
+execution-policy and filesystem-authorizer foundations. Resume enterprise enforcement after the engine
+has a credible, measured path to large analytical workloads. Security fixes and regressions remain
+in scope; this pause applies to new enterprise capability.
+
+The active implementation plan is under **Scale & operator-algorithm assessment** below. The target is
+an ETL-SQL-owned columnar execution path—not embedding DuckDB or delegating the product's execution
+model to another database.
+
+---
+
 ## v0.14.0 — Enterprise Policy Enforcement & Monitoring
 
 Completes the enterprise controls whose protected enrollment and authoritative client runtime shipped
@@ -27,7 +40,10 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 > `ROADMAP.md` — promote the highest-value Phase 6 items here only after Phases 3–5 expose the final
 > operational requirements.
 
-### Phase 3: Policy Authority & Operation-Boundary Enforcement
+### Phase 3: Policy Authority & Operation-Boundary Enforcement — PAUSED
+
+> **Paused 2026-06-30:** preserve completed work and tests, but do not start another Phase 3 slice until
+> the active billion-row performance program reaches its certification gates.
 
 #### 3.1 Policy authority
 - [ ] Add an administrator-only policy API and Portal workflow to validate, version, publish, supersede, and retrieve organization policies by tenant/environment.
@@ -38,10 +54,10 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Add policy-authority availability, signing-key rotation, machine revocation, and publication audit coverage.
 
 #### 3.2 Shared enforcement context
-- [ ] Define one immutable execution-policy snapshot containing enrollment, policy version/hash, actor, execution mode, script hash, job/correlation ID, and effective governed values.
+- [x] Define one immutable execution-policy snapshot containing enrollment, policy version/hash, actor, execution mode, script hash, job/correlation ID, and effective governed values. *(Core `ExecutionPolicySnapshot` is captured by the evaluator at top-level execution and preserved across parallel forks.)*
 - [ ] Capture the snapshot when execution begins and pass it through CLI, TUI, Report Player, Portal, Orchestrator, child processes, parallel branches, and scheduled jobs.
-- [ ] Define policy-refresh semantics for work already running: security revocation and expired policy fail promptly; ordinary limit changes apply no later than the next operation boundary.
-- [ ] Return structured allow/deny decisions with policy key, sanitized requested value/target, effective constraint, and correlation data.
+- [~] Define policy-refresh semantics for work already running: security revocation and expired policy fail promptly; ordinary limit changes apply no later than the next operation boundary. *(Snapshot freshness contract now distinguishes terminal unavailable/expired policy from ordinary version/hash refresh; operation authorizers still need to invoke it.)*
+- [x] Return structured allow/deny decisions with policy key, sanitized requested value/target, effective constraint, and correlation data. *(`OperationPolicyDecision` is the shared operation-boundary result contract.)*
 
 #### 3.3 Filesystem enforcement
 - [ ] Route all script-driven reads, writes, deletes, moves, copies, archive extraction, directory enumeration, spill, export, snapshot, and artifact paths through one canonical path-authorizer.
@@ -208,7 +224,137 @@ grants at small row counts) but does not exercise a true 50M tier — these are 
 - [x] **[Correctness · verify @scale] RIGHT/FULL OUTER via external hash join** — `ExternalJoinEngine.JoinPartitionDirect` only emits unmatched **LEFT** rows. *(Fixed: Added matched right rows tracking and emission of unmatched right rows per partition inside ExternalJoinEngine.ProbeJoin to support RIGHT and FULL outer joins correctly at scale.)*
 - [ ] **[Perf · note] WINDOW** buffers per partition (inherent to frame computation) — cert: 500k rows = 867 MB. Largest single partition bounds memory; document the per-partition limit / consider partition-streaming for frames that allow it.
 
-### RAM-representation strategy — scaling to billions without eating the machine (2026-06-29)
+### Active plan — ETL-SQL-owned columnar execution path (revised 2026-06-30)
+
+**Engineering conclusion:** compact columnar `#temp` storage is necessary but insufficient. If every
+read immediately reconstructs boxed `Row`/`DataTable` values, memory improves while CPU and allocation
+cost remain fundamentally row-at-a-time. The performance architecture must expose native column
+buffers directly to common operators, with the existing row path retained as a compatibility fallback.
+
+**Scope discipline:** do not attempt to reproduce all of DuckDB at once. Build columnar fast paths for
+the high-volume relational core while preserving ETL-SQL orchestration, connectors, governance,
+lineage, scripting, and heterogeneous-source behavior.
+
+#### P0 — Make certification truthful and diagnostic
+
+- [x] Replace the misleading `peakManagedMemoryMB` metric. It previously sampled
+  `GC.GetTotalMemory(forceFullCollection: true)` only after a scenario, so it is neither peak managed
+  memory nor process working set. *(Continuous 100 ms scenario sampler now gates peak process working
+  set and reports private bytes and managed heap.)*
+- [~] Sample and report peak process working set, private bytes, managed heap, allocation bytes, GC
+  counts/pause time, CPU time/utilization, spill read/write bytes, spill extent count, rows/second, and
+  partition-pass count while each scenario runs. *(Process/GC/CPU/throughput and spill-write metrics
+  shipped; spill-read, extent, and partition-pass counters require P1 engine telemetry.)*
+- [x] Enforce a fixed machine-independent memory ceiling. Remove row-proportional Huge defaults (the
+  current formula permits 80,000 MB at 10M rows). For the final lane, process peak must remain below
+  16 GB; configure the engine grant around 8–10 GB to leave runtime/GC headroom. *(Defaults are now
+  fixed at Smoke=1 GB, Standard=4 GB, Stress=8 GB, Huge=16 GB; explicit override remains supported.)*
+- [x] Split correctness, memory, and throughput gates. A scenario must not report “certified” merely
+  because it returned the right checksum after spilling. *(Separate fields are emitted; optional
+  `CERT_MIN_ROWS_PER_SECOND` activates the throughput gate.)*
+- [ ] Capture a checked-in baseline for 10M and 50M before changing storage. Use Release + server GC,
+  record machine CPU/RAM/disk, and report per-scenario metrics rather than one multi-scenario process
+  whose retained state contaminates later measurements.
+
+#### P1 — Fix spill I/O amplification before adding new operators
+
+Current `InMemoryDataSource.WriteBatches()` clones and validates every row, serially awaits each spill,
+and emits one chunk per processed batch. At 1B rows with 10K batches this can approach 100,000 spill
+chunks, making filesystem metadata and reader/writer setup dominate execution.
+
+- [ ] Introduce large sequential spill extents (initial target 64–256 MB), appending multiple logical
+  batches per extent. Bound open files and record extent count in certification.
+- [ ] Add a bounded double-buffered pipeline so producing/encoding the next batch can overlap writing
+  the current extent without violating the memory grant or cancellation semantics.
+- [ ] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
+- [ ] Measure compression as an explicit disk-vs-CPU tradeoff; do not enable it by assumption.
+- [ ] Wire pressure-based spill into every host composition root, not only Orchestrator. Keep the row
+  threshold as a backstop, but make bytes the authoritative trigger.
+
+#### P2 — Add a native column-batch contract and append-only `#temp` store
+
+- [ ] Add an internal `ColumnBatch` model with typed buffers, null bitmaps, row count, and schema.
+  Storage uses arrays/`Memory<T>`/pooled buffers; `Span<T>` is only a synchronous loop view.
+- [ ] Add a dual-path source contract such as `IColumnarDataSource.ReadColumnBatches()`. Preserve
+  `IDataSource.ReadBatches()` as the compatibility adapter for connectors and features that still need
+  rows. Do not force column batches through `Row` between column-capable operators.
+- [ ] Implement append-only segmented `#temp` storage first: bounded mutable head, immutable native
+  segments, large spill extents, deterministic disposal, and a row adapter only at fallback boundaries.
+- [ ] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
+  decimal, dates/times as native fixed-width values, booleans as bit/byte buffers, and strings using
+  offset/data or dictionary encoding selected from measured cardinality.
+- [ ] Use pooled/slab allocation and explicit ownership so large buffers do not create uncontrolled LOH
+  churn. Account allocated capacity—not only logical payload—against the memory grant.
+- [ ] Replace PK/unique full-row caches with compact key/hash structures before declaring constrained
+  columnar temp tables memory-bounded.
+
+#### P3 — Columnar fast paths (“columnar islands”)
+
+Operators use native batches when supported and fall back to the existing row engine for complex or
+unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimization after profiling.
+
+- [ ] Scan and projection without materializing `Row` objects.
+- [ ] Comparison, null, boolean, and simple arithmetic predicates using selection vectors.
+- [ ] `COUNT`, `SUM`, `MIN`, `MAX`, and `AVG` over native buffers.
+- [ ] Low-cardinality `GROUP BY` with compact typed keys and memory-bounded aggregate state.
+- [ ] Hash partition routing directly from column buffers.
+- [ ] Equi-join build/probe over typed key vectors and packed payload columns.
+- [ ] Sort-key extraction and run generation without boxing; retain the bounded external merge.
+- [ ] Add adapters and differential tests proving columnar and row paths return identical results,
+  null behavior, type coercion, collation behavior, lineage, and cancellation semantics.
+
+#### P4 — Partition sizing and spill-read fast paths
+
+- [ ] Replace fixed `ExternalHashPartitions=32` with fan-out derived from sampled/known input bytes,
+  key width, cardinality/skew evidence, and per-partition memory budget. Target one partitioning pass
+  for normal distributions.
+- [ ] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
+  aggregate, or repartition them.
+- [ ] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
+  diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM.
+
+#### P5 — Mutation and broader semantics after the fast path is proven
+
+- [ ] Add delete tombstones, update delta segments, and compaction only after append-only storage and
+  columnar operator gates pass. Mutation complexity must not delay proof of the central architecture.
+- [ ] Make `MERGE` bounded; it currently materializes source and target lists and is outside the initial
+  billion-row claim.
+- [ ] Reduce holistic aggregates to argument/order-key storage rather than full rows.
+- [ ] Add streaming/specialized window paths where frame semantics permit; a single huge window
+  partition remains outside the initial claim.
+- [ ] Extend columnar kernels based on measured hotspots. Use `System.Numerics.Vector<T>` or
+  `System.Runtime.Intrinsics` only where benchmarks show a material gain.
+
+#### Required incremental gates
+
+- [ ] **Gate A — harness:** 10M baseline reports trustworthy peak process memory and throughput data.
+- [ ] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
+  configured ceiling, and materially improves rows/second versus the checked-in baseline.
+- [ ] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
+  does not decode to rows during a columnar scan/count/checksum.
+- [ ] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
+  differential correctness and show a substantial throughput improvement at 10M/50M.
+- [ ] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
+  extent/file counts, and no unnecessary columnar→row→columnar round-trip.
+- [ ] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
+  and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
+  spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
+  aggregates, single-partition windows, billion-distinct-key aggregation, or adversarial skew.
+
+#### Non-goals and guardrails
+
+- Do not add DuckDB or another embedded database as the hidden execution engine.
+- Do not promise blanket “DuckDB performance”; publish operator-specific throughput and limits.
+- Do not remove the row engine. It remains the semantic fallback during incremental migration.
+- Do not optimize solely for the 1B headline at the expense of normal small/medium workloads; every
+  fast path needs crossover thresholds and regression benchmarks.
+- Do not claim the current scale report proves peak memory containment until Gate A lands.
+
+### Historical analysis — boxed rows, byte accounting, and original storage proposal (2026-06-29)
+
+> This section records completed work and the diagnosis that led to the revised plan. Its original
+> “columnar storage behind an unchanged Row interface” sequence is superseded by P0–P5 above wherever
+> they conflict.
 
 *Context: the 50M Huge cert still pins the whole box even though the **algorithms** are already the
 textbook DB playbook (grace hash join + recursive repartition; partitioned single-pass hash
@@ -216,8 +362,10 @@ aggregate; k-way merge sort; memory-guarded builds). The algorithm is not the pr
 **per-row in-memory representation**, the **imprecise governor**, and **fixed partition fan-out** are.
 Real engines (Postgres `work_mem`, SQL Server memory grants, DuckDB/Spark vectorized columnar) bound
 the working set by **bytes**, not by row-count luck, and keep tuples packed/columnar rather than as
-boxed object graphs. Plan: do B then A (proves the approach on the cheapest, safest change first),
-then C, D, E.*
+boxed object graphs. Plan: B then A (done; proves the approach on the cheapest, safest change first),
+then **F** (columnar `#temp` storage — the 1B-row/<16 GB memory goal) and **C** (dynamic fan-out).
+**D** is a smaller spill-read optimization; **E** (vectorized *execution*) is CPU-only and deferred —
+it builds on F, it does not replace it.*
 
 **Root cause — the build-side tuple is ~6–7× fatter than the data it holds.** A `Row`
 (`DataModel.cs:139`) is a `TableSchema` + `object?[]` of **boxed** values, and per the runtime rule
@@ -258,12 +406,12 @@ becomes ~250–300 B once in the join/aggregate `Dictionary<CompoundKey, List<Ro
   - [ ] **(A-better, deferred/risky) De-box numerics at the source** — carry native `long`/`double` in
     `Row` where the column type allows, reserving `decimal` for DECIMAL columns. Largest win (CPU too)
     but touches the deep "every number is decimal at runtime" invariant and many tests; own effort.
-- [ ] **(C) [Perf · MED · LOW effort] Size partition fan-out from an input estimate.** `PartitionCount`
+- [ ] **(C) [Historical; carried into active P4] Size partition fan-out from an input estimate.** `PartitionCount`
   is static (`Engine:ExternalHashPartitions`, default 32). On a billion-row input each partition is
   still huge → forced recursive repartition, and every recursion level is a full re-read + re-write to
   disk. Choose `PartitionCount ≈ estimatedBytes / perPartitionBudget` up front (or after the first
   pass) so each partition fits the grant in **one** pass — turns 3-pass operations into 1-pass.
-- [ ] **(D) [Perf · MED] Avoid the columnar→boxed `Row` round-trip on spill re-read.** *Correction to
+- [ ] **(D) [Historical; carried into active P4] Avoid the columnar→boxed `Row` round-trip on spill re-read.** *Correction to
   an earlier verbal claim: disk spill is **already Arrow columnar by default** (`SpillFormat=Arrow`,
   `appsettings.json:40`); JSON is only a legacy fallback for reading old persistent spill files — so
   this is not "switch to columnar."* The real gap is the **read side**: `ArrowSpillReader.ExtractValue`
@@ -271,10 +419,95 @@ becomes ~250–300 B once in the join/aggregate `Dictionary<CompoundKey, List<Ro
   `decimal` (`:774`), throwing away the columnar advantage in memory. For the partition→re-read→rebuild
   loop, aggregate/probe directly against the Arrow `RecordBatch` where possible instead of
   `ExtractRow` → boxed `Row` → re-hash.
-- [ ] **(E) [Perf · HIGHEST ceiling · ROADMAP, not now] Vectorized/columnar execution.** Batch-at-a-time
-  column-vector operators (process 1–4K-row vectors) — how DuckDB does billions on a laptop. Real
-  engine rewrite; B–D are the incremental path that captures most of the RAM win without it. Park in
-  `ROADMAP.md` once B–D land.
+- [~] **(E) [Historical; replaced by incremental active P3 fast paths] Vectorized columnar execution.**
+  Batch-at-a-time column-vector *operators* (evaluate predicates/arithmetic/aggregates over 1–4K-row
+  vectors) — the DuckDB **CPU** win. **This is the CPU track, distinct from (F) below, which is the
+  *storage* track.** Requires rewriting `ExpressionEvaluator` (today strictly row-at-a-time) to operate
+  on column vectors + custom `System.Runtime.Intrinsics` kernels (the C# `Apache.Arrow` lib ships **no**
+  compute kernels — see `Docs/Strategy/Arrow_Columnar_Strategy.md §2.2`), cascading into every handler.
+  **Does NOT replace (F); it builds on it** — (F) makes `#temp` storage columnar so a later (E) has
+  column vectors to vectorize over. The user's goal is **memory containment**, which (F) delivers
+  *without* (E). Park (E) in `ROADMAP.md`; only revisit for throughput, not RAM.
+
+- [~] **(F) [Historical; replaced by active P1–P3] Columnar segment storage for `#temp` tables.**
+  The storage diagnosis remains useful, but storage behind an unchanged row-at-a-time execution
+  interface is not sufficient for the memory-and-throughput target.
+
+  **Corrected diagnosis (verified):** `#temp` tables are `InMemoryDataSource` (`DataSources.cs:139`),
+  which **already spills** to Arrow columnar chunks (`TempTableSpillThresholdRows` at `:753` + reactive
+  `SpillAsync` at `:203`, via `ISpillable`/`IBufferManager`); a 10M `TempTableSpill` cert passes
+  RAM-bounded. So the gap is NOT "no spill." It is: (1) the **resident** rows are still fat boxed
+  `Row`/`List<Row>` (the ~6–7× blow-up) — spill bounds *how many* are resident, not how fat each is;
+  (2) pressure-spill (`IBufferManager`) is registered in Orchestrator DI but **not** App/engine DI, so
+  off-Orchestrator it relies only on the row-count threshold, not real bytes; (3) PK/Unique constraint
+  caches hold a **second full copy** of every row (`DataModel.cs:577`).
+
+  **Two design corrections (do not repeat the dead ends):**
+  - `Span<T>`/`ReadOnlySpan<T>` are `ref struct`s — stack-only, can't be fields, can't cross `await`.
+    They are **not** a storage type in this async engine. Storage = `Memory<T>` / typed arrays / column
+    buffers; `Span<T>` only inside synchronous inner loops.
+  - Immutability is the *model*, not the obstacle (Arrow/DuckDB transform input segments into new ones,
+    never mutate in place). Mutation is handled by tombstones + delta + compaction (below), supporting
+    **both** rare/small and frequent/large `UPDATE`/`DELETE`.
+
+  **Approach — dense native-typed column segments behind the existing `ReadBatches()`/`Row` interface
+  (no handler rewrite):**
+  - **Segment model:** a `#temp` = ordered list of immutable **column segments**, ~N rows each (N tied
+    to `BatchSize`; default 2048–8192), one **native-typed buffer per column** + null bitmap (`long[]`
+    integral, `double[]` float, `decimal[]` **only** for DECIMAL, `bool[]`, `DateTime`→`long[]` ticks+kind,
+    dictionary-encoded `string`). Native widths + no per-value object headers = the memory win (kills
+    boxing). Column-local de-boxing — no engine-wide invariant change (cf. the deferred A-better item).
+  - **Reads (`Row` adapter):** iterate frozen segments → skip tombstoned rows → decode column buffers to
+    a `Row` per live row → yield `BatchSize` `DataTable`s; then drain the delta. Handlers unchanged.
+    Reuse `RowPacker` for any per-row encode.
+  - **DELETE:** evaluate predicate, flip tombstone bits. O(matched), no rewrite — cheap small *and* large.
+  - **UPDATE:** = tombstone old row + append new version to the **mutable delta/head** buffer (freezes to
+    an immutable segment when it fills; spills if big). Uniform cost for small and large edits.
+  - **Compaction:** when tombstone density (>~30%) or delta size crosses a threshold, rewrite affected
+    segments (drop tombstoned, merge delta) to reclaim RAM/disk. Bulk cost paid lazily — bounds
+    large-edit workloads.
+  - **Spill = the segment** (already columnar → near zero-conversion vs today's per-spill `Row`→Arrow).
+    Reuse `ArrowSpillWriter`/`ISpillable`. **Wire `IBufferManager`/`MemoryGrantArbiter.Shared` into the
+    App composition root** so byte-pressure spill fires outside Orchestrator (keep row threshold as
+    backstop).
+  - **Constraints:** replace PK/Unique `HashSet<Row>` (full second copy) with a **key-hash** structure so
+    constrained `#temp`s don't defeat the density win.
+
+  **Critical files:** `src/ETL-SQL.Core/Data/DataSources.cs` (`InMemoryDataSource` — the heart);
+  **new** `src/ETL-SQL.Core/Data/ColumnSegment.cs` (typed buffers + null/tombstone bitmaps + delta +
+  freeze/decode-to-`Row`); `src/ETL-SQL.Core/Data/DataModel.cs` (`Row` decode adapter; constraint-cache
+  key change); `Handlers/UpdateStatementHandler.cs` + `DeleteStatementHandler.cs` (route mutations
+  through tombstone/delta ops); `Spill/SpillStore.cs` (segment-native spill); App
+  `DependencyInjectionSetup` (register `IBufferManager`). **Reuse:** `ISpillable`/`SpillAsync`/`ReadBatches`,
+  `ArrowSpillWriter`, `MemoryGrantArbiter.Shared`, `RowPacker`, `MemoryBudgetGuard`.
+
+  **Order (memory-first, incremental):** 1) columnar resident store behind `ReadBatches()`/`Row` +
+  segment-native spill (largest, do first); 2) mutation: tombstones (DELETE) + delta + UPDATE=tombstone
+  +append; 3) compaction trigger + reclaim; 4) wire byte-pressure spill into engine DI + key-hash
+  constraint cache.
+
+  **Verification:** existing `TempTableSpill_*`/`SpillCleanup_*` certs still pass; at equal row counts
+  peak managed MB materially below the `List<Row>` baseline (assert via cert harness `peakManagedMemoryMB`);
+  `SELECT * INTO #t` (10M+) → mutate → read-back checksum unchanged; DELETE skips tombstones, UPDATE
+  returns new values, compaction preserves results + reclaims; large `UPDATE`/`DELETE` over 10M stays
+  RAM-bounded (new small- and large-mutation cert scenarios); PK/Unique still enforced via key-hash.
+
+### Target: certify 1,000,000,000 rows below 16 GB process peak
+
+**Status: target, not an existing capability or proven outcome.** The current implementation and
+certification harness do not justify a blanket billion-row claim. The initial claim is deliberately
+narrow and is earned only by Gate F above.
+
+The first certified workload covers append-only scan, filter, projection, low-cardinality aggregation,
+and `#temp` round-trip. Join and sort have separate Gate E requirements and may join the published 1B
+matrix only after their measured throughput, spill passes, and skew behavior are acceptable. Arbitrary
+`MERGE`, holistic aggregates, single-partition windows, billion-distinct-key grouping, and adversarial
+skew remain explicitly outside the initial claim.
+
+Success requires both bounded memory and useful throughput. “Finished eventually after spilling” is a
+correctness result, not a performance certification. Every published result must include hardware,
+Release/GC configuration, peak process memory, elapsed time, rows/second, CPU utilization, spill bytes,
+extent count, partition passes, and required free disk.
 
 **Other scale dimensions (the user's matrix):**
 - [ ] **Script size** (10k lines × 10) — verify lexer/parser is O(n) and AST memory is bounded for very large scripts; `RUN SCRIPT` parse-caching already helps repeated targets.

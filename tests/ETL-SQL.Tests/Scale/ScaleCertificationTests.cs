@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -39,16 +40,20 @@ namespace ETL_SQL.Tests.Scale
 
     [Collection("ScaleCertification")]
     [Trait("Category", "ScaleCertification")]
-    public class ScaleCertificationTests
+    public class ScaleCertificationTests : IDisposable
     {
         private readonly ITestOutputHelper _out;
-        private readonly double _memoryBaselineMB;
+        private readonly ScenarioResourceSampler _resourceSampler;
 
         public ScaleCertificationTests(ITestOutputHelper output)
         {
             _out = output;
-            _memoryBaselineMB = GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0);
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            _resourceSampler = new ScenarioResourceSampler();
         }
+
+        public void Dispose() => _resourceSampler.Dispose();
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -240,7 +245,7 @@ namespace ETL_SQL.Tests.Scale
             return rowScale <= 10.0 ? "Standard" : "Stress";
         }
 
-        private static double MemoryBoundMB(int rowCount, double rowScale)
+        private static double MemoryBoundMB(double rowScale)
         {
             var raw = Environment.GetEnvironmentVariable("CERT_MEMORY_BOUND_MB");
             if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var configured) && configured > 0)
@@ -250,9 +255,11 @@ namespace ETL_SQL.Tests.Scale
 
             var bound = MemoryTier(rowScale) switch
             {
-                "Smoke" => Math.Max(512.0, rowCount * 0.02),
-                "Standard" => Math.Max(2_048.0, rowCount * 0.012),
-                _ => Math.Max(8_192.0, rowCount * 0.008)
+                "Smoke" => 1_024.0,
+                "Standard" => 4_096.0,
+                _ when string.Equals(Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER"),
+                    "Huge", StringComparison.OrdinalIgnoreCase) => 16_384.0,
+                _ => 8_192.0
             };
 
             return Math.Round(bound, 1);
@@ -269,13 +276,23 @@ namespace ETL_SQL.Tests.Scale
                 certificationTier = memoryTier;
             }
 
-            var managedMemoryMB = Math.Round(
-                Math.Max(0.0, GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0) - _memoryBaselineMB), 1);
-            var memoryBoundMB = MemoryBoundMB(rowCount, rowScale);
-
-            Assert.True(managedMemoryMB <= memoryBoundMB,
-                $"{scenario} managed memory {managedMemoryMB} MB exceeded {memoryTier} tier bound {memoryBoundMB} MB. " +
-                "Set CERT_MEMORY_BOUND_MB to an explicit machine-specific bound when certifying on constrained agents.");
+            var resources = _resourceSampler.SnapshotAndReset();
+            const double bytesPerMb = 1024.0 * 1024.0;
+            var peakWorkingSetMB = Math.Round(resources.PeakWorkingSetBytes / bytesPerMb, 1);
+            var peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / bytesPerMb, 1);
+            var peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / bytesPerMb, 1);
+            var allocatedMB = Math.Round(resources.AllocatedBytes / bytesPerMb, 1);
+            var memoryBoundMB = MemoryBoundMB(rowScale);
+            var rowsPerSecond = elapsedMs <= 0 ? 0 : Math.Round(rowCount / (elapsedMs / 1000.0), 1);
+            var memoryPassed = peakWorkingSetMB <= memoryBoundMB;
+            var minimumThroughput = double.TryParse(
+                Environment.GetEnvironmentVariable("CERT_MIN_ROWS_PER_SECOND"),
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var configuredThroughput)
+                && configuredThroughput > 0 ? configuredThroughput : (double?)null;
+            var throughputPassed = minimumThroughput.HasValue
+                ? rowsPerSecond >= minimumThroughput.Value
+                : (bool?)null;
+            var certificationPassed = passed && memoryPassed && throughputPassed != false;
 
             var metrics = new
             {
@@ -284,14 +301,40 @@ namespace ETL_SQL.Tests.Scale
                 memoryTier,
                 rowCount,
                 elapsedMs,
+                rowsPerSecond,
                 spillBytes,
+                spillWriteBytes = spillBytes,
+                spillReadBytes = (long?)null,
+                spillExtentCount = (int?)null,
+                partitionPassCount = (int?)null,
                 resultRows,
                 checksum,
-                peakManagedMemoryMB = managedMemoryMB,
+                peakProcessWorkingSetMB = peakWorkingSetMB,
+                peakPrivateBytesMB,
+                peakManagedHeapMB,
+                allocatedMB,
+                gcGen0Collections = resources.Gen0Collections,
+                gcGen1Collections = resources.Gen1Collections,
+                gcGen2Collections = resources.Gen2Collections,
+                gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+                cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+                cpuUtilizationPercent = resources.CpuUtilizationPercent,
+                serverGcEnabled = GCSettings.IsServerGC,
                 memoryBoundMB,
-                passed
+                memoryMetric = "peak process working set",
+                minimumRowsPerSecond = minimumThroughput,
+                correctnessPassed = passed,
+                memoryPassed,
+                throughputPassed,
+                passed = certificationPassed
             };
             _out.WriteLine("CERT_METRIC:" + JsonSerializer.Serialize(metrics));
+
+            Assert.True(memoryPassed,
+                $"{scenario} peak process working set {peakWorkingSetMB} MB exceeded {memoryTier} tier bound {memoryBoundMB} MB. " +
+                "Set CERT_MEMORY_BOUND_MB to an explicit machine-specific bound when certifying on constrained agents.");
+            Assert.True(throughputPassed != false,
+                $"{scenario} throughput {rowsPerSecond} rows/s was below the configured minimum of {minimumThroughput} rows/s.");
         }
 
         [Fact]

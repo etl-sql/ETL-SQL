@@ -69,12 +69,12 @@ if ($leftoverHosts) {
 
 # ── 1. Build ──────────────────────────────────────────────────────────────────
 Write-Host "Building solution..." -ForegroundColor Yellow
-dotnet build "$RepoRoot/ETL-SQL.slnx" -c Debug --no-restore -v quiet
+dotnet build "$RepoRoot/ETL-SQL.slnx" -c Release --no-restore -v quiet
 if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
 
 # Sanity check: the test binary must be at least as new as its sources, or the run would
 # silently execute stale code (the exact trap that makes the live HUD appear frozen at 0/0).
-$testDll = Join-Path $RepoRoot 'tests/ETL-SQL.Tests/bin/Debug/net10.0/ETL-SQL.Tests.dll'
+$testDll = Join-Path $RepoRoot 'tests/ETL-SQL.Tests/bin/Release/net10.0/ETL-SQL.Tests.dll'
 if (Test-Path $testDll) {
     $newestSrc = Get-ChildItem (Join-Path $RepoRoot 'tests/ETL-SQL.Tests') -Recurse -Filter *.cs -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -97,6 +97,7 @@ $rawLog = Join-Path $OutDir 'raw-output.txt'
 Write-Host "Running certification tests (filter: $filterExpr)..." -ForegroundColor Yellow
 $env:CERT_ROW_SCALE = $RowCountScale
 $env:CERT_CERTIFICATION_TIER = if ($Tier -eq 'All') { '' } else { $Tier }
+$env:DOTNET_gcServer = '1'
 
 if ($Tier -eq 'Standard') {
     $env:CERT_STANDARD_ROW_SCALE = $RowCountScale
@@ -128,7 +129,7 @@ $env:CERT_PROGRESS_FILE = $progressFile
 
 $errLog = "$rawLog.err"
 $dotnetArgs = @('test', "$RepoRoot/ETL-SQL.slnx", '--filter', $filterExpr,
-    '--logger', 'console;verbosity=detailed', '--no-build')
+    '--logger', 'console;verbosity=detailed', '--no-build', '-c', 'Release')
 
 Write-Host "Live status (full output -> $rawLog):" -ForegroundColor Gray
 $proc = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
@@ -195,6 +196,29 @@ if (Test-Path $errLog) { Get-Content $errLog | Add-Content $rawLog }
 
 $testExitCode = $proc.ExitCode
 
+$computer = Get-CimInstance Win32_ComputerSystem
+$processor = Get-CimInstance Win32_Processor | Select-Object -First 1
+$operatingSystem = Get-CimInstance Win32_OperatingSystem
+$disk = Get-CimInstance Win32_DiskDrive | Select-Object -First 1
+$workspaceDrive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($RepoRoot).TrimEnd(':','\'))
+$hardware = [ordered]@{
+    machineName      = $env:COMPUTERNAME
+    operatingSystem = $operatingSystem.Caption
+    osVersion       = $operatingSystem.Version
+    processor       = $processor.Name.Trim()
+    logicalCores    = [Environment]::ProcessorCount
+    physicalMemoryBytes = [long]$computer.TotalPhysicalMemory
+    diskModel        = $disk.Model
+    diskSizeBytes    = [long]$disk.Size
+    workspaceFreeBytes = [long]$workspaceDrive.Free
+    runtimeVersion  = [System.Runtime.InteropServices.RuntimeInformation]::FrameworkDescription
+    processArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+    buildConfiguration = 'Release'
+    serverGcRequested = $true
+    memoryGrantMB = if ($env:CERT_MEMORY_GRANT_MB) { [int]$env:CERT_MEMORY_GRANT_MB } else { 2048 }
+    memoryBoundMB = if ($env:CERT_MEMORY_BOUND_MB) { [double]$env:CERT_MEMORY_BOUND_MB } else { $null }
+}
+
 # ── 3. Parse CERT_METRIC lines ────────────────────────────────────────────────
 $metrics = Get-Content $rawLog |
     Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
@@ -204,12 +228,15 @@ $metrics = Get-Content $rawLog |
     } |
     Where-Object { $_ -ne $null }
 
+$hardware.serverGcEnabled = if ($metrics.Count -gt 0) { [bool]$metrics[0].serverGcEnabled } else { $null }
+
 # ── 4. Write JSON report ──────────────────────────────────────────────────────
 $report = [ordered]@{
     generatedAt   = (Get-Date -Format 'o')
     tier          = $Tier
     rowCountScale = $RowCountScale
     testsPassed   = ($testExitCode -eq 0)
+    hardware      = $hardware
     scenarios     = @($metrics)
 }
 
@@ -225,18 +252,28 @@ $mdLines = @(
     "",
     "## Results",
     "",
-    "| Scenario | Rows | Elapsed (ms) | Spill (bytes) | Result Rows | Memory (MB) | Memory Bound (MB) | Pass |",
-    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
+    "| Scenario | Rows | Rows/s | Elapsed (ms) | Spill Write | Peak WS (MB) | Private (MB) | Heap (MB) | Allocated (MB) | CPU % | GC Pause (ms) | Bound (MB) | Pass |",
+    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
 )
 
 foreach ($m in $metrics) {
     $pass = if ($m.passed) { 'OK' } else { 'FAIL' }
-    $mdLines += "| $($m.scenario) | $($m.rowCount) | $($m.elapsedMs) | $($m.spillBytes) | $($m.resultRows) | $($m.peakManagedMemoryMB) | $($m.memoryBoundMB) | $pass |"
+    $mdLines += "| $($m.scenario) | $($m.rowCount) | $($m.rowsPerSecond) | $($m.elapsedMs) | $($m.spillWriteBytes) | $($m.peakProcessWorkingSetMB) | $($m.peakPrivateBytesMB) | $($m.peakManagedHeapMB) | $($m.allocatedMB) | $($m.cpuUtilizationPercent) | $($m.gcPauseMs) | $($m.memoryBoundMB) | $pass |"
 }
 
 if ($metrics.Count -eq 0) {
-    $mdLines += "| _No metrics collected — check test output_ | | | | | | | |"
+    $mdLines += "| _No metrics collected — check test output_ | | | | | | | | | | | | |"
 }
+
+$mdLines += ""
+$mdLines += "## Environment"
+$mdLines += ""
+$mdLines += "- OS: $($hardware.operatingSystem) $($hardware.osVersion)"
+$mdLines += "- CPU: $($hardware.processor) ($($hardware.logicalCores) logical cores)"
+$mdLines += "- RAM: $([math]::Round($hardware.physicalMemoryBytes / 1GB, 1)) GB"
+$mdLines += "- Disk: $($hardware.diskModel), $([math]::Round($hardware.diskSizeBytes / 1GB, 1)) GB; workspace free $([math]::Round($hardware.workspaceFreeBytes / 1GB, 1)) GB"
+$mdLines += "- Runtime: $($hardware.runtimeVersion), $($hardware.processArchitecture), Release, server GC enabled: $($hardware.serverGcEnabled)"
+$mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
 
 $mdLines += ""
 $mdLines += "## Operator Status"
