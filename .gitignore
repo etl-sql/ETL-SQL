@@ -155,6 +155,11 @@ etlsql.db
 !Docs/QUICKSTART.txt
 *.cs.scratch
 *.etlsql.scratch
+
+# Transient cert-run logs (baseline-*.json and cert-report.* stay tracked)
+certification-results/*.log
+certification-results/*.err
+certification-results/*.out
 test_lineage.md
 test_out.txt
 tests_list.txt
