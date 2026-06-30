@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -103,6 +104,20 @@ public class FileOperationStatementHandler : IStatementHandler
         string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
         string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
         string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        var sourceAccess = stmt.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename
+            ? FileSystemAccessKind.Move
+            : FileSystemAccessKind.Read;
+        source = pathAuthorizer.Authorize(context, source, sourceAccess,
+            validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
+        if (dest != null)
+        {
+            var destinationAccess = stmt.Type == FileOpType.Decompress
+                ? FileSystemAccessKind.Extract
+                : FileSystemAccessKind.Write;
+            dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
+                validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
+        }
 
         // Security Hardening: Count this as a file operation for runaway protection
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -143,6 +158,7 @@ public class FileOperationStatementHandler : IStatementHandler
             switch (stmt.Type)
             {
                 case FileOpType.Delete:
+                    source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete).CanonicalPath;
                     // Security Hardening: Block deleting script files and dangerous file types
                     context.SecurityService.ValidateWriteAccess(source);
                     context.SecurityService.ValidateFileType(source);
@@ -166,6 +182,7 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Copy:
                     if (dest != null)
                     {
+                        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
@@ -181,6 +198,8 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Move:
                     if (dest != null)
                     {
+                        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Move).CanonicalPath;
+                        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Move).CanonicalPath;
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
