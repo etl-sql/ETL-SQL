@@ -13,6 +13,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
@@ -45,6 +46,7 @@ public class ReturnException : Exception
 /// </summary>
 public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
 {
+    public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
     private readonly IEnumerable<IStatementHandler> _handlers;
     private readonly IServiceProvider _serviceProvider = null!;
     private readonly Core.Functions.IFunctionRegistry _functionRegistry;
@@ -748,6 +750,19 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         if (CurrentRecursiveDepth == 0)
         {
+            var actor = script.Metadata.TryGetValue("author", out var author)
+                && !string.IsNullOrWhiteSpace(author) ? author : Environment.UserName;
+            var mode = InteractiveMode
+                ? ScriptExecutionMode.Interactive
+                : string.IsNullOrWhiteSpace(JobName)
+                    ? ScriptExecutionMode.Batch
+                    : ScriptExecutionMode.Scheduled;
+            var canonicalScript = string.Join("\n", script.Statements.Select(statement => statement.ToSql()));
+            var scriptHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(canonicalScript))).ToLowerInvariant();
+            ExecutionPolicy = ExecutionPolicySnapshot.Capture(
+                EnterprisePolicyRuntime.Current, actor, mode, scriptHash, JobName);
+
             foreach (var rs in LastResultSets) rs.Clear();
             LastResultSets.Clear();
             ClearResults();
@@ -1311,7 +1326,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             ScriptPassword = ScriptPassword,
             SessionId = SessionId,
             DisplayExecuteTree = DisplayExecuteTree,
-            MaxGroupingSets = MaxGroupingSets
+            MaxGroupingSets = MaxGroupingSets,
+            ExecutionPolicy = ExecutionPolicy
         };
 
         fork.Telemetry.IsProfiling = Telemetry.IsProfiling;

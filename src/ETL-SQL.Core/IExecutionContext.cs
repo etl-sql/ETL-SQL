@@ -335,6 +335,9 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
                                     ITransactionContext, ILineageContext, IDockerContext,
                                     ILoggingContext, IEvaluationContext, IDataContext, IEngineContext, IVariableContext
 {
+    /// <summary>Immutable enterprise-policy state captured for the current top-level execution.</summary>
+    Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+
     // Property-based access to sub-contexts for better interface segregation (TODO-91)
     IVariableContext VarContext { get; }
     IReportContext ReportContext { get; }
