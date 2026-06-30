@@ -22,6 +22,9 @@
     Multiplier applied to row counts. When omitted or <= 0, defaults by tier:
     Smoke=1.0, Standard=10.0, Stress=100.0, Huge=1000.0, Provider=1.0, All=1.0.
 
+.PARAMETER Scenario
+    Optional named scenario to run in isolation. Intended for reproducible baseline capture.
+
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
@@ -32,7 +35,15 @@ param(
 
     [string]$OutDir = './certification-results',
 
-    [double]$RowCountScale = 0.0
+    [double]$RowCountScale = 0.0,
+
+    [ValidateSet('', 'ExternalSort', 'ExternalAggregate', 'ExternalJoin', 'TempTableSpill',
+        'StreamingSelect', 'WindowFunction', 'CsvIngest', 'ParquetRoundTrip',
+        'ReportDatasetSnapshotReload', 'CubeGroupingSets', 'ScalarSubqueryCache',
+        'SpillCleanupSuccess', 'SpillCleanupFailure')]
+    [string]$Scenario = '',
+
+    [switch]$SkipBuild
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,7 +62,7 @@ if ($RowCountScale -le 0) {
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL Scale Certification Runner" -ForegroundColor Cyan
-Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x" -ForegroundColor Gray
+Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x  |  Scenario: $(if ($Scenario) { $Scenario } else { 'all' })" -ForegroundColor Gray
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -68,9 +79,11 @@ if ($leftoverHosts) {
 }
 
 # ── 1. Build ──────────────────────────────────────────────────────────────────
-Write-Host "Building solution..." -ForegroundColor Yellow
-dotnet build "$RepoRoot/ETL-SQL.slnx" -c Release --no-restore -v quiet
-if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
+if (-not $SkipBuild) {
+    Write-Host "Building solution..." -ForegroundColor Yellow
+    dotnet build "$RepoRoot/ETL-SQL.slnx" -c Release --no-restore -v quiet
+    if ($LASTEXITCODE -ne 0) { Write-Error "Build failed"; exit 1 }
+}
 
 # Sanity check: the test binary must be at least as new as its sources, or the run would
 # silently execute stale code (the exact trap that makes the live HUD appear frozen at 0/0).
@@ -85,7 +98,25 @@ if (Test-Path $testDll) {
 }
 
 # ── 2. Run tests ──────────────────────────────────────────────────────────────
-$filterExpr = if ($Tier -eq 'All') {
+$scenarioMethods = @{
+    ExternalSort = 'Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized'
+    ExternalAggregate = 'Cert_Smoke_ExternalAggregate_100kRows_CorrectSums'
+    ExternalJoin = 'Cert_Smoke_ExternalJoin_50kRows_CorrectResults'
+    TempTableSpill = 'Cert_Smoke_TempTableSpill_50kRows_CorrectCount'
+    StreamingSelect = 'Cert_Smoke_StreamingSelect_ResultCapEnforced'
+    WindowFunction = 'Cert_Smoke_WindowFunction_50kRows_CorrectRankValues'
+    CsvIngest = 'Cert_Smoke_CsvIngest_50kRows_CorrectChecksum'
+    ParquetRoundTrip = 'Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum'
+    ReportDatasetSnapshotReload = 'Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum'
+    CubeGroupingSets = 'Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum'
+    ScalarSubqueryCache = 'Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys'
+    SpillCleanupSuccess = 'Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles'
+    SpillCleanupFailure = 'Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles'
+}
+
+$filterExpr = if ($Scenario) {
+    "FullyQualifiedName=ETL_SQL.Tests.Scale.ScaleCertificationTests.$($scenarioMethods[$Scenario])"
+} elseif ($Tier -eq 'All') {
     "Category=ScaleCertification"
 } else {
     "Category=ScaleCertification&Tier=$Tier"
@@ -139,8 +170,12 @@ $runStart = Get-Date
 while (-not $proc.HasExited) {
     Start-Sleep -Seconds 4
 
-    $os = Get-CimInstance Win32_OperatingSystem
-    $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+    } catch {
+        $freeGB = $null
+    }
 
     $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
         Sort-Object WorkingSet64 -Descending | Select-Object -First 1
@@ -185,9 +220,10 @@ while (-not $proc.HasExited) {
     # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
     # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
     $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
-    $warn = if ($freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
+    $freeDisplay = if ($null -eq $freeGB) { 'n/a' } else { "$freeGB" }
+    $warn = if ($null -ne $freeGB -and $freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
     $line = ('[{0:hh\:mm\:ss}] {1,-26} | RAM {2}GB free {3}GB | spill {4}GB | ETA {5} | {6}{7}' `
-        -f $elapsed, $phase, $procGB, $freeGB, $spillGB, $eta, $act, $warn)
+        -f $elapsed, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
     Write-Host ("`r" + $line.PadRight(150)) -NoNewline
 }
 $proc.WaitForExit()
@@ -196,20 +232,21 @@ if (Test-Path $errLog) { Get-Content $errLog | Add-Content $rawLog }
 
 $testExitCode = $proc.ExitCode
 
-$computer = Get-CimInstance Win32_ComputerSystem
-$processor = Get-CimInstance Win32_Processor | Select-Object -First 1
-$operatingSystem = Get-CimInstance Win32_OperatingSystem
-$disk = Get-CimInstance Win32_DiskDrive | Select-Object -First 1
+try { $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $computer = $null }
+try { $processor = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch { $processor = $null }
+try { $operatingSystem = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { $operatingSystem = $null }
+try { $disk = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Select-Object -First 1 } catch { $disk = $null }
 $workspaceDrive = Get-PSDrive -Name ([System.IO.Path]::GetPathRoot($RepoRoot).TrimEnd(':','\'))
+$fallbackMemory = [GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
 $hardware = [ordered]@{
     machineName      = $env:COMPUTERNAME
-    operatingSystem = $operatingSystem.Caption
-    osVersion       = $operatingSystem.Version
-    processor       = $processor.Name.Trim()
+    operatingSystem = if ($operatingSystem) { $operatingSystem.Caption } else { [System.Runtime.InteropServices.RuntimeInformation]::OSDescription }
+    osVersion       = if ($operatingSystem) { $operatingSystem.Version } else { [Environment]::OSVersion.Version.ToString() }
+    processor       = if ($processor) { $processor.Name.Trim() } else { $env:PROCESSOR_IDENTIFIER }
     logicalCores    = [Environment]::ProcessorCount
-    physicalMemoryBytes = [long]$computer.TotalPhysicalMemory
-    diskModel        = $disk.Model
-    diskSizeBytes    = [long]$disk.Size
+    physicalMemoryBytes = if ($computer) { [long]$computer.TotalPhysicalMemory } else { [long]$fallbackMemory }
+    diskModel        = if ($disk) { $disk.Model } else { 'Unavailable' }
+    diskSizeBytes    = if ($disk) { [long]$disk.Size } else { 0 }
     workspaceFreeBytes = [long]$workspaceDrive.Free
     runtimeVersion  = [System.Runtime.InteropServices.RuntimeInformation]::FrameworkDescription
     processArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
@@ -235,6 +272,7 @@ $report = [ordered]@{
     generatedAt   = (Get-Date -Format 'o')
     tier          = $Tier
     rowCountScale = $RowCountScale
+    scenario      = if ($Scenario) { $Scenario } else { $null }
     testsPassed   = ($testExitCode -eq 0)
     hardware      = $hardware
     scenarios     = @($metrics)

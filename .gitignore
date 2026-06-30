@@ -160,6 +160,7 @@ etlsql.db
 certification-results/*.log
 certification-results/*.err
 certification-results/*.out
+certification-results/baseline-*-runs/
 test_lineage.md
 test_out.txt
 tests_list.txt

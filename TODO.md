@@ -252,9 +252,10 @@ lineage, scripting, and heterogeneous-source behavior.
 - [x] Split correctness, memory, and throughput gates. A scenario must not report “certified” merely
   because it returned the right checksum after spilling. *(Separate fields are emitted; optional
   `CERT_MIN_ROWS_PER_SECOND` activates the throughput gate.)*
-- [ ] Capture a checked-in baseline for 10M and 50M before changing storage. Use Release + server GC,
+- [~] Capture a checked-in baseline for 10M and 50M before changing storage. Use Release + server GC,
   record machine CPU/RAM/disk, and report per-scenario metrics rather than one multi-scenario process
-  whose retained state contaminates later measurements.
+  whose retained state contaminates later measurements. *(Isolated 10M core baseline captured in
+  `certification-results/baseline-10m.json`; resumable 50M capture remains.)*
 
 #### P1 — Fix spill I/O amplification before adding new operators
 
@@ -327,7 +328,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 
 #### Required incremental gates
 
-- [ ] **Gate A — harness:** 10M baseline reports trustworthy peak process memory and throughput data.
+- [x] **Gate A — harness:** 10M baseline reports trustworthy peak process memory and throughput data.
+  *(Each core scenario runs in a fresh Release/server-GC test host via `Test-ScaleBaseline.ps1`.)*
 - [ ] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
   configured ceiling, and materially improves rows/second versus the checked-in baseline.
 - [ ] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
