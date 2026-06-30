@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -272,7 +273,7 @@ public class FileOperationStatementHandler : IStatementHandler
 
                         if (File.Exists(source))
                         {
-                            ZipFile.ExtractToDirectory(source, dest, overwrite);
+                            SafeZipExtractor.Extract(source, dest, overwrite, context, pathAuthorizer);
                             context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
                         }
                         else

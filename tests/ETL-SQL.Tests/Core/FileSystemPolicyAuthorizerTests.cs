@@ -1,8 +1,10 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Moq;
+using System.IO.Compression;
 
 namespace ETL_SQL.Tests.Core;
 
@@ -70,6 +72,48 @@ public sealed class FileSystemPolicyAuthorizerTests
 
             Assert.Equal("Filesystem:Write", denied.Decision.PolicyKey);
             Assert.Contains("immutability", denied.Decision.Reason, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void SafeZipExtractor_RejectsTraversalBeforeWritingEntry()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_zip_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var archivePath = Path.Combine(root, "payload.zip");
+        var destination = Path.Combine(root, "output");
+        var escaped = Path.Combine(root, "escape.csv");
+        try
+        {
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            {
+                var entry = archive.CreateEntry("../escape.csv");
+                using var writer = new StreamWriter(entry.Open());
+                writer.Write("blocked");
+            }
+
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() => SafeZipExtractor.Extract(
+                archivePath, destination, overwrite: false, context.Object,
+                new FileSystemPolicyAuthorizer(security)));
+
+            Assert.Equal("Filesystem:ArchiveExtraction", denied.Decision.PolicyKey);
+            Assert.False(File.Exists(escaped));
         }
         finally
         {
