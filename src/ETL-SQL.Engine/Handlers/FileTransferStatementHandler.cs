@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -28,6 +29,7 @@ public class FileTransferStatementHandler : IStatementHandler
         string localPathVal = (await context.EvaluateValue(stmt.LocalPath, new Row()))?.ToString() ?? "";
         string localPath = context.ResolvePath(localPathVal);
         string remotePath = (await context.EvaluateValue(stmt.RemotePath, new Row()))?.ToString() ?? "";
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
 
         bool overwrite = true;
         if (stmt.Overwrite != null)
@@ -50,6 +52,8 @@ public class FileTransferStatementHandler : IStatementHandler
             {
                 string dir = Path.GetDirectoryName(localPath) ?? Directory.GetCurrentDirectory();
                 string pattern = Path.GetFileName(localPath);
+                dir = pathAuthorizer.Authorize(context, dir, FileSystemAccessKind.Enumerate,
+                    validateFileType: false).CanonicalPath;
 
                 if (!Directory.Exists(dir))
                 {
@@ -67,17 +71,19 @@ public class FileTransferStatementHandler : IStatementHandler
 
                 foreach (var localFile in localFiles)
                 {
+                    var authorizedLocalFile = pathAuthorizer.Authorize(context, localFile,
+                        FileSystemAccessKind.Read).CanonicalPath;
                     // Security Hardening: Check read/write rules
                     context.SecurityService.ValidateFileType(localFile);
 
                     string remoteFile = remotePath;
                     if (remotePath.EndsWith("/") || remotePath.EndsWith("\\") || string.IsNullOrEmpty(remotePath))
                     {
-                        remoteFile = remotePath + Path.GetFileName(localFile);
+                        remoteFile = remotePath + Path.GetFileName(authorizedLocalFile);
                     }
                     else
                     {
-                        remoteFile = remotePath + "/" + Path.GetFileName(localFile);
+                        remoteFile = remotePath + "/" + Path.GetFileName(authorizedLocalFile);
                     }
 
                     if (context.IsWhatIf)
@@ -87,12 +93,14 @@ public class FileTransferStatementHandler : IStatementHandler
                     }
 
                     _logger.WriteLine($"Sending: {localFile} -> {stmt.ConnectionName}:{remoteFile}", ConsoleColor.Cyan);
-                    await remoteFs.UploadFileAsync(localFile, remoteFile, overwrite);
+                    await remoteFs.UploadFileAsync(authorizedLocalFile, remoteFile, overwrite);
                 }
                 _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
             else
             {
+                localPath = pathAuthorizer.Authorize(context, localPath,
+                    FileSystemAccessKind.Read).CanonicalPath;
                 _logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
 
                 context.SecurityService.ValidateFileType(localPath);
@@ -111,6 +119,9 @@ public class FileTransferStatementHandler : IStatementHandler
         else // Receive
         {
             bool hasWildcard = remotePath.Contains('*') || remotePath.Contains('?');
+            localPath = pathAuthorizer.Authorize(context, localPath,
+                FileSystemAccessKind.Write,
+                validateFileType: !hasWildcard).CanonicalPath;
 
             if (hasWildcard)
             {
@@ -128,7 +139,9 @@ public class FileTransferStatementHandler : IStatementHandler
                 // Compile regex for wildcard pattern
                 string escaped = System.Text.RegularExpressions.Regex.Escape(remotePattern);
                 string regexPattern = "^" + escaped.Replace("\\*", ".*").Replace("\\?", ".") + "$";
-                var regex = new System.Text.RegularExpressions.Regex(regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                var regex = new System.Text.RegularExpressions.Regex(regexPattern,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+                    context.SecurityService.RegexMatchTimeout);
 
                 var remoteFilesList = remoteFs.ListFilesAsync(remoteDir);
                 int matchCount = 0;
@@ -141,7 +154,9 @@ public class FileTransferStatementHandler : IStatementHandler
                     if (regex.IsMatch(fileNameOnly))
                     {
                         matchCount++;
-                        string localFile = Path.Combine(localPath, fileNameOnly);
+                        string localFile = pathAuthorizer.Authorize(context,
+                            Path.Combine(localPath, fileNameOnly),
+                            FileSystemAccessKind.Write).CanonicalPath;
 
                         // Security Hardening: Block writing to script files
                         context.SecurityService.ValidateWriteAccess(localFile);
@@ -156,6 +171,8 @@ public class FileTransferStatementHandler : IStatementHandler
                         _logger.WriteLine($"Receiving: {stmt.ConnectionName}:{remoteFile.FullPath} -> {localFile}", ConsoleColor.Cyan);
                         var dir = Path.GetDirectoryName(localFile);
                         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                        localFile = pathAuthorizer.Authorize(context, localFile,
+                            FileSystemAccessKind.Write).CanonicalPath;
                         await remoteFs.DownloadFileAsync(remoteFile.FullPath, localFile, overwrite);
                     }
                 }
@@ -185,6 +202,8 @@ public class FileTransferStatementHandler : IStatementHandler
 
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                localPath = pathAuthorizer.Authorize(context, localPath,
+                    FileSystemAccessKind.Write).CanonicalPath;
                 await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
                 _logger.WriteLine("Download complete.", ConsoleColor.Green);
             }
