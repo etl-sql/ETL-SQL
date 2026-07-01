@@ -58,6 +58,7 @@ public class EvaluatorOptions
     public string SpillFormat { get; set; } = "Arrow";
     public bool AutoRollbackOnFinish { get; set; } = true;
     public bool ReuseLoopNodes { get; set; } = true;
+    public bool UseColumnarTempTables { get; set; }
     public bool DisplayExecuteTree { get; set; } = true;
     public bool IsProfiling { get; set; } = true;
 

@@ -18,6 +18,22 @@ namespace ETL_SQL.Tests.Engine;
 public sealed class ColumnarSelectRoutingTests
 {
     [Fact]
+    public async Task OptInCreatesEligibleTempTableWithColumnarStoreAndPreservesSemanticFallback()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT NOT NULL, Name VARCHAR(20)); " +
+            "CREATE TABLE #fallback (Id INT DEFAULT 7); " +
+            "INSERT INTO #native VALUES (1, 'one');"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        Assert.Equal(1, native.EstimatedRowCount);
+        Assert.IsType<InMemoryDataSource>(evaluator.Connections["#fallback"]);
+    }
+
+    [Fact]
     public async Task SimpleSelectFiltersAndProjectsNativeSourceWithoutCallingRowReader()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -242,6 +258,9 @@ public sealed class ColumnarSelectRoutingTests
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
         return Assert.IsType<SelectStatement>(Assert.Single(script.Statements));
     }
+
+    private static Script ParseScript(string sql)
+        => new Parser(new Lexer(sql).Tokenize(), sql).Parse();
 
     private static NativeOnlyDataSource CreateSource(bool throwOnRowRead = true)
     {

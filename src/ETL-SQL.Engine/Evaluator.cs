@@ -177,6 +177,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
     public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
+    public bool UseColumnarTempTables { get => _options.UseColumnarTempTables; set => _options.UseColumnarTempTables = value; }
     public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
     public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
     public string? JobName { get => _options.JobName; set => _options.JobName = value; }

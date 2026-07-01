@@ -222,8 +222,10 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   reads, materializes rows only for `IDataSource` fallback, supports memory-releasing `TRUNCATE`,
   normalizes row writes to declared types, and enforces `NOT NULL` on row/native input. Integrating it
   also supports nested transaction snapshots through retained immutable segments, restoring row counts
-  and constraint keys on rollback without copying payload buffers. Integrating it as the engine's
-  `#temp` backing store and adding segment-native spill remain.)*
+  and constraint keys on rollback without copying payload buffers. An explicit default-off engine mode
+  now creates eligible declared `#temp` schemas on the append store, while identity/default/check/FK or
+  unsupported physical schemas retain the row store. Default routing, mutation eligibility, session
+  persistence, and segment-native spill remain.)*
 - [~] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
   decimal, dates/times as native fixed-width values, booleans as bit/byte buffers, and strings using
   offset/data or dictionary encoding selected from measured cardinality. *(The physical model now
