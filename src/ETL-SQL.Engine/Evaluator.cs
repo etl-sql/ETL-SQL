@@ -537,7 +537,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
-        UseColumnarTempTables = config?.GetValue<bool>("Engine:UseColumnarTempTables") ?? false;
+        UseColumnarTempTables = config?.GetValue("Engine:UseColumnarTempTables", true) ?? true;
         LineageEnabled = DefaultThresholds.LineageEnabled(config);
         LineageNamespace = config?.GetValue<string>("Lineage:Namespace") ?? "etl-sql";
         LineageImportCatalog = config?.GetValue<bool>("Lineage:ImportCatalogMetadata") ?? false;

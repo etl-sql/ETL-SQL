@@ -19,12 +19,9 @@ namespace ETL_SQL.Tests.Engine;
 public sealed class ColumnarSelectRoutingTests
 {
     [Fact]
-    public async Task OptInCreatesEligibleTempTableWithColumnarStoreAndPreservesSemanticFallback()
+    public async Task DefaultCreatesEligibleTempTableWithColumnarStoreAndPreservesSemanticFallback()
     {
-        var evaluator = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
-        {
-            ["Engine:UseColumnarTempTables"] = "true"
-        }).GetRequiredService<Evaluator>();
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.IsPersistentSession = false;
 
         await evaluator.Evaluate(ParseScript(
@@ -35,6 +32,20 @@ public sealed class ColumnarSelectRoutingTests
         var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
         Assert.Equal(1, native.EstimatedRowCount);
         Assert.IsType<InMemoryDataSource>(evaluator.Connections["#fallback"]);
+    }
+
+    [Fact]
+    public async Task ConfigurationCanOptOutOfColumnarTempStorage()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+        {
+            ["Engine:UseColumnarTempTables"] = "false"
+        }).GetRequiredService<Evaluator>();
+        evaluator.IsPersistentSession = false;
+
+        await evaluator.Evaluate(ParseScript("CREATE TABLE #rows (Id INT);"));
+
+        Assert.IsType<InMemoryDataSource>(evaluator.Connections["#rows"]);
     }
 
     [Fact]
