@@ -871,7 +871,14 @@ public class InMemoryDataSource : IDataSource, ISpillable
         {
             if (extentWriter != null)
             {
-                await extentWriter.DisposeAsync();
+                try
+                {
+                    await extentWriter.DisposeAsync();
+                }
+                catch
+                {
+                    // Suppress secondary exceptions during cleanup to preserve the original exception
+                }
                 if (ExecutionContext != null && extentName != null)
                     ExecutionContext.SpillStore.DeleteChunk(extentName);
             }

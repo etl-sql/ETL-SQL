@@ -74,20 +74,10 @@ namespace ETL_SQL.Connectors.Json
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = PrepareReadPath(tempFiles, ".json");
-
-            try
+            using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
+            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
-                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
-                {
-                    yield return batch;
-                }
-            }
-            finally
-            {
-                DeleteTempFiles(tempFiles);
+                yield return batch;
             }
         }
 
@@ -180,21 +170,12 @@ namespace ETL_SQL.Connectors.Json
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            var tempFiles = new List<string>();
-            string effectivePath;
-            try { effectivePath = PrepareReadPath(tempFiles, ".json"); }
-            catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-
             try
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
+                using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
                 return await JsonExtractor.GetColumnsAsync(stream, _rootPath);
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            finally
-            {
-                DeleteTempFiles(tempFiles);
-            }
         }
 
         private string PrepareReadPath(List<string> tempFiles, string extension)

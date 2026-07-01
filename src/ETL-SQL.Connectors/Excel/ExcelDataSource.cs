@@ -70,86 +70,78 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = PrepareReadPath(tempFiles);
+            var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
+            using var stream = await GetSeekableStreamAsync(baseStream);
+            using var reader = ExcelReaderFactory.CreateReader(stream);
 
-            try
+            // Accepted exception (Rule 2): ExcelDataReader has no async read API.
+            // The full sheet is loaded into a DataSet synchronously here. Re-evaluate if
+            // ExcelDataReader ever ships an async overload or we switch libraries.
+            var result = reader.AsDataSet(new ExcelDataSetConfiguration()
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
-                using var reader = ExcelReaderFactory.CreateReader(stream);
-
-                // Accepted exception (Rule 2): ExcelDataReader has no async read API.
-                // The full sheet is loaded into a DataSet synchronously here. Re-evaluate if
-                // ExcelDataReader ever ships an async overload or we switch libraries.
-                var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+                ConfigureDataTable = (_) => new ExcelDataTableConfiguration()
                 {
-                    ConfigureDataTable = (_) => new ExcelDataTableConfiguration()
-                    {
-                        UseHeaderRow = false
-                    }
-                });
-
-                System.Data.DataTable? sheet = ResolveSheet(result);
-
-                if (sheet == null) yield break;
-
-                var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
-
-                int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
-                int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
-                int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
-                int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
-
-                if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
-
-                var columnNames = new List<string>();
-                int dataStartRow = startRow;
-
-                if (_hasHeader && startRow < sheet.Rows.Count)
-                {
-                    var headerRow = sheet.Rows[startRow];
-                    for (int c = startCol; c <= endCol; c++)
-                    {
-                        columnNames.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
-                    }
-                    dataStartRow++;
+                    UseHeaderRow = false
                 }
-                else
-                {
-                    for (int c = startCol; c <= endCol; c++)
-                    {
-                        columnNames.Add($"Column{c - startCol + 1}");
-                    }
-                }
+            });
 
-                var etlBatch = new ETL_SQL.Data.DataTable();
-                etlBatch.SetColumns(columnNames);
+            System.Data.DataTable? sheet = ResolveSheet(result);
 
-                for (int r = dataStartRow; r <= endRow; r++)
-                {
-                    var row = sheet.Rows[r];
-                    var etlRow = etlBatch.NewRow();
-                    for (int c = startCol; c <= endCol; c++)
-                    {
-                        string colName = columnNames[c - startCol];
-                        etlRow[colName] = row[c] == DBNull.Value ? null : row[c];
-                    }
-                    await etlBatch.AddRowAsync(etlRow);
+            if (sheet == null) yield break;
 
-                    if (etlBatch.Rows.Count >= batchSize)
-                    {
-                        yield return etlBatch;
-                        etlBatch = new ETL_SQL.Data.DataTable();
-                        etlBatch.SetColumns(columnNames);
-                    }
-                }
+            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
 
-                if (etlBatch.Rows.Count > 0) yield return etlBatch;
-            }
-            finally
+            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
+            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
+            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
+            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+
+            if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
+
+            var columnNames = new List<string>();
+            int dataStartRow = startRow;
+
+            if (_hasHeader && startRow < sheet.Rows.Count)
             {
-                DeleteTempFiles(tempFiles);
+                var headerRow = sheet.Rows[startRow];
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    columnNames.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                }
+                dataStartRow++;
             }
+            else
+            {
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    columnNames.Add($"Column{c - startCol + 1}");
+                }
+            }
+
+            var etlBatch = new ETL_SQL.Data.DataTable();
+            etlBatch.SetColumns(columnNames);
+
+            for (int r = dataStartRow; r <= endRow; r++)
+            {
+                var row = sheet.Rows[r];
+                var etlRow = etlBatch.NewRow();
+                for (int c = startCol; c <= endCol; c++)
+                {
+                    string colName = columnNames[c - startCol];
+                    etlRow[colName] = row[c] == DBNull.Value ? null : row[c];
+                }
+                await etlBatch.AddRowAsync(etlRow);
+
+                if (etlBatch.Rows.Count >= batchSize)
+                {
+                    yield return etlBatch;
+                    etlBatch = new ETL_SQL.Data.DataTable();
+                    etlBatch.SetColumns(columnNames);
+                }
+            }
+
+            if (etlBatch.Rows.Count > 0)
+                yield return etlBatch;
         }
 
         public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)
@@ -161,11 +153,10 @@ namespace ETL_SQL.Connectors.Excel
 
             if (append && System.IO.File.Exists(_filePath))
             {
-                var readTempFiles = new List<string>();
                 try
                 {
-                    string effectiveReadPath = PrepareReadPath(readTempFiles);
-                    using (var stream = System.IO.File.OpenRead(effectiveReadPath))
+                    var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
+                    using (var stream = GetSeekableStream(baseStream))
                     using (var reader = ExcelReaderFactory.CreateReader(stream))
                     {
                         var result = reader.AsDataSet(new ExcelDataSetConfiguration()
@@ -185,7 +176,7 @@ namespace ETL_SQL.Connectors.Excel
                             int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
                             int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
 
-                            if (startRow >= 0 && startRow <= endRow && startCol >= 0 && startCol <= endCol)
+                            if (startCol >= 0 && startCol <= endCol && startRow >= 0)
                             {
                                 int dataStartRow = startRow;
                                 if (_hasHeader && startRow < sheet.Rows.Count)
@@ -208,7 +199,7 @@ namespace ETL_SQL.Connectors.Excel
                                 for (int r = dataStartRow; r <= endRow; r++)
                                 {
                                     var row = sheet.Rows[r];
-                                    var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                                    var rowDict = new Dictionary<string, object?>();
                                     for (int c = startCol; c <= endCol; c++)
                                     {
                                         string colName = existingColumns[c - startCol];
@@ -223,10 +214,6 @@ namespace ETL_SQL.Connectors.Excel
                 catch (Exception ex)
                 {
                     _logger.Debug("[ExcelDataSource.WriteBatches] Failed to read existing Excel file for append: {Message}", ex.Message);
-                }
-                finally
-                {
-                    DeleteTempFiles(readTempFiles);
                 }
             }
 
@@ -377,14 +364,10 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            var tempFiles = new List<string>();
-            string effectivePath;
-            try { effectivePath = PrepareReadPath(tempFiles); }
-            catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-
             try
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
+                var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
+                using var stream = GetSeekableStream(baseStream);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 var result = reader.AsDataSet(new ExcelDataSetConfiguration()
                 {
@@ -417,7 +400,6 @@ namespace ETL_SQL.Connectors.Excel
                 }
             }
             catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); }
-            finally { DeleteTempFiles(tempFiles); }
             return Enumerable.Empty<string>();
         }
 
@@ -425,20 +407,15 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            var tempFiles = new List<string>();
-            string effectivePath;
-            try { effectivePath = PrepareReadPath(tempFiles); }
-            catch { return Enumerable.Empty<string>(); }
-
             try
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
+                var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");
+                using var stream = GetSeekableStream(baseStream);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 var result = reader.AsDataSet();
                 return result.Tables.Cast<System.Data.DataTable>().Select(t => t.TableName).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
-            finally { DeleteTempFiles(tempFiles); }
         }
 
         public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
@@ -544,6 +521,24 @@ namespace ETL_SQL.Connectors.Excel
 
                 return (row, col);
             }
+        }
+
+        private async Task<Stream> GetSeekableStreamAsync(Stream stream)
+        {
+            if (stream.CanSeek) return stream;
+            var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0;
+            return new ChainedStream(ms, stream);
+        }
+
+        private Stream GetSeekableStream(Stream stream)
+        {
+            if (stream.CanSeek) return stream;
+            var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            ms.Position = 0;
+            return new ChainedStream(ms, stream);
         }
     }
 }

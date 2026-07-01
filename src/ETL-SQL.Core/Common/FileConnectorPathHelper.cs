@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 
 namespace ETL_SQL.Core.Common
 {
@@ -72,6 +74,35 @@ namespace ETL_SQL.Core.Common
                 }
             }
             return path;
+        }
+
+        public static Stream OpenReadStream(string filePath, EncryptionOptions encryption, bool compress, string defaultExtension)
+        {
+            var baseStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Stream currentStream = baseStream;
+
+            if (encryption.Enabled)
+            {
+                currentStream = encryption.DecryptStream(currentStream);
+            }
+
+            if (compress && (filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                             || encryption.Enabled))
+            {
+                var archive = new System.IO.Compression.ZipArchive(currentStream, System.IO.Compression.ZipArchiveMode.Read);
+                var entry = archive.Entries.FirstOrDefault();
+                if (entry != null)
+                {
+                    var entryStream = entry.Open();
+                    return new ChainedStream(entryStream, archive, currentStream, baseStream);
+                }
+                else
+                {
+                    archive.Dispose();
+                }
+            }
+
+            return new ChainedStream(currentStream, baseStream);
         }
     }
 }

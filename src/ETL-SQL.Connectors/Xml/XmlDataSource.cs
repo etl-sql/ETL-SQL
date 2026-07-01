@@ -73,13 +73,12 @@ namespace ETL_SQL.Connectors.Xml
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = GetEffectivePath(tempFiles);
+            Func<Stream> opener = () => FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xml");
 
             try
             {
                 // Pass 1 — stream through once to discover column names (no data retained)
-                var columnNames = await DiscoverColumnsAsync(effectivePath);
+                var columnNames = await DiscoverColumnsAsync(opener);
                 if (columnNames.Count == 0) yield break;
 
                 var schema = new TableSchema();
@@ -90,7 +89,7 @@ namespace ETL_SQL.Connectors.Xml
                 currentBatch.SetColumns(schema.ColumnNames);
                 var activeSchema = currentBatch.Schema;
 
-                await foreach (var record in StreamRecordsAsync(effectivePath))
+                await foreach (var record in StreamRecordsAsync(opener))
                 {
                     var row = currentBatch.NewRow();
                     foreach (var (name, value) in record.Attributes)
@@ -118,7 +117,6 @@ namespace ETL_SQL.Connectors.Xml
             }
             finally
             {
-                DeleteTempFiles(tempFiles);
             }
         }
 
@@ -128,10 +126,10 @@ namespace ETL_SQL.Connectors.Xml
             List<(string Name, string Value)> Attributes,
             List<(string Name, string Value)> Children);
 
-        private async Task<List<string>> DiscoverColumnsAsync(string path)
+        private async Task<List<string>> DiscoverColumnsAsync(Func<Stream> streamOpener)
         {
             var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await foreach (var record in StreamRecordsAsync(path))
+            await foreach (var record in StreamRecordsAsync(streamOpener))
             {
                 foreach (var (name, _) in record.Attributes) columns.Add(name);
                 foreach (var (name, _) in record.Children) columns.Add(name);
@@ -145,10 +143,10 @@ namespace ETL_SQL.Connectors.Xml
         /// text values are captured; nested elements are skipped (same behaviour as
         /// the previous XDocument implementation).
         /// </summary>
-        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(string path)
+        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(Func<Stream> streamOpener)
         {
             var settings = new XmlReaderSettings { Async = true };
-            using var fileStream = File.OpenRead(path);
+            using var fileStream = streamOpener();
             using var textReader = new StreamReader(fileStream, _encoding);
             using var reader = XmlReader.Create(textReader, settings);
 
