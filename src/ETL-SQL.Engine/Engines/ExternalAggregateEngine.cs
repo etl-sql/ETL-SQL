@@ -45,7 +45,7 @@ public class ExternalAggregateEngine
     }
 
     /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
-    public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
+    public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long? knownRowCount = null, long? knownInputBytes = null)
     {
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         bool yieldedAny = false;
@@ -61,7 +61,7 @@ public class ExternalAggregateEngine
             if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
             {
                 expandedSets = _inMemoryEngine.ExpandGroupingSets(groupingSet);
-                var multiSet = await PartitionStreamMultiSet(inputStream, expandedSets);
+                var multiSet = await PartitionStreamMultiSet(inputStream, expandedSets, knownRowCount, knownInputBytes);
                 partitionPaths = multiSet.Names;
                 setCounts = multiSet.SetCounts;
 
@@ -76,7 +76,7 @@ public class ExternalAggregateEngine
             }
             else
             {
-                var partitioned = await PartitionStream(inputStream, groupBy);
+                var partitioned = await PartitionStream(inputStream, groupBy, knownRowCount, knownInputBytes);
                 partitionPaths = partitioned.Names;
                 partitionRowCounts = partitioned.RowCounts;
             }
@@ -326,7 +326,11 @@ public class ExternalAggregateEngine
 
     private sealed record PartitionResult(string[] Names, long[] RowCounts);
 
-    private async Task<PartitionResult> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? groupBy)
+    private async Task<PartitionResult> PartitionStream(
+        IAsyncEnumerable<Row> stream,
+        List<Expression>? groupBy,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         await using var enumerator = stream.GetAsyncEnumerator(_context.CancellationToken);
         var sample = new List<Row>(MaxFanOutSampleRows);
@@ -339,7 +343,7 @@ public class ExternalAggregateEngine
             sample.Add(row);
             sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
         }
-        await ConfigurePartitionCount(sample, groupBy);
+        await ConfigurePartitionCount(sample, groupBy, knownRowCount, knownInputBytes);
 
         var names = new string[PartitionCount];
         var rowCounts = new long[PartitionCount];
@@ -390,7 +394,11 @@ public class ExternalAggregateEngine
         return new PartitionResult(names, rowCounts);
     }
 
-    private async Task ConfigurePartitionCount(IReadOnlyList<Row> sample, List<Expression>? groupBy)
+    private async Task ConfigurePartitionCount(
+        IReadOnlyList<Row> sample,
+        List<Expression>? groupBy,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         if (sample.Count == 0 || groupBy == null || groupBy.Count == 0) return;
         long inputBytes = 0;
@@ -410,16 +418,22 @@ public class ExternalAggregateEngine
         var budget = MemoryGovernor.Ceiling(_context);
         if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)sample.Count;
+        var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
+        var plannedRows = hasExactTotal ? knownRowCount!.Value : sample.Count;
+        var plannedBytes = hasExactTotal ? knownInputBytes!.Value : inputBytes;
+        var estimatedDistinct = hasExactTotal
+            ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)sample.Count)))
+            : frequencies.Count;
         var plan = HashPartitionSizing.Calculate(
-            inputBytes,
-            sample.Count,
+            plannedBytes,
+            plannedRows,
             (int)Math.Min(int.MaxValue, keyBytes / sample.Count),
             budget,
-            estimatedDistinctKeys: frequencies.Count,
+            estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
             largestKeyFraction: hotFraction,
-            minimumPartitions: _partitionCount,
+            minimumPartitions: hasExactTotal ? 1 : _partitionCount,
             maximumPartitions: Math.Max(1024, _partitionCount));
-        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
         _logger.Debug(
             "External aggregate sampled {SampleRows} rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
             sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
@@ -433,7 +447,11 @@ public class ExternalAggregateEngine
         while (await remainder.MoveNextAsync()) yield return remainder.Current;
     }
 
-    private async Task<MultiSetPartitionResult> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
+    private async Task<MultiSetPartitionResult> PartitionStreamMultiSet(
+        IAsyncEnumerable<Row> stream,
+        List<List<Expression>> sets,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         await using var enumerator = stream.GetAsyncEnumerator(_context.CancellationToken);
         var sample = new List<Row>(MaxFanOutSampleRows);
@@ -446,7 +464,7 @@ public class ExternalAggregateEngine
             sample.Add(row);
             sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
         }
-        await ConfigureGroupingSetPartitionCount(sample, sets);
+        await ConfigureGroupingSetPartitionCount(sample, sets, knownRowCount, knownInputBytes);
 
         var names = new string[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
@@ -519,7 +537,9 @@ public class ExternalAggregateEngine
 
     private async Task ConfigureGroupingSetPartitionCount(
         IReadOnlyList<Row> sample,
-        IReadOnlyList<List<Expression>> sets)
+        IReadOnlyList<List<Expression>> sets,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         if (sample.Count == 0 || sets.Count == 0) return;
         long inputBytes = 0;
@@ -545,16 +565,22 @@ public class ExternalAggregateEngine
         var budget = MemoryGovernor.Ceiling(_context);
         if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)expandedRows;
+        var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
+        var plannedRows = hasExactTotal ? checked(knownRowCount!.Value * sets.Count) : expandedRows;
+        var plannedBytes = hasExactTotal ? checked(knownInputBytes!.Value * sets.Count) : inputBytes;
+        var estimatedDistinct = hasExactTotal
+            ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)expandedRows)))
+            : frequencies.Count;
         var plan = HashPartitionSizing.Calculate(
-            inputBytes,
-            expandedRows,
+            plannedBytes,
+            plannedRows,
             (int)Math.Min(int.MaxValue, keyBytes / expandedRows),
             budget,
-            estimatedDistinctKeys: frequencies.Count,
+            estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
             largestKeyFraction: hotFraction,
-            minimumPartitions: _partitionCount,
+            minimumPartitions: hasExactTotal ? 1 : _partitionCount,
             maximumPartitions: Math.Max(1024, _partitionCount));
-        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
         _logger.Debug(
             "External grouping sets sampled {SampleRows} input rows ({ExpandedRows} expanded) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
             sample.Count, expandedRows, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);

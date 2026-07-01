@@ -9,6 +9,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -147,6 +148,27 @@ namespace ETL_SQL.Tests.Operations.Operations
             {
                 MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
             }
+        }
+
+        [Fact]
+        public async Task ExactInputEstimateCanReduceOversizedConfiguredBaseline()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 64;
+            eval.OperatorMemoryGrantMB = 1;
+            var rows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["category"] = "g" + id, ["value"] = 1m })
+                .ToList();
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            var result = await engine.ApplyAggregationExternal(
+                rows.ToAsyncEnumerable(), groupBy, columns, names,
+                knownRowCount: rows.Count,
+                knownInputBytes: RowWidthEstimator.EstimateTotalBytes(rows)).ToListAsync();
+
+            Assert.Equal(16, result.Count);
+            Assert.True(engine.PartitionCount < 64);
         }
 
         [Fact]

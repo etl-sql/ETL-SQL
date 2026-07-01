@@ -468,7 +468,11 @@ public class SelectExecutionEngine
             {
                 var externalAgg = new ExternalAggregateEngine(_context, _logger);
                 // Phase 7: Keep as lazy stream; WINDOW can chain directly; QUALIFY or full ORDER BY forces materialization.
-                externalEngineStream = externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                externalEngineStream = externalAgg.ApplyAggregationExternal(
+                    allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames,
+                    stmt.HavingClause, stmt.GroupingSet,
+                    knownRowCount: allRows.Count,
+                    knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
             }
             else
