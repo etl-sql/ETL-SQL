@@ -93,6 +93,7 @@ public sealed class ExternalDistinctTests
 
             Assert.Equal(10, results.Count);
             Assert.Equal(20, engine.ColumnarBuildRows);
+            Assert.True(engine.ColumnarRepartitionRows > 0);
         }
         finally
         {

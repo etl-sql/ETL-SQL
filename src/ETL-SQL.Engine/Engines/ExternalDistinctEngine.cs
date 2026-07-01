@@ -30,6 +30,7 @@ internal sealed class ExternalDistinctEngine
 
     internal int PartitionCount => _partitionCount;
     internal long ColumnarBuildRows { get; private set; }
+    internal long ColumnarRepartitionRows { get; private set; }
 
     public async IAsyncEnumerable<Row> ApplyAsync(IAsyncEnumerable<Row> source)
     {
@@ -178,12 +179,64 @@ internal sealed class ExternalDistinctEngine
     /// <summary>Repartitions a partition; returns the sub-set only if it actually split (else null).</summary>
     private async Task<PartitionSet?> TryRepartition(string name, int depth, long originalRowCount, List<string> tempFiles)
     {
-        var sub = await PartitionAsync(ReadPartition(name), depth, tempFiles);
+        var sub = _context.SpillFormat.Equals("Json", StringComparison.OrdinalIgnoreCase)
+            ? await PartitionAsync(ReadPartition(name), depth, tempFiles)
+            : await RepartitionColumnar(name, depth, tempFiles);
         var used = sub.Counts.Count(c => c > 0);
         var largest = sub.Counts.Length == 0 ? 0 : sub.Counts.Max();
         // No split (e.g. every row shares the same key) → caller falls back to in-memory/policy.
         if (used <= 1 || largest >= originalRowCount) return null;
         return sub;
+    }
+
+    private async Task<PartitionSet> RepartitionColumnar(string sourceName, int depth, List<string> tempFiles)
+    {
+        var names = new string[PartitionCount];
+        var counts = new long[PartitionCount];
+        var writers = new ISpillWriter[PartitionCount];
+        var operationId = Guid.NewGuid().ToString("N");
+        for (var partition = 0; partition < PartitionCount; partition++)
+        {
+            names[partition] = $"distinct_d{depth}_{operationId}_{partition}.tmp";
+            tempFiles.Add(names[partition]);
+            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition]);
+        }
+
+        try
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(sourceName);
+            await foreach (var batch in ((IColumnarSpillReader)reader).AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    var routes = Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray();
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        var partition = (RouteKey(batch, rowIndex, depth).GetHashCode() & 0x7fffffff) % PartitionCount;
+                        routes[partition].Add(rowIndex);
+                    }
+                    var columns = batch.Schema.Fields.Select(field => field.Name).ToArray();
+                    for (var partition = 0; partition < routes.Length; partition++)
+                    {
+                        if (routes[partition].Count == 0) continue;
+                        using var selection = SelectionVector.FromIndices(routes[partition]);
+                        using var compacted = ColumnBatchAdapter.Compact(
+                            batch, columns, selection, _context.CancellationToken);
+                        await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
+                        counts[partition] += compacted.RowCount;
+                        ColumnarRepartitionRows += compacted.RowCount;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            for (var partition = 0; partition < writers.Length; partition++)
+                await writers[partition].DisposeAsync();
+            _context.Telemetry.PartitionsCount += counts.Count(count => count > 0);
+            _context.Telemetry.PartitionPassCount++;
+        }
+        return new PartitionSet(names, counts);
     }
 
     /// <summary>
@@ -355,6 +408,14 @@ internal sealed class ExternalDistinctEngine
         var values = new object?[names.Length];
         for (var i = 0; i < values.Length; i++) values[i] = row[names[i]];
         return new CompoundKey(depth, values);
+    }
+
+    private static CompoundKey RouteKey(ColumnBatch batch, int rowIndex, int depth)
+    {
+        var values = new object?[batch.Schema.Count];
+        for (var column = 0; column < values.Length; column++)
+            values[column] = RowPacker.ReadBatchValue(batch, column, rowIndex);
+        return depth == 0 ? new CompoundKey(values) : new CompoundKey(depth, values);
     }
 
     private readonly record struct PartitionSet(string[] Names, long[] Counts);
