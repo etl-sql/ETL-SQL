@@ -479,6 +479,20 @@ For **parser syntax removals**: keep the old form parsing (with a lint warning e
 
 **Do not add behavioral shims** ("run v1 semantics on a v3 engine"). Shims accumulate indefinitely and make the engine unmaintainable. The migration linter is the compatibility layer — build it when a major version ships with breaking changes, not before.
 
+### 14.1 Release, Versioning, and Branching Rules
+
+ETL-SQL strictly follows [Semantic Versioning 2.0.0](https://semver.org/). Agents must respect the following rules:
+
+- **Pre-1.0.0 Releases (`0.y.z`):** The engine runtime is in active development. Breaking changes and syntax deprecations are allowed between minor versions (e.g., `v0.13.0` to `v0.14.0`) but MUST be logged in `BREAKING_CHANGES.md` and follow the deprecation process. Patch releases (e.g., `v0.14.1`) are reserved for bug fixes.
+- **Post-1.0.0 Releases (`1.y.z` and beyond):** 
+  - **Minor versions (`1.x.0`):** New features, connector additions, or enhancements. Must be strictly backwards-compatible; no breaking changes are permitted.
+  - **Patch versions (`1.x.y`):** Backward-compatible bug fixes and security hotfixes only.
+  - **Major versions (`x.0.0`):** Reserved for breaking changes, syntax removals, and paradigm shifts.
+- **Branch Management for Stable Releases:**
+  - Active development for minor/major versions occurs on the `main` branch.
+  - Upon tagging a stable release (e.g., `v1.0.0`), create a release branch named `release/v1.0` (or `release/v1.x`).
+  - Critical bug fixes and security hotfixes targeting that release must be applied (or cherry-picked) to its corresponding `release/v1.x` branch and released as patch version updates (e.g., `v1.0.1`). These fixes must also be integrated back into the `main` branch.
+
 ---
 
 ## 15. Syntax Consistency Rules
