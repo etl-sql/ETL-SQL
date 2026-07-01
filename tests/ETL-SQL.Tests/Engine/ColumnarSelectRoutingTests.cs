@@ -252,10 +252,10 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task GroupedHavingDeclinesNativeRouteAndUsesEstablishedPipeline()
+    public async Task ProjectedGroupedHavingFiltersBoundedNativeResults()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-        await using var source = CreateGroupedSource(throwOnRowRead: false);
+        await using var source = CreateGroupedSource();
         evaluator.Connections["grouped"] = source;
         var statement = ParseSelect(
             "SELECT GroupId, SUM(Value) AS Total FROM grouped " +
@@ -265,6 +265,20 @@ public sealed class ColumnarSelectRoutingTests
             .EvaluateQuery(statement, evaluator).ToListAsync();
 
         Assert.Single(results.SelectMany(batch => batch.Rows));
+        Assert.Equal(0, source.RowReadAttempts);
+    }
+
+    [Fact]
+    public async Task UnprojectedGroupedHavingDeclinesNativeRoute()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateGroupedSource(throwOnRowRead: false);
+        evaluator.Connections["grouped"] = source;
+        var statement = ParseSelect(
+            "SELECT GroupId FROM grouped GROUP BY GroupId HAVING COUNT(*) > 1;");
+
+        await new SelectStatementHandler(NullLogger.Instance).EvaluateQuery(statement, evaluator).ToListAsync();
+
         Assert.Equal(1, source.RowReadAttempts);
     }
 

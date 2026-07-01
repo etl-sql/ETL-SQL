@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
@@ -14,15 +15,17 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
     private readonly string _keyColumn;
     private readonly string[] _valueColumns;
     private readonly Slot[] _slots;
+    private readonly Expression? _havingClause;
     private readonly List<IState> _states = new();
 
     private ColumnarGroupedAggregatePlan(
-        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots)
+        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots, Expression? havingClause)
     {
         _context = context;
         _keyColumn = keyColumn;
         _valueColumns = valueColumns;
         _slots = slots;
+        _havingClause = havingClause;
     }
 
     public static bool TryCreate(
@@ -34,7 +37,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         if (statement.FromTable.TableOperators.Count != 0
             || statement.Joins.Count != 0
             || statement.GroupBy?.Count != 1 || statement.GroupBy[0] is not IdentifierExpression key
-            || statement.GroupingSet != null || statement.HavingClause != null
+            || statement.GroupingSet != null
             || statement.OrderBy != null || statement.Offset != null || statement.LimitCount != null
             || statement.TopCount != null || statement.IsDistinct || statement.QualifyClause != null
             || statement.Sample != null || statement.IsTopPercent || statement.GroupByAll || statement.OrderByAll)
@@ -42,12 +45,15 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         var keyColumn = key.Name.Split('.').Last();
         var valueColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var slots = new List<Slot>(statement.Columns.Count);
+        var projectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var aggregateAliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var column in statement.Columns)
         {
             if (column.Expression is IdentifierExpression identifier
                 && identifier.Name.Split('.').Last().Equals(keyColumn, StringComparison.OrdinalIgnoreCase))
             {
                 slots.Add(new Slot(SlotKind.Key, null, false));
+                projectedNames.Add(column.Alias ?? identifier.Name.Split('.').Last());
                 continue;
             }
             if (column.Expression is not FunctionCallExpression function
@@ -75,9 +81,15 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                 valueColumns.Add(argument);
             }
             slots.Add(new Slot(kind, argument, countStar));
+            var outputName = column.Alias ?? column.Expression.ToSql();
+            projectedNames.Add(outputName);
+            aggregateAliases[column.Expression.ToSql()] = outputName;
         }
         if (valueColumns.Count > 1 && !slots.Any(slot => slot.Kind == SlotKind.Key)) return false;
-        plan = new ColumnarGroupedAggregatePlan(context, keyColumn, valueColumns.ToArray(), slots.ToArray());
+        if (!TryRewriteHaving(statement.HavingClause, aggregateAliases, projectedNames, out var havingClause))
+            return false;
+        plan = new ColumnarGroupedAggregatePlan(
+            context, keyColumn, valueColumns.ToArray(), slots.ToArray(), havingClause);
         return true;
     }
 
@@ -111,12 +123,18 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         foreach (var state in _states) state.Accumulate(batch, selection);
     }
 
-    public DataTable FinalizeResult(IReadOnlyList<string> outputNames)
+    public async Task<DataTable> FinalizeResultAsync(IReadOnlyList<string> outputNames)
     {
         var table = new DataTable();
         table.SetColumns(outputNames);
         for (var index = 0; index < _states.Count; index++)
             _states[index].WriteRows(table, _slots, createRows: index == 0);
+        if (_havingClause != null)
+        {
+            for (var index = table.Rows.Count - 1; index >= 0; index--)
+                if (!await _context.EvaluateCondition(_havingClause, table.Rows[index]))
+                    table.Rows.RemoveAt(index);
+        }
         return table;
     }
 
@@ -150,6 +168,43 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
 
     private static bool IsSupportedKey(Type type)
         => IsNumeric(type) || type == typeof(DateTime) || type == typeof(TimeSpan) || type == typeof(Guid);
+
+    private static bool TryRewriteHaving(
+        Expression? expression,
+        IReadOnlyDictionary<string, string> aggregateAliases,
+        IReadOnlySet<string> projectedNames,
+        out Expression? rewritten)
+    {
+        if (expression == null) { rewritten = null; return true; }
+        switch (expression)
+        {
+            case LiteralExpression:
+                rewritten = expression;
+                return true;
+            case IdentifierExpression identifier when projectedNames.Contains(identifier.Name.Split('.').Last()):
+                rewritten = new IdentifierExpression(identifier.Name.Split('.').Last());
+                return true;
+            case FunctionCallExpression function when aggregateAliases.TryGetValue(function.ToSql(), out var alias):
+                rewritten = new IdentifierExpression(alias);
+                return true;
+            case BinaryExpression binary
+                when TryRewriteHaving(binary.Left, aggregateAliases, projectedNames, out var left)
+                    && TryRewriteHaving(binary.Right, aggregateAliases, projectedNames, out var right):
+                rewritten = new BinaryExpression(left!, binary.Operator, right!);
+                return true;
+            case UnaryExpression unary
+                when TryRewriteHaving(unary.Expression, aggregateAliases, projectedNames, out var inner):
+                rewritten = new UnaryExpression(unary.Operator, inner!);
+                return true;
+            case IsNullExpression isNull
+                when TryRewriteHaving(isNull.Expression, aggregateAliases, projectedNames, out var nullInner):
+                rewritten = new IsNullExpression(nullInner!, isNull.Not);
+                return true;
+            default:
+                rewritten = null;
+                return false;
+        }
+    }
 
     private interface IState : IDisposable
     {

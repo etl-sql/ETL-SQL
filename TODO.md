@@ -283,8 +283,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   numeric value column, including null keys, supported native predicates, and first-batch row fallback.
   Key-only COUNT(*) plans use a separate leased count state, so temporal/GUID keys do not require a
   fabricated numeric value buffer. Aggregates over multiple numeric value columns use independently
-  leased typed states merged by the shared key. String/composite keys, HAVING, and spill partitioning
-  remain.)*
+  leased typed states merged by the shared key. HAVING over projected aggregate/key expressions is
+  evaluated after native aggregation on the bounded group result; unprojected/complex HAVING falls back.
+  String/composite keys and spill partitioning remain.)*
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and

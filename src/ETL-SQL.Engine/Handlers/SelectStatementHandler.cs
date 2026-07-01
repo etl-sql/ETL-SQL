@@ -171,7 +171,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
                         if (firstNative == null)
                         {
-                            yield return groupedPlan!.FinalizeResult(groupedNames);
+                            yield return await groupedPlan!.FinalizeResultAsync(groupedNames);
                             yield break;
                         }
 
@@ -198,7 +198,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                     throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
                                 using (selection) groupedPlan.Accumulate(nativeBatch, selection);
                             }
-                            yield return groupedPlan.FinalizeResult(groupedNames);
+                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
                             yield break;
                         }
 
