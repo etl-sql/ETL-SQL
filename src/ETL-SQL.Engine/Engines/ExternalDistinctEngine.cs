@@ -253,6 +253,23 @@ internal sealed class ExternalDistinctEngine
     {
         var seen = new HashSet<CompoundKey>();
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is IColumnarSpillReader columnarReader)
+        {
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        ColumnarBuildRows++;
+                        if (seen.Add(Key(batch, rowIndex)))
+                            yield return RowPacker.MaterializeBatchRow(batch, rowIndex);
+                    }
+                }
+            }
+            yield break;
+        }
+
         await foreach (var row in reader.AsEnumerableAsync())
             if (seen.Add(Key(row))) yield return row;
     }

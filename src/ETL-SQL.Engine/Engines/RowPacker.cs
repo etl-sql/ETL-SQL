@@ -86,6 +86,14 @@ internal sealed class RowPacker
         return text;
     }
 
+    internal static Row MaterializeBatchRow(ColumnBatch batch, int rowIndex)
+    {
+        var row = new Row();
+        for (var column = 0; column < batch.Schema.Count; column++)
+            row[batch.Schema.Fields[column].Name] = ReadBatchValue(batch, column, rowIndex);
+        return row;
+    }
+
     /// <summary>Reconstructs a <see cref="Row"/> from a blob produced by <see cref="Pack"/>.</summary>
     public static Row Unpack(byte[] data, IReadOnlyList<string> columns)
     {

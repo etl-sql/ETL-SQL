@@ -65,6 +65,7 @@ public sealed class ExternalDistinctTests
             Assert.Equal(1024, results.Count);
             Assert.Equal(1024, results.Select(row => row["id"]).Distinct().Count());
             Assert.True(engine.PartitionCount > 2);
+            Assert.Equal(4096, engine.ColumnarBuildRows);
         }
         finally
         {

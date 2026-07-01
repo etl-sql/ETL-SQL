@@ -340,7 +340,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   and validity bits are copied directly into pooled native storage without per-value string decoding.
   External join build hashing and compact-row packing now consume those batches without constructing
   build-side `Row` graphs; governed DISTINCT performs full-row hashing and compact retention the same
-  way. Probe/repartition paths, ungoverned DISTINCT output, and aggregate/window routing remain.)*
+  way. Ungoverned DISTINCT also hashes batches directly and materializes only unique output rows.
+  Join probe/repartition paths and aggregate/window routing remain.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts
