@@ -244,9 +244,10 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
         }
         else if (connection is AppendOnlyColumnDataSource)
         {
-            throw new ExecutionException(
-                $"CREATE INDEX is not supported by the append-only columnar temp store for {connName}. " +
-                "Disable Engine:UseColumnarTempTables for scripts that create indexes.");
+            var mutable = (InMemoryDataSource)await TempTableStorageRouter.EnsureMutableAsync(
+                _evaluator, connName, connection, "CREATE INDEX");
+            foreach (var col in stmt.Columns) mutable.CreateIndex(col, stmt.IsUnique);
+            _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
         }
         else
         {

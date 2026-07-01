@@ -76,20 +76,85 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task OptInColumnarTempRejectsUnsupportedIndexAndReplaceSemantics()
+    public async Task ColumnarTempDowngradesForIndexAndPreservesRowsAndConstraints()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.UseColumnarTempTables = true;
         evaluator.IsPersistentSession = false;
-        await evaluator.Evaluate(ParseScript("CREATE TABLE #native (Id INT PRIMARY KEY);"));
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY, Name VARCHAR(20)); " +
+            "INSERT INTO #native VALUES (1, 'one'); " +
+            "CREATE INDEX ix_native ON #native (Name);"));
 
-        var indexError = await Assert.ThrowsAsync<ExecutionException>(() =>
-            evaluator.Evaluate(ParseScript("CREATE INDEX ix_native ON #native (Id);")));
-        Assert.Contains("not supported", indexError.Message, StringComparison.OrdinalIgnoreCase);
+        var rowStore = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#native"]);
+        Assert.Single((await rowStore.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows));
 
-        var replaceError = await Assert.ThrowsAsync<ExecutionException>(() =>
-            evaluator.Evaluate(ParseScript("INSERT OR REPLACE INTO #native VALUES (1);")));
-        Assert.Contains("not supported", replaceError.Message, StringComparison.OrdinalIgnoreCase);
+        var duplicate = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript("INSERT INTO #native VALUES (1, 'duplicate');")));
+        Assert.Contains("constraint", duplicate.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ColumnarTempDowngradesForReplaceUpdateAndDeleteWithEstablishedSemantics()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #replace (Id INT PRIMARY KEY, Name VARCHAR(20)); " +
+            "INSERT INTO #replace VALUES (1, 'one'); " +
+            "INSERT OR REPLACE INTO #replace VALUES (1, 'replaced'); " +
+            "CREATE TABLE #update (Id INT, Name VARCHAR(20)); " +
+            "INSERT INTO #update VALUES (1, 'one'), (2, 'two'); " +
+            "UPDATE #update SET Name = 'updated' WHERE Id = 1; " +
+            "DELETE FROM #update WHERE Id = 2;"));
+
+        var replace = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#replace"]);
+        var replaceRows = (await replace.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+        Assert.Single(replaceRows);
+        Assert.Equal("replaced", replaceRows[0]["Name"]);
+
+        var update = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#update"]);
+        var updateRows = (await update.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+        Assert.Single(updateRows);
+        Assert.Equal("updated", updateRows[0]["Name"]);
+    }
+
+    [Fact]
+    public async Task ColumnarTempMutationDowngradeFailsClosedInsideTransaction()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        var error = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript(
+                "CREATE TABLE #native (Id INT); " +
+                "INSERT INTO #native VALUES (1); " +
+                "BEGIN TRANSACTION; " +
+                "UPDATE #native SET Id = 2;")));
+
+        Assert.Contains("active transaction", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+    }
+
+    [Fact]
+    public async Task WhatIfMutationDoesNotDowngradeColumnarTempStorage()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY); " +
+            "INSERT INTO #native VALUES (1); " +
+            "SET WHAT_IF ON; " +
+            "UPDATE #native SET Id = 2; " +
+            "DELETE FROM #native WHERE Id = 1; " +
+            "INSERT OR REPLACE INTO #native VALUES (1); " +
+            "SET WHAT_IF OFF;"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        Assert.Equal(1, native.EstimatedRowCount);
     }
 
     [Fact]

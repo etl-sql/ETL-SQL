@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -74,6 +75,8 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
                 _logger.WriteLine($"WHAT IF: Would update rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
                 return;
             }
+
+            connection = await TempTableStorageRouter.EnsureMutableAsync(context, connName, connection, "UPDATE");
 
             // 1. Prepare temp storage to avoid reading/writing to the same file simultaneously
             var tempStore = new InMemoryDataSource();

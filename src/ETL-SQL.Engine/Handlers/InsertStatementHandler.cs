@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -88,15 +89,12 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
             throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
         _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
 
+        if (destination is AppendOnlyColumnDataSource && stmt.IsReplace && !context.IsWhatIf)
+            destination = await TempTableStorageRouter.EnsureMutableAsync(context, connName, destination, "INSERT OR REPLACE");
+
         if (destination is InMemoryDataSource memSource)
         {
             memSource.ReplaceOnConflict = stmt.IsReplace;
-        }
-        else if (destination is AppendOnlyColumnDataSource && stmt.IsReplace)
-        {
-            throw new ExecutionException(
-                "INSERT OR REPLACE is not supported by the append-only columnar temp store. " +
-                "Disable Engine:UseColumnarTempTables for scripts that require conflict replacement.");
         }
 
         if (destination is IDatabaseSource sqlDest && sqlDest.SupportsSqlPushdown)

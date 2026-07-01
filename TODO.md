@@ -380,8 +380,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   does not decode to rows during a columnar scan/count/checksum. *(The isolated mixed-type storage gate
   streams bounded source batches and validates typed-buffer row-count/checksum scans. Native retained
   capacity measured 19.00% of estimated row heap at both 10M (100 segments, 470,844 rows/s) and 50M
-  (500 segments, 494,258 rows/s). Default `#temp` routing remains blocked until later UPDATE/DELETE/
-  index/replace semantics can safely downgrade or mutate the append-only store.)*
+  (500 segments, 494,258 rows/s). UPDATE, DELETE, CREATE INDEX, and INSERT OR REPLACE now preserve
+  schema/constraints while downgrading once to the established mutable row store; WHAT_IF remains
+  side-effect free. Default `#temp` routing remains blocked on transaction-safe mid-scope downgrade.)*
 - [x] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
   differential correctness and show a substantial throughput improvement at 10M/50M. *(The isolated
   Release/server-GC gate compares identical filter/projection/group checksums and requires at least

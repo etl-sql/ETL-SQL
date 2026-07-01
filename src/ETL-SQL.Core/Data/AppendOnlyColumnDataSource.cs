@@ -45,6 +45,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColu
         if (definitions.Length == 0) throw new ArgumentException("A column store requires at least one column.", nameof(schema));
         _logicalSchema = definitions.ToDictionary(column => column.ColumnName, StringComparer.OrdinalIgnoreCase);
         _columnNames = definitions.Select(column => column.ColumnName).ToArray();
+        TableConstraints = (tableConstraints ?? Enumerable.Empty<TableConstraint>()).ToArray();
         _memoryArbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
         _uniqueConstraints = definitions
             .Select((column, ordinal) => (column, ordinal))
@@ -52,7 +53,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColu
             .Select(item => new UniqueColumnConstraint(item.column, item.ordinal))
             .Cast<IUniqueConstraint>()
             .ToList();
-        foreach (var constraint in tableConstraints ?? Enumerable.Empty<TableConstraint>())
+        foreach (var constraint in TableConstraints)
         {
             if (constraint is TablePrimaryKeyConstraint primaryKey)
                 _uniqueConstraints.Add(CreateCompositeConstraint(primaryKey.Columns, isPrimaryKey: true, primaryKey.ConstraintName));
@@ -71,6 +72,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColu
     public long AllocatedSegmentBytes => Interlocked.Read(ref _allocatedSegmentBytes);
     public long MemoryUsageBytes => AllocatedSegmentBytes + Interlocked.Read(ref _headEstimatedBytes) + Interlocked.Read(ref _constraintEstimatedBytes);
     public IReadOnlyDictionary<string, ColumnDefinition> LogicalSchema => _logicalSchema;
+    public IReadOnlyList<TableConstraint> TableConstraints { get; }
 
     public string Path => string.Empty;
     public Dictionary<string, string>? Options => null;

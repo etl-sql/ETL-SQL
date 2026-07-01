@@ -6,6 +6,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -63,6 +64,8 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
                 _logger.WriteLine($"WHAT IF: Would delete rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
                 return;
             }
+
+            connection = await TempTableStorageRouter.EnsureMutableAsync(context, connName, connection, "DELETE");
 
             // 1. Read existing and filter
             int deletedCount = 0;
