@@ -325,7 +325,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   spill-triggering prefix and preserves full-row equality while adapting fan-out. Ordinary external
   GROUP BY samples and replays the same bounded prefix using evaluated grouping keys; grouping-set
   sizing uses the expanded `(set index, group key)` distribution and its row multiplier. External
-  window sizing, known-total scaling, and safe fan-out reduction remain.)*
+  windows now sample evaluated PARTITION BY keys and replay all input rows. All runtime consumers of
+  `ExternalHashPartitions` can increase the configured baseline; known-total scaling and safe fan-out
+  reduction remain.)*
 - [ ] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
   aggregate, or repartition them. *(Blocked on a versioned spill schema carrying ETL-SQL logical-type
   metadata: current Arrow fields reflect first-row CLR inference and string reads intentionally perform

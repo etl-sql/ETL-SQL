@@ -382,6 +382,59 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ExternalWindowEngine_PartitionSampleIncreasesFanOutWithoutLosingRows()
+        {
+            var e = NewEvaluator(externalPartitions: 2);
+            e.OperatorMemoryGrantMB = 1;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause>());
+            var count = new FunctionCallExpression("COUNT", new List<Expression>
+            {
+                new IdentifierExpression("*")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(count, "Rows")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var rows = Enumerable.Range(0, 4096)
+                    .Select(id => new Row
+                    {
+                        ["Grp"] = "g" + id,
+                        ["Val"] = payload + id
+                    })
+                    .ToAsyncEnumerable();
+
+                var result = await externalWindowEngine
+                    .ApplyWindowFunctionsExternal(rows, stmt).ToListAsync();
+
+                Assert.Equal(4096, result.Count);
+                Assert.True(externalWindowEngine.PartitionCount > 2);
+                var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";
+                Assert.All(result, row => Assert.Equal(1m, row[countKey]));
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
         public async Task ExternalWindowEngine_RunningAggregates_UseDeepSpillStreaming()
         {
             var e = NewEvaluator(externalPartitions: 1);
