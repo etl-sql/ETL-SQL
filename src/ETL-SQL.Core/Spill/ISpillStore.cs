@@ -28,6 +28,12 @@ public interface ISpillReader : IAsyncDisposable
     IAsyncEnumerable<Row> AsEnumerableAsync();
 }
 
+/// <summary>Optional capability for writing owned native batches without reconstructing rows.</summary>
+public interface IColumnarSpillWriter
+{
+    Task WriteBatchAsync(ColumnBatch batch);
+}
+
 /// <summary>
 /// Optional capability implemented by spill readers that can expose native typed batches without
 /// reconstructing a <see cref="Row"/> object graph. A reader must be consumed through either this

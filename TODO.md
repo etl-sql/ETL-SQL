@@ -336,8 +336,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   aggregate, or repartition them. *(New Arrow spill files now carry a versioned, ordinal logical-type
   schema; readers use it to preserve numeric/date-looking strings while metadata-free legacy files keep
   dynamic decoding. Arrow readers now implement an optional native batch contract with typed pooled
-  buffers, null bitmaps, logical types, and exclusive row/batch consumption. Arrow UTF-8 offsets, bytes,
-  and validity bits are copied directly into pooled native storage without per-value string decoding.
+  buffers, null bitmaps, logical types, and exclusive row/batch consumption; Arrow writers accept typed
+  batches directly with schema validation. Arrow UTF-8 offsets, bytes, and validity bits are copied
+  directly into pooled native storage without per-value string decoding on reads.
   External join build hashing and compact-row packing now consume those batches without constructing
   build-side `Row` graphs; governed DISTINCT performs full-row hashing and compact retention the same
   way. Ungoverned DISTINCT also hashes batches directly and materializes only unique output rows.

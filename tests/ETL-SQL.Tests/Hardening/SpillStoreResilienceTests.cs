@@ -207,5 +207,57 @@ namespace ETL_SQL.Tests.Hardening
 
             await Assert.ThrowsAsync<InvalidOperationException>(() => reader.ReadRowAsync());
         }
+
+        [Fact]
+        public async Task ArrowWriter_AcceptsTypedColumnBatches()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            var amount = ETL_SQL.Core.Data.ColumnBuffer<decimal>.Rent(2);
+            amount.Values.Span[0] = 4.25m;
+            amount.SetNull(1);
+            using var batch = new ETL_SQL.Core.Data.ColumnBatch(
+                new ETL_SQL.Core.Data.ColumnBatchSchema(new[]
+                {
+                    new ETL_SQL.Core.Data.ColumnBatchField("Id", typeof(long), "Integer"),
+                    new ETL_SQL.Core.Data.ColumnBatchField("Amount", typeof(decimal), "Decimal"),
+                    new ETL_SQL.Core.Data.ColumnBatchField("Flag", typeof(bool), "Boolean"),
+                    new ETL_SQL.Core.Data.ColumnBatchField("Label", typeof(string), "String")
+                }),
+                new ETL_SQL.Core.Data.IColumnBuffer[]
+                {
+                    new ETL_SQL.Core.Data.ColumnBuffer<long>(new long[] { 10, 11 }, 2),
+                    amount,
+                    new ETL_SQL.Core.Data.ColumnBuffer<bool>(new bool[] { true, false }, 2),
+                    ETL_SQL.Core.Data.Utf8ColumnBuffer.FromStrings(new string?[] { "001", null })
+                },
+                2);
+            await using (var writer = await store.CreateWriterAsync("native_write"))
+            {
+                var columnarWriter = Assert.IsAssignableFrom<IColumnarSpillWriter>(writer);
+                await columnarWriter.WriteBatchAsync(batch);
+            }
+
+            await using var reader = await store.CreateReaderAsync("native_write");
+            var columnarReader = Assert.IsAssignableFrom<IColumnarSpillReader>(reader);
+            var readBatches = new List<ETL_SQL.Core.Data.ColumnBatch>();
+            await foreach (var readBatch in columnarReader.AsColumnBatchesAsync()) readBatches.Add(readBatch);
+            var result = Assert.Single(readBatches);
+            try
+            {
+                Assert.Equal(10L, result.GetColumn<long>("Id").Values.Span[0]);
+                Assert.Equal(4.25m, result.GetColumn<decimal>("Amount").Values.Span[0]);
+                Assert.True(result.GetColumn<decimal>("Amount").IsNull(1));
+                Assert.True(result.GetColumn<bool>("Flag").Values.Span[0]);
+                Assert.Equal("001", result.GetUtf8Column("Label").GetBoxedValue(0));
+                Assert.True(result.GetUtf8Column("Label").IsNull(1));
+            }
+            finally
+            {
+                foreach (var readBatch in readBatches) readBatch.Dispose();
+            }
+        }
     }
 }

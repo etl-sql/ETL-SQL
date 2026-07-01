@@ -434,7 +434,7 @@ public partial class SpillStore : ISpillStore
 
     // ── Arrow IPC ────────────────────────────────────────────────────────────
 
-    private class ArrowSpillWriter : ISpillWriter
+    private class ArrowSpillWriter : ISpillWriter, IColumnarSpillWriter
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
@@ -546,6 +546,31 @@ public partial class SpillStore : ISpillStore
             foreach (var r in rows) await WriteRowAsync(r);
         }
 
+        public async Task WriteBatchAsync(ColumnBatch batch)
+        {
+            ArgumentNullException.ThrowIfNull(batch);
+            await FlushBatchAsync();
+            if (_schema == null)
+            {
+                _schema = InferSchema(batch);
+                _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                await _arrowWriter.WriteStartAsync(CancellationToken.None);
+            }
+            else
+            {
+                ValidateSchema(batch);
+            }
+
+            using var recordBatch = BuildBatch(batch);
+            await _arrowWriter!.WriteRecordBatchAsync(recordBatch);
+            if (_context.Telemetry?.TelemetryEnabled ?? false)
+            {
+                var increment = batch.AllocatedBytes;
+                _context.Telemetry.TotalSpilledBytes += increment;
+                BytesWritten += increment;
+            }
+        }
+
         private async Task FlushBatchAsync()
         {
             if (_buffer.Count == 0 || _arrowWriter == null) return;
@@ -567,6 +592,45 @@ public partial class SpillStore : ISpillStore
             for (var i = 0; i < columns.Count; i++)
                 metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = GetLogicalType(columns[i].Value);
             return new Schema(fields, metadata);
+        }
+
+        private static Schema InferSchema(ColumnBatch batch)
+        {
+            var fields = batch.Schema.Fields
+                .Select(field => new Field(field.Name, GetArrowType(field.ElementType), field.IsNullable))
+                .ToList();
+            var metadata = new Dictionary<string, string>
+            {
+                [SchemaVersionKey] = SchemaVersion
+            };
+            for (var i = 0; i < batch.Schema.Count; i++)
+                metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = batch.Schema.Fields[i].LogicalType;
+            return new Schema(fields, metadata);
+        }
+
+        private static IArrowType GetArrowType(Type elementType)
+        {
+            if (elementType == typeof(byte) || elementType == typeof(short)
+                || elementType == typeof(int) || elementType == typeof(long)) return Int64Type.Default;
+            if (elementType == typeof(decimal)) return new Decimal128Type(29, 9);
+            if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
+            if (elementType == typeof(bool)) return BooleanType.Default;
+            if (elementType == typeof(DateTime)) return new TimestampType(TimeUnit.Microsecond, "UTC");
+            if (elementType == typeof(string)) return StringType.Default;
+            throw new NotSupportedException($"Native spill writing does not support '{elementType.Name}' columns.");
+        }
+
+        private void ValidateSchema(ColumnBatch batch)
+        {
+            if (_schema!.FieldsList.Count != batch.Schema.Count)
+                throw new InvalidOperationException("Column batch does not match the spill writer schema.");
+            for (var i = 0; i < batch.Schema.Count; i++)
+            {
+                var field = batch.Schema.Fields[i];
+                if (!_schema.FieldsList[i].Name.Equals(field.Name, StringComparison.OrdinalIgnoreCase)
+                    || !_schema.FieldsList[i].DataType.Equals(GetArrowType(field.ElementType)))
+                    throw new InvalidOperationException("Column batch does not match the spill writer schema.");
+            }
         }
 
         private static string GetLogicalType(object? value) => value switch
@@ -597,6 +661,75 @@ public partial class SpillStore : ISpillStore
                 .Select(f => BuildArray(f, rows))
                 .ToList();
             return new RecordBatch(_schema, arrays, rows.Count);
+        }
+
+        private RecordBatch BuildBatch(ColumnBatch batch)
+        {
+            var arrays = batch.Columns.Select(BuildArray).ToList();
+            return new RecordBatch(_schema!, arrays, batch.RowCount);
+        }
+
+        private static IArrowArray BuildArray(IColumnBuffer column)
+        {
+            if (column is ColumnBuffer<byte> bytes) return BuildInt64(bytes);
+            if (column is ColumnBuffer<short> shorts) return BuildInt64(shorts);
+            if (column is ColumnBuffer<int> integers) return BuildInt64(integers);
+            if (column is ColumnBuffer<long> longs) return BuildInt64(longs);
+            if (column is ColumnBuffer<decimal> decimals)
+            {
+                var type = new Decimal128Type(29, 9);
+                var builder = new Decimal128Array.Builder(type);
+                for (var i = 0; i < decimals.Count; i++)
+                    if (decimals.IsNull(i)) builder.AppendNull(); else builder.Append(Math.Round(decimals.Values.Span[i], type.Scale));
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<double> doubles)
+            {
+                var builder = new DoubleArray.Builder();
+                for (var i = 0; i < doubles.Count; i++)
+                    if (doubles.IsNull(i)) builder.AppendNull(); else builder.Append(doubles.Values.Span[i]);
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<bool> booleans)
+            {
+                var builder = new BooleanArray.Builder();
+                for (var i = 0; i < booleans.Count; i++)
+                    if (booleans.IsNull(i)) builder.AppendNull(); else builder.Append(booleans.Values.Span[i]);
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<DateTime> dates)
+            {
+                var builder = new TimestampArray.Builder(TimeUnit.Microsecond, "UTC");
+                for (var i = 0; i < dates.Count; i++)
+                {
+                    if (dates.IsNull(i)) builder.AppendNull();
+                    else
+                    {
+                        var value = dates.Values.Span[i];
+                        var offset = value.Kind == DateTimeKind.Unspecified
+                            ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
+                            : new DateTimeOffset(value);
+                        builder.Append(offset);
+                    }
+                }
+                return builder.Build();
+            }
+            if (column is Utf8ColumnBuffer strings)
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < strings.Count; i++)
+                    if (strings.IsNull(i)) builder.AppendNull(); else builder.Append(System.Text.Encoding.UTF8.GetString(strings.GetUtf8Bytes(i)));
+                return builder.Build();
+            }
+            throw new NotSupportedException($"Native spill writing does not support '{column.ElementType.Name}' columns.");
+        }
+
+        private static Int64Array BuildInt64<T>(ColumnBuffer<T> column) where T : unmanaged
+        {
+            var builder = new Int64Array.Builder();
+            for (var i = 0; i < column.Count; i++)
+                if (column.IsNull(i)) builder.AppendNull(); else builder.Append(Convert.ToInt64(column.Values.Span[i]));
+            return builder.Build();
         }
 
         private static IArrowArray BuildArray(Field field, List<Row> rows)
