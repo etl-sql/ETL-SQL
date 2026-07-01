@@ -323,7 +323,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task CopyFile_CopiesSourceToDestination()
         {
-            var src = Path.GetTempFileName();
+            var src = Path.Combine(Path.GetTempPath(), "etlsql_src_" + Guid.NewGuid().ToString("N") + ".txt");
             var dst = Path.Combine(Path.GetTempPath(), "etlsql_dst_" + Guid.NewGuid().ToString("N") + ".txt");
             try
             {
@@ -342,7 +342,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task MoveFile_MovesSourceToDestination()
         {
-            var src = Path.GetTempFileName();
+            var src = Path.Combine(Path.GetTempPath(), "etlsql_src_" + Guid.NewGuid().ToString("N") + ".txt");
             var dst = Path.Combine(Path.GetTempPath(), "etlsql_moved_" + Guid.NewGuid().ToString("N") + ".txt");
             try
             {
@@ -361,7 +361,7 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task CompressFile_CreatesArchive()
         {
-            var src = Path.GetTempFileName();
+            var src = Path.Combine(Path.GetTempPath(), "etlsql_src_" + Guid.NewGuid().ToString("N") + ".txt");
             var archive = Path.Combine(Path.GetTempPath(), "etlsql_archive_" + Guid.NewGuid().ToString("N") + ".zip");
             try
             {
