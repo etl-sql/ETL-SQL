@@ -116,6 +116,40 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task GroupSampleCanIncreaseFanOutWithoutLosingRows()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.OperatorMemoryGrantMB = 1;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var rows = Enumerable.Range(0, 4096)
+                    .Select(id => new Row
+                    {
+                        ["category"] = "g" + id,
+                        ["value"] = 1m,
+                        ["payload"] = payload + id
+                    })
+                    .ToAsyncEnumerable();
+                var (groupBy, columns, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+                Assert.Equal(4096, result.Count);
+                Assert.Equal(4096m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+                Assert.True(engine.PartitionCount > 2);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
         public async Task ApplyAggregationExternal_EmptyInput_ReturnsEmptyResult()
         {
             var (eval, logger) = BuildContext();
