@@ -306,7 +306,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   decimal-to-integral coercion; kernel suites cover cancellation and ownership. End-to-end SELECT
   tests prove both native numeric routing and unsupported string-predicate replay without invoking a
   source row reader; global aggregate tests cover multi-batch decimal promotion and aggregate fallback.
-  String collation, lineage propagation, joins, and broader script differentials remain.)*
+  End-to-end grouped SELECT differentials now compare native and row planners across batches with null
+  keys/values, filtering, and COUNT/SUM/AVG/MIN/MAX; native SELECT-INTO coverage also verifies lineage
+  recording. String collation, join differentials, derived-column lineage, and broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 

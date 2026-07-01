@@ -313,6 +313,70 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task GroupedNativePlannerMatchesRowPipeline()
+    {
+        var definitions = new[]
+        {
+            new ColumnDefinition("GroupId", "INT", false),
+            new ColumnDefinition("Value", "INT", false)
+        };
+        var logicalSchema = definitions.ToDictionary(column => column.ColumnName, StringComparer.OrdinalIgnoreCase);
+        var firstRows = CreateRows((1, 10), (null, 5), (1, null), (2, 3));
+        var secondRows = CreateRows((2, 9), (null, 7), (1, 20));
+        await using var native = new NativeOnlyDataSource(new[]
+        {
+            ColumnBatchAdapter.FromDataTable(firstRows, logicalSchema),
+            ColumnBatchAdapter.FromDataTable(secondRows, logicalSchema)
+        }, throwOnRowRead: true);
+        await using var rowSource = new InMemoryDataSource();
+        rowSource.SetSchema(definitions);
+        await rowSource.WriteBatches(new[] { firstRows, secondRows }.ToAsyncEnumerable());
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.Connections["native_grouped"] = native;
+        evaluator.Connections["row_grouped"] = rowSource;
+        const string projection =
+            "GroupId, COUNT(*) AS RowCount, COUNT(Value) AS ValueCount, " +
+            "SUM(Value) AS Total, AVG(Value) AS MeanValue, MIN(Value) AS Minimum, MAX(Value) AS Maximum";
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        var nativeRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM native_grouped WHERE Value > 4 GROUP BY GroupId;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+        var rowRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM row_grouped WHERE Value > 4 GROUP BY GroupId;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+
+        Assert.Equal(rowRows, nativeRows);
+        Assert.Equal(0, native.RowReadAttempts);
+
+        static DataTable CreateRows(params (int? Key, int? Value)[] values)
+        {
+            var table = new DataTable();
+            table.SetColumns(new[] { "GroupId", "Value" });
+            foreach (var (key, value) in values)
+            {
+                var row = table.NewRow();
+                row["GroupId"] = key.HasValue ? (decimal)key.Value : null;
+                row["Value"] = value.HasValue ? (decimal)value.Value : null;
+                table.Rows.Add(row);
+            }
+            return table;
+        }
+
+        static string Normalize(Row row)
+            => string.Join("|", new[]
+            {
+                row["GroupId"]?.ToString() ?? "NULL",
+                Convert.ToDecimal(row["RowCount"]).ToString(),
+                Convert.ToDecimal(row["ValueCount"]).ToString(),
+                Convert.ToDecimal(row["Total"]).ToString(),
+                Convert.ToDecimal(row["MeanValue"]).ToString(),
+                Convert.ToDecimal(row["Minimum"]).ToString(),
+                Convert.ToDecimal(row["Maximum"]).ToString()
+            });
+    }
+
+    [Fact]
     public async Task MinMaxDoNotPerformUnusedOverflowingSum()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -355,6 +419,8 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(3, destination.EstimatedRowCount);
         Assert.Equal(0, source.RowReadAttempts);
         Assert.Equal(3L, evaluator.Variables["@@ROWCOUNT"]);
+        var lineage = evaluator.LineageTracker.GetLineage("#dest").ToList();
+        Assert.Contains(lineage, entry => entry.Operation == "SELECT INTO" && entry.SourceTables.Contains("col"));
         var batches = await destination.ReadColumnBatches().ToListAsync();
         try
         {
