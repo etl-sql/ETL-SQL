@@ -332,7 +332,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   increase-only sampling after window columns change row width. Projected DISTINCT and other unknown
   streams deliberately never reduce from bounded samples because an unrepresentative prefix cannot
   prove that a smaller fan-out is safe.)*
-- [~] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
+- [x] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
   aggregate, or repartition them. *(New Arrow spill files now carry a versioned, ordinal logical-type
   schema; readers use it to preserve numeric/date-looking strings while metadata-free legacy files keep
   dynamic decoding. Arrow readers now implement an optional native batch contract with typed pooled
@@ -347,10 +347,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   batches under both governed and ungoverned execution; unsupported schemas and explicit native memory
   pressure reopen through the existing row/repartition path. Compatible full-partition window aggregate
   and FIRST/LAST state scans consume batches, retaining row reads only for the required output replay.
-  Recursive external joins, DISTINCT, and identifier-key aggregates now hash native batches, compact
-  per-partition selections, and write typed batches end-to-end. Expression-key/complex aggregate and
-  remaining window routing remain. Grouping-set partition reads filter `__SET_IDX` in native batches
-  and materialize only matching rows.)*
+  Recursive external joins, DISTINCT, and identifier-key aggregates hash native batches, compact
+  per-partition selections, and write typed batches end-to-end. Grouping-set partition reads filter
+  `__SET_IDX` in native batches and materialize only matching rows. Remaining row reads are semantic
+  boundaries: evaluator-dependent expressions, holistic aggregate state, ordered sort/window processing,
+  or rows that must be emitted; their broader kernels/state reduction are tracked in P5.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts
