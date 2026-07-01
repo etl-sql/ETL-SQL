@@ -12,16 +12,16 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
 {
     private readonly IExecutionContext _context;
     private readonly string _keyColumn;
-    private readonly string? _valueColumn;
+    private readonly string[] _valueColumns;
     private readonly Slot[] _slots;
-    private IState? _state;
+    private readonly List<IState> _states = new();
 
     private ColumnarGroupedAggregatePlan(
-        IExecutionContext context, string keyColumn, string? valueColumn, Slot[] slots)
+        IExecutionContext context, string keyColumn, string[] valueColumns, Slot[] slots)
     {
         _context = context;
         _keyColumn = keyColumn;
-        _valueColumn = valueColumn;
+        _valueColumns = valueColumns;
         _slots = slots;
     }
 
@@ -40,14 +40,14 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             || statement.Sample != null || statement.IsTopPercent || statement.GroupByAll || statement.OrderByAll)
             return false;
         var keyColumn = key.Name.Split('.').Last();
-        string? valueColumn = null;
+        var valueColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var slots = new List<Slot>(statement.Columns.Count);
         foreach (var column in statement.Columns)
         {
             if (column.Expression is IdentifierExpression identifier
                 && identifier.Name.Split('.').Last().Equals(keyColumn, StringComparison.OrdinalIgnoreCase))
             {
-                slots.Add(new Slot(SlotKind.Key));
+                slots.Add(new Slot(SlotKind.Key, null, false));
                 continue;
             }
             if (column.Expression is not FunctionCallExpression function
@@ -72,13 +72,12 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                 if (function.Arguments.Count != 1 || function.Arguments[0] is not IdentifierExpression value)
                     return false;
                 argument = value.Name.Split('.').Last();
-                if (valueColumn != null && !valueColumn.Equals(argument, StringComparison.OrdinalIgnoreCase))
-                    return false;
-                valueColumn = argument;
+                valueColumns.Add(argument);
             }
-            slots.Add(new Slot(kind, countStar));
+            slots.Add(new Slot(kind, argument, countStar));
         }
-        plan = new ColumnarGroupedAggregatePlan(context, keyColumn, valueColumn, slots.ToArray());
+        if (valueColumns.Count > 1 && !slots.Any(slot => slot.Kind == SlotKind.Key)) return false;
+        plan = new ColumnarGroupedAggregatePlan(context, keyColumn, valueColumns.ToArray(), slots.ToArray());
         return true;
     }
 
@@ -94,43 +93,55 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             return false;
         }
         if (!IsSupportedKey(key.ElementType)) return false;
-        if (_valueColumn == null) return true;
-        try { return IsNumeric(batch.GetColumn(_valueColumn).ElementType); }
-        catch (KeyNotFoundException) { return false; }
+        foreach (var valueColumn in _valueColumns)
+        {
+            try { if (!IsNumeric(batch.GetColumn(valueColumn).ElementType)) return false; }
+            catch (KeyNotFoundException) { return false; }
+        }
+        return true;
     }
 
     public void Accumulate(ColumnBatch batch, SelectionVector? selection)
     {
-        _state ??= CreateState(batch);
-        _state.Accumulate(batch, selection);
+        if (_states.Count == 0)
+        {
+            if (_valueColumns.Length == 0) _states.Add(CreateState(batch, null));
+            else foreach (var valueColumn in _valueColumns) _states.Add(CreateState(batch, valueColumn));
+        }
+        foreach (var state in _states) state.Accumulate(batch, selection);
     }
 
     public DataTable FinalizeResult(IReadOnlyList<string> outputNames)
     {
         var table = new DataTable();
         table.SetColumns(outputNames);
-        _state?.WriteRows(table, _slots);
+        for (var index = 0; index < _states.Count; index++)
+            _states[index].WriteRows(table, _slots, createRows: index == 0);
         return table;
     }
 
-    public void Dispose() => _state?.Dispose();
+    public void Dispose()
+    {
+        foreach (var state in _states) state.Dispose();
+        _states.Clear();
+    }
 
-    private IState CreateState(ColumnBatch batch)
+    private IState CreateState(ColumnBatch batch, string? valueColumn)
     {
         var keyType = batch.GetColumn(_keyColumn).ElementType;
-        if (_valueColumn == null)
+        if (valueColumn == null)
         {
             var countType = typeof(CountState<>).MakeGenericType(keyType);
             return (IState)Activator.CreateInstance(
                 countType, _context, _keyColumn,
                 batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType)!;
         }
-        var valueType = batch.GetColumn(_valueColumn).ElementType;
+        var valueType = batch.GetColumn(valueColumn).ElementType;
         var stateType = typeof(State<,>).MakeGenericType(keyType, valueType);
         return (IState)Activator.CreateInstance(
-            stateType, _context, _keyColumn, _valueColumn,
+            stateType, _context, _keyColumn, valueColumn,
             batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType,
-            batch.Schema.Fields[batch.Schema.GetOrdinal(_valueColumn)].LogicalType)!;
+            batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType)!;
     }
 
     private static bool IsNumeric(Type type)
@@ -143,7 +154,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
     private interface IState : IDisposable
     {
         void Accumulate(ColumnBatch batch, SelectionVector? selection);
-        void WriteRows(DataTable table, IReadOnlyList<Slot> slots);
+        void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows);
     }
 
     private sealed class State<TKey, TValue> : IState
@@ -181,18 +192,37 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                 _result.Accumulate(batch, _keyColumn, _valueColumn, selection, _context.CancellationToken);
         }
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
         {
             if (_result == null) return;
+            var nullKey = new object();
+            Dictionary<object, Row>? existing = null;
+            if (!createRows)
+                existing = table.Rows.ToDictionary(row => row[GetKeyOrdinal(slots)] ?? nullKey);
             foreach (var (key, state) in _result.Groups)
             {
-                var row = table.NewRow();
+                var restoredKey = key.IsNull ? null : ColumnBatchAdapter.RestoreEngineValue(key.Value, _keyLogicalType);
+                var row = createRows
+                    ? table.NewRow()
+                    : existing![restoredKey ?? nullKey];
                 for (var index = 0; index < slots.Count; index++)
                 {
-                    row[index] = slots[index].Kind switch
+                    var slot = slots[index];
+                    if (slot.Kind == SlotKind.Key)
                     {
-                        SlotKind.Key => key.IsNull ? null : ColumnBatchAdapter.RestoreEngineValue(key.Value, _keyLogicalType),
-                        SlotKind.Count => (decimal)(slots[index].CountStar ? state.RowCount : state.NonNullCount),
+                        if (createRows) row[index] = restoredKey;
+                        continue;
+                    }
+                    if (slot.Kind == SlotKind.Count && slot.CountStar)
+                    {
+                        if (createRows) row[index] = (decimal)state.RowCount;
+                        continue;
+                    }
+                    if (!string.Equals(slot.ValueColumn, _valueColumn, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    row[index] = slot.Kind switch
+                    {
+                        SlotKind.Count => (decimal)state.NonNullCount,
                         SlotKind.Sum => state.NonNullCount == 0 ? null : state.Sum,
                         SlotKind.Average => state.Average,
                         SlotKind.Min => state.NonNullCount == 0 ? null : ColumnBatchAdapter.RestoreEngineValue(state.Min, _valueLogicalType),
@@ -200,8 +230,15 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                         _ => null
                     };
                 }
-                table.Rows.Add(row);
+                if (createRows) table.Rows.Add(row);
             }
+        }
+
+        private static int GetKeyOrdinal(IReadOnlyList<Slot> slots)
+        {
+            for (var index = 0; index < slots.Count; index++)
+                if (slots[index].Kind == SlotKind.Key) return index;
+            throw new InvalidOperationException("Grouped native output requires its key column.");
         }
 
         public void Dispose() => _result?.Dispose();
@@ -225,8 +262,9 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         public void Accumulate(ColumnBatch batch, SelectionVector? selection)
             => _result.Accumulate(batch, _keyColumn, selection, _context.CancellationToken);
 
-        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots)
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
         {
+            if (!createRows) throw new InvalidOperationException("Key-only count state must create grouped output rows.");
             foreach (var (key, count) in _result.Groups)
             {
                 var row = table.NewRow();
@@ -246,6 +284,6 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         public void Dispose() => _result.Dispose();
     }
 
-    private sealed record Slot(SlotKind Kind, bool CountStar = false);
+    private sealed record Slot(SlotKind Kind, string? ValueColumn, bool CountStar);
     private enum SlotKind { Unsupported, Key, Count, Sum, Average, Min, Max }
 }

@@ -215,7 +215,8 @@ public sealed class ColumnarSelectRoutingTests
         evaluator.Connections["grouped"] = source;
         var statement = ParseSelect(
             "SELECT GroupId, COUNT(*) AS RowCount, COUNT(Value) AS ValueCount, SUM(Value) AS Total, " +
-            "AVG(Value) AS MeanValue, MIN(Value) AS Minimum, MAX(Value) AS Maximum " +
+            "AVG(Value) AS MeanValue, MIN(Value) AS Minimum, MAX(Value) AS Maximum, " +
+            "SUM(OtherValue) AS OtherTotal, AVG(OtherValue) AS OtherMean " +
             "FROM grouped GROUP BY GroupId;");
 
         var results = await new SelectStatementHandler(NullLogger.Instance)
@@ -230,9 +231,12 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(15m, rows[0]["MeanValue"]);
         Assert.Equal(10m, rows[0]["Minimum"]);
         Assert.Equal(20m, rows[0]["Maximum"]);
+        Assert.Equal(300m, rows[0]["OtherTotal"]);
+        Assert.Equal(150m, rows[0]["OtherMean"]);
         Assert.Equal(2m, rows[1]["GroupId"]);
         Assert.Equal(2m, rows[1]["RowCount"]);
         Assert.Equal(12m, rows[1]["Total"]);
+        Assert.Equal(120m, rows[1]["OtherTotal"]);
 
         var filteredStatement = ParseSelect(
             "SELECT GroupId, COUNT(*) AS RowCount, SUM(Value) AS Total " +
@@ -549,19 +553,22 @@ public sealed class ColumnarSelectRoutingTests
         var schema = new ColumnBatchSchema(new[]
         {
             new ColumnBatchField("GroupId", typeof(int), "INT"),
-            new ColumnBatchField("Value", typeof(int), "INT")
+            new ColumnBatchField("Value", typeof(int), "INT"),
+            new ColumnBatchField("OtherValue", typeof(int), "INT")
         });
         return new NativeOnlyDataSource(new[]
         {
             new ColumnBatch(schema, new IColumnBuffer[]
             {
                 new ColumnBuffer<int>(new[] { 1, 2, 1 }, 3),
-                new ColumnBuffer<int>(new[] { 10, 5, 0 }, 3, new byte[] { 0b0000_0100 })
+                new ColumnBuffer<int>(new[] { 10, 5, 0 }, 3, new byte[] { 0b0000_0100 }),
+                new ColumnBuffer<int>(new[] { 100, 50, 0 }, 3, new byte[] { 0b0000_0100 })
             }, 3),
             new ColumnBatch(schema, new IColumnBuffer[]
             {
                 new ColumnBuffer<int>(new[] { 1, 2 }, 2),
-                new ColumnBuffer<int>(new[] { 20, 7 }, 2)
+                new ColumnBuffer<int>(new[] { 20, 7 }, 2),
+                new ColumnBuffer<int>(new[] { 200, 70 }, 2)
             }, 2)
         }, throwOnRowRead);
     }
