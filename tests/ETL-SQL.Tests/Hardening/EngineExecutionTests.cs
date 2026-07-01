@@ -367,6 +367,7 @@ namespace ETL_SQL.Tests.Hardening
             var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
 
             Assert.Equal(10, result.Count);
+            Assert.Equal(10, externalWindowEngine.ColumnarWindowScanRows);
             Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-REPLAY-SPILL", StringComparison.OrdinalIgnoreCase));
 
             var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";

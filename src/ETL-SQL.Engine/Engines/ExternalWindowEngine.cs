@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
@@ -30,6 +31,7 @@ public class ExternalWindowEngine
     private readonly IBufferManager? _bufferManager;
     private int _partitionCount;
     public int PartitionCount => _partitionCount;
+    internal long ColumnarWindowScanRows { get; private set; }
 
     public ExternalWindowEngine(IExecutionContext context, WindowEngine inMemoryEngine, ILogger logger)
     {
@@ -413,6 +415,88 @@ public class ExternalWindowEngine
 
     private async IAsyncEnumerable<Row> ProcessBucketPartitionReplaySpill(string name, WindowGroup group)
     {
+        var results = await TryScanPartitionReplayBatches(name, group);
+        if (results == null)
+            results = await ScanPartitionReplayRows(name, group);
+
+        await foreach (var row in ReadPartitionStream(name))
+        {
+            foreach (var (key, value) in results)
+                row[key] = value;
+            yield return row;
+        }
+    }
+
+    private async Task<Dictionary<string, object?>?> TryScanPartitionReplayBatches(
+        string name,
+        WindowGroup group)
+    {
+        var functions = group.Columns.Select(column => (FunctionCallExpression)column.Expression).ToList();
+        if (functions.Any(function => function.Filter != null || !TryGetBatchArgument(function, out _)))
+            return null;
+        var accumulators = group.Columns
+            .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
+            .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
+            .ToList();
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        long scannedRows = 0;
+        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is not IColumnarSpillReader columnarReader) return null;
+        await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+        {
+            using (batch)
+            {
+                int? Ordinal(FunctionCallExpression function)
+                {
+                    if (!TryGetBatchArgument(function, out var argument) || argument == null) return null;
+                    return batch.Schema.GetOrdinal(argument);
+                }
+                var aggregateOrdinals = accumulators.Select(item => Ordinal(item.Function)).ToArray();
+                var valueFunctions = functions
+                    .Where(function => function.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
+                        || function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
+                    .Select(function => (Function: function, Ordinal: Ordinal(function)!.Value))
+                    .ToArray();
+                for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                {
+                    for (var i = 0; i < accumulators.Count; i++)
+                    {
+                        var (function, accumulator) = accumulators[i];
+                        var value = aggregateOrdinals[i] is { } ordinal
+                            ? RowPacker.ReadBatchValue(batch, ordinal, rowIndex)
+                            : null;
+                        accumulator.Add(function.FunctionName, value, _context, IsCountStar(function));
+                    }
+                    foreach (var (function, ordinal) in valueFunctions)
+                    {
+                        var key = $"WINDOW_{function.ToSql().ToUpperInvariant()}";
+                        var value = RowPacker.ReadBatchValue(batch, ordinal, rowIndex);
+                        if (function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
+                            || !values.ContainsKey(key))
+                            values[key] = value;
+                    }
+                }
+                scannedRows += batch.RowCount;
+            }
+        }
+        foreach (var (function, accumulator) in accumulators)
+            values[$"WINDOW_{function.ToSql().ToUpperInvariant()}"] = accumulator.GetValue(function.FunctionName);
+        ColumnarWindowScanRows += scannedRows;
+        return values;
+    }
+
+    private static bool TryGetBatchArgument(FunctionCallExpression function, out string? argument)
+    {
+        argument = null;
+        if (IsCountStar(function)) return true;
+        if (function.Arguments.Count != 1 || function.Arguments[0] is not IdentifierExpression identifier)
+            return false;
+        argument = identifier.Name.Split('.').Last();
+        return argument != "*";
+    }
+
+    private async Task<Dictionary<string, object?>> ScanPartitionReplayRows(string name, WindowGroup group)
+    {
         var accumulators = group.Columns
             .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
             .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
@@ -457,12 +541,7 @@ public class ExternalWindowEngine
             }
         }
 
-        await foreach (var row in ReadPartitionStream(name))
-        {
-            foreach (var (key, value) in results)
-                row[key] = value;
-            yield return row;
-        }
+        return results;
     }
 
     private static bool IsPartitionAggregate(FunctionCallExpression f)

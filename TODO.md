@@ -344,8 +344,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   External join probes hash batches directly and materialize only matched or outer-preserved rows.
   Compatible numeric-key GROUP BY partitions reuse the native grouped planner directly over spill
   batches under both governed and ungoverned execution; unsupported schemas and explicit native memory
-  pressure reopen through the existing row/repartition path. Repartition, complex aggregate, and window
-  routing remain.)*
+  pressure reopen through the existing row/repartition path. Compatible full-partition window aggregate
+  and FIRST/LAST state scans consume batches, retaining row reads only for the required output replay.
+  Repartition, complex aggregate, and remaining window routing remain.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts
