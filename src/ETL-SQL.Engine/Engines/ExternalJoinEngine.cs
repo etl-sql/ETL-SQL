@@ -26,6 +26,7 @@ public class ExternalJoinEngine
     private int _partitionCount;
     public int PartitionCount => _partitionCount;
     internal long ColumnarBuildRows { get; private set; }
+    internal long ColumnarProbeRows { get; private set; }
 
 
     private readonly IBufferManager? _bufferManager;
@@ -333,28 +334,64 @@ public class ExternalJoinEngine
         var matched = isRightJoin ? new bool[table.Rows.Count] : null;
 
         await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
-        await foreach (var left in leftReader.AsEnumerableAsync())
+        if (leftReader is IColumnarSpillReader columnarReader)
         {
-            var key = GetHashKey(left, leftKeys);
-            bool producedMatch = false;
-
-            if (table.Index.TryGetValue(key, out var matches))
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
             {
-                foreach (var idx in matches)
+                using (batch)
                 {
-                    var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
-                    var combined = CombineRows(left, right);
-                    if (await _context.EvaluateCondition(join.Condition, combined))
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
                     {
-                        yield return combined;
-                        producedMatch = true;
-                        if (matched != null) matched[idx] = true;
+                        ColumnarProbeRows++;
+                        var key = GetHashKey(batch, rowIndex, leftKeys);
+                        bool producedMatch = false;
+                        Row? left = null;
+                        if (table.Index.TryGetValue(key, out var matches))
+                        {
+                            left = RowPacker.MaterializeBatchRow(batch, rowIndex);
+                            foreach (var idx in matches)
+                            {
+                                var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
+                                var combined = CombineRows(left, right);
+                                if (await _context.EvaluateCondition(join.Condition, combined))
+                                {
+                                    yield return combined;
+                                    producedMatch = true;
+                                    if (matched != null) matched[idx] = true;
+                                }
+                            }
+                        }
+                        if (!producedMatch && isLeftJoin)
+                            yield return (left ?? RowPacker.MaterializeBatchRow(batch, rowIndex)).Clone();
                     }
                 }
             }
+        }
+        else
+        {
+            await foreach (var left in leftReader.AsEnumerableAsync())
+            {
+                var key = GetHashKey(left, leftKeys);
+                bool producedMatch = false;
 
-            if (!producedMatch && isLeftJoin)
-                yield return left.Clone();
+                if (table.Index.TryGetValue(key, out var matches))
+                {
+                    foreach (var idx in matches)
+                    {
+                        var right = RowPacker.Unpack(table.Rows[idx], table.Columns);
+                        var combined = CombineRows(left, right);
+                        if (await _context.EvaluateCondition(join.Condition, combined))
+                        {
+                            yield return combined;
+                            producedMatch = true;
+                            if (matched != null) matched[idx] = true;
+                        }
+                    }
+                }
+
+                if (!producedMatch && isLeftJoin)
+                    yield return left.Clone();
+            }
         }
 
         if (isRightJoin && matched != null)
@@ -438,6 +475,17 @@ public class ExternalJoinEngine
         var values = new object?[keys.Count];
         for (int i = 0; i < keys.Count; i++)
             values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
+        return new CompoundKey(values);
+    }
+
+    private static CompoundKey GetHashKey(ColumnBatch batch, int rowIndex, List<string> keys)
+    {
+        var values = new object?[keys.Count];
+        for (var i = 0; i < keys.Count; i++)
+        {
+            var column = batch.Schema.GetOrdinal(keys[i]);
+            values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
+        }
         return new CompoundKey(values);
     }
 
