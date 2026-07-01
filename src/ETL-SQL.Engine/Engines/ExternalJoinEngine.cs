@@ -27,6 +27,7 @@ public class ExternalJoinEngine
     public int PartitionCount => _partitionCount;
     internal long ColumnarBuildRows { get; private set; }
     internal long ColumnarProbeRows { get; private set; }
+    internal long ColumnarRepartitionRows { get; private set; }
 
 
     private readonly IBufferManager? _bufferManager;
@@ -411,7 +412,69 @@ public class ExternalJoinEngine
 
     private async Task<PartitionSet> RepartitionPartition(string sourceName, List<string> keys, string prefix, int depth, List<string> tempFiles)
     {
+        if (!_context.SpillFormat.Equals("Json", StringComparison.OrdinalIgnoreCase))
+            return await RepartitionPartitionColumnar(sourceName, keys, prefix, depth, tempFiles);
         return await PartitionStream(ReadPartitionStream(sourceName), keys, prefix, depth, tempFiles);
+    }
+
+    private async Task<PartitionSet> RepartitionPartitionColumnar(
+        string sourceName,
+        List<string> keys,
+        string prefix,
+        int depth,
+        List<string> tempFiles)
+    {
+        var names = new string[PartitionCount];
+        var counts = new long[PartitionCount];
+        var writers = new ISpillWriter[PartitionCount];
+        var uniquePrefix = Guid.NewGuid().ToString("N");
+        for (var i = 0; i < PartitionCount; i++)
+        {
+            names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
+            tempFiles.Add(names[i]);
+            writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
+        }
+
+        try
+        {
+            await using var reader = await _context.SpillStore.CreateReaderAsync(sourceName);
+            var columnarReader = (IColumnarSpillReader)reader;
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    var routes = Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray();
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        var key = GetPartitionHashKey(batch, rowIndex, keys, depth);
+                        routes[(key.GetHashCode() & 0x7fffffff) % PartitionCount].Add(rowIndex);
+                    }
+                    var columns = batch.Schema.Fields.Select(field => field.Name).ToArray();
+                    for (var partition = 0; partition < routes.Length; partition++)
+                    {
+                        if (routes[partition].Count == 0) continue;
+                        using var selection = SelectionVector.FromIndices(routes[partition]);
+                        using var compacted = ColumnBatchAdapter.Compact(
+                            batch, columns, selection, _context.CancellationToken);
+                        await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
+                        counts[partition] += compacted.RowCount;
+                        ColumnarRepartitionRows += compacted.RowCount;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            var usedPartitions = 0;
+            for (var i = 0; i < writers.Length; i++)
+            {
+                if (counts[i] > 0) usedPartitions++;
+                await writers[i].DisposeAsync();
+            }
+            _context.Telemetry.PartitionsCount += usedPartitions;
+            _context.Telemetry.PartitionPassCount++;
+        }
+        return new PartitionSet(names, counts);
     }
 
     private async Task<PartitionSet> PartitionStream(IAsyncEnumerable<Row> stream, List<string> keys, string prefix, int depth, List<string> tempFiles)
@@ -494,6 +557,21 @@ public class ExternalJoinEngine
         var values = new object?[keys.Count];
         for (int i = 0; i < keys.Count; i++)
             values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
+        return new CompoundKey(depth, values);
+    }
+
+    private static CompoundKey GetPartitionHashKey(
+        ColumnBatch batch,
+        int rowIndex,
+        List<string> keys,
+        int depth)
+    {
+        var values = new object?[keys.Count];
+        for (var i = 0; i < keys.Count; i++)
+        {
+            var column = batch.Schema.GetOrdinal(keys[i]);
+            values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
+        }
         return new CompoundKey(depth, values);
     }
 

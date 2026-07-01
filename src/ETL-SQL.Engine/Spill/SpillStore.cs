@@ -627,9 +627,12 @@ public partial class SpillStore : ISpillStore
             for (var i = 0; i < batch.Schema.Count; i++)
             {
                 var field = batch.Schema.Fields[i];
+                var expectedType = GetArrowType(field.ElementType);
                 if (!_schema.FieldsList[i].Name.Equals(field.Name, StringComparison.OrdinalIgnoreCase)
-                    || !_schema.FieldsList[i].DataType.Equals(GetArrowType(field.ElementType)))
-                    throw new InvalidOperationException("Column batch does not match the spill writer schema.");
+                    || _schema.FieldsList[i].DataType.TypeId != expectedType.TypeId)
+                    throw new InvalidOperationException(
+                        $"Column batch field {i} ('{field.Name}', {expectedType.Name}) does not match " +
+                        $"spill field '{_schema.FieldsList[i].Name}' ({_schema.FieldsList[i].DataType.Name}).");
             }
         }
 

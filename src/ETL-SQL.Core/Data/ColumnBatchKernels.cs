@@ -42,6 +42,27 @@ public sealed class SelectionVector : IDisposable
     internal void Add(int index)
         => (_indices ?? throw new ObjectDisposedException(nameof(SelectionVector)))[Count++] = index;
 
+    public static SelectionVector FromIndices(IEnumerable<int> indices)
+    {
+        ArgumentNullException.ThrowIfNull(indices);
+        var values = indices as IReadOnlyCollection<int> ?? indices.ToArray();
+        var result = new SelectionVector(values.Count);
+        try
+        {
+            foreach (var index in values)
+            {
+                if (index < 0) throw new ArgumentOutOfRangeException(nameof(indices));
+                result.Add(index);
+            }
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
     public void Dispose()
     {
         var indices = Interlocked.Exchange(ref _indices, null);
