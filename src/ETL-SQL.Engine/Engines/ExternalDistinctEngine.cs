@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
@@ -15,12 +16,19 @@ internal sealed class ExternalDistinctEngine
     // splits (e.g. one over-represented distinct value) eventually falls back to a direct
     // in-memory dedup rather than recursing forever.
     private const int MaxRecursivePartitionDepth = 8;
+    private const int MaxFanOutSampleRows = 4096;
+    private const long MaxFanOutSampleBytes = 16L * 1024 * 1024;
 
     private readonly IExecutionContext _context;
+    private int _partitionCount;
 
-    public ExternalDistinctEngine(IExecutionContext context) => _context = context;
+    public ExternalDistinctEngine(IExecutionContext context)
+    {
+        _context = context;
+        _partitionCount = Math.Max(1, context.ExternalHashPartitions);
+    }
 
-    private int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
+    internal int PartitionCount => _partitionCount;
 
     public async IAsyncEnumerable<Row> ApplyAsync(IAsyncEnumerable<Row> source)
     {
@@ -37,6 +45,8 @@ internal sealed class ExternalDistinctEngine
                 if (seen.Add(Key(row))) yield return row;
             yield break;
         }
+
+        ConfigurePartitionCount(prefix);
 
         var tempFiles = new List<string>();
         try
@@ -58,6 +68,38 @@ internal sealed class ExternalDistinctEngine
                 catch { /* best-effort cleanup */ }
             }
         }
+    }
+
+    private void ConfigurePartitionCount(IReadOnlyList<Row> prefix)
+    {
+        long inputBytes = 0;
+        long keyBytes = 0;
+        var frequencies = new Dictionary<CompoundKey, int>();
+        var sampledRows = 0;
+        foreach (var row in prefix)
+        {
+            if (sampledRows >= MaxFanOutSampleRows || inputBytes >= MaxFanOutSampleBytes) break;
+            var key = Key(row);
+            inputBytes = checked(inputBytes + row.EstimateHeapBytes());
+            keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
+            frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
+            sampledRows++;
+        }
+        if (sampledRows == 0) return;
+
+        var budget = MemoryGovernor.Ceiling(_context);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        var hotFraction = frequencies.Values.Max() / (double)sampledRows;
+        var plan = HashPartitionSizing.Calculate(
+            inputBytes,
+            sampledRows,
+            (int)Math.Min(int.MaxValue, keyBytes / sampledRows),
+            budget,
+            estimatedDistinctKeys: frequencies.Count,
+            largestKeyFraction: hotFraction,
+            minimumPartitions: _partitionCount,
+            maximumPartitions: Math.Max(1024, _partitionCount));
+        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
     }
 
     /// <summary>
