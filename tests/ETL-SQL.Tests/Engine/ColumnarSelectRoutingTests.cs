@@ -140,6 +140,37 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(decimal.MaxValue, row["mx"]);
     }
 
+    [Fact]
+    public async Task SelectIntoTransfersCompatibleNativeBatchesWithoutRowMaterialization()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource();
+        await using var destination = new AppendOnlyColumnDataSource(new[]
+        {
+            new ColumnDefinition("Id", "INT", false),
+            new ColumnDefinition("Name", "VARCHAR(20)", false)
+        });
+        evaluator.Connections["col"] = source;
+        evaluator.Connections["#dest"] = destination;
+        var statement = ParseSelect("SELECT * INTO #dest FROM col;");
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        await handler.Execute(statement, evaluator);
+
+        Assert.Equal(3, destination.EstimatedRowCount);
+        Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(3L, evaluator.Variables["@@ROWCOUNT"]);
+        var batches = await destination.ReadColumnBatches().ToListAsync();
+        try
+        {
+            Assert.Equal(new[] { 1, 0, 3 }, Assert.Single(batches).GetColumn<int>("Id").Values.ToArray());
+        }
+        finally
+        {
+            foreach (var batch in batches) batch.Dispose();
+        }
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();

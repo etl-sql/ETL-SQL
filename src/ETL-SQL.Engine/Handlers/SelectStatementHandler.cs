@@ -66,6 +66,17 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             var destination = await context.ResolveDataSourceAsync(intoTable);
             await destination.TruncateAsync();
 
+            // Import DB catalog metadata first so source comments inherit onto derived columns.
+            await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
+            new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
+
+            if (statement is SelectStatement nativeSelect
+                && await TryNativeSelectInto(nativeSelect, destination, context) is { } nativeRowCount)
+            {
+                RecordSelectIntoCompletion(intoTable, context, nativeRowCount);
+                return;
+            }
+
             IAsyncEnumerable<DataTable> batches;
             if (statement is SelectStatement selectQuery &&
                 _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
@@ -81,11 +92,6 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);
             if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
 
-            // Record Lineage (importing DB catalog metadata first, when enabled,
-            // so source column comments inherit onto the derived columns).
-            await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
-            new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
-
             var boundBatches = context.InterceptProgress(batches);
             long totalRows = 0;
             async IAsyncEnumerable<DataTable> CountBatches(IAsyncEnumerable<DataTable> source)
@@ -98,15 +104,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             }
 
             await destination.WriteBatches(CountBatches(boundBatches), append: true);
-
-            context.Variables["@@ROWCOUNT"] = totalRows;
-            context.Logger.Info($"{totalRows} rows affected.");
-
-            if (context.InteractiveMode)
-            {
-                // Emit a friendly message for notebooks
-                context.OnMessage?.Invoke(new Diagnostic($"{totalRows} rows affected (INTO {intoTable.TableName})", 0, 0, DiagnosticSeverity.Info));
-            }
+            RecordSelectIntoCompletion(intoTable, context, totalRows);
         }
         // 3. Handle Standard SELECT (Extract -> Display)
         else
@@ -372,6 +370,70 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         if (stmt.Sample != null) output = ApplySample(output, stmt.Sample);
         await foreach (var batch in output) yield return batch;
+    }
+
+    private static async Task<long?> TryNativeSelectInto(
+        SelectStatement statement,
+        IDataSource destination,
+        IExecutionContext context)
+    {
+        if (destination is not IColumnarDataSink sink
+            || statement.WhereClause != null
+            || !IsSimpleColumnarCandidate(statement)
+            || statement.Columns.Count != 1
+            || statement.Columns[0].Alias != null
+            || statement.Columns[0].Expression is not StarExpression star
+            || star.Qualifier != null || star.Pattern != null
+            || star.Exclude.Count != 0 || star.Replace.Count != 0 || star.Rename.Count != 0)
+            return null;
+
+        var source = await context.ResolveDataSourceAsync(statement.FromTable);
+        if (ReferenceEquals(source, destination) || source is not IColumnarDataSource columnarSource)
+            return null;
+
+        var sourceColumns = (await source.GetColumnsAsync()).ToArray();
+        var targetColumns = (await destination.GetColumnsAsync()).ToArray();
+        if (!sourceColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        long rowCount = 0;
+        async IAsyncEnumerable<ColumnBatch> CountAndTransfer()
+        {
+            await foreach (var batch in columnarSource.ReadColumnBatches(
+                context.BatchSize, context.CancellationToken).WithCancellation(context.CancellationToken))
+            {
+                var ownershipTransferred = false;
+                try
+                {
+                    rowCount += batch.RowCount;
+                    context.Telemetry.RowsProcessed += batch.RowCount;
+                    if (context is Evaluator evaluator) evaluator.OnBatchProcessed?.Invoke(batch.RowCount);
+                    yield return batch;
+                    ownershipTransferred = true;
+                }
+                finally
+                {
+                    if (!ownershipTransferred) batch.Dispose();
+                }
+            }
+        }
+
+        await sink.WriteColumnBatches(CountAndTransfer(), append: true, context.CancellationToken);
+        return rowCount;
+    }
+
+    private static void RecordSelectIntoCompletion(
+        TableReference intoTable,
+        IExecutionContext context,
+        long totalRows)
+    {
+        context.Variables["@@ROWCOUNT"] = totalRows;
+        context.Logger.Info($"{totalRows} rows affected.");
+
+        if (context.InteractiveMode)
+            context.OnMessage?.Invoke(new Diagnostic(
+                $"{totalRows} rows affected (INTO {intoTable.TableName})",
+                0, 0, DiagnosticSeverity.Info));
     }
 
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)

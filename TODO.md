@@ -181,7 +181,10 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   path now overlaps validation/production of one batch with encoding/writing of one batch, propagates
   writer failures, observes execution cancellation, and deletes an incomplete extent on failure.
   Explicit byte reservations for both pipeline slots remain to be integrated with the grant.)*
-- [ ] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
+- [~] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
+  *(Compatible identity-projection `SELECT * INTO` now transfers retained native batches directly into
+  a columnar sink with no row materialization or buffer rebuild. Filtered, reordered, aliased, and
+  row-backed destinations still use the compatibility path.)*
 - [x] Measure compression as an explicit disk-vs-CPU tradeoff; do not enable it by assumption.
   *(A reproducible 100K-row Release assessment now emits physical bytes, wall time, CPU time, and
   read-back checksums for compressed/uncompressed Arrow spill. On the 2026-06-30 workstation,
@@ -247,7 +250,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 - [~] Scan and projection without materializing `Row` objects. *(Native batches now support zero-copy
   projections that retain the source ownership lease and expose selected buffers directly. Simple
   read-only SELECTs over `IColumnarDataSource` now scan/filter/project without rows and materialize only
-  at the required `DataTable` result boundary. Native SELECT-INTO transfer and complex-plan routing remain.)*
+  at the required `DataTable` result boundary. Compatible `SELECT * INTO` now transfers batch ownership
+  directly between native sources and sinks; filtered/projection transfer and complex-plan routing remain.)*
 - [~] Comparison, null, boolean, and simple arithmetic predicates using selection vectors. *(Pooled
   selection vectors now support composable typed fixed-width comparisons, SQL null exclusion,
   `IS NULL`/`IS NOT NULL`, boolean filtering, checked add/subtract/multiply and division predicates,
