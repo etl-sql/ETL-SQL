@@ -121,7 +121,7 @@ namespace ETL_SQL.Tests.Operations.Operations
         {
             var (eval, logger) = BuildContext();
             var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64L * 1024 * 1024;
             try
             {
                 var rows = Enumerable.Range(0, 100)
