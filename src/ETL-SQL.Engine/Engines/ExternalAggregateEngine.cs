@@ -34,6 +34,7 @@ public class ExternalAggregateEngine
     private int _partitionCount;
     public int PartitionCount => _partitionCount;
     internal long ColumnarAggregateRows { get; private set; }
+    internal long ColumnarRepartitionRows { get; private set; }
 
 
     public ExternalAggregateEngine(IExecutionContext context, ILogger logger)
@@ -328,6 +329,10 @@ public class ExternalAggregateEngine
     /// </summary>
     private async Task<PartitionResult> RepartitionAggPartition(string sourceName, List<Expression> groupBy, int depth, List<string> tempFiles)
     {
+        if (!_context.SpillFormat.Equals("Json", StringComparison.OrdinalIgnoreCase)
+            && groupBy.All(expression => expression is IdentifierExpression))
+            return await RepartitionAggPartitionColumnar(sourceName, groupBy, depth, tempFiles);
+
         var names = new string[PartitionCount];
         var rowCounts = new long[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
@@ -438,6 +443,66 @@ public class ExternalAggregateEngine
                 }
             }
             _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
+        }
+        return new PartitionResult(names, rowCounts);
+    }
+
+    private async Task<PartitionResult> RepartitionAggPartitionColumnar(
+        string sourceName,
+        List<Expression> groupBy,
+        int depth,
+        List<string> tempFiles)
+    {
+        var names = new string[PartitionCount];
+        var rowCounts = new long[PartitionCount];
+        var writers = new ISpillWriter[PartitionCount];
+        var prefix = Guid.NewGuid().ToString("N");
+        for (var partition = 0; partition < PartitionCount; partition++)
+        {
+            names[partition] = $"agg_d{depth}_{prefix}_{partition}.tmp";
+            tempFiles.Add(names[partition]);
+            writers[partition] = await _context.SpillStore.CreateWriterAsync(names[partition]);
+        }
+
+        try
+        {
+            var keyNames = groupBy.Cast<IdentifierExpression>()
+                .Select(identifier => identifier.Name.Split('.').Last()).ToArray();
+            await using var reader = await _context.SpillStore.CreateReaderAsync(sourceName);
+            await foreach (var batch in ((IColumnarSpillReader)reader).AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    var keyOrdinals = keyNames.Select(batch.Schema.GetOrdinal).ToArray();
+                    var routes = Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray();
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        var values = new object?[keyOrdinals.Length];
+                        for (var key = 0; key < values.Length; key++)
+                            values[key] = RowPacker.ReadBatchValue(batch, keyOrdinals[key], rowIndex);
+                        var compound = new CompoundKey(depth, values);
+                        routes[(compound.GetHashCode() & 0x7fffffff) % PartitionCount].Add(rowIndex);
+                    }
+                    var columns = batch.Schema.Fields.Select(field => field.Name).ToArray();
+                    for (var partition = 0; partition < routes.Length; partition++)
+                    {
+                        if (routes[partition].Count == 0) continue;
+                        using var selection = SelectionVector.FromIndices(routes[partition]);
+                        using var compacted = ColumnBatchAdapter.Compact(
+                            batch, columns, selection, _context.CancellationToken);
+                        await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
+                        rowCounts[partition] += compacted.RowCount;
+                        ColumnarRepartitionRows += compacted.RowCount;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            for (var partition = 0; partition < writers.Length; partition++)
+                await writers[partition].DisposeAsync();
+            _context.Telemetry.PartitionsCount += rowCounts.Count(count => count > 0);
             _context.Telemetry.PartitionPassCount++;
         }
         return new PartitionResult(names, rowCounts);

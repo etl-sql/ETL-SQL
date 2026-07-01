@@ -357,6 +357,32 @@ namespace ETL_SQL.Tests.Operations.Operations
             finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
         }
 
+        [Fact]
+        public async Task UnderestimatedHighCardinalityTailRepartitionsAsNativeBatches()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64 * 1024;
+            try
+            {
+                const int groups = 10000;
+                var (groupBy, columns, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    MakeGroupedRows(groups, groups), groupBy, columns, names).ToListAsync();
+
+                Assert.Equal(groups, result.Count);
+                Assert.True(engine.ColumnarRepartitionRows > 0);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
         // A single-group holistic GROUP_CONCAT buffers every row (GenericState), so its live heap
         // growth is large and unambiguous — making the governor trigger deterministic regardless of
         // GC timing (unlike an O(1) COUNT whose live state is a handful of bytes).
