@@ -67,6 +67,32 @@ public sealed class ColumnBatchGroupingTests
     }
 
     [Fact]
+    public void GroupStateAccumulatesAcrossBatchesUnderOneMemoryGrant()
+    {
+        using var first = CreateBatch();
+        using var second = new ColumnBatch(first.Schema, new IColumnBuffer[]
+        {
+            new ColumnBuffer<int>(new[] { 1, 3 }, 2),
+            new ColumnBuffer<int>(new[] { 20, 4 }, 2)
+        }, 2);
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        using var result = ColumnBatchGroupKernels.GroupAggregate<int, int>(
+            first, "Key", "Value", memoryArbiter: arbiter);
+        var firstReservation = result.EstimatedBytes;
+
+        result.Accumulate(second, "Key", "Value");
+
+        var one = result.Groups[new NativeGroupKey<int>(false, 1)];
+        Assert.Equal(3, one.RowCount);
+        Assert.Equal(2, one.NonNullCount);
+        Assert.Equal(30m, one.Sum);
+        Assert.Equal(15m, one.Average);
+        Assert.Equal(4, result.Groups.Count);
+        Assert.True(result.EstimatedBytes > firstReservation);
+        Assert.Equal(result.EstimatedBytes, arbiter.ReservedBytes);
+    }
+
+    [Fact]
     public void GroupingFailsBoundedlyWhenCardinalityExceedsGrant()
     {
         using var batch = CreateBatch();
