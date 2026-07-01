@@ -29,6 +29,7 @@ internal sealed class ExternalDistinctEngine
     }
 
     internal int PartitionCount => _partitionCount;
+    internal long ColumnarBuildRows { get; private set; }
 
     public async IAsyncEnumerable<Row> ApplyAsync(IAsyncEnumerable<Row> source)
     {
@@ -202,6 +203,32 @@ internal sealed class ExternalDistinctEngine
         bool columnsCaptured = false;
         var guard = new MemoryBudgetGuard(ceiling);
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is IColumnarSpillReader columnarReader)
+        {
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    if (!columnsCaptured)
+                    {
+                        packed.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                        columnsCaptured = true;
+                    }
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        ColumnarBuildRows++;
+                        var key = Key(batch, rowIndex);
+                        if (!seen.Add(key)) continue;
+                        var blob = packer.Pack(batch, rowIndex);
+                        packed.Blobs.Add(blob);
+                        guard.Add(blob.Length + 24 + RowMemory.EstimateKeyBytes(key));
+                        if (guard.Exceeded()) return null;
+                    }
+                }
+            }
+            return packed;
+        }
+
         await foreach (var row in reader.AsEnumerableAsync())
         {
             var key = Key(row);
@@ -288,6 +315,14 @@ internal sealed class ExternalDistinctEngine
         var names = row.GetColumnNames().ToArray();
         var values = new object?[names.Length];
         for (var i = 0; i < values.Length; i++) values[i] = row[names[i]];
+        return new CompoundKey(values);
+    }
+
+    private static CompoundKey Key(ColumnBatch batch, int rowIndex)
+    {
+        var values = new object?[batch.Schema.Count];
+        for (var column = 0; column < values.Length; column++)
+            values[column] = RowPacker.ReadBatchValue(batch, column, rowIndex);
         return new CompoundKey(values);
     }
 

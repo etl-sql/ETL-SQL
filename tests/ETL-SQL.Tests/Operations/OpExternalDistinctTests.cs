@@ -71,4 +71,31 @@ public sealed class ExternalDistinctTests
             MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
         }
     }
+
+    [Fact]
+    public async Task GovernedDedupBuildConsumesNativeSpillBatches()
+    {
+        var services = DependencyInjectionSetup.BuildServiceProvider();
+        var context = services.GetRequiredService<Evaluator>();
+        context.ExternalHashPartitions = 2;
+        context.JoinSpillThreshold = 4;
+        var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+        MemoryGrantArbiter.Shared.TotalBudgetBytes = 64L * 1024 * 1024;
+        try
+        {
+            var rows = Enumerable.Range(0, 20)
+                .Select(id => new Row { ["id"] = id % 10, ["value"] = "v" + (id % 10) })
+                .ToAsyncEnumerable();
+            var engine = new ExternalDistinctEngine(context);
+
+            var results = await engine.ApplyAsync(rows).ToListAsync();
+
+            Assert.Equal(10, results.Count);
+            Assert.Equal(20, engine.ColumnarBuildRows);
+        }
+        finally
+        {
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
+        }
+    }
 }
