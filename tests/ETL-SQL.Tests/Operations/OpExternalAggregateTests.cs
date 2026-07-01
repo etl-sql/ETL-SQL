@@ -117,6 +117,46 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task NumericGroupedAggregateConsumesNativeSpillBatches()
+        {
+            var (eval, logger) = BuildContext();
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var rows = Enumerable.Range(0, 100)
+                    .Select(id => new Row { ["group_id"] = id % 10, ["value"] = 1m })
+                    .ToAsyncEnumerable();
+                var groupBy = new List<Expression> { new IdentifierExpression("group_id") };
+                var columns = new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("group_id"), "group_id"),
+                    new(new FunctionCallExpression("COUNT", new List<Expression>
+                    {
+                        new IdentifierExpression("value")
+                    }), "cnt"),
+                    new(new FunctionCallExpression("SUM", new List<Expression>
+                    {
+                        new IdentifierExpression("value")
+                    }), "total")
+                };
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    rows, groupBy, columns, new List<string> { "group_id", "cnt", "total" }).ToListAsync();
+
+                Assert.Equal(10, result.Count);
+                Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["cnt"])));
+                Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["total"])));
+                Assert.Equal(100, engine.ColumnarAggregateRows);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
         public async Task GroupSampleCanIncreaseFanOutWithoutLosingRows()
         {
             var (eval, logger) = BuildContext();

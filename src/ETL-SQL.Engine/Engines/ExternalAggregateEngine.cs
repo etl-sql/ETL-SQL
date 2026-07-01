@@ -33,6 +33,7 @@ public class ExternalAggregateEngine
     private readonly IBufferManager? _bufferManager;
     private int _partitionCount;
     public int PartitionCount => _partitionCount;
+    internal long ColumnarAggregateRows { get; private set; }
 
 
     public ExternalAggregateEngine(IExecutionContext context, ILogger logger)
@@ -207,6 +208,15 @@ public class ExternalAggregateEngine
         // Governor off (no ceiling configured): original unbounded behavior.
         if (ceiling <= 0)
         {
+            var native = await TryAggregatePartitionColumnar(
+                name, groupBy, finalColumns, colNames, havingClause);
+            if (native != null)
+            {
+                _context.Telemetry.AggregateGroupsCount += native.Count;
+                foreach (var row in native) yield return row;
+                yield break;
+            }
+
             await using var reader = await _context.SpillStore.CreateReaderAsync(name);
             var plain = await _inMemoryEngine.ApplyAggregation(
                 reader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause);
@@ -270,6 +280,38 @@ public class ExternalAggregateEngine
             churnReader.AsEnumerableAsync(), groupBy, finalColumns, colNames, havingClause);
         _context.Telemetry.AggregateGroupsCount += churn.Count;
         foreach (var r in churn) yield return r;
+    }
+
+    private async Task<List<Row>?> TryAggregatePartitionColumnar(
+        string name,
+        List<Expression>? groupBy,
+        List<SelectColumn> finalColumns,
+        List<string> colNames,
+        Expression? havingClause)
+    {
+        var statement = new SelectStatement(
+            finalColumns, null, new TableReference("#spill"), new List<JoinClause>(), null,
+            groupBy, havingClause);
+        if (!ColumnarGroupedAggregatePlan.TryCreate(_context, statement, out var plan) || plan == null)
+            return null;
+        using (plan)
+        await using (var reader = await _context.SpillStore.CreateReaderAsync(name))
+        {
+            if (reader is not IColumnarSpillReader columnarReader) return null;
+            long nativeRows = 0;
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    if (!plan.CanApply(batch)) return null;
+                    plan.Accumulate(batch, selection: null);
+                    nativeRows += batch.RowCount;
+                }
+            }
+            var rows = (await plan.FinalizeResultAsync(colNames)).Rows;
+            ColumnarAggregateRows += nativeRows;
+            return rows;
+        }
     }
 
     /// <summary>

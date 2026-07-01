@@ -342,7 +342,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   build-side `Row` graphs; governed DISTINCT performs full-row hashing and compact retention the same
   way. Ungoverned DISTINCT also hashes batches directly and materializes only unique output rows.
   External join probes hash batches directly and materialize only matched or outer-preserved rows.
-  Repartition paths and aggregate/window routing remain.)*
+  Compatible governor-off numeric-key GROUP BY partitions reuse the native grouped planner directly
+  over spill batches, reopening through the row path when the plan or schema is unsupported.
+  Repartition, governed/complex aggregate, and window routing remain.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts
