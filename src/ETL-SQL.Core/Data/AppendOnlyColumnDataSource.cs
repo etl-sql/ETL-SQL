@@ -70,6 +70,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColu
     public long EstimatedRowCount => Interlocked.Read(ref _rowCount);
     public long AllocatedSegmentBytes => Interlocked.Read(ref _allocatedSegmentBytes);
     public long MemoryUsageBytes => AllocatedSegmentBytes + Interlocked.Read(ref _headEstimatedBytes) + Interlocked.Read(ref _constraintEstimatedBytes);
+    public IReadOnlyDictionary<string, ColumnDefinition> LogicalSchema => _logicalSchema;
 
     public string Path => string.Empty;
     public Dictionary<string, string>? Options => null;

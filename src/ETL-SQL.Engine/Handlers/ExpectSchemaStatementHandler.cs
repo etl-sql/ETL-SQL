@@ -145,6 +145,13 @@ public class ExpectSchemaStatementHandler : IStatementHandler
                 kvp => kvp.Value.DataType ?? "VARCHAR",
                 StringComparer.OrdinalIgnoreCase);
         }
+        if (ds is AppendOnlyColumnDataSource columnar)
+        {
+            return columnar.LogicalSchema.ToDictionary(
+                kvp => kvp.Key,
+                kvp => kvp.Value.DataType ?? "VARCHAR",
+                StringComparer.OrdinalIgnoreCase);
+        }
 
         // For all other connectors: read the first batch to discover column names.
         // Type info is not reliably available across all connectors, so types are marked UNKNOWN

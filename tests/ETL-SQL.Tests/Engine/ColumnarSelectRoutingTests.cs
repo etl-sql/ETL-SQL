@@ -93,6 +93,21 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task ExpectSchemaReadsColumnarTempLogicalTypes()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT, Amount DECIMAL(18,2)); " +
+            "EXPECT SCHEMA #native (Id INT, Amount DECIMAL);"));
+
+        var error = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript("EXPECT SCHEMA #native (Id VARCHAR);")));
+        Assert.Contains("TYPE DRIFT", error.Message);
+    }
+
+    [Fact]
     public async Task SimpleSelectFiltersAndProjectsNativeSourceWithoutCallingRowReader()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
