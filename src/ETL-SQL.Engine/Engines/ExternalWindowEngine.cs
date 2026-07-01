@@ -74,7 +74,7 @@ public class ExternalWindowEngine
         public WindowGroup(WindowSignature sig) => Signature = sig;
     }
 
-    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
+    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt, long? knownRowCount = null, long? knownInputBytes = null)
     {
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var allWindowCalls = stmt.Columns
@@ -115,7 +115,10 @@ public class ExternalWindowEngine
                 var group = groups[i];
                 bool isLastGroup = (i == groups.Count - 1);
 
-                currentStream = ProcessWindowGroup(currentStream, group, stmt);
+                currentStream = ProcessWindowGroup(
+                    currentStream, group, stmt,
+                    knownRowCount: i == 0 ? knownRowCount : null,
+                    knownInputBytes: i == 0 ? knownInputBytes : null);
 
                 if (!isLastGroup)
                 {
@@ -148,11 +151,17 @@ public class ExternalWindowEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> ProcessWindowGroup(IAsyncEnumerable<Row> stream, WindowGroup group, SelectStatement stmt)
+    private async IAsyncEnumerable<Row> ProcessWindowGroup(
+        IAsyncEnumerable<Row> stream,
+        WindowGroup group,
+        SelectStatement stmt,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         _logger.WriteLine($"[blue]   - Group: {group.Columns.Count} cols, PARTITION BY ({(group.Signature.PartitionBy?.Count ?? 0)} expressions)[/]");
 
-        var partitionInfos = await PartitionStream(stream, group.Signature.PartitionBy);
+        var partitionInfos = await PartitionStream(
+            stream, group.Signature.PartitionBy, knownRowCount, knownInputBytes);
         try
         {
             foreach (var info in partitionInfos)
@@ -1128,7 +1137,11 @@ public class ExternalWindowEngine
         return true;
     }
 
-    private async Task<PartitionInfo[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)
+    private async Task<PartitionInfo[]> PartitionStream(
+        IAsyncEnumerable<Row> stream,
+        List<Expression>? partitionBy,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         await using var enumerator = stream.GetAsyncEnumerator(_context.CancellationToken);
         var sample = new List<Row>(MaxFanOutSampleRows);
@@ -1141,7 +1154,7 @@ public class ExternalWindowEngine
             sample.Add(row);
             sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
         }
-        await ConfigurePartitionCount(sample, partitionBy);
+        await ConfigurePartitionCount(sample, partitionBy, knownRowCount, knownInputBytes);
 
         var names = new string[PartitionCount];
         var counts = new long[PartitionCount];
@@ -1191,7 +1204,11 @@ public class ExternalWindowEngine
         return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
     }
 
-    private async Task ConfigurePartitionCount(IReadOnlyList<Row> sample, List<Expression>? partitionBy)
+    private async Task ConfigurePartitionCount(
+        IReadOnlyList<Row> sample,
+        List<Expression>? partitionBy,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         if (sample.Count == 0 || partitionBy == null || partitionBy.Count == 0) return;
         long inputBytes = 0;
@@ -1211,16 +1228,22 @@ public class ExternalWindowEngine
         var budget = MemoryGovernor.Ceiling(_context);
         if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)sample.Count;
+        var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
+        var plannedRows = hasExactTotal ? knownRowCount!.Value : sample.Count;
+        var plannedBytes = hasExactTotal ? knownInputBytes!.Value : inputBytes;
+        var estimatedDistinct = hasExactTotal
+            ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)sample.Count)))
+            : frequencies.Count;
         var plan = HashPartitionSizing.Calculate(
-            inputBytes,
-            sample.Count,
+            plannedBytes,
+            plannedRows,
             (int)Math.Min(int.MaxValue, keyBytes / sample.Count),
             budget,
-            estimatedDistinctKeys: frequencies.Count,
+            estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
             largestKeyFraction: hotFraction,
-            minimumPartitions: _partitionCount,
+            minimumPartitions: hasExactTotal ? 1 : _partitionCount,
             maximumPartitions: Math.Max(1024, _partitionCount));
-        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
         _logger.Debug(
             "External window sampled {SampleRows} rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
             sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);

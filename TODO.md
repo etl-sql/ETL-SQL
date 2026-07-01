@@ -328,8 +328,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   windows now sample evaluated PARTITION BY keys and replay all input rows. All runtime consumers of
   `ExternalHashPartitions` can increase the configured baseline. External aggregation and external
   join accept exact row/byte totals from already-materialized planner/build inputs and may safely reduce
-  an oversized baseline; propagating exact totals through distinct/window and unknown-stream reduction
-  remain.)*
+  an oversized baseline. External windows do the same for their first signature pass, reverting to
+  increase-only sampling after window columns change row width. Distinct exact-total propagation and
+  unknown-stream reduction remain.)*
 - [ ] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
   aggregate, or repartition them. *(Blocked on a versioned spill schema carrying ETL-SQL logical-type
   metadata: current Arrow fields reflect first-row CLR inference and string reads intentionally perform

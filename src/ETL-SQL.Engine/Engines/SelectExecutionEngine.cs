@@ -493,7 +493,10 @@ public class SelectExecutionEngine
             else if (ShouldSpillWindow(allRows))
             {
                 _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
-                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(allRows.ToAsyncEnumerable(), stmt);
+                externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(
+                    allRows.ToAsyncEnumerable(), stmt,
+                    knownRowCount: allRows.Count,
+                    knownInputBytes: RowWidthEstimator.EstimateTotalBytes(allRows));
                 allRows = [];
             }
             else

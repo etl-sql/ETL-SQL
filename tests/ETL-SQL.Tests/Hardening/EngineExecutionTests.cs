@@ -6,6 +6,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -432,6 +433,45 @@ namespace ETL_SQL.Tests.Hardening
             {
                 MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
             }
+        }
+
+        [Fact]
+        public async Task ExternalWindowEngine_ExactInputEstimateReducesOversizedBaseline()
+        {
+            var e = NewEvaluator(externalPartitions: 64);
+            e.OperatorMemoryGrantMB = 1;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause>());
+            var count = new FunctionCallExpression("COUNT", new List<Expression>
+            {
+                new IdentifierExpression("*")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(count, "Rows")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+            var rows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["Grp"] = "g" + id, ["Val"] = id })
+                .ToList();
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(
+                rows.ToAsyncEnumerable(), stmt,
+                knownRowCount: rows.Count,
+                knownInputBytes: RowWidthEstimator.EstimateTotalBytes(rows)).ToListAsync();
+
+            Assert.Equal(16, result.Count);
+            Assert.True(externalWindowEngine.PartitionCount < 64);
         }
 
         [Fact]
