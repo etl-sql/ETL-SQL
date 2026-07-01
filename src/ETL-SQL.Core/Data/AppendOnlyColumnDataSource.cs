@@ -15,7 +15,7 @@ namespace ETL_SQL.Data;
 /// Append-only segmented native store. A small row head accepts compatibility writes and freezes into
 /// immutable column batches; native readers retain those batches without reconstructing rows.
 /// </summary>
-public sealed class AppendOnlyColumnDataSource : IDataSource, IColumnarDataSource, IColumnarDataSink
+public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColumnarDataSource, IColumnarDataSink
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<ColumnBatch> _segments = new();
@@ -26,6 +26,7 @@ public sealed class AppendOnlyColumnDataSource : IDataSource, IColumnarDataSourc
     private IMemoryGrantLease _headMemoryLease;
     private IMemoryGrantLease _constraintMemoryLease;
     private readonly List<IUniqueConstraint> _uniqueConstraints;
+    private readonly Stack<TransactionSnapshot> _transactionSnapshots = new();
     private bool _disposed;
     private long _rowCount;
     private long _headEstimatedBytes;
@@ -229,6 +230,72 @@ public sealed class AppendOnlyColumnDataSource : IDataSource, IColumnarDataSourc
     public object? Snapshot() => throw new NotSupportedException("Column-store snapshots require spill-backed segment manifests.");
     public void Restore(object? snapshot) => throw new NotSupportedException("Column-store snapshots require spill-backed segment manifests.");
 
+    public async Task BeginTransactionAsync()
+    {
+        ThrowIfDisposed();
+        await _gate.WaitAsync();
+        try
+        {
+            ThrowIfDisposed();
+            FreezeHead();
+            ColumnBatch[] retained;
+            lock (_segments) retained = _segments.Select(segment => segment.Retain()).ToArray();
+            _transactionSnapshots.Push(new TransactionSnapshot(retained, _rowCount));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task CommitAsync()
+    {
+        ThrowIfDisposed();
+        await _gate.WaitAsync();
+        try
+        {
+            ThrowIfDisposed();
+            if (_transactionSnapshots.Count == 0)
+                throw new InvalidOperationException("No append-store transaction is active.");
+            _transactionSnapshots.Pop().Dispose();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task RollbackAsync()
+    {
+        ThrowIfDisposed();
+        await _gate.WaitAsync();
+        try
+        {
+            ThrowIfDisposed();
+            if (_transactionSnapshots.Count == 0)
+                throw new InvalidOperationException("No append-store transaction is active.");
+            var snapshot = _transactionSnapshots.Pop();
+            ClearCore();
+            var restored = snapshot.TakeSegments();
+            try
+            {
+                var stagedKeys = restored.SelectMany(StageKeys).ToList();
+                CommitKeys(stagedKeys);
+                lock (_segments) _segments.AddRange(restored);
+                Interlocked.Exchange(ref _rowCount, snapshot.RowCount);
+            }
+            catch
+            {
+                foreach (var segment in restored) segment.Dispose();
+                throw;
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;
@@ -236,6 +303,7 @@ public sealed class AppendOnlyColumnDataSource : IDataSource, IColumnarDataSourc
         try
         {
             if (_disposed) return;
+            while (_transactionSnapshots.Count > 0) _transactionSnapshots.Pop().Dispose();
             ClearCore();
             _headMemoryLease.Dispose();
             _constraintMemoryLease.Dispose();
@@ -681,5 +749,31 @@ public sealed class AppendOnlyColumnDataSource : IDataSource, IColumnarDataSourc
         public void Add(object value) => _values.Add((T)value);
         public void Remove(object value) => _values.Remove((T)value);
         public void Clear() => _values.Clear();
+    }
+
+    private sealed class TransactionSnapshot : IDisposable
+    {
+        private ColumnBatch[]? _segments;
+
+        public TransactionSnapshot(ColumnBatch[] segments, long rowCount)
+        {
+            _segments = segments;
+            RowCount = rowCount;
+        }
+
+        public long RowCount { get; }
+
+        public ColumnBatch[] TakeSegments()
+        {
+            var segments = _segments ?? throw new ObjectDisposedException(nameof(TransactionSnapshot));
+            _segments = null;
+            return segments;
+        }
+
+        public void Dispose()
+        {
+            var segments = Interlocked.Exchange(ref _segments, null);
+            if (segments != null) foreach (var segment in segments) segment.Dispose();
+        }
     }
 }

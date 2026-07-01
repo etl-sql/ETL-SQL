@@ -347,6 +347,49 @@ public sealed class AppendOnlyColumnDataSourceTests
         }
     }
 
+    [Fact]
+    public async Task TransactionRollbackRestoresSegmentsCountsAndConstraintKeys()
+    {
+        await using var store = new AppendOnlyColumnDataSource(
+            ConstrainedSchema(primaryKey: true), segmentRowCapacity: 10);
+        await store.WriteBatches(new[] { CreateRows(1) }.ToAsyncEnumerable());
+        await store.BeginTransactionAsync();
+        var appended = CreateRows(1);
+        appended.Rows[0]["Id"] = 2;
+        await store.WriteBatches(new[] { appended }.ToAsyncEnumerable(), append: true);
+
+        await store.RollbackAsync();
+
+        Assert.Equal(1, store.EstimatedRowCount);
+        var restoredIds = new List<int>();
+        await foreach (var batch in store.ReadColumnBatches())
+        {
+            using (batch) restoredIds.AddRange(batch.GetColumn<int>("Id").Values.ToArray());
+        }
+        Assert.Equal(new[] { 1 }, restoredIds);
+
+        var second = CreateRows(1);
+        second.Rows[0]["Id"] = 2;
+        await store.WriteBatches(new[] { second }.ToAsyncEnumerable(), append: true);
+        Assert.Equal(2, store.EstimatedRowCount);
+    }
+
+    [Fact]
+    public async Task TransactionCommitKeepsAppendedRowsAndNestedSnapshotsRemainIndependent()
+    {
+        await using var store = new AppendOnlyColumnDataSource(Schema);
+        await store.WriteBatches(new[] { CreateRows(1) }.ToAsyncEnumerable());
+        await store.BeginTransactionAsync();
+        await store.WriteBatches(new[] { CreateRows(1) }.ToAsyncEnumerable(), append: true);
+        await store.BeginTransactionAsync();
+        await store.WriteBatches(new[] { CreateRows(1) }.ToAsyncEnumerable(), append: true);
+
+        await store.RollbackAsync();
+        Assert.Equal(2, store.EstimatedRowCount);
+        await store.CommitAsync();
+        Assert.Equal(2, store.EstimatedRowCount);
+    }
+
     private static ColumnDefinition[] ConstrainedSchema(bool primaryKey)
     {
         var id = new ColumnDefinition("Id", "INT", false)
