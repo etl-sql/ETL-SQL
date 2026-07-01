@@ -11,6 +11,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ExcelDataReader;
+using MiniExcelLibs;
 
 namespace ETL_SQL.Connectors.Excel
 {
@@ -86,9 +87,7 @@ namespace ETL_SQL.Connectors.Excel
                     }
                 });
 
-                System.Data.DataTable? sheet = null;
-                if (!string.IsNullOrEmpty(_sheetName)) sheet = result.Tables[_sheetName];
-                else if (result.Tables.Count > 0) sheet = result.Tables[0];
+                System.Data.DataTable? sheet = ResolveSheet(result);
 
                 if (sheet == null) yield break;
 
@@ -153,7 +152,204 @@ namespace ETL_SQL.Connectors.Excel
 
         public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)
         {
-            throw new NotSupportedException("Writing to Excel is not currently supported. Use CSV or FLATFILE for output.");
+            _context?.SecurityService.ValidateWriteAccess(_filePath);
+
+            var existingRows = new List<Dictionary<string, object?>>();
+            var existingColumns = new List<string>();
+
+            if (append && System.IO.File.Exists(_filePath))
+            {
+                var readTempFiles = new List<string>();
+                try
+                {
+                    string effectiveReadPath = PrepareReadPath(readTempFiles);
+                    using (var stream = System.IO.File.OpenRead(effectiveReadPath))
+                    using (var reader = ExcelReaderFactory.CreateReader(stream))
+                    {
+                        var result = reader.AsDataSet(new ExcelDataSetConfiguration()
+                        {
+                            ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
+                        });
+
+                        // Match the sheet we would have written to (the writer sanitizes the name);
+                        // ResolveSheet tries the raw then sanitized name so append preserves rows.
+                        System.Data.DataTable? sheet = ResolveSheet(result);
+
+                        if (sheet != null)
+                        {
+                            var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
+                            int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
+                            int endRow = Math.Min(range.EndRow, sheet.Rows.Count - 1);
+                            int startCol = Math.Min(range.StartCol, sheet.Columns.Count - 1);
+                            int endCol = Math.Min(range.EndCol, sheet.Columns.Count - 1);
+
+                            if (startRow >= 0 && startRow <= endRow && startCol >= 0 && startCol <= endCol)
+                            {
+                                int dataStartRow = startRow;
+                                if (_hasHeader && startRow < sheet.Rows.Count)
+                                {
+                                    var headerRow = sheet.Rows[startRow];
+                                    for (int c = startCol; c <= endCol; c++)
+                                    {
+                                        existingColumns.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                                    }
+                                    dataStartRow++;
+                                }
+                                else
+                                {
+                                    for (int c = startCol; c <= endCol; c++)
+                                    {
+                                        existingColumns.Add($"Column{c - startCol + 1}");
+                                    }
+                                }
+
+                                for (int r = dataStartRow; r <= endRow; r++)
+                                {
+                                    var row = sheet.Rows[r];
+                                    var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                                    for (int c = startCol; c <= endCol; c++)
+                                    {
+                                        string colName = existingColumns[c - startCol];
+                                        rowDict[colName] = row[c] == DBNull.Value ? null : row[c];
+                                    }
+                                    existingRows.Add(rowDict);
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug("[ExcelDataSource.WriteBatches] Failed to read existing Excel file for append: {Message}", ex.Message);
+                }
+                finally
+                {
+                    DeleteTempFiles(readTempFiles);
+                }
+            }
+
+            var newRows = new List<Dictionary<string, object?>>();
+            var newColumns = new List<string>();
+
+            await foreach (var batch in batches)
+            {
+                if (newColumns.Count == 0 && batch.ColumnNames.Count > 0)
+                {
+                    newColumns.AddRange(batch.ColumnNames);
+                }
+
+                foreach (var row in batch.Rows)
+                {
+                    var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var col in batch.ColumnNames)
+                    {
+                        rowDict[col] = row[col];
+                    }
+                    newRows.Add(rowDict);
+                }
+            }
+
+            var allRows = new List<Dictionary<string, object?>>(existingRows.Count + newRows.Count);
+            allRows.AddRange(existingRows);
+            allRows.AddRange(newRows);
+
+            var columns = existingColumns.Count > 0 ? existingColumns : newColumns;
+            if (columns.Count == 0 && allRows.Count > 0)
+            {
+                columns = allRows[0].Keys.ToList();
+            }
+
+            var materializedRows = new List<Dictionary<string, object?>>();
+            foreach (var row in allRows)
+            {
+                var mapped = new Dictionary<string, object?>(columns.Count);
+                foreach (var col in columns)
+                {
+                    row.TryGetValue(col, out var raw);
+                    mapped[col] = CoerceValue(raw);
+                }
+                materializedRows.Add(mapped);
+            }
+
+            string sheetName = string.IsNullOrWhiteSpace(_sheetName) ? "Sheet1" : _sheetName;
+            sheetName = SanitizeSheetName(sheetName);
+
+            var book = new Dictionary<string, object>();
+            book[sheetName] = materializedRows;
+
+            string tempFile = System.IO.Path.GetTempFileName();
+            try
+            {
+                using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write))
+                {
+                    await MiniExcel.SaveAsAsync(stream, book, printHeader: _hasHeader, excelType: ExcelType.XLSX);
+                }
+
+                if (_encryption.Enabled)
+                {
+                    _encryption.EncryptFile(tempFile, _filePath);
+                }
+                else if (_compress)
+                {
+                    string zipPath = _filePath;
+                    if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
+                    var zipDir = System.IO.Path.GetDirectoryName(zipPath);
+                    if (!string.IsNullOrEmpty(zipDir)) System.IO.Directory.CreateDirectory(zipDir);
+                    if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
+                    using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
+                    {
+                        zip.CreateEntryFromFile(tempFile, System.IO.Path.GetFileName(_filePath));
+                    }
+                }
+                else
+                {
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                    System.IO.File.Move(tempFile, _filePath, true);
+                }
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile))
+                {
+                    try { System.IO.File.Delete(tempFile); } catch { /* best effort */ }
+                }
+            }
+        }
+
+        private static object? CoerceValue(object? raw)
+        {
+            if (raw is null || raw == DBNull.Value) return null;
+            if (raw is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal or DateTime or DateTimeOffset or DateOnly)
+                return raw;
+            return NeutralizeFormula(raw.ToString());
+        }
+
+        private static string? NeutralizeFormula(string? s) =>
+            !string.IsNullOrEmpty(s) && s[0] is '=' or '+' or '-' or '@' or '\t' or '\r'
+                ? "'" + s
+                : s;
+
+        // Resolves the sheet this connector targets. When a sheet name is configured, try the raw
+        // name first, then the sanitized form the writer would have produced (Excel forbids the
+        // sanitized chars in real sheet names, so this only helps round-tripping our own output).
+        // Deliberately no first-sheet fallback for a named lookup: that would mask typos on read and
+        // merge an unrelated sheet on append. A null/empty name means "the first sheet".
+        private System.Data.DataTable? ResolveSheet(System.Data.DataSet result)
+        {
+            if (!string.IsNullOrEmpty(_sheetName))
+                return result.Tables[_sheetName] ?? result.Tables[SanitizeSheetName(_sheetName)];
+            return result.Tables.Count > 0 ? result.Tables[0] : null;
+        }
+
+        private static string SanitizeSheetName(string? name)
+        {
+            var s = string.IsNullOrWhiteSpace(name) ? "Sheet" : name!;
+            foreach (var c in new[] { '[', ']', ':', '*', '?', '/', '\\' })
+                s = s.Replace(c, ' ');
+            s = s.Trim();
+            if (s.Length == 0) s = "Sheet";
+            return s.Length > 31 ? s.Substring(0, 31) : s;
         }
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
@@ -174,9 +370,7 @@ namespace ETL_SQL.Connectors.Excel
                     ConfigureDataTable = (_) => new ExcelDataTableConfiguration() { UseHeaderRow = false }
                 });
 
-                System.Data.DataTable? sheet = null;
-                if (!string.IsNullOrEmpty(_sheetName)) sheet = result.Tables[_sheetName];
-                else if (result.Tables.Count > 0) sheet = result.Tables[0];
+                System.Data.DataTable? sheet = ResolveSheet(result);
 
                 if (sheet != null)
                 {

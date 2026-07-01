@@ -96,11 +96,12 @@ These connectors do not implement `IDatabaseSource`. All SQL is evaluated by the
 | **T4** — Exception wrapping test | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **Structured WITH() properties** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | **ALTER CONNECTION support** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Overall** | **✓ GA** | **~ GA (gaps)** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** |
+| **Overall** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** | **✓ GA** |
 
 ### Excel Notes
 - `ExcelDataReader` does not expose async read APIs. Rule 2 compliance is documented as an accepted exception; reads are offloaded to `Task.Run` to avoid blocking the async call chain.
 - Large multi-sheet files may accumulate rows before yielding. Rule 7 should be verified for workbooks over 100k rows.
+- Full write and append support is implemented using `MiniExcel` in the write path (`WriteBatches`), resolving the writing gap.
 
 ### XML Notes
 - Refactored to streaming `XmlReader` in 0.7.x: `ReadBatches` performs two lightweight passes (schema discovery + data yield) without loading the full document into memory. Rule 7 compliant.

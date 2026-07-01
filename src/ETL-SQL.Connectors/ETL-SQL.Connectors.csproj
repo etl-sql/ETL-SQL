@@ -10,6 +10,7 @@
     <PackageReference Include="Azure.Storage.Blobs" />
     <PackageReference Include="ExcelDataReader" />
     <PackageReference Include="ExcelDataReader.DataSet" />
+    <PackageReference Include="MiniExcel" />
     <PackageReference Include="FluentFTP" />
     <PackageReference Include="MailKit" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
