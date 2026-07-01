@@ -349,7 +349,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   and FIRST/LAST state scans consume batches, retaining row reads only for the required output replay.
   Recursive external joins, DISTINCT, and identifier-key aggregates now hash native batches, compact
   per-partition selections, and write typed batches end-to-end. Expression-key/complex aggregate and
-  remaining window routing remain.)*
+  remaining window routing remain. Grouping-set partition reads filter `__SET_IDX` in native batches
+  and materialize only matching rows.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts

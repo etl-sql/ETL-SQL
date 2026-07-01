@@ -35,6 +35,8 @@ public class ExternalAggregateEngine
     public int PartitionCount => _partitionCount;
     internal long ColumnarAggregateRows { get; private set; }
     internal long ColumnarRepartitionRows { get; private set; }
+    internal long ColumnarFilterInputRows { get; private set; }
+    internal long ColumnarFilterOutputRows { get; private set; }
 
 
     public ExternalAggregateEngine(IExecutionContext context, ILogger logger)
@@ -708,6 +710,26 @@ public class ExternalAggregateEngine
     private async IAsyncEnumerable<Row> ReadPartitionForSet(string name, int setIdx)
     {
         await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is IColumnarSpillReader columnarReader)
+        {
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    var setColumn = batch.Schema.GetOrdinal("__SET_IDX");
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        ColumnarFilterInputRows++;
+                        var value = RowPacker.ReadBatchValue(batch, setColumn, rowIndex);
+                        if (Convert.ToInt32(value ?? 0) != setIdx) continue;
+                        ColumnarFilterOutputRows++;
+                        yield return RowPacker.MaterializeBatchRow(batch, rowIndex);
+                    }
+                }
+            }
+            yield break;
+        }
+
         await foreach (var row in reader.AsEnumerableAsync())
         {
             if (Convert.ToInt32(row["__SET_IDX"] ?? 0) == setIdx)

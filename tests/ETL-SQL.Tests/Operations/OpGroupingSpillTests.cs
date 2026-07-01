@@ -142,6 +142,8 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             // Expansion Ratio for CUBE(2) is 2^2 = 4.0
             Assert.Equal(4.0, eval.Telemetry.AggregateExpansionRatio, 1);
+            Assert.Equal(16, engine.ColumnarFilterOutputRows);
+            Assert.True(engine.ColumnarFilterInputRows >= engine.ColumnarFilterOutputRows);
         }
 
         [Fact]
