@@ -383,8 +383,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   certification evidence remain.)*
 - [ ] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
   differential correctness and show a substantial throughput improvement at 10M/50M.
-- [ ] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
-  extent/file counts, and no unnecessary columnar→row→columnar round-trip.
+- [~] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
+  extent/file counts, and no unnecessary columnar→row→columnar round-trip. *(Join fan-out is adaptive,
+  recursive hash paths use typed spill batches, and sort merge fan-in is capped at 64 readers. A
+  deterministic 150-run sort proves two merge levels, three intermediate runs, and 153 total extents.
+  Large-tier throughput/peak-memory evidence remains.)*
 - [ ] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
   and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
   spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
@@ -426,7 +429,7 @@ extent count, partition passes, and required free disk.
 All 13 scenarios **passed** at 5M (correctness holds at scale; validates the ORDER BY sort-key refactor). Observations:
 - **Streaming ops scale excellently** — `StreamingSelect`, `CsvIngest`, `ParquetRoundTrip` ran in 1–4 s with **0 spill**. Confirms FILTER/projection are not data-scale-bound.
 - **Join slowest single op** (130 s / 5M, grace hash + repartition) — works; the perf cost of spilling joins.
-- **Sort** handled 5M (66 s, 876 MB) with the cert's forced 5k chunk size = ~1000 spill readers open at merge; validates the **merge fan-in** concern is latent for 50M (~5–10k readers).
+- **Sort** handled 5M (66 s, 876 MB) with the cert's forced 5k chunk size = ~1000 spill readers open at merge. This historical risk is now mitigated by a 64-reader multi-pass fan-in cap; large-tier remeasurement remains.
 
 ### 50M (Huge tier) — could not complete in this environment
 Wired and attempted twice; both runs were killed at the identical point with **no OOM/exception** — the agent's background runner kills tasks during the multi-minute **silent** 50M row-generation stretches (no stdout). **Not an engine fault.** Partial observation: the engine **generated 50M rows and switched to `ExternalAggregateEngine` without OOM**. To get full 50M metrics + `baseline-huge.json`, run on a capable host in the **foreground**: `pwsh ./scripts/Test-ScaleCertification.ps1 -Tier Huge`.

@@ -22,6 +22,9 @@ public class ExternalSortEngine
     private readonly ILogger _logger;
     private readonly IBufferManager? _bufferManager;
     public int ChunkSize => _context.ExternalSortChunkSize;
+    public int MaxConcurrentMergeReaders { get; private set; }
+    public int MergePassCount { get; private set; }
+    public int IntermediateMergeRunCount { get; private set; }
 
     // Column-name prefix for individual sort-key columns written to spill chunks.
     // Using one column per key avoids JSON array serialization and lets Arrow store
@@ -155,6 +158,7 @@ public class ExternalSortEngine
             int passNo = 0;
             while (chunkPaths.Count > MaxMergeFanIn)
             {
+                MergePassCount++;
                 var nextLevel = new List<string>();
                 for (int i = 0; i < chunkPaths.Count; i += MaxMergeFanIn)
                 {
@@ -171,6 +175,7 @@ public class ExternalSortEngine
                     await MergeChunksToFileAsync(merged, group, keyColumnNames, Compare);
                     nextLevel.Add(merged);
                     _context.Telemetry.SortSpillCount++;
+                    IntermediateMergeRunCount++;
 
                     foreach (var consumed in group)
                     {
@@ -183,6 +188,7 @@ public class ExternalSortEngine
             }
 
             // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and stream rows out.
+            MergePassCount++;
             await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, Compare))
                 yield return entry.Row;
         }
@@ -217,6 +223,7 @@ public class ExternalSortEngine
         {
             foreach (var path in inputChunks)
                 readers.Add(await _context.SpillStore.CreateReaderAsync(path));
+            MaxConcurrentMergeReaders = Math.Max(MaxConcurrentMergeReaders, readers.Count);
 
             var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row Row, object?[] Keys)>.Create(compare));
 

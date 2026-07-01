@@ -104,6 +104,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new OrderByClause(new IdentifierExpression("id"), false) // ASC
             };
 
+            var startExtents = eval.Telemetry.SpillExtentCount;
             var sorted = await engine.SortExternal(rows, orderBy);
 
             Assert.Equal(n, sorted.Count);
@@ -112,6 +113,10 @@ namespace ETL_SQL.Tests.Operations.Operations
                 Assert.Equal((decimal)(i + 1), Convert.ToDecimal(sorted[i]["id"]));
                 Assert.Equal($"val-{i + 1}", sorted[i]["val"]); // row payload travels with its key
             }
+            Assert.InRange(engine.MaxConcurrentMergeReaders, 1, 64);
+            Assert.Equal(2, engine.MergePassCount);
+            Assert.Equal(3, engine.IntermediateMergeRunCount);
+            Assert.Equal(153, eval.Telemetry.SpillExtentCount - startExtents);
         }
 
         // Note: no dedicated "early-flush under a 1-byte ceiling" test — asserting the guard tripped
