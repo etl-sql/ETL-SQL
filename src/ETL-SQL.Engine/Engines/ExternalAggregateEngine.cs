@@ -435,6 +435,19 @@ public class ExternalAggregateEngine
 
     private async Task<MultiSetPartitionResult> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
     {
+        await using var enumerator = stream.GetAsyncEnumerator(_context.CancellationToken);
+        var sample = new List<Row>(MaxFanOutSampleRows);
+        long sampledBytes = 0;
+        while (sample.Count < MaxFanOutSampleRows
+            && sampledBytes < MaxFanOutSampleBytes
+            && await enumerator.MoveNextAsync())
+        {
+            var row = enumerator.Current;
+            sample.Add(row);
+            sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
+        }
+        await ConfigureGroupingSetPartitionCount(sample, sets);
+
         var names = new string[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
         // Per-(partition, set) row counts so the aggregate phase can skip empty (partition, set) pairs
@@ -454,7 +467,7 @@ public class ExternalAggregateEngine
 
         try
         {
-            await foreach (var row in stream)
+            await foreach (var row in ReplaySample(sample, enumerator))
             {
                 totalInput++;
                 for (int sIdx = 0; sIdx < sets.Count; sIdx++)
@@ -502,6 +515,49 @@ public class ExternalAggregateEngine
             _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.Telemetry.AggregateExpansionRatio);
         }
         return new MultiSetPartitionResult(names, setCounts);
+    }
+
+    private async Task ConfigureGroupingSetPartitionCount(
+        IReadOnlyList<Row> sample,
+        IReadOnlyList<List<Expression>> sets)
+    {
+        if (sample.Count == 0 || sets.Count == 0) return;
+        long inputBytes = 0;
+        long keyBytes = 0;
+        long expandedRows = 0;
+        var frequencies = new Dictionary<CompoundKey, int>();
+        foreach (var row in sample)
+        {
+            var rowBytes = row.EstimateHeapBytes();
+            foreach (var (activeGroupBy, setIndex) in sets.Select((set, index) => (set, index)))
+            {
+                inputBytes = checked(inputBytes + rowBytes);
+                expandedRows++;
+                var values = new object?[activeGroupBy.Count];
+                for (var i = 0; i < activeGroupBy.Count; i++)
+                    values[i] = CompoundKey.NormalizeValue(await _context.EvaluateValue(activeGroupBy[i], row));
+                var key = new CompoundKey(setIndex, values);
+                keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
+                frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
+            }
+        }
+
+        var budget = MemoryGovernor.Ceiling(_context);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        var hotFraction = frequencies.Values.Max() / (double)expandedRows;
+        var plan = HashPartitionSizing.Calculate(
+            inputBytes,
+            expandedRows,
+            (int)Math.Min(int.MaxValue, keyBytes / expandedRows),
+            budget,
+            estimatedDistinctKeys: frequencies.Count,
+            largestKeyFraction: hotFraction,
+            minimumPartitions: _partitionCount,
+            maximumPartitions: Math.Max(1024, _partitionCount));
+        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _logger.Debug(
+            "External grouping sets sampled {SampleRows} input rows ({ExpandedRows} expanded) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
+            sample.Count, expandedRows, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
     }
 
     private sealed record MultiSetPartitionResult(string[] Names, long[][] SetCounts);

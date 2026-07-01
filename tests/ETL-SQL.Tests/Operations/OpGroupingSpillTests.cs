@@ -206,5 +206,58 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.True(eval.Telemetry.TotalSpilledBytes > spillBefore);
             Assert.Equal(8.0, eval.Telemetry.AggregateExpansionRatio, 1);
         }
+
+        [Fact]
+        public async Task GroupingSetSampleCanIncreaseFanOutWithoutLosingExpandedRows()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.OperatorMemoryGrantMB = 1;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var rows = Enumerable.Range(0, 4096)
+                    .Select(id => new Row
+                    {
+                        ["cat"] = "g" + id,
+                        ["val"] = 1m,
+                        ["payload"] = payload + id
+                    })
+                    .ToAsyncEnumerable();
+                var groupingSet = new GroupingSetClause(GroupingSetType.GroupingSets,
+                    new List<List<Expression>>
+                    {
+                        new() { new IdentifierExpression("cat") },
+                        new()
+                    });
+                var columns = new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("cat"), "cat"),
+                    new(new FunctionCallExpression("COUNT", new List<Expression>
+                    {
+                        new IdentifierExpression("val")
+                    }), "cnt")
+                };
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    rows,
+                    new List<Expression> { new IdentifierExpression("cat") },
+                    columns,
+                    new List<string> { "cat", "cnt" },
+                    groupingSet: groupingSet).ToListAsync();
+
+                Assert.Equal(4097, result.Count);
+                Assert.Equal(8192m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+                Assert.Equal(2.0, eval.Telemetry.AggregateExpansionRatio, 1);
+                Assert.True(engine.PartitionCount > 2);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
     }
 }
