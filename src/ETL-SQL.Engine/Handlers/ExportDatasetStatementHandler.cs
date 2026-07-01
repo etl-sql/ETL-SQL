@@ -60,7 +60,18 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
             existing.AtRestDecryptionKey ?? (context as Evaluator)?.DatasetAtRestKey));
         var transport = new EncryptionOptions(BuildTransportOptions(stmt));
         var targetPath = context.ResolvePath(stmt.TargetPath);
-        targetPath = FileConnectorPathHelper.CoerceFilePathExtension(targetPath, transport.Enabled, false);
+        if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+        {
+            if (targetPath.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+                targetPath = targetPath.Substring(0, targetPath.Length - 8);
+            else if (targetPath.EndsWith(".parquet.enc", StringComparison.OrdinalIgnoreCase))
+                targetPath = targetPath.Substring(0, targetPath.Length - 12);
+            else if (targetPath.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
+                targetPath = targetPath.Substring(0, targetPath.Length - 4);
+            
+            if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+                targetPath += ".etlds";
+        }
 
         var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_export_{Guid.NewGuid():N}.parquet");
         using var fileTransaction = DatasetFileTransaction.Create(targetPath);

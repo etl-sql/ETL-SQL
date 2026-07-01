@@ -51,7 +51,18 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 null, stmt.Line, stmt.Column);
 
         var sourcePath = context.ResolvePath(stmt.SourcePath);
-        sourcePath = FileConnectorPathHelper.CoerceFilePathExtension(sourcePath, stmt.EncryptionMode is DatasetEncryptionMode.Password or DatasetEncryptionMode.KeyFile, false);
+        if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sourcePath.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 8);
+            else if (sourcePath.EndsWith(".parquet.enc", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 12);
+            else if (sourcePath.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 4);
+            
+            if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+                sourcePath += ".etlds";
+        }
         if (!File.Exists(sourcePath))
             throw new ExecutionException(
                 $"PUBLISH DATASET '{stmt.DatasetName}': source file not found: '{sourcePath}'.",

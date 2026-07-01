@@ -397,7 +397,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_exp_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(root);
-            var exportPath = Path.Combine(root, "sales_export.parquet").Replace('\\', '/');
+            var exportPath = Path.Combine(root, "sales_export.etlds").Replace('\\', '/');
             try
             {
                 var registry = new SingleDatasetRegistry(ownerUserId: 1, root: root);
@@ -415,7 +415,7 @@ namespace ETL_SQL.Tests.Reporting
                     CREATE DATASET &sales AS (SELECT v FROM #seed);
                     EXPORT DATASET &sales TO '{exportPath}' ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
 
-                Assert.True(File.Exists(exportPath + ".pgp"));
+                Assert.True(File.Exists(exportPath));
 
                 // The export is transport-encrypted (not the at-rest key): read it back via a PARQUET
                 // connection with the transport password.
@@ -466,7 +466,7 @@ namespace ETL_SQL.Tests.Reporting
             var rootB = Path.Combine(Path.GetTempPath(), "etlsql_ds_pb_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(rootA);
             Directory.CreateDirectory(rootB);
-            var exportPath = Path.Combine(rootA, "sales_export.parquet").Replace('\\', '/');
+            var exportPath = Path.Combine(rootA, "sales_export.etlds").Replace('\\', '/');
             try
             {
                 const string transport = "move-me-secret";
@@ -523,7 +523,7 @@ namespace ETL_SQL.Tests.Reporting
             var rootB = Path.Combine(Path.GetTempPath(), "etlsql_ds_secret_b_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(rootA);
             Directory.CreateDirectory(rootB);
-            var exportPath = Path.Combine(rootA, "portable-export.parquet").Replace('\\', '/');
+            var exportPath = Path.Combine(rootA, "portable-export.etlds").Replace('\\', '/');
             const string atRestA = "AT_REST_SECRET_MARKER_ALPHA_0123456789";
             const string atRestB = "AT_REST_SECRET_MARKER_BRAVO_0123456789";
             const string transport = "TRANSPORT_SECRET_MARKER_0123456789";
@@ -621,7 +621,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubdeny_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(root);
-            var sourcePath = Path.Combine(root, "portable.parquet.pgp");
+            var sourcePath = Path.Combine(root, "portable.etlds");
             await File.WriteAllTextAsync(sourcePath, "not read because authorization fails");
             try
             {
@@ -652,7 +652,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubrollback_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(root);
-            var sourcePath = Path.Combine(root, "portable.parquet.pgp");
+            var sourcePath = Path.Combine(root, "portable.etlds");
             await File.WriteAllTextAsync(sourcePath, "not encrypted with the supplied password");
             try
             {

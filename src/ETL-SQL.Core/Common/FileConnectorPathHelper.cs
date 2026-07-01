@@ -16,6 +16,12 @@ namespace ETL_SQL.Core.Common
                 return path;
             }
 
+            // Do not coerce exported dataset files (which end in .etlds)
+            if (path.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+            {
+                return path;
+            }
+
             // Do not coerce portal dataset registry/cache files (which end in _<id>.parquet or _<id>.avro)
             int lastDot = path.LastIndexOf('.');
             if (lastDot > 0)
