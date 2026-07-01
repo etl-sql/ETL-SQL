@@ -179,7 +179,7 @@ public sealed class ColumnBatchTests
         var source = new ColumnBatch(schema, new IColumnBuffer[]
         {
             new ColumnBuffer<int>(new[] { 1, 2, 3, 4 }, 4),
-            Utf8ColumnBuffer.FromStrings(new string?[] { "one", null, "three", "four" })
+            Utf8ColumnBuffer.FromStrings(new string?[] { "one", null, "thrβe", "four" })
         }, 4);
         using var selected = ColumnBatchKernels.SelectComparison(
             source, "Id", ColumnComparison.GreaterThanOrEqual, 2);
@@ -190,7 +190,10 @@ public sealed class ColumnBatchTests
         Assert.Equal(3, compacted.RowCount);
         Assert.Equal(new[] { "Name", "Id" }, compacted.Schema.Fields.Select(field => field.Name));
         Assert.True(compacted.GetUtf8Column("Name").IsNull(0));
-        Assert.Equal("three", compacted.GetUtf8Column("Name").GetBoxedValue(1));
+        var names = compacted.GetUtf8Column("Name");
+        Assert.Equal("thrβe", names.GetBoxedValue(1));
+        Assert.Equal(new[] { 0, 0, 6, 10 }, names.Offsets.ToArray());
+        Assert.Equal(10, names.Utf8Data.Length);
         Assert.Equal(new[] { 2, 3, 4 }, compacted.GetColumn<int>("Id").Values.ToArray());
     }
 

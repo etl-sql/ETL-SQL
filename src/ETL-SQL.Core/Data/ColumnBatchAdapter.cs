@@ -235,15 +235,9 @@ public static class ColumnBatchAdapter
     {
         if (source is Utf8ColumnBuffer utf8)
         {
-            var count = hasSelection ? selectedRows.Length : sourceRowCount;
-            var values = new string?[count];
-            for (var output = 0; output < count; output++)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var input = hasSelection ? ValidateSelectedRow(selectedRows.Span[output], sourceRowCount) : output;
-                if (!utf8.IsNull(input)) values[output] = System.Text.Encoding.UTF8.GetString(utf8.GetUtf8Bytes(input));
-            }
-            return Utf8ColumnBuffer.FromStrings(values);
+            return hasSelection
+                ? utf8.Compact(selectedRows.Span, sourceRowCount, cancellationToken)
+                : utf8.Clone(cancellationToken);
         }
 
         if (source is ColumnBuffer<byte> bytes) return CopyFixed(bytes, sourceRowCount, selectedRows, hasSelection, cancellationToken);

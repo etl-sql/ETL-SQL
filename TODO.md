@@ -185,8 +185,9 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   *(Compatible identity-projection `SELECT * INTO` now transfers retained native batches directly into
   a columnar sink with no row materialization or buffer rebuild. Supported filters compact selected
   ordinals directly into independently owned typed buffers; simple reordered/aliased identifier
-  projections also compact and rename the native schema. Expression projections and row-backed
-  destinations still use the compatibility path.)*
+  projections also compact and rename the native schema. UTF-8 selection copies offsets/data bytes
+  directly without decoding managed strings. Expression projections and row-backed destinations still
+  use the compatibility path.)*
 - [x] Measure compression as an explicit disk-vs-CPU tradeoff; do not enable it by assumption.
   *(A reproducible 100K-row Release assessment now emits physical bytes, wall time, CPU time, and
   read-back checksums for compressed/uncompressed Arrow spill. On the 2026-06-30 workstation,

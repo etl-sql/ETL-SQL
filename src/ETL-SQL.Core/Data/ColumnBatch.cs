@@ -237,6 +237,79 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
 
     public object? GetBoxedValue(int index) => IsNull(index) ? null : Encoding.UTF8.GetString(GetUtf8Bytes(index));
 
+    /// <summary>Copies selected UTF-8 slices directly into new pooled buffers without string decoding.</summary>
+    internal Utf8ColumnBuffer Compact(
+        ReadOnlySpan<int> selectedRows,
+        int sourceRowCount,
+        CancellationToken cancellationToken = default)
+    {
+        if (sourceRowCount != _count)
+            throw new ArgumentException("Source row count does not match the UTF-8 buffer.", nameof(sourceRowCount));
+        var sourceOffsets = GetOffsets();
+        var sourceData = GetData();
+        var dataLength = 0;
+        for (var output = 0; output < selectedRows.Length; output++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var input = selectedRows[output];
+            if ((uint)input >= (uint)sourceRowCount)
+                throw new ArgumentOutOfRangeException(nameof(selectedRows), "Selection contains an invalid row ordinal.");
+            dataLength = checked(dataLength + sourceOffsets[input + 1] - sourceOffsets[input]);
+        }
+
+        var nullBytes = checked((selectedRows.Length + 7) / 8);
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, selectedRows.Length + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            bitmap.AsSpan(0, nullBytes).Clear();
+            var position = 0;
+            offsets[0] = 0;
+            for (var output = 0; output < selectedRows.Length; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = selectedRows[output];
+                var length = sourceOffsets[input + 1] - sourceOffsets[input];
+                sourceData.AsSpan(sourceOffsets[input], length).CopyTo(data.AsSpan(position));
+                position += length;
+                offsets[output + 1] = position;
+                if (IsNull(input)) bitmap[output >> 3] |= (byte)(1 << (output & 7));
+            }
+            return new Utf8ColumnBuffer(offsets, data, bitmap, selectedRows.Length, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
+            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
+    /// <summary>Copies the complete encoded column into independent pooled ownership.</summary>
+    internal Utf8ColumnBuffer Clone(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var offsets = ArrayPool<int>.Shared.Rent(Math.Max(1, _count + 1));
+        var data = ArrayPool<byte>.Shared.Rent(Math.Max(1, _dataLength));
+        var bitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, _nullByteCount));
+        try
+        {
+            GetOffsets().AsSpan(0, _count + 1).CopyTo(offsets);
+            GetData().AsSpan(0, _dataLength).CopyTo(data);
+            GetNullBitmap().AsSpan(0, _nullByteCount).CopyTo(bitmap);
+            return new Utf8ColumnBuffer(offsets, data, bitmap, _count, _dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(offsets, clearArray: false);
+            ArrayPool<byte>.Shared.Return(data, clearArray: false);
+            ArrayPool<byte>.Shared.Return(bitmap, clearArray: true);
+            throw;
+        }
+    }
+
     public void Dispose()
     {
         var offsets = _offsets;
