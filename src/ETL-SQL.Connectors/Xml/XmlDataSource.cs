@@ -40,11 +40,6 @@ namespace ETL_SQL.Connectors.Xml
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
 
             _options = options;
             if (options != null)
@@ -65,6 +60,13 @@ namespace ETL_SQL.Connectors.Xml
             }
 
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
@@ -382,19 +384,35 @@ namespace ETL_SQL.Connectors.Xml
                     await System.IO.File.WriteAllTextAsync(tempFile, root.ToString());
                 }
 
+                string fileToEncrypt = tempFile;
+                string? zippedTemp = null;
+
+                if (_compress)
+                {
+                    zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
+                    using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
+                    {
+                        string entryName = System.IO.Path.GetFileName(_filePath);
+                        if (entryName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        else if (entryName.EndsWith(".pgp", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        
+                        zip.CreateEntryFromFile(tempFile, entryName);
+                    }
+                    fileToEncrypt = zippedTemp;
+                }
+
                 if (_encryption.Enabled)
                 {
-                    _encryption.EncryptFile(tempFile, _filePath);
+                    _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
                 {
-                    string zipPath = _filePath;
-                    if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
-                    if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
-                    using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
-                    {
-                        zip.CreateEntryFromFile(tempFile, System.IO.Path.GetFileName(_filePath));
-                    }
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
+                    System.IO.File.Move(fileToEncrypt, _filePath, true);
                 }
                 else
                 {
@@ -402,6 +420,11 @@ namespace ETL_SQL.Connectors.Xml
                     if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
                     System.IO.File.Move(tempFile, _filePath);
+                }
+
+                if (zippedTemp != null && System.IO.File.Exists(zippedTemp))
+                {
+                    try { System.IO.File.Delete(zippedTemp); } catch { /* best effort */ }
                 }
             }
             finally

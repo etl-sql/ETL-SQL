@@ -742,13 +742,20 @@ public class AdminController(
         var results = new List<BulkMutationResult>();
         var affectedUserIds = new HashSet<int>();
         var deleted = 0;
+        // Load every targeted group (with the navigations the delete touches) in one split query — was
+        // an N+1 that re-queried each group inside the loop. Entities stay tracked; the per-group
+        // SaveChangesAsync below is intentional so one optimistic-concurrency conflict does not fail the
+        // whole batch. AsSplitQuery avoids a cartesian explosion across the two collection includes.
+        var requestedIds = items.Select(item => item.Id).ToList();
+        var groupsById = await db.Groups
+            .Include(value => value.UserGroups)
+            .Include(value => value.FolderAcls)
+            .Where(value => requestedIds.Contains(value.Id))
+            .AsSplitQuery()
+            .ToDictionaryAsync(value => value.Id);
         foreach (var item in items)
         {
-            var group = await db.Groups
-                .Include(value => value.UserGroups)
-                .Include(value => value.FolderAcls)
-                .FirstOrDefaultAsync(value => value.Id == item.Id);
-            if (group is null)
+            if (!groupsById.TryGetValue(item.Id, out var group))
             {
                 results.Add(new(item.Id, "NotFound"));
                 continue;
@@ -777,7 +784,12 @@ public class AdminController(
             }
             catch (DbUpdateConcurrencyException)
             {
-                db.ChangeTracker.Clear();
+                // Detach only this group's graph: after a failed save it stays tracked as Deleted and
+                // would otherwise leak into the next group's SaveChanges. Clearing the whole
+                // ChangeTracker (the old single-query approach) would detach the rest of the batch.
+                db.Entry(group).State = EntityState.Detached;
+                foreach (var membership in group.UserGroups) db.Entry(membership).State = EntityState.Detached;
+                foreach (var acl in group.FolderAcls) db.Entry(acl).State = EntityState.Detached;
                 var currentVersion = await db.Groups
                     .Where(value => value.Id == item.Id)
                     .Select(value => (long?)value.Version)
@@ -1116,6 +1128,7 @@ public class AdminController(
         await deliveryStatus.SynchronizeAllAsync();
 
         var viewLogs = await db.AuditLogs
+            .AsNoTracking()
             .Where(a => a.Action == "VIEW_SNAPSHOT"
                 && a.ResourceType == "Report"
                 && a.ResourceId != null
@@ -1146,6 +1159,7 @@ public class AdminController(
             .ToDictionaryAsync(x => x.ReportId, x => x.Failures);
 
         var reports = await db.Reports
+            .AsNoTracking()
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder.Path)

@@ -415,7 +415,7 @@ namespace ETL_SQL.Tests.Reporting
                     CREATE DATASET &sales AS (SELECT v FROM #seed);
                     EXPORT DATASET &sales TO '{exportPath}' ENCRYPT = PASSWORD PASSWORD = '{transport}';"));
 
-                Assert.True(File.Exists(exportPath));
+                Assert.True(File.Exists(exportPath + ".pgp"));
 
                 // The export is transport-encrypted (not the at-rest key): read it back via a PARQUET
                 // connection with the transport password.
@@ -621,7 +621,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubdeny_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(root);
-            var sourcePath = Path.Combine(root, "portable.parquet");
+            var sourcePath = Path.Combine(root, "portable.parquet.pgp");
             await File.WriteAllTextAsync(sourcePath, "not read because authorization fails");
             try
             {
@@ -652,7 +652,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var root = Path.Combine(Path.GetTempPath(), "etlsql_ds_pubrollback_" + Guid.NewGuid().ToString("N")[..8]);
             Directory.CreateDirectory(root);
-            var sourcePath = Path.Combine(root, "portable.parquet");
+            var sourcePath = Path.Combine(root, "portable.parquet.pgp");
             await File.WriteAllTextAsync(sourcePath, "not encrypted with the supplied password");
             try
             {

@@ -174,6 +174,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<AuditLog>(e =>
         {
             e.Property(x => x.ActorType).HasDefaultValue("User");
+            // Read paths that previously full-scanned this (append-heavy) table: the admin audit
+            // viewer (optional action filter, newest-first, paged), usage metrics (action + time
+            // window), per-report change history (resource lookup), and retention purge (time range).
+            // Narrow, non-unique secondary indexes keep insert cost bounded.
+            e.HasIndex(x => x.Timestamp);
+            e.HasIndex(x => new { x.Action, x.Timestamp });
+            e.HasIndex(x => new { x.ResourceType, x.ResourceId });
         });
 
         builder.Entity<Group>(e =>

@@ -37,11 +37,6 @@ namespace ETL_SQL.Connectors.Avro
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
 
             _options = options;
             if (options != null && options.TryGetValue("SCHEMA_FILE", out var sf))
@@ -50,6 +45,13 @@ namespace ETL_SQL.Connectors.Avro
                 context.SecurityService.ValidatePath(_schemaFile);
             }
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, false);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>

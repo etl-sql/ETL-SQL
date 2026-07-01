@@ -51,6 +51,7 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 null, stmt.Line, stmt.Column);
 
         var sourcePath = context.ResolvePath(stmt.SourcePath);
+        sourcePath = FileConnectorPathHelper.CoerceFilePathExtension(sourcePath, stmt.EncryptionMode is DatasetEncryptionMode.Password or DatasetEncryptionMode.KeyFile, false);
         if (!File.Exists(sourcePath))
             throw new ExecutionException(
                 $"PUBLISH DATASET '{stmt.DatasetName}': source file not found: '{sourcePath}'.",

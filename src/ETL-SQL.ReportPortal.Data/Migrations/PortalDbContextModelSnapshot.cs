@@ -59,6 +59,12 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("Action", "Timestamp");
+
+                    b.HasIndex("ResourceType", "ResourceId");
+
                     b.ToTable("AuditLogs");
                 });
 

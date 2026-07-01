@@ -152,7 +152,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task FlatFile_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.csv", "id,name\n1,Alice", "secure.csv.enc", password);
+            var path = WriteEncryptedZip("secure.csv", "id,name\n1,Alice", "secure.csv.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
@@ -529,6 +529,66 @@ namespace ETL_SQL.Tests.Connectors
             Assert.DoesNotContain("id", lines[0]);
         }
 
+        [Fact]
+        public async Task FlatFile_WriteBatches_EncryptedAndCompressed_Roundtrips()
+        {
+            var outPath = Path.Combine(_dir, "out_enc_comp.csv");
+            var opts = new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "ON",
+                ["PASSWORD"] = "my-secret-pwd",
+                ["COMPRESS"] = "ON"
+            };
+
+            var ds = new FlatFileDataSource(Ctx, outPath, opts);
+            
+            // Verify path coercion: it should end with .zip because of encryption + compression
+            Assert.EndsWith(".zip", ds.Path);
+
+            var dt = new ETL_SQL.Data.DataTable();
+            dt.SetColumns(new[] { "id", "name" });
+            var row = dt.NewRow(); row["id"] = 1; row["name"] = "Alice"; await dt.AddRowAsync(row);
+
+            await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+            Assert.True(File.Exists(ds.Path));
+
+            // Read it back
+            var readDs = new FlatFileDataSource(Ctx, ds.Path, opts);
+            var batches = await Read(readDs);
+            Assert.Single(batches);
+            Assert.Equal("Alice", batches[0].Rows[0]["name"]?.ToString());
+        }
+
+        [Fact]
+        public async Task FlatFile_WriteBatches_EncryptedOnly_Roundtrips()
+        {
+            var outPath = Path.Combine(_dir, "out_enc.csv");
+            var opts = new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "ON",
+                ["PASSWORD"] = "my-secret-pwd",
+                ["COMPRESS"] = "OFF"
+            };
+
+            var ds = new FlatFileDataSource(Ctx, outPath, opts);
+            
+            // Verify path coercion: it should end with .pgp because of encryption only
+            Assert.EndsWith(".pgp", ds.Path);
+
+            var dt = new ETL_SQL.Data.DataTable();
+            dt.SetColumns(new[] { "id", "name" });
+            var row = dt.NewRow(); row["id"] = 1; row["name"] = "Bob"; await dt.AddRowAsync(row);
+
+            await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+            Assert.True(File.Exists(ds.Path));
+
+            // Read it back
+            var readDs = new FlatFileDataSource(Ctx, ds.Path, opts);
+            var batches = await Read(readDs);
+            Assert.Single(batches);
+            Assert.Equal("Bob", batches[0].Rows[0]["name"]?.ToString());
+        }
+
         // ── FlatFileConnector ──────────────────────────────────────────────────
 
         [Fact]
@@ -625,7 +685,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task Json_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.json", "[{\"id\":1,\"name\":\"Alice\"}]", "secure.json.enc", password);
+            var path = WriteEncryptedZip("secure.json", "[{\"id\":1,\"name\":\"Alice\"}]", "secure.json.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
@@ -728,7 +788,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task Xml_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.xml", "<root><row><id>1</id><name>Alice</name></row></root>", "secure.xml.enc", password);
+            var path = WriteEncryptedZip("secure.xml", "<root><row><id>1</id><name>Alice</name></row></root>", "secure.xml.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
