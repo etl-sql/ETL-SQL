@@ -20,8 +20,10 @@ public sealed class ColumnarSelectRoutingTests
     [Fact]
     public async Task OptInCreatesEligibleTempTableWithColumnarStoreAndPreservesSemanticFallback()
     {
-        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-        evaluator.UseColumnarTempTables = true;
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+        {
+            ["Engine:UseColumnarTempTables"] = "true"
+        }).GetRequiredService<Evaluator>();
 
         await evaluator.Evaluate(ParseScript(
             "CREATE TABLE #native (Id INT NOT NULL, Name VARCHAR(20)); " +
