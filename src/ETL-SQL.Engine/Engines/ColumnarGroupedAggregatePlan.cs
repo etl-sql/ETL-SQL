@@ -96,7 +96,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         {
             return false;
         }
-        return IsNumeric(key.ElementType) && IsNumeric(value.ElementType);
+        return IsSupportedKey(key.ElementType) && IsNumeric(value.ElementType);
     }
 
     public void Accumulate(ColumnBatch batch, SelectionVector? selection)
@@ -130,6 +130,9 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         => type == typeof(byte) || type == typeof(short) || type == typeof(int) || type == typeof(long)
             || type == typeof(float) || type == typeof(double) || type == typeof(decimal);
 
+    private static bool IsSupportedKey(Type type)
+        => IsNumeric(type) || type == typeof(DateTime) || type == typeof(TimeSpan) || type == typeof(Guid);
+
     private interface IState : IDisposable
     {
         void Accumulate(ColumnBatch batch, SelectionVector? selection);
@@ -137,7 +140,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
     }
 
     private sealed class State<TKey, TValue> : IState
-        where TKey : unmanaged, INumber<TKey>
+        where TKey : unmanaged
         where TValue : unmanaged, INumber<TValue>
     {
         private readonly IExecutionContext _context;
