@@ -8,6 +8,13 @@ namespace ETL_SQL.Tests.Core;
 public sealed class ColumnBatchGroupingTests
 {
     [Fact]
+    public void AverageIsNullWhenGroupHasNoNonNullValues()
+    {
+        var state = new NativeAggregateState<int>(RowCount: 3, NonNullCount: 0, Sum: 0, Min: 0, Max: 0);
+        Assert.Null(state.Average);
+    }
+
+    [Fact]
     public void GroupsTypedAndNullKeysWithSqlAggregateState()
     {
         using var batch = CreateBatch();
@@ -18,6 +25,7 @@ public sealed class ColumnBatchGroupingTests
         Assert.Equal(2, one.RowCount);
         Assert.Equal(1, one.NonNullCount);
         Assert.Equal(10m, one.Sum);
+        Assert.Equal(10m, one.Average);
         Assert.Equal(10, one.Min);
         Assert.Equal(10, one.Max);
 
@@ -25,6 +33,10 @@ public sealed class ColumnBatchGroupingTests
         Assert.Equal(2, nullKey.RowCount);
         Assert.Equal(1, nullKey.NonNullCount);
         Assert.Equal(7m, nullKey.Sum);
+        Assert.Equal(7m, nullKey.Average);
+
+        var two = result.Groups[new NativeGroupKey<int>(false, 2)];
+        Assert.Equal(5m, two.Average);
     }
 
     [Fact]

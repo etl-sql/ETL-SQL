@@ -15,7 +15,10 @@ public readonly record struct NativeAggregateState<T>(
     long NonNullCount,
     decimal Sum,
     T Min,
-    T Max) where T : unmanaged;
+    T Max) where T : unmanaged
+{
+    public decimal? Average => NonNullCount == 0 ? null : Sum / NonNullCount;
+}
 
 /// <summary>Memory-accounted native grouped state. Dispose after consuming the groups.</summary>
 public sealed class NativeGroupAggregateResult<TKey, TValue> : IDisposable

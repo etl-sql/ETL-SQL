@@ -277,7 +277,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   fixed-width native kernel now groups typed nullable keys and maintains row count, non-null count,
   checked sum, min, and max directly from buffers or selection vectors. Estimated per-group state is
   held under a result-lifetime memory-grant lease and fails explicitly when the grant is exhausted.
-  String/composite keys, planner binding, AVG finalization, and spill partitioning remain.)*
+  Grouped AVG finalizes from decimal sum/non-null count with SQL empty semantics. String/composite keys,
+  planner binding, and spill partitioning remain.)*
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and
