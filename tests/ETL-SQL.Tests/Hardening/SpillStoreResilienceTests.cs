@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Spill;
@@ -150,6 +151,60 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Equal("12.50", row["DecimalText"]);
             Assert.IsType<string>(row["DateText"]);
             Assert.Equal("2026-07-01T12:34:56Z", row["DateText"]);
+        }
+
+        [Fact]
+        public async Task ArrowReader_ExposesTypedColumnBatches()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            var timestamp = new DateTime(2026, 7, 1, 12, 0, 0, DateTimeKind.Utc);
+            await using (var writer = await store.CreateWriterAsync("column_batch"))
+            {
+                await writer.WriteRowAsync(new Row
+                {
+                    ["Id"] = 7,
+                    ["Amount"] = 12.5m,
+                    ["Enabled"] = true,
+                    ["At"] = timestamp,
+                    ["Label"] = "00123"
+                });
+                await writer.WriteRowAsync(new Row
+                {
+                    ["Id"] = 8,
+                    ["Amount"] = null,
+                    ["Enabled"] = false,
+                    ["At"] = timestamp.AddMinutes(1),
+                    ["Label"] = "next"
+                });
+            }
+
+            await using var reader = await store.CreateReaderAsync("column_batch");
+            var columnar = Assert.IsAssignableFrom<IColumnarSpillReader>(reader);
+            var batches = new List<ETL_SQL.Core.Data.ColumnBatch>();
+            await foreach (var batch in columnar.AsColumnBatchesAsync()) batches.Add(batch);
+
+            var result = Assert.Single(batches);
+            try
+            {
+                Assert.Equal(2, result.RowCount);
+                Assert.Equal("Integer", result.Schema.Fields[result.Schema.GetOrdinal("Id")].LogicalType);
+                Assert.Equal(7L, result.GetColumn<long>("Id").Values.Span[0]);
+                Assert.Equal(8L, result.GetColumn<long>("Id").Values.Span[1]);
+                Assert.Equal(12.5m, result.GetColumn<decimal>("Amount").Values.Span[0]);
+                Assert.True(result.GetColumn<decimal>("Amount").IsNull(1));
+                Assert.True(result.GetColumn<bool>("Enabled").Values.Span[0]);
+                Assert.Equal(timestamp, result.GetColumn<DateTime>("At").Values.Span[0]);
+                Assert.Equal("00123", result.GetUtf8Column("Label").GetBoxedValue(0));
+            }
+            finally
+            {
+                foreach (var batch in batches) batch.Dispose();
+            }
+
+            await Assert.ThrowsAsync<InvalidOperationException>(() => reader.ReadRowAsync());
         }
     }
 }

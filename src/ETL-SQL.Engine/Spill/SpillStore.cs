@@ -11,6 +11,7 @@ using Apache.Arrow;
 using Apache.Arrow.Ipc;
 using Apache.Arrow.Types;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
@@ -705,7 +706,7 @@ public partial class SpillStore : ISpillStore
         }
     }
 
-    private class ArrowSpillReader : ISpillReader
+    private class ArrowSpillReader : ISpillReader, IColumnarSpillReader
     {
         private const string SchemaVersionKey = "etlsql.spill.schema_version";
         private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
@@ -721,6 +722,7 @@ public partial class SpillStore : ISpillStore
 
         private RecordBatch? _currentBatch;
         private int _currentBatchRow;
+        private SpillReadMode _readMode;
 
         public string ChunkName => _chunkName;
 
@@ -777,6 +779,7 @@ public partial class SpillStore : ISpillStore
 
         public async Task<Row?> ReadRowAsync()
         {
+            EnterReadMode(SpillReadMode.Rows);
             if (_arrowReader == null) return null;
 
             while (true)
@@ -811,6 +814,84 @@ public partial class SpillStore : ISpillStore
                 row[field.Name] = ExtractValue(batch.Column(i), rowIndex, logicalType);
             }
             return row;
+        }
+
+        public async IAsyncEnumerable<ColumnBatch> AsColumnBatchesAsync()
+        {
+            EnterReadMode(SpillReadMode.Columns);
+            if (_arrowReader == null) yield break;
+
+            while (await _arrowReader.ReadNextRecordBatchAsync() is { } batch)
+            {
+                using (batch)
+                    yield return ConvertBatch(batch);
+            }
+        }
+
+        private void EnterReadMode(SpillReadMode mode)
+        {
+            if (_readMode != SpillReadMode.None && _readMode != mode)
+                throw new InvalidOperationException("A spill reader cannot mix row and column-batch consumption.");
+            _readMode = mode;
+        }
+
+        private static ColumnBatch ConvertBatch(RecordBatch batch)
+        {
+            var fields = new List<ColumnBatchField>(batch.Schema.FieldsList.Count);
+            var columns = new List<IColumnBuffer>(batch.Schema.FieldsList.Count);
+            try
+            {
+                for (var i = 0; i < batch.Schema.FieldsList.Count; i++)
+                {
+                    var field = batch.Schema.FieldsList[i];
+                    var logicalType = GetLogicalType(batch.Schema, i) ?? field.DataType.Name;
+                    var column = ConvertArray(batch.Column(i), batch.Length);
+                    fields.Add(new ColumnBatchField(field.Name, column.ElementType, logicalType, field.IsNullable));
+                    columns.Add(column);
+                }
+                return new ColumnBatch(new ColumnBatchSchema(fields), columns, batch.Length);
+            }
+            catch
+            {
+                foreach (var column in columns) column.Dispose();
+                throw;
+            }
+        }
+
+        private static IColumnBuffer ConvertArray(IArrowArray array, int count) => array switch
+        {
+            Int64Array values => CopyFixed<long>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            Decimal128Array values => CopyFixed<decimal>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            DoubleArray values => CopyFixed<double>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            BooleanArray values => CopyFixed<bool>(count, values.IsNull, i => values.GetValue(i) ?? default),
+            TimestampArray values => CopyFixed<DateTime>(count, values.IsNull,
+                i => values.GetTimestamp(i)?.UtcDateTime ?? default),
+            StringArray values => Utf8ColumnBuffer.FromStrings(
+                Enumerable.Range(0, count).Select(i => values.IsNull(i) ? null : values.GetString(i)).ToList()),
+            _ => throw new NotSupportedException($"Arrow spill column type '{array.Data.DataType.Name}' is not supported by native batches.")
+        };
+
+        private static ColumnBuffer<T> CopyFixed<T>(
+            int count,
+            Func<int, bool> isNull,
+            Func<int, T> getValue) where T : unmanaged
+        {
+            var buffer = ColumnBuffer<T>.Rent(count);
+            try
+            {
+                var values = buffer.Values.Span;
+                for (var i = 0; i < count; i++)
+                {
+                    if (isNull(i)) buffer.SetNull(i);
+                    else values[i] = getValue(i);
+                }
+                return buffer;
+            }
+            catch
+            {
+                buffer.Dispose();
+                throw;
+            }
         }
 
         private static string? GetLogicalType(Schema schema, int columnIndex)
@@ -877,6 +958,8 @@ public partial class SpillStore : ISpillStore
             if (_cryptoStream != null) await _cryptoStream.DisposeAsync();
             if (_fileStream != null) await _fileStream.DisposeAsync();
         }
+
+        private enum SpillReadMode { None, Rows, Columns }
     }
 }
 
