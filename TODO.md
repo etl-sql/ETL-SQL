@@ -381,8 +381,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   assessment reports native allocated capacity at 23.74% of estimated row heap and validates a
   typed-buffer row-count/checksum across immutable segments. Default `#temp` routing plus 10M/50M
   certification evidence remain.)*
-- [ ] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
-  differential correctness and show a substantial throughput improvement at 10M/50M.
+- [x] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
+  differential correctness and show a substantial throughput improvement at 10M/50M. *(The isolated
+  Release/server-GC gate compares identical filter/projection/group checksums and requires at least
+  1.5x speedup. Measured native versus row throughput: 63.30M versus 15.98M rows/s at 10M (3.961x),
+  and 72.36M versus 17.66M rows/s at 50M (4.098x).)*
 - [~] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
   extent/file counts, and no unnecessary columnar→row→columnar round-trip. *(Join fan-out is adaptive,
   recursive hash paths use typed spill batches, and sort merge fan-in is capped at 64 readers. A
