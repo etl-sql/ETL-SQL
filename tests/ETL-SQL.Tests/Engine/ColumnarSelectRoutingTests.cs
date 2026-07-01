@@ -34,6 +34,31 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task OptInColumnarTempTableParticipatesInEngineRollback()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY); " +
+            "INSERT INTO #native VALUES (1); " +
+            "BEGIN TRANSACTION; " +
+            "INSERT INTO #native VALUES (2); " +
+            "ROLLBACK;"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        Assert.Equal(1, native.EstimatedRowCount);
+        var batches = await native.ReadColumnBatches().ToListAsync();
+        try
+        {
+            Assert.Equal(new[] { 1 }, batches.SelectMany(batch => batch.GetColumn<int>("Id").Values.ToArray()));
+        }
+        finally
+        {
+            foreach (var batch in batches) batch.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task SimpleSelectFiltersAndProjectsNativeSourceWithoutCallingRowReader()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
