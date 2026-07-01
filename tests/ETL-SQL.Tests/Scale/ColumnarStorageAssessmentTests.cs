@@ -1,6 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -16,7 +20,9 @@ public sealed class ColumnarStorageAssessmentTests(ITestOutputHelper output)
     [Trait("Category", "ScaleAssessment")]
     public async Task NativeStoreUsesMateriallyLessResidentCapacityAndScansTypedBuffers()
     {
-        const int rowCount = 100_000;
+        var rowCount = ReadPositiveInt("COLUMNAR_STORAGE_GATE_ROWS", 100_000);
+        var segmentRows = Math.Min(rowCount, ReadPositiveInt("COLUMNAR_STORAGE_GATE_SEGMENT_ROWS", 100_000));
+        var maximumRatio = ReadPositiveDouble("COLUMNAR_STORAGE_GATE_MAX_RATIO") ?? 0.50;
         var schema = new[]
         {
             new ColumnDefinition("Id", "INT", false) { IsNullable = false },
@@ -25,25 +31,10 @@ public sealed class ColumnarStorageAssessmentTests(ITestOutputHelper output)
             new ColumnDefinition("Active", "BIT", false) { IsNullable = false },
             new ColumnDefinition("Label", "VARCHAR(32)", false)
         };
-        var rows = new DataTable();
-        rows.SetColumns(schema.Select(column => column.ColumnName));
-        long rowHeapBytes = 0;
-        long expectedIdSum = 0;
-        for (var id = 1; id <= rowCount; id++)
-        {
-            var row = rows.NewRow();
-            row["Id"] = id;
-            row["GroupId"] = (short)(id % 100);
-            row["Amount"] = id / 100m;
-            row["Active"] = (id & 1) == 0;
-            row["Label"] = id % 20 == 0 ? null : $"group-{id % 100}";
-            rows.Rows.Add(row);
-            rowHeapBytes += row.EstimateHeapBytes();
-            expectedIdSum += id;
-        }
-
-        await using var store = new AppendOnlyColumnDataSource(schema, segmentRowCapacity: 10_000);
-        await store.WriteBatches(new[] { rows }.ToAsyncEnumerable());
+        var counter = new HeapCounter();
+        var stopwatch = Stopwatch.StartNew();
+        await using var store = new AppendOnlyColumnDataSource(schema, segmentRowCapacity: segmentRows);
+        await store.WriteBatches(CreateBatches(rowCount, segmentRows, schema, counter));
 
         long scannedRows = 0;
         long scannedIdSum = 0;
@@ -55,14 +46,70 @@ public sealed class ColumnarStorageAssessmentTests(ITestOutputHelper output)
                 foreach (var id in batch.GetColumn<int>("Id").Values.Span) scannedIdSum += id;
             }
         }
+        stopwatch.Stop();
 
-        var ratio = (double)store.MemoryUsageBytes / rowHeapBytes;
-        output.WriteLine(
-            $"COLUMNAR_STORAGE_METRIC rows={rowCount} rowHeapBytes={rowHeapBytes} " +
-            $"nativeAllocatedBytes={store.MemoryUsageBytes} ratio={ratio:F4} segments={store.SegmentCount}");
+        var expectedIdSum = (long)rowCount * (rowCount + 1) / 2;
+        var ratio = (double)store.MemoryUsageBytes / counter.RowHeapBytes;
+        var metric = new
+        {
+            rowCount,
+            segmentRows,
+            segments = store.SegmentCount,
+            rowHeapBytes = counter.RowHeapBytes,
+            nativeAllocatedBytes = store.MemoryUsageBytes,
+            ratio = Math.Round(ratio, 6),
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds), 2),
+            scannedRows,
+            scannedIdSum,
+            maximumRatio
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("COLUMNAR_STORAGE_GATE " + json);
+        var outputPath = Environment.GetEnvironmentVariable("COLUMNAR_STORAGE_GATE_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+
         Assert.Equal(rowCount, scannedRows);
         Assert.Equal(expectedIdSum, scannedIdSum);
-        Assert.True(ratio < 0.50,
-            $"Expected native allocated capacity below 50% of estimated row heap; observed {ratio:P2}.");
+        Assert.True(ratio < maximumRatio,
+            $"Expected native allocated capacity below {maximumRatio:P2} of estimated row heap; observed {ratio:P2}.");
     }
+
+    private static async IAsyncEnumerable<DataTable> CreateBatches(
+        int rowCount,
+        int batchRows,
+        IReadOnlyList<ColumnDefinition> schema,
+        HeapCounter counter)
+    {
+        for (var start = 1; start <= rowCount; start += batchRows)
+        {
+            var count = Math.Min(batchRows, rowCount - start + 1);
+            var rows = new DataTable();
+            rows.SetColumns(schema.Select(column => column.ColumnName));
+            for (var offset = 0; offset < count; offset++)
+            {
+                var id = start + offset;
+                var row = rows.NewRow();
+                row["Id"] = id;
+                row["GroupId"] = (short)(id % 100);
+                row["Amount"] = id / 100m;
+                row["Active"] = (id & 1) == 0;
+                row["Label"] = id % 20 == 0 ? null : $"group-{id % 100}";
+                rows.Rows.Add(row);
+                counter.RowHeapBytes += row.EstimateHeapBytes();
+            }
+            yield return rows;
+            await Task.Yield();
+        }
+    }
+
+    private static int ReadPositiveInt(string name, int fallback)
+        => int.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Integer,
+            CultureInfo.InvariantCulture, out var value) && value > 0 ? value : fallback;
+
+    private static double? ReadPositiveDouble(string name)
+        => double.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Float,
+            CultureInfo.InvariantCulture, out var value) && value > 0 ? value : null;
+
+    private sealed class HeapCounter { public long RowHeapBytes; }
 }

@@ -377,10 +377,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 - [ ] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
   configured ceiling, and materially improves rows/second versus the checked-in baseline.
 - [~] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
-  does not decode to rows during a columnar scan/count/checksum. *(A deterministic 100K mixed-type
-  assessment reports native allocated capacity at 23.74% of estimated row heap and validates a
-  typed-buffer row-count/checksum across immutable segments. Default `#temp` routing plus 10M/50M
-  certification evidence remain.)*
+  does not decode to rows during a columnar scan/count/checksum. *(The isolated mixed-type storage gate
+  streams bounded source batches and validates typed-buffer row-count/checksum scans. Native retained
+  capacity measured 19.00% of estimated row heap at both 10M (100 segments, 470,844 rows/s) and 50M
+  (500 segments, 494,258 rows/s). Default `#temp` routing remains blocked until later UPDATE/DELETE/
+  index/replace semantics can safely downgrade or mutate the append-only store.)*
 - [x] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
   differential correctness and show a substantial throughput improvement at 10M/50M. *(The isolated
   Release/server-GC gate compares identical filter/projection/group checksums and requires at least
