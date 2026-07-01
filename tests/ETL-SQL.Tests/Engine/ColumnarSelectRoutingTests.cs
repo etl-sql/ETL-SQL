@@ -24,6 +24,7 @@ public sealed class ColumnarSelectRoutingTests
         {
             ["Engine:UseColumnarTempTables"] = "true"
         }).GetRequiredService<Evaluator>();
+        evaluator.IsPersistentSession = false;
 
         await evaluator.Evaluate(ParseScript(
             "CREATE TABLE #native (Id INT NOT NULL, Name VARCHAR(20)); " +
@@ -40,6 +41,7 @@ public sealed class ColumnarSelectRoutingTests
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
         await evaluator.Evaluate(ParseScript(
             "CREATE TABLE #native (Id INT PRIMARY KEY); " +
             "INSERT INTO #native VALUES (1); " +
@@ -58,6 +60,18 @@ public sealed class ColumnarSelectRoutingTests
         {
             foreach (var batch in batches) batch.Dispose();
         }
+    }
+
+    [Fact]
+    public async Task PersistentSessionKeepsTempTableOnPersistableRowStore()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = true;
+
+        await evaluator.Evaluate(ParseScript("CREATE TABLE #persisted (Id INT);"));
+
+        Assert.IsType<InMemoryDataSource>(evaluator.Connections["#persisted"]);
     }
 
     [Fact]
