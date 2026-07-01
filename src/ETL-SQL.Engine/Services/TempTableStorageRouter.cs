@@ -15,13 +15,6 @@ internal static class TempTableStorageRouter
         if (source is not AppendOnlyColumnDataSource columnar)
             return source;
 
-        if (context.TranCount > 0)
-        {
-            throw new ExecutionException(
-                $"{operation} cannot downgrade columnar temporary table {connectionName} inside an active transaction. " +
-                "Create the table with a row-store-only schema or perform the operation outside the transaction.");
-        }
-
         var rowStore = new InMemoryDataSource
         {
             ExecutionContext = context,
@@ -42,8 +35,21 @@ internal static class TempTableStorageRouter
             throw;
         }
 
-        context.Connections[connectionName] = rowStore;
-        await columnar.DisposeAsync();
+        if (context.TranCount > 0)
+        {
+            if (context is not Evaluator evaluator)
+            {
+                await rowStore.DisposeAsync();
+                throw new ExecutionException(
+                    $"{operation} cannot transactionally downgrade temporary table {connectionName} in this execution context.");
+            }
+            evaluator.ReplaceDataSourceForTransaction(connectionName, columnar, rowStore);
+        }
+        else
+        {
+            context.Connections[connectionName] = rowStore;
+            await columnar.DisposeAsync();
+        }
         return rowStore;
     }
 }

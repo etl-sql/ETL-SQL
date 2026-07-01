@@ -23,12 +23,26 @@ public class TransactionManager
             DataSnapshots = new Dictionary<string, object?>()
         };
 
-        foreach (var kvp in connections)
+        try
         {
-            if (kvp.Value is InMemoryDataSource imds)
+            foreach (var kvp in connections)
             {
-                snapshot.DataSnapshots[kvp.Key] = imds.Snapshot();
+                if (kvp.Value is InMemoryDataSource imds)
+                {
+                    snapshot.DataSnapshots[kvp.Key] = imds.Snapshot();
+                }
+                else if (kvp.Value is AppendOnlyColumnDataSource columnar)
+                {
+                    await columnar.BeginTransactionAsync();
+                    snapshot.EnlistedDataSources.Add(columnar);
+                }
             }
+        }
+        catch
+        {
+            for (var index = snapshot.EnlistedDataSources.Count - 1; index >= 0; index--)
+                await snapshot.EnlistedDataSources[index].RollbackAsync();
+            throw;
         }
 
         _snapshots.Push(snapshot);
@@ -51,6 +65,29 @@ public class TransactionManager
         }
     }
 
+    /// <summary>
+    /// Replaces a transactionally snapshotted source while retaining the original for rollback.
+    /// The replacement remains connected on commit and is discarded when the root transaction rolls back.
+    /// </summary>
+    public void ReplaceDataSource(
+        string connectionName,
+        IDataSource original,
+        IDataSource replacement,
+        IDictionary<string, IDataSource> connections)
+    {
+        if (_trancount == 0 || _snapshots.Count == 0)
+            throw new InvalidOperationException("A data source replacement requires an active transaction.");
+        if (!connections.TryGetValue(connectionName, out var current) || !ReferenceEquals(current, original))
+            throw new InvalidOperationException($"Connection {connectionName} changed before its transactional replacement.");
+
+        var root = _snapshots.Last();
+        if (root.DataSourceReplacements.Any(item => item.ConnectionName.Equals(connectionName, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Connection {connectionName} already has a transactional replacement.");
+
+        root.DataSourceReplacements.Add(new DataSourceReplacement(connectionName, original, replacement));
+        connections[connectionName] = replacement;
+    }
+
     /// <summary>Commits the current transaction level. If it's the root transaction, clears snapshots.</summary>
     public async Task CommitTransaction()
     {
@@ -66,7 +103,15 @@ public class TransactionManager
             }
 
             _trancount--;
-            if (_trancount == 0) _snapshots.Clear();
+            if (_trancount == 0)
+            {
+                if (snapshot != null)
+                {
+                    foreach (var replacement in snapshot.DataSourceReplacements)
+                        await replacement.Original.DisposeAsync();
+                }
+                _snapshots.Clear();
+            }
             else if (_snapshots.Count > 0) _snapshots.Pop();
         }
     }
@@ -113,6 +158,11 @@ public class TransactionManager
                         ds.Restore(kvp.Value);
                     }
                 }
+                foreach (var replacement in root.DataSourceReplacements)
+                {
+                    connections[replacement.ConnectionName] = replacement.Original;
+                    await replacement.Replacement.DisposeAsync();
+                }
             }
         }
         _trancount = 0;
@@ -126,4 +176,7 @@ public class TransactionSnapshot
     public Dictionary<string, object?> Variables { get; set; } = new();
     public Dictionary<string, object?> DataSnapshots { get; set; } = new();
     public List<ITransactionalDataSource> EnlistedDataSources { get; set; } = new();
+    public List<DataSourceReplacement> DataSourceReplacements { get; set; } = new();
 }
+
+public sealed record DataSourceReplacement(string ConnectionName, IDataSource Original, IDataSource Replacement);

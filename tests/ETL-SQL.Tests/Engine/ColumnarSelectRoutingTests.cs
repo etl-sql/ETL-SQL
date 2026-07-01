@@ -121,20 +121,43 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task ColumnarTempMutationDowngradeFailsClosedInsideTransaction()
+    public async Task ColumnarTempMutationDowngradeRestoresOriginalStoreOnRollback()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.UseColumnarTempTables = true;
         evaluator.IsPersistentSession = false;
-        var error = await Assert.ThrowsAsync<ExecutionException>(() =>
-            evaluator.Evaluate(ParseScript(
-                "CREATE TABLE #native (Id INT); " +
-                "INSERT INTO #native VALUES (1); " +
-                "BEGIN TRANSACTION; " +
-                "UPDATE #native SET Id = 2;")));
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT); " +
+            "INSERT INTO #native VALUES (1); " +
+            "BEGIN TRANSACTION; " +
+            "INSERT INTO #native VALUES (2); " +
+            "UPDATE #native SET Id = 3 WHERE Id = 1; " +
+            "ROLLBACK;"));
 
-        Assert.Contains("active transaction", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var rows = (await native.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+        Assert.Single(rows);
+        Assert.Equal(1, Convert.ToInt32(rows[0]["Id"]));
+    }
+
+    [Fact]
+    public async Task ColumnarTempMutationDowngradeRetainsRowStoreOnCommit()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT); " +
+            "INSERT INTO #native VALUES (1); " +
+            "BEGIN TRANSACTION; " +
+            "UPDATE #native SET Id = 2; " +
+            "COMMIT;"));
+
+        var rowStore = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#native"]);
+        var rows = (await rowStore.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+        Assert.Single(rows);
+        Assert.Equal(2, Convert.ToInt32(rows[0]["Id"]));
     }
 
     [Fact]

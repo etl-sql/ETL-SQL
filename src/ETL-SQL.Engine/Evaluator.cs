@@ -1264,6 +1264,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public async Task CommitTransaction() => await _transactionManager.CommitTransaction();
     public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
     public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+    internal void ReplaceDataSourceForTransaction(string connectionName, IDataSource original, IDataSource replacement)
+        => _transactionManager.ReplaceDataSource(connectionName, original, replacement, _connections);
 
 
 
