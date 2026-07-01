@@ -336,8 +336,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   aggregate, or repartition them. *(New Arrow spill files now carry a versioned, ordinal logical-type
   schema; readers use it to preserve numeric/date-looking strings while metadata-free legacy files keep
   dynamic decoding. Arrow readers now implement an optional native batch contract with typed pooled
-  buffers, null bitmaps, logical types, and exclusive row/batch consumption. External-operator routing
-  and direct UTF-8 buffer adoption remain.)*
+  buffers, null bitmaps, logical types, and exclusive row/batch consumption. Arrow UTF-8 offsets, bytes,
+  and validity bits are copied directly into pooled native storage without per-value string decoding.
+  External-operator routing remains.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts

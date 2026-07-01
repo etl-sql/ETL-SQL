@@ -177,7 +177,7 @@ namespace ETL_SQL.Tests.Hardening
                     ["Amount"] = null,
                     ["Enabled"] = false,
                     ["At"] = timestamp.AddMinutes(1),
-                    ["Label"] = "next"
+                    ["Label"] = null
                 });
             }
 
@@ -198,6 +198,7 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.True(result.GetColumn<bool>("Enabled").Values.Span[0]);
                 Assert.Equal(timestamp, result.GetColumn<DateTime>("At").Values.Span[0]);
                 Assert.Equal("00123", result.GetUtf8Column("Label").GetBoxedValue(0));
+                Assert.True(result.GetUtf8Column("Label").IsNull(1));
             }
             finally
             {

@@ -215,6 +215,60 @@ public sealed class Utf8ColumnBuffer : IColumnBuffer
         }
     }
 
+    /// <summary>
+    /// Copies an already UTF-8 encoded variable-width column into pooled ownership without decoding
+    /// individual strings. <paramref name="validityBitmap"/> uses Arrow semantics (one means valid)
+    /// and is converted to this buffer's null bitmap (one means null).
+    /// </summary>
+    public static Utf8ColumnBuffer CopyEncoded(
+        ReadOnlySpan<int> offsets,
+        ReadOnlySpan<byte> data,
+        ReadOnlySpan<byte> validityBitmap,
+        int validityBitOffset = 0)
+    {
+        if (offsets.Length == 0) throw new ArgumentException("At least one offset is required.", nameof(offsets));
+        if (validityBitOffset < 0) throw new ArgumentOutOfRangeException(nameof(validityBitOffset));
+        var count = offsets.Length - 1;
+        var baseOffset = offsets[0];
+        var endOffset = offsets[count];
+        if (baseOffset < 0 || endOffset < baseOffset || endOffset > data.Length)
+            throw new ArgumentException("Encoded offsets fall outside the supplied data buffer.", nameof(offsets));
+        for (var i = 1; i < offsets.Length; i++)
+            if (offsets[i] < offsets[i - 1] || offsets[i] > endOffset)
+                throw new ArgumentException("Encoded offsets must be ordered and in range.", nameof(offsets));
+
+        var dataLength = endOffset - baseOffset;
+        var nullBytes = checked((count + 7) / 8);
+        var copiedOffsets = ArrayPool<int>.Shared.Rent(Math.Max(1, count + 1));
+        var copiedData = ArrayPool<byte>.Shared.Rent(Math.Max(1, dataLength));
+        var nullBitmap = ArrayPool<byte>.Shared.Rent(Math.Max(1, nullBytes));
+        try
+        {
+            for (var i = 0; i <= count; i++) copiedOffsets[i] = offsets[i] - baseOffset;
+            data.Slice(baseOffset, dataLength).CopyTo(copiedData);
+            nullBitmap.AsSpan(0, nullBytes).Clear();
+            if (!validityBitmap.IsEmpty)
+            {
+                for (var i = 0; i < count; i++)
+                {
+                    var sourceBit = checked(validityBitOffset + i);
+                    if ((sourceBit >> 3) >= validityBitmap.Length)
+                        throw new ArgumentException("Validity bitmap is too small for the encoded values.", nameof(validityBitmap));
+                    var valid = (validityBitmap[sourceBit >> 3] & (1 << (sourceBit & 7))) != 0;
+                    if (!valid) nullBitmap[i >> 3] |= (byte)(1 << (i & 7));
+                }
+            }
+            return new Utf8ColumnBuffer(copiedOffsets, copiedData, nullBitmap, count, dataLength);
+        }
+        catch
+        {
+            ArrayPool<int>.Shared.Return(copiedOffsets, clearArray: false);
+            ArrayPool<byte>.Shared.Return(copiedData, clearArray: false);
+            ArrayPool<byte>.Shared.Return(nullBitmap, clearArray: true);
+            throw;
+        }
+    }
+
     public Type ElementType => typeof(string);
     public int Count => _count;
     public ReadOnlyMemory<int> Offsets => GetOffsets().AsMemory(0, _count + 1);

@@ -866,8 +866,11 @@ public partial class SpillStore : ISpillStore
             BooleanArray values => CopyFixed<bool>(count, values.IsNull, i => values.GetValue(i) ?? default),
             TimestampArray values => CopyFixed<DateTime>(count, values.IsNull,
                 i => values.GetTimestamp(i)?.UtcDateTime ?? default),
-            StringArray values => Utf8ColumnBuffer.FromStrings(
-                Enumerable.Range(0, count).Select(i => values.IsNull(i) ? null : values.GetString(i)).ToList()),
+            StringArray values => Utf8ColumnBuffer.CopyEncoded(
+                values.ValueOffsets,
+                values.Values,
+                values.NullBitmapBuffer.Span,
+                values.Offset),
             _ => throw new NotSupportedException($"Arrow spill column type '{array.Data.DataType.Name}' is not supported by native batches.")
         };
 
