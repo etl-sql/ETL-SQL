@@ -92,6 +92,12 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         {
             memSource.ReplaceOnConflict = stmt.IsReplace;
         }
+        else if (destination is AppendOnlyColumnDataSource && stmt.IsReplace)
+        {
+            throw new ExecutionException(
+                "INSERT OR REPLACE is not supported by the append-only columnar temp store. " +
+                "Disable Engine:UseColumnarTempTables for scripts that require conflict replacement.");
+        }
 
         if (destination is IDatabaseSource sqlDest && sqlDest.SupportsSqlPushdown)
         {

@@ -242,6 +242,12 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
             foreach (var col in stmt.Columns) mem.CreateIndex(col, stmt.IsUnique);
             _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
         }
+        else if (connection is AppendOnlyColumnDataSource)
+        {
+            throw new ExecutionException(
+                $"CREATE INDEX is not supported by the append-only columnar temp store for {connName}. " +
+                "Disable Engine:UseColumnarTempTables for scripts that create indexes.");
+        }
         else
         {
             _logger.WriteLine($"Warning: Indexing not natively supported for {connection.GetType().Name}. Skipping.", ConsoleColor.Yellow);

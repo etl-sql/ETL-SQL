@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
@@ -72,6 +73,23 @@ public sealed class ColumnarSelectRoutingTests
         await evaluator.Evaluate(ParseScript("CREATE TABLE #persisted (Id INT);"));
 
         Assert.IsType<InMemoryDataSource>(evaluator.Connections["#persisted"]);
+    }
+
+    [Fact]
+    public async Task OptInColumnarTempRejectsUnsupportedIndexAndReplaceSemantics()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript("CREATE TABLE #native (Id INT PRIMARY KEY);"));
+
+        var indexError = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript("CREATE INDEX ix_native ON #native (Id);")));
+        Assert.Contains("not supported", indexError.Message, StringComparison.OrdinalIgnoreCase);
+
+        var replaceError = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript("INSERT OR REPLACE INTO #native VALUES (1);")));
+        Assert.Contains("not supported", replaceError.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

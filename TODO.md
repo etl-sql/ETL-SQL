@@ -226,7 +226,8 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   now creates eligible declared `#temp` schemas on the append store, while identity/default/check/FK or
   unsupported physical schemas retain the row store. Persistent sessions also remain on the row store
   until native segment manifests can be saved/restored. Default routing, mutation eligibility, native
-  session persistence, and segment-native spill remain.)*
+  session persistence, and segment-native spill remain; runtime `CREATE INDEX` and `INSERT OR REPLACE`
+  now fail explicitly in opt-in mode instead of silently dropping their semantics.)*
 - [~] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
   decimal, dates/times as native fixed-width values, booleans as bit/byte buffers, and strings using
   offset/data or dictionary encoding selected from measured cardinality. *(The physical model now
