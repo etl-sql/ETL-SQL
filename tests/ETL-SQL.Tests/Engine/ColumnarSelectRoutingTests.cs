@@ -208,6 +208,63 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task GroupedAggregatesAccumulateAcrossNativeBatches()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateGroupedSource();
+        evaluator.Connections["grouped"] = source;
+        var statement = ParseSelect(
+            "SELECT GroupId, COUNT(*) AS RowCount, COUNT(Value) AS ValueCount, SUM(Value) AS Total, " +
+            "AVG(Value) AS MeanValue, MIN(Value) AS Minimum, MAX(Value) AS Maximum " +
+            "FROM grouped GROUP BY GroupId;");
+
+        var results = await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync();
+
+        var rows = Assert.Single(results).Rows.OrderBy(row => row["GroupId"]?.ToString()).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(1m, rows[0]["GroupId"]);
+        Assert.Equal(3m, rows[0]["RowCount"]);
+        Assert.Equal(2m, rows[0]["ValueCount"]);
+        Assert.Equal(30m, rows[0]["Total"]);
+        Assert.Equal(15m, rows[0]["MeanValue"]);
+        Assert.Equal(10m, rows[0]["Minimum"]);
+        Assert.Equal(20m, rows[0]["Maximum"]);
+        Assert.Equal(2m, rows[1]["GroupId"]);
+        Assert.Equal(2m, rows[1]["RowCount"]);
+        Assert.Equal(12m, rows[1]["Total"]);
+
+        var filteredStatement = ParseSelect(
+            "SELECT GroupId, COUNT(*) AS RowCount, SUM(Value) AS Total " +
+            "FROM grouped WHERE Value > 5 GROUP BY GroupId;");
+        var filtered = Assert.Single(await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(filteredStatement, evaluator).ToListAsync());
+        var filteredRows = filtered.Rows.OrderBy(row => row["GroupId"]?.ToString()).ToList();
+        Assert.Equal(2m, filteredRows[0]["RowCount"]);
+        Assert.Equal(30m, filteredRows[0]["Total"]);
+        Assert.Equal(1m, filteredRows[1]["RowCount"]);
+        Assert.Equal(7m, filteredRows[1]["Total"]);
+        Assert.Equal(0, source.RowReadAttempts);
+    }
+
+    [Fact]
+    public async Task GroupedHavingDeclinesNativeRouteAndUsesEstablishedPipeline()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateGroupedSource(throwOnRowRead: false);
+        evaluator.Connections["grouped"] = source;
+        var statement = ParseSelect(
+            "SELECT GroupId, SUM(Value) AS Total FROM grouped " +
+            "GROUP BY GroupId HAVING SUM(Value) > 20;");
+
+        var results = await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync();
+
+        Assert.Single(results.SelectMany(batch => batch.Rows));
+        Assert.Equal(1, source.RowReadAttempts);
+    }
+
+    [Fact]
     public async Task MinMaxDoNotPerformUnusedOverflowingSum()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -371,6 +428,28 @@ public sealed class ColumnarSelectRoutingTests
                 Utf8ColumnBuffer.FromStrings(new string?[] { "max-a", "max-b" })
             }, 2)
         }, throwOnRowRead: true);
+    }
+
+    private static NativeOnlyDataSource CreateGroupedSource(bool throwOnRowRead = true)
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("GroupId", typeof(int), "INT"),
+            new ColumnBatchField("Value", typeof(int), "INT")
+        });
+        return new NativeOnlyDataSource(new[]
+        {
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<int>(new[] { 1, 2, 1 }, 3),
+                new ColumnBuffer<int>(new[] { 10, 5, 0 }, 3, new byte[] { 0b0000_0100 })
+            }, 3),
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<int>(new[] { 1, 2 }, 2),
+                new ColumnBuffer<int>(new[] { 20, 7 }, 2)
+            }, 2)
+        }, throwOnRowRead);
     }
 
     private sealed class NativeOnlyDataSource(IEnumerable<ColumnBatch> batches, bool throwOnRowRead) : IDataSource, IColumnarDataSource

@@ -278,8 +278,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   checked sum, min, and max directly from buffers or selection vectors. Estimated per-group state is
   held under a result-lifetime memory-grant lease and fails explicitly when the grant is exhausted.
   The same typed state now accumulates across multiple native batches under one lifetime lease, and
-  grouped AVG finalizes from decimal sum/non-null count with SQL empty semantics. String/composite
-  keys, planner binding, and spill partitioning remain.)*
+  grouped AVG finalizes from decimal sum/non-null count with SQL empty semantics. The SELECT planner
+  now binds one fixed-width key plus COUNT/SUM/AVG/MIN/MAX over one fixed-width value column, including
+  supported native predicates and first-batch row fallback. String/composite keys, multiple aggregate
+  value columns, HAVING, and spill partitioning remain.)*
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and

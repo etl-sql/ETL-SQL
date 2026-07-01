@@ -154,6 +154,72 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             yield break;
         }
 
+        if (ColumnarGroupedAggregatePlan.TryCreate(context, stmt, out var groupedPlan))
+        {
+            using (groupedPlan)
+            {
+                var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+                if (source is IColumnarDataSource columnarSource)
+                {
+                    var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                    var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                        .GetAsyncEnumerator(context.CancellationToken);
+                    ColumnBatch? firstNative = null;
+                    try
+                    {
+                        if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
+                        if (firstNative == null)
+                        {
+                            yield return groupedPlan!.FinalizeResult(groupedNames);
+                            yield break;
+                        }
+
+                        SelectionVector? firstSelection = null;
+                        var supported = groupedPlan!.CanApply(firstNative)
+                            && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
+                                firstNative, stmt.WhereClause, out firstSelection,
+                                cancellationToken: context.CancellationToken));
+                        if (supported)
+                        {
+                            using (firstNative)
+                            using (firstSelection)
+                                groupedPlan.Accumulate(firstNative, firstSelection);
+                            firstNative = null;
+                            while (await nativeEnumerator.MoveNextAsync())
+                            {
+                                using var nativeBatch = nativeEnumerator.Current;
+                                if (!groupedPlan.CanApply(nativeBatch))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible schema during grouped aggregation.");
+                                SelectionVector? selection = null;
+                                if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                                    nativeBatch, stmt.WhereClause, out selection,
+                                    cancellationToken: context.CancellationToken))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
+                                using (selection) groupedPlan.Accumulate(nativeBatch, selection);
+                            }
+                            yield return groupedPlan.FinalizeResult(groupedNames);
+                            yield break;
+                        }
+
+                        firstSelection?.Dispose();
+                        var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                        firstNative = null;
+                        var executionEngine = new SelectExecutionEngine(context, _logger);
+                        await foreach (var batch in executionEngine.ExecuteHeavyPipeline(
+                            stmt, rowBatches, groupedColumns, groupedNames))
+                            yield return batch;
+                        yield break;
+                    }
+                    finally
+                    {
+                        firstNative?.Dispose();
+                        await nativeEnumerator.DisposeAsync();
+                    }
+                }
+            }
+        }
+
         if (IsGlobalColumnarAggregateCandidate(stmt)
             && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
         {
