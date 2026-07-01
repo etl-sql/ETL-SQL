@@ -378,7 +378,6 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         IExecutionContext context)
     {
         if (destination is not IColumnarDataSink sink
-            || statement.WhereClause != null
             || !IsSimpleColumnarCandidate(statement)
             || statement.Columns.Count != 1
             || statement.Columns[0].Alias != null
@@ -396,30 +395,85 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         if (!sourceColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
             return null;
 
+        var enumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+            .GetAsyncEnumerator(context.CancellationToken);
+        if (!await enumerator.MoveNextAsync())
+        {
+            await enumerator.DisposeAsync();
+            return 0;
+        }
+
+        var first = enumerator.Current;
+        SelectionVector? firstSelection = null;
+        if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+            first, statement.WhereClause, out firstSelection, cancellationToken: context.CancellationToken))
+        {
+            first.Dispose();
+            await enumerator.DisposeAsync();
+            return null;
+        }
+
         long rowCount = 0;
+        var firstPending = true;
         async IAsyncEnumerable<ColumnBatch> CountAndTransfer()
         {
-            await foreach (var batch in columnarSource.ReadColumnBatches(
-                context.BatchSize, context.CancellationToken).WithCancellation(context.CancellationToken))
+            firstPending = false;
+            var input = first;
+            var selection = firstSelection;
+            while (true)
             {
+                ColumnBatch? output = null;
                 var ownershipTransferred = false;
                 try
                 {
-                    rowCount += batch.RowCount;
-                    context.Telemetry.RowsProcessed += batch.RowCount;
-                    if (context is Evaluator evaluator) evaluator.OnBatchProcessed?.Invoke(batch.RowCount);
-                    yield return batch;
+                    if (statement.WhereClause == null)
+                    {
+                        output = input;
+                        input = null!;
+                    }
+                    else
+                    {
+                        using (selection)
+                            output = ColumnBatchAdapter.Compact(input, sourceColumns, selection, context.CancellationToken);
+                        selection = null;
+                        input.Dispose();
+                        input = null!;
+                    }
+
+                    rowCount += output.RowCount;
+                    context.Telemetry.RowsProcessed += output.RowCount;
+                    if (context is Evaluator evaluator) evaluator.OnBatchProcessed?.Invoke(output.RowCount);
+                    yield return output;
                     ownershipTransferred = true;
                 }
                 finally
                 {
-                    if (!ownershipTransferred) batch.Dispose();
+                    if (!ownershipTransferred) output?.Dispose();
+                    input?.Dispose();
+                    selection?.Dispose();
+                }
+
+                if (!await enumerator.MoveNextAsync()) yield break;
+                input = enumerator.Current;
+                if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                    input, statement.WhereClause, out selection, cancellationToken: context.CancellationToken))
+                {
+                    input.Dispose();
+                    throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during SELECT INTO.");
                 }
             }
         }
 
-        await sink.WriteColumnBatches(CountAndTransfer(), append: true, context.CancellationToken);
-        return rowCount;
+        try
+        {
+            await sink.WriteColumnBatches(CountAndTransfer(), append: true, context.CancellationToken);
+            return rowCount;
+        }
+        finally
+        {
+            if (firstPending) first.Dispose();
+            await enumerator.DisposeAsync();
+        }
     }
 
     private static void RecordSelectIntoCompletion(

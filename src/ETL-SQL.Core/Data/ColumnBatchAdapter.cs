@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
@@ -11,6 +12,43 @@ namespace ETL_SQL.Core.Data;
 /// </summary>
 public static class ColumnBatchAdapter
 {
+    /// <summary>
+    /// Creates an independently owned native batch containing the selected rows and columns.
+    /// Values stay in typed buffers; no <see cref="Row"/> or <see cref="DataTable"/> is created.
+    /// </summary>
+    public static ColumnBatch Compact(
+        ColumnBatch batch,
+        IReadOnlyList<string> columns,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+        ArgumentNullException.ThrowIfNull(columns);
+        if (columns.Count == 0) throw new ArgumentException("At least one column is required.", nameof(columns));
+
+        var ordinals = columns.Select(batch.Schema.GetOrdinal).ToArray();
+        if (ordinals.Distinct().Count() != ordinals.Length)
+            throw new ArgumentException("A compacted batch cannot contain duplicate columns.", nameof(columns));
+        var selectedRows = selection?.Indices ?? default;
+        var rowCount = selection?.Count ?? batch.RowCount;
+        var output = new List<IColumnBuffer>(ordinals.Length);
+        try
+        {
+            foreach (var ordinal in ordinals)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                output.Add(CopyColumn(batch.Columns[ordinal], batch.RowCount, selectedRows, selection != null, cancellationToken));
+            }
+            var schema = new ColumnBatchSchema(ordinals.Select(ordinal => batch.Schema.Fields[ordinal]));
+            return new ColumnBatch(schema, output, rowCount);
+        }
+        catch
+        {
+            foreach (var column in output) column.Dispose();
+            throw;
+        }
+    }
+
     public static Type GetPhysicalType(string logicalType) => BaseType(logicalType) switch
     {
         "TINYINT" => typeof(byte),
@@ -180,6 +218,72 @@ public static class ColumnBatchAdapter
                 throw new NotSupportedException($"Logical type '{logicalType}' does not yet have a native column buffer.");
         }
     }
+
+    private static IColumnBuffer CopyColumn(
+        IColumnBuffer source,
+        int sourceRowCount,
+        ReadOnlyMemory<int> selectedRows,
+        bool hasSelection,
+        CancellationToken cancellationToken)
+    {
+        if (source is Utf8ColumnBuffer utf8)
+        {
+            var count = hasSelection ? selectedRows.Length : sourceRowCount;
+            var values = new string?[count];
+            for (var output = 0; output < count; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = hasSelection ? ValidateSelectedRow(selectedRows.Span[output], sourceRowCount) : output;
+                if (!utf8.IsNull(input)) values[output] = System.Text.Encoding.UTF8.GetString(utf8.GetUtf8Bytes(input));
+            }
+            return Utf8ColumnBuffer.FromStrings(values);
+        }
+
+        if (source is ColumnBuffer<byte> bytes) return CopyFixed(bytes, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<short> shorts) return CopyFixed(shorts, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<int> ints) return CopyFixed(ints, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<long> longs) return CopyFixed(longs, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<double> doubles) return CopyFixed(doubles, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<decimal> decimals) return CopyFixed(decimals, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<DateTime> dates) return CopyFixed(dates, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<TimeSpan> times) return CopyFixed(times, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<Guid> guids) return CopyFixed(guids, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        throw new NotSupportedException($"Physical type '{source.ElementType.Name}' cannot be compacted.");
+    }
+
+    private static ColumnBuffer<T> CopyFixed<T>(
+        ColumnBuffer<T> source,
+        int sourceRowCount,
+        ReadOnlyMemory<int> selectedRows,
+        bool hasSelection,
+        CancellationToken cancellationToken) where T : unmanaged
+    {
+        var count = hasSelection ? selectedRows.Length : sourceRowCount;
+        var result = ColumnBuffer<T>.Rent(count);
+        try
+        {
+            var sourceValues = source.Values.Span;
+            var outputValues = result.Values.Span;
+            for (var output = 0; output < count; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = hasSelection ? ValidateSelectedRow(selectedRows.Span[output], sourceRowCount) : output;
+                if (source.IsNull(input)) result.SetNull(output);
+                else outputValues[output] = sourceValues[input];
+            }
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
+    private static int ValidateSelectedRow(int row, int rowCount)
+        => (uint)row < (uint)rowCount
+            ? row
+            : throw new ArgumentOutOfRangeException(nameof(row), "Selection vector contains an invalid row ordinal.");
 
     private static ColumnBuffer<T> BuildFixed<T>(
         IReadOnlyList<Row> rows,

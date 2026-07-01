@@ -163,7 +163,42 @@ public sealed class ColumnarSelectRoutingTests
         var batches = await destination.ReadColumnBatches().ToListAsync();
         try
         {
-            Assert.Equal(new[] { 1, 0, 3 }, Assert.Single(batches).GetColumn<int>("Id").Values.ToArray());
+            var ids = Assert.Single(batches).GetColumn<int>("Id");
+            Assert.Equal(1, ids.Values.Span[0]);
+            Assert.True(ids.IsNull(1));
+            Assert.Equal(3, ids.Values.Span[2]);
+        }
+        finally
+        {
+            foreach (var batch in batches) batch.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task FilteredSelectIntoCompactsNativeBuffersWithoutCallingRowReader()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource();
+        await using var destination = new AppendOnlyColumnDataSource(new[]
+        {
+            new ColumnDefinition("Id", "INT", false),
+            new ColumnDefinition("Name", "VARCHAR(20)", false)
+        });
+        evaluator.Connections["col"] = source;
+        evaluator.Connections["#dest"] = destination;
+        var statement = ParseSelect("SELECT * INTO #dest FROM col WHERE Id > 1;");
+
+        await new SelectStatementHandler(NullLogger.Instance).Execute(statement, evaluator);
+
+        Assert.Equal(1, destination.EstimatedRowCount);
+        Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(1L, evaluator.Variables["@@ROWCOUNT"]);
+        var batches = await destination.ReadColumnBatches().ToListAsync();
+        try
+        {
+            var batch = Assert.Single(batches);
+            Assert.Equal(3, batch.GetColumn<int>("Id").Values.Span[0]);
+            Assert.Equal("three", batch.GetUtf8Column("Name").GetBoxedValue(0));
         }
         finally
         {

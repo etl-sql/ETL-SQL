@@ -167,4 +167,44 @@ public sealed class ColumnBatchTests
             target.Rows.Add(row);
         }
     }
+
+    [Fact]
+    public void Compact_CopiesSelectedTypedValuesAndNullsIntoIndependentOwnership()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Id", typeof(int), "INT"),
+            new ColumnBatchField("Name", typeof(string), "VARCHAR(20)")
+        });
+        var source = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            new ColumnBuffer<int>(new[] { 1, 2, 3, 4 }, 4),
+            Utf8ColumnBuffer.FromStrings(new string?[] { "one", null, "three", "four" })
+        }, 4);
+        using var selected = ColumnBatchKernels.SelectComparison(
+            source, "Id", ColumnComparison.GreaterThanOrEqual, 2);
+        using var compacted = ColumnBatchAdapter.Compact(source, new[] { "Name", "Id" }, selected);
+
+        source.Dispose();
+
+        Assert.Equal(3, compacted.RowCount);
+        Assert.Equal(new[] { "Name", "Id" }, compacted.Schema.Fields.Select(field => field.Name));
+        Assert.True(compacted.GetUtf8Column("Name").IsNull(0));
+        Assert.Equal("three", compacted.GetUtf8Column("Name").GetBoxedValue(1));
+        Assert.Equal(new[] { 2, 3, 4 }, compacted.GetColumn<int>("Id").Values.ToArray());
+    }
+
+    [Fact]
+    public void Compact_ObservesCancellationBeforeAllocatingAllColumns()
+    {
+        using var source = new ColumnBatch(
+            new ColumnBatchSchema(new[] { new ColumnBatchField("Id", typeof(int), "INT") }),
+            new IColumnBuffer[] { new ColumnBuffer<int>(new[] { 1, 2 }, 2) },
+            2);
+        using var cancellation = new System.Threading.CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            ColumnBatchAdapter.Compact(source, new[] { "Id" }, cancellationToken: cancellation.Token));
+    }
 }
