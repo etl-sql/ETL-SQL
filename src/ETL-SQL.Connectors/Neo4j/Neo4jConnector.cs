@@ -38,7 +38,7 @@ namespace ETL_SQL.Connectors.Neo4j
                     var uri = new Uri(connectionString);
                     if (!string.IsNullOrEmpty(uri.UserInfo))
                     {
-                        var parts = uri.UserInfo.Split(':');
+                        var parts = uri.UserInfo.Split(new[] { ':' }, 2);
                         user = Uri.UnescapeDataString(parts[0]);
                         if (parts.Length > 1)
                         {
@@ -48,7 +48,10 @@ namespace ETL_SQL.Connectors.Neo4j
                         cleanUri = uriBuilder.Uri.ToString();
                     }
                 }
-                catch { }
+                catch (UriFormatException)
+                {
+                    // Not a URI-shaped connection string; the driver reports the real problem.
+                }
 
                 var authToken = string.IsNullOrEmpty(user) ? AuthTokens.None : AuthTokens.Basic(user, password);
                 var driver = GraphDatabase.Driver(cleanUri, authToken);

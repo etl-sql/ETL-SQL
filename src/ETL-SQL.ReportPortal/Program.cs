@@ -173,8 +173,12 @@ builder.Services.AddAuthentication(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        // COMPAT_BREAK: 0.14 — tokens minted before iss/aud were stamped are rejected,
+        // forcing one re-login (user tokens) or re-mint (short-lived service tokens).
+        ValidateIssuer = true,
+        ValidIssuer = TokenService.TokenIssuer,
+        ValidateAudience = true,
+        ValidAudience = TokenService.TokenAudience,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKeys = validationKeys,

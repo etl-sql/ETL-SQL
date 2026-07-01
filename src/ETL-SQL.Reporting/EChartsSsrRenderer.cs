@@ -125,7 +125,9 @@ namespace ETL_SQL.Reporting
             if (string.IsNullOrWhiteSpace(visual.ChartConfig)) return null;
             if (_initFailed) return null;
 
-            _poolSemaphore.Wait();
+            // Bounded wait: under sustained render pressure, fall back to the static renderer
+            // (callers treat null as "SSR unavailable") rather than parking request threads.
+            if (!_poolSemaphore.Wait(TimeSpan.FromSeconds(10))) return null;
             PooledEngine? pooled = null;
             try
             {

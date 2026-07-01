@@ -24,7 +24,8 @@ public class DatasetController(
     DatasetPermissionService datasetPermissions,
     FolderPermissionService folderPermissions,
     SecuritySessionService securitySessions,
-    SessionCache sessions) : ControllerBase
+    SessionCache sessions,
+    ILogger<DatasetController> logger) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -145,6 +146,9 @@ public class DatasetController(
                     }
                     catch (Exception ex)
                     {
+                        // Completing with the exception aborts the client download mid-stream;
+                        // log it too or the server has no record of why the export failed.
+                        logger.LogError(ex, "XLSX export of dataset {DatasetId} failed mid-stream.", id);
                         await pipe.Writer.CompleteAsync(ex);
                     }
                 });
@@ -165,6 +169,7 @@ public class DatasetController(
                 }
                 catch (Exception ex)
                 {
+                    logger.LogError(ex, "CSV export of dataset {DatasetId} failed mid-stream.", id);
                     await csvPipe.Writer.CompleteAsync(ex);
                 }
             });

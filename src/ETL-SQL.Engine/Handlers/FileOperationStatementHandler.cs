@@ -297,7 +297,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         else if (stmt.KeyFile != null)
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
-                            CryptoUtils.EncryptFileWithSsh(source, dest, keyFilePath, overwrite);
+                            await CryptoUtils.EncryptFileWithSshAsync(source, dest, keyFilePath, overwrite);
                         }
                         else
                         {
@@ -326,7 +326,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            CryptoUtils.DecryptFileWithSsh(source, dest, keyFilePath, overwrite, pwd);
+                            await CryptoUtils.DecryptFileWithSshAsync(source, dest, keyFilePath, overwrite, pwd);
                         }
                         else
                         {

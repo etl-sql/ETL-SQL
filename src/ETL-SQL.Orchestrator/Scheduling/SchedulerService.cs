@@ -197,10 +197,30 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
         public async Task<bool> TriggerJobAsync(string jobName)
         {
-            var jobs = await _store.GetAllJobsAsync();
-            var job = jobs.FirstOrDefault(j => j.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase));
+            var job = await _store.GetJobAsync(jobName);
             if (job == null) return false;
-            _ = Task.Run(() => ExecuteJobAsync(job));
+
+            // Same start guard as the scheduling loop: one execution of a job at a time. A
+            // trigger racing an in-flight run coalesces with it instead of starting a duplicate.
+            if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+            {
+                _logger.LogInformation(
+                    "Job {JobName}: manual trigger coalesced with an execution already in progress.",
+                    job.Name);
+                return true;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ExecuteJobAsync(job);
+                }
+                finally
+                {
+                    _scheduledJobStarts.TryRemove(job.Name, out _);
+                }
+            }, CancellationToken.None);
             return true;
         }
 
@@ -501,6 +521,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }, CancellationToken.None);
         }
 
+        // Scheduling is deliberately local wall-clock: AtTime means "at HH:mm on this machine"
+        // and stored LastRun/NextRun values are local. Because the next run is always computed
+        // forward from 'now' after a fire, a DST fall-back hour cannot double-run a job; a
+        // spring-forward NextRun inside the skipped hour fires when the clock jumps past it.
+        // Do not switch this to UTC piecemeal — persisted rows would be reinterpreted at upgrade.
         private DateTime CalculateNextRun(JobDefinition job)
         {
             var now = DateTime.Now;

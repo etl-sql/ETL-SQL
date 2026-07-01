@@ -268,7 +268,8 @@ namespace ETL_SQL.Connectors.BigQuery
                 ?? throw new ExecutionException("BigQuery: DATASET required for column introspection.");
 
             var client = await CreateClientAsync();
-            var sql = $"SELECT column_name FROM `{projectId}.{datasetId}.INFORMATION_SCHEMA.COLUMNS` " +
+            var sql = $"SELECT column_name FROM `{ValidateIdentifierPart(projectId, "project")}." +
+                      $"{ValidateIdentifierPart(datasetId, "dataset")}.INFORMATION_SCHEMA.COLUMNS` " +
                       "WHERE table_name = @tableName ORDER BY ordinal_position";
             try
             {
@@ -389,6 +390,20 @@ namespace ETL_SQL.Connectors.BigQuery
                 2 => (null, parts[0], parts[1]),
                 _ => (null, null, parts[0])
             };
+        }
+
+        /// <summary>
+        /// Guards project/dataset IDs interpolated inside a backtick-quoted path. Unlike
+        /// <see cref="QuoteIdentifier"/> these parts cannot be individually re-quoted (the
+        /// whole path shares one backtick pair), so restrict them to BigQuery's legal
+        /// identifier characters instead.
+        /// </summary>
+        private static string ValidateIdentifierPart(string value, string kind)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !value.All(c =>
+                    char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or ':'))
+                throw new ExecutionException($"BigQuery: invalid {kind} identifier.");
+            return value;
         }
 
         private static string QuoteIdentifier(string name)
