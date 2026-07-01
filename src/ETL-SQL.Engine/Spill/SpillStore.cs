@@ -435,6 +435,9 @@ public partial class SpillStore : ISpillStore
 
     private class ArrowSpillWriter : ISpillWriter
     {
+        private const string SchemaVersionKey = "etlsql.spill.schema_version";
+        private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
+        private const string SchemaVersion = "1";
         private readonly FileStream _fileStream;
         private readonly CryptoStream? _cryptoStream;
         private readonly GZipStream? _gzipStream;
@@ -552,11 +555,30 @@ public partial class SpillStore : ISpillStore
 
         private static Schema InferSchema(Row row)
         {
-            var fields = row.Columns
+            var columns = row.Columns.ToList();
+            var fields = columns
                 .Select(kvp => new Field(kvp.Key, GetArrowType(kvp.Value), nullable: true))
                 .ToList();
-            return new Schema(fields, metadata: null);
+            var metadata = new Dictionary<string, string>
+            {
+                [SchemaVersionKey] = SchemaVersion
+            };
+            for (var i = 0; i < columns.Count; i++)
+                metadata[$"{LogicalTypeKeyPrefix}{i}.logical_type"] = GetLogicalType(columns[i].Value);
+            return new Schema(fields, metadata);
         }
+
+        private static string GetLogicalType(object? value) => value switch
+        {
+            null => "Dynamic",
+            string => "String",
+            int or long or short or byte or uint or ulong or ushort or sbyte => "Integer",
+            decimal => "Decimal",
+            double or float => "Double",
+            bool => "Boolean",
+            DateTime => "Timestamp",
+            _ => "Json"
+        };
 
         private static IArrowType GetArrowType(object? value) => value switch
         {
@@ -685,6 +707,8 @@ public partial class SpillStore : ISpillStore
 
     private class ArrowSpillReader : ISpillReader
     {
+        private const string SchemaVersionKey = "etlsql.spill.schema_version";
+        private const string LogicalTypeKeyPrefix = "etlsql.spill.column.";
         private readonly string _path;
         private readonly byte[] _key;
         private readonly bool _encrypt;
@@ -783,12 +807,25 @@ public partial class SpillStore : ISpillStore
             for (int i = 0; i < batch.Schema.FieldsList.Count; i++)
             {
                 var field = batch.Schema.FieldsList[i];
-                row[field.Name] = ExtractValue(batch.Column(i), rowIndex);
+                var logicalType = GetLogicalType(batch.Schema, i);
+                row[field.Name] = ExtractValue(batch.Column(i), rowIndex, logicalType);
             }
             return row;
         }
 
-        private static object? ExtractValue(IArrowArray array, int index)
+        private static string? GetLogicalType(Schema schema, int columnIndex)
+        {
+            if (schema.Metadata == null
+                || !schema.Metadata.TryGetValue(SchemaVersionKey, out var version)
+                || version != "1")
+                return null;
+            return schema.Metadata.TryGetValue(
+                $"{LogicalTypeKeyPrefix}{columnIndex}.logical_type", out var logicalType)
+                ? logicalType
+                : null;
+        }
+
+        private static object? ExtractValue(IArrowArray array, int index, string? logicalType)
         {
             if (array.IsNull(index)) return null;
 
@@ -799,16 +836,17 @@ public partial class SpillStore : ISpillStore
                 DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
                 BooleanArray a => (object?)a.GetValue(index),
                 TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
-                StringArray a => (object?)DecodeArrowString(a.GetString(index)),
+                StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType),
                 _ => null
             };
         }
 
         private const string JsonPrefix = "\x1Ejson:";
 
-        private static object? DecodeArrowString(string? s)
+        private static object? DecodeArrowString(string? s, string? logicalType)
         {
             if (s == null) return null;
+            if (logicalType == "String") return s;
             if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
             {
                 try

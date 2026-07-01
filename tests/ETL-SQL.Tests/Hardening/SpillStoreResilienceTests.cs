@@ -122,5 +122,34 @@ namespace ETL_SQL.Tests.Hardening
 
             Assert.Equal(100000, count);
         }
+
+        [Fact]
+        public async Task ArrowLogicalSchema_PreservesNumericAndDateLookingStrings()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            await using (var writer = await store.CreateWriterAsync("logical_strings"))
+            {
+                await writer.WriteRowAsync(new Row
+                {
+                    ["NumericText"] = "00123",
+                    ["DecimalText"] = "12.50",
+                    ["DateText"] = "2026-07-01T12:34:56Z"
+                });
+            }
+
+            await using var reader = await store.CreateReaderAsync("logical_strings");
+            var row = await reader.ReadRowAsync();
+
+            Assert.NotNull(row);
+            Assert.IsType<string>(row!["NumericText"]);
+            Assert.Equal("00123", row["NumericText"]);
+            Assert.IsType<string>(row["DecimalText"]);
+            Assert.Equal("12.50", row["DecimalText"]);
+            Assert.IsType<string>(row["DateText"]);
+            Assert.Equal("2026-07-01T12:34:56Z", row["DateText"]);
+        }
     }
 }

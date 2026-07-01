@@ -332,10 +332,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   increase-only sampling after window columns change row width. Projected DISTINCT and other unknown
   streams deliberately never reduce from bounded samples because an unrepresentative prefix cannot
   prove that a smaller fan-out is safe.)*
-- [ ] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
-  aggregate, or repartition them. *(Blocked on a versioned spill schema carrying ETL-SQL logical-type
-  metadata: current Arrow fields reflect first-row CLR inference and string reads intentionally perform
-  dynamic JSON/numeric/date decoding, so exposing raw arrays as typed columns would change semantics.)*
+- [~] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
+  aggregate, or repartition them. *(New Arrow spill files now carry a versioned, ordinal logical-type
+  schema; readers use it to preserve numeric/date-looking strings while metadata-free legacy files keep
+  dynamic decoding. A batch-reader contract, Arrow-to-`ColumnBatch` adaptation, and external-operator
+  routing remain.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts
