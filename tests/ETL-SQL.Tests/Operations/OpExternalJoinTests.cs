@@ -55,6 +55,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(10, results.Count);
+            Assert.Equal(10, engine.ColumnarBuildRows);
             Assert.All(results, r => Assert.Equal(r["lval"]?.ToString().Replace("l-", ""), r["rval"]?.ToString().Replace("r-", "")));
 
             Assert.True(eval.Telemetry.TotalSpilledBytes > startSpill, "Should have reported spilled bytes");

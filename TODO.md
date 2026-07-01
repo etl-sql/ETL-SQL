@@ -338,7 +338,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   dynamic decoding. Arrow readers now implement an optional native batch contract with typed pooled
   buffers, null bitmaps, logical types, and exclusive row/batch consumption. Arrow UTF-8 offsets, bytes,
   and validity bits are copied directly into pooled native storage without per-value string decoding.
-  External-operator routing remains.)*
+  External join build hashing and compact-row packing now consume those batches without constructing
+  build-side `Row` graphs. Probe/repartition paths and the remaining external operators remain.)*
 - [x] Detect skew and unsplittable hot keys explicitly; use bounded specialized handling or fail with a
   diagnostic under `SpillOrFail` rather than silently consuming unbounded RAM. *(External join,
   aggregate, and distinct recursion measure used/largest subpartitions, reject repartition attempts

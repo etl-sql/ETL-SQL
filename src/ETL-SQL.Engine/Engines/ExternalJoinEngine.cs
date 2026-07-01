@@ -25,6 +25,7 @@ public class ExternalJoinEngine
     private readonly ILogger _logger;
     private int _partitionCount;
     public int PartitionCount => _partitionCount;
+    internal long ColumnarBuildRows { get; private set; }
 
 
     private readonly IBufferManager? _bufferManager;
@@ -257,6 +258,36 @@ public class ExternalJoinEngine
         var packer = new RowPacker();
         bool columnsCaptured = false;
         await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
+        if (rightReader is IColumnarSpillReader columnarReader)
+        {
+            await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+            {
+                using (batch)
+                {
+                    if (!columnsCaptured)
+                    {
+                        table.Columns.AddRange(batch.Schema.Fields.Select(field => field.Name));
+                        columnsCaptured = true;
+                    }
+                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    {
+                        var keyValues = new object?[rightKeys.Count];
+                        for (var keyIndex = 0; keyIndex < rightKeys.Count; keyIndex++)
+                        {
+                            var columnIndex = batch.Schema.GetOrdinal(rightKeys[keyIndex]);
+                            keyValues[keyIndex] = RowPacker.ReadBatchValue(batch, columnIndex, rowIndex);
+                        }
+                        var key = new CompoundKey(keyValues);
+                        var blob = packer.Pack(batch, rowIndex);
+                        AddBuildRow(table, key, blob, guard);
+                        ColumnarBuildRows++;
+                        if (guard.Exceeded()) return null;
+                    }
+                }
+            }
+            return table;
+        }
+
         await foreach (var rightRow in rightReader.AsEnumerableAsync())
         {
             // The build side has a uniform schema; capture the column order once (matches how the
@@ -269,20 +300,28 @@ public class ExternalJoinEngine
 
             var key = GetHashKey(rightRow, rightKeys);
             var blob = packer.Pack(rightRow, table.Columns);
-            int idx = table.Rows.Count;
-            table.Rows.Add(blob);
-
-            if (!table.Index.TryGetValue(key, out var bucket))
-            {
-                bucket = new List<int>();
-                table.Index[key] = bucket;
-                guard.Add(RowMemory.EstimateKeyBytes(key) + 48); // new key + dictionary/list overhead
-            }
-            bucket.Add(idx);
-            guard.Add(blob.Length + 24); // contiguous blob + array header + index slot
+            AddBuildRow(table, key, blob, guard);
             if (guard.Exceeded()) return null;
         }
         return table;
+    }
+
+    private static void AddBuildRow(
+        PackedBuildTable table,
+        CompoundKey key,
+        byte[] blob,
+        MemoryBudgetGuard guard)
+    {
+        int idx = table.Rows.Count;
+        table.Rows.Add(blob);
+        if (!table.Index.TryGetValue(key, out var bucket))
+        {
+            bucket = new List<int>();
+            table.Index[key] = bucket;
+            guard.Add(RowMemory.EstimateKeyBytes(key) + 48);
+        }
+        bucket.Add(idx);
+        guard.Add(blob.Length + 24);
     }
 
     /// <summary>Streams the probe (left) side against a packed build table, emitting join results.</summary>

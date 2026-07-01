@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 
@@ -47,6 +48,42 @@ internal sealed class RowPacker
             WriteValue(_writer, row[columns[i]]);
         _writer.Flush();
         return _ms.ToArray();
+    }
+
+    /// <summary>Packs one native batch row without constructing a <see cref="Row"/> object.</summary>
+    public byte[] Pack(ColumnBatch batch, int rowIndex)
+    {
+        _ms.SetLength(0);
+        for (var column = 0; column < batch.Schema.Count; column++)
+            WriteValue(_writer, ReadBatchValue(batch, column, rowIndex));
+        _writer.Flush();
+        return _ms.ToArray();
+    }
+
+    internal static object? ReadBatchValue(ColumnBatch batch, int columnIndex, int rowIndex)
+    {
+        var value = batch.Columns[columnIndex].GetBoxedValue(rowIndex);
+        if (value is not string text) return value;
+        var logicalType = batch.Schema.Fields[columnIndex].LogicalType;
+        if (logicalType == "String") return text;
+        const string jsonPrefix = "\x1Ejson:";
+        if (text.StartsWith(jsonPrefix, StringComparison.Ordinal))
+        {
+            try
+            {
+                var element = JsonSerializer.Deserialize<JsonElement>(text.AsSpan(jsonPrefix.Length));
+                return SpillSerializationHelper.UnwrapJsonElement(element);
+            }
+            catch { return text; }
+        }
+        if (logicalType == "Dynamic")
+        {
+            if (decimal.TryParse(text, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var number)) return number;
+            if (DateTime.TryParse(text, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind, out var date)) return date;
+        }
+        return text;
     }
 
     /// <summary>Reconstructs a <see cref="Row"/> from a blob produced by <see cref="Pack"/>.</summary>
