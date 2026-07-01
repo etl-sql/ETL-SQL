@@ -683,6 +683,16 @@ public class InMemoryDataSource : IDataSource, ISpillable
     }
 
     public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        => await WriteBatchesCore(batches, append, takeOwnership: false);
+
+    /// <summary>
+    /// Writes engine-owned batches without cloning each row. The caller must not read or mutate a
+    /// yielded batch after ownership transfers to this data source.
+    /// </summary>
+    public async Task WriteOwnedBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        => await WriteBatchesCore(batches, append, takeOwnership: true);
+
+    private async Task WriteBatchesCore(IAsyncEnumerable<DataTable> batches, bool append, bool takeOwnership)
     {
         if (!append) await TruncateAsync();
         ISpillWriter? extentWriter = null;
@@ -798,7 +808,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
                 {
                     try
                     {
-                        var rowClone = row.Clone();
+                        var rowClone = takeOwnership ? row : row.Clone();
                         await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
                         await processedBatch.AddRowAsync(rowClone);
                     }
@@ -828,7 +838,8 @@ public class InMemoryDataSource : IDataSource, ISpillable
                                 await pendingSpillWrite;
 
                             UpdateIndexesWithBatch(processedBatch);
-                            currentExtentIndexedBatches.Add(processedBatch);
+                            if (_index.Count > 0)
+                                currentExtentIndexedBatches.Add(processedBatch);
                             var estimatedBytes = EstimateSpillPayloadBytes(processedBatch);
                             pendingSpillWrite = WriteSpillBatchAsync(processedBatch, estimatedBytes);
                             _totalRowCount += processedBatch.Rows.Count;
@@ -919,7 +930,15 @@ public class InMemoryDataSource : IDataSource, ISpillable
                 extentEstimatedBytes = 0;
             }
 
-            await extentWriter.WriteRowsAsync(batch.Rows);
+            if (extentWriter is IColumnarSpillWriter columnarWriter)
+            {
+                using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
+                await columnarWriter.WriteBatchAsync(columnBatch);
+            }
+            else
+            {
+                await extentWriter.WriteRowsAsync(batch.Rows);
+            }
             extentEstimatedBytes += estimatedBytes;
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -1017,7 +1036,15 @@ public class InMemoryDataSource : IDataSource, ISpillable
                     extentBytes = 0;
                 }
 
-                await writer.WriteRowsAsync(batch.Rows);
+                if (writer is IColumnarSpillWriter columnarWriter)
+                {
+                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
+                    await columnarWriter.WriteBatchAsync(columnBatch);
+                }
+                else
+                {
+                    await writer.WriteRowsAsync(batch.Rows);
+                }
                 extentBytes += EstimateSpillPayloadBytes(batch);
                 if (extentBytes >= Math.Max(1, SpillExtentTargetBytes))
                     await CompleteCurrentAsync();

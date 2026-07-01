@@ -103,7 +103,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 }
             }
 
-            await destination.WriteBatches(CountBatches(boundBatches), append: true);
+            if (destination is InMemoryDataSource rowStore)
+                await rowStore.WriteOwnedBatches(CountBatches(boundBatches), append: true);
+            else
+                await destination.WriteBatches(CountBatches(boundBatches), append: true);
             RecordSelectIntoCompletion(intoTable, context, totalRows);
         }
         // 3. Handle Standard SELECT (Extract -> Display)

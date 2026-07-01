@@ -543,7 +543,28 @@ public partial class SpillStore : ISpillStore
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
-            foreach (var r in rows) await WriteRowAsync(r);
+            long telemetryBytes = 0;
+            foreach (var row in rows)
+            {
+                var snapshot = SnapshotRow(row);
+                if (_schema == null)
+                {
+                    _schema = InferSchema(snapshot);
+                    _arrowWriter = new ArrowStreamWriter(_payloadStream, _schema, leaveOpen: true);
+                    await _arrowWriter.WriteStartAsync(CancellationToken.None);
+                }
+
+                _buffer.Add(snapshot);
+                telemetryBytes += row.Columns.Count * 16L;
+                if (_buffer.Count >= _flushBatchSize)
+                    await FlushBatchAsync();
+            }
+
+            if ((_context.Telemetry?.TelemetryEnabled ?? false) && telemetryBytes > 0)
+            {
+                _context.Telemetry.TotalSpilledBytes += telemetryBytes;
+                BytesWritten += telemetryBytes;
+            }
         }
 
         public async Task WriteBatchAsync(ColumnBatch batch)
@@ -574,7 +595,7 @@ public partial class SpillStore : ISpillStore
         private async Task FlushBatchAsync()
         {
             if (_buffer.Count == 0 || _arrowWriter == null) return;
-            var batch = BuildBatch(_buffer);
+            using var batch = BuildBatch(_buffer);
             await _arrowWriter.WriteRecordBatchAsync(batch);
             _buffer.Clear();
         }

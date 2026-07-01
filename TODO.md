@@ -374,8 +374,14 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 
 - [x] **Gate A — harness:** 10M baseline reports trustworthy peak process memory and throughput data.
   *(Each core scenario runs in a fresh Release/server-GC test host via `Test-ScaleBaseline.ps1`.)*
-- [ ] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
-  configured ceiling, and materially improves rows/second versus the checked-in baseline.
+- [~] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
+  configured ceiling, and materially improves rows/second versus the checked-in baseline. *(Owned
+  SELECT-INTO batches now avoid a redundant row clone, row-backed spill crosses into Arrow through
+  typed batches, and unindexed extents no longer retain batches solely for rollback bookkeeping.
+  The isolated 10M run reached 228,786 rows/s with 425 MB peak working set and 43 extents versus the
+  checked-in 226,035 rows/s/450 MB baseline. The isolated 50M run reached 249,890 rows/s with 466 MB
+  peak working set, 83 extents, 5.66 GB logical writes, and 650 MB physical reads. Boundedness is
+  proven; a pre-change 50M throughput baseline is still required to establish material improvement.)*
 - [x] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
   does not decode to rows during a columnar scan/count/checksum. *(The isolated mixed-type storage gate
   streams bounded source batches and validates typed-buffer row-count/checksum scans. Native retained
