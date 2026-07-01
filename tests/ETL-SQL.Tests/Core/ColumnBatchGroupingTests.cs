@@ -93,6 +93,22 @@ public sealed class ColumnBatchGroupingTests
     }
 
     [Fact]
+    public void KeyOnlyCountStateAccumulatesNullKeysAcrossBatches()
+    {
+        using var first = CreateBatch();
+        using var second = CreateBatch();
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        using var result = new NativeGroupCountResult<int>(arbiter);
+
+        result.Accumulate(first, "Key");
+        result.Accumulate(second, "Key");
+
+        Assert.Equal(4, result.Groups[new NativeGroupKey<int>(false, 1)]);
+        Assert.Equal(4, result.Groups[new NativeGroupKey<int>(true, default)]);
+        Assert.Equal(result.EstimatedBytes, arbiter.ReservedBytes);
+    }
+
+    [Fact]
     public void GroupingFailsBoundedlyWhenCardinalityExceedsGrant()
     {
         using var batch = CreateBatch();

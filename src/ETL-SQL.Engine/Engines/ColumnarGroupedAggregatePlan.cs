@@ -12,12 +12,12 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
 {
     private readonly IExecutionContext _context;
     private readonly string _keyColumn;
-    private readonly string _valueColumn;
+    private readonly string? _valueColumn;
     private readonly Slot[] _slots;
     private IState? _state;
 
     private ColumnarGroupedAggregatePlan(
-        IExecutionContext context, string keyColumn, string valueColumn, Slot[] slots)
+        IExecutionContext context, string keyColumn, string? valueColumn, Slot[] slots)
     {
         _context = context;
         _keyColumn = keyColumn;
@@ -78,7 +78,6 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             }
             slots.Add(new Slot(kind, countStar));
         }
-        valueColumn ??= keyColumn;
         plan = new ColumnarGroupedAggregatePlan(context, keyColumn, valueColumn, slots.ToArray());
         return true;
     }
@@ -86,17 +85,18 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
     public bool CanApply(ColumnBatch batch)
     {
         IColumnBuffer key;
-        IColumnBuffer value;
         try
         {
             key = batch.GetColumn(_keyColumn);
-            value = batch.GetColumn(_valueColumn);
         }
         catch (KeyNotFoundException)
         {
             return false;
         }
-        return IsSupportedKey(key.ElementType) && IsNumeric(value.ElementType);
+        if (!IsSupportedKey(key.ElementType)) return false;
+        if (_valueColumn == null) return true;
+        try { return IsNumeric(batch.GetColumn(_valueColumn).ElementType); }
+        catch (KeyNotFoundException) { return false; }
     }
 
     public void Accumulate(ColumnBatch batch, SelectionVector? selection)
@@ -118,6 +118,13 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
     private IState CreateState(ColumnBatch batch)
     {
         var keyType = batch.GetColumn(_keyColumn).ElementType;
+        if (_valueColumn == null)
+        {
+            var countType = typeof(CountState<>).MakeGenericType(keyType);
+            return (IState)Activator.CreateInstance(
+                countType, _context, _keyColumn,
+                batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType)!;
+        }
         var valueType = batch.GetColumn(_valueColumn).ElementType;
         var stateType = typeof(State<,>).MakeGenericType(keyType, valueType);
         return (IState)Activator.CreateInstance(
@@ -198,6 +205,45 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         }
 
         public void Dispose() => _result?.Dispose();
+    }
+
+    private sealed class CountState<TKey> : IState where TKey : unmanaged
+    {
+        private readonly IExecutionContext _context;
+        private readonly string _keyColumn;
+        private readonly string _keyLogicalType;
+        private readonly NativeGroupCountResult<TKey> _result;
+
+        public CountState(IExecutionContext context, string keyColumn, string keyLogicalType)
+        {
+            _context = context;
+            _keyColumn = keyColumn;
+            _keyLogicalType = keyLogicalType;
+            _result = new NativeGroupCountResult<TKey>(context.MemoryArbiter);
+        }
+
+        public void Accumulate(ColumnBatch batch, SelectionVector? selection)
+            => _result.Accumulate(batch, _keyColumn, selection, _context.CancellationToken);
+
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots)
+        {
+            foreach (var (key, count) in _result.Groups)
+            {
+                var row = table.NewRow();
+                for (var index = 0; index < slots.Count; index++)
+                {
+                    row[index] = slots[index].Kind switch
+                    {
+                        SlotKind.Key => key.IsNull ? null : ColumnBatchAdapter.RestoreEngineValue(key.Value, _keyLogicalType),
+                        SlotKind.Count when slots[index].CountStar => (decimal)count,
+                        _ => null
+                    };
+                }
+                table.Rows.Add(row);
+            }
+        }
+
+        public void Dispose() => _result.Dispose();
     }
 
     private sealed record Slot(SlotKind Kind, bool CountStar = false);

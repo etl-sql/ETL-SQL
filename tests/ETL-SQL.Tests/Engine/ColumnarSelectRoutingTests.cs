@@ -302,6 +302,13 @@ public sealed class ColumnarSelectRoutingTests
         var nullKey = Assert.Single(rows, row => row["EventDate"] == null);
         Assert.Equal(2m, nullKey["RowCount"]);
         Assert.Equal(8m, nullKey["Total"]);
+
+        var countOnly = ParseSelect(
+            "SELECT EventDate, COUNT(*) AS RowCount FROM events GROUP BY EventDate;");
+        var countRows = Assert.Single(await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(countOnly, evaluator).ToListAsync()).Rows;
+        Assert.Equal(2m, Assert.Single(countRows, row => row["EventDate"] == null)["RowCount"]);
+        Assert.Equal(2m, Assert.Single(countRows, row => Equals(row["EventDate"], firstDate))["RowCount"]);
         Assert.Equal(0, source.RowReadAttempts);
     }
 
