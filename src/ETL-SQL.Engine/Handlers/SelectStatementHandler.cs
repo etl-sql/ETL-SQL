@@ -379,11 +379,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
     {
         if (destination is not IColumnarDataSink sink
             || !IsSimpleColumnarCandidate(statement)
-            || statement.Columns.Count != 1
-            || statement.Columns[0].Alias != null
-            || statement.Columns[0].Expression is not StarExpression star
-            || star.Qualifier != null || star.Pattern != null
-            || star.Exclude.Count != 0 || star.Replace.Count != 0 || star.Rename.Count != 0)
+            || statement.Columns.Count == 0)
             return null;
 
         var source = await context.ResolveDataSourceAsync(statement.FromTable);
@@ -392,8 +388,37 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         var sourceColumns = (await source.GetColumnsAsync()).ToArray();
         var targetColumns = (await destination.GetColumnsAsync()).ToArray();
-        if (!sourceColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
+        string[] projectedColumns;
+        string[] outputColumns;
+        if (statement.Columns.Count == 1 && statement.Columns[0].Alias == null
+            && statement.Columns[0].Expression is StarExpression star
+            && star.Qualifier == null && star.Pattern == null
+            && star.Exclude.Count == 0 && star.Replace.Count == 0 && star.Rename.Count == 0)
+        {
+            projectedColumns = sourceColumns;
+            outputColumns = sourceColumns;
+        }
+        else if (statement.Columns.All(column => column.Expression is IdentifierExpression))
+        {
+            projectedColumns = statement.Columns
+                .Select(column => ((IdentifierExpression)column.Expression).Name.Split('.').Last())
+                .ToArray();
+            if (projectedColumns.Any(column => !sourceColumns.Contains(column, StringComparer.OrdinalIgnoreCase)))
+                return null;
+            outputColumns = statement.Columns
+                .Select((column, index) => column.Alias ?? projectedColumns[index])
+                .ToArray();
+        }
+        else
+        {
             return null;
+        }
+
+        if (!outputColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
+            return null;
+        var transfersWholeBatch = statement.WhereClause == null
+            && projectedColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase)
+            && outputColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase);
 
         var enumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
             .GetAsyncEnumerator(context.CancellationToken);
@@ -426,7 +451,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 var ownershipTransferred = false;
                 try
                 {
-                    if (statement.WhereClause == null)
+                    if (transfersWholeBatch)
                     {
                         output = input;
                         input = null!;
@@ -434,7 +459,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                     else
                     {
                         using (selection)
-                            output = ColumnBatchAdapter.Compact(input, sourceColumns, selection, context.CancellationToken);
+                            output = ColumnBatchAdapter.Compact(
+                                input, projectedColumns, selection, context.CancellationToken, outputColumns);
                         selection = null;
                         input.Dispose();
                         input = null!;

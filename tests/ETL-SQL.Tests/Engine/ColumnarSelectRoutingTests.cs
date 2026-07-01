@@ -206,6 +206,37 @@ public sealed class ColumnarSelectRoutingTests
         }
     }
 
+    [Fact]
+    public async Task ReorderedAliasedSelectIntoCompactsAndRenamesNativeSchema()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource();
+        await using var destination = new AppendOnlyColumnDataSource(new[]
+        {
+            new ColumnDefinition("Label", "VARCHAR(20)", false),
+            new ColumnDefinition("ResultId", "INT", false)
+        });
+        evaluator.Connections["col"] = source;
+        evaluator.Connections["#dest"] = destination;
+        var statement = ParseSelect("SELECT Name AS Label, Id AS ResultId INTO #dest FROM col WHERE Id > 1;");
+
+        await new SelectStatementHandler(NullLogger.Instance).Execute(statement, evaluator);
+
+        Assert.Equal(0, source.RowReadAttempts);
+        var batches = await destination.ReadColumnBatches().ToListAsync();
+        try
+        {
+            var batch = Assert.Single(batches);
+            Assert.Equal(new[] { "Label", "ResultId" }, batch.Schema.Fields.Select(field => field.Name));
+            Assert.Equal("three", batch.GetUtf8Column("Label").GetBoxedValue(0));
+            Assert.Equal(3, batch.GetColumn<int>("ResultId").Values.Span[0]);
+        }
+        finally
+        {
+            foreach (var batch in batches) batch.Dispose();
+        }
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();

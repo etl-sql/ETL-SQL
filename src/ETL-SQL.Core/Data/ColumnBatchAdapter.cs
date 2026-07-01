@@ -20,11 +20,14 @@ public static class ColumnBatchAdapter
         ColumnBatch batch,
         IReadOnlyList<string> columns,
         SelectionVector? selection = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? outputColumns = null)
     {
         ArgumentNullException.ThrowIfNull(batch);
         ArgumentNullException.ThrowIfNull(columns);
         if (columns.Count == 0) throw new ArgumentException("At least one column is required.", nameof(columns));
+        if (outputColumns != null && outputColumns.Count != columns.Count)
+            throw new ArgumentException("Output column count must match projected column count.", nameof(outputColumns));
 
         var ordinals = columns.Select(batch.Schema.GetOrdinal).ToArray();
         if (ordinals.Distinct().Count() != ordinals.Length)
@@ -39,7 +42,11 @@ public static class ColumnBatchAdapter
                 cancellationToken.ThrowIfCancellationRequested();
                 output.Add(CopyColumn(batch.Columns[ordinal], batch.RowCount, selectedRows, selection != null, cancellationToken));
             }
-            var schema = new ColumnBatchSchema(ordinals.Select(ordinal => batch.Schema.Fields[ordinal]));
+            var schema = new ColumnBatchSchema(ordinals.Select((ordinal, index) =>
+            {
+                var field = batch.Schema.Fields[ordinal];
+                return outputColumns == null ? field : field with { Name = outputColumns[index] };
+            }));
             return new ColumnBatch(schema, output, rowCount);
         }
         catch
