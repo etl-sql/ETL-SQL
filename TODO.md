@@ -314,7 +314,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 
 #### P4 — Partition sizing and spill-read fast paths
 
-- [~] Replace fixed `ExternalHashPartitions=32` with fan-out derived from sampled/known input bytes,
+- [x] Replace fixed `ExternalHashPartitions=32` with fan-out derived from sampled/known input bytes,
   key width, cardinality/skew evidence, and per-partition memory budget. Target one partitioning pass
   for normal distributions. *(A deterministic sizing model now accounts for payload bytes, row/key
   state overhead, target budget utilization, cardinality, skew, and configured bounds; it predicts
@@ -329,8 +329,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   `ExternalHashPartitions` can increase the configured baseline. External aggregation and external
   join accept exact row/byte totals from already-materialized planner/build inputs and may safely reduce
   an oversized baseline. External windows do the same for their first signature pass, reverting to
-  increase-only sampling after window columns change row width. Distinct exact-total propagation and
-  unknown-stream reduction remain.)*
+  increase-only sampling after window columns change row width. Projected DISTINCT and other unknown
+  streams deliberately never reduce from bounded samples because an unrepresentative prefix cannot
+  prove that a smaller fan-out is safe.)*
 - [ ] Read spill extents as column batches. Do not reconstruct boxed rows merely to hash, filter,
   aggregate, or repartition them. *(Blocked on a versioned spill schema carrying ETL-SQL logical-type
   metadata: current Arrow fields reflect first-row CLR inference and string reads intentionally perform
