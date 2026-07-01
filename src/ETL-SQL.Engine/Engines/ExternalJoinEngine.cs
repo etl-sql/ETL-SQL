@@ -18,10 +18,13 @@ namespace ETL_SQL.Engine.Engines;
 public class ExternalJoinEngine
 {
     private const int MaxRecursivePartitionDepth = 8;
+    private const int MaxFanOutSampleRows = 4096;
+    private const long MaxFanOutSampleBytes = 16L * 1024 * 1024;
 
     private readonly IExecutionContext _context;
     private readonly ILogger _logger;
-    public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
+    private int _partitionCount;
+    public int PartitionCount => _partitionCount;
 
 
     private readonly IBufferManager? _bufferManager;
@@ -30,6 +33,7 @@ public class ExternalJoinEngine
     {
         _context = context;
         _logger = logger;
+        _partitionCount = Math.Max(1, _context.ExternalHashPartitions);
         _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
     }
 
@@ -40,9 +44,23 @@ public class ExternalJoinEngine
         var tempFiles = new List<string>();
         try
         {
+            await using var rightEnumerator = rightStream.GetAsyncEnumerator(_context.CancellationToken);
+            var rightSample = new List<Row>(MaxFanOutSampleRows);
+            long sampledBytes = 0;
+            while (rightSample.Count < MaxFanOutSampleRows
+                && sampledBytes < MaxFanOutSampleBytes
+                && await rightEnumerator.MoveNextAsync())
+            {
+                var row = rightEnumerator.Current;
+                rightSample.Add(row);
+                sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
+            }
+            ConfigurePartitionCount(rightSample, rightKeys);
+
             // 1. Partition Phase
             var leftPartitions = await PartitionStream(leftStream, leftKeys, "left", tempFiles);
-            var rightPartitions = await PartitionStream(rightStream, rightKeys, "right", tempFiles);
+            var rightPartitions = await PartitionStream(
+                ReplaySample(rightSample, rightEnumerator), rightKeys, "right", tempFiles);
 
             // 2. Join Phase (one partition at a time)
             for (int i = 0; i < PartitionCount; i++)
@@ -76,6 +94,45 @@ public class ExternalJoinEngine
                 }
             }
         }
+    }
+
+    private void ConfigurePartitionCount(IReadOnlyList<Row> sample, IReadOnlyList<string> keys)
+    {
+        if (sample.Count == 0) return;
+        long inputBytes = 0;
+        long keyBytes = 0;
+        var frequencies = new Dictionary<CompoundKey, int>();
+        foreach (var row in sample)
+        {
+            inputBytes = checked(inputBytes + row.EstimateHeapBytes());
+            var key = GetHashKey(row, keys.ToList());
+            keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
+            frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+        var budget = MemoryGovernor.Ceiling(_context);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        var hotFraction = frequencies.Count == 0 ? 0 : frequencies.Values.Max() / (double)sample.Count;
+        var plan = HashPartitionSizing.Calculate(
+            inputBytes,
+            sample.Count,
+            (int)Math.Min(int.MaxValue, Math.Max(0, keyBytes / sample.Count)),
+            budget,
+            estimatedDistinctKeys: frequencies.Count,
+            largestKeyFraction: hotFraction,
+            minimumPartitions: Math.Max(1, _partitionCount),
+            maximumPartitions: Math.Max(1024, _partitionCount));
+        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _logger.Debug(
+            "External join sampled {SampleRows} build rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
+            sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
+    }
+
+    private static async IAsyncEnumerable<Row> ReplaySample(
+        IReadOnlyList<Row> sample,
+        IAsyncEnumerator<Row> remainder)
+    {
+        foreach (var row in sample) yield return row;
+        while (await remainder.MoveNextAsync()) yield return remainder.Current;
     }
 
     private async IAsyncEnumerable<Row> JoinPartition(

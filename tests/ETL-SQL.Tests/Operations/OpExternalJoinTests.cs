@@ -87,6 +87,35 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Contains(results, r => Convert.ToInt32(r["id"]) == 2);
         }
 
+        [Fact]
+        public async Task BuildSampleCanIncreaseFanOutAboveConfiguredBaseline()
+        {
+            var (eval, logger) = BuildContext(partitions: 2);
+            eval.OperatorMemoryGrantMB = 1;
+            var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var right = Enumerable.Range(0, 4096)
+                    .Select(id => new Row { ["id"] = id, ["payload"] = payload + id })
+                    .ToAsyncEnumerable();
+                var left = new[] { new Row { ["id"] = 7 } }.ToAsyncEnumerable();
+                var engine = new ExternalJoinEngine(eval, logger);
+
+                var results = await engine.ApplyHashJoinExternal(
+                    left, right, InnerOnId,
+                    new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
+
+                Assert.Single(results);
+                Assert.True(engine.PartitionCount > 2);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
+            }
+        }
+
         // ── RAM governor ──────────────────────────────────────────────────────
         // JoinSpillThreshold is set huge so the row-count repartition never fires — the memory
         // guard is the only thing that can trip, isolating the governor path. The build (right)
