@@ -146,7 +146,7 @@ public partial class SecurityService
     }
 
     // Data formats a script is expected to read or write. Any other extension is denied by default.
-    private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".pgp", ".asc", ".gpg", ".key", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed", ".etlds" };
+    private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".pgp", ".asc", ".gpg", ".key", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed", ".etlds", ".etlsnap" };
     // Executables and code-signing certificates: a compromised script must not be able to drop or
     // overwrite binaries, installers, or trust-store certs (.pfx/.cer) that could escalate privilege.
     private static readonly string[] BlockedExtensions = { ".dll", ".exe", ".bat", ".cmd", ".sh", ".msi", ".sys", ".com", ".pfx", ".cer" };
