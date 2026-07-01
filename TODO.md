@@ -338,8 +338,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   *(Each core scenario runs in a fresh Release/server-GC test host via `Test-ScaleBaseline.ps1`.)*
 - [ ] **Gate B — spill:** 50M append-only temp round-trip uses bounded large extents, stays below the
   configured ceiling, and materially improves rows/second versus the checked-in baseline.
-- [ ] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
-  does not decode to rows during a columnar scan/count/checksum.
+- [~] **Gate C — storage:** native columnar `#temp` uses materially less memory than `List<Row>` and
+  does not decode to rows during a columnar scan/count/checksum. *(A deterministic 100K mixed-type
+  assessment reports native allocated capacity at 23.74% of estimated row heap and validates a
+  typed-buffer row-count/checksum across immutable segments. Default `#temp` routing plus 10M/50M
+  certification evidence remain.)*
 - [ ] **Gate D — operators:** scan/filter/project and low-cardinality aggregate fast paths pass
   differential correctness and show a substantial throughput improvement at 10M/50M.
 - [ ] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
