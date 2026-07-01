@@ -44,6 +44,7 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             var startSpill = eval.Telemetry.TotalSpilledBytes;
             var startParts = eval.Telemetry.PartitionsCount;
+            var startPasses = eval.Telemetry.PartitionPassCount;
 
             var results = await engine.ApplyHashJoinExternal(
                 leftRows.ToAsyncEnumerable(),
@@ -57,6 +58,7 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             Assert.True(eval.Telemetry.TotalSpilledBytes > startSpill, "Should have reported spilled bytes");
             Assert.True(eval.Telemetry.PartitionsCount > startParts, "Should have reported used partition count");
+            Assert.Equal(startPasses + 2, eval.Telemetry.PartitionPassCount); // left and right partition sweeps
         }
 
         [Fact]

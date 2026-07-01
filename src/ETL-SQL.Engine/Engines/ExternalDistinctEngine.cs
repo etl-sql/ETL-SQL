@@ -221,6 +221,7 @@ internal sealed class ExternalDistinctEngine
             for (var i = 0; i < counts.Length; i++)
                 if (counts[i] > 0) used++;
             _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
         }
 
         return new PartitionSet(names, counts);

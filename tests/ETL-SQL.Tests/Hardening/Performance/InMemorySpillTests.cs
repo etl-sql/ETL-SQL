@@ -50,6 +50,9 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 // Assert
                 // With threshold 20, first 2 batches (20 rows) stay in memory.
                 // Next 3 batches (30 rows) should trigger spilling.
+                // They are coalesced into one sequential extent rather than three tiny files.
+                Assert.Equal(1, ds.SpillChunkCount);
+                Assert.Equal(1, eval.Telemetry.SpillExtentCount);
 
                 // Verify data integrity
                 int rowCount = 0;
@@ -60,6 +63,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                     foreach (var row in batch.Rows) idSum += Convert.ToInt64(row["Id"]);
                 }
                 Assert.Equal(50, rowCount);
+                Assert.True(eval.Telemetry.SpillReadBytes > 0);
 
                 // Verify cleanup
                 await ds.TruncateAsync();

@@ -266,7 +266,8 @@ namespace ETL_SQL.Tests.Scale
         }
 
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
-            long spillBytes, long resultRows, decimal checksum, bool passed)
+            long spillBytes, long resultRows, decimal checksum, bool passed,
+            ITelemetryContext? telemetry = null)
         {
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
@@ -304,9 +305,9 @@ namespace ETL_SQL.Tests.Scale
                 rowsPerSecond,
                 spillBytes,
                 spillWriteBytes = spillBytes,
-                spillReadBytes = (long?)null,
-                spillExtentCount = (int?)null,
-                partitionPassCount = (int?)null,
+                spillReadBytes = telemetry?.SpillReadBytes ?? 0,
+                spillExtentCount = telemetry?.SpillExtentCount ?? 0,
+                partitionPassCount = telemetry?.PartitionPassCount ?? 0,
                 resultRows,
                 checksum,
                 peakProcessWorkingSetMB = peakWorkingSetMB,
@@ -412,7 +413,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalSort");
-            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 2. External Aggregate (GROUP BY) ─────────────────────────────────
@@ -445,7 +446,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalAggregate");
-            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true);
+            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true, ev.Telemetry);
         }
 
         // ── 3. External Join ──────────────────────────────────────────────────
@@ -494,7 +495,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalJoin");
-            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 4. Temp table spill (SELECT INTO) ────────────────────────────────
@@ -520,7 +521,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "TempTableSpill");
-            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows);
+            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows, ev.Telemetry);
         }
 
         // ── 5. Streaming SELECT — result cap check ────────────────────────────
@@ -547,7 +548,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             EmitMetrics($"StreamingSelect_{Rows}_cap{Cap}", Rows, sw.ElapsedMilliseconds, spillBytes,
-                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count <= Cap);
+                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count <= Cap, ev.Telemetry);
         }
 
         // ── 6. Window function at scale ───────────────────────────────────────
@@ -586,7 +587,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "WindowFunction");
-            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 7. CSV ingest ────────────────────────────────────────────────────
@@ -759,7 +760,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(expectedInputSum * 4, sum);
             AssertSpilled(ev, "CubeGroupingSets");
             EmitMetrics($"CubeGroupingSets_{Rows}_{Groups}x{Buckets}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
         }
 
         // ── 11. Scalar subquery cache at scale ───────────────────────────────
@@ -825,7 +826,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(distinctKeys, ev.Telemetry.SubqueryCacheMisses);
             Assert.Equal(Rows - distinctKeys, ev.Telemetry.SubqueryCacheHits);
             EmitMetrics($"ScalarSubqueryCache_{Rows}_{distinctKeys}keys", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
         }
 
         // ── 12. Spill cleanup after success ─────────────────────────────────
@@ -853,7 +854,7 @@ namespace ETL_SQL.Tests.Scale
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after evaluator disposal.");
             EmitMetrics($"SpillCleanupSuccess_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
         }
 
         // ── 13. Spill cleanup after forced failure ──────────────────────────
@@ -877,13 +878,13 @@ namespace ETL_SQL.Tests.Scale
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
             AssertSpilled(ev, "SpillCleanupFailure");
-            Assert.True(filesBeforeDispose > 0, "Expected spill files before evaluator disposal after forced failure.");
+            Assert.Equal(0, filesBeforeDispose); // incomplete extent is deleted eagerly on failure
 
             await ev.DisposeAsync();
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
             EmitMetrics($"SpillCleanupFailure_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
         }
 
         private static string CreateTempDir()

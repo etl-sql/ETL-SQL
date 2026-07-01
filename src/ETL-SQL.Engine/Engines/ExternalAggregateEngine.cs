@@ -313,6 +313,7 @@ public class ExternalAggregateEngine
                 }
             }
             _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
         }
 
         return new PartitionResult(names, rowCounts);
@@ -366,6 +367,7 @@ public class ExternalAggregateEngine
                 }
             }
             _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
         }
         return new PartitionResult(names, rowCounts);
     }
@@ -434,6 +436,7 @@ public class ExternalAggregateEngine
                 }
             }
             _context.Telemetry.PartitionsCount += used;
+            _context.Telemetry.PartitionPassCount++;
             if (totalInput > 0) _context.Telemetry.AggregateExpansionRatio = (double)totalExpanded / totalInput;
             _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.Telemetry.AggregateExpansionRatio);
         }

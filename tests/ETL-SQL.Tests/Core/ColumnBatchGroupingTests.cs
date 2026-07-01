@@ -1,0 +1,95 @@
+using System;
+using System.Threading;
+using ETL_SQL.Core.Data;
+using Xunit;
+
+namespace ETL_SQL.Tests.Core;
+
+public sealed class ColumnBatchGroupingTests
+{
+    [Fact]
+    public void GroupsTypedAndNullKeysWithSqlAggregateState()
+    {
+        using var batch = CreateBatch();
+        using var result = ColumnBatchGroupKernels.GroupAggregate<int, int>(batch, "Key", "Value");
+
+        Assert.Equal(3, result.Groups.Count);
+        var one = result.Groups[new NativeGroupKey<int>(false, 1)];
+        Assert.Equal(2, one.RowCount);
+        Assert.Equal(1, one.NonNullCount);
+        Assert.Equal(10m, one.Sum);
+        Assert.Equal(10, one.Min);
+        Assert.Equal(10, one.Max);
+
+        var nullKey = result.Groups[new NativeGroupKey<int>(true, default)];
+        Assert.Equal(2, nullKey.RowCount);
+        Assert.Equal(1, nullKey.NonNullCount);
+        Assert.Equal(7m, nullKey.Sum);
+    }
+
+    [Fact]
+    public void GroupingConsumesSelectionVectorsDirectly()
+    {
+        using var batch = CreateBatch();
+        using var selected = ColumnBatchKernels.SelectComparison(batch, "Value", ColumnComparison.GreaterThan, 6);
+        using var result = ColumnBatchGroupKernels.GroupAggregate<int, int>(
+            batch, "Key", "Value", selection: selected);
+
+        Assert.Equal(2, result.Groups.Count);
+        Assert.Equal(10m, result.Groups[new NativeGroupKey<int>(false, 1)].Sum);
+        Assert.Equal(7m, result.Groups[new NativeGroupKey<int>(true, default)].Sum);
+    }
+
+    [Fact]
+    public void GroupStateHoldsAndReleasesItsMemoryGrant()
+    {
+        using var batch = CreateBatch();
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        var result = ColumnBatchGroupKernels.GroupAggregate<int, int>(
+            batch, "Key", "Value", memoryArbiter: arbiter);
+
+        Assert.Equal(result.EstimatedBytes, arbiter.ReservedBytes);
+        Assert.True(result.EstimatedBytes > 0);
+        result.Dispose();
+        Assert.Equal(0, arbiter.ReservedBytes);
+    }
+
+    [Fact]
+    public void GroupingFailsBoundedlyWhenCardinalityExceedsGrant()
+    {
+        using var batch = CreateBatch();
+        var arbiter = new MemoryGrantArbiter(1);
+
+        var error = Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+            ColumnBatchGroupKernels.GroupAggregate<int, int>(batch, "Key", "Value", memoryArbiter: arbiter));
+
+        Assert.Contains("spill-capable grouped execution", error.Message);
+        Assert.Equal(0, arbiter.ReservedBytes);
+    }
+
+    [Fact]
+    public void CancellationReleasesPartialGroupState()
+    {
+        using var batch = CreateBatch();
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() =>
+            ColumnBatchGroupKernels.GroupAggregate<int, int>(
+                batch, "Key", "Value", arbiter, cancellationToken: cancellation.Token));
+        Assert.Equal(0, arbiter.ReservedBytes);
+    }
+
+    private static ColumnBatch CreateBatch()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(int), "INT"),
+            new ColumnBatchField("Value", typeof(int), "INT")
+        });
+        var keys = new ColumnBuffer<int>(new[] { 1, 1, 2, 0, 0 }, 5, new byte[] { 0b0001_1000 });
+        var values = new ColumnBuffer<int>(new[] { 10, 0, 5, 7, 0 }, 5, new byte[] { 0b0001_0010 });
+        return new ColumnBatch(schema, new IColumnBuffer[] { keys, values }, 5);
+    }
+}

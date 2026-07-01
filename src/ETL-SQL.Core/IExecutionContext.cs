@@ -139,8 +139,11 @@ public interface ITelemetryContext
     long RowsProcessed { get; set; }
     long LastStatementRowsProcessed { get; set; }
     long TotalSpilledBytes { get; set; }
+    long SpillReadBytes { get; set; }
+    int SpillExtentCount { get; set; }
     bool TelemetryEnabled { get; set; }
     int PartitionsCount { get; set; }
+    int PartitionPassCount { get; set; }
     long AggregateGroupsCount { get; set; }
     double AggregateExpansionRatio { get; set; }
     long LastExecutionTimeMs { get; set; }

@@ -150,10 +150,19 @@ public partial class SpillStore : ISpillStore
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
 
+        ISpillWriter writer;
         if (_context.SpillFormat == "Json")
-            return await Task.FromResult(new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress));
+            writer = new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
+        else
+            writer = new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress);
 
-        return await Task.FromResult(new ArrowSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress));
+        var telemetry = _context.Telemetry;
+        if (telemetry != null)
+        {
+            lock (telemetry)
+                telemetry.SpillExtentCount++;
+        }
+        return await Task.FromResult(writer);
     }
 
     public async Task<ISpillReader> CreateReaderAsync(string chunkName)
@@ -163,16 +172,30 @@ public partial class SpillStore : ISpillStore
         var encrypt = _context.SpillEncryptionEnabled;
         var compress = _context.SpillCompressionEnabled;
 
+        ISpillReader reader;
         if (_context.SpillFormat == "Json")
         {
-            var reader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
-            await reader.InitializeAsync();
-            return reader;
+            var jsonReader = new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            await jsonReader.InitializeAsync();
+            reader = jsonReader;
+        }
+        else
+        {
+            var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
+            await arrowReader.InitializeAsync();
+            reader = arrowReader;
         }
 
-        var arrowReader = new ArrowSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress);
-        await arrowReader.InitializeAsync();
-        return arrowReader;
+        if (File.Exists(path))
+        {
+            var telemetry = _context.Telemetry;
+            if (telemetry != null)
+            {
+                lock (telemetry)
+                    telemetry.SpillReadBytes += new FileInfo(path).Length;
+            }
+        }
+        return reader;
     }
 
     public void DeleteChunk(string chunkName)

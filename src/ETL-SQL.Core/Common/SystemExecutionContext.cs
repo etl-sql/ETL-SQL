@@ -79,9 +79,12 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long RowsProcessed { get; set; }
     public long LastStatementRowsProcessed { get; set; }
     public long TotalSpilledBytes { get; set; }
+    public long SpillReadBytes { get; set; }
+    public int SpillExtentCount { get; set; }
     public string? LastIndexUsedName { get; set; }
     public bool TelemetryEnabled { get; set; } = true;
     public int PartitionsCount { get; set; }
+    public int PartitionPassCount { get; set; }
     public long AggregateGroupsCount { get; set; }
     public double AggregateExpansionRatio { get; set; }
     public long LastExecutionTimeMs { get; set; }

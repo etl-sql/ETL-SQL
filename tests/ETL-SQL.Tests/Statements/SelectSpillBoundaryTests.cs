@@ -27,6 +27,7 @@ public class SelectSpillBoundaryTests
         // the join engine; the exact number depends on the hash distribution of the few distinct
         // values, so assert the path was used rather than an exact partition count.)
         Assert.True(evaluator.Telemetry.PartitionsCount >= 1);
+        Assert.True(evaluator.Telemetry.PartitionPassCount >= 1);
     }
 
     [Fact]
@@ -50,6 +51,7 @@ public class SelectSpillBoundaryTests
         Assert.Equal(values.Select(v => (decimal)v), result.Rows.Select(r => System.Convert.ToDecimal(r["v"])));
         // Recursion produced more partitions than the 2 top-level ones.
         Assert.True(evaluator.Telemetry.PartitionsCount > 2);
+        Assert.True(evaluator.Telemetry.PartitionPassCount > 1);
     }
 
     [Fact]

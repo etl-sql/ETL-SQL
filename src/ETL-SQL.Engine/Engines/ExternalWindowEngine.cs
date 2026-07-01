@@ -1166,6 +1166,7 @@ public class ExternalWindowEngine
                 }
             }
             _context.Telemetry.PartitionsCount += usedCount;
+            _context.Telemetry.PartitionPassCount++;
         }
 
         return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();

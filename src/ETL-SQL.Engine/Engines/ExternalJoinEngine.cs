@@ -307,6 +307,7 @@ public class ExternalJoinEngine
             }
 
             _context.Telemetry.PartitionsCount += usedPartitions;
+            _context.Telemetry.PartitionPassCount++;
             _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.Telemetry.PartitionsCount);
         }
 

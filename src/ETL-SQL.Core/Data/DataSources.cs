@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -45,6 +46,12 @@ public struct CompositeKey : IEquatable<CompositeKey>
 
     public override bool Equals(object? obj) => obj is CompositeKey other && Equals(other);
     public override int GetHashCode() => _hashCode;
+    public long EstimateHeapBytes()
+    {
+        long bytes = 32L + (long)_values.Length * IntPtr.Size;
+        foreach (var value in _values) bytes += Row.EstimateValueBytes(value);
+        return bytes;
+    }
 }
 
 /// <summary>
@@ -116,6 +123,34 @@ public interface IDataSource : IAsyncDisposable
     Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
 }
 
+/// <summary>
+/// Optional fast-path contract for sources that can expose native typed column buffers. Existing
+/// <see cref="IDataSource.ReadBatches"/> remains the compatibility path for row-based consumers.
+/// </summary>
+public interface IColumnarDataSource
+{
+    /// <summary>
+    /// Returns retained native batches. The consumer owns each returned reference and must dispose it.
+    /// <paramref name="batchSize"/> is a preferred size; immutable stored segments may be larger.
+    /// </summary>
+    IAsyncEnumerable<ColumnBatch> ReadColumnBatches(
+        int batchSize = 10000,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>Optional native append contract paired with <see cref="IColumnarDataSource"/>.</summary>
+public interface IColumnarDataSink
+{
+    /// <summary>
+    /// Appends native batches without a row conversion. Ownership of each successfully accepted
+    /// batch transfers to the sink.
+    /// </summary>
+    Task WriteColumnBatches(
+        IAsyncEnumerable<ColumnBatch> batches,
+        bool append = false,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IDatabaseSource : IDataSource
 {
     Task<string> GetVersionAsync();
@@ -152,10 +187,17 @@ public class InMemoryDataSource : IDataSource, ISpillable
     public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
     public bool ReplaceOnConflict { get; set; } = false;
 
-    private readonly List<string> _spillChunkNames = new();
+    private readonly ConcurrentQueue<string> _spillChunkNames = new();
     public int SpillChunkCount => _spillChunkNames.Count;
+    /// <summary>
+    /// Approximate uncompressed payload target for a sequential spill extent. Logical input
+    /// batches are appended to the same extent until this target is reached.
+    /// </summary>
+    public long SpillExtentTargetBytes { get; set; } = 128L * 1024 * 1024;
     public long SpillTotalBytes { get; private set; } = 0;
     private long _totalRowCount = 0;
+    private long _residentEstimatedBytes;
+    private IMemoryGrantLease? _memoryLease;
     public long EstimatedRowCount => _totalRowCount;
     private IExecutionContext? _executionContext;
     public IExecutionContext? ExecutionContext
@@ -163,6 +205,17 @@ public class InMemoryDataSource : IDataSource, ISpillable
         get => _executionContext;
         set
         {
+            IMemoryGrantLease? candidateLease = value == null
+                ? null
+                : (value.MemoryArbiter ?? MemoryGrantArbiter.Shared).AcquireLease();
+            if (_residentEstimatedBytes > 0 &&
+                candidateLease?.RegisterAndCheckSpill(_residentEstimatedBytes) == true)
+            {
+                candidateLease.Dispose();
+                throw new ExecutionException(
+                    $"In-memory table requires {_residentEstimatedBytes:N0} bytes, exceeding the process memory grant.");
+            }
+
             if (_executionContext != null)
             {
                 try
@@ -171,7 +224,9 @@ public class InMemoryDataSource : IDataSource, ISpillable
                 }
                 catch (ObjectDisposedException) { /* ignore during shutdown */ }
             }
+            _memoryLease?.Dispose();
             _executionContext = value;
+            _memoryLease = candidateLease;
             if (_executionContext != null)
             {
                 try
@@ -188,13 +243,10 @@ public class InMemoryDataSource : IDataSource, ISpillable
     {
         get
         {
-            // Simple estimation: 256 bytes per row (overhead + pointers)
-            // Plus index overhead
-            long batchBytes = _batches.Sum(b => (long)b.Rows.Count * 256);
             long indexBytes = _index.Count * 128L; // Simplified
             // Spilled chunks are ON DISK, so they don't count towards CURRENT RAM USAGE.
             // This is critical for BufferManager to know how much RAM is actually reclaimable.
-            return batchBytes + indexBytes;
+            return Interlocked.Read(ref _residentEstimatedBytes) + indexBytes;
         }
     }
 
@@ -208,20 +260,14 @@ public class InMemoryDataSource : IDataSource, ISpillable
             if (_batches.Count == 0 && _index.Count == 0) return false;
             if (ExecutionContext == null) return false;
 
-            // Move all batches to spill store
-            foreach (var batch in _batches)
-            {
-                var chunkName = $"{Guid.NewGuid():N}.spill";
-                await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
-                {
-                    await writer.WriteRowsAsync(batch.Rows);
-                    SpillTotalBytes += writer.BytesWritten;
-                }
-                _spillChunkNames.Add(chunkName);
-            }
+            // Move resident batches into bounded sequential extents. Pressure-driven spilling used
+            // to create one file per logical batch, amplifying filesystem and Arrow setup costs.
+            if (_batches.Count > 0)
+                SpillTotalBytes += await SpillResidentBatchesToExtentsAsync("spill");
 
             _batches.Clear();
-            _index.Clear();
+            _index.ClearData(preserveUniqueKeys: true);
+            ResetMemoryReservation(_index.EstimatedUniqueKeyBytes);
 
             return true;
         }
@@ -494,6 +540,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
             // Note: The rows themselves already handle missing keys as null, 
             // but we could explicitly add them here if we wanted to evaluate defaults for existing data.
         }
+        RecalculateResidentMemoryReservation();
     }
 
     public void DropColumn(string columnName)
@@ -509,6 +556,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
             // In a high-perf scenario, we don't necessarily need to clear the underlying array storage immediately.
             // It just becomes inaccessible via the schema.
         }
+        RecalculateResidentMemoryReservation();
     }
 
     public void RenameColumn(string oldName, string newName)
@@ -548,7 +596,8 @@ public class InMemoryDataSource : IDataSource, ISpillable
             _batches.Clear();
             _totalRowCount = 0;
             // Clear existing index data while preserving the index definitions
-            _index.Clear();
+            _index.ClearData();
+            ResetMemoryReservation();
 
             if (ExecutionContext != null)
             {
@@ -576,6 +625,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
         var indexKey = _index.GetIndexKey(cols);
         _index.AddIndexDefinition(indexKey, cols, isUnique);
         _index.RebuildIndex(cols, _batches);
+        RecalculateResidentMemoryReservation();
     }
 
     public List<Row>? Lookup(string columnName, object? value)
@@ -635,21 +685,31 @@ public class InMemoryDataSource : IDataSource, ISpillable
     public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
     {
         if (!append) await TruncateAsync();
-        await foreach (var b in batches)
-        {
-            if (_columnOrder.Count == 0)
-            {
-                _columnOrder.AddRange(b.ColumnNames);
-                foreach (var col in _columnOrder)
-                {
-                    if (!Schema.ContainsKey(col))
-                        Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
-                }
-            }
+        ISpillWriter? extentWriter = null;
+        string? extentName = null;
+        long extentEstimatedBytes = 0;
+        Task? pendingSpillWrite = null;
+        var currentExtentIndexedBatches = new List<DataTable>();
+        var cancellationToken = ExecutionContext?.CancellationToken ?? CancellationToken.None;
 
-            await _lock.WaitAsync();
-            try
+        try
+        {
+            await foreach (var b in batches)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_columnOrder.Count == 0)
+                {
+                    _columnOrder.AddRange(b.ColumnNames);
+                    foreach (var col in _columnOrder)
+                    {
+                        if (!Schema.ContainsKey(col))
+                            Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
+                    }
+                }
+
+                await _lock.WaitAsync();
+                try
+                {
                 if (ReplaceOnConflict)
                 {
                     var uniqueKeys = new List<List<string>>();
@@ -751,42 +811,233 @@ public class InMemoryDataSource : IDataSource, ISpillable
                 if (processedBatch.Rows.Count == 0) continue;
 
                 long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
+                long processedBatchBytes = EstimateResidentMemoryBytes(processedBatch) +
+                    EstimateIndexGrowthBytes(processedBatch.Rows.Count);
+                bool bytePressure = _memoryLease?.RegisterAndCheckSpill(
+                    _residentEstimatedBytes + processedBatchBytes) == true;
+                bool rowThresholdExceeded = _totalRowCount + processedBatch.Rows.Count > threshold;
 
-                if (_totalRowCount + processedBatch.Rows.Count > threshold)
-                {
-                    if (ExecutionContext != null)
+                    if (bytePressure || rowThresholdExceeded)
                     {
-                        var chunkName = $"{Guid.NewGuid():N}.tmp";
-                        await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                        if (ExecutionContext != null)
                         {
-                            await writer.WriteRowsAsync(processedBatch.Rows);
+                            // Keep at most one batch in the writer while the producer validates the
+                            // next batch. Awaiting here bounds the pipeline to two logical batches:
+                            // one being encoded/written and one being produced.
+                            if (pendingSpillWrite != null)
+                                await pendingSpillWrite;
+
+                            UpdateIndexesWithBatch(processedBatch);
+                            currentExtentIndexedBatches.Add(processedBatch);
+                            var estimatedBytes = EstimateSpillPayloadBytes(processedBatch);
+                            pendingSpillWrite = WriteSpillBatchAsync(processedBatch, estimatedBytes);
+                            _totalRowCount += processedBatch.Rows.Count;
+
+                            // A row-threshold spill may occur after the arbiter accepted the
+                            // prospective resident size. Rebase to the bytes that actually remain
+                            // resident so the process-wide reservation does not retain phantom RAM.
+                            RecalculateResidentMemoryReservation();
+
+                            if (ExecutionContext.Telemetry.IsProfiling)
+                                ExecutionContext.LoggingContext.Logger.Debug(
+                                    "Temp table spill triggered by {Reason} (row threshold {Threshold}). Appended batch to extent: {ExtentName}",
+                                    bytePressure ? "memory grant" : "row threshold", threshold, extentName);
+
+                            continue;
                         }
-                        _spillChunkNames.Add(chunkName);
-                        _totalRowCount += processedBatch.Rows.Count;
-
-                        if (ExecutionContext.Telemetry.IsProfiling)
-                            ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
-
-                        continue;
                     }
+
+                    _batches.Add(processedBatch);
+                    _residentEstimatedBytes += processedBatchBytes;
+                    _totalRowCount += processedBatch.Rows.Count;
+
+                    UpdateIndexesWithBatch(processedBatch);
                 }
-
-                _batches.Add(processedBatch);
-                _totalRowCount += processedBatch.Rows.Count;
-
-                if (_index.Count > 0)
+                finally
                 {
-                    foreach (var col in _index.Keys.ToList())
-                    {
-                        if (_index.TryGetColumns(col, out var cols))
-                            _index.UpdateIndexWithBatch(cols!, processedBatch);
-                    }
+                    _lock.Release();
                 }
             }
-            finally
+
+            if (pendingSpillWrite != null)
+                await pendingSpillWrite;
+
+            if (extentWriter != null)
             {
-                _lock.Release();
+                await CompleteExtentAsync();
             }
+        }
+        catch
+        {
+            if (extentWriter != null)
+            {
+                await extentWriter.DisposeAsync();
+                if (ExecutionContext != null && extentName != null)
+                    ExecutionContext.SpillStore.DeleteChunk(extentName);
+            }
+            if (currentExtentIndexedBatches.Count > 0)
+            {
+                await _lock.WaitAsync();
+                try
+                {
+                    foreach (var batch in currentExtentIndexedBatches)
+                        _index.RemoveUniqueKeysForBatch(batch);
+                    RecalculateResidentMemoryReservation();
+                }
+                finally { _lock.Release(); }
+            }
+            throw;
+        }
+
+        async Task CompleteExtentAsync()
+        {
+            var writer = extentWriter!;
+            var name = extentName!;
+            await writer.DisposeAsync();
+            SpillTotalBytes += writer.BytesWritten;
+            _spillChunkNames.Enqueue(name);
+            extentWriter = null;
+            extentName = null;
+            extentEstimatedBytes = 0;
+            currentExtentIndexedBatches.Clear();
+        }
+
+        async Task WriteSpillBatchAsync(DataTable batch, long estimatedBytes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (extentWriter == null)
+            {
+                extentName = $"{Guid.NewGuid():N}.tmp";
+                extentWriter = await ExecutionContext!.SpillStore.CreateWriterAsync(extentName);
+                extentEstimatedBytes = 0;
+            }
+
+            await extentWriter.WriteRowsAsync(batch.Rows);
+            extentEstimatedBytes += estimatedBytes;
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (extentEstimatedBytes >= Math.Max(1, SpillExtentTargetBytes))
+                await CompleteExtentAsync();
+        }
+    }
+
+    private static long EstimateSpillPayloadBytes(DataTable batch)
+    {
+        // Arrow currently normalizes most fixed-width values to eight bytes and maintains null
+        // metadata. Use a conservative per-cell allowance; include variable-width payload so a
+        // string-heavy extent does not grow without bound. Exact physical bytes depend on optional
+        // encryption/compression and are reported separately by the spill writer.
+        long bytes = 0;
+        foreach (var row in batch.Rows)
+            bytes += row.EstimateHeapBytes();
+        return bytes;
+    }
+
+    private long EstimateResidentMemoryBytes(DataTable batch)
+    {
+        // Row object + slot array + boxed/reference slots. Variable-width payload is added below.
+        // The estimate is intentionally conservative because it is a governor input, not a storage
+        // size report. Indexed tables include additional key/reference overhead per resident row.
+        long bytes = 0;
+        foreach (var row in batch.Rows)
+            bytes += row.EstimateHeapBytes();
+        return bytes;
+    }
+
+    private long EstimateIndexGrowthBytes(int rowCount)
+        => (long)rowCount * (_index.UniqueIndexCount * 64L + _index.NonUniqueIndexCount * 16L);
+
+    private void UpdateIndexesWithBatch(DataTable batch)
+    {
+        foreach (var indexKey in _index.Keys.ToList())
+            if (_index.TryGetColumns(indexKey, out var columns))
+                _index.UpdateIndexWithBatch(columns!, batch);
+    }
+
+    private void ResetMemoryReservation(long retainedBytes = 0)
+    {
+        _memoryLease?.Dispose();
+        _memoryLease = _executionContext == null
+            ? null
+            : (_executionContext.MemoryArbiter ?? MemoryGrantArbiter.Shared).AcquireLease();
+        Interlocked.Exchange(ref _residentEstimatedBytes, retainedBytes);
+        if (retainedBytes > 0 && _memoryLease?.RegisterAndCheckSpill(retainedBytes) == true)
+            throw new ExecutionException(
+                $"Unique-key storage requires {retainedBytes:N0} bytes, exceeding the process memory grant.");
+    }
+
+    private void RebaseMemoryReservation()
+    {
+        _memoryLease?.Dispose();
+        _memoryLease = _executionContext == null
+            ? null
+            : (_executionContext.MemoryArbiter ?? MemoryGrantArbiter.Shared).AcquireLease();
+        if (_residentEstimatedBytes > 0)
+        {
+            if (_memoryLease?.RegisterAndCheckSpill(_residentEstimatedBytes) == true)
+                throw new ExecutionException(
+                    $"In-memory table requires {_residentEstimatedBytes:N0} bytes, exceeding the process memory grant.");
+        }
+    }
+
+    private void RecalculateResidentMemoryReservation()
+    {
+        var residentRows = _batches.Sum(batch => (long)batch.Rows.Count);
+        var bytes = _batches.Sum(EstimateResidentMemoryBytes) +
+            _index.EstimatedUniqueKeyBytes +
+            residentRows * _index.NonUniqueIndexCount * 16L;
+        Interlocked.Exchange(ref _residentEstimatedBytes, bytes);
+        RebaseMemoryReservation();
+    }
+
+    private async Task<long> SpillResidentBatchesToExtentsAsync(string extension)
+    {
+        if (ExecutionContext == null) throw new InvalidOperationException("A spill context is required.");
+        var completedNames = new List<string>();
+        ISpillWriter? writer = null;
+        string? currentName = null;
+        long extentBytes = 0;
+        long totalBytes = 0;
+
+        try
+        {
+            foreach (var batch in _batches)
+            {
+                if (writer == null)
+                {
+                    currentName = $"{Guid.NewGuid():N}.{extension}";
+                    writer = await ExecutionContext.SpillStore.CreateWriterAsync(currentName);
+                    extentBytes = 0;
+                }
+
+                await writer.WriteRowsAsync(batch.Rows);
+                extentBytes += EstimateSpillPayloadBytes(batch);
+                if (extentBytes >= Math.Max(1, SpillExtentTargetBytes))
+                    await CompleteCurrentAsync();
+            }
+
+            if (writer != null) await CompleteCurrentAsync();
+            foreach (var name in completedNames) _spillChunkNames.Enqueue(name);
+            return totalBytes;
+        }
+        catch
+        {
+            if (writer != null) await writer.DisposeAsync();
+            if (currentName != null) ExecutionContext.SpillStore.DeleteChunk(currentName);
+            foreach (var name in completedNames) ExecutionContext.SpillStore.DeleteChunk(name);
+            throw;
+        }
+
+        async Task CompleteCurrentAsync()
+        {
+            var completedWriter = writer!;
+            var completedName = currentName!;
+            await completedWriter.DisposeAsync();
+            totalBytes += completedWriter.BytesWritten;
+            completedNames.Add(completedName);
+            writer = null;
+            currentName = null;
+            extentBytes = 0;
         }
     }
 
@@ -798,10 +1049,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
         await _lock.WaitAsync();
         try
         {
-            if (_index.TryGetIndex(indexName, out var index))
-            {
-                return index!.ContainsKey(key);
-            }
+            if (_index.HasIndex(indexName)) return _index.ContainsKey(indexName, key);
 
             // If no index, fallback to linear scan
             foreach (var b in _batches)
@@ -844,6 +1092,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
                     {
                         batch.Rows.RemoveAt(i);
                         deleted.Add(row);
+                        _totalRowCount--;
                     }
                 }
             }
@@ -858,6 +1107,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
                     }
                 }
             }
+            if (deleted.Count > 0) RecalculateResidentMemoryReservation();
             return deleted;
         }
         finally
@@ -901,6 +1151,7 @@ public class InMemoryDataSource : IDataSource, ISpillable
                     }
                 }
             }
+            if (updated.Count > 0) RecalculateResidentMemoryReservation();
             return updated;
         }
         finally
@@ -920,8 +1171,13 @@ public class InMemoryDataSource : IDataSource, ISpillable
     {
         if (snapshot is List<DataTable> s)
         {
+            var spilledRows = Math.Max(0, _totalRowCount - _batches.Sum(batch => (long)batch.Rows.Count));
             _batches.Clear();
             _batches.AddRange(s);
+            _totalRowCount = spilledRows + _batches.Sum(batch => (long)batch.Rows.Count);
+            ResetMemoryReservation();
+            _residentEstimatedBytes = _batches.Sum(EstimateResidentMemoryBytes);
+            RebaseMemoryReservation();
             if (_index.Count > 0)
             {
                 foreach (var col in _index.Keys.ToList())
@@ -939,6 +1195,9 @@ public class InMemoryDataSource : IDataSource, ISpillable
     {
         _batches.Clear();
         _index.Clear();
+        ResetMemoryReservation();
+        _memoryLease?.Dispose();
+        _memoryLease = null;
 
         if (ExecutionContext != null && !ExecutionContext.IsPersistentSession)
         {
@@ -954,11 +1213,12 @@ public class InMemoryDataSource : IDataSource, ISpillable
     {
         SetSchema(schema);
         _spillChunkNames.Clear();
-        _spillChunkNames.AddRange(chunks);
+        foreach (var chunk in chunks)
+            _spillChunkNames.Enqueue(chunk);
         _totalRowCount = 0; // Will be recalculatable from chunks if needed, but for now we assume recovered
     }
 
-    public IEnumerable<string> GetSpillChunks() => _spillChunkNames;
+    public IEnumerable<string> GetSpillChunks() => _spillChunkNames.ToArray();
 
     public async Task FlushToSpillAsync()
     {
@@ -967,17 +1227,10 @@ public class InMemoryDataSource : IDataSource, ISpillable
         {
             if (_batches.Count == 0 || ExecutionContext?.SpillStore == null) return;
 
-            foreach (var batch in _batches)
-            {
-                var chunkName = $"{Guid.NewGuid():N}.tmp";
-                await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
-                {
-                    await writer.WriteRowsAsync(batch.Rows);
-                }
-                _spillChunkNames.Add(chunkName);
-            }
+            SpillTotalBytes += await SpillResidentBatchesToExtentsAsync("tmp");
             _batches.Clear();
-            _index.Clear();
+            _index.ClearData(preserveUniqueKeys: true);
+            ResetMemoryReservation(_index.EstimatedUniqueKeyBytes);
         }
         finally { _lock.Release(); }
     }
