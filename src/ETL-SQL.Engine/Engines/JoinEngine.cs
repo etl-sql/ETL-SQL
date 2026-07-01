@@ -138,7 +138,11 @@ public class JoinEngine
                     _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 
                     var externalEngine = new ExternalJoinEngine(_context, _logger);
-                    allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin, hashKeysLeft, hashKeysRight).ToListAsync();
+                    allBufferedRows = await externalEngine.ApplyHashJoinExternal(
+                        allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin,
+                        hashKeysLeft, hashKeysRight,
+                        knownBuildRowCount: joinRows.Count,
+                        knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(joinRows)).ToListAsync();
                 }
                 else
                 {
@@ -477,7 +481,9 @@ public class JoinEngine
             _logger.WriteLine($"[yellow]HYPER-SCALE: Right side ({joinRows.Count} rows) exceeds threshold. Using ExternalJoinEngine.[/]");
             var externalJoin = new ExternalJoinEngine(_context, _logger);
             await foreach (var r in externalJoin.ApplyHashJoinExternal(
-                leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight))
+                leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight,
+                knownBuildRowCount: joinRows.Count,
+                knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(joinRows)))
                 yield return r;
             yield break;
         }

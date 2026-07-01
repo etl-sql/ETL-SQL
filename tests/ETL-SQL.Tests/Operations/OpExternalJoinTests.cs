@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -114,6 +115,29 @@ namespace ETL_SQL.Tests.Operations.Operations
             {
                 MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
             }
+        }
+
+        [Fact]
+        public async Task ExactBuildEstimateCanReduceOversizedConfiguredBaseline()
+        {
+            var (eval, logger) = BuildContext(partitions: 64);
+            eval.OperatorMemoryGrantMB = 1;
+            var leftRows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["id"] = id })
+                .ToList();
+            var rightRows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["id"] = id, ["value"] = "r" + id })
+                .ToList();
+            var engine = new ExternalJoinEngine(eval, logger);
+
+            var results = await engine.ApplyHashJoinExternal(
+                leftRows.ToAsyncEnumerable(), rightRows.ToAsyncEnumerable(), InnerOnId,
+                new List<string> { "id" }, new List<string> { "id" },
+                knownBuildRowCount: rightRows.Count,
+                knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(rightRows)).ToListAsync();
+
+            Assert.Equal(16, results.Count);
+            Assert.True(engine.PartitionCount < 64);
         }
 
         // ── RAM governor ──────────────────────────────────────────────────────

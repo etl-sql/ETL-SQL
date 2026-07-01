@@ -38,7 +38,7 @@ public class ExternalJoinEngine
     }
 
     /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
-    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys)
+    public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys, long? knownBuildRowCount = null, long? knownBuildBytes = null)
     {
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var tempFiles = new List<string>();
@@ -55,7 +55,7 @@ public class ExternalJoinEngine
                 rightSample.Add(row);
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
-            ConfigurePartitionCount(rightSample, rightKeys);
+            ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
 
             // 1. Partition Phase
             var leftPartitions = await PartitionStream(leftStream, leftKeys, "left", tempFiles);
@@ -96,7 +96,11 @@ public class ExternalJoinEngine
         }
     }
 
-    private void ConfigurePartitionCount(IReadOnlyList<Row> sample, IReadOnlyList<string> keys)
+    private void ConfigurePartitionCount(
+        IReadOnlyList<Row> sample,
+        IReadOnlyList<string> keys,
+        long? knownBuildRowCount,
+        long? knownBuildBytes)
     {
         if (sample.Count == 0) return;
         long inputBytes = 0;
@@ -112,16 +116,22 @@ public class ExternalJoinEngine
         var budget = MemoryGovernor.Ceiling(_context);
         if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Count == 0 ? 0 : frequencies.Values.Max() / (double)sample.Count;
+        var hasExactTotal = knownBuildRowCount >= 0 && knownBuildBytes >= 0;
+        var plannedRows = hasExactTotal ? knownBuildRowCount!.Value : sample.Count;
+        var plannedBytes = hasExactTotal ? knownBuildBytes!.Value : inputBytes;
+        var estimatedDistinct = hasExactTotal
+            ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)sample.Count)))
+            : frequencies.Count;
         var plan = HashPartitionSizing.Calculate(
-            inputBytes,
-            sample.Count,
+            plannedBytes,
+            plannedRows,
             (int)Math.Min(int.MaxValue, Math.Max(0, keyBytes / sample.Count)),
             budget,
-            estimatedDistinctKeys: frequencies.Count,
+            estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
             largestKeyFraction: hotFraction,
-            minimumPartitions: Math.Max(1, _partitionCount),
+            minimumPartitions: hasExactTotal ? 1 : Math.Max(1, _partitionCount),
             maximumPartitions: Math.Max(1024, _partitionCount));
-        _partitionCount = Math.Max(_partitionCount, plan.PartitionCount);
+        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
         _logger.Debug(
             "External join sampled {SampleRows} build rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
             sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
