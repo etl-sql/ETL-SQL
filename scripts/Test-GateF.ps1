@@ -82,9 +82,10 @@ try {
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
     if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
-        throw ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
-            "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate." -f `
-            $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB)
+        $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
+            "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
+            $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
+        throw $message
     }
 
     $commit = (git -C $repoRoot rev-parse HEAD).Trim()
