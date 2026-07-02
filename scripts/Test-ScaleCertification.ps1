@@ -159,7 +159,8 @@ Remove-Item $progressFile -ErrorAction SilentlyContinue
 $env:CERT_PROGRESS_FILE = $progressFile
 
 $errLog = "$rawLog.err"
-$dotnetArgs = @('test', "$RepoRoot/ETL-SQL.slnx", '--filter', $filterExpr,
+$testProject = Join-Path $RepoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+$dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
     '--logger', 'console;verbosity=detailed', '--no-build', '-c', 'Release')
 
 Write-Host "Live status (full output -> $rawLog):" -ForegroundColor Gray
