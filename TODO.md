@@ -184,7 +184,8 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 #### Prebuilt administrator template scripts
 - [x] (a) Daily job-failure digest email — shipped at `samples/admin_operations/daily_failure_digest.etlsql`, verified in-process + parse-checked.
-- [ ] (b) backup + status; (c) capacity/utilization report; (d) operational-metrics email subscription — planned in [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md) (b/c depend on the HostMetrics/roll-up work; each template ships with an in-process mechanic test + full-file parse check — note `SEND EMAIL` uses `AT connectionName`, and statuses are `SUCCESS`/`FAILURE`/`BLOCKED`/`QUARANTINED`/`RUNNING`/`INTERRUPTED`).
+- [x] (c) Capacity/utilization report — shipped at `samples/admin_operations/capacity_report.etlsql`: aggregates `SHOW HOST METRICS INTO` (min free disk / peak memory·CPU per node) and `SHOW JOB HISTORY INTO` (runs / non-success) into an emailed summary. Verified in-process (exact body expression) + parse-checked.
+- [ ] (b) backup + status; (d) operational-metrics email subscription — planned in [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md). Each template ships with an in-process mechanic test + full-file parse check (`SEND EMAIL` uses `AT connectionName`; statuses are `SUCCESS`/`FAILURE`/`BLOCKED`/`QUARANTINED`/`RUNNING`/`INTERRUPTED`).
 
 ### v0.14.0 release gates
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
