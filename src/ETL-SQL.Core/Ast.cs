@@ -2218,6 +2218,13 @@ public sealed record ShowJobHistoryStatement : Statement
     public ShowJobHistoryStatement(string? jobName = null) { JobName = jobName; }
 }
 
+public sealed record ShowHostMetricsStatement : Statement
+{
+    public string? NodeId { get; }
+    public string? IntoTable { get; set; }
+    public ShowHostMetricsStatement(string? nodeId = null) { NodeId = nodeId; }
+}
+
 public sealed record ShowJobsStatement : Statement
 {
     public string? IntoTable { get; set; }
