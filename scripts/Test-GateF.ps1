@@ -23,7 +23,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$outRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutDir))
+$outRoot = if ([System.IO.Path]::IsPathRooted($OutDir)) {
+    [System.IO.Path]::GetFullPath($OutDir)
+} else {
+    [System.IO.Path]::GetFullPath((Join-Path $repoRoot $OutDir))
+}
 New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
 $statusPath = Join-Path $outRoot 'status.json'
 $runLog = Join-Path $outRoot 'gate-f.log'
