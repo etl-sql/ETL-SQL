@@ -144,7 +144,16 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [x] Admin bypass (default on, `Portal:Security:AdminBypassRowLevelSecurity`) keyed on the effective identity; fails closed (null identity → `HAS_GROUP` false, `@@CURRENT_USER` null).
 - [x] Admin real-impersonation endpoint `POST /api/reports/{id}/execute-as/{targetUserId}`: effective = target (incl. target's bypass status), real = admin via `@@REAL_USER`, unconditionally never-cached, audited as `EXECUTE_REPORT_AS`. *(commit `66dc5715`)*
 - [x] Administrators_Guide §4 Row-Level Security section (authoring, security properties, admin bypass/impersonation).
-- [ ] **Remaining Phase 1:** disable scheduled/background refresh for identity-sensitive reports (never-cache already prevents the leak; this stops pointless work); end-to-end Portal integration test proving cross-viewer isolation and never-cache over the full HTTP path (belongs in the WebApplicationFactory harness).
+- [x] Scheduled/background refresh (trusted, non-interactive) of an identity-sensitive report is skipped — no shared snapshot to update, so no execution slot is burned.
+- [x] End-to-end Portal integration test (`RowLevelSecurityPortalTests`): identity-sensitive report persists no shared snapshot (plain report does); admin `execute-as` runs, audits the real actor + target, and shares no snapshot. Engine filtering covered by `RowLevelSecurityIdentityTests`.
+
+**Phase 1 complete.** Phase 2 (below) is the remaining RLS work.
+
+##### RLS Phase 2 (enterprise completion)
+- [ ] Table-valued `USER_GROUPS()` / `USER_ROLES()` for `WHERE col IN (SELECT ... )` joins.
+- [ ] Publisher **preview-as** (simulated group/role set, edit-scope only) — gated by the security-review decision recorded in `Docs/Release_Checklist.md`.
+- [ ] Per-recipient subscription execution for identity-sensitive reports (currently they simply produce no shared snapshot).
+- [ ] CLI / Orchestrator run-as identity semantics for non-interactive execution.
 - [ ] **Impersonation / run-as** — host-enforced, never script-self-granted: `Admin` may run a report as a real named user (view-narrowing only, since admins already bypass RLS) for support/repro; `Publisher` may preview a report they can edit under a simulated group/role set. Both log real + effective identity. Resolve the open question on Publisher preview-as data access (see design doc) at security review.
 - [ ] **Phase 2:** Map OIDC group claims into the effective group set (genuine enterprise requirement); add table-valued `USER_GROUPS()` / `USER_ROLES()`; implement Publisher preview-as; per-recipient subscription execution; CLI/orchestrator run-as identity semantics.
 - [ ] Document the RLS pattern (author-written `HAS_GROUP` predicates) and its boundaries in the Administrators_Guide / Security docs: folder/dataset permissions remain the coarse-grained gate; identity-variable RLS is the row-level layer.

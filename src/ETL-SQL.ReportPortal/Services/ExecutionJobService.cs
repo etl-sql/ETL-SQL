@@ -244,6 +244,20 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string? correlationId = null)
     {
         EvictExpiredJobs();
+
+        // A scheduled/background refresh exists to update the shared snapshot. An identity-sensitive
+        // report has no shared snapshot (it runs per viewer and is never cached), so a trusted
+        // scheduled refresh would run under a non-interactive identity and produce nothing shareable.
+        // Skip it rather than burn an execution slot. Interactive user refreshes still run under the
+        // caller's own identity. See Docs/Design/RowLevelSecurity.md.
+        if (trustedDatasetExecution && await ScriptReferencesIdentityAsync(scriptPath, CancellationToken.None))
+        {
+            _log.LogInformation(
+                "Report {ReportId} is identity-sensitive; skipping scheduled refresh (no shared snapshot to update).",
+                reportId);
+            return string.Empty;
+        }
+
         var existingPersisted = await GetActiveRefreshJobIdAsync(reportId);
         if (existingPersisted is not null)
             return existingPersisted;
