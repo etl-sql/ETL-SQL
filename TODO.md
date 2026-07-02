@@ -474,6 +474,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
   spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
   aggregates, single-partition windows, billion-distinct-key aggregation, or adversarial skew.
+  *(A resumable `Test-GateF.ps1` runner now isolates the native scan/filter/projection/100-group
+  aggregate and spill-backed `#temp` round-trip, writes durable child logs plus atomic `status.json`,
+  enforces a 16 GB peak/50K rows-per-second floor, records the commit, and refuses to start the spill
+  scenario without 25 GB free on the temp drive. The user-operated 1B run remains.)*
 
 #### Non-goals and guardrails
 
