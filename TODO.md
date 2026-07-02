@@ -241,11 +241,15 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   writes now coalesce logical batches into estimated 128 MB extents; pressure and explicit flush paths
   rotate at the same bound; certification reports physical read bytes plus extent count. Other external
   operators and repeated single-batch write calls still need extent aggregation.)*
-- [~] Add a bounded double-buffered pipeline so producing/encoding the next batch can overlap writing
+- [x] Add a bounded double-buffered pipeline so producing/encoding the next batch can overlap writing
   the current extent without violating the memory grant or cancellation semantics. *(The `#temp`
   path now overlaps validation/production of one batch with encoding/writing of one batch, propagates
   writer failures, observes execution cancellation, and deletes an incomplete extent on failure.
-  Explicit byte reservations for both pipeline slots remain to be integrated with the grant.)*
+  Producer and pending-writer slots now hold independent process-wide memory-grant leases; a rejected
+  producer reservation waits for the writer to release its slot before retrying, while a batch that
+  cannot coexist with retained table memory is handed directly to spill rather than retained. Focused
+  tests prove overlap, grant-pressure backpressure, cancellation/failure cleanup, and zero leaked
+  reservations.)*
 - [~] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
   *(Compatible identity-projection `SELECT * INTO` now transfers retained native batches directly into
   a columnar sink with no row materialization or buffer rebuild. Supported filters compact selected

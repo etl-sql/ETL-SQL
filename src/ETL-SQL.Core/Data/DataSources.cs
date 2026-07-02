@@ -784,6 +784,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                 }
 
+                IMemoryGrantLease? batchLease = null;
                 await _lock.WaitAsync();
                 try
                 {
@@ -890,9 +891,42 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
                 long processedBatchBytes = EstimateResidentMemoryBytes(processedBatch) +
                     EstimateIndexGrowthBytes(processedBatch.Rows.Count);
-                bool bytePressure = _memoryLease?.RegisterAndCheckSpill(
-                    _residentEstimatedBytes + processedBatchBytes) == true;
                 bool rowThresholdExceeded = _totalRowCount + processedBatch.Rows.Count > threshold;
+
+                // Account the producer slot independently from the resident table and the pending
+                // writer slot. If the writer currently owns the available headroom, wait for it and
+                // retry before admitting another batch. This is the pipeline's memory backpressure.
+                var pipelineArbiter = ExecutionContext?.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+                batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
+                bool batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
+                if (!batchReserved && pendingSpillWrite != null)
+                {
+                    await AwaitPendingSpillAsync();
+                    batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
+                }
+
+                bool bytePressure = !batchReserved;
+                if (!rowThresholdExceeded && !bytePressure)
+                {
+                    // Transfer accounting from the transient producer slot to retained table memory.
+                    batchLease?.Dispose();
+                    batchLease = null;
+                    bytePressure = _memoryLease?.RegisterAndCheckSpill(
+                        _residentEstimatedBytes + processedBatchBytes) == true;
+                    if (bytePressure)
+                    {
+                        // Best effort reservation for the immediate writer slot. If the resident
+                        // table already consumes the grant this may still be rejected; the batch is
+                        // then synchronously handed to spill rather than retained.
+                        batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
+                        batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
+                        if (!batchReserved)
+                        {
+                            batchLease?.Dispose();
+                            batchLease = null;
+                        }
+                    }
+                }
 
                     if (bytePressure || rowThresholdExceeded)
                     {
@@ -901,14 +935,14 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                             // Keep at most one batch in the writer while the producer validates the
                             // next batch. Awaiting here bounds the pipeline to two logical batches:
                             // one being encoded/written and one being produced.
-                            if (pendingSpillWrite != null)
-                                await pendingSpillWrite;
+                            await AwaitPendingSpillAsync();
 
                             UpdateIndexesWithBatch(processedBatch);
                             if (_index.Count > 0)
                                 currentExtentIndexedBatches.Add(processedBatch);
                             var estimatedBytes = EstimateSpillPayloadBytes(processedBatch);
-                            pendingSpillWrite = WriteSpillBatchAsync(processedBatch, estimatedBytes);
+                            pendingSpillWrite = WriteSpillBatchAsync(processedBatch, estimatedBytes, batchLease);
+                            batchLease = null; // ownership transfers to the pending writer task
                             _totalRowCount += processedBatch.Rows.Count;
 
                             // A row-threshold spill may occur after the arbiter accepted the
@@ -925,6 +959,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                         }
                     }
 
+                    batchLease?.Dispose();
+
                     _batches.Add(processedBatch);
                     _residentEstimatedBytes += processedBatchBytes;
                     _totalRowCount += processedBatch.Rows.Count;
@@ -933,12 +969,12 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 }
                 finally
                 {
+                    batchLease?.Dispose();
                     _lock.Release();
                 }
             }
 
-            if (pendingSpillWrite != null)
-                await pendingSpillWrite;
+            await AwaitPendingSpillAsync();
 
             if (extentWriter != null)
             {
@@ -987,30 +1023,48 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
             currentExtentIndexedBatches.Clear();
         }
 
-        async Task WriteSpillBatchAsync(DataTable batch, long estimatedBytes)
+        async Task AwaitPendingSpillAsync()
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (extentWriter == null)
-            {
-                extentName = $"{Guid.NewGuid():N}.tmp";
-                extentWriter = await ExecutionContext!.SpillStore.CreateWriterAsync(extentName);
-                extentEstimatedBytes = 0;
-            }
+            if (pendingSpillWrite == null) return;
+            var pending = pendingSpillWrite;
+            pendingSpillWrite = null;
+            await pending;
+        }
 
-            if (extentWriter is IColumnarSpillWriter columnarWriter)
+        async Task WriteSpillBatchAsync(
+            DataTable batch,
+            long estimatedBytes,
+            IMemoryGrantLease? pipelineLease)
+        {
+            try
             {
-                using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
-                await columnarWriter.WriteBatchAsync(columnBatch);
-            }
-            else
-            {
-                await extentWriter.WriteRowsAsync(batch.Rows);
-            }
-            extentEstimatedBytes += estimatedBytes;
-            cancellationToken.ThrowIfCancellationRequested();
+                cancellationToken.ThrowIfCancellationRequested();
+                if (extentWriter == null)
+                {
+                    extentName = $"{Guid.NewGuid():N}.tmp";
+                    extentWriter = await ExecutionContext!.SpillStore.CreateWriterAsync(extentName);
+                    extentEstimatedBytes = 0;
+                }
 
-            if (extentEstimatedBytes >= Math.Max(1, SpillExtentTargetBytes))
-                await CompleteExtentAsync();
+                if (extentWriter is IColumnarSpillWriter columnarWriter)
+                {
+                    using var columnBatch = ColumnBatchAdapter.FromDataTable(batch);
+                    await columnarWriter.WriteBatchAsync(columnBatch);
+                }
+                else
+                {
+                    await extentWriter.WriteRowsAsync(batch.Rows);
+                }
+                extentEstimatedBytes += estimatedBytes;
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (extentEstimatedBytes >= Math.Max(1, SpillExtentTargetBytes))
+                    await CompleteExtentAsync();
+            }
+            finally
+            {
+                pipelineLease?.Dispose();
+            }
         }
     }
 

@@ -46,6 +46,15 @@ namespace ETL_SQL.Tests.Engine
         public void ReleaseFirstWrite() => _releaseFirstWrite.TrySetResult();
     }
 
+    internal sealed class FailingSpillWriter : ISpillWriter
+    {
+        public string ChunkName => "failing";
+        public long BytesWritten => 0;
+        public Task WriteRowAsync(Row row) => Task.FromException(new IOException("forced spill failure"));
+        public Task WriteRowsAsync(IEnumerable<Row> rows) => Task.FromException(new IOException("forced spill failure"));
+        public ValueTask DisposeAsync() => default;
+    }
+
     public class SpillWriterTests
     {
         [Fact]
@@ -208,6 +217,8 @@ namespace ETL_SQL.Tests.Engine
             context.SetupGet(c => c.SpillStore).Returns(spillStore.Object);
             context.SetupGet(c => c.Telemetry).Returns(telemetry.Object);
             context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
+            var arbiter = new MemoryGrantArbiter(1_000_000);
+            context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
 
             var secondBatchProduced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var source = new InMemoryDataSource
@@ -227,10 +238,69 @@ namespace ETL_SQL.Tests.Engine
             var writeTask = source.WriteBatches(Batches());
             await secondBatchProduced.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.False(writeTask.IsCompleted);
+            await writer.FirstWriteStarted.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.InRange(arbiter.ReservedBytes, 1, arbiter.TotalBudgetBytes);
 
             writer.ReleaseFirstWrite();
             await writeTask.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(2, source.SpillChunkCount);
+            Assert.Equal(0, arbiter.ReservedBytes);
+
+            static DataTable CreateBatch(int value)
+            {
+                var table = new DataTable();
+                table.SetColumns(new[] { "id" });
+                var row = table.NewRow();
+                row["id"] = value;
+                table.Rows.Add(row);
+                return table;
+            }
+        }
+
+        [Fact]
+        public async Task InMemoryDataSource_SpillPipeline_GrantPressureBackpressuresProducer()
+        {
+            var writer = new BlockingSpillWriter();
+            var spillStore = new Mock<ISpillStore>();
+            spillStore.Setup(s => s.CreateWriterAsync(It.IsAny<string>())).ReturnsAsync(writer);
+
+            var first = CreateBatch(1);
+            var second = CreateBatch(2);
+            var third = CreateBatch(3);
+            var oneBatchBytes = first.Rows.Sum(row => row.EstimateHeapBytes());
+            var arbiter = new MemoryGrantArbiter(oneBatchBytes + 1);
+            var context = new Mock<IExecutionContext>();
+            context.SetupGet(c => c.ServiceProvider).Returns(new ServiceCollection().BuildServiceProvider());
+            context.SetupGet(c => c.SpillStore).Returns(spillStore.Object);
+            context.SetupGet(c => c.Telemetry).Returns(new Mock<ITelemetryContext>().Object);
+            context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
+            context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
+
+            var secondYielded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var thirdRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var source = new InMemoryDataSource { ExecutionContext = context.Object, SpillExtentTargetBytes = 1 };
+
+            async IAsyncEnumerable<DataTable> Batches()
+            {
+                yield return first;
+                secondYielded.TrySetResult();
+                yield return second;
+                thirdRequested.TrySetResult();
+                yield return third;
+                await Task.CompletedTask;
+            }
+
+            var writeTask = source.WriteBatches(Batches());
+            await writer.FirstWriteStarted.WaitAsync(TimeSpan.FromSeconds(5));
+            await secondYielded.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await Task.Delay(100);
+            Assert.False(thirdRequested.Task.IsCompleted);
+            Assert.InRange(arbiter.ReservedBytes, 1, arbiter.TotalBudgetBytes);
+
+            writer.ReleaseFirstWrite();
+            await writeTask.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(thirdRequested.Task.IsCompleted);
+            Assert.Equal(0, arbiter.ReservedBytes);
 
             static DataTable CreateBatch(int value)
             {
@@ -260,6 +330,8 @@ namespace ETL_SQL.Tests.Engine
             context.SetupGet(c => c.Telemetry).Returns(telemetry.Object);
             context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
             context.SetupGet(c => c.CancellationToken).Returns(() => cancellation.Token);
+            var arbiter = new MemoryGrantArbiter(1_000_000);
+            context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
 
             var source = new InMemoryDataSource { ExecutionContext = context.Object };
             var table = new DataTable();
@@ -274,6 +346,34 @@ namespace ETL_SQL.Tests.Engine
             writer.ReleaseFirstWrite();
 
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => writeTask);
+            Assert.Equal(0, source.SpillChunkCount);
+            Assert.Equal(0, arbiter.ReservedBytes);
+            spillStore.Verify(s => s.DeleteChunk(It.IsAny<string>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task InMemoryDataSource_SpillPipeline_WriterFailureReleasesGrantAndDeletesExtent()
+        {
+            var spillStore = new Mock<ISpillStore>();
+            spillStore.Setup(s => s.CreateWriterAsync(It.IsAny<string>())).ReturnsAsync(new FailingSpillWriter());
+            var arbiter = new MemoryGrantArbiter(1_000_000);
+            var context = new Mock<IExecutionContext>();
+            context.SetupGet(c => c.ServiceProvider).Returns(new ServiceCollection().BuildServiceProvider());
+            context.SetupGet(c => c.SpillStore).Returns(spillStore.Object);
+            context.SetupGet(c => c.Telemetry).Returns(new Mock<ITelemetryContext>().Object);
+            context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
+            context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
+
+            var source = new InMemoryDataSource { ExecutionContext = context.Object };
+            var table = new DataTable();
+            table.SetColumns(new[] { "id" });
+            var row = table.NewRow();
+            row["id"] = 1;
+            table.Rows.Add(row);
+
+            await Assert.ThrowsAsync<IOException>(() => source.WriteBatches(new[] { table }.ToAsyncEnumerable()));
+
+            Assert.Equal(0, arbiter.ReservedBytes);
             Assert.Equal(0, source.SpillChunkCount);
             spillStore.Verify(s => s.DeleteChunk(It.IsAny<string>()), Times.Once);
         }
