@@ -158,7 +158,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 #### Liveness alerting and job-failure notification
 - [x] Administrators_Guide §9.1 documents the external heartbeat / dead-man's-switch (out-of-process `/healthz` probe), the per-job-immediate vs daily-digest job-failure patterns (with the "in-orchestrator digest can't report its own host down" caveat), and the workload-vs-host-saturation distinction for capacity.
-- [ ] Ship a template failure-digest job as a prebuilt admin script — deferred: needs verification that job history is queryable/formattable into an email body on a live orchestrator before shipping a runnable template (see Prebuilt template scripts below).
+- [x] Template failure-digest job shipped at `samples/admin_operations/daily_failure_digest.etlsql`: `SHOW JOB HISTORY INTO #t` → filter recent non-`SUCCESS` runs (`DATEADD`/status) → `STRING_AGG` body → `SEND EMAIL`. The mechanic is verified in-process against a seeded `IJobHistoryStore` and the full template is parse-checked (`JobFailureDigestTemplateTests`, 2 tests) — no Docker needed since `SHOW JOB HISTORY` reads the local store. Also fixed the `SEND EMAIL` help doc (`AT connectionName`, not `@`).
 
 #### Backup scheduling and observability
 - [x] Administrators_Guide §8 documents scheduling the existing `etl-sql admin backup` CLI externally (survives orchestrator downtime), alerting on its exit code, and a periodic `--validate` restore drill; plus the PostgreSQL-is-your-tooling's-job note.

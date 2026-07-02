@@ -880,9 +880,11 @@ or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns
   Use this for **SLA-bearing jobs** (e.g. the outbound vendor SFTP deliveries) where a next-morning
   digest is already too late. This is the most reliable signal because it fires from the job itself.
 - **Daily failure digest** — a scheduled job that reads the prior day's history and emails any failures
-  as a safety net beneath the per-job emails. Because this digest runs inside the orchestrator, it
-  cannot report its own host being down — so pair it with the external `/healthz` dead-man's-switch
-  above and alert if the expected digest does not arrive.
+  as a safety net beneath the per-job emails. A ready-to-adapt template ships at
+  `samples/admin_operations/daily_failure_digest.etlsql` (set the SMTP connection, recipient, and
+  lookback, then schedule it daily). Because this digest runs inside the orchestrator, it cannot report
+  its own host being down — so pair it with the external `/healthz` dead-man's-switch above and alert
+  if the expected digest does not arrive.
 
 **Capacity and saturation.** Job history records each job's own `RowsProcessed`, `PeakMemoryBytes`, and
 `CpuTimeSeconds`, and the Portal exposes point-in-time operational metrics (active/queued executions,

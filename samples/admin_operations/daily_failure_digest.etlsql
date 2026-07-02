@@ -1,0 +1,65 @@
+-- =============================================================================
+--  Daily Job-Failure Digest  (administrator template — run as-is or adapt)
+-- =============================================================================
+--  Reads the orchestrator job history, finds runs in the last 24 hours that did
+--  NOT succeed (FAILURE / BLOCKED / QUARANTINED), and emails a summary.
+--
+--  Intended use: schedule this as a daily orchestrator job. It is a safety net
+--  BENEATH per-job failure emails, not a replacement — SLA-bearing jobs (e.g.
+--  outbound vendor SFTP) should also email immediately on failure from the job
+--  itself, because a next-morning digest is already too late for those.
+--
+--  IMPORTANT: this digest runs *inside* the orchestrator, so it cannot report
+--  that its own host is down. Pair it with an external /healthz dead-man's-switch
+--  and alert if the digest email does not arrive. See Administrators_Guide §9.1.
+--
+--  ADAPT the three placeholders below: SMTP connection, recipient, lookback.
+-- =============================================================================
+
+-- 1. SMTP connection. Replace host/user and encrypt the password:
+--    ETL-SQL encrypt "your-smtp-password" --pass "YourMasterKey"
+CREATE CONNECTION Mailer AS SMTP(
+    HOST     = 'smtp.example.com',
+    PORT     = 587,
+    USER     = 'etl-alerts@example.com',
+    PASSWORD = 'ENC:REPLACE_WITH_ENCRYPTED_PASSWORD'
+);
+
+DECLARE @recipient = 'ops-team@example.com';
+DECLARE @sender    = 'etl-alerts@example.com';
+
+-- 2. Capture job history into a queryable temp table, then keep only recent
+--    non-successful runs. 'RUNNING' rows are in-flight jobs, not failures.
+--    Widen the window (e.g. DATEADD(HOUR, -25, ...)) to overlap the schedule.
+SHOW JOB HISTORY INTO #jobhist;
+
+SELECT JobName, StartTime, EndTime, Status, ErrorMessage
+INTO #failures
+FROM #jobhist
+WHERE Status NOT IN ('SUCCESS', 'RUNNING')
+  AND StartTime >= DATEADD(DAY, -1, GETDATE());
+
+DECLARE @failCount = (SELECT COUNT(*) FROM #failures);
+PRINT CONCAT('Job failures in the last 24h: ', @failCount);
+
+-- 3. Only email when something actually failed.
+IF @failCount > 0
+BEGIN
+    -- One line per failed job: "JobName [STATUS]: error message".
+    DECLARE @detail = (
+        SELECT STRING_AGG(CONCAT(JobName, ' [', Status, ']: ', ISNULL(ErrorMessage, '(no message)')), CHAR(10))
+        FROM #failures
+    );
+
+    SEND EMAIL
+        TO @recipient
+        FROM @sender
+        SUBJECT CONCAT('[ETL-SQL] ', @failCount, ' job failure(s) in the last 24h')
+        BODY CONCAT(
+            'The following scheduled jobs did not complete successfully in the last 24 hours:', CHAR(10), CHAR(10),
+            @detail, CHAR(10), CHAR(10),
+            'Review them in the orchestrator (SHOW JOB HISTORY) or the Report Portal.')
+        AT Mailer;
+
+    PRINT 'Failure digest sent.';
+END;
