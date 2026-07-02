@@ -63,6 +63,43 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task ReconcileStaleRunning_MarksOldRunningInterrupted_KeepsRecentAndTerminal()
+        {
+            await _store.InitializeAsync();
+
+            // An in-flight RUNNING row (just started) and a completed row.
+            await _store.LogJobStartAsync("RecentRunning");
+            var done = await _store.LogJobStartAsync("Finished");
+            await _store.LogJobEndAsync(done, "SUCCESS");
+
+            // maxRuntime far in the future prunes nothing (the RUNNING row is recent).
+            Assert.Equal(0, await _store.ReconcileStaleRunningAsync(TimeSpan.FromDays(1)));
+
+            // maxRuntime of zero treats every RUNNING row as overdue → the recent one is marked
+            // INTERRUPTED, while the already-terminal SUCCESS row is untouched.
+            Assert.Equal(1, await _store.ReconcileStaleRunningAsync(TimeSpan.Zero));
+
+            var rows = (await _store.GetHistoryAsync(limit: 100)).ToList();
+            Assert.Equal("INTERRUPTED", rows.Single(r => r.JobName == "RecentRunning").Status);
+            Assert.Equal("SUCCESS", rows.Single(r => r.JobName == "Finished").Status);
+        }
+
+        [Fact]
+        public async Task ReconcileStaleRunning_IsOverwrittenByLateCompletion()
+        {
+            await _store.InitializeAsync();
+
+            // A job whose RUNNING row is reconciled to INTERRUPTED while it was actually still running.
+            var id = await _store.LogJobStartAsync("SlowJob");
+            Assert.Equal(1, await _store.ReconcileStaleRunningAsync(TimeSpan.Zero));
+
+            // The eventual completion write overwrites INTERRUPTED with the real terminal status.
+            await _store.LogJobEndAsync(id, "SUCCESS", rowsProcessed: 3);
+            var row = (await _store.GetHistoryAsync("SlowJob")).Single();
+            Assert.Equal("SUCCESS", row.Status);
+        }
+
+        [Fact]
         public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
         {
             await _store.InitializeAsync();

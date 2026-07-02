@@ -128,6 +128,24 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return;
             }
 
+            // Startup recovery: a previous crash may have left RUNNING rows with no completion write.
+            // Reconcile any older than the max job runtime to INTERRUPTED so they are not stuck RUNNING
+            // forever (unprunable and invisible to failure reporting). Self-healing per the store contract.
+            try
+            {
+                int maxRuntimeHours = _configuration.GetValue<int>("Orchestrator:MaxJobRuntimeHours", 24);
+                if (maxRuntimeHours > 0)
+                {
+                    int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
+                    if (reconciled > 0)
+                        _logger.LogWarning("Marked {Count} orphaned RUNNING job-history row(s) as INTERRUPTED on startup.", reconciled);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Startup reconciliation of orphaned RUNNING job-history rows failed.");
+            }
+
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -186,15 +204,25 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     int historyRetentionDays = _configuration.GetValue<int>("Orchestrator:JobHistoryRetentionDays", 30);
                     if (historyRetentionDays > 0 && now - _lastHistoryPrune >= TimeSpan.FromMinutes(historyPruneIntervalMinutes))
                     {
+                        // Reconcile orphaned/hung RUNNING rows first so they become prunable and visible
+                        // to failure reporting, then prune old terminal rows.
+                        int maxRuntimeHours = _configuration.GetValue<int>("Orchestrator:MaxJobRuntimeHours", 24);
                         try
                         {
+                            if (maxRuntimeHours > 0)
+                            {
+                                int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
+                                if (reconciled > 0)
+                                    _logger.LogWarning("Marked {Count} RUNNING job-history row(s) exceeding the max runtime ({Hours}h) as INTERRUPTED.", reconciled, maxRuntimeHours);
+                            }
+
                             int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
                             if (pruned > 0)
                                 _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "Job-history pruning failed; will retry next cycle.");
+                            _logger.LogWarning(ex, "Job-history maintenance failed; will retry next cycle.");
                         }
                         _lastHistoryPrune = now;
                     }

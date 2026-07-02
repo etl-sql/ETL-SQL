@@ -1000,6 +1000,23 @@ namespace ETL_SQL.Orchestrator.Storage
             return await command.ExecuteNonQueryAsync();
         }
 
+        public async Task<int> ReconcileStaleRunningAsync(TimeSpan maxRuntime)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            var now = DateTime.Now;
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "UPDATE JobHistory SET Status = 'INTERRUPTED', EndTime = @end, " +
+                "ErrorMessage = 'No completion recorded within the maximum job runtime; the orchestrator likely restarted or the job was killed.' " +
+                "WHERE Status = 'RUNNING' AND StartTime < @cutoff;";
+            command.AddParam("@end", now.ToString("O"));
+            command.AddParam("@cutoff", now.Subtract(maxRuntime).ToString("O"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
         public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100)
         {
             await EnsureInitializedAsync();

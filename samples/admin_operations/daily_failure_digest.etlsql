@@ -29,7 +29,8 @@ DECLARE @recipient = 'ops-team@example.com';
 DECLARE @sender    = 'etl-alerts@example.com';
 
 -- 2. Capture job history into a queryable temp table, then keep only recent
---    non-successful runs. 'RUNNING' rows are in-flight jobs, not failures.
+--    non-successful runs. 'RUNNING' rows are in-flight jobs (excluded); jobs the
+--    orchestrator abandoned in a crash surface as 'INTERRUPTED' and ARE included.
 --    Widen the window (e.g. DATEADD(HOUR, -25, ...)) to overlap the schedule.
 SHOW JOB HISTORY INTO #jobhist;
 

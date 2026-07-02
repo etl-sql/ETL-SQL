@@ -121,6 +121,15 @@ public interface IJobHistoryStore
     /// </summary>
     Task<int> PruneHistoryAsync(TimeSpan maxAge);
 
+    /// <summary>
+    /// Marks orphaned RUNNING rows — jobs whose <c>StartTime</c> is older than
+    /// <paramref name="maxRuntime"/> with no completion recorded — as INTERRUPTED, so a crash that
+    /// prevented the completion write does not leave a row RUNNING forever (unprunable and invisible to
+    /// failure reporting). Self-healing: if such a job is in fact still running, its eventual
+    /// completion write overwrites INTERRUPTED with the real terminal status. Returns rows updated.
+    /// </summary>
+    Task<int> ReconcileStaleRunningAsync(TimeSpan maxRuntime);
+
     // State Management
     Task<string?> GetJobStateAsync(string jobName, string key);
     Task SetJobStateAsync(string jobName, string key, string? value);
