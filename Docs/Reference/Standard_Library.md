@@ -221,6 +221,9 @@ FROM #comments;
 
 ## 4. Date & Time Functions
 
+See [Dates, Times, and Time Zones](Dates_and_Times.md) for the engine temporal model, timezone and
+DST rules, connector normalization matrix, precision, and invariant formatting guidance.
+
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
 | `GETDATE` / `NOW` / `SYSDATE` | `GETDATE()`, `NOW()`, `SYSDATE()` | Current system date and time (bare identifiers or function calls) |
@@ -239,7 +242,7 @@ FROM #comments;
 | `DATETIMEOFFSETSFROMPARTS` | `DATETIMEOFFSETSFROMPARTS(y, m, d, h, mi, s, frac, h_off, m_off, prec)` | Constructs `DATETIMEOFFSET` from components |
 | `TIMEFROMPARTS` | `TIMEFROMPARTS(h, mi, s, frac, prec)` | Constructs `TIME` from parts |
 | `TRUNC` | `TRUNC(datetime)` | Truncates the time portion; returns date |
-| `TO_DATE` | `TO_DATE(string [, format])` | Converts string representation of date/time to a `DATETIME` |
+| `TO_DATE` | `TO_DATE(string [, format])` | Converts an ISO-compatible string to `DATETIME`; the optional format argument is reserved and not currently applied |
 | `RELDATE` | `RELDATE(expression)` | Resolves a relative date expression string (e.g. `'D-1'`, `'M-1'`) |
 | `DATE_TRUNC` | `DATE_TRUNC(part, date)` | Truncates date to specified boundary (Postgres-compatible parameter order) |
 | `TO_TIMESTAMP` | `TO_TIMESTAMP(seconds)` | Converts Unix epoch seconds (with fractional seconds) to a `DATETIME` |

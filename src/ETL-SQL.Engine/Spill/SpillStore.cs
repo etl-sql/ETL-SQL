@@ -637,6 +637,9 @@ public partial class SpillStore : ISpillStore
             if (elementType == typeof(double) || elementType == typeof(float)) return DoubleType.Default;
             if (elementType == typeof(bool)) return BooleanType.Default;
             if (elementType == typeof(DateTime)) return new TimestampType(TimeUnit.Microsecond, "UTC");
+            // Arrow timestamps preserve an instant but not the original DateTimeOffset offset. Store
+            // the round-trip representation as UTF-8 so spill/reload retains both pieces of information.
+            if (elementType == typeof(DateTimeOffset)) return StringType.Default;
             if (elementType == typeof(string)) return StringType.Default;
             throw new NotSupportedException($"Native spill writing does not support '{elementType.Name}' columns.");
         }
@@ -666,6 +669,7 @@ public partial class SpillStore : ISpillStore
             double or float => "Double",
             bool => "Boolean",
             DateTime => "Timestamp",
+            DateTimeOffset => "DateTimeOffset",
             _ => "Json"
         };
 
@@ -736,6 +740,14 @@ public partial class SpillStore : ISpillStore
                         builder.Append(offset);
                     }
                 }
+                return builder.Build();
+            }
+            if (column is ColumnBuffer<DateTimeOffset> offsets)
+            {
+                var builder = new StringArray.Builder();
+                for (var i = 0; i < offsets.Count; i++)
+                    if (offsets.IsNull(i)) builder.AppendNull();
+                    else builder.Append(offsets.Values.Span[i].ToString("O", System.Globalization.CultureInfo.InvariantCulture));
                 return builder.Build();
             }
             if (column is Utf8ColumnBuffer strings)
@@ -1002,7 +1014,7 @@ public partial class SpillStore : ISpillStore
                 {
                     var field = batch.Schema.FieldsList[i];
                     var logicalType = GetLogicalType(batch.Schema, i) ?? field.DataType.Name;
-                    var column = ConvertArray(batch.Column(i), batch.Length);
+                    var column = ConvertArray(batch.Column(i), batch.Length, logicalType);
                     fields.Add(new ColumnBatchField(field.Name, column.ElementType, logicalType, field.IsNullable));
                     columns.Add(column);
                 }
@@ -1015,7 +1027,7 @@ public partial class SpillStore : ISpillStore
             }
         }
 
-        private static IColumnBuffer ConvertArray(IArrowArray array, int count) => array switch
+        private static IColumnBuffer ConvertArray(IArrowArray array, int count, string logicalType) => array switch
         {
             Int64Array values => CopyFixed<long>(count, values.IsNull, i => values.GetValue(i) ?? default),
             Decimal128Array values => CopyFixed<decimal>(count, values.IsNull, i => values.GetValue(i) ?? default),
@@ -1023,6 +1035,9 @@ public partial class SpillStore : ISpillStore
             BooleanArray values => CopyFixed<bool>(count, values.IsNull, i => values.GetValue(i) ?? default),
             TimestampArray values => CopyFixed<DateTime>(count, values.IsNull,
                 i => values.GetTimestamp(i)?.UtcDateTime ?? default),
+            StringArray values when IsDateTimeOffsetLogicalType(logicalType)
+                => CopyFixed<DateTimeOffset>(count, values.IsNull,
+                    i => ParseDateTimeOffsetString(values.GetString(i)!)),
             StringArray values => Utf8ColumnBuffer.CopyEncoded(
                 values.ValueOffsets,
                 values.Values,
@@ -1077,6 +1092,8 @@ public partial class SpillStore : ISpillStore
                 DoubleArray a => ToDecimalOrDouble(a.GetValue(index)),
                 BooleanArray a => (object?)a.GetValue(index),
                 TimestampArray a => (object?)a.GetTimestamp(index)?.UtcDateTime,
+                StringArray a when IsDateTimeOffsetLogicalType(logicalType)
+                    => ParseDateTimeOffsetString(a.GetString(index)!),
                 StringArray a => (object?)DecodeArrowString(a.GetString(index), logicalType),
                 _ => null
             };
@@ -1088,6 +1105,8 @@ public partial class SpillStore : ISpillStore
         {
             if (s == null) return null;
             if (logicalType == "String") return s;
+            if (IsDateTimeOffsetLogicalType(logicalType))
+                return ParseDateTimeOffsetString(s);
             if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
             {
                 try
@@ -1101,6 +1120,21 @@ public partial class SpillStore : ISpillStore
             if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d)) return d;
             if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt)) return dt;
             return s;
+        }
+
+        private static bool IsDateTimeOffsetLogicalType(string? logicalType)
+            => logicalType?.StartsWith("DATETIMEOFFSET", StringComparison.OrdinalIgnoreCase) == true
+                || logicalType?.Equals("DateTimeOffset", StringComparison.OrdinalIgnoreCase) == true;
+
+        private static DateTimeOffset ParseDateTimeOffsetString(string value)
+        {
+            var payload = value.StartsWith(JsonPrefix, StringComparison.Ordinal)
+                ? value[JsonPrefix.Length..]
+                : value;
+            if (payload.Length >= 2 && payload[0] == '"' && payload[^1] == '"')
+                payload = JsonSerializer.Deserialize<string>(payload) ?? payload;
+            return DateTimeOffset.Parse(payload, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind);
         }
 
         private static object? ToDecimalOrDouble(double? val)

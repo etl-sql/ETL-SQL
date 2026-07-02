@@ -700,6 +700,15 @@ public class ExpressionEvaluator
             }
             dto = new DateTimeOffset(dt);
         }
+        else if (val is string text && DateTime.TryParse(
+                     text,
+                     System.Globalization.CultureInfo.InvariantCulture,
+                     System.Globalization.DateTimeStyles.AssumeUniversal
+                     | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                     out var parsedUtc))
+        {
+            dto = new DateTimeOffset(DateTime.SpecifyKind(parsedUtc, DateTimeKind.Utc));
+        }
         else if (EvaluationUtils.TryToDateTimeOffset(val, out var parsedDto))
         {
             dto = parsedDto;
@@ -714,9 +723,13 @@ public class ExpressionEvaluator
             var tzInfo = RelDateResolver.FindTimeZone(zone.ToString() ?? "UTC");
             return TimeZoneInfo.ConvertTime(dto, tzInfo);
         }
-        catch
+        catch (TimeZoneNotFoundException ex)
         {
-            return dto;
+            throw new ExecutionException($"Unknown time zone '{zone}'.", ex);
+        }
+        catch (InvalidTimeZoneException ex)
+        {
+            throw new ExecutionException($"Invalid time zone configuration for '{zone}'.", ex);
         }
     }
 
@@ -1002,7 +1015,7 @@ public class ExpressionEvaluator
             _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
             "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
         {
-            return RelDateResolver.ResolveToOffset(reldateExpr, _context.WeekStartDay);
+            return RelDateResolver.ResolveValue(reldateExpr, _context.WeekStartDay);
         }
 
         if (decryptSensitive && val is string s && s.StartsWith("ENC:"))

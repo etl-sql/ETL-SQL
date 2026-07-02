@@ -93,5 +93,18 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal(1234500, dto5.Ticks % 10000000);
             Assert.Equal(TimeSpan.FromHours(-5), dto5.Offset);
         }
+
+        [Fact]
+        public void DateTimeOffsetCastPreservesOffsetIndependentOfMachineZone()
+        {
+            var result = Assert.IsType<DateTimeOffset>(
+                TypeConverter.Cast("2026-01-02T03:04:05.1234567+09:30", "DATETIMEOFFSET"));
+
+            Assert.Equal(TimeSpan.FromHours(9.5), result.Offset);
+            Assert.Equal(3, result.Hour);
+            Assert.Equal(1234567, result.Ticks % TimeSpan.TicksPerSecond);
+            Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+                TypeConverter.Cast("2026-01-02T03:04:05Z", "DATETIMEOFFSET(8)"));
+        }
     }
 }

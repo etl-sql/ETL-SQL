@@ -1,6 +1,11 @@
 using System;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ETL_SQL.Tests
@@ -380,6 +385,49 @@ namespace ETL_SQL.Tests
             Assert.Equal(1, result3.Day);
             Assert.Equal(0, result3.Hour);
             Assert.Equal(TimeSpan.FromHours(-5), result3.Offset);
+        }
+
+        [Fact]
+        public void ResolveValuePreservesLegacyTypeUnlessZoneIsExplicit()
+        {
+            var reference = new DateTimeOffset(2026, 7, 2, 1, 0, 0, TimeSpan.Zero);
+
+            Assert.IsType<DateTime>(RelDateResolver.ResolveValue("D-1", Monday, reference));
+            var zoned = Assert.IsType<DateTimeOffset>(
+                RelDateResolver.ResolveValue("D-1 America/New_York", Monday, reference));
+            Assert.Equal(TimeSpan.FromHours(-4), zoned.Offset);
+        }
+
+        [Fact]
+        public void InvalidTimezoneThrowsInsteadOfSilentlyUsingServerTime()
+        {
+            var error = Assert.Throws<ExecutionException>(() =>
+                RelDateResolver.ResolveToOffset("D Not/A_Real_Zone", Monday));
+            Assert.Contains("Unknown time zone", error.Message);
+        }
+
+        [Fact]
+        public void DayAnchorRejectsHistoricalMidnightDstGap()
+        {
+            // Sao Paulo advanced from 00:00 to 01:00 on 2018-11-04.
+            var reference = new DateTimeOffset(2018, 11, 4, 12, 0, 0, TimeSpan.Zero);
+            var error = Assert.Throws<ExecutionException>(() =>
+                RelDateResolver.ResolveToOffset("D America/Sao_Paulo", Monday, reference));
+
+            Assert.Contains("nonexistent local time", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task QuotedTimezoneRelDateDeclarationParsesAndEvaluatesEndToEnd()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await evaluator.Evaluate(TestHelpers.Parse("DECLARE @day RELDATE = 'D UTC';"));
+
+            var result = await evaluator.ExecuteQuery(
+                TestHelpers.Parse("SELECT @day AS Resolved;").Statements[0]).FirstAsync();
+
+            var value = Assert.IsType<DateTimeOffset>(Assert.Single(result.Rows)["Resolved"]);
+            Assert.Equal(TimeSpan.Zero, value.Offset);
         }
     }
 }

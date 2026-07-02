@@ -154,6 +154,24 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ArrowRowSpillPreservesDateTimeOffset()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            var expected = new DateTimeOffset(2026, 7, 2, 10, 5, 51, TimeSpan.FromHours(-5));
+            await using (var writer = await store.CreateWriterAsync("offset_row"))
+                await writer.WriteRowAsync(new Row { ["OccurredAt"] = expected });
+
+            await using var reader = await store.CreateReaderAsync("offset_row");
+            var row = await reader.ReadRowAsync();
+
+            Assert.Equal(expected, Assert.IsType<DateTimeOffset>(row!["OccurredAt"]));
+            Assert.Equal(expected.Offset, ((DateTimeOffset)row["OccurredAt"]!).Offset);
+        }
+
+        [Fact]
         public async Task ArrowReader_ExposesTypedColumnBatches()
         {
             var e = NewEvaluator();
@@ -218,20 +236,23 @@ namespace ETL_SQL.Tests.Hardening
             var amount = ETL_SQL.Core.Data.ColumnBuffer<decimal>.Rent(2);
             amount.Values.Span[0] = 4.25m;
             amount.SetNull(1);
+            var instant = new DateTimeOffset(2026, 7, 2, 13, 14, 15, TimeSpan.FromHours(5.5));
             using var batch = new ETL_SQL.Core.Data.ColumnBatch(
                 new ETL_SQL.Core.Data.ColumnBatchSchema(new[]
                 {
                     new ETL_SQL.Core.Data.ColumnBatchField("Id", typeof(long), "Integer"),
                     new ETL_SQL.Core.Data.ColumnBatchField("Amount", typeof(decimal), "Decimal"),
                     new ETL_SQL.Core.Data.ColumnBatchField("Flag", typeof(bool), "Boolean"),
-                    new ETL_SQL.Core.Data.ColumnBatchField("Label", typeof(string), "String")
+                    new ETL_SQL.Core.Data.ColumnBatchField("Label", typeof(string), "String"),
+                    new ETL_SQL.Core.Data.ColumnBatchField("OccurredAt", typeof(DateTimeOffset), "DATETIMEOFFSET")
                 }),
                 new ETL_SQL.Core.Data.IColumnBuffer[]
                 {
                     new ETL_SQL.Core.Data.ColumnBuffer<long>(new long[] { 10, 11 }, 2),
                     amount,
                     new ETL_SQL.Core.Data.ColumnBuffer<bool>(new bool[] { true, false }, 2),
-                    ETL_SQL.Core.Data.Utf8ColumnBuffer.FromStrings(new string?[] { "001", null })
+                    ETL_SQL.Core.Data.Utf8ColumnBuffer.FromStrings(new string?[] { "001", null }),
+                    new ETL_SQL.Core.Data.ColumnBuffer<DateTimeOffset>(new[] { instant, instant.AddHours(1) }, 2)
                 },
                 2);
             await using (var writer = await store.CreateWriterAsync("native_write"))
@@ -253,6 +274,8 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.True(result.GetColumn<bool>("Flag").Values.Span[0]);
                 Assert.Equal("001", result.GetUtf8Column("Label").GetBoxedValue(0));
                 Assert.True(result.GetUtf8Column("Label").IsNull(1));
+                Assert.Equal(instant, result.GetColumn<DateTimeOffset>("OccurredAt").Values.Span[0]);
+                Assert.Equal(instant.Offset, result.GetColumn<DateTimeOffset>("OccurredAt").Values.Span[0].Offset);
             }
             finally
             {

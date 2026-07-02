@@ -12,13 +12,26 @@ using Xunit.Abstractions;
 
 namespace ETL_SQL.Tests.Scale;
 
+public sealed class GateFCertificationFactAttribute : FactAttribute
+{
+    public GateFCertificationFactAttribute()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable("GATE_F_CERTIFICATION"), "1",
+                StringComparison.Ordinal))
+            Skip = "Gate F is an operator-run certification test. Use scripts/Test-GateF.ps1.";
+    }
+}
+
 public sealed class BillionRowCertificationTests(ITestOutputHelper output)
 {
-    [Fact]
+    [GateFCertificationFact]
     [Trait("Category", "BillionRowCertification")]
     public async Task NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded()
     {
-        var rowCount = ReadPositiveLong("GATE_F_ROWS", 1_000_000_000);
+        var rowCount = ReadPositiveLong("GATE_F_ROWS", 0);
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_ROWS must be explicitly set for Gate F certification.");
         var batchSize = ReadPositiveInt("GATE_F_BATCH_ROWS", 100_000);
         var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
         var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");

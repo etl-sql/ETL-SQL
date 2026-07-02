@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine;
@@ -78,6 +79,18 @@ public static class RelDateResolver
     }
 
     /// <summary>
+    /// Resolves to the legacy timezone-neutral <see cref="DateTime"/> when no timezone suffix is
+    /// present, and to <see cref="DateTimeOffset"/> when the expression explicitly names a timezone.
+    /// </summary>
+    public static object ResolveValue(string expression, DayOfWeek weekStart, DateTimeOffset? now = null)
+    {
+        var hasZone = TrySplitTimeZone(expression, out _, out _);
+        var resolved = ResolveToOffset(expression, weekStart, now);
+        if (hasZone) return resolved;
+        return resolved.DateTime;
+    }
+
+    /// <summary>
     /// Resolves a RELDATE expression to a concrete DateTimeOffset.
     /// Supports optional trailing timezone indicators (e.g. "D-1 EST").
     /// </summary>
@@ -86,25 +99,24 @@ public static class RelDateResolver
         if (string.IsNullOrWhiteSpace(expression))
             throw new ExecutionException("RELDATE expression cannot be empty.");
 
-        var expr = expression.Trim();
-        string? tzName = null;
-
-        // Split on the first space to extract optional timezone/offset suffix (only for relative expressions)
-        if (expr.Length > 0 && !char.IsDigit(expr[0]))
-        {
-            var firstSpaceIdx = expr.IndexOf(' ');
-            if (firstSpaceIdx > 0)
-            {
-                tzName = expr.Substring(firstSpaceIdx + 1).Trim();
-                expr = expr.Substring(0, firstSpaceIdx).Trim();
-            }
-        }
+        TrySplitTimeZone(expression, out var expr, out var tzName);
 
         // Determine target timezone
         TimeZoneInfo targetTz = TimeZoneInfo.Local;
         if (!string.IsNullOrEmpty(tzName))
         {
-            targetTz = FindTimeZone(tzName);
+            try
+            {
+                targetTz = FindTimeZone(tzName);
+            }
+            catch (TimeZoneNotFoundException ex)
+            {
+                throw new ExecutionException($"Unknown time zone '{tzName}' in RELDATE expression '{expression}'.", ex);
+            }
+            catch (InvalidTimeZoneException ex)
+            {
+                throw new ExecutionException($"Invalid time zone configuration for '{tzName}'.", ex);
+            }
         }
 
         var baseTime = now ?? DateTimeOffset.Now;
@@ -250,7 +262,33 @@ public static class RelDateResolver
         }
 
         // Return a DateTimeOffset with the correct offset at that resolved local time
-        return new DateTimeOffset(resolvedLocalTime, targetTz.GetUtcOffset(resolvedLocalTime));
+        return CreateZonedValue(resolvedLocalTime, targetTz, expression);
+    }
+
+    private static bool TrySplitTimeZone(string expression, out string relativeExpression, out string? zoneName)
+    {
+        relativeExpression = expression.Trim();
+        zoneName = null;
+        if (relativeExpression.Length == 0 || char.IsDigit(relativeExpression[0])) return false;
+
+        var firstSpace = relativeExpression.IndexOf(' ');
+        if (firstSpace <= 0) return false;
+        zoneName = relativeExpression[(firstSpace + 1)..].Trim();
+        relativeExpression = relativeExpression[..firstSpace].Trim();
+        return zoneName.Length > 0;
+    }
+
+    private static DateTimeOffset CreateZonedValue(DateTime localTime, TimeZoneInfo zone, string expression)
+    {
+        localTime = DateTime.SpecifyKind(localTime, DateTimeKind.Unspecified);
+        if (zone.IsInvalidTime(localTime))
+            throw new ExecutionException(
+                $"RELDATE expression '{expression}' resolves to a nonexistent local time in '{zone.Id}' due to a daylight-saving transition.");
+
+        var offset = zone.IsAmbiguousTime(localTime)
+            ? zone.GetAmbiguousTimeOffsets(localTime).Min()
+            : zone.GetUtcOffset(localTime);
+        return new DateTimeOffset(localTime, offset);
     }
 
     private static DateTime GetWeekStart(DateTime date, DayOfWeek firstDay)

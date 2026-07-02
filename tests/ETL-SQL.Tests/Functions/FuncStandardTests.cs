@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -201,8 +202,12 @@ namespace ETL_SQL.Tests.Functions
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             // Use a standard zone name (Windows uses different names than IANA, but 'UTC' is universal)
             var res = await EvaluateExpression(evaluator, "'2024-03-24 12:00:00' AT TIME ZONE 'UTC'");
-            Assert.True(res is DateTime, "AT TIME ZONE should return DateTime");
-            Assert.Equal(12, ((DateTime)res).Hour);
+            var offset = Assert.IsType<DateTimeOffset>(res);
+            Assert.Equal(12, offset.Hour);
+            Assert.Equal(TimeSpan.Zero, offset.Offset);
+
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                EvaluateExpression(evaluator, "'2024-03-24 12:00:00' AT TIME ZONE 'Not/A_Real_Zone'"));
         }
 
         [Fact]

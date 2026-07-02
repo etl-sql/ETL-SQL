@@ -7,6 +7,7 @@ using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 
 namespace ETL_SQL.Connectors.Oracle
 {
@@ -354,23 +355,17 @@ namespace ETL_SQL.Connectors.Oracle
         {
             if (value == null || value == DBNull.Value) return null;
             
+            if (value is OracleTimeStampTZ timestampTz)
+                return new DateTimeOffset(
+                    DateTime.SpecifyKind(timestampTz.Value, DateTimeKind.Unspecified),
+                    timestampTz.GetTimeZoneOffset());
+            if (value is OracleTimeStampLTZ timestampLtz)
+                return new DateTimeOffset(
+                    DateTime.SpecifyKind(timestampLtz.Value, DateTimeKind.Unspecified),
+                    OracleTimeStampLTZ.GetLocalTimeZoneOffset());
+            if (value is OracleTimeStamp timestamp) return timestamp.Value;
+            if (value is OracleDate date) return date.Value;
             var typeName = value.GetType().FullName;
-            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStampTZ")
-            {
-                return (DateTimeOffset)(dynamic)value;
-            }
-            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ")
-            {
-                return (DateTimeOffset)(dynamic)value;
-            }
-            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStamp")
-            {
-                return (DateTime)(dynamic)value;
-            }
-            if (typeName == "Oracle.ManagedDataAccess.Types.OracleDate")
-            {
-                return (DateTime)(dynamic)value;
-            }
             if (typeName == "Oracle.ManagedDataAccess.Types.OracleDecimal")
             {
                 return (decimal)(dynamic)value;

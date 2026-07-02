@@ -19,6 +19,7 @@ using ETL_SQL.Core.Common;
 using MySqlConnector;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 using Xunit;
 using MySqlConnectorObj = ETL_SQL.Connectors.MySql.MySqlConnector;
 
@@ -205,6 +206,19 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal(7, cmd.CommandTimeout);
         }
 
+        [Fact]
+        public void OracleTimestampWithTimeZoneMapsToDateTimeOffset()
+        {
+            var source = new OracleTimeStampTZ(2026, 7, 2, 10, 5, 51, 0, "-05:00");
+            var method = typeof(ETL_SQL.Connectors.Oracle.OracleDataSource)
+                .GetMethod("MapOracleValue", BindingFlags.Static | BindingFlags.NonPublic)!;
+
+            var result = Assert.IsType<DateTimeOffset>(method.Invoke(null, new object[] { source }));
+
+            Assert.Equal(new DateTime(2026, 7, 2, 10, 5, 51), result.DateTime);
+            Assert.Equal(TimeSpan.FromHours(-5), result.Offset);
+        }
+
         // ── PostgresConnector ─────────────────────────────────────────────────
 
         [Fact]
@@ -212,6 +226,19 @@ namespace ETL_SQL.Tests.Connectors
         {
             var c = new PostgresConnector();
             Assert.Equal("POSTGRES", c.Name);
+        }
+
+        [Fact]
+        public void PostgresDateTimeOffsetParametersNormalizeToUtc()
+        {
+            var method = typeof(PostgresDataSource)
+                .GetMethod("NormalizeDateTimeOffset", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var source = new DateTimeOffset(2026, 7, 2, 10, 0, 0, TimeSpan.FromHours(-5));
+
+            var result = Assert.IsType<DateTime>(method.Invoke(null, new object[] { source }));
+
+            Assert.Equal(DateTimeKind.Utc, result.Kind);
+            Assert.Equal(new DateTime(2026, 7, 2, 15, 0, 0, DateTimeKind.Utc), result);
         }
 
         [Fact]

@@ -2096,6 +2096,10 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 #### `AT TIME ZONE`
 Converts a `DATETIME` or `DATETIMEOFFSET` expression to the target timezone. If the input has no offset, it is assumed to be **UTC**.
 
+IANA and Windows timezone IDs are supported. Unknown IDs raise an execution error. See
+[Dates, Times, and Time Zones](Dates_and_Times.md) for cross-platform aliases, DST behavior, and
+connector storage rules.
+
 ```sql
 SELECT OrderDate AT TIME ZONE 'Pacific Standard Time' AS local_time FROM #orders;
 

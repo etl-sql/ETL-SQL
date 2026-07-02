@@ -5,7 +5,8 @@
 .DESCRIPTION
     Runs the bounded native operator core and spill-backed #temp round-trip in isolated Release hosts.
     Each scenario has durable stdout/stderr logs and a result JSON. status.json is refreshed while a
-    child is active, so another session can inspect progress without attaching to this console.
+    child is active, so another session can inspect progress without attaching to this console. The
+    billion-row test is opt-in to this script and is skipped by ordinary test, smoke, and release lanes.
 #>
 param(
     [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip')]
@@ -154,6 +155,7 @@ try {
             ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
         if ($Force -or -not $reusable) {
             $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
             $env:GATE_F_BATCH_ROWS = '100000'
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -217,7 +219,7 @@ catch {
     throw
 }
 finally {
-    Remove-Item Env:GATE_F_ROWS,Env:GATE_F_BATCH_ROWS,Env:GATE_F_MEMORY_BOUND_MB,Env:GATE_F_MIN_ROWS_PER_SECOND,Env:GATE_F_OUTPUT `
+    Remove-Item Env:GATE_F_CERTIFICATION,Env:GATE_F_ROWS,Env:GATE_F_BATCH_ROWS,Env:GATE_F_MEMORY_BOUND_MB,Env:GATE_F_MIN_ROWS_PER_SECOND,Env:GATE_F_OUTPUT `
         -ErrorAction SilentlyContinue
     Remove-Item Env:CERT_MEMORY_BOUND_MB,Env:CERT_MEMORY_GRANT_MB,Env:CERT_MIN_ROWS_PER_SECOND `
         -ErrorAction SilentlyContinue

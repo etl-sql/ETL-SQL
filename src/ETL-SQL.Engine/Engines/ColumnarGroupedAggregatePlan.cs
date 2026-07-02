@@ -167,7 +167,8 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             || type == typeof(float) || type == typeof(double) || type == typeof(decimal);
 
     private static bool IsSupportedKey(Type type)
-        => IsNumeric(type) || type == typeof(DateTime) || type == typeof(TimeSpan) || type == typeof(Guid);
+        => IsNumeric(type) || type == typeof(DateTime) || type == typeof(DateTimeOffset)
+            || type == typeof(TimeSpan) || type == typeof(Guid);
 
     private static bool TryRewriteHaving(
         Expression? expression,

@@ -112,7 +112,7 @@ namespace ETL_SQL.Connectors.Postgres
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        row[i] = reader.IsDBNull(i) ? null : MapPostgresValue(reader, i);
                     }
                     await currentBatch.AddRowAsync(row);
 
@@ -162,7 +162,7 @@ namespace ETL_SQL.Connectors.Postgres
                         {
                             var val = row[key];
                             if (val == null || val == DBNull.Value) return "\\N";
-                            var s = val.ToString() ?? "";
+                            var s = FormatCopyValue(val);
                             return s.Replace("\t", " ").Replace("\n", " ").Replace("\r", " ");
                         });
                         await writer.WriteLineAsync(string.Join("\t", values));
@@ -209,6 +209,13 @@ namespace ETL_SQL.Connectors.Postgres
                         {
                             cmd.Parameters.Add(new NpgsqlParameter(pName, NpgsqlTypes.NpgsqlDbType.Unknown) { Value = strVal });
                         }
+                        else if (param is DateTimeOffset dto)
+                        {
+                            cmd.Parameters.Add(new NpgsqlParameter(pName, NpgsqlTypes.NpgsqlDbType.TimestampTz)
+                            {
+                                Value = NormalizeDateTimeOffset(dto)
+                            });
+                        }
                         else
                         {
                             cmd.Parameters.AddWithValue(pName, param ?? DBNull.Value);
@@ -240,7 +247,7 @@ namespace ETL_SQL.Connectors.Postgres
                         var row = currentBatch.NewRow();
                         for (int i = 0; i < reader.FieldCount; i++)
                         {
-                            row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                            row[i] = reader.IsDBNull(i) ? null : MapPostgresValue(reader, i);
                         }
                         await currentBatch.AddRowAsync(row);
 
@@ -271,6 +278,32 @@ namespace ETL_SQL.Connectors.Postgres
                 if (!isShared) await conn.DisposeAsync();
             }
         }
+
+        private static object MapPostgresValue(NpgsqlDataReader reader, int ordinal)
+        {
+            var value = reader.GetValue(ordinal);
+            var providerType = reader.GetDataTypeName(ordinal);
+            if (providerType.Equals("timestamp with time zone", StringComparison.OrdinalIgnoreCase)
+                || providerType.Equals("timestamptz", StringComparison.OrdinalIgnoreCase))
+            {
+                if (value is DateTime dateTime)
+                    return new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
+                if (value is DateTimeOffset offset) return offset.ToUniversalTime();
+            }
+            return value;
+        }
+
+        private static string FormatCopyValue(object value) => value switch
+        {
+            DateTimeOffset offset => offset.UtcDateTime.ToString(
+                "yyyy-MM-dd HH:mm:ss.ffffff+00", System.Globalization.CultureInfo.InvariantCulture),
+            DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm:ss.ffffff",
+                System.Globalization.CultureInfo.InvariantCulture),
+            IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty
+        };
+
+        private static DateTime NormalizeDateTimeOffset(DateTimeOffset value) => value.UtcDateTime;
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {

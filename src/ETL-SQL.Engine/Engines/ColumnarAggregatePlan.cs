@@ -65,7 +65,8 @@ internal sealed class ColumnarAggregatePlan
                 || column.ElementType == typeof(float) || column.ElementType == typeof(double)
                 || column.ElementType == typeof(decimal);
             var fixedWidthComparable = numeric || column.ElementType == typeof(DateTime)
-                || column.ElementType == typeof(TimeSpan) || column.ElementType == typeof(Guid);
+                || column.ElementType == typeof(DateTimeOffset) || column.ElementType == typeof(TimeSpan)
+                || column.ElementType == typeof(Guid);
             if (slot.Name is "SUM" or "AVG" ? !numeric : !fixedWidthComparable)
                 return false;
         }
@@ -162,6 +163,7 @@ internal sealed class ColumnarAggregatePlan
         if (type == typeof(double)) return Box(ColumnBatchKernels.MinMax<double>(batch, column, selection));
         if (type == typeof(decimal)) return Box(ColumnBatchKernels.MinMax<decimal>(batch, column, selection));
         if (type == typeof(DateTime)) return Box(ColumnBatchKernels.MinMax<DateTime>(batch, column, selection));
+        if (type == typeof(DateTimeOffset)) return Box(ColumnBatchKernels.MinMax<DateTimeOffset>(batch, column, selection));
         if (type == typeof(TimeSpan)) return Box(ColumnBatchKernels.MinMax<TimeSpan>(batch, column, selection));
         if (type == typeof(Guid)) return Box(ColumnBatchKernels.MinMax<Guid>(batch, column, selection));
         return (false, null, null);

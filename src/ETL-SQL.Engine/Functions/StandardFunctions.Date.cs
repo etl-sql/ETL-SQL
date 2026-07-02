@@ -35,7 +35,7 @@ namespace ETL_SQL.Engine.Functions
 
             registry.RegisterWithHelp("TRUNC", Trunc, "TRUNC(val[, part]): Truncates a date to the specified part (default 'DAY') or a number to decimals.");
             registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATETIME") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
-            registry.RegisterWithHelp("RELDATE", (args, ctx) => args.Count == 0 ? null : RelDateResolver.ResolveToOffset(args[0]?.ToString() ?? "", ctx.WeekStartDay), "RELDATE(expr): Resolves a relative date expression (e.g. 'D-7', 'M-1', 'W-1').");
+            registry.RegisterWithHelp("RELDATE", (args, ctx) => args.Count == 0 ? null : RelDateResolver.ResolveValue(args[0]?.ToString() ?? "", ctx.WeekStartDay), "RELDATE(expr): Resolves a relative date expression (e.g. 'D-7', 'M-1', 'W-1').");
             registry.RegisterWithHelp("DATEADD", DateAdd, "DATEADD(datepart, number, date): Adds a value to a date.");
             registry.RegisterWithHelp("TO_TIMESTAMP", ToTimestamp, "TO_TIMESTAMP(seconds): Converts Unix epoch seconds to a DATETIME.");
             registry.RegisterWithHelp("DATE_TRUNC", DateTrunc, "DATE_TRUNC(datepart, date): Truncates a date to the specified date part boundary.");

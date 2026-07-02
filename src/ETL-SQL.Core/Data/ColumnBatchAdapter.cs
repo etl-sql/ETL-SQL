@@ -251,6 +251,7 @@ public static class ColumnBatchAdapter
         if (source is ColumnBuffer<decimal> decimals) return CopyFixed(decimals, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<bool> booleans) return CopyFixed(booleans, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<DateTime> dates) return CopyFixed(dates, sourceRowCount, selectedRows, hasSelection, cancellationToken);
+        if (source is ColumnBuffer<DateTimeOffset> offsets) return CopyFixed(offsets, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<TimeSpan> times) return CopyFixed(times, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         if (source is ColumnBuffer<Guid> guids) return CopyFixed(guids, sourceRowCount, selectedRows, hasSelection, cancellationToken);
         throw new NotSupportedException($"Physical type '{source.ElementType.Name}' cannot be compacted.");

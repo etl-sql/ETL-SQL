@@ -79,7 +79,11 @@ public static class TypeConverter
         ["UNIQUEIDENTIFIER"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["GUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
         ["UUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
-        ["DATETIMEOFFSET"] = v => v is DateTimeOffset dto ? dto : (v is DateTime dt ? new DateTimeOffset(dt) : (EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt2) ? new DateTimeOffset(dt2) : DateTimeOffset.Parse(v.ToString() ?? ""))),
+        ["DATETIMEOFFSET"] = v => v is DateTimeOffset dto ? dto : (v is DateTime dt
+            ? new DateTimeOffset(dt)
+            : (EvaluationUtils.SafeTryParseDateTimeOffset(v.ToString() ?? "", out var parsed)
+                ? parsed
+                : DateTimeOffset.Parse(v.ToString() ?? "", System.Globalization.CultureInfo.InvariantCulture))),
         ["VECTOR"] = v => v.ToString(),
         ["SENSITIVE"] = v => v,
         ["SECRET"] = v => v,
@@ -104,7 +108,9 @@ public static class TypeConverter
                         var endIdx = typeName.IndexOf(')', idx);
                         if (endIdx > idx && int.TryParse(typeName.Substring(idx + 1, endIdx - idx - 1), out var precision))
                         {
-                            precision = Math.Clamp(precision, 0, 7);
+                            if (precision is < 0 or > 7)
+                                throw new ArgumentOutOfRangeException(nameof(typeName),
+                                    "Temporal precision must be between 0 and 7.");
                             if (converted is DateTime dt)
                             {
                                 long ticksPerUnit = (long)Math.Pow(10, 7 - precision);

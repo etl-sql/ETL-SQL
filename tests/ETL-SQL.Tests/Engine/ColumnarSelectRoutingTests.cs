@@ -315,11 +315,14 @@ public sealed class ColumnarSelectRoutingTests
         var lastDate = new DateTime(2026, 12, 31);
         var firstGuid = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var lastGuid = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        var firstOffset = new DateTimeOffset(2026, 1, 1, 8, 0, 0, TimeSpan.FromHours(-5));
+        var lastOffset = new DateTimeOffset(2026, 12, 31, 18, 0, 0, TimeSpan.FromHours(2));
         var schema = new ColumnBatchSchema(new[]
         {
             new ColumnBatchField("EventDate", typeof(DateTime), "DATETIME"),
             new ColumnBatchField("Duration", typeof(TimeSpan), "TIME"),
-            new ColumnBatchField("Identifier", typeof(Guid), "UUID")
+            new ColumnBatchField("Identifier", typeof(Guid), "UUID"),
+            new ColumnBatchField("ObservedAt", typeof(DateTimeOffset), "DATETIMEOFFSET")
         });
         await using var source = new NativeOnlyDataSource(new[]
         {
@@ -327,13 +330,15 @@ public sealed class ColumnarSelectRoutingTests
             {
                 new ColumnBuffer<DateTime>(new[] { lastDate, default }, 2, new byte[] { 0b0000_0010 }),
                 new ColumnBuffer<TimeSpan>(new[] { TimeSpan.FromHours(5), TimeSpan.FromHours(2) }, 2),
-                new ColumnBuffer<Guid>(new[] { lastGuid, firstGuid }, 2)
+                new ColumnBuffer<Guid>(new[] { lastGuid, firstGuid }, 2),
+                new ColumnBuffer<DateTimeOffset>(new[] { lastOffset, firstOffset }, 2)
             }, 2),
             new ColumnBatch(schema, new IColumnBuffer[]
             {
                 new ColumnBuffer<DateTime>(new[] { firstDate }, 1),
                 new ColumnBuffer<TimeSpan>(new[] { TimeSpan.FromHours(8) }, 1),
-                new ColumnBuffer<Guid>(new[] { Guid.Parse("11111111-1111-1111-1111-111111111111") }, 1)
+                new ColumnBuffer<Guid>(new[] { Guid.Parse("11111111-1111-1111-1111-111111111111") }, 1),
+                new ColumnBuffer<DateTimeOffset>(new[] { firstOffset.AddDays(1) }, 1)
             }, 1)
         }, throwOnRowRead: true);
         evaluator.Connections["events"] = source;
@@ -342,7 +347,8 @@ public sealed class ColumnarSelectRoutingTests
             .EvaluateQuery(ParseSelect(
                 "SELECT MIN(EventDate) AS FirstDate, MAX(EventDate) AS LastDate, " +
                 "MIN(Duration) AS Shortest, MAX(Duration) AS Longest, " +
-                "MIN(Identifier) AS FirstId, MAX(Identifier) AS LastId FROM events;"), evaluator)
+                "MIN(Identifier) AS FirstId, MAX(Identifier) AS LastId, " +
+                "MIN(ObservedAt) AS FirstOffset, MAX(ObservedAt) AS LastOffset FROM events;"), evaluator)
             .ToListAsync());
         var row = Assert.Single(result.Rows);
 
@@ -352,6 +358,8 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(TimeSpan.FromHours(8), row["Longest"]);
         Assert.Equal(firstGuid, row["FirstId"]);
         Assert.Equal(lastGuid, row["LastId"]);
+        Assert.Equal(firstOffset, row["FirstOffset"]);
+        Assert.Equal(lastOffset, row["LastOffset"]);
         Assert.Equal(0, source.RowReadAttempts);
     }
 

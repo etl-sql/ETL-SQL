@@ -487,7 +487,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   *(A resumable `Test-GateF.ps1` runner now isolates the native scan/filter/projection/100-group
   aggregate and spill-backed `#temp` round-trip, writes durable child logs plus atomic `status.json`,
   enforces a 16 GB peak/50K rows-per-second floor, records the commit, and refuses to start the spill
-  scenario without 25 GB free on the temp drive. The user-operated 1B run remains.)*
+  scenario without 25 GB free on the temp drive. Its 1B test is explicitly skipped outside that
+  operator-run certification script; it is not part of smoke, ordinary test, or release lanes. The
+  user-operated 1B run remains.)*
 
 #### Non-goals and guardrails
 
