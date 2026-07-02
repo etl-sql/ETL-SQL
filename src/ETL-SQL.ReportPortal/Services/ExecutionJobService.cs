@@ -29,6 +29,14 @@ public record ExecutionJob(
     string? CorrelationId = null)
 {
     public JobStatus Status { get; set; } = JobStatus.Pending;
+
+    /// <summary>
+    /// When set, the report runs under this target user's row-level-security identity while
+    /// <see cref="UserId"/> remains the real actor (an administrator). Impersonated runs are always
+    /// executed per-request and never persist a shared snapshot. See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    public int? ImpersonatedUserId { get; init; }
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -205,13 +213,16 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         Dictionary<string, string>? parameters = null,
         bool isAdministrator = false,
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
-        string? correlationId = null)
+        string? correlationId = null, int? impersonatedUserId = null)
     {
         EvictExpiredJobs();
         var jobId = Guid.NewGuid().ToString("N");
         var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator,
             ActorType: actorType, ActorId: actorId, EffectiveScopes: effectiveScopes,
-            CorrelationId: correlationId);
+            CorrelationId: correlationId)
+        {
+            ImpersonatedUserId = impersonatedUserId
+        };
         _jobs[jobId] = job;
         await PersistNewJobAsync(job, "Execution");
 
@@ -462,7 +473,10 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             // because the view path serves the latest snapshot to any viewer regardless of who built
             // it — which would leak one user's row-filtered result to another. The executor still gets
             // their own result via the per-job manifest artifact. See Docs/Design/RowLevelSecurity.md.
-            var identitySensitive = await ScriptReferencesIdentityAsync(scriptPath, cts.Token);
+            // Impersonated runs are always per-request previews under a substituted identity and must
+            // never become a shared snapshot, regardless of whether the script references identity.
+            var identitySensitive = job.ImpersonatedUserId is not null
+                || await ScriptReferencesIdentityAsync(scriptPath, cts.Token);
             if (identitySensitive)
             {
                 _log.LogInformation(
@@ -966,25 +980,44 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == job.UserId, ct);
-            if (user is null) return null;
+            // Under impersonation the effective identity (whose rows are shown) is the target user;
+            // the real actor stays the administrator. Row-level predicates and the admin bypass key
+            // off the *effective* (target) identity, so impersonating a non-admin shows that user's
+            // restricted view. Permission to run the report was already gated on the real admin.
+            var effectiveUserId = job.ImpersonatedUserId ?? job.UserId;
+
+            var effective = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == effectiveUserId, ct);
+            if (effective is null) return null;
 
             var roles = await (from ur in db.UserRoles
                                join r in db.Roles on ur.RoleId equals r.Id
-                               where ur.UserId == job.UserId && r.Name != null
+                               where ur.UserId == effectiveUserId && r.Name != null
                                select r.Name!).ToListAsync(ct);
             var groups = await (from ug in db.UserGroups
                                 join g in db.Groups on ug.GroupId equals g.Id
-                                where ug.UserId == job.UserId
+                                where ug.UserId == effectiveUserId
                                 select g.Name).ToListAsync(ct);
 
-            var name = user.UserName ?? job.UserId.ToString();
+            var effectiveName = effective.UserName ?? effectiveUserId.ToString();
+            var realName = effectiveName;
+            if (job.ImpersonatedUserId is not null)
+            {
+                var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == job.UserId, ct);
+                realName = actor?.UserName ?? job.UserId.ToString();
+            }
+
+            // IsAdmin reflects the effective identity, not the real actor, so an admin impersonating a
+            // normal user does not carry admin bypass into the target's view.
+            var effectiveIsAdmin = job.ImpersonatedUserId is null
+                ? job.IsAdministrator
+                : roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+
             return new ETL_SQL.Core.Governance.ExecutionIdentity
             {
-                EffectiveUser = name,
-                EffectiveUserId = job.UserId,
-                RealUser = name,
-                IsAdmin = job.IsAdministrator,
+                EffectiveUser = effectiveName,
+                EffectiveUserId = effectiveUserId,
+                RealUser = realName,
+                IsAdmin = effectiveIsAdmin,
                 AdminBypassesRowLevelSecurity = _config.Security.AdminBypassRowLevelSecurity,
                 Groups = groups,
                 Roles = roles
