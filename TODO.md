@@ -150,7 +150,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 **Phase 1 complete.** Phase 2 (below) is the remaining RLS work.
 
 ##### RLS Phase 2 (enterprise completion)
-- [ ] Table-valued `USER_GROUPS()` / `USER_ROLES()` for `WHERE col IN (SELECT ... )` joins.
+- [x] Table-valued `USER_GROUPS()` / `USER_ROLES()` for `WHERE col IN (SELECT Value FROM USER_GROUPS())` joins; both added to the identity-sensitivity scan so they are also never-cached. *(3 engine tests)*
 - [ ] Publisher **preview-as** (simulated group/role set, edit-scope only) — gated by the security-review decision recorded in `Docs/Release_Checklist.md`.
 - [ ] Per-recipient subscription execution for identity-sensitive reports (currently they simply produce no shared snapshot).
 - [ ] CLI / Orchestrator run-as identity semantics for non-interactive execution.

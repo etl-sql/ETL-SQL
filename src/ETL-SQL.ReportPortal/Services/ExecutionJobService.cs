@@ -960,7 +960,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     // Row-level-security identity references. A script containing any of these runs under the
     // viewer's identity and must not share a snapshot (see the ReportSnapshots guard above).
     private static readonly string[] _identityReferenceTokens =
-        { "@@CURRENT_USER", "@@REAL_USER", "@@IS_ADMIN", "HAS_GROUP", "HAS_ROLE" };
+        { "@@CURRENT_USER", "@@REAL_USER", "@@IS_ADMIN", "HAS_GROUP", "HAS_ROLE", "USER_GROUPS", "USER_ROLES" };
 
     /// <summary>
     /// Conservative static check: does the script reference any identity variable/function? Scans raw

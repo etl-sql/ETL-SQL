@@ -65,6 +65,11 @@ namespace ETL_SQL.Engine.Functions
                 return ctx.ExecutionIdentity is { } id && !string.IsNullOrEmpty(name) && id.EffectiveHasRole(name);
             }, "HAS_ROLE('name'): TRUE if the current user holds the role (row-level security). Admins bypass by default; FALSE when no identity is present.");
 
+            registry.RegisterWithHelp("USER_GROUPS", UserGroups,
+                "USER_GROUPS(): Table-valued — one 'Value' row per group the current user belongs to. Use in WHERE col IN (SELECT Value FROM USER_GROUPS()). Empty when no identity is present.");
+            registry.RegisterWithHelp("USER_ROLES", UserRoles,
+                "USER_ROLES(): Table-valued — one 'Value' row per role the current user holds. Empty when no identity is present.");
+
             registry.RegisterWithHelp("GET_JOB_STATE", async (args, ctx) =>
             {
                 if (args.Count < 1) throw new ExecutionException("GET_JOB_STATE requires at least 1 argument (key)");
@@ -139,6 +144,24 @@ namespace ETL_SQL.Engine.Functions
         private static object? Count(List<object?> args, IExecutionContext ctx)
         {
             return (args[0] is System.Collections.ICollection ic) ? (decimal)ic.Count : (args[0] is System.Collections.IEnumerable ie && args[0] is not string ? (decimal)Enumerable.Count(ie.Cast<object>()) : (args[0] == null ? 0m : 1m));
+        }
+
+        /// <summary>USER_GROUPS() — table-valued; one 'Value' row per group in the injected identity.</summary>
+        private static async Task<object?> UserGroups(List<object?> args, IExecutionContext ctx)
+            => await IdentityValuesTable(ctx.ExecutionIdentity?.Groups);
+
+        /// <summary>USER_ROLES() — table-valued; one 'Value' row per role in the injected identity.</summary>
+        private static async Task<object?> UserRoles(List<object?> args, IExecutionContext ctx)
+            => await IdentityValuesTable(ctx.ExecutionIdentity?.Roles);
+
+        private static async Task<DataTable> IdentityValuesTable(IEnumerable<string>? values)
+        {
+            var dt = new DataTable();
+            dt.SetColumns(new[] { "Value" });
+            if (values is not null)
+                foreach (var value in values)
+                    await dt.AddRowAsync(new Row { ["Value"] = value });
+            return dt;
         }
 
         /// <summary>UNNEST(list) — table-valued; one 'Value' row per list element.</summary>

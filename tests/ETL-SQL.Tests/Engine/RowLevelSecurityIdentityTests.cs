@@ -138,6 +138,45 @@ DECLARE @admin = @@IS_ADMIN;");
         }
 
         [Fact]
+        public async Task UserGroups_TableValued_YieldsOneRowPerGroup()
+        {
+            var eval = NewEvaluator();
+            eval.ExecutionIdentity = User("jane", 42, groups: new[] { "Region:East", "Level:Manager" });
+
+            await TestHelpers.Execute(eval, @"
+SELECT Value INTO #g FROM USER_GROUPS();
+DECLARE @c = (SELECT COUNT(*) FROM #g);");
+
+            Assert.Equal(2, Convert.ToInt32(eval.GetVariable("@c")));
+        }
+
+        [Fact]
+        public async Task RlsPredicate_FiltersRows_ByUserGroupsSubquery()
+        {
+            var eval = NewEvaluator();
+            eval.ExecutionIdentity = User("jane", 42, groups: new[] { "East" });
+
+            await TestHelpers.Execute(eval, @"
+CREATE TABLE #sales (id INT, region VARCHAR);
+INSERT INTO #sales VALUES (1, 'East'), (2, 'West'), (3, 'East');
+SELECT * INTO #visible FROM #sales WHERE region IN (SELECT Value FROM USER_GROUPS());
+DECLARE @c = (SELECT COUNT(*) FROM #visible);");
+
+            Assert.Equal(2, Convert.ToInt32(eval.GetVariable("@c")));
+        }
+
+        [Fact]
+        public async Task UserGroups_Empty_WhenNoIdentity()
+        {
+            var eval = NewEvaluator();
+            await TestHelpers.Execute(eval, @"
+SELECT Value INTO #g FROM USER_GROUPS();
+DECLARE @c = (SELECT COUNT(*) FROM #g);");
+
+            Assert.Equal(0, Convert.ToInt32(eval.GetVariable("@c")));
+        }
+
+        [Fact]
         public async Task RlsPredicate_FiltersRows_ByGroupMembership()
         {
             var eval = NewEvaluator();
