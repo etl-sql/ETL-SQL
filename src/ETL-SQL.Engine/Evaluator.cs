@@ -47,6 +47,7 @@ public class ReturnException : Exception
 public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
 {
     public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+    public ExecutionIdentity? ExecutionIdentity { get; set; }
     private readonly IEnumerable<IStatementHandler> _handlers;
     private readonly IServiceProvider _serviceProvider = null!;
     private readonly Core.Functions.IFunctionRegistry _functionRegistry;
@@ -1331,7 +1332,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             SessionId = SessionId,
             DisplayExecuteTree = DisplayExecuteTree,
             MaxGroupingSets = MaxGroupingSets,
-            ExecutionPolicy = ExecutionPolicy
+            ExecutionPolicy = ExecutionPolicy,
+            ExecutionIdentity = ExecutionIdentity
         };
 
         fork.Telemetry.IsProfiling = Telemetry.IsProfiling;

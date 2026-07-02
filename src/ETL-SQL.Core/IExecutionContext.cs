@@ -341,6 +341,13 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     /// <summary>Immutable enterprise-policy state captured for the current top-level execution.</summary>
     Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
 
+    /// <summary>
+    /// Authenticated identity the script runs under, injected by the trusted host. Sole source for
+    /// the identity system variables and HAS_GROUP/HAS_ROLE. Null when no identity was injected
+    /// (e.g. non-interactive/standalone execution); row-level predicates then fail closed.
+    /// </summary>
+    Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
+
     // Property-based access to sub-contexts for better interface segregation (TODO-91)
     IVariableContext VarContext { get; }
     IReportContext ReportContext { get; }

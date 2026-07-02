@@ -967,7 +967,12 @@ public class ExpressionEvaluator
         if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.Telemetry.SortSpillCount;
         if (v.Name.Equals("@@FETCH_STATUS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.FetchStatus;
 
-
+        // Identity variables (row-level security). Null when no identity is injected — a valid
+        // fail-closed value, so these must resolve here and never fall through to "Undeclared".
+        if (v.Name.Equals("@@CURRENT_USER", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.EffectiveUser;
+        if (v.Name.Equals("@@CURRENT_USER_ID", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.EffectiveUserId;
+        if (v.Name.Equals("@@REAL_USER", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.RealUser;
+        if (v.Name.Equals("@@IS_ADMIN", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.IsAdmin ?? false;
 
         if (!_context.VarContext.ContainsVariable(v.Name))
             throw new ExecutionException($"Undeclared: {v.Name}");

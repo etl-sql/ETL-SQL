@@ -21,6 +21,7 @@ namespace ETL_SQL.Core.Common;
 public class SystemExecutionContext : IExecutionContext, IVariableContext, IReportContext, ITelemetryContext
 {
     public Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+    public Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
     public IVariableContext VarContext => this;
     public IReportContext ReportContext => this;
     public ITelemetryContext Telemetry => this;

@@ -51,6 +51,20 @@ namespace ETL_SQL.Engine.Functions
 
             registry.RegisterWithHelp("CONNECTION_PROPERTY", ConnectionProperty, "CONNECTION_PROPERTY(conn_name, prop_name): Returns the value of a connection property, masking sensitive properties.");
 
+            // Row-level security predicates. Read the host-injected identity; fail closed (FALSE)
+            // when no identity was injected. Admins bypass by default. See Docs/Design/RowLevelSecurity.md.
+            registry.RegisterWithHelp("HAS_GROUP", (args, ctx) =>
+            {
+                var name = args.FirstOrDefault()?.ToString();
+                return ctx.ExecutionIdentity is { } id && !string.IsNullOrEmpty(name) && id.EffectiveHasGroup(name);
+            }, "HAS_GROUP('name'): TRUE if the current user belongs to the group (row-level security). Admins bypass by default; FALSE when no identity is present.");
+
+            registry.RegisterWithHelp("HAS_ROLE", (args, ctx) =>
+            {
+                var name = args.FirstOrDefault()?.ToString();
+                return ctx.ExecutionIdentity is { } id && !string.IsNullOrEmpty(name) && id.EffectiveHasRole(name);
+            }, "HAS_ROLE('name'): TRUE if the current user holds the role (row-level security). Admins bypass by default; FALSE when no identity is present.");
+
             registry.RegisterWithHelp("GET_JOB_STATE", async (args, ctx) =>
             {
                 if (args.Count < 1) throw new ExecutionException("GET_JOB_STATE requires at least 1 argument (key)");

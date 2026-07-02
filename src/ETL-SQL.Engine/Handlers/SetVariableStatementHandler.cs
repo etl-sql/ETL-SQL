@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -27,6 +28,12 @@ public class SetVariableStatementHandler : IStatementHandler
         {
             var varName = vExpr.Name;
             _logger.Debug("Setting variable {VariableName}", varName);
+
+            // System (@@) variables are read-only. This is a security invariant: identity
+            // variables (@@CURRENT_USER, @@IS_ADMIN, …) back row-level security and must not be
+            // reassignable from a script. See Docs/Design/RowLevelSecurity.md.
+            if (SystemVariableProvider.IsSystemVariable(varName))
+                throw new ExecutionException($"System variable {varName} is read-only and cannot be assigned.");
 
             if (!context.VarContext.ContainsVariable(varName))
                 throw new ExecutionException($"Variable {varName} must be declared before it can be assigned.");
