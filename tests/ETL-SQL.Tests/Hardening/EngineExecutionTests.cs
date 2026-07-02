@@ -276,21 +276,31 @@ namespace ETL_SQL.Tests.Hardening
         public async Task ExternalJoinEngine_RecursivelyPartitionsOversizedPartitions()
         {
             var e = NewEvaluator(externalPartitions: 4);
-            e.JoinSpillThreshold = 2;
-            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-            var schema = new TableSchema(new[] { "Id", "Val" });
+            e.JoinSpillThreshold = 10_000_000;
+            e.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 256;
+            try
+            {
+                var engine = new ExternalJoinEngine(e, NullLogger.Instance);
+                var schema = new TableSchema(new[] { "Id", "Val" });
 
-            var result = await engine.ApplyHashJoinExternal(
-                Stream(schema, 0, 32),
-                Stream(schema, 0, 32),
-                CreateJoin("INNER"),
-                new List<string> { "Id" },
-                new List<string> { "Id" }).ToListAsync();
+                var result = await engine.ApplyHashJoinExternal(
+                    Stream(schema, 0, 32),
+                    Stream(schema, 0, 32),
+                    CreateJoin("INNER"),
+                    new List<string> { "Id" },
+                    new List<string> { "Id" }).ToListAsync();
 
-            Assert.Equal(32, result.Count);
-            Assert.True(
-                e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
-                "Expected recursive partitioning to create additional spill partitions beyond the initial left/right pass.");
+                Assert.Equal(32, result.Count);
+                Assert.True(
+                    e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
+                    "Expected byte-governed recursive partitioning beyond the initial left/right pass.");
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
+            }
         }
 
         [Fact]

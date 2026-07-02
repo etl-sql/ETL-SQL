@@ -191,20 +191,21 @@ namespace ETL_SQL.Tests.Operations.Operations
         public async Task OversizedPartitionsAreRewrittenAsNativeBatches()
         {
             var (eval, logger) = BuildContext(partitions: 2);
-            eval.JoinSpillThreshold = 100;
+            eval.JoinSpillThreshold = 10_000_000;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
             var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 16 * 1024;
             try
             {
-                var left = JoinRows(1000, 1000, "lval");
-                var right = JoinRows(1000, 1000, "rval");
+                var left = JoinRows(4000, 4000, "lval");
+                var right = JoinRows(20000, 4000, "rval");
                 var engine = new ExternalJoinEngine(eval, logger);
 
                 var results = await engine.ApplyHashJoinExternal(
                     left, right, InnerOnId,
                     new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
 
-                Assert.Equal(1000, results.Count);
+                Assert.Equal(20000, results.Count);
                 Assert.True(engine.ColumnarRepartitionRows > 0);
             }
             finally

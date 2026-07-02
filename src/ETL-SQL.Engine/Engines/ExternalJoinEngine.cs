@@ -163,23 +163,6 @@ public class ExternalJoinEngine
         int depth,
         List<string> tempFiles)
     {
-        // Row-count-driven repartition (grace hash join): split an oversized build side up front.
-        if (ShouldRepartition(rightRowCount, depth))
-        {
-            var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
-            if (split != null)
-            {
-                await foreach (var row in JoinSubPartitions(split.Value.Left, split.Value.Right, join, leftKeys, rightKeys, depth + 1, tempFiles))
-                    yield return row;
-                yield break;
-            }
-
-            _logger.Debug(
-                "External join partition at depth {Depth} could not be reduced further by row count. Falling back to a memory-guarded direct join for {RightRows} right rows.",
-                depth,
-                rightRowCount);
-        }
-
         // Memory-guarded direct join. The (right) build side is read fully before any probe row is
         // emitted, so if heap growth crosses the governor ceiling mid-build (e.g. wide rows under the
         // row threshold) we can repartition or apply policy without having yielded anything.
@@ -241,13 +224,6 @@ public class ExternalJoinEngine
             return (left, right);
         }
         return null;
-    }
-
-    private bool ShouldRepartition(long rightRowCount, int depth)
-    {
-        return PartitionCount > 1
-            && depth < MaxRecursivePartitionDepth
-            && rightRowCount > Math.Max(1, _context.JoinSpillThreshold);
     }
 
     /// <summary>

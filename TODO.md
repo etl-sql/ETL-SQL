@@ -454,10 +454,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   recursive hash paths use typed spill batches, and sort merge fan-in is capped at 64 readers. A
   deterministic 150-run sort proves two merge levels, three intermediate runs, and 153 total extents.
   Known-cardinality equi-joins now stream both inputs directly to the external partitioner instead of
-  materializing the build side, and partition planning respects the 256 MB per-operator grant rather
-  than the full process pool. At 10M rows this reached 73,126 rows/s and 2.48 GB peak working set versus
-  the checked-in 39,399 rows/s/4.15 GB baseline. Recursive work remains too high at 8,778 extents and
-  547 partition passes; reduce that amplification and capture 50M join/sort evidence before completion.)*
+  materializing the build side, partition planning respects the 256 MB per-operator grant, and recursive
+  repartitioning is driven by the exact packed-build byte guard rather than a 5K-row cutoff. At 10M rows
+  this reached 108,938 rows/s, 2.28 GB peak working set, 74 extents, and three partition passes versus
+  the checked-in 39,399 rows/s/4.15 GB baseline. At 50M it sustained 107,152 rows/s below the 16 GB gate
+  (10.0 GB peak), with 210 extents and three passes. The 50M sort measurement remains.)*
 - [ ] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
   and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
   spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
