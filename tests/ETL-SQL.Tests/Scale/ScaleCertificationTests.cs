@@ -388,7 +388,9 @@ namespace ETL_SQL.Tests.Scale
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
 
             var ev = await EvWithRows(Rows);
-            ev.ExternalSortChunkSize = 5_000;  // force multiple sort chunks
+            // Force multiple runs at every tier without pinning large-tier certification to the
+            // tiny smoke run size. Cap at the production default so the measurement remains honest.
+            ev.ExternalSortChunkSize = Math.Min(100_000, Math.Max(5_000, Rows / 64));
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();

@@ -449,7 +449,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   Release/server-GC gate compares identical filter/projection/group checksums and requires at least
   1.5x speedup. Measured native versus row throughput: 63.30M versus 15.98M rows/s at 10M (3.961x),
   and 72.36M versus 17.66M rows/s at 50M (4.098x).)*
-- [~] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
+- [x] **Gate E — external operators:** equi-join and sort stay bounded with dynamic fan-out, bounded
   extent/file counts, and no unnecessary columnar→row→columnar round-trip. *(Join fan-out is adaptive,
   recursive hash paths use typed spill batches, and sort merge fan-in is capped at 64 readers. A
   deterministic 150-run sort proves two merge levels, three intermediate runs, and 153 total extents.
@@ -458,7 +458,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   repartitioning is driven by the exact packed-build byte guard rather than a 5K-row cutoff. At 10M rows
   this reached 108,938 rows/s, 2.28 GB peak working set, 74 extents, and three partition passes versus
   the checked-in 39,399 rows/s/4.15 GB baseline. At 50M it sustained 107,152 rows/s below the 16 GB gate
-  (10.0 GB peak), with 210 extents and three passes. The 50M sort measurement remains.)*
+  (10.0 GB peak), with 210 extents and three passes. Sort certification scales forced run size up to
+  the production 100K cap while retaining multiple runs: 10M used 176 extents/two passes at 76,258
+  rows/s and 1.07 GB peak; 50M used 625 extents/two passes at 73,070 rows/s and 1.10 GB peak.)*
 - [ ] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
   and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
   spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
