@@ -797,6 +797,24 @@ User snippets with the same trigger as a built-in override the built-in. The dir
 
 Back up the portal sidecar files, script roots, snapshots, datasets, map roots, and service configuration alongside the databases. A portal restore without the script root or snapshot directory is incomplete.
 
+For PostgreSQL (HA) deployments, database backup is the responsibility of your PostgreSQL tooling
+(`pg_dump` / continuous archiving / managed snapshots) — back up PostgreSQL and the shared artifact
+roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for you.
+
+### Scheduling backups and restore drills
+
+`etl-sql admin backup` (§11.3) is a one-shot command, not a scheduled service — **you schedule it**:
+
+- **Schedule it externally** with the OS scheduler (Windows Task Scheduler / cron), not as an internal
+  job, so a backup still runs when the orchestrator itself is down. Capture the command's exit code and
+  alert on non-zero (wire it into the job-failure alerting in §9.1).
+- **Test the restore.** An unverified backup is a hope, not a recovery plan. Periodically restore into a
+  scratch directory with `etl-sql admin restore` (it validates integrity, key versions, and version
+  compatibility with `--validate` before writing anything — see §11.3) and confirm the Portal starts
+  and a report renders. Schedule this drill on a cadence that matches your recovery objectives.
+- Restored clones must not silently reuse machine identity or credentials in another environment —
+  re-enroll and rotate as covered in §11.3.
+
 ### Logs
 
 Default log locations vary by deployment, but the bundled services write application logs under `logs/` unless overridden:
@@ -843,6 +861,34 @@ After installation or upgrade:
 6. Confirm logs, backup jobs, and monitoring checks are collecting the expected files.
 
 For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md).
+
+### 9.1 External monitoring and alerting
+
+ETL-SQL exposes health and history for you to monitor, but **it does not page you** — wire the signals
+into your own monitoring stack.
+
+**Liveness (dead-man's-switch).** Point an out-of-process monitor (your uptime service, Nagios/Zabbix,
+a cloud health check, or a small cron script on a *different* host) at `GET /healthz` on each Portal
+node and at the Orchestrator. Alert when the probe fails or stops responding. This must run outside the
+Portal/Orchestrator process: a job *inside* the orchestrator cannot report that its own host is down,
+so an internal check alone has a blind spot exactly when it matters most.
+
+**Job-failure alerting.** Job outcomes are recorded in job history (queryable with `SHOW JOB HISTORY`,
+or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns:
+
+- **Per-job immediate email** — the job author adds a failure branch that sends `SEND EMAIL` on error.
+  Use this for **SLA-bearing jobs** (e.g. the outbound vendor SFTP deliveries) where a next-morning
+  digest is already too late. This is the most reliable signal because it fires from the job itself.
+- **Daily failure digest** — a scheduled job that reads the prior day's history and emails any failures
+  as a safety net beneath the per-job emails. Because this digest runs inside the orchestrator, it
+  cannot report its own host being down — so pair it with the external `/healthz` dead-man's-switch
+  above and alert if the expected digest does not arrive.
+
+**Capacity and saturation.** Job history records each job's own `RowsProcessed`, `PeakMemoryBytes`, and
+`CpuTimeSeconds`, and the Portal exposes point-in-time operational metrics (active/queued executions,
+24h failure rates, hourly load, storage bytes). These describe *workload*. To answer "am I outgrowing
+this server," also collect **host** metrics (CPU %, memory headroom, free disk on the spill and state
+volumes) with OS-level monitoring — the application measures per-job cost, not the box's headroom.
 
 ---
 

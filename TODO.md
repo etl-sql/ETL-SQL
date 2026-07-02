@@ -157,12 +157,12 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 **RLS Phase 1 & 2 complete** (impersonation/preview-as, OIDC groups, `USER_GROUPS()`/`USER_ROLES()`, per-recipient subscriptions, docs — all shipped above). Only an optional explicit operator run-as for scheduled jobs remains, and the fail-closed default already makes that safe.
 
 #### Liveness alerting and job-failure notification
-- [ ] Document (Administrators_Guide) an external heartbeat / dead-man's-switch: an out-of-process monitor that probes `/healthz` and alerts if the health probe or the expected daily failure-digest is missing — an in-orchestrator digest job cannot report on its own host being down.
-- [ ] Ship a template failure-digest job (reads the prior day's job history, emails failures) as a prebuilt admin script; recommend per-job immediate failure email for SLA-bearing jobs such as the vendor SFTP deliveries.
+- [x] Administrators_Guide §9.1 documents the external heartbeat / dead-man's-switch (out-of-process `/healthz` probe), the per-job-immediate vs daily-digest job-failure patterns (with the "in-orchestrator digest can't report its own host down" caveat), and the workload-vs-host-saturation distinction for capacity.
+- [ ] Ship a template failure-digest job as a prebuilt admin script — deferred: needs verification that job history is queryable/formattable into an email body on a live orchestrator before shipping a runnable template (see Prebuilt template scripts below).
 
 #### Backup scheduling and observability
-- [ ] Have the scheduled backup routine write a JobHistory row (success/failure with backup id) so the failure-digest covers backup failures with no separate email path. Do **not** add an in-language `BACKUP` statement that appears to cover PostgreSQL — DB backup for HA remains pg tooling's responsibility per the Administrators_Guide.
-- [ ] Document scheduling the existing `etl-sql admin backup` CLI plus a periodic tested restore drill.
+- [x] Administrators_Guide §8 documents scheduling the existing `etl-sql admin backup` CLI externally (survives orchestrator downtime), alerting on its exit code, and a periodic `--validate` restore drill; plus the PostgreSQL-is-your-tooling's-job note.
+- [ ] Backup-status-to-JobHistory row — deferred: backup is a CLI command, not a scheduled job, so this belongs with the prebuilt scheduled-backup template rather than the engine. Explicitly **not** adding an in-language `BACKUP` statement (would appear to cover PostgreSQL, which it must not).
 
 #### Outbound SFTP hardening
 - [x] SFTP server host-key verification: `HOST_KEY_FINGERPRINT` option pins the server key (SHA256 base64 or MD5 hex, optional algo prefix). `SftpConnector` now wires `HostKeyReceived` and rejects a mismatch (MITM protection); unpinned connections proceed but log a warning (backward compatible). Matching logic unit-tested (6 cases: SHA256 padding/prefix, MD5 case/separators, mismatch, empty).
