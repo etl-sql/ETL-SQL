@@ -70,6 +70,66 @@ public sealed class ColumnarPredicateCompilerTests
     }
 
     [Fact]
+    public void BindsUtf8ComparisonsOnlyWhenCollationSemanticsAreProvided()
+    {
+        using var batch = CreateBatch();
+        var equality = new BinaryExpression(
+            new IdentifierExpression("Name"),
+            TokenType.EQUALS,
+            new LiteralExpression("ONE", TokenType.STRING_LITERAL));
+
+        Assert.True(ColumnarPredicateCompiler.TrySelect(
+            batch, equality, out var selected, caseSensitiveComparison: false));
+        using (selected) Assert.Equal(new[] { 0 }, selected!.Indices.ToArray());
+
+        Assert.True(ColumnarPredicateCompiler.TrySelect(
+            batch, equality, out selected, caseSensitiveComparison: true));
+        using (selected) Assert.Empty(selected!.Indices.ToArray());
+    }
+
+    [Fact]
+    public void Utf8ComparisonsPreserveNumericCoercionAndSqlNullExclusion()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Value", typeof(string), "VARCHAR(20)")
+        });
+        using var batch = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "2", "10", null, "3" })
+        }, 4);
+        var predicate = new BinaryExpression(
+            new IdentifierExpression("Value"),
+            TokenType.GREATER_THAN,
+            new LiteralExpression("2", TokenType.STRING_LITERAL));
+
+        Assert.True(ColumnarPredicateCompiler.TrySelect(
+            batch, predicate, out var selected, caseSensitiveComparison: false));
+        using (selected) Assert.Equal(new[] { 1, 3 }, selected!.Indices.ToArray());
+    }
+
+    [Fact]
+    public void Utf8ComparisonPreservesUnicodeOrdinalIgnoreCaseFallback()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Value", typeof(string), "VARCHAR(20)")
+        });
+        using var batch = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "École", "ecole", "ÉCOLE" })
+        }, 3);
+        var predicate = new BinaryExpression(
+            new IdentifierExpression("Value"),
+            TokenType.EQUALS,
+            new LiteralExpression("école", TokenType.STRING_LITERAL));
+
+        Assert.True(ColumnarPredicateCompiler.TrySelect(
+            batch, predicate, out var selected, caseSensitiveComparison: false));
+        using (selected) Assert.Equal(new[] { 0, 2 }, selected!.Indices.ToArray());
+    }
+
+    [Fact]
     public void BindsNullPredicates()
     {
         using var batch = CreateBatch();

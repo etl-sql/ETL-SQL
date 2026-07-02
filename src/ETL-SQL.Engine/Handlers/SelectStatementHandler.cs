@@ -182,7 +182,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         var supported = groupedPlan!.CanApply(firstNative)
                             && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
                                 firstNative, stmt.WhereClause, out firstSelection,
-                                cancellationToken: context.CancellationToken));
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison));
                         if (supported)
                         {
                             using (firstNative)
@@ -197,7 +198,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                 SelectionVector? selection = null;
                                 if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
                                     nativeBatch, stmt.WhereClause, out selection,
-                                    cancellationToken: context.CancellationToken))
+                                    cancellationToken: context.CancellationToken,
+                                    caseSensitiveComparison: context.CaseSensitiveComparison))
                                     throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
                                 using (selection) groupedPlan.Accumulate(nativeBatch, selection);
                             }
@@ -265,7 +267,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                     var supported = aggregatePlan!.CanApply(firstNative)
                         && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
                             firstNative, stmt.WhereClause, out firstSelection,
-                            cancellationToken: context.CancellationToken));
+                            cancellationToken: context.CancellationToken,
+                            caseSensitiveComparison: context.CaseSensitiveComparison));
                     if (supported)
                     {
                         using (firstNative)
@@ -281,7 +284,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                             SelectionVector? selection = null;
                             if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
                                 nativeBatch, stmt.WhereClause, out selection,
-                                cancellationToken: context.CancellationToken))
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison))
                                 throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during aggregation.");
                             using (selection) aggregatePlan.Accumulate(nativeBatch, selection);
                         }
@@ -334,7 +338,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         var predicateSupported = stmt.WhereClause == null
                             || ColumnarPredicateCompiler.TrySelect(
                                 firstNative, stmt.WhereClause, out firstSelection,
-                                cancellationToken: context.CancellationToken);
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison);
                         var projectedSources = nativeColumns
                             .Select(column => ((IdentifierExpression)column.Expression).Name.Split('.').Last())
                             .ToList();
@@ -362,7 +367,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                 if (stmt.WhereClause != null
                                     && !ColumnarPredicateCompiler.TrySelect(
                                         nativeBatch, stmt.WhereClause, out selection,
-                                        cancellationToken: context.CancellationToken))
+                                        cancellationToken: context.CancellationToken,
+                                        caseSensitiveComparison: context.CaseSensitiveComparison))
                                     throw new InvalidOperationException("Columnar source changed to an incompatible schema during a query.");
                                 using (selection)
                                 {
@@ -518,7 +524,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         var first = enumerator.Current;
         SelectionVector? firstSelection = null;
         if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
-            first, statement.WhereClause, out firstSelection, cancellationToken: context.CancellationToken))
+            first, statement.WhereClause, out firstSelection,
+            cancellationToken: context.CancellationToken,
+            caseSensitiveComparison: context.CaseSensitiveComparison))
         {
             first.Dispose();
             await enumerator.DisposeAsync();
@@ -569,7 +577,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 if (!await enumerator.MoveNextAsync()) yield break;
                 input = enumerator.Current;
                 if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
-                    input, statement.WhereClause, out selection, cancellationToken: context.CancellationToken))
+                    input, statement.WhereClause, out selection,
+                    cancellationToken: context.CancellationToken,
+                    caseSensitiveComparison: context.CaseSensitiveComparison))
                 {
                     input.Dispose();
                     throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during SELECT INTO.");

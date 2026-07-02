@@ -336,8 +336,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   cancellation, and ordinal validation without `Row` materialization. A conservative AST binder now
   recognizes fixed-width comparisons, reversed literal comparisons, arithmetic comparisons, and
   `IS NULL`/`IS NOT NULL`; `AND` composes selections and `OR` uses a pooled bitmap to deduplicate while
-  preserving candidate order. Unsupported expressions return to the row fallback. Complex-plan
-  routing and string/collation comparison remain.)*
+  preserving candidate order. UTF-8 columns now support all six comparisons while preserving the row
+  engine's numeric/date coercion, SQL null behavior, and configured ordinal case sensitivity. Common
+  non-coercing ASCII equality stays encoded and allocation-free; Unicode/coercing comparisons decode
+  individual values without constructing rows. Unsupported expressions return to the row fallback.
+  Broader complex-plan routing remains.)*
 - [x] `COUNT`, `SUM`, `MIN`, `MAX`, and `AVG` over native buffers. *(Scalar typed-buffer kernels now
   implement SQL null exclusion, empty-input semantics, decimal-promoted accumulation, floating and
   decimal averages, optional selection vectors, cancellation, and fixed-width min/max without boxed
@@ -382,7 +385,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   source row reader; global aggregate tests cover multi-batch decimal promotion and aggregate fallback.
   End-to-end grouped SELECT differentials now compare native and row planners across batches with null
   keys/values, filtering, and COUNT/SUM/AVG/MIN/MAX; native SELECT-INTO coverage also verifies lineage
-  recording. String collation, join differentials, derived-column lineage, and broader scripts remain.)*
+  recording. String predicate coverage now proves case-sensitive/case-insensitive routing, Unicode
+  fallback, numeric coercion, and null exclusion. Join differentials, derived-column lineage, and
+  broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 

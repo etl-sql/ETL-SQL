@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Text;
 using System.Threading;
 
 namespace ETL_SQL.Core.Data;
@@ -152,6 +153,79 @@ public static class ColumnBatchKernels
                 _ => throw new ArgumentOutOfRangeException(nameof(comparison))
             };
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Applies the engine's coercing string comparison semantics directly over a UTF-8 column.
+    /// Values are decoded individually, but no Row/DataTable object graph is materialized.
+    /// </summary>
+    public static SelectionVector SelectUtf8Comparison(
+        ColumnBatch batch,
+        string columnName,
+        ColumnComparison comparison,
+        object constant,
+        bool caseSensitive,
+        SelectionVector? input = null,
+        CancellationToken cancellationToken = default)
+    {
+        var column = batch.GetUtf8Column(columnName);
+        byte[]? constantUtf8 = null;
+        var canCompareEncodedEquality = comparison is ColumnComparison.Equal or ColumnComparison.NotEqual
+            && constant is string constantString
+            && !decimal.TryParse(constantString, out _)
+            && !EvaluationUtils.TryToDateTime(constantString, out _);
+        if (canCompareEncodedEquality)
+            constantUtf8 = Encoding.UTF8.GetBytes((string)constant);
+
+        return Select(batch.RowCount, input, index =>
+        {
+            if (column.IsNull(index)) return false;
+            var encodedValue = column.GetUtf8Bytes(index);
+            if (constantUtf8 != null
+                && (caseSensitive || IsAscii(encodedValue) && IsAscii(constantUtf8)))
+            {
+                var equal = caseSensitive
+                    ? encodedValue.SequenceEqual(constantUtf8)
+                    : EqualsAsciiIgnoreCase(encodedValue, constantUtf8);
+                return comparison == ColumnComparison.Equal ? equal : !equal;
+            }
+
+            var value = Encoding.UTF8.GetString(encodedValue);
+            if (comparison is ColumnComparison.Equal or ColumnComparison.NotEqual)
+            {
+                var equal = EvaluationUtils.IsSoftEqual(value, constant, caseSensitive: caseSensitive);
+                return comparison == ColumnComparison.Equal ? equal : !equal;
+            }
+
+            var order = EvaluationUtils.CompareConstants(value, constant, caseSensitive);
+            return comparison switch
+            {
+                ColumnComparison.LessThan => order < 0,
+                ColumnComparison.LessThanOrEqual => order <= 0,
+                ColumnComparison.GreaterThan => order > 0,
+                ColumnComparison.GreaterThanOrEqual => order >= 0,
+                _ => throw new ArgumentOutOfRangeException(nameof(comparison))
+            };
+        }, cancellationToken);
+    }
+
+    private static bool IsAscii(ReadOnlySpan<byte> value)
+    {
+        foreach (var item in value)
+            if ((item & 0x80) != 0) return false;
+        return true;
+    }
+
+    private static bool EqualsAsciiIgnoreCase(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+    {
+        if (left.Length != right.Length) return false;
+        for (var i = 0; i < left.Length; i++)
+        {
+            var l = left[i] is >= (byte)'a' and <= (byte)'z' ? (byte)(left[i] - 32) : left[i];
+            var r = right[i] is >= (byte)'a' and <= (byte)'z' ? (byte)(right[i] - 32) : right[i];
+            if (l != r) return false;
+        }
+        return true;
     }
 
     public static SelectionVector SelectArithmeticComparison<T>(

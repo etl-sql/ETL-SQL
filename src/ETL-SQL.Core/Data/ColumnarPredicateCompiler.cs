@@ -14,7 +14,8 @@ public static class ColumnarPredicateCompiler
         Expression expression,
         out SelectionVector? selection,
         SelectionVector? input = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool? caseSensitiveComparison = null)
     {
         selection = null;
         if (expression is IsNullExpression { Expression: IdentifierExpression nullIdentifier } nullExpression)
@@ -33,11 +34,11 @@ public static class ColumnarPredicateCompiler
         }
         if (expression is BinaryExpression { Operator: TokenType.AND } andExpression)
         {
-            if (!TrySelect(batch, andExpression.Left, out var left, input, cancellationToken) || left == null)
+            if (!TrySelect(batch, andExpression.Left, out var left, input, cancellationToken, caseSensitiveComparison) || left == null)
                 return false;
             try
             {
-                if (!TrySelect(batch, andExpression.Right, out selection, left, cancellationToken))
+                if (!TrySelect(batch, andExpression.Right, out selection, left, cancellationToken, caseSensitiveComparison))
                 {
                     selection?.Dispose();
                     selection = null;
@@ -56,8 +57,8 @@ public static class ColumnarPredicateCompiler
             SelectionVector? right = null;
             try
             {
-                if (!TrySelect(batch, orExpression.Left, out left, input, cancellationToken) || left == null
-                    || !TrySelect(batch, orExpression.Right, out right, input, cancellationToken) || right == null)
+                if (!TrySelect(batch, orExpression.Left, out left, input, cancellationToken, caseSensitiveComparison) || left == null
+                    || !TrySelect(batch, orExpression.Right, out right, input, cancellationToken, caseSensitiveComparison) || right == null)
                     return false;
                 selection = ColumnBatchKernels.Union(batch.RowCount, left, right, input, cancellationToken);
                 return true;
@@ -74,11 +75,11 @@ public static class ColumnarPredicateCompiler
 
         if (TryBindValue(comparison.Left, out var columnName, out var arithmetic, out var operand)
             && comparison.Right is LiteralExpression rightLiteral)
-            return TryDispatch(batch, columnName, arithmetic, operand, comparisonKind, rightLiteral.Value, input, cancellationToken, out selection);
+            return TryDispatch(batch, columnName, arithmetic, operand, comparisonKind, rightLiteral.Value, input, cancellationToken, caseSensitiveComparison, out selection);
 
         if (comparison.Left is LiteralExpression leftLiteral
             && TryBindValue(comparison.Right, out columnName, out arithmetic, out operand))
-            return TryDispatch(batch, columnName, arithmetic, operand, Reverse(comparisonKind), leftLiteral.Value, input, cancellationToken, out selection);
+            return TryDispatch(batch, columnName, arithmetic, operand, Reverse(comparisonKind), leftLiteral.Value, input, cancellationToken, caseSensitiveComparison, out selection);
 
         return false;
     }
@@ -121,6 +122,7 @@ public static class ColumnarPredicateCompiler
         object? constant,
         SelectionVector? input,
         CancellationToken cancellationToken,
+        bool? caseSensitiveComparison,
         out SelectionVector? selection)
     {
         selection = null;
@@ -138,6 +140,9 @@ public static class ColumnarPredicateCompiler
             else if (column.ElementType == typeof(float)) selection = Apply(batch, columnName, arithmetic, operand, comparison, Convert.ToSingle(constant), input, cancellationToken);
             else if (column.ElementType == typeof(double)) selection = Apply(batch, columnName, arithmetic, operand, comparison, Convert.ToDouble(constant), input, cancellationToken);
             else if (column.ElementType == typeof(decimal)) selection = Apply(batch, columnName, arithmetic, operand, comparison, Convert.ToDecimal(constant), input, cancellationToken);
+            else if (column is Utf8ColumnBuffer && arithmetic == null && caseSensitiveComparison.HasValue)
+                selection = ColumnBatchKernels.SelectUtf8Comparison(
+                    batch, columnName, comparison, constant, caseSensitiveComparison.Value, input, cancellationToken);
             else return false;
             return true;
         }

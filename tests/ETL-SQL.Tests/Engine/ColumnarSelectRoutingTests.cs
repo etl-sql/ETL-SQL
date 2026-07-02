@@ -239,7 +239,7 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task UnsupportedStringPredicateReplaysNativeBatchesThroughRowFallback()
+    public async Task StringPredicateUsesNativeBuffersWithConfiguredCollation()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         await using var source = CreateSource();
@@ -250,6 +250,11 @@ public sealed class ColumnarSelectRoutingTests
         var results = await handler.EvaluateQuery(statement, evaluator).ToListAsync();
 
         Assert.Equal(new[] { "ONE" }, results.SelectMany(batch => batch.Rows).Select(row => row["Name"]));
+        Assert.Equal(0, source.RowReadAttempts);
+
+        evaluator.CaseSensitiveComparison = true;
+        var caseSensitiveResults = await handler.EvaluateQuery(statement, evaluator).ToListAsync();
+        Assert.Empty(caseSensitiveResults.SelectMany(batch => batch.Rows));
         Assert.Equal(0, source.RowReadAttempts);
     }
 
