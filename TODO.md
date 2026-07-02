@@ -172,13 +172,19 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [~] Capture host/server utilization, distinct from per-job process cost. **Done:** free disk on the state and spill volumes (`NodeCapacitySnapshot.StateDiskFreeBytes`/`SpillDiskFreeBytes` via `DriveInfo`, cross-platform) now captured alongside the existing host memory-load % and CPU %, and surfaced per node in the heartbeat metadata (the most outage-critical signal). **Remaining:** persist a real time series (currently the heartbeat keeps only the latest per-node snapshot), a query/read surface, and whole-host (not process) CPU % — a Phase-6-flavored subsystem.
 - [x] Configurable JobHistory retention: `IJobHistoryStore.PruneHistoryAsync(maxAge)` deletes completed rows older than `Orchestrator:JobHistoryRetentionDays` (default 30; 0 disables), run on a `Scheduler:HistoryPruneIntervalMinutes` cycle (default 360) alongside session reaping. RUNNING rows are never pruned. *(store test)* Portal execution-ledger retention still remains.
 - [x] Orphaned-RUNNING recovery (gap found while reviewing retention): a hard crash between job start and completion left a JobHistory row `RUNNING` forever — unprunable (retention skips RUNNING) and invisible to failure reporting. `ReconcileStaleRunningAsync(maxRuntime)` now marks RUNNING rows older than `Orchestrator:MaxJobRuntimeHours` (default 24) as `INTERRUPTED` on scheduler startup and each maintenance cycle; self-healing (a late completion overwrites it) and now caught by the failure digest. *(2 store tests)*
-- [ ] Add a daily roll-up summary (per job/report: count, failures, rows, peak memory, avg duration) retained longer than raw rows, so pruning bounds table growth without losing capacity-planning trend.
+- [ ] Add a daily roll-up summary (per job/report: count, failures, rows, peak memory, avg duration) retained longer than raw rows, so pruning bounds table growth without losing capacity-planning trend. *(planned — see [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md) §4)*
+
+> **Remaining host-utilization + capacity work is planned in
+> [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md)**
+> (HostMetrics time-series table, `SHOW HOST METRICS` read surface, daily roll-ups, whole-host CPU
+> probes, and the remaining templates), with a concrete sequencing. Next-cycle starting point.
 
 #### Governance default
 - [x] `Portal:Audit:RequireRemoteDelivery` is now nullable; when unset it resolves to **on** for an enrolled deployment with a collector configured (`TransportEndpoint`), **off** for standalone/unenrolled or no-collector deployments. Explicit `true`/`false` always wins — upgrade-safe (a deployment without remote audit is never newly blocked). *(6 resolve unit cases; Administrators_Guide §4 updated)*
 
 #### Prebuilt administrator template scripts
-- [ ] Ship a set of template `.etlsql` scripts admins can run as-is or adapt, decoupled from any single deployment: (a) daily job-failure digest email; (b) backup + status-to-JobHistory; (c) capacity/utilization report over JobHistory + the roll-up summary; (d) operational-metrics summary (active/queued/failure-rate/storage) as an opt-in email subscription over the Portal `OperationalMetricsService` data.
+- [x] (a) Daily job-failure digest email — shipped at `samples/admin_operations/daily_failure_digest.etlsql`, verified in-process + parse-checked.
+- [ ] (b) backup + status; (c) capacity/utilization report; (d) operational-metrics email subscription — planned in [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md) (b/c depend on the HostMetrics/roll-up work; each template ships with an in-process mechanic test + full-file parse check — note `SEND EMAIL` uses `AT connectionName`, and statuses are `SUCCESS`/`FAILURE`/`BLOCKED`/`QUARANTINED`/`RUNNING`/`INTERRUPTED`).
 
 ### v0.14.0 release gates
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
