@@ -58,6 +58,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         private DateTime _lastMetricsLog = DateTime.MinValue;
         private DateTime _lastSessionReap = DateTime.MinValue;
+        private DateTime _lastHistoryPrune = DateTime.MinValue;
         private Task? _runTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
@@ -66,6 +67,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _cts = new CancellationTokenSource();
             _lastMetricsLog = DateTime.Now;
             _lastSessionReap = DateTime.Now;
+            _lastHistoryPrune = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
@@ -176,6 +178,25 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogInformation("Orchestrator: Executing periodic session reap (stale_days={Days})", retentionDays);
                         _sessionManager.ReapStaleSessions(TimeSpan.FromDays(retentionDays));
                         _lastSessionReap = now;
+                    }
+
+                    // Periodic job-history pruning: bound unbounded JobHistory growth. Retention 0
+                    // (or negative) disables pruning — history is kept indefinitely.
+                    int historyPruneIntervalMinutes = _configuration.GetValue<int>("Scheduler:HistoryPruneIntervalMinutes", 360);
+                    int historyRetentionDays = _configuration.GetValue<int>("Orchestrator:JobHistoryRetentionDays", 30);
+                    if (historyRetentionDays > 0 && now - _lastHistoryPrune >= TimeSpan.FromMinutes(historyPruneIntervalMinutes))
+                    {
+                        try
+                        {
+                            int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
+                            if (pruned > 0)
+                                _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Job-history pruning failed; will retry next cycle.");
+                        }
+                        _lastHistoryPrune = now;
                     }
 
                     await Task.Delay(TimeSpan.FromSeconds(sleepIntervalSeconds), ct);

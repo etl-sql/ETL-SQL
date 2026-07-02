@@ -42,6 +42,27 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task PruneHistoryAsync_RemovesOldCompletedRows_KeepsRunningAndRecent()
+        {
+            await _store.InitializeAsync();
+
+            // A completed row and an in-flight RUNNING row (no LogJobEnd).
+            var completed = await _store.LogJobStartAsync("JobA");
+            await _store.LogJobEndAsync(completed, "Completed", rowsProcessed: 5);
+            await _store.LogJobStartAsync("JobB");
+
+            // Retention far in the past prunes nothing — both rows are recent.
+            Assert.Equal(0, await _store.PruneHistoryAsync(TimeSpan.FromDays(30)));
+
+            // Cutoff = now removes the completed row but preserves the in-flight RUNNING one.
+            Assert.Equal(1, await _store.PruneHistoryAsync(TimeSpan.Zero));
+
+            var remaining = (await _store.GetHistoryAsync(limit: 100)).ToList();
+            Assert.Single(remaining);
+            Assert.Equal("JobB", remaining[0].JobName);
+        }
+
+        [Fact]
         public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
         {
             await _store.InitializeAsync();

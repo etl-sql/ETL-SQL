@@ -986,6 +986,20 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task<int> PruneHistoryAsync(TimeSpan maxAge)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            // StartTime is stored as a round-trip ("O") timestamp; a same-format cutoff compares
+            // correctly. RUNNING rows (in-flight jobs) are preserved regardless of age.
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM JobHistory WHERE Status <> 'RUNNING' AND StartTime < @cutoff;";
+            command.AddParam("@cutoff", DateTime.Now.Subtract(maxAge).ToString("O"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
         public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100)
         {
             await EnsureInitializedAsync();

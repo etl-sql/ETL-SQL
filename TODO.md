@@ -170,7 +170,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 #### Capacity visibility and retention
 - [ ] Capture host/server utilization (host CPU %, memory headroom, disk free on spill and state volumes) as a sampled time series, distinct from per-job process cost. JobHistory records each job's own peak memory / CPU time but nothing measures the box's saturation headroom, which is what "am I outgrowing this server" requires.
-- [ ] Add configurable JobHistory (and Portal execution ledger) retention with a sensible default (~30 days). JobHistory currently has no time-based pruning and grows unbounded.
+- [x] Configurable JobHistory retention: `IJobHistoryStore.PruneHistoryAsync(maxAge)` deletes completed rows older than `Orchestrator:JobHistoryRetentionDays` (default 30; 0 disables), run on a `Scheduler:HistoryPruneIntervalMinutes` cycle (default 360) alongside session reaping. RUNNING rows are never pruned. *(store test)* Portal execution-ledger retention still remains.
 - [ ] Add a daily roll-up summary (per job/report: count, failures, rows, peak memory, avg duration) retained longer than raw rows, so pruning bounds table growth without losing capacity-planning trend.
 
 #### Governance default
