@@ -10,7 +10,7 @@ ETL-SQL can be deployed as workstation tooling, server services, or both.
 
 | Component | Purpose | Typical host |
 | :--- | :--- | :--- |
-| Workstation SDK | `ETL-SQL` CLI, terminal IDE, language server, and report tooling for script authors | Developer workstations, CI runners |
+| Workstation | `ETL-SQL` CLI, terminal IDE, language server, and report tooling for script authors | Developer workstations, CI runners |
 | Orchestrator Service | Background scheduler and job execution service | Application server |
 | Report Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
 
@@ -108,10 +108,12 @@ Portal__ScriptRootPath=C:\ETL-SQL\scripts
 Portal__SnapshotDirectory=C:\ETL-SQL\snapshots
 Portal__Orchestrator__ApiUrl=https://orchestrator.example.com:5003
 Portal__Orchestrator__ApiKey=your-shared-secret
+Portal__Orchestrator__DatabasePath=C:\ETL-SQL\data\etlsql.db
 Portal__Storage__Provider=Local
 Portal__Storage__KeyRingPath=C:\ETL-SQL\data\.portal-keys
 Orchestrator__ApiKey=your-shared-secret
 Orchestrator__Database__Provider=Sqlite
+Orchestrator__DatabasePath=C:\ETL-SQL\data\etlsql.db
 Orchestrator__ScriptRoot=C:\ETL-SQL\scripts
 Jobs__UseProcessSpawning=true
 Jobs__ExecutablePath=C:\Program Files\ETL-SQL\bin\ETL-SQL.exe
@@ -184,7 +186,7 @@ old key after every caller has moved. The service compares fixed-length key dige
 
 Governance Core centralizes three production controls:
 
-- **Typed policy enforcement** — policy violations are attached to lint diagnostics and enforced again at execution boundaries.
+- **Plaintext secrets policy enforcement** — the central linter detects and blocks plaintext secret persistence when forbidden by policy.
 - **Named secret references** — connector passwords and sensitive connection-string fields can use `SECRET:name` instead of raw secret values.
 - **Durable audit forwarding** — Portal security and mutation audit rows are staged in a transactional outbox and can be forwarded to an HTTPS collector, with optional fail-closed behavior.
 
@@ -346,41 +348,18 @@ Long-running Portal, Report Player, and Orchestrator hosts refresh policy every 
 policy reloads the enterprise configuration overlay. If live retrieval and verified cache recovery both fail
 under fail-closed enrollment, the host logs a critical error and stops rather than continuing beyond policy
 freshness. Supervise these processes with Windows Services, systemd, Kubernetes, or an equivalent service manager
-so an unhealthy policy dependency is visible and restart behavior follows organizational policy.
-
-Governance policy documents inside `policyPayload` use schema version `1.0`:
+so an unhealthy policy dependency is visible and restart behavior follows organizational policy. Governance policy documents inside `policyPayload` use schema version `1.0`. Currently supported policies govern plaintext secrets permission and audit outbox transport rules:
 
 ```json
 {
   "schemaVersion": "1.0",
-  "connectors": {
-    "allowedTypes": [ "MSSQL", "POSTGRES", "FLATFILE", "SFTP" ]
-  },
-  "filesystem": {
-    "approvedRoots": [ "C:\\ETL-SQL\\scripts", "C:\\ETL-SQL\\data" ]
-  },
-  "execution": {
-    "allowedModes": [ "Interactive", "Batch", "Scheduled" ],
-    "maxParallelDegree": 4,
-    "maxFileOperationsPerScript": 100,
-    "maxRecursiveNestingDepth": 50
-  },
-  "remoteExecution": {
-    "mode": "TrustedOrchestrator",
-    "allowedHosts": []
-  },
   "mutationGuardrails": {
-    "requireWhatIfForDestructiveStatements": true,
-    "requireTransactionForMutations": true,
     "requireRemoteAuditForMutations": true
   }
 }
 ```
 
-Verified policy values are added after JSON, environment variables, command-line configuration, and test/deployment
-overrides, giving the enterprise policy final configuration precedence. Lower-authority sources can no longer
-replace those effective values. Operation-boundary enforcement of every governed setting is delivered separately;
-administrators should not treat configuration precedence alone as complete filesystem or connector containment.
+Verified policy values are added after JSON, environment variables, command-line configuration, and test/deployment overrides, giving the authoritative enterprise policy final configuration precedence. Lower-authority sources can no longer replace those effective values. Additional operation-boundary enforcement policies (such as filesystem roots, allowed connector types, and execution resource ceilings) are planned for a future release; administrators should not treat configuration precedence alone as complete containment.
 
 Run `etl-sql enterprise status` to retrieve and verify policy and report `Live`, `Cached`, or `Unavailable`, the
 policy version, source, issuance, expiry, governed key names, and any live-retrieval warning. Trust keys,
@@ -557,6 +536,7 @@ The Report Portal constrains filesystem access to configured roots. Set these to
 | Setting | Purpose | Default in code |
 | :--- | :--- | :--- |
 | `Portal:DatabasePath` | Portal SQLite database | `./portal.db` |
+| `Portal:Orchestrator:DatabasePath` | Location of Orchestrator's SQLite DB from Portal context | `../Orchestrator/etlsql.db` (relative to Portal database directory) |
 | `Portal:Database:Provider` | Portal state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Portal:Database:ConnectionString` | Portal PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 | `Portal:ScriptRootPath` | Report and job script browser root | `./Reports` |
@@ -565,6 +545,7 @@ The Report Portal constrains filesystem access to configured roots. Set these to
 | `Portal:MapRootPath` | Map assets used by reports | `./data/maps` |
 | `Portal:Storage:Provider` | Artifact provider: `Local` or `Smb`/`Unc` | `Local` |
 | `Portal:Storage:KeyRingPath` | ASP.NET Data Protection key ring and Keys artifact root | `.portal-keys` beside the portal DB |
+| `Orchestrator:DatabasePath` | Orchestrator SQLite database | `%LocalAppData%/ETL-SQL/etlsql.db` |
 | `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 
@@ -807,7 +788,7 @@ User snippets with the same trigger as a built-in override the built-in. The dir
 | Database | Typical path | Backup guidance |
 | :--- | :--- | :--- |
 | Portal SQLite DB | `Portal:DatabasePath` | Stop the portal or use SQLite online backup / `VACUUM INTO`. |
-| Orchestrator SQLite DB | Orchestrator data directory | Stop the orchestrator or use SQLite online backup / `VACUUM INTO`. |
+| Orchestrator SQLite DB | `Orchestrator:DatabasePath` | Stop the orchestrator or use SQLite online backup / `VACUUM INTO`. |
 
 Back up the portal sidecar files, script roots, snapshots, datasets, map roots, and service configuration alongside the databases. A portal restore without the script root or snapshot directory is incomplete.
 

@@ -120,6 +120,80 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal(45, timeoutValue);
         }
 
+        [Fact]
+        public void CreateDataSource_ParsesHostKeyFingerprintAndAtomicUpload()
+        {
+            var connector = new SftpConnector();
+            var options = new Dictionary<string, string>
+            {
+                ["USER"] = "u",
+                ["HOST_KEY_FINGERPRINT"] = "SHA256:abc123",
+                ["ATOMIC_UPLOAD"] = "true"
+            };
+
+            var ds = connector.CreateDataSource(SystemExecutionContext.Instance, "sftp.example.com", options) as SftpConnector;
+            Assert.NotNull(ds);
+
+            var fpField = typeof(SftpConnector).GetField("_hostKeyFingerprint", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var atomicField = typeof(SftpConnector).GetField("_atomicUpload", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.Equal("SHA256:abc123", (string?)fpField!.GetValue(ds));
+            Assert.True((bool)atomicField!.GetValue(ds)!);
+        }
+
+        [Fact]
+        public void CreateDataSource_DefaultsFingerprintNull_AtomicUploadFalse()
+        {
+            var connector = new SftpConnector();
+            var ds = connector.CreateDataSource(SystemExecutionContext.Instance, "sftp.example.com",
+                new Dictionary<string, string> { ["USER"] = "u" }) as SftpConnector;
+
+            var fpField = typeof(SftpConnector).GetField("_hostKeyFingerprint", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var atomicField = typeof(SftpConnector).GetField("_atomicUpload", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.Null((string?)fpField!.GetValue(ds));
+            Assert.False((bool)atomicField!.GetValue(ds)!);
+        }
+
+        [Theory]
+        // SHA256: exact, with algorithm prefix, and tolerating base64 padding differences.
+        [InlineData("n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc", true)]
+        [InlineData("SHA256:n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc", true)]
+        [InlineData("n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc=", true)]
+        [InlineData("WRONGFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc", false)]
+        public void FingerprintMatches_Sha256(string pin, bool expected)
+        {
+            const string actualSha256 = "n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc";
+            Assert.Equal(expected, SftpConnector.FingerprintMatches(pin, actualSha256, new byte[] { 1, 2, 3 }));
+        }
+
+        [Theory]
+        // MD5: colon-separated hex, no separators, uppercase, and with the algorithm prefix.
+        [InlineData("aa:bb:cc:dd", true)]
+        [InlineData("aabbccdd", true)]
+        [InlineData("AA:BB:CC:DD", true)]
+        [InlineData("MD5:aa:bb:cc:dd", true)]
+        [InlineData("aa:bb:cc:ee", false)]
+        public void FingerprintMatches_Md5(string pin, bool expected)
+        {
+            var actualMd5 = new byte[] { 0xaa, 0xbb, 0xcc, 0xdd };
+            Assert.Equal(expected, SftpConnector.FingerprintMatches(pin, "some-sha256-value", actualMd5));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void FingerprintMatches_EmptyPin_NeverMatches(string? pin)
+        {
+            Assert.False(SftpConnector.FingerprintMatches(pin, "anything", new byte[] { 0xaa }));
+        }
+
+        [Fact]
+        public void FingerprintMatches_Sha256Pin_DoesNotMatchViaMd5Fallback()
+        {
+            // An explicit SHA256 pin must not accidentally match the MD5 bytes.
+            Assert.False(SftpConnector.FingerprintMatches("SHA256:aabbccdd", "different", new byte[] { 0xaa, 0xbb, 0xcc, 0xdd }));
+        }
+
         private static async Task InvokeClientCreationAsync(SftpConnector connector)
         {
             var method = typeof(SftpConnector).GetMethod(

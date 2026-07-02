@@ -24,6 +24,8 @@ namespace ETL_SQL.Connectors
         private readonly string? _keyFilePath;
         private readonly string? _passphrase;
         private readonly int _timeoutSeconds = 30;
+        private readonly string? _hostKeyFingerprint;
+        private readonly bool _atomicUpload;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly Func<string, string, string?, string?, string?, Task<SftpClient>>? _clientFactory;
@@ -61,7 +63,7 @@ namespace ETL_SQL.Connectors
         {
         }
 
-        public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30)
+        public SftpConnector(IExecutionContext context, string host, int port, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, int timeoutSeconds = 30, string? hostKeyFingerprint = null, bool atomicUpload = false)
             : this(context, host, port, username, password, keyFilePath, passphrase, timeoutSeconds,
                   (h, u, p, k, pp) =>
                   {
@@ -70,7 +72,8 @@ namespace ETL_SQL.Connectors
                           : new Renci.SshNet.ConnectionInfo(h, port, u, new PasswordAuthenticationMethod(u, p ?? ""));
                       info.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
                       return new SftpClient(info);
-                  })
+                  },
+                  hostKeyFingerprint, atomicUpload)
         {
         }
 
@@ -87,7 +90,8 @@ namespace ETL_SQL.Connectors
         }
 
         internal SftpConnector(IExecutionContext? context, string host, int port, string username, string? password, string? keyFilePath, string? passphrase, int timeoutSeconds,
-            Func<string, string, string?, string?, string?, SftpClient> clientFactory)
+            Func<string, string, string?, string?, string?, SftpClient> clientFactory,
+            string? hostKeyFingerprint = null, bool atomicUpload = false)
         {
             _context = context;
             _host = host;
@@ -97,6 +101,8 @@ namespace ETL_SQL.Connectors
             _keyFilePath = (string.IsNullOrEmpty(keyFilePath) || context == null) ? keyFilePath : context.ResolvePath(keyFilePath);
             _passphrase = passphrase;
             _timeoutSeconds = timeoutSeconds;
+            _hostKeyFingerprint = string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : hostKeyFingerprint.Trim();
+            _atomicUpload = atomicUpload;
             _logger = context?.Logger ?? NullLogger.Instance;
             _clientFactory = (h, u, p, k, pp) => Task.Run(() => clientFactory(h, u, p, k, pp));
 
@@ -146,7 +152,9 @@ namespace ETL_SQL.Connectors
             ["KEYFILE"] = new[] { "Path to the private key file" },
             ["PASSPHRASE"] = new[] { "Passphrase for the private key" },
             ["PORT"] = new[] { "SSH/SFTP Port (default 22)" },
-            ["TIMEOUT_SECONDS"] = new[] { "Connection timeout in seconds (default 30)" }
+            ["TIMEOUT_SECONDS"] = new[] { "Connection timeout in seconds (default 30)" },
+            ["HOST_KEY_FINGERPRINT"] = new[] { "Pinned server host-key fingerprint (SHA256:base64 or MD5 hex). When set, a mismatch rejects the connection (MITM protection). Strongly recommended for outbound/vendor transfers." },
+            ["ATOMIC_UPLOAD"] = new[] { "true/false (default false): upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory." }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
@@ -173,6 +181,11 @@ namespace ETL_SQL.Connectors
                 timeoutSeconds = parsedTimeout;
             }
 
+            string? hostKeyFingerprint = options?.GetValueOrDefault("HOST_KEY_FINGERPRINT");
+            bool atomicUpload = options != null
+                && options.TryGetValue("ATOMIC_UPLOAD", out var atomicStr)
+                && bool.TryParse(atomicStr, out var parsedAtomic) && parsedAtomic;
+
             string host = connectionString;
             int port = 22;
             if (options != null && options.TryGetValue("PORT", out var portStr) && int.TryParse(portStr, out var parsedPort))
@@ -193,7 +206,7 @@ namespace ETL_SQL.Connectors
                 }
             }
 
-            return new SftpConnector(context, host, port, user, pass, keyFile, passphrase, timeoutSeconds);
+            return new SftpConnector(context, host, port, user, pass, keyFile, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
@@ -209,10 +222,76 @@ namespace ETL_SQL.Connectors
             var client = await GetOrCreateClientAsync();
             if (!client.IsConnected)
             {
+                // Verify the server host key before the connection is trusted. Idempotent subscribe.
+                client.HostKeyReceived -= OnHostKeyReceived;
+                client.HostKeyReceived += OnHostKeyReceived;
                 await Task.Run(client.Connect);
             }
 
             return client;
+        }
+
+        /// <summary>
+        /// Host-key verification. When a fingerprint is pinned (HOST_KEY_FINGERPRINT), a mismatch
+        /// rejects the connection (man-in-the-middle protection). When none is pinned, the connection
+        /// proceeds — preserving existing behaviour — but logs a warning, because an unpinned outbound
+        /// transfer trusts whatever server answers. See Docs/Design or the SFTP connector help.
+        /// </summary>
+        private void OnHostKeyReceived(object? sender, HostKeyEventArgs e)
+        {
+            if (_hostKeyFingerprint is null)
+            {
+                _logger.Warning(
+                    "SFTP host key for {Host} is not pinned (HOST_KEY_FINGERPRINT unset); the transfer trusts whatever server answers and is vulnerable to man-in-the-middle interception. Pin the fingerprint for outbound/vendor transfers.",
+                    _host ?? "(unknown)");
+                return; // e.CanTrust stays true — backward compatible.
+            }
+
+            if (HostKeyMatchesPin(e))
+                return;
+
+            e.CanTrust = false;
+            _logger.Error(
+                "SFTP host key for {Host} did not match the pinned HOST_KEY_FINGERPRINT; rejecting the connection (possible man-in-the-middle).",
+                null, _host ?? "(unknown)");
+        }
+
+        private bool HostKeyMatchesPin(HostKeyEventArgs e)
+            => FingerprintMatches(_hostKeyFingerprint!, e.FingerPrintSHA256, e.FingerPrint);
+
+        /// <summary>
+        /// Compares a pinned host-key fingerprint against the server's actual SHA256 (base64) and MD5
+        /// (bytes) fingerprints. Accepts an optional <c>SHA256:</c>/<c>MD5:</c> algorithm prefix (as
+        /// shown by ssh-keygen), tolerates SHA256 base64 padding, and matches MD5 hex ignoring case and
+        /// separators. Internal for unit testing without a live SSH server.
+        /// </summary>
+        internal static bool FingerprintMatches(string? pin, string? actualSha256, byte[]? actualMd5)
+        {
+            if (string.IsNullOrWhiteSpace(pin)) return false;
+            pin = pin.Trim();
+
+            // Only treat the text before the first colon as an algorithm prefix when it is actually
+            // "SHA256"/"MD5" — a bare MD5 fingerprint ("aa:bb:cc:dd") also contains colons.
+            var colon = pin.IndexOf(':');
+            var prefix = colon > 0 ? pin[..colon].Trim().ToUpperInvariant() : null;
+            var algo = prefix is "SHA256" or "MD5" ? prefix : null;
+            var value = algo is not null ? pin[(colon + 1)..].Trim() : pin;
+
+            if (algo is null or "SHA256" && !string.IsNullOrEmpty(actualSha256))
+            {
+                if (string.Equals(actualSha256.TrimEnd('='), value.TrimEnd('='), StringComparison.Ordinal))
+                    return true;
+            }
+
+            if (algo is null or "MD5" && actualMd5 is { Length: > 0 })
+            {
+                var actualHex = string.Join("", actualMd5.Select(b => b.ToString("x2")));
+                var normalizedPin = value.Replace(":", "").Replace("-", "");
+                if (string.Equals(actualHex, normalizedPin, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         private async Task RunClientOperationAsync(Action<SftpClient> operation)
@@ -285,8 +364,32 @@ namespace ETL_SQL.Connectors
                         throw new ExecutionException($"Remote file already exists: {remotePath}");
                     }
 
-                    using var fileStream = File.OpenRead(localPath);
-                    client.UploadFile(fileStream, remotePath);
+                    if (_atomicUpload)
+                    {
+                        // Upload to a temp name and rename into place so a polling consumer never sees a
+                        // partially written file. Requires rename permission on the target directory
+                        // (off by default for write-only vendors). Rename cannot overwrite on SFTP, so an
+                        // existing destination is removed first — a small non-atomic window that only
+                        // applies when replacing an existing file, not to first-time deliveries.
+                        var tempPath = remotePath + ".tmp-" + Guid.NewGuid().ToString("N");
+                        try
+                        {
+                            using (var fileStream = File.OpenRead(localPath))
+                                client.UploadFile(fileStream, tempPath);
+                            if (client.Exists(remotePath))
+                                client.DeleteFile(remotePath);
+                            client.RenameFile(tempPath, remotePath);
+                        }
+                        catch
+                        {
+                            try { if (client.Exists(tempPath)) client.DeleteFile(tempPath); } catch { /* best effort cleanup */ }
+                            throw;
+                        }
+                        return;
+                    }
+
+                    using var stream = File.OpenRead(localPath);
+                    client.UploadFile(stream, remotePath);
                 });
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
