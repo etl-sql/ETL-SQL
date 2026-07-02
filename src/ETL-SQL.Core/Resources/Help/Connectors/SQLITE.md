@@ -2,25 +2,28 @@
 Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver. Supports local transactions, schema inspection, and data loading.
 
 Syntax:
-  CREATE CONNECTION <name> AS SQLITE(
-    DATABASE        = 'C:\data\mydb.db',
-    PASSWORD        = '<password>',
-    TIMEOUT_SECONDS = 30
-  );
+```sql
+CREATE CONNECTION <name> AS SQLITE(
+  DATABASE        = 'C:\data\mydb.db',
+  PASSWORD        = '<password>',
+  TIMEOUT_SECONDS = 30
+);
 
-  -- Or in-memory database:
-  CREATE CONNECTION <name> AS SQLITE(
-    DATABASE        = ':memory:'
-  );
+-- Or in-memory database:
+CREATE CONNECTION <name> AS SQLITE(
+  DATABASE        = ':memory:'
+);
+```
 
 Aliases:
   SQLITE3
 
 Options:
-- **DATABASE / PATH** — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
-- **PASSWORD** — encryption password (only supported if SQLCipher is linked natively on the host)
-- **TIMEOUT_SECONDS** — command/query execution timeout in seconds (default 30)
-- **TABLE** — default table for unqualified SELECT/INSERT operations
+- **DATABASE = 'path'** — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
+- **PATH = 'path'** — alias for DATABASE
+- **PASSWORD = 'pwd'** — encryption password (only supported if SQLCipher is linked natively on the host)
+- **TIMEOUT_SECONDS = n** — command/query execution timeout in seconds (default 30)
+- **TABLE = 'name'** — default table for unqualified SELECT/INSERT operations
 
 ```sql
 -- Create an in-memory SQLite database connection

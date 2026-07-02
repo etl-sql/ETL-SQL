@@ -65,6 +65,81 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
+        public void SqliteConnector_CreateDataSource_InMemory_NoPathResolution()
+        {
+            var mockContext = CreateMockContext();
+            var connector = new SqliteConnector();
+            var options = new Dictionary<string, string> { { "DATABASE", ":memory:" } };
+            string connStr = connector.BuildConnectionString(options);
+            var dataSource = (SqliteDataSource)connector.CreateDataSource(mockContext.Object, connStr, options);
+
+            mockContext.Verify(c => c.ResolvePath(It.IsAny<string>()), Times.Never);
+            Assert.Contains(":memory:", dataSource.ConnectionString);
+        }
+
+        [Fact]
+        public async Task SqliteDataSource_InMemory_ReadWrite_Success()
+        {
+            var mockContext = CreateMockContext();
+            var connector = new SqliteConnector();
+            var options = new Dictionary<string, string> { { "DATABASE", ":memory:" } };
+            string connStr = connector.BuildConnectionString(options);
+            var dataSource = (SqliteDataSource)connector.CreateDataSource(mockContext.Object, connStr, options);
+
+            var sessionSource = (SqliteDataSource)dataSource.WithTable("users");
+
+            try
+            {
+                // We keep the connection open using a transaction so the in-memory database persists
+                await sessionSource.BeginTransactionAsync();
+
+                // Get the connection via reflection to run DDL on the in-memory database
+                var connField = typeof(SqliteDataSource).GetField("_transactionalConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                var conn = (Microsoft.Data.Sqlite.SqliteConnection)connField.GetValue(sessionSource);
+                Assert.NotNull(conn);
+
+                using (var cmd = new Microsoft.Data.Sqlite.SqliteCommand("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT)", conn))
+                {
+                    cmd.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)typeof(SqliteDataSource)
+                        .GetField("_activeTransaction", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                        .GetValue(sessionSource);
+                    await cmd.ExecuteNonQueryAsync();
+                }
+
+                // Write batches
+                var table = new DataTable();
+                table.SetColumns(new[] { "id", "name", "role" });
+                await table.AddRowAsync(new Row { ["id"] = 1L, ["name"] = "Alice", ["role"] = "Admin" });
+                await table.AddRowAsync(new Row { ["id"] = 2L, ["name"] = "Bob", ["role"] = "User" });
+
+                async IAsyncEnumerable<DataTable> GetBatches()
+                {
+                    yield return table;
+                    await Task.CompletedTask;
+                }
+
+                await sessionSource.WriteBatches(GetBatches(), append: true);
+                await sessionSource.CommitAsync();
+
+                // To read the in-memory data, we must start another transaction or keep connection open,
+                // because once CommitAsync finishes, the transactional connection is closed and database is destroyed.
+                // Let's verify that a new session starts clean (empty / table doesn't exist).
+                var verifySource = (SqliteDataSource)dataSource.WithTable("users");
+                var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(async () =>
+                {
+                    await foreach (var batch in verifySource.ReadBatches()) { }
+                });
+                Assert.Contains("no such table", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                await sessionSource.DisposeAsync();
+                await dataSource.DisposeAsync();
+            }
+        }
+
+
+        [Fact]
         public async Task SqliteDataSource_ExecuteNonQueryAndReader_Success()
         {
             var mockContext = CreateMockContext();

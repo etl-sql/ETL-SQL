@@ -478,6 +478,45 @@ END;
 
 ---
 
+### 2.9 SQLite (`SQLITE`)
+Aliases: `SQLITE3`
+
+Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver. Supports local transactions, schema inspection, and data loading.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `DATABASE` | File path to the SQLite database or `:memory:` | Yes (either `DATABASE` or `PATH`) |
+| `PATH` | Alias for `DATABASE` | Yes (either `DATABASE` or `PATH`) |
+| `PASSWORD` | Encryption password (requires host SQLCipher native library) | No |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (Default: `30`) | No |
+| `TABLE` | Default table context for unqualified operations | No |
+
+> [!IMPORTANT]
+> The option keys `DATABASE` and `PATH` are mutually exclusive alias options. Only specify one.
+> Setting a `PASSWORD` requires the SQLCipher native library to be available on the host system.
+
+*Examples:*
+
+```sql
+-- Standard unencrypted in-memory database
+CREATE CONNECTION local_mem AS SQLITE(DATABASE=':memory:');
+
+-- Standard unencrypted file-based database
+CREATE CONNECTION local_db AS SQLITE(PATH='C:\Data\local.db');
+
+-- Encrypted file-based database (SQLCipher)
+CREATE CONNECTION secure_db AS SQLITE(
+    DATABASE='C:\Data\secure.db',
+    PASSWORD='myEncryptionPassword',
+    TIMEOUT_SECONDS=10
+);
+
+-- Traditional connection string form
+CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
+```
+
+---
+
 ## 3. Flat File & Document Connectors
 
 ### 3.1 Flat Files (`FLATFILE`)

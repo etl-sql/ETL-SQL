@@ -398,12 +398,22 @@ namespace ETL_SQL.App
             }
             else
             {
-                // Database connection template
-                sb.AppendLine($"-- CREATE CONNECTION outbound_dest AS {resolvedDestType}(");
-                sb.AppendLine($"--     SERVER = '...',");
-                sb.AppendLine($"--     DATABASE = '...',");
-                sb.AppendLine($"--     TABLE = '{path}'");
-                sb.AppendLine($"-- );");
+                if (resolvedDestType.Equals("SQLITE", StringComparison.OrdinalIgnoreCase))
+                {
+                    // SQLite database connection template
+                    sb.AppendLine($"-- CREATE CONNECTION outbound_dest AS SQLITE(");
+                    sb.AppendLine($"--     DATABASE = '{path}'");
+                    sb.AppendLine($"-- );");
+                }
+                else
+                {
+                    // Database connection template
+                    sb.AppendLine($"-- CREATE CONNECTION outbound_dest AS {resolvedDestType}(");
+                    sb.AppendLine($"--     SERVER = '...',");
+                    sb.AppendLine($"--     DATABASE = '...',");
+                    sb.AppendLine($"--     TABLE = '{path}'");
+                    sb.AppendLine($"-- );");
+                }
             }
             sb.AppendLine();
 
@@ -726,6 +736,14 @@ namespace ETL_SQL.App
                 sb.AppendLine(");");
                 return;
             }
+            else if (resolvedType.Equals("SQLITE", StringComparison.OrdinalIgnoreCase))
+            {
+                var path = string.IsNullOrWhiteSpace(source.Path) ? "C:/Inbound/vendor_feed.db" : source.Path;
+                sb.AppendLine("CREATE CONNECTION src_db AS SQLITE(");
+                sb.AppendLine($"    DATABASE = '{EscapeSqlString(path)}'");
+                sb.AppendLine(");");
+                return;
+            }
 
             sb.AppendLine($"CREATE CONNECTION src_db AS {resolvedType}(SERVER='...', DATABASE='...', USER='...', PASSWORD='...');");
         }
@@ -746,6 +764,9 @@ namespace ETL_SQL.App
 
             if (isFile)
                 return "FROM src_file;";
+
+            if (resolvedType.Equals("SQLITE", StringComparison.OrdinalIgnoreCase))
+                return "FROM src_db.raw_table;";
 
             return "FROM src_db.public.raw_table;";
         }
@@ -932,7 +953,7 @@ namespace ETL_SQL.App
 
         private static readonly HashSet<string> ConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
         {
-            "FLATFILE", "MSSQL", "POSTGRES", "MYSQL", "ORACLE", "SNOWFLAKE", "BIGQUERY"
+            "FLATFILE", "MSSQL", "POSTGRES", "MYSQL", "ORACLE", "SNOWFLAKE", "BIGQUERY", "SQLITE"
         };
 
         private static readonly HashSet<string> Formats = new(StringComparer.OrdinalIgnoreCase)

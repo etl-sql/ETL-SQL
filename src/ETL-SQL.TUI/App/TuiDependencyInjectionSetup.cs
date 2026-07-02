@@ -190,6 +190,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
+            services.AddSingleton<IHostMetricsStore>(sp => sp.GetRequiredService<SQLiteJobHistoryStore>());
             services.AddSingleton<SchedulerService>();
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 
