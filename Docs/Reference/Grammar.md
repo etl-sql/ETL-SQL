@@ -2227,9 +2227,14 @@ SHOW JOBS;
 SHOW JOB HISTORY;
 SHOW JOB HISTORY NightlyArchive;
 
+-- Host-utilization time series (capacity planning): all nodes or one node id
+SHOW HOST METRICS;
+SHOW HOST METRICS 'app-server-01:1234:ab...';
+
 -- Direct output to a temporary table
 SHOW JOBS INTO #jobs;
 SHOW JOB HISTORY INTO #history;
+SHOW HOST METRICS INTO #host_metrics;
 ```
 
 ## 16. File Operations

@@ -18,7 +18,8 @@ Subjects:
 - **TAGS** — lineage tags applied in the current session.
 - **VERSION** — engine version and build metadata.
 - **SUBSCRIPTIONS** — defined report subscriptions.
-- **HISTORY** — recent job execution records.
+- **JOB HISTORY ['<job>'] [AT conn]** — recent job execution records (all jobs, or one named job).
+- **HOST METRICS ['<nodeId>']** — host-utilization time series for capacity planning: per node, the last 24 hours of memory-load %, CPU %, and free disk (MB) on the state and spill volumes, newest first. Optionally filter to one node id.
 - **REPORT '<name>'** — portal report metadata.
 - **REPORT HISTORY '<name>'** — portal report refresh/history rows.
 - **REPORT DEPENDENCIES '<name>'** — dependencies discovered for a portal report.
@@ -57,6 +58,13 @@ SHOW LOCKS;
 
 -- Check active jobs
 SHOW JOBS;
+
+-- Capacity planning: find nodes low on spill/state disk in the last 24h
+SHOW HOST METRICS INTO #hm;
+SELECT NodeId, MIN(StateDiskFreeMB) AS MinStateFreeMB, MIN(SpillDiskFreeMB) AS MinSpillFreeMB,
+       MAX(MemoryLoadPercent) AS PeakMemPct
+FROM #hm
+GROUP BY NodeId;
 
 EXECUTE portal BEGIN
   SHOW FAVORITES LIMIT 25 INTO #favorites;
