@@ -47,6 +47,14 @@ Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 - [ ] Any accepted Medium/Low findings are recorded in the release notes or `Docs/Operations/`.
 - [ ] New third-party dependencies are reflected in `THIRD-PARTY-INVENTORY.md` and `NOTICES.md`.
 
+### Feature security watchlist (resolve before the named capability ships)
+
+- [ ] **RLS Publisher preview-as data access** — before the report-writer "preview as a simulated
+      group/role set" capability ships, decide whether previewing under groups the Publisher does not
+      belong to is an acceptable data-access path or must be gated by a separate grant / restricted to
+      non-production data. See open question 1 in [`Docs/Design/RowLevelSecurity.md`](Design/RowLevelSecurity.md).
+      (Admin real-impersonation is view-narrowing only and not covered by this item.)
+
 ## Phase 3 — Local validation gate (authoritative)
 
 This is the gate. Green CI is **not** a substitute — CI does not run the Docker-integration or SLT lanes.

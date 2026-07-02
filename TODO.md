@@ -121,6 +121,54 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Provide outage runbooks for policy authority, certificate expiry, invalid publication, SIEM outage, disk exhaustion, and fail-closed fleet recovery.
 - [ ] Add support-bundle diagnostics that expose versions, hashes, timestamps, and health without policy payload values, trust material, credentials, or sensitive event targets.
 
+### Administrator operational review — follow-on hardening (2026-07-01)
+
+> Derived from an administrator walkthrough of a two-server (Portal + Orchestrator) enterprise
+> deployment (~1000 users, 50 reports, 100 jobs incl. 20 outbound vendor SFTP). Verified against
+> current code: the identity system variables, host-utilization capture, JobHistory retention, and
+> SFTP host-key/atomic-upload behavior below **do not exist today**. Some items overlap ROADMAP
+> Phase 6 (Operations Control Plane) candidate scope; promoted here because they are concrete gaps an
+> administrator hits before Phase 6 lands.
+
+#### Row-level security — expose caller identity to report/script SQL
+
+> Full design: [`Docs/Design/RowLevelSecurity.md`](Docs/Design/RowLevelSecurity.md). Decisions locked:
+> admins bypass RLS by default (configurable), group/role matching is case-insensitive, OIDC group
+> claims are a required source, Phase 1 = variables + `HAS_GROUP`/`HAS_ROLE` + enforcement + admin
+> impersonation. `Publisher` is the report-writer role, distinct from `Admin`.
+
+- [ ] **Phase 1:** Add read-only identity system variables (`@@CURRENT_USER`, `@@CURRENT_USER_ID`, `@@REAL_USER`, `@@IS_ADMIN`) populated by the trusted Portal host from the authenticated principal, plus `HAS_GROUP('name')` / `HAS_ROLE('name')` predicate functions. `SystemVariableProvider` exposes no identity variable today.
+- [ ] **Enforce `@@` immutability explicitly.** The lexer treats `@@X` and `@x` as the same `VARIABLE` token; write protection is currently an accidental resolution-order side effect. Reject `DECLARE` / `SET` / OUTPUT-parameter targets beginning with `@@` at the handler (ideally parse) with a clear error, and document the `GetVariable`-routes-`@@`-to-provider rule as a security invariant.
+- [ ] Guarantee identity is host-injected via a dedicated `ExecutionIdentity` channel — never from report parameters, `SetParametersAsync`, environment, or saved sessions.
+- [ ] Prevent snapshot/subscription cache leakage: auto-flag a report as identity-sensitive when a static scan finds any identity variable/function reference (reuse `DmlDetector`), then force no-shared-snapshot, per-recipient (or disabled) subscriptions, and per-user (or disabled) scheduled refresh.
+- [ ] Admin bypass (default on, `Portal:Security:AdminBypassRowLevelSecurity`) keyed on the effective identity; fail-closed when no identity is injected (identity-sensitive reports refuse to run, per-report opt-out).
+- [ ] **Impersonation / run-as** — host-enforced, never script-self-granted: `Admin` may run a report as a real named user (view-narrowing only, since admins already bypass RLS) for support/repro; `Publisher` may preview a report they can edit under a simulated group/role set. Both log real + effective identity. Resolve the open question on Publisher preview-as data access (see design doc) at security review.
+- [ ] **Phase 2:** Map OIDC group claims into the effective group set (genuine enterprise requirement); add table-valued `USER_GROUPS()` / `USER_ROLES()`; implement Publisher preview-as; per-recipient subscription execution; CLI/orchestrator run-as identity semantics.
+- [ ] Document the RLS pattern (author-written `HAS_GROUP` predicates) and its boundaries in the Administrators_Guide / Security docs: folder/dataset permissions remain the coarse-grained gate; identity-variable RLS is the row-level layer.
+
+#### Liveness alerting and job-failure notification
+- [ ] Document (Administrators_Guide) an external heartbeat / dead-man's-switch: an out-of-process monitor that probes `/healthz` and alerts if the health probe or the expected daily failure-digest is missing — an in-orchestrator digest job cannot report on its own host being down.
+- [ ] Ship a template failure-digest job (reads the prior day's job history, emails failures) as a prebuilt admin script; recommend per-job immediate failure email for SLA-bearing jobs such as the vendor SFTP deliveries.
+
+#### Backup scheduling and observability
+- [ ] Have the scheduled backup routine write a JobHistory row (success/failure with backup id) so the failure-digest covers backup failures with no separate email path. Do **not** add an in-language `BACKUP` statement that appears to cover PostgreSQL — DB backup for HA remains pg tooling's responsibility per the Administrators_Guide.
+- [ ] Document scheduling the existing `etl-sql admin backup` CLI plus a periodic tested restore drill.
+
+#### Outbound SFTP hardening
+- [ ] Add SFTP server host-key verification (known-hosts / fingerprint pin) for outbound transfers; `SftpConnector` currently subscribes no `HostKeyReceived` handler and trusts any server key (MITM exposure on internet-facing vendor jobs).
+- [ ] Add opt-in per-connection atomic upload (upload to a temp name, rename on completion), defaulting off so write-only-grant vendors (no rename/read permission) are unaffected; document the accepted partial-file risk when disabled.
+
+#### Capacity visibility and retention
+- [ ] Capture host/server utilization (host CPU %, memory headroom, disk free on spill and state volumes) as a sampled time series, distinct from per-job process cost. JobHistory records each job's own peak memory / CPU time but nothing measures the box's saturation headroom, which is what "am I outgrowing this server" requires.
+- [ ] Add configurable JobHistory (and Portal execution ledger) retention with a sensible default (~30 days). JobHistory currently has no time-based pruning and grows unbounded.
+- [ ] Add a daily roll-up summary (per job/report: count, failures, rows, peak memory, avg duration) retained longer than raw rows, so pruning bounds table growth without losing capacity-planning trend.
+
+#### Governance default
+- [ ] Default `Portal:Audit:RequireRemoteDelivery` fail-closed audit to on for multi-user / enrolled deployments; keep standalone local-only as the unenrolled default.
+
+#### Prebuilt administrator template scripts
+- [ ] Ship a set of template `.etlsql` scripts admins can run as-is or adapt, decoupled from any single deployment: (a) daily job-failure digest email; (b) backup + status-to-JobHistory; (c) capacity/utilization report over JobHistory + the roll-up summary; (d) operational-metrics summary (active/queued/failure-rate/storage) as an opt-in email subscription over the Portal `OperationalMetricsService` data.
+
 ### v0.14.0 release gates
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
 - [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
