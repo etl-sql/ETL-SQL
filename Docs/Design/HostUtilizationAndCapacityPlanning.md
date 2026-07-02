@@ -121,11 +121,13 @@ parse check. Watch the two gotchas found this session: the `SEND EMAIL` connecti
 
 ## Sequencing
 
-1. `HostMetrics` table + `IHostMetricsStore` + append from heartbeat + retention. *(self-contained; unblocks everything)*
-2. `SHOW HOST METRICS [INTO]`. *(read surface)*
+1. ✅ **DONE** (`7a5d4bd2`) — `HostMetrics` table + `IHostMetricsStore` + append from heartbeat + retention.
+2. ✅ **DONE** (`b18e48d3`) — `SHOW HOST METRICS [nodeId] [INTO]` read surface.
 3. Roll-up tables + daily aggregation + long retention. *(covers the JobHistory roll-up item)*
-4. `capacity_report.etlsql` + `backup_and_report.etlsql` templates, each verified in-process. *(delivers the admin value)*
-5. Whole-host CPU probes (Windows, then Linux), incrementally. *(accuracy upgrade)*
+4. `capacity_report.etlsql` + `backup_and_report.etlsql` templates, each verified in-process.
+   *(now unblocked — both `SHOW JOB HISTORY` and `SHOW HOST METRICS` read surfaces exist)*
+5. Whole-host CPU probes (Windows, then Linux), incrementally — fills `HostMetrics.HostCpuPercent`
+   (currently null; the column, store, and `SHOW HOST METRICS` output already carry it).
 6. Operational-metrics Portal subscription. *(Portal-side, independent)*
 
 ## Guardrails
