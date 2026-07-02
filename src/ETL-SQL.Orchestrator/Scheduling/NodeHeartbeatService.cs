@@ -94,6 +94,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             capacity.ProcessCpuPercent,
                             capacity.ProcessorCount,
                             capacity.IsOverloaded,
+                            capacity.StateDiskFreeBytes,
+                            capacity.SpillDiskFreeBytes,
                             capturedUtc = capacity.CapturedAtUtc.ToString("O")
                         }
                     });

@@ -11,7 +11,14 @@ public sealed record NodeCapacitySnapshot(
     double ProcessCpuPercent,
     int ProcessorCount,
     bool IsOverloaded,
-    DateTime CapturedAtUtc);
+    DateTime CapturedAtUtc)
+{
+    /// <summary>Free bytes on the volume hosting application/state files; 0 if unknown.</summary>
+    public long StateDiskFreeBytes { get; init; }
+
+    /// <summary>Free bytes on the volume used for engine spill/temp; 0 if unknown.</summary>
+    public long SpillDiskFreeBytes { get; init; }
+}
 
 public interface INodeCapacityMonitor
 {
@@ -63,9 +70,31 @@ public sealed class NodeCapacityMonitor : INodeCapacityMonitor
                 cpuPercent,
                 Environment.ProcessorCount,
                 memoryLoad >= 95 || cpuPercent >= 95,
-                now);
+                now)
+            {
+                // Free disk is the most outage-critical host signal. Sample the state volume (app/DB
+                // base directory) and the spill volume (temp). Both use DriveInfo — cross-platform.
+                StateDiskFreeBytes = TryGetFreeBytes(AppContext.BaseDirectory),
+                SpillDiskFreeBytes = TryGetFreeBytes(System.IO.Path.GetTempPath()),
+            };
 
             return _cachedSnapshot;
+        }
+    }
+
+    private static long TryGetFreeBytes(string? path)
+    {
+        try
+        {
+            var root = System.IO.Path.GetPathRoot(System.IO.Path.GetFullPath(
+                string.IsNullOrWhiteSpace(path) ? AppContext.BaseDirectory : path));
+            if (string.IsNullOrEmpty(root)) return 0;
+            var drive = new System.IO.DriveInfo(root);
+            return drive.IsReady ? drive.AvailableFreeSpace : 0;
+        }
+        catch
+        {
+            return 0; // Disk stats are best-effort; never fail a capacity capture over them.
         }
     }
 }
