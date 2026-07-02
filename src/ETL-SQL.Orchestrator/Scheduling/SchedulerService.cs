@@ -219,6 +219,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
                             if (pruned > 0)
                                 _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+
+                            // Host-metrics samples are dense; retain them shorter than job history and
+                            // rely on the roll-up for long-term trend. Same store implements both.
+                            int hostMetricsRetentionDays = _configuration.GetValue<int>("Orchestrator:HostMetricsRetentionDays", 14);
+                            if (hostMetricsRetentionDays > 0 && _store is IHostMetricsStore metricsStore)
+                            {
+                                int prunedMetrics = await metricsStore.PruneHostMetricsAsync(TimeSpan.FromDays(hostMetricsRetentionDays));
+                                if (prunedMetrics > 0)
+                                    _logger.LogInformation("Orchestrator: pruned {Count} host-metrics sample(s) older than {Days} day(s).", prunedMetrics, hostMetricsRetentionDays);
+                            }
                         }
                         catch (Exception ex)
                         {

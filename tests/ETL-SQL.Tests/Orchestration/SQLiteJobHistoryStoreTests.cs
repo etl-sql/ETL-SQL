@@ -100,6 +100,35 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task HostMetrics_Append_Get_Prune_RoundTrips()
+        {
+            await _store.InitializeAsync();
+            var now = DateTime.UtcNow;
+
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-a", now, 42.5, 10.0, HostCpuPercent: null, StateDiskFreeBytes: 1000, SpillDiskFreeBytes: 2000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-a", now.AddDays(-10), 30.0, 5.0, HostCpuPercent: 88.0, StateDiskFreeBytes: 500, SpillDiskFreeBytes: 600));
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-b", now, 55.0, 20.0, HostCpuPercent: 77.0, StateDiskFreeBytes: 3000, SpillDiskFreeBytes: 4000));
+
+            // 'since' filter: only samples from the last hour, for node-a.
+            var recentA = await _store.GetHostMetricsAsync("node-a", now.AddHours(-1));
+            Assert.Single(recentA);
+            Assert.Equal(42.5, recentA[0].MemoryLoadPercent);
+            Assert.Null(recentA[0].HostCpuPercent);
+            Assert.Equal(1000, recentA[0].StateDiskFreeBytes);
+
+            // Non-null HostCpuPercent round-trips.
+            var recentB = await _store.GetHostMetricsAsync("node-b", now.AddHours(-1));
+            Assert.Equal(77.0, recentB[0].HostCpuPercent);
+
+            // Null nodeId returns every node; wide window returns the old row too.
+            Assert.Equal(3, (await _store.GetHostMetricsAsync(null, now.AddDays(-30))).Count);
+
+            // Prune older than 1 day removes only the 10-day-old row.
+            Assert.Equal(1, await _store.PruneHostMetricsAsync(TimeSpan.FromDays(1)));
+            Assert.Equal(2, (await _store.GetHostMetricsAsync(null, now.AddDays(-30))).Count);
+        }
+
+        [Fact]
         public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
         {
             await _store.InitializeAsync();

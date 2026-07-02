@@ -101,6 +101,22 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     });
                     await _store.RegisterOrRenewNodeAsync(NodeId, Role, ttl, metadata);
                     leaseExpiresAtUtc = DateTime.UtcNow.Add(ttl);
+
+                    // Append a host-utilization time-series sample (capacity planning). Best-effort:
+                    // the same store implements IHostMetricsStore; a failure here must not miss a beat.
+                    if (_store is IHostMetricsStore metricsStore)
+                    {
+                        try
+                        {
+                            await metricsStore.AppendHostMetricAsync(new HostMetricSample(
+                                NodeId, capacity.CapturedAtUtc, capacity.MemoryLoadPercent, capacity.ProcessCpuPercent,
+                                HostCpuPercent: null, capacity.StateDiskFreeBytes, capacity.SpillDiskFreeBytes));
+                        }
+                        catch (Exception metricsEx)
+                        {
+                            _logger.LogDebug(metricsEx, "Host-metrics sample append failed (best-effort).");
+                        }
+                    }
                     if (leaseLost)
                     {
                         _logger.LogInformation("Node {NodeId}: heartbeat lease renewed after prior loss.", NodeId);

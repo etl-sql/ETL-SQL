@@ -19,7 +19,7 @@ namespace ETL_SQL.Orchestrator.Storage
     /// the same logic runs on SQLite (default) and PostgreSQL (Practical HA). The SQLite entry point is
     /// <see cref="SQLiteJobHistoryStore"/>.
     /// </summary>
-    public class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore
+    public class RelationalJobHistoryStore : IJobHistoryStore, IJobScheduleQueryStore, IBundleStore, ILineageCatalogStore, INodeRegistryStore, IWriteEpochStore, IClusterLockStore, IHostMetricsStore
     {
         private readonly IOrchestratorStoreDialect _dialect;
         private bool _initialized;
@@ -178,8 +178,23 @@ namespace ETL_SQL.Orchestrator.Storage
                     PRIMARY KEY (JobName, StateKey)
                 );";
 
+                    // Host-utilization time series (capacity planning): one row per sample per node.
+                    var createHostMetricsTable = @"
+                CREATE TABLE IF NOT EXISTS HostMetrics (
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    NodeId TEXT NOT NULL,
+                    CapturedAt TEXT NOT NULL,
+                    MemoryLoadPercent REAL NOT NULL DEFAULT 0,
+                    ProcessCpuPercent REAL NOT NULL DEFAULT 0,
+                    HostCpuPercent REAL,
+                    StateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
+                    SpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);";
+
                     var schema = createJobsTable + createHistoryTable + createBundleTables
-                        + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable;
+                        + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
+                        + createHostMetricsTable;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                     // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                     // COLLATE NOCASE indexes/queries resolve.
@@ -1014,6 +1029,73 @@ namespace ETL_SQL.Orchestrator.Storage
                 "WHERE Status = 'RUNNING' AND StartTime < @cutoff;";
             command.AddParam("@end", now.ToString("O"));
             command.AddParam("@cutoff", now.Subtract(maxRuntime).ToString("O"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
+        // ── Host utilization time series (IHostMetricsStore) ─────────────────────────
+        // Timestamps are stored UTC round-trip ("O") so string comparison is instant-correct
+        // regardless of the sample's DateTimeKind.
+
+        public async Task AppendHostMetricAsync(HostMetricSample sample)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "INSERT INTO HostMetrics (NodeId, CapturedAt, MemoryLoadPercent, ProcessCpuPercent, HostCpuPercent, StateDiskFreeBytes, SpillDiskFreeBytes) " +
+                "VALUES (@node, @at, @mem, @cpu, @hostcpu, @state, @spill);";
+            command.AddParam("@node", sample.NodeId);
+            command.AddParam("@at", sample.CapturedAt.ToUniversalTime().ToString("O"));
+            command.AddParam("@mem", sample.MemoryLoadPercent);
+            command.AddParam("@cpu", sample.ProcessCpuPercent);
+            command.AddParam("@hostcpu", (object?)sample.HostCpuPercent ?? DBNull.Value);
+            command.AddParam("@state", sample.StateDiskFreeBytes);
+            command.AddParam("@spill", sample.SpillDiskFreeBytes);
+            await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<IReadOnlyList<HostMetricSample>> GetHostMetricsAsync(string? nodeId, DateTime since, int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            var sql = "SELECT NodeId, CapturedAt, MemoryLoadPercent, ProcessCpuPercent, HostCpuPercent, StateDiskFreeBytes, SpillDiskFreeBytes " +
+                      "FROM HostMetrics WHERE CapturedAt >= @since ";
+            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND NodeId = @node "; command.AddParam("@node", nodeId); }
+            sql += "ORDER BY CapturedAt DESC LIMIT @limit;";
+            command.CommandText = sql;
+            command.AddParam("@since", since.ToUniversalTime().ToString("O"));
+            command.AddParam("@limit", limit);
+
+            var results = new List<HostMetricSample>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                results.Add(new HostMetricSample(
+                    reader.GetString(0),
+                    DateTime.Parse(reader.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                    Convert.ToDouble(reader.GetValue(2)),
+                    Convert.ToDouble(reader.GetValue(3)),
+                    reader.IsDBNull(4) ? null : Convert.ToDouble(reader.GetValue(4)),
+                    Convert.ToInt64(reader.GetValue(5)),
+                    Convert.ToInt64(reader.GetValue(6))));
+            }
+            return results;
+        }
+
+        public async Task<int> PruneHostMetricsAsync(TimeSpan maxAge)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM HostMetrics WHERE CapturedAt < @cutoff;";
+            command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("O"));
             return await command.ExecuteNonQueryAsync();
         }
 
