@@ -18,6 +18,10 @@ Options:
 - **PASSWORD** — password authentication
 - **KEYFILE** — path to a private key file (PEM or PPK format)
 - **PASSPHRASE** — passphrase protecting the private key
+- **HOST_KEY_FINGERPRINT** — pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). When set, a mismatch **rejects** the connection, protecting outbound transfers against man-in-the-middle interception. When unset the connection proceeds (backward compatible) but logs a warning — **pin it for internet-facing / vendor transfers.** Get the value with `ssh-keygen -lf <server_host_key>`.
+- **ATOMIC_UPLOAD** — `true`/`false` (default `false`). When `true`, `SEND FILE` uploads to a temporary name and renames into place on completion, so a polling consumer never reads a partially written file. Requires **rename** permission on the target directory — leave off for write-only vendor drop boxes.
+
+Security note: for outbound vendor deliveries, pin `HOST_KEY_FINGERPRINT` and, where the vendor permits rename, enable `ATOMIC_UPLOAD`.
 
 ```sql
 CREATE CONNECTION PartnerSFTP AS SFTP(

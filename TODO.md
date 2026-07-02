@@ -165,8 +165,8 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Document scheduling the existing `etl-sql admin backup` CLI plus a periodic tested restore drill.
 
 #### Outbound SFTP hardening
-- [ ] Add SFTP server host-key verification (known-hosts / fingerprint pin) for outbound transfers; `SftpConnector` currently subscribes no `HostKeyReceived` handler and trusts any server key (MITM exposure on internet-facing vendor jobs).
-- [ ] Add opt-in per-connection atomic upload (upload to a temp name, rename on completion), defaulting off so write-only-grant vendors (no rename/read permission) are unaffected; document the accepted partial-file risk when disabled.
+- [x] SFTP server host-key verification: `HOST_KEY_FINGERPRINT` option pins the server key (SHA256 base64 or MD5 hex, optional algo prefix). `SftpConnector` now wires `HostKeyReceived` and rejects a mismatch (MITM protection); unpinned connections proceed but log a warning (backward compatible). Matching logic unit-tested (6 cases: SHA256 padding/prefix, MD5 case/separators, mismatch, empty).
+- [x] Opt-in per-connection atomic upload: `ATOMIC_UPLOAD=true` uploads to a temp name then renames into place; defaults off so write-only vendors are unaffected. Documented in the SFTP connector help (partial-file risk when off; rename permission required when on).
 
 #### Capacity visibility and retention
 - [ ] Capture host/server utilization (host CPU %, memory headroom, disk free on spill and state volumes) as a sampled time series, distinct from per-job process cost. JobHistory records each job's own peak memory / CPU time but nothing measures the box's saturation headroom, which is what "am I outgrowing this server" requires.
