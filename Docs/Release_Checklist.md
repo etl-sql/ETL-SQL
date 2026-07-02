@@ -49,11 +49,11 @@ Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 
 ### Feature security watchlist (resolve before the named capability ships)
 
-- [ ] **RLS Publisher preview-as data access** — before the report-writer "preview as a simulated
-      group/role set" capability ships, decide whether previewing under groups the Publisher does not
-      belong to is an acceptable data-access path or must be gated by a separate grant / restricted to
-      non-production data. See open question 1 in [`Docs/Design/RowLevelSecurity.md`](Design/RowLevelSecurity.md).
-      (Admin real-impersonation is view-narrowing only and not covered by this item.)
+- [x] **RLS Publisher preview-as data access — RESOLVED (2026-07-02).** Not an escalation and needs
+      no separate grant: a report author already has full access to the data their query reaches, so
+      preview-as (like admin run-as) only changes RLS-predicate evaluation, while the previewer's own
+      authority still gates dataset/connection access. Data isolation from an author is a DB-layer
+      responsibility, out of scope. See open question 1 in [`Docs/Design/RowLevelSecurity.md`](Design/RowLevelSecurity.md).
 
 ## Phase 3 — Local validation gate (authoritative)
 

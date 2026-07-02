@@ -107,7 +107,82 @@ public class RowLevelSecurityPortalTests : IClassFixture<PortalWebFactory>
         Assert.Equal(0, await verifyDb.ReportSnapshots.CountAsync(s => s.ReportId == reportId));
     }
 
+    [Fact]
+    public async Task PreviewAs_AllowedForEditor_ForbiddenForExecuteOnlyViewer()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var editorName = $"rls_editor_{suffix}";
+        await CreatePortalUserAsync(adminToken, editorName, "Editor@Test1!", "Publisher");
+        var viewerName = $"rls_viewer_{suffix}";
+        await CreatePortalUserAsync(adminToken, viewerName, "Viewer@Test1!", "Viewer");
+
+        var folderId = await CreateFolderAsync(adminToken, $"Preview Folder {suffix}");
+        var reportId = await CreateReportAsync(adminToken, folderId, $"rls_preview_{suffix}",
+            $"CREATE VISUAL Prev_{suffix} AS CARD (SOURCE = (SELECT 42 AS Answer, HAS_GROUP('X') AS Allowed), MAPPINGS (VALUE = Answer));");
+
+        int targetUserId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var editor = await db.Users.SingleAsync(u => u.UserName == editorName);
+            var viewer = await db.Users.SingleAsync(u => u.UserName == viewerName);
+
+            var editorGroup = new Group { Name = $"editors_{suffix}" };
+            var viewerGroup = new Group { Name = $"viewers_{suffix}" };
+            db.Groups.AddRange(editorGroup, viewerGroup);
+            await db.SaveChangesAsync();
+
+            db.UserGroups.AddRange(
+                new UserGroup { UserId = editor.Id, GroupId = editorGroup.Id },
+                new UserGroup { UserId = viewer.Id, GroupId = viewerGroup.Id });
+            // Editor gets Manage (edit authority); viewer gets Execute only.
+            db.FolderAcls.AddRange(
+                new FolderAcl { FolderId = folderId, GroupId = editorGroup.Id, Permission = FolderPermission.Manage },
+                new FolderAcl { FolderId = folderId, GroupId = viewerGroup.Id, Permission = FolderPermission.Execute });
+            await db.SaveChangesAsync();
+            targetUserId = viewer.Id;
+        }
+
+        var editorToken = await LoginWithRequiredChangeAsync(editorName, "Editor@Test1!", "Editor@Test2!");
+        var viewerToken = await LoginWithRequiredChangeAsync(viewerName, "Viewer@Test1!", "Viewer@Test2!");
+
+        var editorRes = await AuthPost(editorToken, $"/api/reports/{reportId}/execute-as/{targetUserId}",
+            new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, editorRes.StatusCode);
+
+        var viewerRes = await AuthPost(viewerToken, $"/api/reports/{reportId}/execute-as/{targetUserId}",
+            new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Forbidden, viewerRes.StatusCode);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
+
+    private async Task CreatePortalUserAsync(string adminToken, string username, string password, string role)
+    {
+        var res = await AuthPost(adminToken, "/api/admin/users",
+            new { username, email = $"{username}@test.local", password, role });
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+    }
+
+    // Admin-created users have MustChangePassword=true; the first-login token is restricted, so
+    // change the password once and re-login for a full-authority token.
+    private async Task<string> LoginWithRequiredChangeAsync(string username, string password, string newPassword)
+    {
+        var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        loginRes.EnsureSuccessStatusCode();
+        var firstToken = (await loginRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
+
+        using var cpReq = new HttpRequestMessage(HttpMethod.Post, "/api/auth/change-password");
+        cpReq.Headers.Authorization = new("Bearer", firstToken);
+        cpReq.Content = JsonContent.Create(new { currentPassword = password, newPassword });
+        (await _client.SendAsync(cpReq)).EnsureSuccessStatusCode();
+
+        var reloginRes = await _client.PostAsJsonAsync("/api/auth/login", new { username, password = newPassword });
+        reloginRes.EnsureSuccessStatusCode();
+        return (await reloginRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["token"]!.GetValue<string>();
+    }
 
     private async Task<int> CreateFolderAsync(string token, string name)
     {

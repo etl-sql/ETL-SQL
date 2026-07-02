@@ -78,18 +78,21 @@ public class ExecutionController(
     }
 
     // ── 2.1b  POST /api/reports/{id}/execute-as/{targetUserId} ────────────────
-    // Admin impersonation: run the report under a target user's row-level-security identity to
-    // reproduce what that user sees. The admin's own authority gates execution; the target's identity
-    // drives row filtering. The result is never cached and both identities are audited.
+    // Run the report under a target user's row-level-security identity — admin impersonation (support
+    // / reproduction) or Publisher preview-as (authoring / testing RLS predicates). The *real actor's*
+    // own authority gates execution and dataset/connection access; only the author-written RLS
+    // predicates see the target identity, so this exposes no data the caller couldn't already reach.
+    // Available to administrators and to editors (Manage) of the report's folder. Never cached; both
+    // identities audited. See Docs/Design/RowLevelSecurity.md.
     [HttpPost("reports/{id:int}/execute-as/{targetUserId:int}")]
-    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ExecuteAs(int id, int targetUserId, [FromBody] ExecuteRequest? req)
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
         if (report is null) return NotFound();
 
+        // Editors (Manage) can preview-as their own reports; admins can run-as on any report.
         var perm = await GetEffectivePermissionAsync(report.FolderId);
-        if (perm is null || perm < FolderPermission.Execute) return Forbid();
+        if (!IsAdmin && (perm is null || perm < FolderPermission.Manage)) return Forbid();
 
         var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
         if (target is null) return NotFound(new { error = "Target user not found." });

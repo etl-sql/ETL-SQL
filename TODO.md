@@ -151,7 +151,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 ##### RLS Phase 2 (enterprise completion)
 - [x] Table-valued `USER_GROUPS()` / `USER_ROLES()` for `WHERE col IN (SELECT Value FROM USER_GROUPS())` joins; both added to the identity-sensitivity scan so they are also never-cached. *(3 engine tests)*
-- [ ] Publisher **preview-as** (simulated group/role set, edit-scope only) — gated by the security-review decision recorded in `Docs/Release_Checklist.md`.
+- [x] Publisher **preview-as**: `execute-as` extended to folder editors (Manage), not just admins. Security-review question resolved (not an escalation — the previewer's own authority gates data access; the simulated identity only drives author-written RLS predicates; DB-layer isolation is out of scope). Never-cached, dual-identity audit. *(Portal test: editor allowed, execute-only viewer forbidden)*
 - [ ] Per-recipient subscription execution for identity-sensitive reports (currently they simply produce no shared snapshot).
 - [ ] CLI / Orchestrator run-as identity semantics for non-interactive execution.
 - [ ] **Impersonation / run-as** — host-enforced, never script-self-granted: `Admin` may run a report as a real named user (view-narrowing only, since admins already bypass RLS) for support/repro; `Publisher` may preview a report they can edit under a simulated group/role set. Both log real + effective identity. Resolve the open question on Publisher preview-as data access (see design doc) at security review.

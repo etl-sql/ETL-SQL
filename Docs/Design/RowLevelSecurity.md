@@ -182,10 +182,16 @@ WHERE  HAS_GROUP('Region:' + r.RegionCode);   -- membership, not substring
 
 ## Open questions
 
-1. **Publisher preview-as data access** — does previewing with a simulated group set that the
-   Publisher doesn't belong to constitute an access escalation over sensitive data? Default stance
-   here: allowed (it is inherent to authoring), but gated behind a grant and called out for security
-   review. **(Needs decision.)**
+1. **Publisher preview-as data access — RESOLVED (2026-07-02).** Not an escalation, and no separate
+   grant is needed. A report author already has full access to the data their query reaches (they
+   wrote the SQL); RLS is a filter they *apply to viewers*, not an access control against themselves.
+   Preview-as therefore works exactly like admin run-as: the **effective** (simulated/target) identity
+   drives only the author-written RLS predicates, while the **real actor's** own authority still gates
+   dataset/connection access (`DatasetCallerContext` = real actor), so preview-as cannot reach data the
+   previewer couldn't already reach. True isolation of data from its own author is a database-layer
+   responsibility (per-author credentials / DB-native RLS), explicitly out of ETL-SQL's scope.
+   Implementation: extend `execute-as` to Publishers for reports they can edit; unconditionally
+   never-cached; dual-identity audit.
 2. **Group name namespace** — are OIDC groups domain-qualified, and do we normalize a canonical form
    before matching? (Matching is case-insensitive regardless.)
 3. **Admin bypass granularity** — global toggle (as designed) vs per-report opt-in to still-filter
