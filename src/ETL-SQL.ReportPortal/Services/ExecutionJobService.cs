@@ -957,26 +957,20 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         return _snapshotPackages.SaveAsync(manifest, manifestKey, ct);
     }
 
-    // Row-level-security identity references. A script containing any of these runs under the
-    // viewer's identity and must not share a snapshot (see the ReportSnapshots guard above).
-    private static readonly string[] _identityReferenceTokens =
-        { "@@CURRENT_USER", "@@REAL_USER", "@@IS_ADMIN", "HAS_GROUP", "HAS_ROLE", "USER_GROUPS", "USER_ROLES" };
-
     /// <summary>
-    /// Conservative static check: does the script reference any identity variable/function? Scans raw
-    /// text (comments/strings may over-flag), which is deliberate — over-flagging only costs caching,
-    /// while under-flagging would leak one viewer's filtered rows to another.
+    /// Does the script reference any row-level-security identity variable/function? Reads the file and
+    /// applies the shared conservative scan; on read failure fails safe (treat as identity-sensitive,
+    /// so no shared snapshot is produced).
     /// </summary>
     private static async Task<bool> ScriptReferencesIdentityAsync(string scriptPath, CancellationToken ct)
     {
         try
         {
-            var text = await File.ReadAllTextAsync(scriptPath, ct);
-            return _identityReferenceTokens.Any(t => text.Contains(t, StringComparison.OrdinalIgnoreCase));
+            return ETL_SQL.Core.Governance.RowLevelSecurityScan.ReferencesIdentity(
+                await File.ReadAllTextAsync(scriptPath, ct));
         }
         catch
         {
-            // If we cannot read the script, fail safe: treat as identity-sensitive (no shared snapshot).
             return true;
         }
     }

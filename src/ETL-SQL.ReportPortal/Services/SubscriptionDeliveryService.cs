@@ -195,6 +195,24 @@ public class SubscriptionDeliveryService(
             return await RecordFailureAsync(
                 sub, recipient, "Report script file no longer exists.", correlationId, ct);
 
+        // Row-level security: an identity-sensitive report filters rows per viewer. Shared subscription
+        // delivery runs under no interactive identity (fail-closed), so it would silently email an
+        // empty report. Refuse with a clear reason rather than deliver misleading blank output.
+        // Per-recipient identity delivery is tracked as future work. See Docs/Design/RowLevelSecurity.md.
+        try
+        {
+            if (ETL_SQL.Core.Governance.RowLevelSecurityScan.ReferencesIdentity(
+                    await File.ReadAllTextAsync(reportScriptPath, ct)))
+                return await RecordFailureAsync(sub, recipient,
+                    "Report uses row-level security (per-viewer filtering); shared subscription delivery is not supported.",
+                    correlationId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return await RecordFailureAsync(sub, recipient,
+                "Report script could not be read for row-level-security evaluation.", correlationId, ct);
+        }
+
         SmtpConnection? smtp = null;
         if (!string.IsNullOrEmpty(sub.SmtpAlias))
         {
