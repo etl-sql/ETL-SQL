@@ -154,6 +154,13 @@ public class PortalSecurityConfig
     /// Wildcards are intentionally unsupported so embedding remains an explicit deployment decision.
     /// </summary>
     public string[] FrameAncestors { get; set; } = [];
+
+    /// <summary>
+    /// Whether administrators bypass row-level security (HAS_GROUP/HAS_ROLE short-circuit to true).
+    /// Default on. Turn off to filter admins by the same predicates as other users.
+    /// See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    public bool AdminBypassRowLevelSecurity { get; set; } = true;
 }
 
 public class DatasetConfig
