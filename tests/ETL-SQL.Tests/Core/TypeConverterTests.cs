@@ -64,5 +64,34 @@ namespace ETL_SQL.Tests.Core
             Assert.IsType<byte[]>(result);
             Assert.Equal("Hello", System.Text.Encoding.UTF8.GetString((byte[])result));
         }
+
+        [Fact]
+        public void TestDateTimeOffsetAndPrecisionCasts()
+        {
+            var offsetStr = "2026-07-02 10:05:51.1234567 -05:00";
+            var resultOffset = TypeConverter.Cast(offsetStr, "DATETIMEOFFSET");
+            Assert.IsType<DateTimeOffset>(resultOffset);
+            var dto = (DateTimeOffset)resultOffset;
+            Assert.Equal(2026, dto.Year);
+            Assert.Equal(7, dto.Month);
+            Assert.Equal(2, dto.Day);
+            Assert.Equal(10, dto.Hour);
+            Assert.Equal(5, dto.Minute);
+            Assert.Equal(51, dto.Second);
+            Assert.Equal(1234567, dto.Ticks % 10000000);
+            Assert.Equal(TimeSpan.FromHours(-5), dto.Offset);
+
+            var resultDt3 = TypeConverter.Cast(offsetStr, "DATETIME(3)");
+            Assert.IsType<DateTime>(resultDt3);
+            var dt3 = (DateTime)resultDt3;
+            Assert.Equal(123, dt3.Millisecond);
+            Assert.Equal(0, (dt3.Ticks % 10000000) % 10000);
+
+            var resultDto5 = TypeConverter.Cast(offsetStr, "DATETIMEOFFSET(5)");
+            Assert.IsType<DateTimeOffset>(resultDto5);
+            var dto5 = (DateTimeOffset)resultDto5;
+            Assert.Equal(1234500, dto5.Ticks % 10000000);
+            Assert.Equal(TimeSpan.FromHours(-5), dto5.Offset);
+        }
     }
 }

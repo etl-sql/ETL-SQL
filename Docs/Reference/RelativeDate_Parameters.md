@@ -106,7 +106,13 @@ Valid values: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`
 
 ### Time zone
 
-All period anchors (`D`, `W`, `M`, `Q`, `Y` and their variants) resolve in **server local time**. `N` resolves in server local time; `NU` resolves in UTC. For time zone conversions, use the `FOR TIMEZONE` clause or pass the time zone as a separate parameter.
+All period anchors (`D`, `W`, `M`, `Q`, `Y` and their variants) resolve in **server local time** by default. `N` resolves in server local time; `NU` resolves in UTC.
+
+To evaluate relative date snapping under a specific timezone calendar, append a timezone suffix to the expression (e.g., `D-1 EST`, `D America/New_York`, `N-2H UTC`). When a suffix is provided:
+1. The calendar day snap is determined based on the target timezone's clock.
+2. The resolved value is returned as a timezone-aware `DATETIMEOFFSET` type, preserving the correct timezone offset for that date (including DST transitions).
+
+For a complete list of timezone abbreviations and behavior, refer to the [Dates and Times Guide](Dates_and_Times.md).
 
 ### Fixed date passthrough
 

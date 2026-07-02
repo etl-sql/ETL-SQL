@@ -66,6 +66,7 @@ public static class ColumnBatchAdapter
         "DECIMAL" or "NUMERIC" or "MONEY" => typeof(decimal),
         "BIT" or "BOOL" or "BOOLEAN" => typeof(byte),
         "DATE" or "DATETIME" or "TIMESTAMP" => typeof(DateTime),
+        "DATETIMEOFFSET" => typeof(DateTimeOffset),
         "TIME" => typeof(TimeSpan),
         "GUID" or "UUID" or "UNIQUEIDENTIFIER" => typeof(Guid),
         "STRING" or "VARCHAR" or "NVARCHAR" or "TEXT" or "NTEXT" or "CHAR" or "NCHAR" or
@@ -199,6 +200,8 @@ public static class ColumnBatchAdapter
             case "DATETIME":
             case "TIMESTAMP":
                 return BuildFixed(rows, ordinal, value => value is DateTime date ? date : Convert.ToDateTime(value));
+            case "DATETIMEOFFSET":
+                return BuildFixed(rows, ordinal, value => value is DateTimeOffset dto ? dto : (EvaluationUtils.TryToDateTimeOffset(value, out var parsedDto) ? parsedDto : DateTimeOffset.Parse(value.ToString()!)));
             case "TIME":
                 return BuildFixed(rows, ordinal, value => value is TimeSpan time ? time : TimeSpan.Parse(value.ToString()!));
             case "GUID":
@@ -338,6 +341,7 @@ public static class ColumnBatchAdapter
             decimal => "DECIMAL",
             bool => "BOOLEAN",
             DateTime => "DATETIME",
+            DateTimeOffset => "DATETIMEOFFSET",
             TimeSpan => "TIME",
             Guid => "UUID",
             string => "VARCHAR",

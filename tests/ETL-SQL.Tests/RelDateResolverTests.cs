@@ -348,5 +348,38 @@ namespace ETL_SQL.Tests
         {
             Assert.Throws<ExecutionException>(() => RelDateResolver.Resolve("N-2X", Monday, Ref));
         }
+
+        [Fact]
+        public void Timezone_Aware_Relative_Dates()
+        {
+            // 1:00 AM UTC on July 2 is 9:00 PM EDT on July 1 in New York (-4:00)
+            var refTime = new DateTimeOffset(2026, 7, 2, 1, 0, 0, TimeSpan.Zero);
+
+            // D-1 relative to New York calendar should be June 30
+            var result1 = RelDateResolver.ResolveToOffset("D-1 EST", Monday, refTime);
+            Assert.Equal(2026, result1.Year);
+            Assert.Equal(6, result1.Month);
+            Assert.Equal(30, result1.Day);
+            Assert.Equal(0, result1.Hour);
+            Assert.Equal(0, result1.Minute);
+            Assert.Equal(TimeSpan.FromHours(-4), result1.Offset);
+
+            // N-2H relative to UTC should be July 1 at 23:00 UTC
+            var result2 = RelDateResolver.ResolveToOffset("N-2H UTC", Monday, refTime);
+            Assert.Equal(2026, result2.Year);
+            Assert.Equal(7, result2.Month);
+            Assert.Equal(1, result2.Day);
+            Assert.Equal(23, result2.Hour);
+            Assert.Equal(0, result2.Minute);
+            Assert.Equal(TimeSpan.Zero, result2.Offset);
+
+            // D relative to Chicago calendar should be July 1
+            var result3 = RelDateResolver.ResolveToOffset("D America/Chicago", Monday, refTime);
+            Assert.Equal(2026, result3.Year);
+            Assert.Equal(7, result3.Month);
+            Assert.Equal(1, result3.Day);
+            Assert.Equal(0, result3.Hour);
+            Assert.Equal(TimeSpan.FromHours(-5), result3.Offset);
+        }
     }
 }

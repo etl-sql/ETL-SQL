@@ -680,24 +680,43 @@ public class ExpressionEvaluator
         });
     }
 
-    /// <summary>Evaluates the AT TIME ZONE expression.</summary>
     private async ValueTask<object?> EvaluateAtTimeZone(AtTimeZoneExpression atTz, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
         var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
         if (val == null || zone == null) return val;
 
-        DateTime dt = DateTime.Parse(val.ToString() ?? "");
-        if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        DateTimeOffset dto;
+        if (val is DateTimeOffset valDto)
+        {
+            dto = valDto;
+        }
+        else if (val is DateTime valDt)
+        {
+            var dt = valDt;
+            if (dt.Kind == DateTimeKind.Unspecified)
+            {
+                dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            }
+            dto = new DateTimeOffset(dt);
+        }
+        else if (EvaluationUtils.TryToDateTimeOffset(val, out var parsedDto))
+        {
+            dto = parsedDto;
+        }
+        else
+        {
+            return val;
+        }
 
         try
         {
-            var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(zone.ToString() ?? "UTC");
-            return TimeZoneInfo.ConvertTime(dt, tzInfo);
+            var tzInfo = RelDateResolver.FindTimeZone(zone.ToString() ?? "UTC");
+            return TimeZoneInfo.ConvertTime(dto, tzInfo);
         }
         catch
         {
-            return dt;
+            return dto;
         }
     }
 
@@ -983,7 +1002,7 @@ public class ExpressionEvaluator
             _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
             "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
         {
-            return RelDateResolver.Resolve(reldateExpr, _context.WeekStartDay);
+            return RelDateResolver.ResolveToOffset(reldateExpr, _context.WeekStartDay);
         }
 
         if (decryptSensitive && val is string s && s.StartsWith("ENC:"))

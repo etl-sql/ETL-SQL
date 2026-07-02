@@ -105,7 +105,7 @@ namespace ETL_SQL.Connectors.Oracle
                 var row = new Row();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    row[columns[i]] = reader.IsDBNull(i) ? null : MapOracleValue(reader.GetValue(i));
                 }
                 await currentBatch.AddRowAsync(row);
 
@@ -191,7 +191,14 @@ namespace ETL_SQL.Connectors.Oracle
                 using var cmd = CreateCommand(stmtSql, conn);
                 int paramCount = 0;
                 foreach (var param in paramList)
-                    cmd.Parameters.Add(new OracleParameter($"p{paramCount++}", param ?? DBNull.Value));
+                {
+                    var p = new OracleParameter($"p{paramCount++}", param ?? DBNull.Value);
+                    if (param is DateTimeOffset)
+                    {
+                        p.OracleDbType = OracleDbType.TimeStampTZ;
+                    }
+                    cmd.Parameters.Add(p);
+                }
                 if (paramCount > 0)
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
 
@@ -206,7 +213,7 @@ namespace ETL_SQL.Connectors.Oracle
                 {
                     var row = new Row();
                     for (int i = 0; i < reader.FieldCount; i++)
-                        row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        row[columns[i]] = reader.IsDBNull(i) ? null : MapOracleValue(reader.GetValue(i));
                     await resultBatch.AddRowAsync(row);
                 }
                 resultBatch.RowsAffected = (int)reader.RecordsAffected;
@@ -341,6 +348,38 @@ namespace ETL_SQL.Connectors.Oracle
             cmd.BindByName = true;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
+        }
+
+        private static object? MapOracleValue(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            
+            var typeName = value.GetType().FullName;
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStampTZ")
+            {
+                return (DateTimeOffset)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStampLTZ")
+            {
+                return (DateTimeOffset)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleTimeStamp")
+            {
+                return (DateTime)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleDate")
+            {
+                return (DateTime)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleDecimal")
+            {
+                return (decimal)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleIntervalDS")
+            {
+                return (TimeSpan)(dynamic)value;
+            }
+            return value;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

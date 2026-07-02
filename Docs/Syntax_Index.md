@@ -1303,6 +1303,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | :--- | :--- | :--- |
 | `ALL` | Join | Canonical language token |
 | `APPLY` | Join | Canonical language token |
+| `ASOF` | Join | Canonical language token |
 | `CROSS` | Join | Canonical language token |
 | `EXCEPT` | Join | Canonical language token |
 | `FULL` | Join | Canonical language token |
@@ -1311,6 +1312,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `INTERSECT` | Join | Canonical language token |
 | `JOIN` | Join | Canonical language token |
 | `KEEP` | Join | Canonical language token |
+| `LATERAL` | Join | Canonical language token |
 | `LEFT` | Join | Canonical language token |
 | `OUTER` | Join | Canonical language token |
 | `RIGHT` | Join | Canonical language token |
@@ -1716,10 +1718,12 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CLOSE` | General | Canonical language token |
 | `COLUMNS` | General | Canonical language token |
 | `COMMENT` | General | Canonical language token |
+| `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
+| `DESCRIBE` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
 | `DISCONNECT` | General | Canonical language token |
 | `ENABLE` | General | Canonical language token |
@@ -1755,6 +1759,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `OCTET_LENGTH` | General | Canonical language token |
 | `OFF` | General | Canonical language token |
 | `ON` | General | Canonical language token |
+| `OPERATOR_MEMORY_GRANT` | General | Canonical language token |
 | `OUTPUT` | General | Canonical language token |
 | `OVERLAY` | General | Canonical language token |
 | `PARALLEL` | General | Canonical language token |
@@ -1766,10 +1771,12 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REFRESH` | General | Canonical language token |
 | `REFRESH_REPORT` | General | Canonical language token |
 | `REFRESH_VISUALS` | General | Canonical language token |
+| `REPEATABLE` | General | Canonical language token |
 | `REQUIRE` | General | Canonical language token |
 | `REQUIRED` | General | Canonical language token |
 | `RESTART` | General | Canonical language token |
 | `SAFE` | General | Canonical language token |
+| `SAMPLE` | General | Canonical language token |
 | `SESSION` | General | Canonical language token |
 | `SESSIONS` | General | Canonical language token |
 | `SETS` | General | Canonical language token |
@@ -1961,6 +1968,8 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REGEXP_SUBSTR` | Function | Canonical built-in function |
 | `RELDATE` | Function | Canonical built-in function |
 | `REMOVE_FROM_LIST` | Function | Canonical built-in function |
+| `REMOVE_HIDDEN_CHARACTERS` | Function | Canonical built-in function |
+| `REMOVE_HTML_CHARACTERS` | Function | Canonical built-in function |
 | `REPEAT` | Function | Canonical built-in function |
 | `REPLACE` | Function | Canonical built-in function |
 | `REPLICATE` | Function | Canonical built-in function |
@@ -2102,4 +2111,5 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `@trusted` | Tag | Standard governance tag |
 | `@unit` | Tag | Standard governance tag |
 <!-- END GENERATED CANONICAL TOKEN INDEX -->
+
 
