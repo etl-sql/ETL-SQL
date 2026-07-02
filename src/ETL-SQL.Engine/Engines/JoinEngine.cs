@@ -386,6 +386,33 @@ public class JoinEngine
         var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         var rightAlias = join.Table.Alias ?? join.Table.TableName;
 
+        var streamingLeftKeys = new List<string>();
+        var streamingRightKeys = new List<string>();
+        var rightSource = await _context.ResolveDataSourceAsync(join.Table);
+        var estimatedRightRows = (rightSource as IEstimatedCardinalityDataSource)?.EstimatedRowCount;
+        var knownLargeRight = estimatedRightRows > _context.JoinSpillThreshold;
+        var isInnerEquiJoin = join.JoinType.Equals("INNER", StringComparison.OrdinalIgnoreCase)
+            || join.JoinType.Equals("INNER JOIN", StringComparison.OrdinalIgnoreCase)
+            || join.JoinType.Equals("JOIN", StringComparison.OrdinalIgnoreCase);
+        if (knownLargeRight && isInnerEquiJoin && !join.IsFuzzy && !join.IsAsof
+            && TryExtractEqualityKeys(
+                join.Condition, leftAlias, rightAlias, streamingLeftKeys, streamingRightKeys))
+        {
+            _logger.WriteLine(
+                $"[yellow]HYPER-SCALE: Right-side estimate ({estimatedRightRows} rows) exceeds threshold. " +
+                "Streaming both sides directly into ExternalJoinEngine.[/]");
+            var externalJoin = new ExternalJoinEngine(_context, _logger);
+            await foreach (var row in externalJoin.ApplyHashJoinExternal(
+                leftStream,
+                GetJoinRowsAsyncEnumerable(join),
+                join,
+                streamingLeftKeys,
+                streamingRightKeys,
+                knownBuildRowCount: estimatedRightRows!.Value))
+                yield return row;
+            yield break;
+        }
+
         var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
 
         // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table.

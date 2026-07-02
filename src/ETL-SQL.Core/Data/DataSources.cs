@@ -123,6 +123,12 @@ public interface IDataSource : IAsyncDisposable
     Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
 }
 
+/// <summary>Optional row-count estimate used to choose bounded operators before consuming a source.</summary>
+public interface IEstimatedCardinalityDataSource
+{
+    long EstimatedRowCount { get; }
+}
+
 /// <summary>
 /// Optional fast-path contract for sources that can expose native typed column buffers. Existing
 /// <see cref="IDataSource.ReadBatches"/> remains the compatibility path for row-based consumers.
@@ -171,7 +177,7 @@ public interface IDatabaseSource : IDataSource
 /// Represents an in-memory data store with indexing and constraint validation support.
 /// Used for temporary tables, MOCKDB, and intermediate query results.
 /// </summary>
-public class InMemoryDataSource : IDataSource, ISpillable
+public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinalityDataSource
 {
     private readonly List<DataTable> _batches = new();
     private readonly SemaphoreSlim _lock = new(1, 1);

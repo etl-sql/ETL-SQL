@@ -14,7 +14,16 @@ namespace ETL_SQL.Engine.Engines;
 internal static class MemoryGovernor
 {
     /// <summary>The per-operator memory ceiling in bytes. 0 (or less) = disabled.</summary>
-    public static long Ceiling(IExecutionContext ctx) => ctx.MemoryArbiter?.TotalBudgetBytes ?? 0;
+    public static long Ceiling(IExecutionContext ctx)
+    {
+        var processBytes = ctx.MemoryArbiter?.TotalBudgetBytes ?? 0;
+        var operatorBytes = ctx.OperatorMemoryGrantMB > 0
+            ? (long)ctx.OperatorMemoryGrantMB * 1024 * 1024
+            : 0;
+        if (processBytes <= 0) return operatorBytes;
+        if (operatorBytes <= 0) return processBytes;
+        return Math.Min(processBytes, operatorBytes);
+    }
 
     /// <summary>
     /// Applied when an operator has exhausted its ability to relieve memory pressure (e.g. a

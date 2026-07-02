@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Scale
     /// Generation is deterministic and stateless, so the engine may read it any number of times
     /// (e.g. a self-join) and always get identical data.
     /// </summary>
-    internal sealed class StreamingRowSource : IDataSource
+    internal sealed class StreamingRowSource : IDataSource, IEstimatedCardinalityDataSource
     {
         private readonly long _rowCount;
         private readonly (string Name, Func<long, object?> Gen)[] _columns;
@@ -35,6 +35,7 @@ namespace ETL_SQL.Tests.Scale
         public string Path => "";
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "GENSTREAM";
+        public long EstimatedRowCount => _rowCount;
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {

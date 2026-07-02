@@ -119,10 +119,14 @@ public class ExternalJoinEngine
         var budget = MemoryGovernor.Ceiling(_context);
         if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Count == 0 ? 0 : frequencies.Values.Max() / (double)sample.Count;
-        var hasExactTotal = knownBuildRowCount >= 0 && knownBuildBytes >= 0;
-        var plannedRows = hasExactTotal ? knownBuildRowCount!.Value : sample.Count;
-        var plannedBytes = hasExactTotal ? knownBuildBytes!.Value : inputBytes;
-        var estimatedDistinct = hasExactTotal
+        var hasPlannedTotal = knownBuildRowCount >= 0;
+        var plannedRows = hasPlannedTotal ? knownBuildRowCount!.Value : sample.Count;
+        var plannedBytes = knownBuildBytes >= 0
+            ? knownBuildBytes!.Value
+            : hasPlannedTotal
+                ? checked((long)Math.Ceiling(inputBytes / (double)sample.Count * plannedRows))
+                : inputBytes;
+        var estimatedDistinct = hasPlannedTotal
             ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)sample.Count)))
             : frequencies.Count;
         var plan = HashPartitionSizing.Calculate(
@@ -132,9 +136,9 @@ public class ExternalJoinEngine
             budget,
             estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
             largestKeyFraction: hotFraction,
-            minimumPartitions: hasExactTotal ? 1 : Math.Max(1, _partitionCount),
+            minimumPartitions: hasPlannedTotal ? 1 : Math.Max(1, _partitionCount),
             maximumPartitions: Math.Max(1024, _partitionCount));
-        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
+        _partitionCount = hasPlannedTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
         _logger.Debug(
             "External join sampled {SampleRows} build rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
             sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
