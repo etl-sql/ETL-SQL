@@ -174,7 +174,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Add a daily roll-up summary (per job/report: count, failures, rows, peak memory, avg duration) retained longer than raw rows, so pruning bounds table growth without losing capacity-planning trend.
 
 #### Governance default
-- [ ] Default `Portal:Audit:RequireRemoteDelivery` fail-closed audit to on for multi-user / enrolled deployments; keep standalone local-only as the unenrolled default.
+- [x] `Portal:Audit:RequireRemoteDelivery` is now nullable; when unset it resolves to **on** for an enrolled deployment with a collector configured (`TransportEndpoint`), **off** for standalone/unenrolled or no-collector deployments. Explicit `true`/`false` always wins — upgrade-safe (a deployment without remote audit is never newly blocked). *(6 resolve unit cases; Administrators_Guide §4 updated)*
 
 #### Prebuilt administrator template scripts
 - [ ] Ship a set of template `.etlsql` scripts admins can run as-is or adapt, decoupled from any single deployment: (a) daily job-failure digest email; (b) backup + status-to-JobHistory; (c) capacity/utilization report over JobHistory + the roll-up summary; (d) operational-metrics summary (active/queued/failure-rate/storage) as an opt-in email subscription over the Portal `OperationalMetricsService` data.

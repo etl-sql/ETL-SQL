@@ -111,10 +111,22 @@ public class AuditConfig
     /// delivery is judged unavailable: any delivery has terminally failed, the pending backlog
     /// exceeds <see cref="FailClosedMaxPendingBacklog"/>, the oldest pending event is older than
     /// <see cref="FailClosedMaxBacklogSeconds"/>, or the queued payload exceeds
-    /// <see cref="OutboxMaxBytes"/>. Defaults to false (local zero-trust default); set true only
-    /// when an HTTPS collector is configured and remote audit delivery is mandatory.
+    /// <see cref="OutboxMaxBytes"/>.
+    ///
+    /// <para><b>Unset (null) is the safe default</b> and resolves per <see cref="ResolveRequireRemoteDelivery"/>:
+    /// on for an <b>enrolled</b> deployment that has configured a collector (<see cref="TransportEndpoint"/>),
+    /// off otherwise. Standalone/unenrolled deployments therefore stay local-only, and a deployment
+    /// with no collector configured is never blocked. An explicit <c>true</c>/<c>false</c> always wins.</para>
     /// </summary>
-    public bool RequireRemoteDelivery { get; set; }
+    public bool? RequireRemoteDelivery { get; set; }
+
+    /// <summary>
+    /// Resolves the effective fail-closed policy. An explicit configured value is honoured; when unset,
+    /// fail-closed is on only for an enrolled deployment that has a collector configured — so it is a
+    /// no-op for standalone deployments and for enrolled deployments without remote audit set up.
+    /// </summary>
+    public bool ResolveRequireRemoteDelivery(bool isEnrolled) =>
+        RequireRemoteDelivery ?? (isEnrolled && !string.IsNullOrWhiteSpace(TransportEndpoint));
 
     /// <summary>Fail-closed once this many undelivered (Pending) outbox rows accumulate. 0 disables this check.</summary>
     public int FailClosedMaxPendingBacklog { get; set; } = 1000;

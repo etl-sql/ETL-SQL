@@ -398,7 +398,12 @@ because a row may be resent after a crash or lost delivery acknowledgement. Any 
 delivered. Non-2xx responses retry with exponential backoff until `TransportMaxAttempts`, then the row is marked
 `Failed`.
 
-`RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. When it is
+`RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. **Leaving it
+unset is the recommended default**: fail-closed then turns on automatically for an **enrolled** deployment that has a
+collector configured (`TransportEndpoint`), and stays off for standalone/unenrolled deployments and for any deployment
+with no collector — so a compliance deployment gets fail-closed audit without having to remember to flip a switch,
+while nothing is ever blocked where remote audit was not set up. Set an explicit `true`/`false` to override; an
+explicit value always wins. When it is
 enabled, security-sensitive mutations are blocked with HTTP 503 once remote audit delivery is judged unavailable:
 any terminally failed outbox row, pending backlog over `FailClosedMaxPendingBacklog`, oldest pending row older than
 `FailClosedMaxBacklogSeconds`, or queued payload over `OutboxMaxBytes`. Leave it disabled unless an HTTPS collector

@@ -142,7 +142,8 @@ public sealed class AuditOutboxTransportService(
         if (totalBytes < config.Audit.OutboxMaxBytes)
             return removed;
 
-        if (config.Audit.RequireRemoteDelivery)
+        if (config.Audit.ResolveRequireRemoteDelivery(
+                ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current.IsEnrolled))
         {
             // Mandatory delivery: do not drop events — the fail-closed gate already stops new
             // mutations. Surface the saturation for operators.
