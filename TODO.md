@@ -298,14 +298,15 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   release ownership. The mutable head reserves estimated row bytes, immutable segments reserve actual
   rented-array capacity, rejected native batches retain caller ownership, and segment reservations stay
   active until the final retained reader returns the buffers.)*
-- [~] Replace PK/unique full-row caches with compact key/hash structures before declaring constrained
+- [x] Replace PK/unique full-row caches with compact key/hash structures before declaring constrained
   columnar temp tables memory-bounded. *(Row-backed `#temp` unique indexes now keep value-aware compact
   key sets instead of `List<Row>` buckets, retain keys across spill, clear keys while preserving index
   definitions on truncate, and account key bytes incrementally. The native append store now enforces
   column-level PK/unique constraints directly from row or native buffers with persistent typed key sets,
   SQL null semantics, transactional staging, and a dedicated memory-grant lease. Table-level composite
   PK/unique constraints use canonical packed typed keys rather than retained rows or component-object
-  arrays. Engine `#temp` routing remains.)*
+  arrays. Eligible constrained `#temp` schemas now route to the native store by default; end-to-end
+  coverage proves composite unique enforcement stays on that route.)*
 
 #### P3 — Columnar fast paths (“columnar islands”)
 
@@ -326,11 +327,13 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   `IS NULL`/`IS NOT NULL`; `AND` composes selections and `OR` uses a pooled bitmap to deduplicate while
   preserving candidate order. Unsupported expressions return to the row fallback. Complex-plan
   routing and string/collation comparison remain.)*
-- [~] `COUNT`, `SUM`, `MIN`, `MAX`, and `AVG` over native buffers. *(Scalar typed-buffer kernels now
+- [x] `COUNT`, `SUM`, `MIN`, `MAX`, and `AVG` over native buffers. *(Scalar typed-buffer kernels now
   implement SQL null exclusion, empty-input semantics, decimal-promoted accumulation, floating and
   decimal averages, optional selection vectors, cancellation, and fixed-width min/max without boxed
   row accumulation. Global aggregate SELECTs now bind these kernels across multiple native batches,
-  including filtered input and safe replay into the row aggregate pipeline. Grouped plan routing remains.)*
+  including filtered input and safe replay into the row aggregate pipeline. Grouped SELECT plans bind
+  the same aggregate set across batches and multiple numeric value columns. Global MIN/MAX also retain
+  native routing for date/time and GUID buffers, with null and cross-batch coverage.)*
 - [~] Low-cardinality `GROUP BY` with compact typed keys and memory-bounded aggregate state. *(A fused
   fixed-width native kernel now groups typed nullable keys and maintains row count, non-null count,
   checked sum, min, and max directly from buffers or selection vectors. Estimated per-group state is

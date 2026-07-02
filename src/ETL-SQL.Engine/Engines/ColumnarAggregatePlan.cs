@@ -60,10 +60,13 @@ internal sealed class ColumnarAggregatePlan
             try { column = batch.GetColumn(slot.SourceColumn!); }
             catch (KeyNotFoundException) { return false; }
             if (slot.Name == "COUNT") continue;
-            if (column.ElementType != typeof(byte) && column.ElementType != typeof(short)
-                && column.ElementType != typeof(int) && column.ElementType != typeof(long)
-                && column.ElementType != typeof(float) && column.ElementType != typeof(double)
-                && column.ElementType != typeof(decimal))
+            var numeric = column.ElementType == typeof(byte) || column.ElementType == typeof(short)
+                || column.ElementType == typeof(int) || column.ElementType == typeof(long)
+                || column.ElementType == typeof(float) || column.ElementType == typeof(double)
+                || column.ElementType == typeof(decimal);
+            var fixedWidthComparable = numeric || column.ElementType == typeof(DateTime)
+                || column.ElementType == typeof(TimeSpan) || column.ElementType == typeof(Guid);
+            if (slot.Name is "SUM" or "AVG" ? !numeric : !fixedWidthComparable)
                 return false;
         }
         return true;
@@ -158,6 +161,9 @@ internal sealed class ColumnarAggregatePlan
         if (type == typeof(float)) return Box(ColumnBatchKernels.MinMax<float>(batch, column, selection));
         if (type == typeof(double)) return Box(ColumnBatchKernels.MinMax<double>(batch, column, selection));
         if (type == typeof(decimal)) return Box(ColumnBatchKernels.MinMax<decimal>(batch, column, selection));
+        if (type == typeof(DateTime)) return Box(ColumnBatchKernels.MinMax<DateTime>(batch, column, selection));
+        if (type == typeof(TimeSpan)) return Box(ColumnBatchKernels.MinMax<TimeSpan>(batch, column, selection));
+        if (type == typeof(Guid)) return Box(ColumnBatchKernels.MinMax<Guid>(batch, column, selection));
         return (false, null, null);
     }
 

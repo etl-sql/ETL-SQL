@@ -75,6 +75,22 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task DefaultRoutesCompositeConstrainedTempTableAndEnforcesUniqueKey()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT NOT NULL, Code VARCHAR(20) NOT NULL, " +
+            "CONSTRAINT UQ_native UNIQUE (Id, Code)); " +
+            "INSERT INTO #native VALUES (1, 'one');"));
+
+        Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var duplicate = await Assert.ThrowsAsync<ExecutionException>(() =>
+            evaluator.Evaluate(ParseScript("INSERT INTO #native VALUES (1, 'one');")));
+        Assert.Contains("constraint 'UQ_native'", duplicate.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PersistentSessionKeepsTempTableOnPersistableRowStore()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -288,6 +304,54 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(1m, row["mn"]);
         Assert.Equal((decimal)int.MaxValue, row["mx"]);
         Assert.Equal(1_073_741_824.5m, row["av"]);
+        Assert.Equal(0, source.RowReadAttempts);
+    }
+
+    [Fact]
+    public async Task GlobalMinMaxSupportsTemporalAndGuidBuffersNatively()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var firstDate = new DateTime(2026, 1, 1);
+        var lastDate = new DateTime(2026, 12, 31);
+        var firstGuid = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var lastGuid = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("EventDate", typeof(DateTime), "DATETIME"),
+            new ColumnBatchField("Duration", typeof(TimeSpan), "TIME"),
+            new ColumnBatchField("Identifier", typeof(Guid), "UUID")
+        });
+        await using var source = new NativeOnlyDataSource(new[]
+        {
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<DateTime>(new[] { lastDate, default }, 2, new byte[] { 0b0000_0010 }),
+                new ColumnBuffer<TimeSpan>(new[] { TimeSpan.FromHours(5), TimeSpan.FromHours(2) }, 2),
+                new ColumnBuffer<Guid>(new[] { lastGuid, firstGuid }, 2)
+            }, 2),
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<DateTime>(new[] { firstDate }, 1),
+                new ColumnBuffer<TimeSpan>(new[] { TimeSpan.FromHours(8) }, 1),
+                new ColumnBuffer<Guid>(new[] { Guid.Parse("11111111-1111-1111-1111-111111111111") }, 1)
+            }, 1)
+        }, throwOnRowRead: true);
+        evaluator.Connections["events"] = source;
+
+        var result = Assert.Single(await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(ParseSelect(
+                "SELECT MIN(EventDate) AS FirstDate, MAX(EventDate) AS LastDate, " +
+                "MIN(Duration) AS Shortest, MAX(Duration) AS Longest, " +
+                "MIN(Identifier) AS FirstId, MAX(Identifier) AS LastId FROM events;"), evaluator)
+            .ToListAsync());
+        var row = Assert.Single(result.Rows);
+
+        Assert.Equal(firstDate, row["FirstDate"]);
+        Assert.Equal(lastDate, row["LastDate"]);
+        Assert.Equal(TimeSpan.FromHours(2), row["Shortest"]);
+        Assert.Equal(TimeSpan.FromHours(8), row["Longest"]);
+        Assert.Equal(firstGuid, row["FirstId"]);
+        Assert.Equal(lastGuid, row["LastId"]);
         Assert.Equal(0, source.RowReadAttempts);
     }
 
