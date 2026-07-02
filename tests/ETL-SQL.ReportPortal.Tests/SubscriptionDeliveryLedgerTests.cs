@@ -27,7 +27,8 @@ public sealed class SubscriptionDeliveryLedgerTests
         public static ConfigurableRunner Throws(string message) =>
             new(_ => throw new InvalidOperationException(message));
 
-        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct)
+        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
             CallCount++;
             return Task.FromResult(_result(CallCount));

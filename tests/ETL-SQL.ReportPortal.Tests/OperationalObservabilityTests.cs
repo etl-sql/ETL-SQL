@@ -246,7 +246,8 @@ public sealed class OperationalObservabilityTests : IDisposable
 
     private sealed class EchoingFailureRunner(string error) : ISubscriptionScriptRunner
     {
-        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct)
+        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
             => Task.FromResult<(bool, string?)>((false, error));
     }
 

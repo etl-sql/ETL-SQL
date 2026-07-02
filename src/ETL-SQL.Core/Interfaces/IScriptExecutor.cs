@@ -10,8 +10,13 @@ namespace ETL_SQL.Core;
 /// </summary>
 public interface IScriptExecutor
 {
-    /// <summary>Executes the given script text and returns the result.</summary>
-    Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0);
+    /// <summary>
+    /// Executes the given script text and returns the result. When <paramref name="executionIdentity"/>
+    /// is supplied, it is the row-level-security identity the script runs under (used by per-recipient
+    /// subscription delivery); null means non-interactive execution, which fails closed for
+    /// identity-sensitive scripts. See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, Governance.ExecutionIdentity? executionIdentity = null);
 }
 
 public record ScriptExecutionResult(bool Success, long RowsProcessed, string? ErrorMessage = null, long PeakMemoryBytes = 0, double CpuTimeSeconds = 0, string? SessionId = null);
