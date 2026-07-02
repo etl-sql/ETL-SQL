@@ -223,6 +223,24 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             }
         }
 
+        if (IsValidatedCountCandidate(stmt))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            if (source is IValidatedRowCountDataSource validatedCountSource)
+            {
+                var count = await validatedCountSource.CountRowsValidatedAsync(context.CancellationToken);
+                var result = new DataTable();
+                var outputName = stmt.Columns[0].Alias ?? "COUNT(*)";
+                result.SetColumns(new[] { outputName });
+                var row = new Row();
+                // AggregateEngine exposes COUNT using the engine's numeric aggregate type.
+                row[outputName] = (decimal)count;
+                await result.AddRowAsync(row);
+                yield return result;
+                yield break;
+            }
+        }
+
         if (IsGlobalColumnarAggregateCandidate(stmt)
             && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
         {
@@ -601,6 +619,18 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
             && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool IsValidatedCountCandidate(SelectStatement stmt)
+        => IsGlobalColumnarAggregateCandidate(stmt)
+            && stmt.WhereClause == null
+            && stmt.Columns.Count == 1
+            && stmt.Columns[0].Expression is FunctionCallExpression function
+            && function.FunctionName.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
+            && !function.IsDistinct && function.Window == null && function.Filter == null
+            && (function.Arguments.Count == 0
+                || function.Arguments.Count == 1 && function.Arguments[0] is StarExpression
+                || function.Arguments.Count == 1 && function.Arguments[0] is IdentifierExpression identifier
+                    && identifier.Name == "*");
 
     private static async IAsyncEnumerable<DataTable> ReplayNativeAsRows(
         ColumnBatch first,

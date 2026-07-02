@@ -509,10 +509,23 @@ public class DataTable
         Schema.RenameColumn(oldName, newName);
     }
 
-    public async System.Threading.Tasks.Task AddRowAsync(Row row)
+    public System.Threading.Tasks.Task AddRowAsync(Row row)
     {
         PrepareRowForAdd(row);
 
+        if (!Schema.Constraints.Any(RequiresAsyncValidation))
+        {
+            ValidateSynchronousConstraints(row);
+            IncrementRowsAdded();
+            Rows.Add(row);
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        return AddRowWithAsyncConstraints(row);
+    }
+
+    private async System.Threading.Tasks.Task AddRowWithAsyncConstraints(Row row)
+    {
         foreach (var constraint in Schema.Constraints)
         {
             if (constraint.Type == ConstraintType.Check && Validator != null && constraint.Expression != null)

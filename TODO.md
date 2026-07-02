@@ -480,7 +480,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   (10.0 GB peak), with 210 extents and three passes. Sort certification scales forced run size up to
   the production 100K cap while retaining multiple runs: 10M used 176 extents/two passes at 76,258
   rows/s and 1.07 GB peak; 50M used 625 extents/two passes at 73,070 rows/s and 1.10 GB peak.)*
-- [ ] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
+- [x] **Gate F — initial 1B claim:** append-only scan, filter, projection, low-cardinality aggregate,
   and `#temp` round-trip complete below 16 GB process peak with documented CPU, disk, elapsed time,
   spill volume, and hardware. This does **not** initially certify arbitrary `MERGE`, holistic
   aggregates, single-partition windows, billion-distinct-key aggregation, or adversarial skew.
@@ -488,8 +488,13 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   aggregate and spill-backed `#temp` round-trip, writes durable child logs plus atomic `status.json`,
   enforces a 16 GB peak/50K rows-per-second floor, records the commit, and refuses to start the spill
   scenario without 25 GB free on the temp drive. Its 1B test is explicitly skipped outside that
-  operator-run certification script; it is not part of smoke, ordinary test, or release lanes. The
-  user-operated 1B run remains.)*
+  operator-run certification script; it is not part of smoke, ordinary test, or release lanes.
+  The user-operated run completed at commit `6c26091d`: native scan/filter/projection/100-group
+  aggregation processed 1B rows in 19.99 seconds at 50.0M rows/s with 142 MB peak working set and no
+  row fallback; the spill-backed `#temp` round-trip completed in 3,946.7 seconds at 253K rows/s with
+  507.8 MB peak working set, 113.2 GB written, 13.0 GB read, 1,043 extents, and one partition pass.
+  Correctness, memory, and throughput gates all passed. Subsequent performance changes require a new
+  Gate F run before replacing these published measurements.)*
 
 #### Non-goals and guardrails
 
@@ -502,9 +507,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 
 ### Target: certify 1,000,000,000 rows below 16 GB process peak
 
-**Status: target, not an existing capability or proven outcome.** The current implementation and
-certification harness do not justify a blanket billion-row claim. The initial claim is deliberately
-narrow and is earned only by Gate F above.
+**Status: the narrow Gate F workload is certified; this is not a blanket billion-row claim.** The
+initial claim is deliberately limited to the operators listed below and the measured configuration
+recorded above.
 
 The first certified workload covers append-only scan, filter, projection, low-cardinality aggregation,
 and `#temp` round-trip. Join and sort have separate Gate E requirements and may join the published 1B

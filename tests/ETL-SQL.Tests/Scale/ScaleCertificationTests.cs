@@ -60,6 +60,10 @@ namespace ETL_SQL.Tests.Scale
         private static Evaluator NewEvaluator()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            // Certification hosts are disposable and must expose spill under the runner's monitored
+            // temp root. Persisting these sessions both hides live disk use from the HUD and leaves
+            // multi-gigabyte artifacts after a successful run.
+            ev.IsPersistentSession = false;
             // The cert runs on dev workstations / CI agents (not dedicated DB hosts) and drives large
             // inputs, so cap the RAM-governor ceiling to a modest value rather than inheriting the
             // production auto (~80% of physical RAM) default. This keeps even a 50M run within a few GB
@@ -69,6 +73,9 @@ namespace ETL_SQL.Tests.Scale
             if (!int.TryParse(raw, out var grantMb)) grantMb = 2048;
             if (grantMb > 0)
                 MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)grantMb * 1024 * 1024;
+            var rawBatchRows = Environment.GetEnvironmentVariable("CERT_BATCH_ROWS");
+            if (int.TryParse(rawBatchRows, out var batchRows) && batchRows > 0)
+                ev.BatchSize = batchRows;
             return ev;
         }
 
@@ -508,7 +515,10 @@ namespace ETL_SQL.Tests.Scale
         {
             var Rows = ScaleRows(50_000);
             var ev = await EvWithRows(Rows);
-            ev.TempTableSpillThresholdRows = 10_000;  // force temp table spill
+            // Retain one configured batch, then force all subsequent batches through spill.
+            // Gate F raises BatchSize to reduce scheduler/allocation overhead while preserving
+            // bounded memory and a complete physical spill/readback validation.
+            ev.TempTableSpillThresholdRows = ev.BatchSize;
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();

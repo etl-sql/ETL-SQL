@@ -130,6 +130,16 @@ public interface IEstimatedCardinalityDataSource
 }
 
 /// <summary>
+/// Optional exact-count capability for sources that can validate their physical backing store
+/// without reconstructing every row. Implementations must consume all persisted data and verify
+/// that the physical count agrees with their logical row count before returning.
+/// </summary>
+public interface IValidatedRowCountDataSource
+{
+    Task<long> CountRowsValidatedAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
 /// Optional fast-path contract for sources that can expose native typed column buffers. Existing
 /// <see cref="IDataSource.ReadBatches"/> remains the compatibility path for row-based consumers.
 /// </summary>
@@ -177,7 +187,7 @@ public interface IDatabaseSource : IDataSource
 /// Represents an in-memory data store with indexing and constraint validation support.
 /// Used for temporary tables, MOCKDB, and intermediate query results.
 /// </summary>
-public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinalityDataSource
+public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinalityDataSource, IValidatedRowCountDataSource
 {
     private readonly List<DataTable> _batches = new();
     private readonly SemaphoreSlim _lock = new(1, 1);
@@ -297,7 +307,14 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
 
     public Task ValidateRow(Row row) => ValidateRow(row, _batches);
 
-    public async Task ValidateRow(Row row, IEnumerable<DataTable> activeBatches)
+    public Task ValidateRow(Row row, IEnumerable<DataTable> activeBatches)
+    {
+        if (Schema.Count == 0 && TableConstraints.Count == 0)
+            return Task.CompletedTask;
+        return ValidateRowCore(row, activeBatches);
+    }
+
+    private async Task ValidateRowCore(Row row, IEnumerable<DataTable> activeBatches)
     {
         var errors = new List<string>();
 
@@ -642,6 +659,50 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
     public bool HasIndex(string columnName) => _index.HasIndex(columnName);
 
     public IDataSource WithTable(string tableName) => this;
+
+    public async Task<long> CountRowsValidatedAsync(CancellationToken cancellationToken = default)
+    {
+        List<string> chunks;
+        List<DataTable> memoryCopy;
+        long expectedCount;
+        await _lock.WaitAsync(cancellationToken);
+        try
+        {
+            chunks = _spillChunkNames.ToList();
+            memoryCopy = _batches.ToList();
+            expectedCount = _totalRowCount;
+        }
+        finally { _lock.Release(); }
+
+        long physicalCount = memoryCopy.Sum(batch => (long)batch.Rows.Count);
+        if (chunks.Count > 0 && ExecutionContext?.SpillStore == null)
+            throw new ExecutionException("Spill-to-disk operation failed: IExecutionContext.SpillStore is null but spilled data exists.");
+
+        foreach (var spillName in chunks)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await using var reader = await ExecutionContext!.SpillStore.CreateReaderAsync(spillName);
+            if (reader is IColumnarSpillReader columnarReader)
+            {
+                await foreach (var batch in columnarReader.AsColumnBatchesAsync().WithCancellation(cancellationToken))
+                {
+                    using (batch) physicalCount += batch.RowCount;
+                }
+            }
+            else
+            {
+                await foreach (var _ in reader.AsEnumerableAsync().WithCancellation(cancellationToken))
+                    physicalCount++;
+            }
+        }
+
+        if (physicalCount != expectedCount)
+            throw new ExecutionException(
+                $"Temp-table physical row-count validation failed: expected {expectedCount:N0}, read {physicalCount:N0}.");
+
+        return physicalCount;
+    }
+
     public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
     {
         // 1. Yield from disk spill first (if any)

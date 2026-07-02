@@ -7,6 +7,10 @@
     Each scenario has durable stdout/stderr logs and a result JSON. status.json is refreshed while a
     child is active, so another session can inspect progress without attaching to this console. The
     billion-row test is opt-in to this script and is skipped by ordinary test, smoke, and release lanes.
+
+.PARAMETER TempBatchRows
+    Row batch used by the spill-backed temp-table scenario. The default 25,000 is the measured
+    workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
     [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip')]
@@ -16,6 +20,8 @@ param(
     [string]$OutDir = '.\certification-results\gate-f-1b',
     [double]$MemoryBoundMB = 16384,
     [int]$MemoryGrantMB = 8192,
+    [ValidateRange(1000, 1000000)]
+    [int]$TempBatchRows = 25000,
     [double]$MinimumRowsPerSecond = 50000,
     [double]$MinimumFreeDiskGB = 25,
     [switch]$SkipBuild,
@@ -112,6 +118,7 @@ try {
         "Scenario: $Scenario",
         "Memory bound MB: $MemoryBoundMB",
         "Memory grant MB: $MemoryGrantMB",
+        "Temp-table batch rows: $TempBatchRows",
         "Minimum rows/s: $MinimumRowsPerSecond",
         ("Spill drive free GB: {0:N1}" -f $freeDiskGB)
     ) | Add-Content -LiteralPath $runLog -Encoding UTF8
@@ -124,6 +131,7 @@ try {
         requestedScenario = $Scenario
         memoryBoundMB = $MemoryBoundMB
         memoryGrantMB = $MemoryGrantMB
+        tempBatchRows = $TempBatchRows
         minimumRowsPerSecond = $MinimumRowsPerSecond
         minimumFreeDiskGB = $MinimumFreeDiskGB
         spillRoot = $tempRoot
@@ -175,12 +183,13 @@ try {
         $tempOut = Join-Path $outRoot 'temp-table-round-trip'
         $result = Join-Path $tempOut 'cert-report.json'
         $resultKey = Join-Path $outRoot 'temp-table-round-trip.key'
-        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond"
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$TempBatchRows|$MinimumRowsPerSecond"
         $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
             ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
         if ($Force -or -not $reusable) {
             $env:CERT_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:CERT_MEMORY_GRANT_MB = $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:CERT_BATCH_ROWS = $TempBatchRows.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:CERT_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
             $scale = $Rows / 50000d
             $pwsh = (Get-Process -Id $PID).Path

@@ -161,6 +161,9 @@ certification-results/*.log
 certification-results/*.err
 certification-results/*.out
 certification-results/baseline-*-runs/
+# Gate F keeps one compact, reproducible report; child logs, keys, and status are run-local.
+certification-results/gate-f-1b/*
+!certification-results/gate-f-1b/gate-f-report.json
 test_lineage.md
 test_out.txt
 tests_list.txt

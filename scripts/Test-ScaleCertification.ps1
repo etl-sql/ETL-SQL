@@ -233,6 +233,12 @@ if (Test-Path $errLog) { Get-Content $errLog | Add-Content $rawLog }
 
 $testExitCode = $proc.ExitCode
 
+# The certification evaluator is explicitly non-persistent. A force-killed test host cannot run its
+# disposer, so the runner owns final cleanup after the child exits as a second line of defense.
+if (Test-Path $spillRoot) {
+    try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+}
+
 try { $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $computer = $null }
 try { $processor = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch { $processor = $null }
 try { $operatingSystem = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { $operatingSystem = $null }
@@ -322,7 +328,7 @@ $mdLines += "| :--- | :--- | :--- | :--- |"
 $mdLines += "| ORDER BY | External Sort (multi-chunk) | 50k rows | Run size scales from 5K to the production 100K cap while preserving multiple runs |"
 $mdLines += "| GROUP BY | External Aggregate | 100k rows | OperatorMemoryGrantMB forced to 1 MB |"
 $mdLines += "| JOIN (equality) | External Hash Join | 50k rows | JoinSpillThreshold forced to 5k |"
-$mdLines += "| SELECT INTO #temp | Temp Table Spill | 50k rows | TempTableSpillThresholdRows forced to 10k |"
+$mdLines += "| SELECT INTO #temp | Temp Table Spill | 50k rows | Retains one configured batch, then validates every spilled extent during COUNT(*) readback |"
 $mdLines += "| SELECT (streaming) | Result Cap | 100k rows | MaxLastResultRows cap enforced at 50k |"
 $mdLines += "| WINDOW ROW_NUMBER | External Window | 50k rows | WindowSpillThreshold forced to 5k |"
 $mdLines += "| CSV ingest | Connector batch read | 50k rows | Row count and checksum certified |"
