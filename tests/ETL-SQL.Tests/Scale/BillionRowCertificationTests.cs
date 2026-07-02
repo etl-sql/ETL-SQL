@@ -1,7 +1,12 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -11,7 +16,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
 {
     [Fact]
     [Trait("Category", "BillionRowCertification")]
-    public void NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded()
+    public async Task NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded()
     {
         var rowCount = ReadPositiveLong("GATE_F_ROWS", 1_000_000_000);
         var batchSize = ReadPositiveInt("GATE_F_BATCH_ROWS", 100_000);
@@ -21,21 +26,38 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         GC.Collect(2, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
         using var sampler = new ScenarioResourceSampler();
-        using var result = RunNative(rowCount, batchSize);
-        var resources = sampler.SnapshotAndReset();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = new StreamingColumnarSource(rowCount, batchSize);
+        evaluator.Connections["gate_f_source"] = source;
 
         var threshold = checked((int)(rowCount / 2));
+        var stopwatch = Stopwatch.StartNew();
+        var tables = await evaluator.ExecuteQuery(TestHelpers.Parse($"""
+            SELECT GroupId, COUNT(*) AS N, SUM(Id) AS IdSum, SUM(Amount) AS AmountSum
+            FROM gate_f_source
+            WHERE Id > {threshold}
+            GROUP BY GroupId;
+            """).Statements[0]).ToListAsync();
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var rows = tables.SelectMany(table => table.Rows).ToArray();
+        var selectedCount = rows.Sum(row => Convert.ToInt64(row["N"], CultureInfo.InvariantCulture));
+        var idSum = rows.Sum(row => Convert.ToDecimal(row["IdSum"], CultureInfo.InvariantCulture));
+        var amountSum = rows.Sum(row => Convert.ToDecimal(row["AmountSum"], CultureInfo.InvariantCulture));
+        var projectionChecksum = checked((long)(idSum + amountSum * 2));
         var expectedSelected = rowCount - threshold;
         var expectedIdSum = SumRange(threshold + 1, rowCount);
         var expectedAmountSum = SumModuloRange(threshold + 1, rowCount, 1_000);
         var expectedChecksum = checked(expectedIdSum + expectedAmountSum * 2);
-        var rowsPerSecond = rowCount / Math.Max(0.001, result.Elapsed.TotalSeconds);
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
         var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
 
-        Assert.Equal(expectedSelected, result.SelectedCount);
-        Assert.Equal(expectedChecksum, result.ProjectionChecksum);
-        Assert.Equal(100, result.GroupSums.Count);
-        Assert.Equal((decimal)expectedAmountSum, result.GroupSums.Values.Sum());
+        Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(expectedSelected, selectedCount);
+        Assert.Equal(expectedChecksum, projectionChecksum);
+        Assert.Equal(100, rows.Length);
+        Assert.Equal((decimal)expectedAmountSum, amountSum);
         Assert.True(peakWorkingSetMb < memoryBoundMb,
             $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
         if (minimumRowsPerSecond.HasValue)
@@ -47,10 +69,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             scenario = "GateF_NativeScanFilterProjectionAggregate",
             rowCount,
             batchSize,
-            selectedRows = result.SelectedCount,
-            checksum = result.ProjectionChecksum,
-            groups = result.GroupSums.Count,
-            elapsedMs = Math.Round(result.Elapsed.TotalMilliseconds, 3),
+            selectedRows = selectedCount,
+            checksum = projectionChecksum,
+            groups = rows.Length,
+            rowReadAttempts = source.RowReadAttempts,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
             rowsPerSecond = Math.Round(rowsPerSecond, 2),
             peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
             peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
@@ -70,55 +93,6 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         output.WriteLine("GATE_F_METRIC:" + json);
         var outputPath = Environment.GetEnvironmentVariable("GATE_F_OUTPUT");
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
-    }
-
-    private static NativeResult RunNative(long rowCount, int batchSize)
-    {
-        NativeGroupAggregateResult<int, long>? groups = null;
-        long selected = 0;
-        long checksum = 0;
-        var threshold = checked((int)(rowCount / 2));
-        var stopwatch = Stopwatch.StartNew();
-        for (long start = 1; start <= rowCount; start += batchSize)
-        {
-            var count = (int)Math.Min(batchSize, rowCount - start + 1);
-            var ids = ColumnBuffer<int>.Rent(count);
-            var groupIds = ColumnBuffer<int>.Rent(count);
-            var amounts = ColumnBuffer<long>.Rent(count);
-            for (var offset = 0; offset < count; offset++)
-            {
-                var id = checked((int)(start + offset));
-                ids.Values.Span[offset] = id;
-                groupIds.Values.Span[offset] = id % 100;
-                amounts.Values.Span[offset] = id % 1_000;
-            }
-            using var batch = new ColumnBatch(
-                new ColumnBatchSchema(new[]
-                {
-                    new ColumnBatchField("Id", typeof(int), "INT", false),
-                    new ColumnBatchField("GroupId", typeof(int), "INT", false),
-                    new ColumnBatchField("Amount", typeof(long), "BIGINT", false)
-                }),
-                new IColumnBuffer[] { ids, groupIds, amounts }, count);
-            using var selection = ColumnBatchKernels.SelectComparison(
-                batch, "Id", ColumnComparison.GreaterThan, threshold);
-            selected += selection.Count;
-            foreach (var row in selection.Indices.Span)
-                checksum = checked(checksum + ids.Values.Span[row] + amounts.Values.Span[row] * 2);
-            if (groups == null)
-                groups = ColumnBatchGroupKernels.GroupAggregate<int, long>(
-                    batch, "GroupId", "Amount", selection: selection);
-            else
-                groups.Accumulate(batch, "GroupId", "Amount", selection);
-        }
-        stopwatch.Stop();
-        return new NativeResult(
-            selected,
-            checksum,
-            groups?.Groups.ToDictionary(pair => pair.Key.Value, pair => pair.Value.Sum)
-                ?? new Dictionary<int, decimal>(),
-            stopwatch.Elapsed,
-            groups);
     }
 
     private static long SumRange(long first, long last)
@@ -147,17 +121,63 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         => double.TryParse(Environment.GetEnvironmentVariable(name), NumberStyles.Float,
             CultureInfo.InvariantCulture, out var value) && value > 0 ? value : null;
 
-    private sealed class NativeResult(
-        long selectedCount,
-        long projectionChecksum,
-        IReadOnlyDictionary<int, decimal> groupSums,
-        TimeSpan elapsed,
-        NativeGroupAggregateResult<int, long>? state) : IDisposable
+    private sealed class StreamingColumnarSource(long rowCount, int preferredBatchSize)
+        : IDataSource, IColumnarDataSource, IEstimatedCardinalityDataSource
     {
-        public long SelectedCount { get; } = selectedCount;
-        public long ProjectionChecksum { get; } = projectionChecksum;
-        public IReadOnlyDictionary<int, decimal> GroupSums { get; } = groupSums;
-        public TimeSpan Elapsed { get; } = elapsed;
-        public void Dispose() => state?.Dispose();
+        private static readonly ColumnBatchSchema Schema = new(new[]
+        {
+            new ColumnBatchField("Id", typeof(int), "INT", false),
+            new ColumnBatchField("GroupId", typeof(int), "INT", false),
+            new ColumnBatchField("Amount", typeof(long), "BIGINT", false)
+        });
+
+        public int RowReadAttempts { get; private set; }
+        public long EstimatedRowCount => rowCount;
+        public string Path => string.Empty;
+        public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "GATE_F_COLUMNAR";
+
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
+        {
+            RowReadAttempts++;
+            await Task.Yield();
+            throw new InvalidOperationException("Gate F must remain on the native columnar evaluator route.");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+
+        public async IAsyncEnumerable<ColumnBatch> ReadColumnBatches(
+            int batchSize = 10_000,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var size = preferredBatchSize > 0 ? preferredBatchSize : batchSize;
+            for (long start = 1; start <= rowCount; start += size)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var count = (int)Math.Min(size, rowCount - start + 1);
+                var ids = ColumnBuffer<int>.Rent(count);
+                var groupIds = ColumnBuffer<int>.Rent(count);
+                var amounts = ColumnBuffer<long>.Rent(count);
+                for (var offset = 0; offset < count; offset++)
+                {
+                    var id = checked((int)(start + offset));
+                    ids.Values.Span[offset] = id;
+                    groupIds.Values.Span[offset] = id % 100;
+                    amounts.Values.Span[offset] = id % 1_000;
+                }
+                yield return new ColumnBatch(Schema, new IColumnBuffer[] { ids, groupIds, amounts }, count);
+            }
+        }
+
+        public Task<IEnumerable<string>> GetColumnsAsync()
+            => Task.FromResult<IEnumerable<string>>(Schema.Fields.Select(field => field.Name).ToArray());
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+            => throw new NotSupportedException();
+        public object? Snapshot() => throw new NotSupportedException();
+        public void Restore(object? snapshot) => throw new NotSupportedException();
+        public IDataSource WithTable(string tableName) => this;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

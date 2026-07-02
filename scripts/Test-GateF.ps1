@@ -32,6 +32,9 @@ New-Item -ItemType Directory -Force -Path $outRoot | Out-Null
 $statusPath = Join-Path $outRoot 'status.json'
 $runLog = Join-Path $outRoot 'gate-f.log'
 $startedAt = Get-Date
+$activeScenario = ''
+$commit = ''
+$runKey = ''
 
 function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [string]$detail = '') {
     $status = [ordered]@{
@@ -43,6 +46,7 @@ function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [str
         startedAt = $startedAt.ToString('o')
         updatedAt = (Get-Date).ToString('o')
         elapsedSeconds = [math]::Round(((Get-Date) - $startedAt).TotalSeconds, 1)
+        commit = $commit
         detail = $detail
         outputDirectory = $outRoot
     }
@@ -57,6 +61,7 @@ function Invoke-LoggedProcess(
     [string[]]$arguments,
     [string]$stdoutPath,
     [string]$stderrPath) {
+    $script:activeScenario = $name
     Write-Status 'running' $name 0 'starting child process'
     $process = Start-Process -FilePath $filePath -ArgumentList $arguments -WorkingDirectory $repoRoot `
         -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru
@@ -98,6 +103,8 @@ try {
     }
 
     @(
+        '',
+        ('=' * 72),
         "Gate F started: $($startedAt.ToString('o'))",
         "Commit: $commit",
         "Rows: $Rows",
@@ -106,8 +113,32 @@ try {
         "Memory grant MB: $MemoryGrantMB",
         "Minimum rows/s: $MinimumRowsPerSecond",
         ("Spill drive free GB: {0:N1}" -f $freeDiskGB)
-    ) | Set-Content -LiteralPath $runLog -Encoding UTF8
+    ) | Add-Content -LiteralPath $runLog -Encoding UTF8
     Write-Status 'preparing' '' 0 "commit $commit"
+
+    $runManifest = [ordered]@{
+        startedAt = $startedAt.ToString('o')
+        commit = $commit
+        rows = $Rows
+        requestedScenario = $Scenario
+        memoryBoundMB = $MemoryBoundMB
+        memoryGrantMB = $MemoryGrantMB
+        minimumRowsPerSecond = $MinimumRowsPerSecond
+        minimumFreeDiskGB = $MinimumFreeDiskGB
+        spillRoot = $tempRoot
+        spillDrive = $tempDrive.Root
+        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+        machineName = [Environment]::MachineName
+        operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
+        processArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
+        runtimeVersion = [Runtime.InteropServices.RuntimeInformation]::FrameworkDescription
+        logicalProcessorCount = [Environment]::ProcessorCount
+        processor = $env:PROCESSOR_IDENTIFIER
+        gcAvailableMemoryBytes = if ([GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes -gt 0) {
+            [long][GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
+        } else { 0 }
+    }
+    $runManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
 
     if (-not $SkipBuild) {
         & dotnet build (Join-Path $repoRoot 'ETL-SQL.slnx') -c Release --no-restore -v quiet *>&1 |
@@ -117,7 +148,11 @@ try {
 
     if ($Scenario -eq 'All' -or $Scenario -eq 'ColumnarCore') {
         $result = Join-Path $outRoot 'columnar-core.json'
-        if ($Force -or -not (Test-Path $result)) {
+        $resultKey = Join-Path $outRoot 'columnar-core.key'
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MinimumRowsPerSecond|100000"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
             $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:GATE_F_BATCH_ROWS = '100000'
             $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -128,13 +163,20 @@ try {
                 'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
                 '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.NativeScanFilterProjectionAndLowCardinalityAggregateStayBounded'
             ) (Join-Path $outRoot 'columnar-core.log') (Join-Path $outRoot 'columnar-core.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'ColumnarCore' 0 "reusing completed result for commit $commit"
         }
     }
 
     if ($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip') {
         $tempOut = Join-Path $outRoot 'temp-table-round-trip'
         $result = Join-Path $tempOut 'cert-report.json'
-        if ($Force -or -not (Test-Path $result)) {
+        $resultKey = Join-Path $outRoot 'temp-table-round-trip.key'
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
             $env:CERT_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:CERT_MEMORY_GRANT_MB = $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture)
             $env:CERT_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
@@ -146,6 +188,9 @@ try {
                 '-RowCountScale', $scale.ToString([Globalization.CultureInfo]::InvariantCulture),
                 '-OutDir', $tempOut, '-SkipBuild'
             ) (Join-Path $outRoot 'temp-table-round-trip.log') (Join-Path $outRoot 'temp-table-round-trip.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'TempTableRoundTrip' 0 "reusing completed result for commit $commit"
         }
     }
 
@@ -154,6 +199,7 @@ try {
         commit = $commit
         rows = $Rows
         testsPassed = $true
+        run = $runManifest
         columnarCore = if (Test-Path (Join-Path $outRoot 'columnar-core.json')) {
             Get-Content (Join-Path $outRoot 'columnar-core.json') -Raw | ConvertFrom-Json
         } else { $null }
@@ -166,7 +212,7 @@ try {
     Write-Host "Gate F completed. Report: $(Join-Path $outRoot 'gate-f-report.json')" -ForegroundColor Green
 }
 catch {
-    Write-Status 'failed' '' 0 $_.Exception.Message
+    Write-Status 'failed' $activeScenario 0 $_.Exception.Message
     $_ | Out-String | Add-Content -LiteralPath $runLog
     throw
 }
