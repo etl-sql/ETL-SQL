@@ -57,6 +57,7 @@ namespace ETL_SQL.Tests.Hardening
             services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddSingleton<IJobHistoryStore>(new Mock<IJobHistoryStore>().Object);
+            services.AddSingleton<IHostMetricsStore>(new Mock<IHostMetricsStore>().Object);
             var lineageCatalog = new Mock<ILineageCatalogStore>();
             lineageCatalog
                 .Setup(s => s.GetHistoryForTableAsync(It.IsAny<string>(), It.IsAny<int>()))
