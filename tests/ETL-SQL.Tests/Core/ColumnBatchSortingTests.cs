@@ -55,6 +55,41 @@ public sealed class ColumnBatchSortingTests
             ColumnBatchSortKernels.CreateRun<int>(batch, "Key", cancellationToken: cancellation.Token));
     }
 
+    [Fact]
+    public void MultiKeyUtf8RunHonorsCollationDirectionNullsAndStableTies()
+    {
+        using var batch = CreateStringBatch();
+        using var insensitive = ColumnBatchSortKernels.CreateRun(batch, new[]
+        {
+            new NativeSortKey("Region", NullsFirst: false, StringComparison: StringComparison.OrdinalIgnoreCase),
+            new NativeSortKey("Score", Descending: true)
+        });
+        Assert.Equal(new[] { 1, 2, 4, 0, 5, 3 }, insensitive.Ordinals.ToArray());
+
+        using var ordinal = ColumnBatchSortKernels.CreateRun(batch, new[]
+        {
+            new NativeSortKey("Region", NullsFirst: false),
+            new NativeSortKey("Score", Descending: true)
+        });
+        Assert.Equal(new[] { 1, 4, 2, 0, 5, 3 }, ordinal.Ordinals.ToArray());
+    }
+
+    [Fact]
+    public void Utf8OrdinalSortMatchesUtf16OrderingForSupplementaryCharacters()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Value", typeof(string), "VARCHAR(20)")
+        });
+        using var batch = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new[] { "\uE000", "\U00010000" })
+        }, 2);
+        using var run = ColumnBatchSortKernels.CreateRun(batch, new[] { new NativeSortKey("Value") });
+
+        Assert.Equal(new[] { 1, 0 }, run.Ordinals.ToArray());
+    }
+
     private static ColumnBatch CreateBatch()
     {
         var schema = new ColumnBatchSchema(new[]
@@ -67,5 +102,19 @@ public sealed class ColumnBatchSortingTests
             new ColumnBuffer<int>(new[] { 3, 1, 0, 3, 1 }, 5, new byte[] { 0b0000_0100 }),
             new ColumnBuffer<int>(new[] { 10, 20, 30, 40, 5 }, 5)
         }, 5);
+    }
+
+    private static ColumnBatch CreateStringBatch()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Score", typeof(int), "INT")
+        });
+        return new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "b", "A", "a", null, "A", "á" }),
+            new ColumnBuffer<int>(new[] { 2, 2, 1, 9, 1, 0 }, 6)
+        }, 6);
     }
 }

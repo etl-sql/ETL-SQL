@@ -408,10 +408,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   native batches, with unmatched outer rows represented by null buffers. Planner binding and spill
   partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
-  *(Fixed-width keys now produce pooled typed sort runs from full batches or selection vectors using a
-  cancellation-aware bottom-up merge, explicit null placement/direction, deterministic ties, and
-  transient/result memory grants. Multi-key/string/collation extraction and planner integration with
-  the existing bounded external merge remain.)*
+  *(Fixed-width and UTF-8 keys now produce pooled typed sort runs from full batches or selection
+  vectors using a cancellation-aware bottom-up merge, per-key null placement/direction, deterministic
+  ties, and transient/result memory grants. Multi-key comparison supports mixed native types plus
+  ordinal and ordinal-ignore-case UTF-8 collation, with direct byte comparison for ASCII data.
+  Planner integration with the existing bounded external merge remains.)*
 - [~] Add adapters and differential tests proving columnar and row paths return identical results,
   null behavior, type coercion, collation behavior, lineage, and cancellation semantics. *(The row
   boundary adapter and deterministic differential coverage now compare fixed-width filtering,

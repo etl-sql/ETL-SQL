@@ -1,9 +1,17 @@
 using System;
 using System.Buffers;
+using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Data;
+
+public sealed record NativeSortKey(
+    string ColumnName,
+    bool Descending = false,
+    bool NullsFirst = true,
+    StringComparison StringComparison = StringComparison.Ordinal);
 
 /// <summary>Pooled sorted row ordinals for one native run.</summary>
 public sealed class NativeSortRun : IDisposable
@@ -45,6 +53,47 @@ public static class ColumnBatchSortKernels
     {
         var column = batch.GetColumn<T>(keyColumnName);
         var values = column.Values;
+        return CreateRunCore(batch, (left, right) =>
+        {
+            var leftNull = column.IsNull(left);
+            var rightNull = column.IsNull(right);
+            if (leftNull || rightNull)
+                return leftNull == rightNull ? 0 : (leftNull == nullsFirst ? -1 : 1);
+            var order = values.Span[left].CompareTo(values.Span[right]);
+            return descending ? -order : order;
+        }, memoryArbiter, selection, cancellationToken);
+    }
+
+    public static NativeSortRun CreateRun(
+        ColumnBatch batch,
+        IReadOnlyList<NativeSortKey> keys,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        if (keys.Count == 0) throw new ArgumentException("At least one sort key is required.", nameof(keys));
+        var comparers = new Func<int, int, int>[keys.Count];
+        for (var index = 0; index < keys.Count; index++)
+            comparers[index] = CreateKeyComparer(batch.GetColumn(keys[index].ColumnName), keys[index]);
+        return CreateRunCore(batch, (left, right) =>
+        {
+            for (var index = 0; index < comparers.Length; index++)
+            {
+                var order = comparers[index](left, right);
+                if (order != 0) return order;
+            }
+            return 0;
+        }, memoryArbiter, selection, cancellationToken);
+    }
+
+    private static NativeSortRun CreateRunCore(
+        ColumnBatch batch,
+        Func<int, int, int> compareKeys,
+        IMemoryGrantArbiter? memoryArbiter,
+        SelectionVector? selection,
+        CancellationToken cancellationToken)
+    {
         var count = selection?.Count ?? batch.RowCount;
         var arbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
         var lease = arbiter.AcquireLease();
@@ -80,14 +129,7 @@ public static class ColumnBatchSortKernels
 
             int Compare(int left, int right)
             {
-                var leftNull = column.IsNull(left);
-                var rightNull = column.IsNull(right);
-                int order;
-                if (leftNull || rightNull)
-                    order = leftNull == rightNull ? 0 : (leftNull == nullsFirst ? -1 : 1);
-                else
-                    order = values.Span[left].CompareTo(values.Span[right]);
-                if (descending && !leftNull && !rightNull) order = -order;
+                var order = compareKeys(left, right);
                 return order != 0 ? order : left.CompareTo(right);
             }
 
@@ -136,5 +178,85 @@ public static class ColumnBatchSortKernels
             lease.Dispose();
             throw;
         }
+    }
+
+    private static Func<int, int, int> CreateKeyComparer(IColumnBuffer column, NativeSortKey key)
+    {
+        if (column is Utf8ColumnBuffer utf8)
+        {
+            if (key.StringComparison is not StringComparison.Ordinal and not StringComparison.OrdinalIgnoreCase)
+                throw new NotSupportedException("Native UTF-8 sorting supports ordinal collations only.");
+            return CompareRows;
+
+            int CompareRows(int left, int right)
+            {
+                var nullOrder = CompareNulls(column, left, right, key.NullsFirst, out var bothPresent);
+                if (!bothPresent) return nullOrder;
+                var leftBytes = utf8.GetUtf8Bytes(left);
+                var rightBytes = utf8.GetUtf8Bytes(right);
+                int order;
+                if (key.StringComparison == StringComparison.Ordinal && IsAscii(leftBytes) && IsAscii(rightBytes))
+                    order = leftBytes.SequenceCompareTo(rightBytes);
+                else if (IsAscii(leftBytes) && IsAscii(rightBytes))
+                    order = CompareAsciiIgnoreCase(leftBytes, rightBytes);
+                else
+                    order = string.Compare(Encoding.UTF8.GetString(leftBytes), Encoding.UTF8.GetString(rightBytes),
+                        key.StringComparison);
+                return key.Descending ? -order : order;
+            }
+        }
+
+        if (column is ColumnBuffer<byte> bytes) return Fixed(bytes, key);
+        if (column is ColumnBuffer<short> shorts) return Fixed(shorts, key);
+        if (column is ColumnBuffer<int> ints) return Fixed(ints, key);
+        if (column is ColumnBuffer<long> longs) return Fixed(longs, key);
+        if (column is ColumnBuffer<double> doubles) return Fixed(doubles, key);
+        if (column is ColumnBuffer<decimal> decimals) return Fixed(decimals, key);
+        if (column is ColumnBuffer<DateTime> dates) return Fixed(dates, key);
+        if (column is ColumnBuffer<DateTimeOffset> offsets) return Fixed(offsets, key);
+        if (column is ColumnBuffer<TimeSpan> times) return Fixed(times, key);
+        if (column is ColumnBuffer<Guid> guids) return Fixed(guids, key);
+        throw new NotSupportedException($"Physical type '{column.ElementType.Name}' cannot be sorted natively.");
+
+        static Func<int, int, int> Fixed<T>(ColumnBuffer<T> typed, NativeSortKey sortKey)
+            where T : unmanaged, IComparable<T>
+            => (left, right) =>
+            {
+                var nullOrder = CompareNulls(typed, left, right, sortKey.NullsFirst, out var bothPresent);
+                if (!bothPresent) return nullOrder;
+                var order = typed.Values.Span[left].CompareTo(typed.Values.Span[right]);
+                return sortKey.Descending ? -order : order;
+            };
+    }
+
+    private static int CompareNulls(
+        IColumnBuffer column,
+        int left,
+        int right,
+        bool nullsFirst,
+        out bool bothPresent)
+    {
+        var leftNull = column.IsNull(left);
+        var rightNull = column.IsNull(right);
+        bothPresent = !leftNull && !rightNull;
+        return bothPresent || leftNull == rightNull ? 0 : (leftNull == nullsFirst ? -1 : 1);
+    }
+
+    private static bool IsAscii(ReadOnlySpan<byte> value)
+    {
+        foreach (var item in value) if (item >= 0x80) return false;
+        return true;
+    }
+
+    private static int CompareAsciiIgnoreCase(ReadOnlySpan<byte> left, ReadOnlySpan<byte> right)
+    {
+        var length = Math.Min(left.Length, right.Length);
+        for (var index = 0; index < length; index++)
+        {
+            var a = left[index] is >= (byte)'a' and <= (byte)'z' ? left[index] - 32 : left[index];
+            var b = right[index] is >= (byte)'a' and <= (byte)'z' ? right[index] - 32 : right[index];
+            if (a != b) return a.CompareTo(b);
+        }
+        return left.Length.CompareTo(right.Length);
     }
 }
