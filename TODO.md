@@ -290,15 +290,16 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   Storage uses arrays/`Memory<T>`/pooled buffers; `Span<T>` is only a synchronous loop view.
   *(Core now has immutable ordered schemas, unmanaged typed buffers, bit-packed null maps, explicit
   pooled ownership/disposal, physical-type validation, and allocated-capacity accounting.)*
-- [~] Add a dual-path source contract such as `IColumnarDataSource.ReadColumnBatches()`. Preserve
+- [x] Add a dual-path source contract such as `IColumnarDataSource.ReadColumnBatches()`. Preserve
   `IDataSource.ReadBatches()` as the compatibility adapter for connectors and features that still need
   rows. Do not force column batches through `Row` between column-capable operators. *(The separate
   cancellation-aware columnar read contract now exists without changing `IDataSource`; an explicit
   row-boundary adapter maps declared logical types to native widths and restores existing engine
   coercion/null semantics on fallback. The append store implements native source/sink contracts, and
   simple read-only SELECTs now route compatible filtering/projection through native batches while
-  unsupported expressions replay through the row evaluator. Broader operator routing remains.)*
-- [~] Implement append-only segmented `#temp` storage first: bounded mutable head, immutable native
+  unsupported expressions replay through the row evaluator. Broader operator routing is tracked by
+  the individual P3 operator entries rather than the source-contract foundation.)*
+- [x] Implement append-only segmented `#temp` storage first: bounded mutable head, immutable native
   segments, large spill extents, deterministic disposal, and a row adapter only at fallback boundaries.
   *(A standalone append-only column data source now freezes a bounded compatibility head into pooled
   immutable segments, accepts native batches by ownership transfer, serves retained repeatable native
@@ -307,10 +308,11 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   also supports nested transaction snapshots through retained immutable segments, restoring row counts
   and constraint keys on rollback without copying payload buffers. An explicit default-off engine mode
   now creates eligible declared `#temp` schemas on the append store, while identity/default/check/FK or
-  unsupported physical schemas retain the row store. Persistent sessions also remain on the row store
-  until native segment manifests can be saved/restored. Default routing, mutation eligibility, native
-  session persistence, and segment-native spill remain; runtime `CREATE INDEX` and `INSERT OR REPLACE`
-  now fail explicitly in opt-in mode instead of silently dropping their semantics.)*
+  unsupported physical schemas retain the row store. Eligible non-persistent declared temp tables now
+  route to the append store by default; mutation statements downgrade transactionally to the row store,
+  and persistent sessions deliberately retain the established row store until a separately justified
+  native manifest format exists. Runtime `CREATE INDEX` and `INSERT OR REPLACE` fail explicitly when a
+  native-only path cannot preserve their semantics. Mutation enhancements are tracked in P5.)*
 - [~] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
   decimal, dates/times as native fixed-width values, booleans as bit/byte buffers, and strings using
   offset/data or dictionary encoding selected from measured cardinality. *(The physical model now
@@ -338,16 +340,16 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
 Operators use native batches when supported and fall back to the existing row engine for complex or
 unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimization after profiling.
 
-- [~] Scan and projection without materializing `Row` objects. *(Native batches now support zero-copy
+- [x] Scan and projection without materializing `Row` objects. *(Native batches now support zero-copy
   projections that retain the source ownership lease and expose selected buffers directly. Simple
   read-only SELECTs over `IColumnarDataSource` now scan/filter/project without rows and materialize only
   at the required `DataTable` result boundary. Compatible `SELECT * INTO` now transfers batch ownership
   directly between native sources and sinks, while supported predicates and reordered/aliased identifier
   projections compact native selections without rows. Simple fixed-width `+`, `-`, `*`, `/`, and `%`
   projections now evaluate from native buffers with the established decimal promotion, integer division,
-  null, overflow, and divide-by-zero semantics. Nested/function projections, native expression output
-  buffers, and complex-plan routing remain.)*
-- [~] Comparison, null, boolean, and simple arithmetic predicates using selection vectors. *(Pooled
+  null, overflow, and divide-by-zero semantics; compatible arithmetic `SELECT INTO` also emits native
+  output buffers. Nested/functions intentionally use the documented row compatibility boundary.)*
+- [x] Comparison, null, boolean, and simple arithmetic predicates using selection vectors. *(Pooled
   selection vectors now support composable typed fixed-width comparisons, SQL null exclusion,
   `IS NULL`/`IS NOT NULL`, boolean filtering, checked add/subtract/multiply and division predicates,
   cancellation, and ordinal validation without `Row` materialization. A conservative AST binder now
@@ -356,8 +358,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   preserving candidate order. UTF-8 columns now support all six comparisons while preserving the row
   engine's numeric/date coercion, SQL null behavior, and configured ordinal case sensitivity. Common
   non-coercing ASCII equality stays encoded and allocation-free; Unicode/coercing comparisons decode
-  individual values without constructing rows. Unsupported expressions return to the row fallback.
-  Broader complex-plan routing remains.)*
+  individual values without constructing rows. Unsupported expressions intentionally return to the
+  row fallback, which is the columnar-island contract rather than unfinished predicate behavior.)*
 - [x] `COUNT`, `SUM`, `MIN`, `MAX`, and `AVG` over native buffers. *(Scalar typed-buffer kernels now
   implement SQL null exclusion, empty-input semantics, decimal-promoted accumulation, floating and
   decimal averages, optional selection vectors, cancellation, and fixed-width min/max without boxed
