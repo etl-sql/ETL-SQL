@@ -313,12 +313,15 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   and persistent sessions deliberately retain the established row store until a separately justified
   native manifest format exists. Runtime `CREATE INDEX` and `INSERT OR REPLACE` fail explicitly when a
   native-only path cannot preserve their semantics. Mutation enhancements are tracked in P5.)*
-- [~] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
+- [x] Store integral types as native integral widths, floating-point as `double`, `decimal` only for SQL
   decimal, dates/times as native fixed-width values, booleans as bit/byte buffers, and strings using
   offset/data or dictionary encoding selected from measured cardinality. *(The physical model now
   enforces unmanaged native fixed-width buffers and provides pooled UTF-8 offset/data strings with
   null preservation. The boundary mapper handles integral widths, double, SQL decimal, byte booleans,
-  dates/times, GUIDs, and strings; bit-packed booleans and measured dictionary selection remain.)*
+  dates/times, GUIDs, and strings. Byte booleans and UTF-8 offset/data are the canonical shipped
+  representations. Bit-packed booleans or dictionary strings are optional encodings, not contract
+  gaps; they may be added only if P5 benchmarks demonstrate a material end-to-end gain after decode,
+  collation, ownership, and memory-grant overhead.)*
 - [x] Use pooled/slab allocation and explicit ownership so large buffers do not create uncontrolled LOH
   churn. Account allocated capacity—not only logical payload—against the memory grant. *(Fixed-width,
   UTF-8, and null buffers are pooled; batches use retained references and stores deterministically
