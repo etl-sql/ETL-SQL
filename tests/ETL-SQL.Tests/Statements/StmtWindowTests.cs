@@ -16,6 +16,23 @@ namespace ETL_SQL.Tests.Statements
     public class WindowFunctionTests
     {
         [Fact]
+        public async Task RowNumberOverEmptyWindowStreamsAcrossBatchesAfterFiltering()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            ev.BatchSize = 2;
+            await ev.Evaluate(Parse(
+                "CREATE TABLE #streaming_window (Id INT); " +
+                "INSERT INTO #streaming_window VALUES (1), (2), (3), (4), (5);"));
+            var statement = (SelectStatement)Parse(
+                "SELECT Id, ROW_NUMBER() OVER() AS RN FROM #streaming_window WHERE Id > 1;").Statements[0];
+
+            var rows = (await ev.EvaluateSelect(statement).ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+
+            Assert.Equal(new[] { 2, 3, 4, 5 }, rows.Select(row => Convert.ToInt32(row["Id"])).ToArray());
+            Assert.Equal(new decimal[] { 1, 2, 3, 4 }, rows.Select(row => Convert.ToDecimal(row["RN"])).ToArray());
+        }
+
+        [Fact]
         public async Task TestRowNumber()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

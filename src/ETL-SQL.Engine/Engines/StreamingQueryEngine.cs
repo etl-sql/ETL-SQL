@@ -31,6 +31,7 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
         bool yielded = false;
         int rowsYielded = 0;
         int rowsSkipped = 0;
+        long streamingRowNumber = 0;
         int offset = 0;
 
         if (stmt.Offset != null)
@@ -80,6 +81,8 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                     if (!passesWhere) continue;
                 }
 
+                streamingRowNumber++;
+
                 if (rowsSkipped < offset)
                 {
                     rowsSkipped++;
@@ -91,7 +94,9 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 var resRow = resultBatch.NewRow();
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
-                    resRow[i] = compiledColumns[i] != null
+                    resRow[i] = IsStreamingRowNumber(finalColumns[i].Expression)
+                        ? (decimal)streamingRowNumber
+                        : compiledColumns[i] != null
                         ? compiledColumns[i]!(evalRow)
                         : await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
                 }
@@ -112,6 +117,14 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
     done:
         if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
     }
+
+    internal static bool IsStreamingRowNumber(Expression expression)
+        => expression is FunctionCallExpression
+        {
+            FunctionName: var name,
+            Arguments.Count: 0,
+            Window: { PartitionBy.Count: 0, OrderBy.Count: 0, Frame: null }
+        } && name.Equals("ROW_NUMBER", StringComparison.OrdinalIgnoreCase);
 
     public async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)
     {

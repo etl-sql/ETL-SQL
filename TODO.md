@@ -516,8 +516,13 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   retain only decimal order values plus percentile/direction metadata. Finalization sorts this compact
   state directly; unrelated row columns are no longer retained. Ordered string aggregation also now
   correctly returns the argument ordered by a different key.)*
-- [ ] Add streaming/specialized window paths where frame semantics permit; a single huge window
-  partition remains outside the initial claim.
+- [x] Add streaming/specialized window paths where frame semantics permit; a single huge window
+  partition remains outside the initial claim. *(Unpartitioned, unordered ROW_NUMBER() OVER() now
+  executes in the streaming SELECT engine across input/result batches, after WHERE and before
+  OFFSET/LIMIT, without buffering the window input. Compatible full-partition aggregate and
+  FIRST/LAST scans already consume columnar spill batches in the external window engine. Ordered,
+  partitioned, peer-sensitive, and bounded-frame functions retain the established spill/window path;
+  a single unsplittable huge partition remains an explicit boundary.)*
 - [ ] Extend columnar kernels based on measured hotspots. Use `System.Numerics.Vector<T>` or
   `System.Runtime.Intrinsics` only where benchmarks show a material gain.
 

@@ -478,7 +478,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // 4. Strategy Selection
         bool hasAgg = finalColumns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
         bool hasWindow = finalColumns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-        bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct || stmt.QualifyClause != null;
+        bool hasOnlyStreamingRowNumber = hasWindow
+            && finalColumns.Where(column => windowEngine.IsWindowFunction(column.Expression))
+                .All(column => StreamingQueryEngine.IsStreamingRowNumber(column.Expression));
+        bool isComplex = hasAgg || hasWindow && !hasOnlyStreamingRowNumber
+            || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null
+            || !hasOnlyStreamingRowNumber && (stmt.Offset != null || stmt.LimitCount != null)
+            || stmt.IsDistinct || stmt.QualifyClause != null;
 
         IAsyncEnumerable<DataTable> output;
         if (!isComplex)
