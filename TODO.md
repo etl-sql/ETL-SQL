@@ -410,8 +410,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   join ordinals now gather fixed-width and UTF-8 payload columns directly into independently owned
   native batches, with unmatched outer rows represented by null buffers. Runtime dispatch binds
   fixed-width, UTF-8, and composite physical keys without reflection, and bounded ordinal-pair
-  construction supports unmatched emission after multi-batch probing. SELECT planner binding and
-  spill partitioning remain.)*
+  construction supports unmatched emission after multi-batch probing. The SELECT planner now binds
+  conservative single equi-join shapes over restart-safe cardinality-aware native sources, retains the
+  right side under a grant, streams left batches, preserves projection order, and emits outer nulls
+  only after every right batch is probed. Spill partitioning and broader join shapes remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width and UTF-8 keys now produce pooled typed sort runs from full batches or selection
   vectors using a cancellation-aware bottom-up merge, per-key null placement/direction, deterministic

@@ -157,6 +157,14 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             yield break;
         }
 
+        if (ColumnarJoinSelectPlan.TryCreate(stmt, out var nativeJoinPlan)
+            && await nativeJoinPlan!.TryOpenAsync(context) is { } nativeJoinExecution)
+        {
+            await using (nativeJoinExecution)
+            await foreach (var batch in nativeJoinExecution.ExecuteAsync()) yield return batch;
+            yield break;
+        }
+
         IColumnarGroupedAggregatePlan? groupedPlan = null;
         if (ColumnarGroupedAggregatePlan.TryCreate(context, stmt, out var singleGroupedPlan))
             groupedPlan = singleGroupedPlan;

@@ -985,6 +985,47 @@ public sealed class ColumnarSelectRoutingTests
         }
     }
 
+    [Fact]
+    public async Task LeftJoinPlannerProbesMultipleNativeBatchesAndProjectsOuterNullsWithoutRows()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        await using var left = new NativeOnlyDataSource(new[]
+        {
+            Batch(new[] { 1, 2, 3 }, new[] { "one", "two", "three" })
+        }, throwOnRowRead: true);
+        await using var right = new NativeOnlyDataSource(new[]
+        {
+            Batch(new[] { 2 }, new[] { "right-a" }),
+            Batch(new[] { 2, 4 }, new[] { "right-b", "right-four" })
+        }, throwOnRowRead: true);
+        evaluator.Connections["native_left"] = left;
+        evaluator.Connections["native_right"] = right;
+        var statement = ParseSelect(
+            "SELECT r.Label AS RightLabel, l.Label AS LeftLabel " +
+            "FROM native_left l LEFT JOIN native_right r ON l.Key = r.Key;");
+
+        var rows = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => $"{row["RightLabel"] ?? "NULL"}|{row["LeftLabel"]}")
+            .OrderBy(value => value).ToArray();
+
+        Assert.Equal(new[] { "NULL|one", "NULL|three", "right-a|two", "right-b|two" }, rows);
+        Assert.Equal(0, left.RowReadAttempts);
+        Assert.Equal(0, right.RowReadAttempts);
+
+        ColumnBatch Batch(int[] keys, string[] labels)
+            => new(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<int>(keys, keys.Length),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, keys.Length);
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
@@ -1056,13 +1097,16 @@ public sealed class ColumnarSelectRoutingTests
         }, throwOnRowRead);
     }
 
-    private sealed class NativeOnlyDataSource(IEnumerable<ColumnBatch> batches, bool throwOnRowRead) : IDataSource, IColumnarDataSource
+    private sealed class NativeOnlyDataSource(IEnumerable<ColumnBatch> batches, bool throwOnRowRead) :
+        IDataSource, IReplayableColumnarDataSource, IEstimatedCardinalityDataSource
     {
         private List<ColumnBatch>? _batches = batches.ToList();
         public int RowReadAttempts { get; private set; }
         public string Path => string.Empty;
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "TEST_COLUMNAR";
+        public long EstimatedRowCount => (_batches ?? throw new ObjectDisposedException(nameof(NativeOnlyDataSource)))
+            .Sum(batch => (long)batch.RowCount);
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
         {

@@ -154,6 +154,12 @@ public interface IColumnarDataSource
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// A native source whose column-batch enumeration can be restarted after a planner probe or
+/// memory-pressure rejection without changing the logical result.
+/// </summary>
+public interface IReplayableColumnarDataSource : IColumnarDataSource;
+
 /// <summary>Optional native append contract paired with <see cref="IColumnarDataSource"/>.</summary>
 public interface IColumnarDataSink
 {

@@ -15,7 +15,7 @@ namespace ETL_SQL.Data;
 /// Append-only segmented native store. A small row head accepts compatibility writes and freezes into
 /// immutable column batches; native readers retain those batches without reconstructing rows.
 /// </summary>
-public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IColumnarDataSource, IColumnarDataSink, IEstimatedCardinalityDataSource
+public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IReplayableColumnarDataSource, IColumnarDataSink, IEstimatedCardinalityDataSource
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<ColumnBatch> _segments = new();
