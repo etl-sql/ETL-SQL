@@ -8,6 +8,11 @@ Returns the saved state value for the current script or job execution context.
 GET_JOB_STATE(key)
 ```
 
+## Parameters
+- **key** (`STRING`) — the name the value was saved under by `SET_JOB_STATE`. Keys are free-form and
+  scoped to the current context (the orchestrator job name for scheduled jobs, the script file for
+  CLI runs), so the same key in two different jobs refers to two different values.
+
 ## Returns
 `STRING` — The saved state value, or `NULL` if not set.
 

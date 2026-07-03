@@ -27,14 +27,15 @@ namespace ETL_SQL.Tests.Orchestration
             var eval = provider.GetRequiredService<Evaluator>();
 
             // DECLARE simulates the CLI's `--var backup_exit_code=2 --var backup_target=nightly`.
+            // Typed exactly like the shipped template so the STRING/BOOL casts execute here too.
             await TestHelpers.Execute(eval, @"
-DECLARE @backup_exit_code = 2;
-DECLARE @backup_target = 'nightly';
+DECLARE @backup_exit_code INT = 2;
+DECLARE @backup_target STRING = 'nightly';
 
-DECLARE @label   = @backup_target;
-DECLARE @failed  = (@backup_exit_code <> 0);
-DECLARE @status  = IIF(@failed, 'FAILURE', 'SUCCESS');
-DECLARE @stamp   = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss');
+DECLARE @label   STRING = @backup_target;
+DECLARE @failed  BOOL   = (@backup_exit_code <> 0);
+DECLARE @status  STRING = IIF(@failed, 'FAILURE', 'SUCCESS');
+DECLARE @stamp   STRING = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss');
 
 SELECT SET_JOB_STATE('last_backup_status', @status);
 SELECT SET_JOB_STATE('last_backup_exit_code', CAST(@backup_exit_code AS VARCHAR));

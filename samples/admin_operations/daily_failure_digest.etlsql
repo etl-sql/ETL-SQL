@@ -25,8 +25,8 @@ CREATE CONNECTION Mailer AS SMTP(
     PASSWORD = 'ENC:REPLACE_WITH_ENCRYPTED_PASSWORD'
 );
 
-DECLARE @recipient = 'ops-team@example.com';
-DECLARE @sender    = 'etl-alerts@example.com';
+DECLARE @recipient STRING = 'ops-team@example.com';
+DECLARE @sender    STRING = 'etl-alerts@example.com';
 
 -- 2. Capture job history into a queryable temp table, then keep only recent
 --    non-successful runs. 'RUNNING' rows are in-flight jobs (excluded); jobs the
@@ -40,14 +40,14 @@ FROM #jobhist
 WHERE Status NOT IN ('SUCCESS', 'RUNNING')
   AND StartTime >= DATEADD(DAY, -1, GETDATE());
 
-DECLARE @failCount = (SELECT COUNT(*) FROM #failures);
+DECLARE @failCount INT = (SELECT COUNT(*) FROM #failures);
 PRINT CONCAT('Job failures in the last 24h: ', @failCount);
 
 -- 3. Only email when something actually failed.
 IF @failCount > 0
 BEGIN
     -- One line per failed job: "JobName [STATUS]: error message".
-    DECLARE @detail = (
+    DECLARE @detail STRING = (
         SELECT STRING_AGG(CONCAT(JobName, ' [', Status, ']: ', ISNULL(ErrorMessage, '(no message)')), CHAR(10))
         FROM #failures
     );

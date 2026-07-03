@@ -35,14 +35,14 @@ CREATE CONNECTION Mailer AS SMTP(
     PASSWORD = 'ENC:REPLACE_WITH_ENCRYPTED_PASSWORD'
 );
 
-DECLARE @recipient = 'ops-team@example.com';
-DECLARE @sender    = 'etl-alerts@example.com';
+DECLARE @recipient STRING = 'ops-team@example.com';
+DECLARE @sender    STRING = 'etl-alerts@example.com';
 
 -- Exit code 0 means the backup CLI succeeded; anything else is a failure.
-DECLARE @label   = @backup_target;
-DECLARE @failed  = (@backup_exit_code <> 0);
-DECLARE @status  = IIF(@failed, 'FAILURE', 'SUCCESS');
-DECLARE @stamp   = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss');
+DECLARE @label   STRING = @backup_target;
+DECLARE @failed  BOOL   = (@backup_exit_code <> 0);
+DECLARE @status  STRING = IIF(@failed, 'FAILURE', 'SUCCESS');
+DECLARE @stamp   STRING = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss');
 
 PRINT CONCAT('Backup "', @label, '" outcome: ', @status,
              ' (exit code ', @backup_exit_code, ') at ', @stamp);
