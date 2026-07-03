@@ -423,40 +423,20 @@ public class ExternalJoinEngine
             {
                 using (batch)
                 {
-                    NativePartitionRouting? nativeRouting = null;
-                    if (keys.Count == 1
-                        && batch.GetColumn(keys[0]) is Utf8ColumnBuffer)
-                        nativeRouting = ColumnBatchPartitionKernels.HashPartitionNormalizedUtf8(
-                            batch, keys[0], PartitionCount, depth,
-                            cancellationToken: _context.CancellationToken);
-
-                    var routes = nativeRouting == null
-                        ? Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray()
-                        : null;
-                    if (nativeRouting == null)
-                    {
-                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
-                        {
-                            var key = GetPartitionHashKey(batch, rowIndex, keys, depth);
-                            routes![(key.GetHashCode() & 0x7fffffff) % PartitionCount].Add(rowIndex);
-                        }
-                    }
+                    using var nativeRouting = ColumnBatchPartitionKernels.HashPartitionNormalized(
+                        batch, keys, PartitionCount, depth,
+                        cancellationToken: _context.CancellationToken);
                     var columns = batch.Schema.Fields.Select(field => field.Name).ToArray();
-                    using (nativeRouting)
+                    for (var partition = 0; partition < PartitionCount; partition++)
                     {
-                        for (var partition = 0; partition < PartitionCount; partition++)
-                        {
-                            var routed = nativeRouting?.GetPartition(partition);
-                            if (routed?.Length == 0 || nativeRouting == null && routes![partition].Count == 0) continue;
-                            using var selection = nativeRouting != null
-                                ? SelectionVector.FromIndices(routed!.Value.Span)
-                                : SelectionVector.FromIndices(routes![partition]);
-                            using var compacted = ColumnBatchAdapter.Compact(
-                                batch, columns, selection, _context.CancellationToken);
-                            await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
-                            counts[partition] += compacted.RowCount;
-                            ColumnarRepartitionRows += compacted.RowCount;
-                        }
+                        var routed = nativeRouting.GetPartition(partition);
+                        if (routed.Length == 0) continue;
+                        using var selection = SelectionVector.FromIndices(routed.Span);
+                        using var compacted = ColumnBatchAdapter.Compact(
+                            batch, columns, selection, _context.CancellationToken);
+                        await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
+                        counts[partition] += compacted.RowCount;
+                        ColumnarRepartitionRows += compacted.RowCount;
                     }
                 }
             }
@@ -555,21 +535,6 @@ public class ExternalJoinEngine
         var values = new object?[keys.Count];
         for (int i = 0; i < keys.Count; i++)
             values[i] = SpillSerializationHelper.UnwrapValue(row[keys[i]]);
-        return new CompoundKey(depth, values);
-    }
-
-    private static CompoundKey GetPartitionHashKey(
-        ColumnBatch batch,
-        int rowIndex,
-        List<string> keys,
-        int depth)
-    {
-        var values = new object?[keys.Count];
-        for (var i = 0; i < keys.Count; i++)
-        {
-            var column = batch.Schema.GetOrdinal(keys[i]);
-            values[i] = RowPacker.ReadBatchValue(batch, column, rowIndex);
-        }
         return new CompoundKey(depth, values);
     }
 

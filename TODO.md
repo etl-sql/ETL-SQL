@@ -387,8 +387,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   O(rows + partitions) storage. Normalized UTF-8 keys now use the same salted hash as one-column
   `CompoundKey`, keeping trimmed/numeric/date-equivalent values together; recursive external joins
   consume that pooled routing directly instead of allocating one `List<int>` per partition. Composite
-  hashing and broader initial-partition planner integration remain; adaptive fan-out is already supplied
-  by the external operator sizing model.)*
+  typed/UTF-8 keys now build the exact incremental `CompoundKey` hash without allocating per-row key
+  arrays, and recursive joins use the same pooled route for every key count. Broader initial-partition
+  planner integration remains; adaptive fan-out is already supplied by the external sizing model.)*
 - [~] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
   equi-join kernel now builds typed key-to-ordinal state, probes native buffers or selection vectors,
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds
