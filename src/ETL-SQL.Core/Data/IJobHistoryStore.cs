@@ -79,6 +79,15 @@ public record JobHistoryEntry(
     bool? HashMatched = null
 );
 
+/// <summary>Daily-aggregated job execution for one job, retained far longer than raw history.</summary>
+public sealed record JobHistoryDailySummary(
+    string Day,
+    string JobName,
+    int RunCount,
+    int FailureCount,
+    long TotalRows,
+    long MaxPeakMemoryBytes);
+
 public interface IJobHistoryStore
 {
     Task InitializeAsync();
@@ -129,6 +138,19 @@ public interface IJobHistoryStore
     /// completion write overwrites INTERRUPTED with the real terminal status. Returns rows updated.
     /// </summary>
     Task<int> ReconcileStaleRunningAsync(TimeSpan maxRuntime);
+
+    /// <summary>
+    /// Recomputes the daily job-history roll-up for every day still present in the raw table
+    /// (idempotent) so trend survives raw-history pruning. Run before <see cref="PruneHistoryAsync"/>.
+    /// Returns the number of (day, job) summary rows written.
+    /// </summary>
+    Task<int> RollUpJobHistoryAsync();
+
+    /// <summary>Returns daily job summaries on/after <paramref name="sinceDay"/>, newest first.</summary>
+    Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobName, DateTime sinceDay, int limit = 1000);
+
+    /// <summary>Deletes daily job summaries older than <paramref name="maxAge"/>; returns rows removed.</summary>
+    Task<int> PruneJobHistoryDailyAsync(TimeSpan maxAge);
 
     // State Management
     Task<string?> GetJobStateAsync(string jobName, string key);

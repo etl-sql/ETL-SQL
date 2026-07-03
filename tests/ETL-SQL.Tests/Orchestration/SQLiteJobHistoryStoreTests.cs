@@ -129,6 +129,46 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task RollUp_AggregatesJobAndHostByDay_IsIdempotent_AndPrunable()
+        {
+            await _store.InitializeAsync();
+
+            // Job history: 2 runs of one job (1 failure), rows 5+3, peak mem 100/200.
+            var f = await _store.LogJobStartAsync("RJob");
+            await _store.LogJobEndAsync(f, "FAILURE", "boom", rowsProcessed: 5, peakMemoryBytes: 100);
+            var s = await _store.LogJobStartAsync("RJob");
+            await _store.LogJobEndAsync(s, "SUCCESS", rowsProcessed: 3, peakMemoryBytes: 200);
+
+            // Host metrics: 2 samples for one node.
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 40, 10, null, 1000, 5000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 60, 30, null, 500, 4000));
+
+            await _store.RollUpJobHistoryAsync();
+            await _store.RollUpHostMetricsAsync();
+
+            var job = Assert.Single(await _store.GetJobHistoryDailyAsync("RJob", DateTime.Now.AddDays(-1)));
+            Assert.Equal(2, job.RunCount);
+            Assert.Equal(1, job.FailureCount);
+            Assert.Equal(8, job.TotalRows);
+            Assert.Equal(200, job.MaxPeakMemoryBytes);
+
+            var host = Assert.Single(await _store.GetHostMetricsDailyAsync("n1", DateTime.UtcNow.AddDays(-1)));
+            Assert.Equal(50.0, host.AvgMemoryLoadPercent, 1);
+            Assert.Equal(60.0, host.MaxMemoryLoadPercent, 1);
+            Assert.Equal(500, host.MinStateDiskFreeBytes);
+
+            // Idempotent: re-running does not duplicate rows.
+            await _store.RollUpJobHistoryAsync();
+            await _store.RollUpHostMetricsAsync();
+            Assert.Single(await _store.GetJobHistoryDailyAsync("RJob", DateTime.Now.AddDays(-1)));
+            Assert.Single(await _store.GetHostMetricsDailyAsync("n1", DateTime.UtcNow.AddDays(-1)));
+
+            // Daily pruning (negative maxAge → cutoff in the future → today's rows are older) removes them.
+            Assert.Equal(1, await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(-1)));
+            Assert.Equal(1, await _store.PruneHostMetricsDailyAsync(TimeSpan.FromDays(-1)));
+        }
+
+        [Fact]
         public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
         {
             await _store.InitializeAsync();

@@ -1,10 +1,11 @@
 # Host Utilization Time Series & Capacity Reporting — Implementation Plan
 
-> **Status:** plan for the next work cycle (drafted 2026-07-02). Covers the remaining items in
-> `TODO.md` → *Administrator operational review — follow-on hardening*: the host-utilization **time
-> series + read surface**, the **JobHistory roll-up summary**, and the last two **admin template
-> scripts** (backup-with-status, capacity report). Grounded in the code investigated during the
-> 2026-07-01/02 session; file/method references below are current as of then.
+> **Status:** implementation plan (drafted 2026-07-02); most of it has now shipped. The
+> host-utilization **time series + read surface**, the **daily roll-up summary** (JobHistory + host
+> metrics), and the **capacity report** template are done (see the ✅ markers in *Sequencing*). Remaining:
+> the `backup_and_report.etlsql` template, whole-host CPU probes, and the Portal operational-metrics
+> subscription. Covers `TODO.md` → *Administrator operational review — follow-on hardening*. Grounded in
+> the code investigated during the 2026-07-01/02 session; file/method references below are current as of then.
 
 ## What already exists (do not rebuild)
 
@@ -75,17 +76,25 @@ Isolate behind an `IHostCpuProbe` with a no-op default that returns null (so `Ho
 null and callers fall back to `ProcessCpuPercent`). Ship platform probes incrementally; never let a
 probe failure break sampling.
 
-### 4. Roll-up summary (covers the JobHistory roll-up item too)
+### 4. Roll-up summary (covers the JobHistory roll-up item too) — ✅ SHIPPED
 
-Two daily-aggregate tables, written by a daily job in the scheduler maintenance loop and retained far
-longer (e.g. 400 days) than raw rows:
-- **`JobHistoryDaily`**: per (day, JobName) → run count, failure count (`Status NOT IN ('SUCCESS','RUNNING')`),
-  total rows, max peak memory, avg/max duration.
-- **`HostMetricsDaily`**: per (day, NodeId) → avg/max memory-load %, avg/max CPU %, min free disk
+Two daily-aggregate tables, written on the scheduler maintenance cycle and retained far longer
+(`Orchestrator:HistoryRollupRetentionDays`, default 400 days) than raw rows:
+- **`JobHistoryDaily`** (PK `(Day, JobName)`): run count, failure count (`Status <> 'SUCCESS'` over
+  completed rows — the roll-up excludes in-flight `RUNNING`), total rows, max peak memory.
+- **`HostMetricsDaily`** (PK `(Day, NodeId)`): avg/max memory-load %, avg/max CPU %, min free disk
   (state/spill). Min free disk is the saturation signal.
 
-Roll-up runs after pruning: aggregate rows about to age out (or the whole prior day) before the raw
-rows are deleted, so trend survives pruning. Idempotent upsert keyed on (day, name/node).
+Day is derived portably as `substr(<timestamp>, 1, 10)` (the `"O"` round-trip strings sort/prefix as
+`yyyy-MM-dd` on both SQLite and Postgres). Each roll-up is **idempotent and transactional**: within one
+transaction it `DELETE`s the summary rows for every day still present in the raw table, then re-`INSERT`s
+them from a `GROUP BY` — so re-running never double-counts and a day is only ever fully recomputed.
+
+Roll-up runs **before** raw pruning (`RollUpJobHistoryAsync`/`RollUpHostMetricsAsync` precede
+`PruneHistoryAsync`/`PruneHostMetricsAsync` in the maintenance block), so rows about to age out are
+captured first and trend survives pruning. Summaries are pruned on their own long horizon via
+`PruneJobHistoryDailyAsync`/`PruneHostMetricsDailyAsync`. Read via
+`GetJobHistoryDailyAsync`/`GetHostMetricsDailyAsync`. *(store test: aggregation + idempotency + retention)*
 
 ### 5. Read surface
 
@@ -123,7 +132,8 @@ parse check. Watch the two gotchas found this session: the `SEND EMAIL` connecti
 
 1. ✅ **DONE** (`7a5d4bd2`) — `HostMetrics` table + `IHostMetricsStore` + append from heartbeat + retention.
 2. ✅ **DONE** (`b18e48d3`) — `SHOW HOST METRICS [nodeId] [INTO]` read surface.
-3. Roll-up tables + daily aggregation + long retention. *(covers the JobHistory roll-up item)*
+3. ✅ **DONE** — Roll-up tables (`JobHistoryDaily`/`HostMetricsDaily`) + idempotent daily aggregation +
+   long retention (`Orchestrator:HistoryRollupRetentionDays`, default 400). *(covers the JobHistory roll-up item)*
 4. `capacity_report.etlsql` ✅ **DONE** (`samples/admin_operations/`); `backup_and_report.etlsql` remains
    — each verified in-process. *(read surfaces `SHOW JOB HISTORY` + `SHOW HOST METRICS` both exist)*
 5. Whole-host CPU probes (Windows, then Linux), incrementally — fills `HostMetrics.HostCpuPercent`

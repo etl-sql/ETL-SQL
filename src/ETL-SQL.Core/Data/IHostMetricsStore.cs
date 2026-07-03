@@ -17,6 +17,17 @@ public sealed record HostMetricSample(
     long StateDiskFreeBytes,
     long SpillDiskFreeBytes);
 
+/// <summary>Daily-aggregated host utilization for one node, retained far longer than raw samples.</summary>
+public sealed record HostMetricsDailySummary(
+    string Day,
+    string NodeId,
+    double AvgMemoryLoadPercent,
+    double MaxMemoryLoadPercent,
+    double AvgCpuPercent,
+    double MaxCpuPercent,
+    long MinStateDiskFreeBytes,
+    long MinSpillDiskFreeBytes);
+
 /// <summary>
 /// Append-only time series of host utilization samples. Kept separate from <see cref="IJobHistoryStore"/>
 /// so that store stays cohesive. See Docs/Design/HostUtilizationAndCapacityPlanning.md.
@@ -34,4 +45,17 @@ public interface IHostMetricsStore
 
     /// <summary>Deletes samples older than <paramref name="maxAge"/>; returns rows removed.</summary>
     Task<int> PruneHostMetricsAsync(TimeSpan maxAge);
+
+    /// <summary>
+    /// Recomputes the daily host-metrics roll-up for every day still present in the raw table
+    /// (idempotent) so trend survives raw-sample pruning. Run before <see cref="PruneHostMetricsAsync"/>.
+    /// Returns the number of (day, node) summary rows written.
+    /// </summary>
+    Task<int> RollUpHostMetricsAsync();
+
+    /// <summary>Returns daily host summaries on/after <paramref name="sinceDay"/>, newest first.</summary>
+    Task<IReadOnlyList<HostMetricsDailySummary>> GetHostMetricsDailyAsync(string? nodeId, DateTime sinceDay, int limit = 1000);
+
+    /// <summary>Deletes daily host summaries older than <paramref name="maxAge"/>; returns rows removed.</summary>
+    Task<int> PruneHostMetricsDailyAsync(TimeSpan maxAge);
 }

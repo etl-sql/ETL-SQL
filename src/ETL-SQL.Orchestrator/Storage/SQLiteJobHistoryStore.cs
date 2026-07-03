@@ -192,9 +192,32 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_hm_node_time ON HostMetrics(NodeId, CapturedAt);";
 
+                    // Daily roll-up tables (capacity trend that survives raw pruning). Day is 'yyyy-MM-dd'.
+                    var createRollupTables = @"
+                CREATE TABLE IF NOT EXISTS JobHistoryDaily (
+                    Day TEXT NOT NULL,
+                    JobName TEXT NOT NULL,
+                    RunCount INTEGER NOT NULL DEFAULT 0,
+                    FailureCount INTEGER NOT NULL DEFAULT 0,
+                    TotalRows INTEGER NOT NULL DEFAULT 0,
+                    MaxPeakMemoryBytes INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (Day, JobName)
+                );
+                CREATE TABLE IF NOT EXISTS HostMetricsDaily (
+                    Day TEXT NOT NULL,
+                    NodeId TEXT NOT NULL,
+                    AvgMemoryLoadPercent REAL NOT NULL DEFAULT 0,
+                    MaxMemoryLoadPercent REAL NOT NULL DEFAULT 0,
+                    AvgCpuPercent REAL NOT NULL DEFAULT 0,
+                    MaxCpuPercent REAL NOT NULL DEFAULT 0,
+                    MinStateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
+                    MinSpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (Day, NodeId)
+                );";
+
                     var schema = createJobsTable + createHistoryTable + createBundleTables
                         + createLineageHistoryTable + createNodesTable + createWriteEpochsTable + createClusterLocksTable + createJobStateTable
-                        + createHostMetricsTable;
+                        + createHostMetricsTable + createRollupTables;
                     // SQLite's auto-increment PK literal is the default; the dialect rewrites it for other
                     // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                     // COLLATE NOCASE indexes/queries resolve.
@@ -1096,6 +1119,134 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = "DELETE FROM HostMetrics WHERE CapturedAt < @cutoff;";
             command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("O"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
+        // ── Daily roll-ups ───────────────────────────────────────────────────────────
+        // Day = substr(timestamp, 1, 10) = 'yyyy-MM-dd' from the round-trip ("O") string, portable
+        // across SQLite/Postgres. DELETE-then-INSERT the days still present in raw (transactional +
+        // idempotent), leaving already-pruned days' summaries intact so trend outlives raw retention.
+
+        public async Task<int> RollUpJobHistoryAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var tx = connection.BeginTransaction();
+
+            using (var del = connection.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = "DELETE FROM JobHistoryDaily WHERE Day IN (SELECT DISTINCT substr(StartTime,1,10) FROM JobHistory WHERE Status <> 'RUNNING');";
+                await del.ExecuteNonQueryAsync();
+            }
+            int written;
+            using (var ins = connection.CreateCommand())
+            {
+                ins.Transaction = tx;
+                ins.CommandText =
+                    "INSERT INTO JobHistoryDaily (Day, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes) " +
+                    "SELECT substr(StartTime,1,10), JobName, COUNT(*), " +
+                    "SUM(CASE WHEN Status <> 'SUCCESS' THEN 1 ELSE 0 END), SUM(RowsProcessed), MAX(PeakMemoryBytes) " +
+                    "FROM JobHistory WHERE Status <> 'RUNNING' GROUP BY substr(StartTime,1,10), JobName;";
+                written = await ins.ExecuteNonQueryAsync();
+            }
+            tx.Commit();
+            return written;
+        }
+
+        public async Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobName, DateTime sinceDay, int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            var sql = "SELECT Day, JobName, RunCount, FailureCount, TotalRows, MaxPeakMemoryBytes FROM JobHistoryDaily WHERE Day >= @since ";
+            if (!string.IsNullOrEmpty(jobName)) { sql += "AND JobName = @job "; command.AddParam("@job", jobName); }
+            sql += "ORDER BY Day DESC, JobName LIMIT @limit;";
+            command.CommandText = sql;
+            command.AddParam("@since", sinceDay.ToString("yyyy-MM-dd"));
+            command.AddParam("@limit", limit);
+
+            var results = new List<JobHistoryDailySummary>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                results.Add(new JobHistoryDailySummary(reader.GetString(0), reader.GetString(1),
+                    Convert.ToInt32(reader.GetValue(2)), Convert.ToInt32(reader.GetValue(3)),
+                    Convert.ToInt64(reader.GetValue(4)), Convert.ToInt64(reader.GetValue(5))));
+            return results;
+        }
+
+        public async Task<int> PruneJobHistoryDailyAsync(TimeSpan maxAge)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM JobHistoryDaily WHERE Day < @cutoff;";
+            command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("yyyy-MM-dd"));
+            return await command.ExecuteNonQueryAsync();
+        }
+
+        public async Task<int> RollUpHostMetricsAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var tx = connection.BeginTransaction();
+
+            using (var del = connection.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = "DELETE FROM HostMetricsDaily WHERE Day IN (SELECT DISTINCT substr(CapturedAt,1,10) FROM HostMetrics);";
+                await del.ExecuteNonQueryAsync();
+            }
+            int written;
+            using (var ins = connection.CreateCommand())
+            {
+                ins.Transaction = tx;
+                ins.CommandText =
+                    "INSERT INTO HostMetricsDaily (Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes) " +
+                    "SELECT substr(CapturedAt,1,10), NodeId, AVG(MemoryLoadPercent), MAX(MemoryLoadPercent), " +
+                    "AVG(ProcessCpuPercent), MAX(ProcessCpuPercent), MIN(StateDiskFreeBytes), MIN(SpillDiskFreeBytes) " +
+                    "FROM HostMetrics GROUP BY substr(CapturedAt,1,10), NodeId;";
+                written = await ins.ExecuteNonQueryAsync();
+            }
+            tx.Commit();
+            return written;
+        }
+
+        public async Task<IReadOnlyList<HostMetricsDailySummary>> GetHostMetricsDailyAsync(string? nodeId, DateTime sinceDay, int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            var sql = "SELECT Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes FROM HostMetricsDaily WHERE Day >= @since ";
+            if (!string.IsNullOrEmpty(nodeId)) { sql += "AND NodeId = @node "; command.AddParam("@node", nodeId); }
+            sql += "ORDER BY Day DESC, NodeId LIMIT @limit;";
+            command.CommandText = sql;
+            command.AddParam("@since", sinceDay.ToString("yyyy-MM-dd"));
+            command.AddParam("@limit", limit);
+
+            var results = new List<HostMetricsDailySummary>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                results.Add(new HostMetricsDailySummary(reader.GetString(0), reader.GetString(1),
+                    Convert.ToDouble(reader.GetValue(2)), Convert.ToDouble(reader.GetValue(3)),
+                    Convert.ToDouble(reader.GetValue(4)), Convert.ToDouble(reader.GetValue(5)),
+                    Convert.ToInt64(reader.GetValue(6)), Convert.ToInt64(reader.GetValue(7))));
+            return results;
+        }
+
+        public async Task<int> PruneHostMetricsDailyAsync(TimeSpan maxAge)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = "DELETE FROM HostMetricsDaily WHERE Day < @cutoff;";
+            command.AddParam("@cutoff", DateTime.UtcNow.Subtract(maxAge).ToString("yyyy-MM-dd"));
             return await command.ExecuteNonQueryAsync();
         }
 
