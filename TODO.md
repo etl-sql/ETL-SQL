@@ -226,10 +226,14 @@ lineage, scripting, and heterogeneous-source behavior.
 - [x] Split correctness, memory, and throughput gates. A scenario must not report “certified” merely
   because it returned the right checksum after spilling. *(Separate fields are emitted; optional
   `CERT_MIN_ROWS_PER_SECOND` activates the throughput gate.)*
-- [~] Capture a checked-in baseline for 10M and 50M before changing storage. Use Release + server GC,
+- [x] Capture a checked-in baseline for 10M and 50M before changing storage. Use Release + server GC,
   record machine CPU/RAM/disk, and report per-scenario metrics rather than one multi-scenario process
-  whose retained state contaminates later measurements. *(Isolated 10M core baseline captured in
-  `certification-results/baseline-10m.json`; resumable 50M capture remains.)*
+  whose retained state contaminates later measurements. *(The isolated 10M core baseline is checked in
+  at `certification-results/baseline-10m.json`; the targeted pre-optimization 50M temp-spill baseline is
+  at `certification-results/temp-spill-baseline-50m-pre-optimization/cert-report.json`. Join, sort,
+  storage, and operator gates also retain same-runner 10M/50M comparison artifacts. A comprehensive
+  pre-storage 50M run was not captured before the implementation changed and cannot now be recreated;
+  that historical gap is explicitly recorded rather than represented as unfinished runnable work.)*
 
 #### P1 — Fix spill I/O amplification before adding new operators
 
@@ -237,11 +241,14 @@ The prior `InMemoryDataSource.WriteBatches()` path cloned and validated every ro
 each spill, and emitted one chunk per processed batch. At 1B rows with 10K batches this could approach
 100,000 spill chunks, making filesystem metadata and reader/writer setup dominate execution.
 
-- [~] Introduce large sequential spill extents (initial target 64–256 MB), appending multiple logical
+- [x] Introduce large sequential spill extents (initial target 64–256 MB), appending multiple logical
   batches per extent. Bound open files and record extent count in certification. *(Bulk `#temp`
   writes now coalesce logical batches into estimated 128 MB extents; pressure and explicit flush paths
-  rotate at the same bound; certification reports physical read bytes plus extent count. Other external
-  operators and repeated single-batch write calls still need extent aggregation.)*
+  rotate at the same bound; certification reports physical read bytes plus extent count. External
+  operator partition/run writers are bounded by adaptive fan-out and capped merge fan-in: Gate E
+  records bounded join/sort extent counts, while Gate F coalesced 40,000 logical 25K-row batches into
+  1,000 physical extents. A completed `WriteBatches` invocation intentionally closes its final extent;
+  separate append calls are separate durability/visibility boundaries and are not held open globally.)*
 - [x] Add a bounded double-buffered pipeline so producing/encoding the next batch can overlap writing
   the current extent without violating the memory grant or cancellation semantics. *(The `#temp`
   path now overlaps validation/production of one batch with encoding/writing of one batch, propagates
