@@ -504,8 +504,12 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   dead rows reach 25% of physical rows, skips while transaction snapshots are active, preserves old
   segments until replacement grants succeed, and leaves mutations successful if peak-memory admission
   rejects compaction.)*
-- [ ] Make `MERGE` bounded; it currently materializes source and target lists and is outside the initial
-  billion-row claim.
+- [x] Make `MERGE` bounded; it currently materializes source and target lists and is outside the initial
+  billion-row claim. *(Heterogeneous engine MERGE now holds a result-lifetime memory lease and reserves
+  a conservative multiple for retained inputs, hash/index state, mutation sets, OUTPUT clones, and the
+  final rewrite before accepting each row. It fails with a remediation diagnostic at the per-operator
+  or process grant instead of growing without bound; same-database MSSQL continues to use pushdown.
+  This establishes a bounded fail-fast contract rather than claiming spill-to-completion at 1B.)*
 - [ ] Reduce holistic aggregates to argument/order-key storage rather than full rows.
 - [ ] Add streaming/specialized window paths where frame semantics permit; a single huge window
   partition remains outside the initial claim.

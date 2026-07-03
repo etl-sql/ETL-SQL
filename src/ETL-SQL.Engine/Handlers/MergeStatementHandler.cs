@@ -122,11 +122,11 @@ public class MergeStatementHandler : IStatementHandler
     /// <remarks>Optimized with O(S+T) hash-join for equality conditions.</remarks>
     private async Task PerformInMemoryMerge(MergeStatement stmt, IDataSource target, IDataSource source, IExecutionContext context)
     {
-        var sourceRows = new List<Row>();
-        await foreach (var batch in source.ReadBatches(context.BatchSize)) sourceRows.AddRange(batch.Rows);
-
-        var targetRows = new List<Row>();
-        await foreach (var batch in target.ReadBatches(context.BatchSize)) targetRows.AddRange(batch.Rows);
+        using var mergeLease = context.MemoryArbiter.AcquireLease();
+        var operatorBudget = (long)context.OperatorMemoryGrantMB * 1024 * 1024;
+        long retainedBytes = 0;
+        var sourceRows = await ReadBoundedRows(source, "source");
+        var targetRows = await ReadBoundedRows(target, "target");
         if (context.IsWhatIf)
         {
             targetRows = targetRows.Select(row => row.Clone()).ToList();
@@ -256,6 +256,32 @@ public class MergeStatementHandler : IStatementHandler
         if (!context.IsWhatIf && stmt.Output != null && outputRows.Count > 0)
         {
             await OutputClauseHelper.ProcessAsync(stmt.Output, context, outputRows.Select(r => (r.Deleted, r.Inserted, (string?)r.Action)));
+        }
+
+        async Task<List<Row>> ReadBoundedRows(IDataSource dataSource, string side)
+        {
+            var rows = new List<Row>();
+            await foreach (var batch in dataSource.ReadBatches(context.BatchSize))
+            {
+                foreach (var row in batch.Rows)
+                {
+                    context.CancellationToken.ThrowIfCancellationRequested();
+                    // MERGE retains both inputs, hash buckets, match/delete sets, inserted rows,
+                    // optional before/after OUTPUT clones, and a final rewrite batch. Reserve a
+                    // conservative multiple before retaining each row so growth remains bounded.
+                    var rowBudget = checked(256L + row.EstimateHeapBytes() * 6L);
+                    var prospective = checked(retainedBytes + rowBudget);
+                    if (operatorBudget > 0 && prospective > operatorBudget
+                        || mergeLease.RegisterAndCheckSpill(prospective))
+                        throw new ExecutionException(
+                            $"Engine MERGE exceeded its bounded memory grant while retaining the {side} input " +
+                            $"({retainedBytes:N0} bytes reserved). Increase Engine:OperatorMemoryGrantMB, " +
+                            "reduce the merge scope, or use same-database MSSQL pushdown.");
+                    retainedBytes = prospective;
+                    rows.Add(row);
+                }
+            }
+            return rows;
         }
     }
 
