@@ -403,8 +403,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   differential coverage proves duplicate/null behavior for all four variants. UTF-8 keys use
   `CompoundKey`-compatible trim/numeric/date normalization and differential coverage proves all four
   variants across duplicates, nulls, and case-sensitive identity. Mixed fixed-width/UTF-8 composite
-  keys use the same normalized equality with SQL any-null-component non-matching semantics. Direct
-  payload projection, planner binding, and spill partitioning remain.)*
+  keys use the same normalized equality with SQL any-null-component non-matching semantics. Packed
+  join ordinals now gather fixed-width and UTF-8 payload columns directly into independently owned
+  native batches, with unmatched outer rows represented by null buffers. Planner binding and spill
+  partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width keys now produce pooled typed sort runs from full batches or selection vectors using a
   cancellation-aware bottom-up merge, explicit null placement/direction, deterministic ties, and

@@ -210,6 +210,38 @@ public sealed class ColumnBatchJoinTests
     }
 
     [Fact]
+    public void JoinPayloadProjectionGathersNativeBuffersAndNullsUnmatchedRightRows()
+    {
+        var left = CreatePayloadBatch(new[] { 1, 2, 3 }, new[] { "one", "two", "three" }, new[] { 10, 20, 30 });
+        var right = CreatePayloadBatch(new[] { 2, 2 }, new[] { "right-a", "right-b" }, new[] { 200, 201 });
+        var pairs = ColumnBatchJoinKernels.Join<int>(left, "Key", right, "Key", ColumnarJoinKind.LeftOuter);
+        var projected = ColumnBatchJoinKernels.ProjectPayloads(
+            left, right, pairs,
+            new[] { "Label" }, new[] { "Label", "Payload" },
+            new[] { "LeftLabel", "RightLabel", "RightPayload" });
+        pairs.Dispose();
+        left.Dispose();
+        right.Dispose();
+
+        using (projected)
+        {
+            Assert.Equal(new[] { "LeftLabel", "RightLabel", "RightPayload" },
+                projected.Schema.Fields.Select(field => field.Name));
+            Assert.Equal(new object?[] { "one", "two", "two", "three" },
+                Enumerable.Range(0, projected.RowCount)
+                    .Select(row => projected.GetUtf8Column("LeftLabel").GetBoxedValue(row)));
+            Assert.Equal(new object?[] { null, "right-a", "right-b", null },
+                Enumerable.Range(0, projected.RowCount)
+                    .Select(row => projected.GetUtf8Column("RightLabel").GetBoxedValue(row)));
+            var payload = projected.GetColumn<int>("RightPayload");
+            Assert.True(payload.IsNull(0));
+            Assert.Equal(200, payload.Values.Span[1]);
+            Assert.Equal(201, payload.Values.Span[2]);
+            Assert.True(payload.IsNull(3));
+        }
+    }
+
+    [Fact]
     public void JoinResultHoldsMemoryGrantUntilDisposed()
     {
         using var left = CreateBatch(new[] { 1, 2, 2, 0 }, 0b0000_1000);
@@ -289,6 +321,22 @@ public sealed class ColumnBatchJoinTests
         {
             Utf8ColumnBuffer.FromStrings(keys.Select(key => key.Region).ToArray()),
             new ColumnBuffer<int>(idValues, idValues.Length, idNulls)
+        }, keys.Length);
+    }
+
+    private static ColumnBatch CreatePayloadBatch(int[] keys, string[] labels, int[] payloads)
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Payload", typeof(int), "INT")
+        });
+        return new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            new ColumnBuffer<int>(keys, keys.Length),
+            Utf8ColumnBuffer.FromStrings(labels),
+            new ColumnBuffer<int>(payloads, payloads.Length)
         }, keys.Length);
     }
 }

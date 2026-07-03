@@ -53,6 +53,51 @@ public sealed class NativeJoinPairs : IDisposable
 
 public static class ColumnBatchJoinKernels
 {
+    public static ColumnBatch ProjectPayloads(
+        ColumnBatch left,
+        ColumnBatch right,
+        NativeJoinPairs pairs,
+        IReadOnlyList<string> leftColumns,
+        IReadOnlyList<string> rightColumns,
+        IReadOnlyList<string>? outputColumns = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftColumns);
+        ArgumentNullException.ThrowIfNull(rightColumns);
+        var columnCount = leftColumns.Count + rightColumns.Count;
+        if (columnCount == 0) throw new ArgumentException("At least one payload column is required.");
+        if (outputColumns != null && outputColumns.Count != columnCount)
+            throw new ArgumentException("Output column count must match payload column count.", nameof(outputColumns));
+
+        var buffers = new List<IColumnBuffer>(columnCount);
+        var fields = new List<ColumnBatchField>(columnCount);
+        try
+        {
+            Append(left, leftColumns, pairs.LeftRows, nullable: false);
+            Append(right, rightColumns, pairs.RightRows, nullable: true);
+            return new ColumnBatch(new ColumnBatchSchema(fields), buffers, pairs.Count);
+        }
+        catch
+        {
+            foreach (var buffer in buffers) buffer.Dispose();
+            throw;
+        }
+
+        void Append(ColumnBatch source, IReadOnlyList<string> columns, ReadOnlyMemory<int> rows, bool nullable)
+        {
+            foreach (var name in columns)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var ordinal = source.Schema.GetOrdinal(name);
+                var field = source.Schema.Fields[ordinal];
+                var outputName = outputColumns?[fields.Count] ?? field.Name;
+                buffers.Add(ColumnBatchAdapter.GatherColumn(
+                    source.Columns[ordinal], source.RowCount, rows, cancellationToken));
+                fields.Add(field with { Name = outputName, IsNullable = field.IsNullable || nullable });
+            }
+        }
+    }
+
     public static NativeJoinPairs InnerJoin<T>(
         ColumnBatch left,
         string leftKeyColumn,

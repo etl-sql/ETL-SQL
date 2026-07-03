@@ -257,6 +257,59 @@ public static class ColumnBatchAdapter
         throw new NotSupportedException($"Physical type '{source.ElementType.Name}' cannot be compacted.");
     }
 
+    internal static IColumnBuffer GatherColumn(
+        IColumnBuffer source,
+        int sourceRowCount,
+        ReadOnlyMemory<int> rows,
+        CancellationToken cancellationToken)
+    {
+        if (source is Utf8ColumnBuffer utf8)
+            return utf8.Gather(rows.Span, sourceRowCount, cancellationToken);
+        if (source is ColumnBuffer<byte> bytes) return GatherFixed(bytes, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<short> shorts) return GatherFixed(shorts, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<int> ints) return GatherFixed(ints, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<long> longs) return GatherFixed(longs, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<double> doubles) return GatherFixed(doubles, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<decimal> decimals) return GatherFixed(decimals, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<bool> booleans) return GatherFixed(booleans, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<DateTime> dates) return GatherFixed(dates, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<DateTimeOffset> offsets) return GatherFixed(offsets, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<TimeSpan> times) return GatherFixed(times, sourceRowCount, rows, cancellationToken);
+        if (source is ColumnBuffer<Guid> guids) return GatherFixed(guids, sourceRowCount, rows, cancellationToken);
+        throw new NotSupportedException($"Physical type '{source.ElementType.Name}' cannot be gathered.");
+    }
+
+    private static ColumnBuffer<T> GatherFixed<T>(
+        ColumnBuffer<T> source,
+        int sourceRowCount,
+        ReadOnlyMemory<int> rows,
+        CancellationToken cancellationToken) where T : unmanaged
+    {
+        var result = ColumnBuffer<T>.Rent(rows.Length);
+        try
+        {
+            for (var output = 0; output < rows.Length; output++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var input = rows.Span[output];
+                if (input == -1)
+                {
+                    result.SetNull(output);
+                    continue;
+                }
+                ValidateSelectedRow(input, sourceRowCount);
+                if (source.IsNull(input)) result.SetNull(output);
+                else result.Values.Span[output] = source.Values.Span[input];
+            }
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
     private static ColumnBuffer<T> CopyFixed<T>(
         ColumnBuffer<T> source,
         int sourceRowCount,
