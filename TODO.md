@@ -581,11 +581,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   enforces a 16 GB peak/50K rows-per-second floor, records the commit, and refuses to start the spill
   scenario without 25 GB free on the temp drive. Its 1B test is explicitly skipped outside that
   operator-run certification script; it is not part of smoke, ordinary test, or release lanes.
-  The optimized user-operated run completed at commit `c039a462`: native
-  scan/filter/projection/100-group aggregation processed 1B rows in 20.80 seconds at 48.1M rows/s
-  with 145.8 MB peak working set and no row fallback; the spill-backed `#temp` round-trip completed
-  in 942.2 seconds at 1.06M rows/s with 543.7 MB peak working set, 26.5 GB written, 4.2 GB read,
-  1,000 extents, and no partition pass. The complete gate took 1,007 seconds (16m47s). Correctness,
+  The optimized user-operated run completed at commit `c398036d`: native
+  scan/filter/projection/100-group aggregation processed 1B rows in 20.95 seconds at 47.7M rows/s
+  with 147.0 MB peak working set and no row fallback; the spill-backed `#temp` round-trip completed
+  in 939.0 seconds at 1.06M rows/s with 551.8 MB peak working set, 26.5 GB written, 4.2 GB read,
+  1,000 extents, and no partition pass. The complete gate took 991 seconds (16m31s). Correctness,
   memory, and throughput gates all passed. Subsequent performance changes require a new Gate F run
   before replacing these published measurements.)*
 
