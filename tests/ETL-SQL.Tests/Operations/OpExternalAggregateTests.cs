@@ -383,7 +383,7 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
-        public async Task UnderestimatedHighCardinalityTailRepartitionsAsNativeBatches()
+        public async Task HighCardinalityTailConsumesNativeSpillBatchesWithAdaptiveFanOut()
         {
             var (eval, logger) = BuildContext();
             eval.ExternalHashPartitions = 2;
@@ -400,7 +400,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                     MakeGroupedRows(groups, groups), groupBy, columns, names).ToListAsync();
 
                 Assert.Equal(groups, result.Count);
-                Assert.True(engine.ColumnarRepartitionRows > 0);
+                Assert.Equal(groups, engine.ColumnarAggregateRows);
             }
             finally
             {

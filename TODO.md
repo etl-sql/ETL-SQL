@@ -389,15 +389,16 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   to three components (overflow storage only for wider keys), support multiple numeric aggregate
   columns and HAVING, and match the row planner across batches and null components. Native grant
   exhaustion reliably returns to governed external partition aggregation.)*
-- [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
+- [x] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and
   O(rows + partitions) storage. Normalized UTF-8 keys now use the same salted hash as one-column
   `CompoundKey`, keeping trimmed/numeric/date-equivalent values together; recursive external joins
   consume that pooled routing directly instead of allocating one `List<int>` per partition. Composite
   typed/UTF-8 keys now build the exact incremental `CompoundKey` hash without allocating per-row key
-  arrays, and recursive joins use the same pooled route for every key count. Broader initial-partition
-  planner integration remains; adaptive fan-out is already supplied by the external sizing model.)*
+  arrays, and recursive joins use the same pooled route for every key count. Initial external streams
+  remain row-based until their established spill boundary; columnar spill extents route natively on
+  recursive passes. Adaptive fan-out is supplied by the external sizing model.)*
 - [x] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
   equi-join kernel now builds typed key-to-ordinal state, probes native buffers or selection vectors,
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds
@@ -425,7 +426,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   runs under grants and performs a stable k-way merge while materializing only final result batches.
   Oversized estimates or grant rejection occur before source consumption and route to the existing
   bounded external-sort pipeline.)*
-- [~] Add adapters and differential tests proving columnar and row paths return identical results,
+- [x] Add adapters and differential tests proving columnar and row paths return identical results,
   null behavior, type coercion, collation behavior, lineage, and cancellation semantics. *(The row
   boundary adapter and deterministic differential coverage now compare fixed-width filtering,
   arithmetic, scalar aggregates, grouping, and sorting against row-reference results with nulls and
@@ -440,7 +441,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   through native arithmetic SELECT-INTO is covered without row materialization.
   Native arithmetic projection differentials cover typed-buffer arithmetic, integer division, and null
   propagation against the row planner. Mixed-type composite join differentials cover all four join
-  variants; broader scripts remain.)*
+  variants. Planner-level tests additionally cover multi-batch join/sort execution and safe replay to
+  spill-capable row pipelines when native admission is rejected.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
