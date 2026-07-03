@@ -370,7 +370,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   including filtered input and safe replay into the row aggregate pipeline. Grouped SELECT plans bind
   the same aggregate set across batches and multiple numeric value columns. Global MIN/MAX also retain
   native routing for date/time and GUID buffers, with null and cross-batch coverage.)*
-- [~] Low-cardinality `GROUP BY` with compact typed keys and memory-bounded aggregate state. *(A fused
+- [x] Low-cardinality `GROUP BY` with compact typed keys and memory-bounded aggregate state. *(A fused
   fixed-width native kernel now groups typed nullable keys and maintains row count, non-null count,
   checked sum, min, and max directly from buffers or selection vectors. Estimated per-group state is
   held under a result-lifetime memory-grant lease and fails explicitly when the grant is exhausted.
@@ -385,9 +385,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   Low-cardinality UTF-8 keys now support native COUNT/SUM/AVG/MIN/MAX across batches and multiple
   numeric value columns with the same trim, numeric/date normalization, null grouping, and
   case-sensitive key identity as `CompoundKey`, under explicit result-lifetime grants. End-to-end
-  differentials match the row planner. Fixed-width and string native grant exhaustion now reliably
-  returns to governed external partition aggregation. Composite keys and native in-plan spill
-  partitioning remain.)*
+  differentials match the row planner. Composite mixed-type keys use inline normalized storage for up
+  to three components (overflow storage only for wider keys), support multiple numeric aggregate
+  columns and HAVING, and match the row planner across batches and null components. Native grant
+  exhaustion reliably returns to governed external partition aggregation.)*
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and

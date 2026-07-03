@@ -674,6 +674,87 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task CompositeGroupedAggregatesMatchRowPlannerWithoutRowReads()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("GroupId", typeof(int), "INT"),
+            new ColumnBatchField("Value", typeof(int), "INT")
+        });
+        await using var native = new NativeOnlyDataSource(new[]
+        {
+            CreateBatch(new string?[] { "A", " A ", null, "A" }, new int?[] { 1, 1, 2, null },
+                new int?[] { 10, null, 5, 3 }),
+            CreateBatch(new string?[] { "A", null, "a" }, new int?[] { 1, 2, 1 },
+                new int?[] { 20, 7, 4 })
+        }, throwOnRowRead: true);
+        await using var rowSource = new InMemoryDataSource();
+        rowSource.SetSchema(new[]
+        {
+            new ColumnDefinition("Region", "VARCHAR(20)", false),
+            new ColumnDefinition("GroupId", "INT", false),
+            new ColumnDefinition("Value", "INT", false)
+        });
+        var rowBatch = new DataTable();
+        rowBatch.SetColumns(new[] { "Region", "GroupId", "Value" });
+        foreach (var item in new (string? Region, int? GroupId, int? Value)[]
+        {
+            ("A", 1, 10), (" A ", 1, null), (null, 2, 5), ("A", null, 3),
+            ("A", 1, 20), (null, 2, 7), ("a", 1, 4)
+        })
+        {
+            var row = rowBatch.NewRow();
+            row["Region"] = item.Region;
+            row["GroupId"] = item.GroupId.HasValue ? (decimal)item.GroupId.Value : null;
+            row["Value"] = item.Value.HasValue ? (decimal)item.Value.Value : null;
+            rowBatch.Rows.Add(row);
+        }
+        await rowSource.WriteBatches(new[] { rowBatch }.ToAsyncEnumerable());
+        evaluator.Connections["native_composite_groups"] = native;
+        evaluator.Connections["row_composite_groups"] = rowSource;
+        const string projection = "Region, GroupId, COUNT(*) AS RowCount, COUNT(Value) AS ValueCount, " +
+            "SUM(Value) AS Total, AVG(Value) AS Mean, MIN(Value) AS Minimum, MAX(Value) AS Maximum";
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        var nativeRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM native_composite_groups GROUP BY Region, GroupId HAVING COUNT(*) >= 1;"), evaluator)
+            .ToListAsync()).SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+        var rowRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM row_composite_groups GROUP BY Region, GroupId HAVING COUNT(*) >= 1;"), evaluator)
+            .ToListAsync()).SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+
+        Assert.Equal(rowRows, nativeRows);
+        Assert.Equal(0, native.RowReadAttempts);
+
+        ColumnBatch CreateBatch(string?[] regions, int?[] groups, int?[] values)
+        {
+            var groupNulls = new byte[(groups.Length + 7) / 8];
+            var valueNulls = new byte[(values.Length + 7) / 8];
+            for (var index = 0; index < groups.Length; index++)
+            {
+                if (groups[index] == null) groupNulls[index >> 3] |= (byte)(1 << (index & 7));
+                if (values[index] == null) valueNulls[index >> 3] |= (byte)(1 << (index & 7));
+            }
+            return new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(regions),
+                new ColumnBuffer<int>(groups.Select(value => value ?? 0).ToArray(), groups.Length, groupNulls),
+                new ColumnBuffer<int>(values.Select(value => value ?? 0).ToArray(), values.Length, valueNulls)
+            }, regions.Length);
+        }
+
+        static string Normalize(Row row) => string.Join("|", new[]
+        {
+            row["Region"]?.ToString() ?? "NULL", row["GroupId"]?.ToString() ?? "NULL",
+            row["RowCount"]?.ToString() ?? "NULL", row["ValueCount"]?.ToString() ?? "NULL",
+            row["Total"]?.ToString() ?? "NULL", row["Mean"]?.ToString() ?? "NULL",
+            row["Minimum"]?.ToString() ?? "NULL", row["Maximum"]?.ToString() ?? "NULL"
+        });
+    }
+
+    [Fact]
     public async Task GroupedNativePlannerMatchesRowPipeline()
     {
         var definitions = new[]

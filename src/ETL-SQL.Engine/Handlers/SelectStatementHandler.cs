@@ -157,7 +157,12 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             yield break;
         }
 
-        if (ColumnarGroupedAggregatePlan.TryCreate(context, stmt, out var groupedPlan))
+        IColumnarGroupedAggregatePlan? groupedPlan = null;
+        if (ColumnarGroupedAggregatePlan.TryCreate(context, stmt, out var singleGroupedPlan))
+            groupedPlan = singleGroupedPlan;
+        else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(context, stmt, out var compositeGroupedPlan))
+            groupedPlan = compositeGroupedPlan;
+        if (groupedPlan != null)
         {
             using (groupedPlan)
             {
@@ -174,12 +179,12 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
                         if (firstNative == null)
                         {
-                            yield return await groupedPlan!.FinalizeResultAsync(groupedNames);
+                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
                             yield break;
                         }
 
                         SelectionVector? firstSelection = null;
-                        var supported = groupedPlan!.CanApply(firstNative)
+                        var supported = groupedPlan.CanApply(firstNative)
                             && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
                                 firstNative, stmt.WhereClause, out firstSelection,
                                 cancellationToken: context.CancellationToken,

@@ -295,7 +295,12 @@ public class ExternalAggregateEngine
         var statement = new SelectStatement(
             finalColumns, null, new TableReference("#spill"), new List<JoinClause>(), null,
             groupBy, havingClause);
-        if (!ColumnarGroupedAggregatePlan.TryCreate(_context, statement, out var plan) || plan == null)
+        IColumnarGroupedAggregatePlan? plan = null;
+        if (ColumnarGroupedAggregatePlan.TryCreate(_context, statement, out var singlePlan))
+            plan = singlePlan;
+        else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(_context, statement, out var compositePlan))
+            plan = compositePlan;
+        if (plan == null)
             return null;
         try
         {

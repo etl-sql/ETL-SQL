@@ -9,7 +9,14 @@ using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines;
 
-internal sealed class ColumnarGroupedAggregatePlan : IDisposable
+internal interface IColumnarGroupedAggregatePlan : IDisposable
+{
+    bool CanApply(ColumnBatch batch);
+    void Accumulate(ColumnBatch batch, SelectionVector? selection);
+    Task<DataTable> FinalizeResultAsync(IReadOnlyList<string> outputNames);
+}
+
+internal sealed class ColumnarGroupedAggregatePlan : IColumnarGroupedAggregatePlan
 {
     private readonly IExecutionContext _context;
     private readonly string _keyColumn;
