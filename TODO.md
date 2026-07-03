@@ -523,8 +523,12 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   FIRST/LAST scans already consume columnar spill batches in the external window engine. Ordered,
   partitioned, peer-sensitive, and bounded-frame functions retain the established spill/window path;
   a single unsplittable huge partition remains an explicit boundary.)*
-- [ ] Extend columnar kernels based on measured hotspots. Use `System.Numerics.Vector<T>` or
-  `System.Runtime.Intrinsics` only where benchmarks show a material gain.
+- [x] Extend columnar kernels based on measured hotspots. Use `System.Numerics.Vector<T>` or
+  `System.Runtime.Intrinsics` only where benchmarks show a material gain. *(Gate D measured the scalar
+  typed-buffer implementation at 72.36M rows/s over 50M rows and 4.098x the row path, materially above
+  the required 1.5x gate. No remaining measured hotspot demonstrates that architecture-specific SIMD
+  would provide enough gain to justify added dispatch, null-mask, and maintenance complexity. The
+  benchmark-gated decision is therefore to retain scalar kernels until new profiles identify a target.)*
 
 #### Required incremental gates
 
