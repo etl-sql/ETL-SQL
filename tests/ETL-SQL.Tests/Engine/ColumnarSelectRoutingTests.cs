@@ -243,18 +243,43 @@ public sealed class ColumnarSelectRoutingTests
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         await using var source = CreateSource();
+        await using var rowSource = new InMemoryDataSource();
+        rowSource.SetSchema(new[]
+        {
+            new ColumnDefinition("Id", "INT", false),
+            new ColumnDefinition("Name", "VARCHAR(20)", false)
+        });
+        var rowBatch = new DataTable();
+        rowBatch.SetColumns(new[] { "Id", "Name" });
+        foreach (var (id, name) in new (int?, string)[] { (1, "ONE"), (null, "null-id"), (3, "three") })
+        {
+            var row = rowBatch.NewRow();
+            row["Id"] = id.HasValue ? (decimal)id.Value : null;
+            row["Name"] = name;
+            rowBatch.Rows.Add(row);
+        }
+        await rowSource.WriteBatches(new[] { rowBatch }.ToAsyncEnumerable());
         evaluator.Connections["col"] = source;
-        var statement = ParseSelect(
-            "SELECT Id * 2 AS Doubled, 10 - Id AS Remaining, Id / 2 AS Halved FROM col;");
+        evaluator.Connections["row_arithmetic"] = rowSource;
+        const string projection = "Id * 2 AS Doubled, 10 - Id AS Remaining, Id / 2 AS Halved";
         var handler = new SelectStatementHandler(NullLogger.Instance);
 
-        var rows = (await handler.EvaluateQuery(statement, evaluator).ToListAsync())
+        var rows = (await handler.EvaluateQuery(ParseSelect($"SELECT {projection} FROM col;"), evaluator).ToListAsync())
             .SelectMany(batch => batch.Rows).ToArray();
+        var rowPlannerRows = (await handler.EvaluateQuery(
+                ParseSelect($"SELECT {projection} FROM row_arithmetic;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows)
+            .Select(Normalize)
+            .ToArray();
 
         Assert.Equal(new object?[] { 2m, null, 6m }, rows.Select(row => row["Doubled"]));
         Assert.Equal(new object?[] { 9m, null, 7m }, rows.Select(row => row["Remaining"]));
         Assert.Equal(new object?[] { 0m, null, 1m }, rows.Select(row => row["Halved"]));
+        Assert.Equal(rowPlannerRows, rows.Select(Normalize));
         Assert.Equal(0, source.RowReadAttempts);
+
+        static string Normalize(Row row)
+            => $"{row["Doubled"] ?? "NULL"}|{row["Remaining"] ?? "NULL"}|{row["Halved"] ?? "NULL"}";
     }
 
     [Fact]

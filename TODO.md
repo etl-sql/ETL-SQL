@@ -420,8 +420,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   fallback, numeric coercion, and null exclusion. Fixed-width join differentials now cover inner/left
   outer/semi/anti joins across duplicates and nulls. String/composite join differentials,
   derived-column lineage through native arithmetic SELECT-INTO is covered without row materialization.
-  String/composite join differentials, native arithmetic projection result differentials, and broader
-  scripts remain.)*
+  Native arithmetic projection differentials cover typed-buffer arithmetic, integer division, and null
+  propagation against the row planner. String/composite join differentials and broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
