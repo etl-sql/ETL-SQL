@@ -2,8 +2,10 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
 
@@ -76,9 +78,68 @@ public static class ColumnBatchJoinKernels
         if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
         var leftKeys = left.GetColumn<T>(leftKeyColumn);
         var rightKeys = right.GetColumn<T>(rightKeyColumn);
-        var leftValues = leftKeys.Values;
-        var rightValues = rightKeys.Values;
-        var build = new Dictionary<T, List<int>>();
+        return JoinCore(
+            left.RowCount,
+            right.RowCount,
+            leftKeys.IsNull,
+            rightKeys.IsNull,
+            row => leftKeys.Values.Span[row],
+            row => rightKeys.Values.Span[row],
+            _ => Unsafe.SizeOf<T>(),
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+    }
+
+    public static NativeJoinPairs JoinUtf8(
+        ColumnBatch left,
+        string leftKeyColumn,
+        ColumnBatch right,
+        string rightKeyColumn,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
+        var leftKeys = left.GetUtf8Column(leftKeyColumn);
+        var rightKeys = right.GetUtf8Column(rightKeyColumn);
+        return JoinCore<object>(
+            left.RowCount,
+            right.RowCount,
+            leftKeys.IsNull,
+            rightKeys.IsNull,
+            row => Normalize(leftKeys, row),
+            row => Normalize(rightKeys, row),
+            row => rightKeys.GetUtf8Bytes(row).Length,
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+
+        static object Normalize(Utf8ColumnBuffer keys, int row)
+            => CompoundKey.NormalizeValue(Encoding.UTF8.GetString(keys.GetUtf8Bytes(row)))!;
+    }
+
+    private static NativeJoinPairs JoinCore<TKey>(
+        int leftRowCount,
+        int rightRowCount,
+        Func<int, bool> leftIsNull,
+        Func<int, bool> rightIsNull,
+        Func<int, TKey> getLeftKey,
+        Func<int, TKey> getRightKey,
+        Func<int, int> getRightKeySize,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter,
+        SelectionVector? leftSelection,
+        SelectionVector? rightSelection,
+        CancellationToken cancellationToken) where TKey : notnull
+    {
+        var build = new Dictionary<TKey, List<int>>();
         var arbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
         var lease = arbiter.AcquireLease();
         int[]? leftRows = null;
@@ -88,13 +149,13 @@ public static class ColumnBatchJoinKernels
 
         try
         {
-            VisitOrdinals(right.RowCount, rightSelection, cancellationToken, row =>
+            VisitOrdinals(rightRowCount, rightSelection, cancellationToken, row =>
             {
-                if (rightKeys.IsNull(row)) return;
-                var key = rightValues.Span[row];
+                if (rightIsNull(row)) return;
+                var key = getRightKey(row);
                 if (!build.TryGetValue(key, out var rows))
                 {
-                    Reserve(lease, ref reservedBytes, 48L + Unsafe.SizeOf<T>());
+                    Reserve(lease, ref reservedBytes, 48L + getRightKeySize(row));
                     rows = new List<int>();
                     build.Add(key, rows);
                 }
@@ -102,11 +163,11 @@ public static class ColumnBatchJoinKernels
                 rows.Add(row);
             });
 
-            VisitOrdinals(left.RowCount, leftSelection, cancellationToken, leftRow =>
+            VisitOrdinals(leftRowCount, leftSelection, cancellationToken, leftRow =>
             {
                 List<int>? matches = null;
-                var matched = !leftKeys.IsNull(leftRow)
-                    && build.TryGetValue(leftValues.Span[leftRow], out matches);
+                var matched = !leftIsNull(leftRow)
+                    && build.TryGetValue(getLeftKey(leftRow), out matches);
                 if (matched)
                 {
                     if (joinKind == ColumnarJoinKind.LeftAnti) return;

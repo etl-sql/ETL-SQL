@@ -400,8 +400,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds
   bounded build/output reservations until result disposal. The same bounded kernel now supports left
   outer, semi, and anti semantics; unmatched rows use an explicit `-1` right ordinal, and randomized
-  differential coverage proves duplicate/null behavior for all four variants. String/composite keys,
-  direct payload projection, planner binding, and spill partitioning remain.)*
+  differential coverage proves duplicate/null behavior for all four variants. UTF-8 keys use
+  `CompoundKey`-compatible trim/numeric/date normalization and differential coverage proves all four
+  variants across duplicates, nulls, and case-sensitive identity. Composite keys, direct payload
+  projection, planner binding, and spill partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width keys now produce pooled typed sort runs from full batches or selection vectors using a
   cancellation-aware bottom-up merge, explicit null placement/direction, deterministic ties, and
@@ -417,11 +419,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   End-to-end grouped SELECT differentials now compare native and row planners across batches with null
   keys/values, filtering, and COUNT/SUM/AVG/MIN/MAX; native SELECT-INTO coverage also verifies lineage
   recording. String predicate coverage now proves case-sensitive/case-insensitive routing, Unicode
-  fallback, numeric coercion, and null exclusion. Fixed-width join differentials now cover inner/left
-  outer/semi/anti joins across duplicates and nulls. String/composite join differentials,
-  derived-column lineage through native arithmetic SELECT-INTO is covered without row materialization.
+  fallback, numeric coercion, and null exclusion. Fixed-width and normalized UTF-8 join differentials
+  now cover inner/left outer/semi/anti joins across duplicates and nulls. Derived-column lineage
+  through native arithmetic SELECT-INTO is covered without row materialization.
   Native arithmetic projection differentials cover typed-buffer arithmetic, integer division, and null
-  propagation against the row planner. String/composite join differentials and broader scripts remain.)*
+  propagation against the row planner. Composite join differentials and broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 

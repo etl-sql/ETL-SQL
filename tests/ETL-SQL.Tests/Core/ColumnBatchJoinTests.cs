@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 using Xunit;
 
 namespace ETL_SQL.Tests.Core;
@@ -126,6 +127,45 @@ public sealed class ColumnBatchJoinTests
         }
     }
 
+    [Theory]
+    [InlineData(ColumnarJoinKind.Inner)]
+    [InlineData(ColumnarJoinKind.LeftOuter)]
+    [InlineData(ColumnarJoinKind.LeftSemi)]
+    [InlineData(ColumnarJoinKind.LeftAnti)]
+    public void Utf8JoinMatchesNormalizedRowReference(ColumnarJoinKind kind)
+    {
+        string?[] leftKeys = { "A", " A ", "1", null, "a", "missing" };
+        string?[] rightKeys = { "A", "1.0", "A", null, "a" };
+        using var left = CreateStringBatch(leftKeys);
+        using var right = CreateStringBatch(rightKeys);
+        using var actual = ColumnBatchJoinKernels.JoinUtf8(left, "Key", right, "Key", kind);
+
+        var expected = new List<(int Left, int Right)>();
+        for (var leftRow = 0; leftRow < leftKeys.Length; leftRow++)
+        {
+            var normalizedLeft = CompoundKey.NormalizeValue(leftKeys[leftRow]);
+            var matches = normalizedLeft == null
+                ? Array.Empty<int>()
+                : Enumerable.Range(0, rightKeys.Length)
+                    .Where(rightRow => rightKeys[rightRow] != null &&
+                        Equals(normalizedLeft, CompoundKey.NormalizeValue(rightKeys[rightRow])))
+                    .ToArray();
+            if (matches.Length > 0)
+            {
+                if (kind == ColumnarJoinKind.LeftAnti) continue;
+                if (kind == ColumnarJoinKind.LeftSemi) expected.Add((leftRow, matches[0]));
+                else expected.AddRange(matches.Select(rightRow => (leftRow, rightRow)));
+            }
+            else if (kind is ColumnarJoinKind.LeftOuter or ColumnarJoinKind.LeftAnti)
+            {
+                expected.Add((leftRow, -1));
+            }
+        }
+
+        Assert.Equal(expected.Select(pair => pair.Left), actual.LeftRows.ToArray());
+        Assert.Equal(expected.Select(pair => pair.Right), actual.RightRows.ToArray());
+    }
+
     [Fact]
     public void JoinResultHoldsMemoryGrantUntilDisposed()
     {
@@ -174,6 +214,20 @@ public sealed class ColumnBatchJoinTests
             new ColumnBuffer<int>(keys.Length == 4
                 ? new[] { 10, 20, 20, 40 }
                 : Enumerable.Range(1, keys.Length).Select(value => value * 10).ToArray(), keys.Length)
+        }, keys.Length);
+    }
+
+    private static ColumnBatch CreateStringBatch(string?[] keys)
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Payload", typeof(int), "INT")
+        });
+        return new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(keys),
+            new ColumnBuffer<int>(Enumerable.Range(1, keys.Length).ToArray(), keys.Length)
         }, keys.Length);
     }
 }
