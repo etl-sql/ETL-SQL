@@ -299,6 +299,10 @@ Read-only variables that track session state and performance. These are automati
 | `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache. | `PRINT 'Cache Hits: ' + @@SUBQUERY_CACHE_HITS;` |
 | `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution. | `PRINT 'Cache Misses: ' + @@SUBQUERY_CACHE_MISSES;` |
 | `@@SORT_SPILLS` | External sort runs that spilled to disk this session. | `PRINT 'Sort Spills: ' + @@SORT_SPILLS;` |
+| `@@CURRENT_USER` | The effective username running the current session (impersonation-aware). | `WHERE Owner = @@CURRENT_USER` |
+| `@@CURRENT_USER_ID` | The effective numeric user identifier for the current session. | `WHERE UserId = @@CURRENT_USER_ID` |
+| `@@REAL_USER` | The actual actor running the session (unchanged by impersonation). | `INSERT INTO Audit Logs (Actor) VALUES (@@REAL_USER);` |
+| `@@IS_ADMIN` | Boolean indicating if the effective identity has administrator privileges. | `IF @@IS_ADMIN = TRUE PRINT 'Running in admin mode';` |
 
 **Example: Flow control based on row count**
 ```sql

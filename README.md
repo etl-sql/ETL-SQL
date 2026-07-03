@@ -4,7 +4,7 @@
   <img src="Docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
 </p>
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.13.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.14.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 [![Build Status](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml/badge.svg)](https://github.com/etl-sql/ETL-SQL/actions/workflows/ci.yml)

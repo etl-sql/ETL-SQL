@@ -1,4 +1,4 @@
-﻿# Report-SQL Scripting Guide
+# Report-SQL Scripting Guide
 
 Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, `CREATE NAVIGATION`, `CREATE BUTTON`, and `CREATE STYLE` — plus a CLI build tool and live browser hosts for serving reports.
 
@@ -182,6 +182,59 @@ CREATE VISUAL SalesChart AS BAR (
   MAPPINGS (X = region, Y = revenue)
 );
 ```
+
+---
+
+## Row-Level Security in Reports (RLS)
+
+Report Portal executes report scripts securely using the logged-in viewer's identity. Within your report SQL, you can use built-in identity variables and predicate functions to dynamically filter datasets so users only see data they are authorized to view.
+
+### Identity Variables
+
+- `@@CURRENT_USER` — The username of the logged-in viewer.
+- `@@CURRENT_USER_ID` — The numeric identifier of the viewer.
+- `@@IS_ADMIN` — Boolean flag indicating if the viewer is an administrator (bypassing RLS by default).
+
+### Identity Predicates
+
+- `HAS_GROUP('group_name')` — Returns `TRUE` if the viewer is a member of the specified group.
+- `USER_GROUPS()` — Table-valued function returning all groups the viewer belongs to.
+
+### Examples
+
+**1. Filtering by Username**
+Filter rows where the manager matches the current viewer:
+```sql
+SELECT OrderId, Region, Total
+INTO #filtered_orders
+FROM prod_db.dbo.Orders
+WHERE Manager = @@CURRENT_USER OR @@IS_ADMIN = TRUE;
+```
+
+**2. Group-based Regional Filter**
+Filter rows using `HAS_GROUP` to check for region-specific access:
+```sql
+SELECT OrderId, Region, Total
+INTO #filtered_orders
+FROM prod_db.dbo.Orders
+WHERE (Region = 'US' AND HAS_GROUP('US_Sales') = TRUE)
+   OR (Region = 'EU' AND HAS_GROUP('EU_Sales') = TRUE)
+   OR @@IS_ADMIN = TRUE;
+```
+
+**3. Dynamic Set-Membership Filter**
+Use a subquery against `USER_GROUPS()` to join against a regional mapping table:
+```sql
+SELECT o.OrderId, o.Region, o.Total
+INTO #filtered_orders
+FROM prod_db.dbo.Orders o
+JOIN #region_mappings m ON o.Region = m.RegionCode
+WHERE m.GroupName IN (SELECT GroupName FROM USER_GROUPS())
+   OR @@IS_ADMIN = TRUE;
+```
+
+> [!IMPORTANT]
+> **Admin Bypass:** By default, administrators bypass RLS constraints if `@@IS_ADMIN = TRUE` is handled in your predicates. If your organization mandates filtering administrators as well, ensure the `Portal:Security:AdminBypassRowLevelSecurity` setting is set to `FALSE` in `appsettings.json`, or design your predicates without the `OR @@IS_ADMIN = TRUE` clause.
 
 ---
 

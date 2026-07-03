@@ -465,6 +465,43 @@ BEGIN
 END
 ```
 
+### Row-Level Security & Identity Functions
+
+#### `HAS_GROUP`
+- **Signature:** `HAS_GROUP(groupName)`
+- **Return Type:** `BOOLEAN`
+- **Example:**
+```sql
+SELECT * FROM #data WHERE Region = 'US' AND HAS_GROUP('US_Sales') = TRUE;
+```
+
+#### `HAS_ROLE`
+- **Signature:** `HAS_ROLE(roleName)`
+- **Return Type:** `BOOLEAN`
+- **Example:**
+```sql
+IF HAS_ROLE('Admin') = TRUE
+BEGIN
+    PRINT 'User is an administrator';
+END
+```
+
+#### `USER_GROUPS`
+- **Signature:** `USER_GROUPS()`
+- **Return Type:** `TABLE (GroupName STRING)`
+- **Example:**
+```sql
+SELECT * FROM #regions WHERE RegionCode IN (SELECT GroupName FROM USER_GROUPS());
+```
+
+#### `USER_ROLES`
+- **Signature:** `USER_ROLES()`
+- **Return Type:** `TABLE (RoleName STRING)`
+- **Example:**
+```sql
+SELECT * FROM #roles WHERE RoleCode IN (SELECT RoleName FROM USER_ROLES());
+```
+
 ---
 
 ## 9. Hashing & Checksums

@@ -1,8 +1,7 @@
-# Row-Level Security via Injected Identity — Design Draft
+# Row-Level Security via Injected Identity — Reference Specification
 
-> **Status:** draft for review (2026-07-01). Derived from an administrator operational review.
-> Tracked in `TODO.md` under *Administrator operational review — follow-on hardening*.
-> Nothing here is implemented yet; the "Current state" section is verified against the code.
+> **Status:** ✅ **COMPLETE** (shipped in v0.14.0).
+> Grounded in the code and tests implemented for the v0.14.0 release.
 
 ## Goal
 
