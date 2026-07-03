@@ -318,7 +318,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 var sourceColumns = (await source.GetColumnsAsync()).ToList();
                 var (nativeColumns, nativeNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                if (nativeColumns.All(column => column.Expression is IdentifierExpression))
+                // Open the native source once. Unsupported projection shapes replay the already-read
+                // batch through the established row evaluator without restarting the source.
                 {
                     var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
@@ -334,24 +335,31 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                             yield break;
                         }
 
+                        if (!ColumnarProjectionCompiler.CanProject(firstNative, nativeColumns))
+                        {
+                            var projectionFallbackBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                            firstNative = null;
+                            await foreach (var batch in streamingEngine.ExecuteStreamingSelect(
+                                stmt, projectionFallbackBatches, nativeColumns, nativeNames))
+                                yield return batch;
+                            yield break;
+                        }
+
                         SelectionVector? firstSelection = null;
                         var predicateSupported = stmt.WhereClause == null
                             || ColumnarPredicateCompiler.TrySelect(
                                 firstNative, stmt.WhereClause, out firstSelection,
                                 cancellationToken: context.CancellationToken,
                                 caseSensitiveComparison: context.CaseSensitiveComparison);
-                        var projectedSources = nativeColumns
-                            .Select(column => ((IdentifierExpression)column.Expression).Name.Split('.').Last())
-                            .ToList();
-
                         if (predicateSupported)
                         {
                             var yieldedRows = false;
                             using (firstNative)
                             using (firstSelection)
                             {
-                                var firstResult = ColumnBatchAdapter.ToDataTable(
-                                    firstNative, projectedSources, nativeNames, firstSelection);
+                                var firstResult = ColumnarProjectionCompiler.ProjectToDataTable(
+                                    firstNative, nativeColumns, nativeNames, firstSelection,
+                                    context.CancellationToken);
                                 if (firstResult.Rows.Count > 0)
                                 {
                                     yieldedRows = true;
@@ -363,6 +371,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                             while (await nativeEnumerator.MoveNextAsync())
                             {
                                 using var nativeBatch = nativeEnumerator.Current;
+                                if (!ColumnarProjectionCompiler.CanProject(nativeBatch, nativeColumns))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible projection schema during a query.");
                                 SelectionVector? selection = null;
                                 if (stmt.WhereClause != null
                                     && !ColumnarPredicateCompiler.TrySelect(
@@ -372,8 +382,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                     throw new InvalidOperationException("Columnar source changed to an incompatible schema during a query.");
                                 using (selection)
                                 {
-                                    var result = ColumnBatchAdapter.ToDataTable(
-                                        nativeBatch, projectedSources, nativeNames, selection);
+                                    var result = ColumnarProjectionCompiler.ProjectToDataTable(
+                                        nativeBatch, nativeColumns, nativeNames, selection,
+                                        context.CancellationToken);
                                     if (result.Rows.Count > 0)
                                     {
                                         yieldedRows = true;

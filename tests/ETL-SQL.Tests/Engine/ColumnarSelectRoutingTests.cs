@@ -239,6 +239,25 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task ArithmeticProjectionReadsTypedBuffersWithoutCallingRowReader()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource();
+        evaluator.Connections["col"] = source;
+        var statement = ParseSelect(
+            "SELECT Id * 2 AS Doubled, 10 - Id AS Remaining, Id / 2 AS Halved FROM col;");
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        var rows = (await handler.EvaluateQuery(statement, evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows).ToArray();
+
+        Assert.Equal(new object?[] { 2m, null, 6m }, rows.Select(row => row["Doubled"]));
+        Assert.Equal(new object?[] { 9m, null, 7m }, rows.Select(row => row["Remaining"]));
+        Assert.Equal(new object?[] { 0m, null, 1m }, rows.Select(row => row["Halved"]));
+        Assert.Equal(0, source.RowReadAttempts);
+    }
+
+    [Fact]
     public async Task StringPredicateUsesNativeBuffersWithConfiguredCollation()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

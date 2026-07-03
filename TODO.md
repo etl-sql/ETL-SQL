@@ -263,8 +263,10 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   a columnar sink with no row materialization or buffer rebuild. Supported filters compact selected
   ordinals directly into independently owned typed buffers; simple reordered/aliased identifier
   projections also compact and rename the native schema. UTF-8 selection copies offsets/data bytes
-  directly without decoding managed strings. Expression projections and row-backed destinations still
-  use the compatibility path.)*
+  directly without decoding managed strings. Fixed-width column/literal arithmetic projections now
+  read typed buffers directly and materialize only the required result boundary. Native expression
+  buffers for direct `SELECT INTO` transfer and row-backed destinations still use the compatibility
+  path.)*
 - [x] Measure compression as an explicit disk-vs-CPU tradeoff; do not enable it by assumption.
   *(A reproducible 100K-row Release assessment now emits physical bytes, wall time, CPU time, and
   read-back checksums for compressed/uncompressed Arrow spill. On the 2026-06-30 workstation,
@@ -337,7 +339,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   read-only SELECTs over `IColumnarDataSource` now scan/filter/project without rows and materialize only
   at the required `DataTable` result boundary. Compatible `SELECT * INTO` now transfers batch ownership
   directly between native sources and sinks, while supported predicates and reordered/aliased identifier
-  projections compact native selections without rows. Expression projection and complex-plan routing remain.)*
+  projections compact native selections without rows. Simple fixed-width `+`, `-`, `*`, `/`, and `%`
+  projections now evaluate from native buffers with the established decimal promotion, integer division,
+  null, overflow, and divide-by-zero semantics. Nested/function projections, native expression output
+  buffers, and complex-plan routing remain.)*
 - [~] Comparison, null, boolean, and simple arithmetic predicates using selection vectors. *(Pooled
   selection vectors now support composable typed fixed-width comparisons, SQL null exclusion,
   `IS NULL`/`IS NOT NULL`, boolean filtering, checked add/subtract/multiply and division predicates,
@@ -398,7 +403,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   recording. String predicate coverage now proves case-sensitive/case-insensitive routing, Unicode
   fallback, numeric coercion, and null exclusion. Fixed-width join differentials now cover inner/left
   outer/semi/anti joins across duplicates and nulls. String/composite join differentials,
-  derived-column lineage, and broader scripts remain.)*
+  derived-column lineage, native arithmetic projection differentials, and broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
