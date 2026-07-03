@@ -544,5 +544,8 @@ public class SubscriptionDeliveryService(
         catch { return null; }
     }
 
-    private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "\\'");
+    // The ETL-SQL lexer escapes a quote inside a string literal by doubling it ('' -> '), not with a
+    // backslash. A backslash-escaped quote would terminate the string early, so a value containing a
+    // single quote (e.g. an SMTP username or report name) must be doubled.
+    private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "''");
 }

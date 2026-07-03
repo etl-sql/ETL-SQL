@@ -212,6 +212,8 @@ namespace ETL_SQL.Orchestrator.Storage
                     MaxCpuPercent REAL NOT NULL DEFAULT 0,
                     MinStateDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
                     MinSpillDiskFreeBytes INTEGER NOT NULL DEFAULT 0,
+                    AvgHostCpuPercent REAL,
+                    MaxHostCpuPercent REAL,
                     PRIMARY KEY (Day, NodeId)
                 );";
 
@@ -233,6 +235,7 @@ namespace ETL_SQL.Orchestrator.Storage
                     await EnsureHistoryColumnsExist(connection);
                     await EnsureJobColumnsExist(connection);
                     await EnsureLineageHistoryColumnsExist(connection);
+                    await EnsureHostMetricsDailyColumnsExist(connection);
                 }
                 finally
                 {
@@ -339,6 +342,27 @@ namespace ETL_SQL.Orchestrator.Storage
             {
                 using var cmd = connection.CreateCommand();
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN Version INTEGER NOT NULL DEFAULT 1;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+
+        private async Task EnsureHostMetricsDailyColumnsExist(DbConnection connection)
+        {
+            // Whole-host CPU joined the daily roll-up after the table first shipped; upgrade
+            // existing databases in place (nullable REAL — no backfill possible for pruned raw rows).
+            var columns = await _dialect.GetColumnNamesAsync(connection, "HostMetricsDaily");
+
+            if (!columns.Contains("AvgHostCpuPercent"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE HostMetricsDaily ADD COLUMN AvgHostCpuPercent REAL;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("MaxHostCpuPercent"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE HostMetricsDaily ADD COLUMN MaxHostCpuPercent REAL;";
                 await cmd.ExecuteNonQueryAsync();
             }
         }
@@ -1205,10 +1229,13 @@ namespace ETL_SQL.Orchestrator.Storage
             using (var ins = connection.CreateCommand())
             {
                 ins.Transaction = tx;
+                // AVG/MAX ignore NULL HostCpuPercent samples (and yield NULL when no sample has one),
+                // so days recorded before the whole-host probe shipped roll up as NULL, not 0.
                 ins.CommandText =
-                    "INSERT INTO HostMetricsDaily (Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes) " +
+                    "INSERT INTO HostMetricsDaily (Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes, AvgHostCpuPercent, MaxHostCpuPercent) " +
                     "SELECT substr(CapturedAt,1,10), NodeId, AVG(MemoryLoadPercent), MAX(MemoryLoadPercent), " +
-                    "AVG(ProcessCpuPercent), MAX(ProcessCpuPercent), MIN(StateDiskFreeBytes), MIN(SpillDiskFreeBytes) " +
+                    "AVG(ProcessCpuPercent), MAX(ProcessCpuPercent), MIN(StateDiskFreeBytes), MIN(SpillDiskFreeBytes), " +
+                    "AVG(HostCpuPercent), MAX(HostCpuPercent) " +
                     "FROM HostMetrics GROUP BY substr(CapturedAt,1,10), NodeId;";
                 written = await ins.ExecuteNonQueryAsync();
             }
@@ -1222,7 +1249,7 @@ namespace ETL_SQL.Orchestrator.Storage
             using var connection = _dialect.CreateConnection();
             await connection.OpenAsync();
             using var command = connection.CreateCommand();
-            var sql = "SELECT Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes FROM HostMetricsDaily WHERE Day >= @since ";
+            var sql = "SELECT Day, NodeId, AvgMemoryLoadPercent, MaxMemoryLoadPercent, AvgCpuPercent, MaxCpuPercent, MinStateDiskFreeBytes, MinSpillDiskFreeBytes, AvgHostCpuPercent, MaxHostCpuPercent FROM HostMetricsDaily WHERE Day >= @since ";
             if (!string.IsNullOrEmpty(nodeId)) { sql += "AND NodeId = @node "; command.AddParam("@node", nodeId); }
             sql += "ORDER BY Day DESC, NodeId LIMIT @limit;";
             command.CommandText = sql;
@@ -1235,7 +1262,9 @@ namespace ETL_SQL.Orchestrator.Storage
                 results.Add(new HostMetricsDailySummary(reader.GetString(0), reader.GetString(1),
                     Convert.ToDouble(reader.GetValue(2)), Convert.ToDouble(reader.GetValue(3)),
                     Convert.ToDouble(reader.GetValue(4)), Convert.ToDouble(reader.GetValue(5)),
-                    Convert.ToInt64(reader.GetValue(6)), Convert.ToInt64(reader.GetValue(7))));
+                    Convert.ToInt64(reader.GetValue(6)), Convert.ToInt64(reader.GetValue(7)),
+                    reader.IsDBNull(8) ? null : Convert.ToDouble(reader.GetValue(8)),
+                    reader.IsDBNull(9) ? null : Convert.ToDouble(reader.GetValue(9))));
             return results;
         }
 

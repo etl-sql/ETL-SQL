@@ -50,6 +50,39 @@ DECLARE @body = CONCAT('The backup ', @label, ' did not complete successfully.',
         }
 
         [Fact]
+        public async Task Markers_PersistDurably_AndReadBackViaGetJobState()
+        {
+            // The template's whole point is a durable marker a later monitoring script can read.
+            // Prove the persistence round-trip, not just that SET_JOB_STATE executed: run under the
+            // orchestrator job-state path (JobName → IJobHistoryStore), then read the markers back
+            // from the store directly and via GET_JOB_STATE in a separate execution.
+            var provider = DependencyInjectionSetup.BuildServiceProvider();
+            var eval = provider.GetRequiredService<Evaluator>();
+            var store = provider.GetRequiredService<ETL_SQL.Core.Data.IJobHistoryStore>();
+            await store.InitializeAsync();
+
+            var jobName = $"backup_marker_{Guid.NewGuid():N}";
+            eval.JobName = jobName;
+
+            await TestHelpers.Execute(eval, @"
+DECLARE @backup_exit_code = 3;
+DECLARE @status = IIF(@backup_exit_code <> 0, 'FAILURE', 'SUCCESS');
+SELECT SET_JOB_STATE('last_backup_status', @status);
+SELECT SET_JOB_STATE('last_backup_exit_code', CAST(@backup_exit_code AS VARCHAR));");
+
+            // Committed to the orchestrator store on successful completion.
+            Assert.Equal("FAILURE", await store.GetJobStateAsync(jobName, "last_backup_status"));
+            Assert.Equal("3", await store.GetJobStateAsync(jobName, "last_backup_exit_code"));
+
+            // And readable from a later script (the monitoring-check scenario).
+            await TestHelpers.Execute(eval, @"
+DECLARE @lastStatus = GET_JOB_STATE('last_backup_status');
+DECLARE @lastCode   = GET_JOB_STATE('last_backup_exit_code');");
+            Assert.Equal("FAILURE", eval.GetVariable("@lastStatus")?.ToString());
+            Assert.Equal("3", eval.GetVariable("@lastCode")?.ToString());
+        }
+
+        [Fact]
         public async Task ZeroExitCode_MarksSuccess_NoAlert()
         {
             var provider = DependencyInjectionSetup.BuildServiceProvider();

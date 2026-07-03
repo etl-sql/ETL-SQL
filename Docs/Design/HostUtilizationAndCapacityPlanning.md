@@ -81,8 +81,11 @@ Two daily-aggregate tables, written on the scheduler maintenance cycle and retai
 (`Orchestrator:HistoryRollupRetentionDays`, default 400 days) than raw rows:
 - **`JobHistoryDaily`** (PK `(Day, JobName)`): run count, failure count (`Status <> 'SUCCESS'` over
   completed rows — the roll-up excludes in-flight `RUNNING`), total rows, max peak memory.
-- **`HostMetricsDaily`** (PK `(Day, NodeId)`): avg/max memory-load %, avg/max CPU %, min free disk
-  (state/spill). Min free disk is the saturation signal.
+- **`HostMetricsDaily`** (PK `(Day, NodeId)`): avg/max memory-load %, avg/max **process** CPU %,
+  avg/max **whole-host** CPU % (nullable — days sampled before the host probe shipped, or on platforms
+  without one, roll up as NULL, never a fake 0), min free disk (state/spill). Min free disk is the
+  saturation signal. Existing databases gain the host-CPU columns via an idempotent
+  `ALTER TABLE ... ADD COLUMN` on startup (`EnsureHostMetricsDailyColumnsExist`).
 
 Day is derived portably as `substr(<timestamp>, 1, 10)` (the `"O"` round-trip strings sort/prefix as
 `yyyy-MM-dd` on both SQLite and Postgres). Each roll-up is **idempotent and transactional**: within one

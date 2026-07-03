@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Orchestrator.Scheduling;
@@ -99,6 +100,40 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(5, runs);          // every node ran the (idempotent) section
             Assert.Equal(1, maxConcurrent); // but never two at once
             Assert.Null(await _store.GetLockHolderAsync("boot-migration")); // released at the end
+        }
+
+        [Fact]
+        public async Task IntervalGatedSend_ExactlyOneWinnerPerInterval_AndRestartSafe()
+        {
+            // The Portal operational-metrics digest gates its send cadence on this exact pattern:
+            // TryAcquireLockAsync(name, owner, ttl = interval), never renewed, never released — the
+            // TTL expiring is what re-enables the next interval's send. Prove the cluster contract:
+            //   1) when N nodes race, exactly one wins the interval;
+            //   2) losers polling within the interval never win;
+            //   3) a restarted node (fresh owner id, as the digest generates per process) cannot
+            //      re-send within the interval — restart safety;
+            //   4) after the interval elapses, the next attempt wins again.
+            await _store.InitializeAsync();
+            const string lockName = "portal-operational-digest";
+            var interval = TimeSpan.FromMilliseconds(300);
+
+            // 1) Five nodes race for the same interval.
+            var owners = new[] { "node-0", "node-1", "node-2", "node-3", "node-4" };
+            var races = await Task.WhenAll(
+                owners.Select(o => _store.TryAcquireLockAsync(lockName, o, interval)));
+            Assert.Equal(1, races.Count(won => won));
+
+            // 2) Losers re-polling inside the interval still lose.
+            var holder = await _store.GetLockHolderAsync(lockName);
+            foreach (var o in owners.Where(o => o != holder))
+                Assert.False(await _store.TryAcquireLockAsync(lockName, o, interval));
+
+            // 3) A restart mints a new owner id; it must NOT win mid-interval (no duplicate digest).
+            Assert.False(await _store.TryAcquireLockAsync(lockName, "node-restarted-" + Guid.NewGuid().ToString("N"), interval));
+
+            // 4) Once the interval (TTL) lapses, the next poll sends again.
+            await Task.Delay(interval + TimeSpan.FromMilliseconds(200));
+            Assert.True(await _store.TryAcquireLockAsync(lockName, "node-next-interval", interval));
         }
 
         [Fact]

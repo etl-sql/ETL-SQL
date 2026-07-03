@@ -139,9 +139,14 @@ namespace ETL_SQL.Tests.Orchestration
             var s = await _store.LogJobStartAsync("RJob");
             await _store.LogJobEndAsync(s, "SUCCESS", rowsProcessed: 3, peakMemoryBytes: 200);
 
-            // Host metrics: 2 samples for one node.
+            // Host metrics: 3 samples for one node. The first predates the whole-host CPU probe
+            // (HostCpuPercent null) — AVG/MAX must aggregate over the two non-null samples only.
             await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 40, 10, null, 1000, 5000));
-            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 60, 30, null, 500, 4000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 60, 30, 20.0, 500, 4000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 50, 20, 80.0, 800, 4500));
+
+            // A second node with no whole-host CPU at all rolls up to null, not 0.
+            await _store.AppendHostMetricAsync(new HostMetricSample("n2", DateTime.UtcNow, 30, 5, null, 2000, 6000));
 
             await _store.RollUpJobHistoryAsync();
             await _store.RollUpHostMetricsAsync();
@@ -156,6 +161,13 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(50.0, host.AvgMemoryLoadPercent, 1);
             Assert.Equal(60.0, host.MaxMemoryLoadPercent, 1);
             Assert.Equal(500, host.MinStateDiskFreeBytes);
+            Assert.NotNull(host.AvgHostCpuPercent);
+            Assert.Equal(50.0, host.AvgHostCpuPercent!.Value, 1); // AVG(20, 80) — null sample excluded
+            Assert.Equal(80.0, host.MaxHostCpuPercent!.Value, 1);
+
+            var host2 = Assert.Single(await _store.GetHostMetricsDailyAsync("n2", DateTime.UtcNow.AddDays(-1)));
+            Assert.Null(host2.AvgHostCpuPercent);
+            Assert.Null(host2.MaxHostCpuPercent);
 
             // Idempotent: re-running does not duplicate rows.
             await _store.RollUpJobHistoryAsync();
@@ -165,7 +177,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Daily pruning (negative maxAge → cutoff in the future → today's rows are older) removes them.
             Assert.Equal(1, await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(-1)));
-            Assert.Equal(1, await _store.PruneHostMetricsDailyAsync(TimeSpan.FromDays(-1)));
+            Assert.Equal(2, await _store.PruneHostMetricsDailyAsync(TimeSpan.FromDays(-1))); // n1 + n2
         }
 
         [Fact]

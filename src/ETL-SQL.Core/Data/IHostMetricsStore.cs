@@ -23,10 +23,12 @@ public sealed record HostMetricsDailySummary(
     string NodeId,
     double AvgMemoryLoadPercent,
     double MaxMemoryLoadPercent,
-    double AvgCpuPercent,
-    double MaxCpuPercent,
+    double AvgProcessCpuPercent,
+    double MaxProcessCpuPercent,
     long MinStateDiskFreeBytes,
-    long MinSpillDiskFreeBytes);
+    long MinSpillDiskFreeBytes,
+    double? AvgHostCpuPercent,
+    double? MaxHostCpuPercent);
 
 /// <summary>
 /// Append-only time series of host utilization samples. Kept separate from <see cref="IJobHistoryStore"/>
