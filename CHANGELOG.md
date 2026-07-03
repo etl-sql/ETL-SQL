@@ -653,7 +653,12 @@ Hardening from the v0.10.0 release-readiness security review:
 
 
 ## [Unofficial 0.1.0] — 2026-03-13
+
 ### Added
- - **Proof of concept completed**: The proof of concept was completed, flat files (csv) were loaded and joined into #temp tables.
- - **Git repo initialized**: The git repo was initialized and the project was started.
- - **Basic TUI functionality**: Query writing can be done using a TUI interface.
+
+- **Proof of Concept Completed:** Successfully loaded flat files (CSV) and joined them into in-memory `#temp` tables.
+- **Abstract Syntax Tree (AST) Parser:** Implemented the initial AST parser to parse SQL statements and evaluate expression trees.
+- **Core SQL Execution Engine:** Developed the core engine to execute queries, process DML scripts, and return formatted results.
+- **Terminal IDE (TUI) Foundations:** Added a basic console editor interface to write scripts and display execution output.
+- **Git Repository Initialized:** Initialized the git repository and established the project structure.
+- **Development Kickoff:** Work began on March 6, 2026, to design and prototype the initial engine proof of concept.
