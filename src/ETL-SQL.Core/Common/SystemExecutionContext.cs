@@ -190,6 +190,10 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
             throw new ETL_SQL.Services.SecurityException($"SMTP send limit exceeded: this script attempted to send {SmtpEmailsSentThisScript} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
     }
     public int MaxInternalOperations { get => SecurityService.MaxInternalOperations; set => SecurityService.MaxInternalOperations = value; }
+    public int MaxConnectionsPerScript { get; set; } = 100;
+    public int MaxTempTablesPerScript { get; set; } = 100;
+    public int MaxVariablesPerScript { get; set; } = 100;
+    public int MaxVisualsPerScript { get; set; } = 100;
 
     public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
     public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();

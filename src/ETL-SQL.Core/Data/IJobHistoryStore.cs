@@ -98,6 +98,8 @@ public interface IJobHistoryStore
     Task<JobDefinition?> GetJobAsync(string name);
     Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
     Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
+    /// <summary>Returns a stable name-ordered page of saved jobs for management APIs.</summary>
+    Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0);
     Task DeleteJobAsync(string name);
     Task<bool> TryDeleteJobAsync(string name, long expectedVersion);
     Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
@@ -123,6 +125,9 @@ public interface IJobHistoryStore
     Task<long> LogJobStartAsync(string jobName);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
+    /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
+    Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
+        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);
 
     /// <summary>
     /// Deletes completed job-history rows older than <paramref name="maxAge"/> (in-flight RUNNING rows

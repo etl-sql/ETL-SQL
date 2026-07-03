@@ -74,6 +74,10 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:ForeachPageSize` | integer | `10000` | `SET FOREACH_PAGE_SIZE = n` | Number of iterations per segment processed during parallel `FOREACH` loops. |
 | `Engine:MaxMessages` | integer | `1000` | `SET MAX_MESSAGES = n` | Max console print lines or warning messages buffered for a script. |
 | `Engine:MaxInternalOperations` | integer | `100000` | — | Limit on internal loop execution steps. |
+| `Engine:MaxConnectionsPerScript` | integer | `100` | — | Maximum live non-temporary connections in one script. `0` disables the ceiling. Prefer staging and connection reuse well below this limit. |
+| `Engine:MaxTempTablesPerScript` | integer | `100` | — | Maximum live `#temp` tables in one script. Dropping a table releases capacity; `0` disables the ceiling. |
+| `Engine:MaxVariablesPerScript` | integer | `100` | — | Maximum variables in the active script scope. Redeclaration does not consume additional capacity; `0` disables the ceiling. |
+| `Engine:MaxVisualsPerScript` | integer | `100` | — | Maximum live visual definitions in one report script. Replacing a visual does not consume additional capacity; `0` disables the ceiling. |
 | `Engine:TelemetryEnabled` | boolean | `true` | `SET TELEMETRY = ON\|OFF` | Transmits anonymous execution metrics to help refine optimization. |
 | `Engine:LineageEnabled` | boolean | `true` | `SET LINEAGE = ON\|OFF` | Automatically parses sources/targets to construct lineage maps. |
 | `Engine:AuditAdHocRuns` | boolean | `false` | — | When true, every script launched via local CLI is sent to the audit server. |

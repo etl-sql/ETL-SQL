@@ -282,6 +282,14 @@ public interface IEngineContext
     int MaxLastResultRows { get; set; }
     int ForeachPageSize { get; set; }
     int? PreviewLimit { get; set; }
+    /// <summary>Maximum live non-temporary connections in one script. Zero disables the ceiling.</summary>
+    int MaxConnectionsPerScript { get; set; }
+    /// <summary>Maximum live #temp tables in one script. Zero disables the ceiling.</summary>
+    int MaxTempTablesPerScript { get; set; }
+    /// <summary>Maximum variables in the active script scope. Zero disables the ceiling.</summary>
+    int MaxVariablesPerScript { get; set; }
+    /// <summary>Maximum live visual definitions in one report script. Zero disables the ceiling.</summary>
+    int MaxVisualsPerScript { get; set; }
     bool FunctionExists(string name);
     bool ProcedureExists(string name);
 }

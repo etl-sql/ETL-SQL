@@ -40,6 +40,9 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
 
         if (isTemp || !connections.ContainsKey(connName))
         {
+            if (isTemp && !connections.ContainsKey(connName))
+                LiveObjectLimits.EnsureTempTableCapacity(_evaluator);
+
             if (isTemp && _evaluator.UseColumnarTempTables && !_evaluator.IsPersistentSession && IsColumnarEligible(stmt))
             {
                 connections[connName] = new AppendOnlyColumnDataSource(

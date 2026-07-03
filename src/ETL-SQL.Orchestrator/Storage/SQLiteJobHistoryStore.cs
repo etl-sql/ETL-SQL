@@ -133,6 +133,8 @@ namespace ETL_SQL.Orchestrator.Storage
                 );
                 CREATE INDEX IF NOT EXISTS idx_jobs_sched ON Jobs(IsEnabled, NextRun);
                 CREATE INDEX IF NOT EXISTS idx_jh_job_start ON JobHistory(JobName, StartTime);
+                CREATE INDEX IF NOT EXISTS idx_jh_start ON JobHistory(StartTime);
+                CREATE INDEX IF NOT EXISTS idx_jh_end ON JobHistory(EndTime);
                 CREATE INDEX IF NOT EXISTS idx_lh_target ON LineageHistory(TargetTable COLLATE NOCASE);
                 CREATE INDEX IF NOT EXISTS idx_lh_runAt ON LineageHistory(RunAt);";
 
@@ -895,6 +897,23 @@ namespace ETL_SQL.Orchestrator.Storage
             return jobs;
         }
 
+        public async Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Jobs ORDER BY Name LIMIT @limit OFFSET @offset;";
+            command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
+            command.AddParam("@offset", Math.Max(0, offset));
+
+            var jobs = new List<JobDefinition>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) jobs.Add(ReadJob(reader));
+            return jobs;
+        }
+
         public async Task<JobDefinition?> GetJobAsync(string name)
         {
             await EnsureInitializedAsync();
@@ -1292,28 +1311,50 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             if (jobName != null) command.AddParam("@name", jobName);
-            command.AddParam("@limit", limit);
+            command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
 
             var entries = new List<JobHistoryEntry>();
             using var reader = await command.ExecuteReaderAsync();
-            while (await reader.ReadAsync())
-            {
-                entries.Add(new JobHistoryEntry(
-                    reader.GetInt64(0),
-                    reader.GetString(1),
-                    DateTime.Parse(reader.GetString(2)),
-                    reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
-                    reader.GetString(4),
-                    reader.IsDBNull(5) ? null : reader.GetString(5),
-                    reader.GetInt64(6),
-                    reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
-                    reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
-                    reader.IsDBNull(9) ? null : reader.GetString(9),
-                    reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0)
-                ));
-            }
+            while (await reader.ReadAsync()) entries.Add(ReadHistoryEntry(reader));
             return entries;
         }
+
+        public async Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
+            DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM JobHistory WHERE EndTime > @after AND EndTime <= @through " +
+                "ORDER BY EndTime, Id LIMIT @limit OFFSET @offset;";
+            // JobHistory is currently persisted with DateTime.Now, including the local UTC offset.
+            // Compare using the same representation; parsing at the API boundary still returns
+            // absolute instants. A future schema migration can normalize the column itself to UTC.
+            command.AddParam("@after", completedAfter.ToLocalTime().ToString("O"));
+            command.AddParam("@through", completedThrough.ToLocalTime().ToString("O"));
+            command.AddParam("@limit", Math.Clamp(limit, 1, 1000));
+            command.AddParam("@offset", Math.Max(0, offset));
+
+            var entries = new List<JobHistoryEntry>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync()) entries.Add(ReadHistoryEntry(reader));
+            return entries;
+        }
+
+        private static JobHistoryEntry ReadHistoryEntry(DbDataReader reader) => new(
+            reader.GetInt64(0),
+            reader.GetString(1),
+            DateTime.Parse(reader.GetString(2)),
+            reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
+            reader.GetString(4),
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.GetInt64(6),
+            reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
+            reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
+            reader.IsDBNull(9) ? null : reader.GetString(9),
+            reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0));
 
         public async Task<string?> GetJobStateAsync(string jobName, string key)
         {

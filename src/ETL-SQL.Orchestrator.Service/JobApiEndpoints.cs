@@ -130,10 +130,11 @@ namespace ETL_SQL.Orchestrator.Service
 
             // ── Scheduled job management ──────────────────────────────────────
 
-            app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store, IConfiguration cfg) =>
+            app.MapGet("/api/scheduled-jobs", async (HttpContext ctx, IJobHistoryStore store, IConfiguration cfg,
+                int limit = 100, int offset = 0) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var jobs = await store.GetAllJobsAsync();
+                var jobs = await store.GetJobsPageAsync(limit, offset);
                 return Results.Ok(jobs);
             }).WithName("listScheduledJobs");
 
@@ -181,9 +182,7 @@ namespace ETL_SQL.Orchestrator.Service
                         new { Error = "If-Match with the current job version is required." },
                         statusCode: StatusCodes.Status428PreconditionRequired);
 
-                var jobs = await store.GetAllJobsAsync();
-                var existing = jobs.FirstOrDefault(j =>
-                    j.Name.Equals(Uri.UnescapeDataString(name), StringComparison.OrdinalIgnoreCase));
+                var existing = await store.GetJobAsync(Uri.UnescapeDataString(name));
                 if (existing == null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
@@ -222,9 +221,8 @@ namespace ETL_SQL.Orchestrator.Service
                         new { Error = "If-Match with the current job version is required." },
                         statusCode: StatusCodes.Status428PreconditionRequired);
 
-                var jobs = await store.GetAllJobsAsync();
                 var unescaped = Uri.UnescapeDataString(name);
-                if (!jobs.Any(j => j.Name.Equals(unescaped, StringComparison.OrdinalIgnoreCase)))
+                if (await store.GetJobAsync(unescaped) is null)
                     return Results.NotFound(new { Error = $"Job '{name}' not found." });
 
                 if (!await store.TryDeleteJobAsync(unescaped, expectedVersion.Value))
@@ -243,7 +241,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IJobHistoryStore store, IConfiguration cfg, int limit = 50) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = await store.GetHistoryAsync(Uri.UnescapeDataString(name), limit);
+                var history = await store.GetHistoryAsync(Uri.UnescapeDataString(name), Math.Clamp(limit, 1, 1000));
                 return Results.Ok(history);
             }).WithName("getScheduledJobHistory");
 
@@ -251,7 +249,7 @@ namespace ETL_SQL.Orchestrator.Service
                 IConfiguration cfg, string? jobName = null, int limit = 100) =>
             {
                 if (ApiKeyDenied(ctx, cfg)) return Results.Unauthorized();
-                var history = await store.GetHistoryAsync(jobName, limit);
+                var history = await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000));
                 return Results.Ok(history);
             }).WithName("getAllJobHistory");
 

@@ -617,8 +617,18 @@ extent count, partition passes, and required free disk.
 
 **Other scale dimensions (the user's matrix):**
 - [x] **Script size** (10k lines × 10) — verify lexer/parser is O(n) and AST memory is bounded for very large scripts; `RUN SCRIPT` parse-caching already helps repeated targets. *(A dedicated scale assessment parses 10,000 and 100,000 one-statement lines after warmup, verifies exact AST statement counts, caps 100k-line thread allocation below 512 MB, and requires both allocation and elapsed growth to remain within 15x for a 10x input increase. The assessment passes in 245 ms on the current development host.)*
-- [ ] **Object count per script** (10/50/100 CONNECTION/VISUAL/@param/#temp) — agree with capping via policy limits (ties into v0.14.0 Phase 3.5 resource ceilings); 100 live connections in one script is an anti-pattern → guidance + a configurable limit rather than an algorithm change.
-- [ ] **Server/orchestrator scale** (20/100/1000 reports/jobs) — the EF findings above (N+1, `AsNoTracking`, client-eval) are the relevant levers; verify scheduler/job-history queries paginate and index well at 1000 jobs.
+- [x] **Object count per script** (10/50/100 CONNECTION/VISUAL/@param/#temp) — configurable
+  `Engine:MaxConnectionsPerScript`, `MaxTempTablesPerScript`, `MaxVariablesPerScript`, and
+  `MaxVisualsPerScript` ceilings default to 100 (`0` disables), reject before partial registration,
+  and do not charge replacements/redeclarations. A 12-case assessment executes every object kind at
+  10/50/100 and focused tests verify all four rejection paths. Reuse connections and split scripts
+  rather than treating the 100-object safety ceiling as a design target.
+- [x] **Server/orchestrator scale** (20/100/1000 reports/jobs) — dedicated assessments verify bounded,
+  untracked 100-row report catalog reads and paged job/history reads at all three sizes. SQLite query
+  plans use the report-folder, due-job, history-start, and history-completion indexes. Scheduled-job
+  management now supports stable `limit`/`offset` pages (maximum 1,000), point updates/deletes avoid
+  full catalog reads, and Portal completion polling uses bounded 1,000-row time-window pages instead
+  of unbounded history materialization.
 
 ### Measured: Stress tier (5M, 100x) — 2026-06-29
 

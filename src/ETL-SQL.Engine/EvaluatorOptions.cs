@@ -19,6 +19,10 @@ public class EvaluatorOptions
     public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
     public int MaxSmtpEmailsPerScript { get; set; } = SecurityService.DefaultMaxSmtpEmailsPerScript;
     public int MaxInternalOperations { get; set; } = 100000;
+    public int MaxConnectionsPerScript { get; set; } = 100;
+    public int MaxTempTablesPerScript { get; set; } = 100;
+    public int MaxVariablesPerScript { get; set; } = 100;
+    public int MaxVisualsPerScript { get; set; } = 100;
 
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;

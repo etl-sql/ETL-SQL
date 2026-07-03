@@ -39,6 +39,8 @@ public class CreateVisualStatementHandler(ILogger logger) : IStatementHandler
 
         // Register / overwrite visual definition
         bool alreadyExists = context.ReportContext.VisualDefinitions.ContainsKey(stmt.Name);
+        if (!alreadyExists)
+            LiveObjectLimits.EnsureVisualCapacity(context);
         if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !context.InteractiveMode)
         {
             throw new ExecutionException($"Visual '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP VISUAL first.", null, stmt.Line, stmt.Column);

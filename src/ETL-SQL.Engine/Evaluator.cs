@@ -167,6 +167,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         get => _options.MaxInternalOperations;
         set { _options.MaxInternalOperations = value; _securityService.MaxInternalOperations = value; }
     }
+    public int MaxConnectionsPerScript { get => _options.MaxConnectionsPerScript; set => _options.MaxConnectionsPerScript = value; }
+    public int MaxTempTablesPerScript { get => _options.MaxTempTablesPerScript; set => _options.MaxTempTablesPerScript = value; }
+    public int MaxVariablesPerScript { get => _options.MaxVariablesPerScript; set => _options.MaxVariablesPerScript = value; }
+    public int MaxVisualsPerScript { get => _options.MaxVisualsPerScript; set => _options.MaxVisualsPerScript = value; }
 
     public bool IsPersistentSession { get; set; }
     public bool IsResuming { get; set; }
@@ -534,6 +538,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
         MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
         MaxInternalOperations = config?.GetValue<int>("Security:MaxInternalOperations", 100000) ?? 100000;
+        MaxConnectionsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxConnectionsPerScript", 100) ?? 100);
+        MaxTempTablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxTempTablesPerScript", 100) ?? 100);
+        MaxVariablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVariablesPerScript", 100) ?? 100);
+        MaxVisualsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVisualsPerScript", 100) ?? 100);
         WeekStartDay = DefaultThresholds.StartOfWeek(config);
         ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         IsPersistentSession = DefaultThresholds.PersistenceDefault(config);

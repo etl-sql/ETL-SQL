@@ -37,6 +37,9 @@ public class CreateConnectionStatementHandler(
         bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
         bool isInteractive = context.InteractiveMode;
 
+        if (!alreadyExists && !context.IsWhatIf)
+            LiveObjectLimits.EnsureConnectionCapacity(context);
+
         if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !isInteractive)
             throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists. Use ALTER CONNECTION to modify it.");
 

@@ -455,6 +455,22 @@ curl -X DELETE http://localhost:5001/jobs/{id} \
 
 From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).
 
+### 3.6 Paging Scheduled Jobs and History
+
+The management APIs bound catalog responses so large installations do not materialize every job or
+history row in one request. Job pages are ordered by name and accept `limit` (1–1,000, default 100)
+and `offset`. History endpoints accept `limit` (1–1,000).
+
+```text
+GET /api/scheduled-jobs?limit=100&offset=200
+GET /api/scheduled-jobs/NightlyArchive/history?limit=100
+GET /api/history?jobName=NightlyArchive&limit=100
+```
+
+Scheduler due-job reads are not paged because every due job must be considered in a scheduling pass;
+they use the `(IsEnabled, NextRun)` index. Portal completion polling uses bounded 1,000-row,
+completion-time pages internally.
+
 ---
 
 ## 4. Session Persistence

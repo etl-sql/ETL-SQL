@@ -30,6 +30,9 @@ public class DeclareStatementHandler : IStatementHandler
         if (SystemVariableProvider.IsSystemVariable(stmt.VariableName))
             throw new ExecutionException($"System variable {stmt.VariableName} is reserved and cannot be declared.");
 
+        if (!context.VarContext.ContainsVariableInCurrentScope(stmt.VariableName))
+            LiveObjectLimits.EnsureVariableCapacity(context);
+
         _logger.Debug("Declaring variable {VariableName} as {DataType}", stmt.VariableName, stmt.DataType);
 
         object? val = null;
