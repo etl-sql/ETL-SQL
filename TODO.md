@@ -492,7 +492,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 
 #### P5 — Mutation and broader semantics after the fast path is proven
 
-- [~] Add delete tombstones, update delta segments, and compaction only after append-only storage and
+- [x] Add delete tombstones, update delta segments, and compaction only after append-only storage and
   columnar operator gates pass. Mutation complexity must not delay proof of the central architecture.
   *(Native DELETE now records grant-accounted per-segment tombstone bitmaps for predicates supported by
   the selection-vector compiler, preserves columnar storage, filters tombstoned rows during native and
@@ -500,7 +500,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   UPDATE now tombstones matched ordinals and appends transformed rows as a native delta segment,
   materializing only matched rows for general expression evaluation; key changes, constraint reuse,
   commit, and rollback preserve native storage. DELETE/UPDATE with OUTPUT or unsupported predicates
-  retain the established row-store downgrade. Compaction remains.)*
+  retain the established row-store downgrade. Best-effort compaction rewrites tombstoned segments once
+  dead rows reach 25% of physical rows, skips while transaction snapshots are active, preserves old
+  segments until replacement grants succeed, and leaves mutations successful if peak-memory admission
+  rejects compaction.)*
 - [ ] Make `MERGE` bounded; it currently materializes source and target lists and is outside the initial
   billion-row claim.
 - [ ] Reduce holistic aggregates to argument/order-key storage rather than full rows.

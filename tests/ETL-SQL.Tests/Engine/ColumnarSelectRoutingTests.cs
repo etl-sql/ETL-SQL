@@ -165,6 +165,8 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(2, native.EstimatedRowCount);
         Assert.Equal(new[] { 1, 2 }, rows.Select(row => Convert.ToInt32(row["Id"])).ToArray());
         Assert.Equal("replacement", rows[1]["Name"]);
+        Assert.Equal(1, native.CompactionCount);
+        Assert.Equal(0, native.TombstonedRowCount);
     }
 
     [Fact]
@@ -183,6 +185,7 @@ public sealed class ColumnarSelectRoutingTests
             .Select(row => Convert.ToInt32(row["Id"])).OrderBy(id => id).ToArray();
         Assert.Equal(new[] { 1, 2 }, ids);
         Assert.Equal(2, native.EstimatedRowCount);
+        Assert.Equal(0, native.TombstonedRowCount);
     }
 
     [Fact]
@@ -202,6 +205,25 @@ public sealed class ColumnarSelectRoutingTests
             .OrderBy(row => Convert.ToInt32(row["Id"])).ToList();
         Assert.Equal(new[] { 1, 2, 3 }, rows.Select(row => Convert.ToInt32(row["Id"])).ToArray());
         Assert.Equal("updated", rows[2]["Name"]);
+        Assert.Equal(1, native.CompactionCount);
+        Assert.Equal(0, native.TombstonedRowCount);
+    }
+
+    [Fact]
+    public async Task TombstoneCompactionWaitsUntilDeadRowThreshold()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT); " +
+            "INSERT INTO #native VALUES (1), (2), (3), (4), (5); " +
+            "DELETE FROM #native WHERE Id = 1;"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        Assert.Equal(0, native.CompactionCount);
+        Assert.Equal(1, native.TombstonedRowCount);
+        Assert.Equal(4, native.EstimatedRowCount);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -35,6 +36,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     private long _allocatedSegmentBytes;
     private long _constraintEstimatedBytes;
     private long _tombstoneBytes;
+    private long _compactionCount;
 
     public AppendOnlyColumnDataSource(
         IEnumerable<ColumnDefinition> schema,
@@ -78,6 +80,14 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         + Interlocked.Read(ref _constraintEstimatedBytes) + Interlocked.Read(ref _tombstoneBytes);
     public IReadOnlyDictionary<string, ColumnDefinition> LogicalSchema => _logicalSchema;
     public IReadOnlyList<TableConstraint> TableConstraints { get; }
+    public long CompactionCount => Interlocked.Read(ref _compactionCount);
+    public long TombstonedRowCount
+    {
+        get
+        {
+            lock (_segments) return _segmentTombstones.Sum(CountTombstones);
+        }
+    }
 
     public string Path => string.Empty;
     public Dictionary<string, string>? Options => null;
@@ -292,6 +302,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                     _tombstoneBytes = prospectiveBytes;
                     _rowCount -= deleted;
                     RebuildConstraintsFromLiveRows(cancellationToken);
+                    TryCompactTombstones(cancellationToken);
                     return deleted;
                 }
                 catch
@@ -406,6 +417,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                     catch { RollbackKeys(stagedKeys); throw; }
                     delta = null; // ownership transferred
                     _rowCount += updated;
+                    TryCompactTombstones(cancellationToken);
                     return updated;
                 }
                 catch
@@ -734,6 +746,86 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         if (bytes > 0 && _tombstoneMemoryLease.RegisterAndCheckSpill(bytes))
             throw MemoryGrantExceeded(bytes);
         _tombstoneBytes = bytes;
+    }
+
+    private bool TryCompactTombstones(CancellationToken cancellationToken)
+    {
+        if (_transactionSnapshots.Count > 0) return false;
+        long physicalRows = 0;
+        long tombstonedRows = 0;
+        for (var index = 0; index < _segments.Count; index++)
+        {
+            physicalRows += _segments[index].RowCount;
+            tombstonedRows += CountTombstones(_segmentTombstones[index]);
+        }
+        if (tombstonedRows == 0 || tombstonedRows * 4 < physicalRows) return false;
+
+        var replacements = new List<(int Index, ColumnBatch? Batch)>();
+        try
+        {
+            for (var index = 0; index < _segments.Count; index++)
+            {
+                var tombstone = _segmentTombstones[index];
+                if (tombstone == null) continue;
+                cancellationToken.ThrowIfCancellationRequested();
+                using var selection = CreateLiveSelection(_segments[index].RowCount, tombstone);
+                var compacted = selection.Count == 0
+                    ? null
+                    : ColumnBatchAdapter.Compact(
+                        _segments[index], _columnNames, selection, cancellationToken, _columnNames);
+                replacements.Add((index, compacted));
+            }
+
+            var accepted = 0;
+            try
+            {
+                foreach (var replacement in replacements)
+                {
+                    if (replacement.Batch == null) continue;
+                    AcceptSegment(replacement.Batch);
+                    accepted++;
+                }
+            }
+            catch (ExecutionException)
+            {
+                while (accepted > 0)
+                {
+                    var last = _segments.Count - 1;
+                    _segments.RemoveAt(last);
+                    _segmentTombstones.RemoveAt(last);
+                    accepted--;
+                }
+                foreach (var replacement in replacements)
+                    replacement.Batch?.Dispose();
+                return false;
+            }
+
+            foreach (var replacement in replacements.OrderByDescending(item => item.Index))
+            {
+                var old = _segments[replacement.Index];
+                _segments.RemoveAt(replacement.Index);
+                _segmentTombstones.RemoveAt(replacement.Index);
+                old.Dispose();
+            }
+            RebaseTombstoneGrant(_segmentTombstones.Sum(bitmap => (long)(bitmap?.LongLength ?? 0)));
+            Interlocked.Increment(ref _compactionCount);
+            return true;
+        }
+        catch
+        {
+            foreach (var replacement in replacements)
+                if (replacement.Batch != null && !_segments.Contains(replacement.Batch))
+                    replacement.Batch.Dispose();
+            throw;
+        }
+    }
+
+    private static long CountTombstones(byte[]? bitmap)
+    {
+        if (bitmap == null) return 0;
+        long count = 0;
+        foreach (var value in bitmap) count += BitOperations.PopCount((uint)value);
+        return count;
     }
 
     private static SelectionVector CreateLiveSelection(int rowCount, byte[] tombstones)
