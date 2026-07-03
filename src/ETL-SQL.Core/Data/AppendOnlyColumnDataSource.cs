@@ -312,6 +312,129 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         finally { _gate.Release(); }
     }
 
+    /// <summary>
+    /// Replaces rows selected by a native predicate using tombstones plus one appended delta segment.
+    /// Only selected rows cross the row expression boundary. Returns <c>null</c> without mutation when
+    /// the predicate cannot be bound to native buffers.
+    /// </summary>
+    public async Task<long?> UpdateWhereAsync(
+        Expression? predicate,
+        bool caseSensitiveComparison,
+        Func<Row, ValueTask<Row>> transform,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(transform);
+        ThrowIfDisposed();
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            ThrowIfDisposed();
+            FreezeHead();
+            var selections = new SelectionVector?[_segments.Count];
+            try
+            {
+                for (var index = 0; index < _segments.Count; index++)
+                {
+                    if (predicate == null)
+                        selections[index] = SelectionVector.FromIndices(Enumerable.Range(0, _segments[index].RowCount));
+                    else if (!ColumnarPredicateCompiler.TrySelect(
+                        _segments[index], predicate, out selections[index],
+                        cancellationToken: cancellationToken,
+                        caseSensitiveComparison: caseSensitiveComparison))
+                        return null;
+                }
+
+                var replacements = CreateHead();
+                for (var segmentIndex = 0; segmentIndex < selections.Length; segmentIndex++)
+                {
+                    var segment = _segments[segmentIndex];
+                    var tombstone = _segmentTombstones[segmentIndex];
+                    foreach (var sourceRow in selections[segmentIndex]!.Indices.ToArray())
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (tombstone != null && (tombstone[sourceRow >> 3] & (1 << (sourceRow & 7))) != 0)
+                            continue;
+                        var row = replacements.NewRow();
+                        for (var column = 0; column < _columnNames.Length; column++)
+                        {
+                            var field = segment.Schema.Fields[column];
+                            row[column] = ColumnBatchAdapter.RestoreEngineValue(
+                                segment.Columns[column].GetBoxedValue(sourceRow), field.LogicalType);
+                        }
+                        replacements.Rows.Add(NormalizeRow(await transform(row)));
+                    }
+                }
+                if (replacements.Rows.Count == 0) return 0;
+
+                var originalTombstones = _segmentTombstones.Select(bitmap => bitmap?.ToArray()).ToArray();
+                var originalCount = _rowCount;
+                var originalSegmentCount = _segments.Count;
+                var addedBitmapBytes = 0L;
+                for (var index = 0; index < selections.Length; index++)
+                    if (_segmentTombstones[index] == null && selections[index]!.Count > 0)
+                        addedBitmapBytes = checked(addedBitmapBytes + (_segments[index].RowCount + 7L) / 8L);
+                var prospectiveBytes = checked(_tombstoneBytes + addedBitmapBytes);
+                if (_tombstoneMemoryLease.RegisterAndCheckSpill(prospectiveBytes))
+                    throw MemoryGrantExceeded(prospectiveBytes);
+
+                ColumnBatch? delta = null;
+                try
+                {
+                    long updated = 0;
+                    for (var index = 0; index < selections.Length; index++)
+                    {
+                        var bitmap = _segmentTombstones[index] ??=
+                            new byte[(_segments[index].RowCount + 7) / 8];
+                        foreach (var row in selections[index]!.Indices.Span)
+                        {
+                            var mask = (byte)(1 << (row & 7));
+                            ref var slot = ref bitmap[row >> 3];
+                            if ((slot & mask) != 0) continue;
+                            slot |= mask;
+                            updated++;
+                        }
+                    }
+                    _tombstoneBytes = prospectiveBytes;
+                    _rowCount -= updated;
+                    RebuildConstraintsFromLiveRows(cancellationToken);
+
+                    delta = ColumnBatchAdapter.FromDataTable(replacements, _logicalSchema);
+                    ValidateNativeNullability(delta);
+                    var stagedKeys = StageKeys(delta);
+                    CommitKeys(stagedKeys);
+                    try { AcceptSegment(delta); }
+                    catch { RollbackKeys(stagedKeys); throw; }
+                    delta = null; // ownership transferred
+                    _rowCount += updated;
+                    return updated;
+                }
+                catch
+                {
+                    delta?.Dispose();
+                    while (_segments.Count > originalSegmentCount)
+                    {
+                        var last = _segments.Count - 1;
+                        var appended = _segments[last];
+                        _segments.RemoveAt(last);
+                        _segmentTombstones.RemoveAt(last);
+                        appended.Dispose();
+                    }
+                    _segmentTombstones.Clear();
+                    _segmentTombstones.AddRange(originalTombstones);
+                    _rowCount = originalCount;
+                    RebaseTombstoneGrant(originalTombstones.Sum(bitmap => (long)(bitmap?.LongLength ?? 0)));
+                    RebuildConstraintsFromLiveRows(cancellationToken);
+                    throw;
+                }
+            }
+            finally
+            {
+                foreach (var selection in selections) selection?.Dispose();
+            }
+        }
+        finally { _gate.Release(); }
+    }
+
     public async Task TruncateAsync()
     {
         ThrowIfDisposed();

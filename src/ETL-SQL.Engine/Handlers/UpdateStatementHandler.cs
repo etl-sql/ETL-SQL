@@ -76,6 +76,30 @@ public class UpdateStatementHandler(ILogger logger) : IStatementHandler
                 return;
             }
 
+            if (connection is AppendOnlyColumnDataSource columnar && stmt.Output == null)
+            {
+                var nativeUpdated = await columnar.UpdateWhereAsync(
+                    stmt.WhereClause,
+                    context.CaseSensitiveComparison,
+                    async row =>
+                    {
+                        foreach (var assignment in stmt.Assignments)
+                            row[assignment.ColumnName] = await context.EvaluateValue(assignment.Value, row);
+                        return row;
+                    },
+                    context.CancellationToken);
+                if (nativeUpdated.HasValue)
+                {
+                    context.IncrementOperationCount(
+                        OperationType.EngineInternal,
+                        count: nativeUpdated.Value > int.MaxValue ? int.MaxValue : (int)nativeUpdated.Value);
+                    context.Telemetry.RowsProcessed += nativeUpdated.Value;
+                    if (context.IsVerbose)
+                        _logger.WriteLine($"Finished appending {nativeUpdated.Value} update deltas in {connName}");
+                    return;
+                }
+            }
+
             connection = await TempTableStorageRouter.EnsureMutableAsync(context, connName, connection, "UPDATE");
 
             // 1. Prepare temp storage to avoid reading/writing to the same file simultaneously

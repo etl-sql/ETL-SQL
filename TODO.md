@@ -497,8 +497,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   *(Native DELETE now records grant-accounted per-segment tombstone bitmaps for predicates supported by
   the selection-vector compiler, preserves columnar storage, filters tombstoned rows during native and
   row reads, rebuilds unique/primary-key state from live rows, and snapshots tombstones transactionally.
-  DELETE with OUTPUT or unsupported predicates retains the established row-store downgrade. Update
-  delta segments and compaction remain.)*
+  UPDATE now tombstones matched ordinals and appends transformed rows as a native delta segment,
+  materializing only matched rows for general expression evaluation; key changes, constraint reuse,
+  commit, and rollback preserve native storage. DELETE/UPDATE with OUTPUT or unsupported predicates
+  retain the established row-store downgrade. Compaction remains.)*
 - [ ] Make `MERGE` bounded; it currently materializes source and target lists and is outside the initial
   billion-row claim.
 - [ ] Reduce holistic aggregates to argument/order-key storage rather than full rows.

@@ -122,7 +122,7 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task ColumnarTempDowngradesForReplaceUpdateAndDeleteWithEstablishedSemantics()
+    public async Task ReplaceDowngradesWhileUpdateAndDeleteUseColumnarDeltas()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.UseColumnarTempTables = true;
@@ -141,7 +141,7 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Single(replaceRows);
         Assert.Equal("replaced", replaceRows[0]["Name"]);
 
-        var update = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#update"]);
+        var update = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#update"]);
         var updateRows = (await update.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
         Assert.Single(updateRows);
         Assert.Equal("updated", updateRows[0]["Name"]);
@@ -186,6 +186,25 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task NativeUpdateDeltaCanChangeAndReleasePrimaryKeys()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY, Name VARCHAR(20)); " +
+            "INSERT INTO #native VALUES (1, 'one'), (2, 'two'); " +
+            "UPDATE #native SET Id = 3, Name = 'updated' WHERE Id = 1; " +
+            "INSERT INTO #native VALUES (1, 'replacement');"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var rows = (await native.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows)
+            .OrderBy(row => Convert.ToInt32(row["Id"])).ToList();
+        Assert.Equal(new[] { 1, 2, 3 }, rows.Select(row => Convert.ToInt32(row["Id"])).ToArray());
+        Assert.Equal("updated", rows[2]["Name"]);
+    }
+
+    [Fact]
     public async Task ColumnarTempMutationDowngradeRestoresOriginalStoreOnRollback()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -206,7 +225,7 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
-    public async Task ColumnarTempMutationDowngradeRetainsRowStoreOnCommit()
+    public async Task ColumnarUpdateDeltaRetainsNativeStoreOnCommit()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
         evaluator.UseColumnarTempTables = true;
@@ -219,8 +238,8 @@ public sealed class ColumnarSelectRoutingTests
             "UPDATE #native SET Id = 2; " +
             "COMMIT;"));
 
-        var rowStore = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#native"]);
-        var rows = (await rowStore.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var rows = (await native.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows).ToList();
         Assert.Single(rows);
         Assert.Equal(2, Convert.ToInt32(rows[0]["Id"]));
     }
