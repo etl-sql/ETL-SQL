@@ -17,6 +17,13 @@ Categories: `Syntax` | `Semantic` | `TypeSystem` | `Runtime` | `Connector` | `Pa
 
 ---
 
+### v0.14.0 — Security: Removal of generic .tmp from whitelisted file extensions
+- **What changed**: The `.tmp` file extension has been removed from the whitelist of allowed extensions in `SecurityService`. Files with the `.tmp` extension are no longer readable or writable by default.
+- **Who is affected**: Scripts that explicitly read from or write to `.tmp` files.
+- **Migration**: Use `.txt` or other allowed extensions (e.g. `.dat`, `.csv`) for temporary script-driven operations.
+- **Diagnostic**: Linter or runtime errors when accessing `.tmp` files.
+- **Earliest removal**: Immediate.
+
 ### v0.12.0 — Runtime: Portal administration mutations require optimistic-concurrency versions
 - **What changed**: Updates, deletes, ACL changes, and bulk administration operations for users, groups, folders, reports, datasets, subscriptions, SMTP definitions, and scheduled jobs require the version returned by the latest read; stale writes return `409 Conflict` with current state instead of silently overwriting a newer edit.
 - **Who is affected**: Report Portal API and UI clients that mutate administrator-managed resources.
