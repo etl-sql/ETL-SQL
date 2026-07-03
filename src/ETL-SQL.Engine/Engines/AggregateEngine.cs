@@ -844,6 +844,8 @@ public class AggregateEngine
             "VAR" or "VAR_SAMP" or "VARP" or "VAR_POP"
                 or "STDEV" or "STDDEV" or "STDDEV_SAMP" or "STDEVP" or "STDDEV_POP" => new VarianceState(name),
             "COVAR_SAMP" or "COVAR_POP" or "CORR" => new CovarianceState(name),
+            "STRING_AGG" or "LIST_AGG" or "GROUP_CONCAT" => new StringCollectionState(name),
+            "PERCENTILE_CONT" or "PERCENTILE_DISC" => new PercentileState(name == "PERCENTILE_CONT"),
             _ => new GenericState(f)
         };
     }
@@ -1165,6 +1167,103 @@ public class AggregateEngine
         public async ValueTask<object?> Finalize(AggregateEngine engine)
         {
             return await engine.EvaluateAggregate(_f, _rows);
+        }
+    }
+
+    private sealed class StringCollectionState(string functionName) : IAggregateState
+    {
+        private readonly List<CollectedValue> _values = new();
+        private HashSet<object?>? _distinct;
+        private string? _separator;
+        private long _sequence;
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            _function ??= f;
+            var value = f.Arguments.Count == 0 ? null : await context.EvaluateValue(f.Arguments[0], row);
+            if (functionName == "GROUP_CONCAT" && (value == null || value == DBNull.Value)) return;
+            if (f.IsDistinct && !(_distinct ??= new HashSet<object?>()).Add(value)) return;
+            if (_separator == null && f.Arguments.Count >= 2)
+                _separator = (await context.EvaluateValue(f.Arguments[1], row))?.ToString();
+            object?[]? keys = null;
+            if (f.WithinGroupOrderBy is { Count: > 0 })
+            {
+                keys = new object?[f.WithinGroupOrderBy.Count];
+                for (var index = 0; index < keys.Length; index++)
+                    keys[index] = await context.EvaluateValue(f.WithinGroupOrderBy[index].Expression, row);
+            }
+            _values.Add(new CollectedValue(value, keys, _sequence++));
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_values.Count == 0)
+                return new ValueTask<object?>(functionName == "GROUP_CONCAT" ? null : string.Empty);
+            if (_values[0].OrderKeys != null)
+            {
+                _values.Sort((left, right) =>
+                {
+                    for (var index = 0; index < left.OrderKeys!.Length; index++)
+                    {
+                        var order = engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]);
+                        if (order != 0)
+                            return engineOrderDescending(index) ? -order : order;
+                    }
+                    return left.Sequence.CompareTo(right.Sequence);
+                });
+            }
+            var separator = _separator ?? ",";
+            var values = _values.Select(item => item.Value?.ToString() ?? string.Empty);
+            return new ValueTask<object?>(string.Join(separator, values));
+
+            bool engineOrderDescending(int index)
+                => _function!.WithinGroupOrderBy![index].Descending;
+        }
+
+        private FunctionCallExpression? _function;
+
+        private readonly record struct CollectedValue(object? Value, object?[]? OrderKeys, long Sequence);
+    }
+
+    private sealed class PercentileState(bool continuous) : IAggregateState
+    {
+        private readonly List<decimal> _values = new();
+        private double? _percentile;
+        private bool _descending;
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context) || f.WithinGroupOrderBy is not { Count: > 0 }) return;
+            if (_percentile == null && f.Arguments.Count > 0)
+            {
+                _percentile = Math.Clamp(
+                    Convert.ToDouble(await context.EvaluateValue(f.Arguments[0], row)), 0.0, 1.0);
+                _descending = f.WithinGroupOrderBy[0].Descending;
+            }
+            var value = await context.EvaluateValue(f.WithinGroupOrderBy[0].Expression, row);
+            if (value != null) _values.Add(SafeToDecimal(value, context));
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_values.Count == 0 || _percentile == null) return new ValueTask<object?>((object?)null);
+            _values.Sort();
+            if (_descending) _values.Reverse();
+            if (!continuous)
+            {
+                for (var index = 0; index < _values.Count; index++)
+                    if ((double)(index + 1) / _values.Count >= _percentile.Value)
+                        return new ValueTask<object?>(_values[index]);
+                return new ValueTask<object?>(_values[^1]);
+            }
+            if (_values.Count == 1) return new ValueTask<object?>(_values[0]);
+            var rowNumber = _percentile.Value * (_values.Count - 1);
+            var lower = (int)Math.Floor(rowNumber);
+            var upper = (int)Math.Ceiling(rowNumber);
+            if (lower == upper) return new ValueTask<object?>(_values[lower]);
+            var fraction = (decimal)(rowNumber - lower);
+            return new ValueTask<object?>(_values[lower] + fraction * (_values[upper] - _values[lower]));
         }
     }
 

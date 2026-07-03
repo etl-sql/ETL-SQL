@@ -408,9 +408,8 @@ namespace ETL_SQL.Tests.Operations.Operations
             }
         }
 
-        // A single-group holistic GROUP_CONCAT buffers every row (GenericState), so its live heap
-        // growth is large and unambiguous — making the governor trigger deterministic regardless of
-        // GC timing (unlike an O(1) COUNT whose live state is a handful of bytes).
+        // GROUP_CONCAT retains only its argument values (not full rows), but a single large group is
+        // still unsplittable and exercises SpillOnly churn under an intentionally tiny grant.
         private static (List<Expression> groupBy, List<SelectColumn> cols, List<string> names) ConcatByCategory()
         {
             var groupBy = new List<Expression> { new IdentifierExpression("category") };
@@ -438,7 +437,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
             try
             {
-                // Same unsplittable single group + holistic buffering, but churn mode completes.
+                // Unsplittable single group with value-only holistic state; churn mode completes.
                 var (groupBy, cols, names) = ConcatByCategory();
                 var engine = new ExternalAggregateEngine(eval, logger);
 

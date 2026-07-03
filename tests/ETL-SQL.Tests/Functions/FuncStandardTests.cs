@@ -153,6 +153,13 @@ namespace ETL_SQL.Tests.Functions
 
             var resDesc = await ev.EvaluateSelect((SelectStatement)Parse("SELECT STRING_AGG(Val, ',') WITHIN GROUP (ORDER BY Val DESC) AS Res FROM #T;").Statements[0]).FirstAsync();
             Assert.True(resDesc.Rows[0]["Res"]?.ToString() == "C,B,A", $"Ordered DESC failed: {resDesc.Rows[0]["Res"]}");
+
+            await ev.Evaluate(Parse("CREATE TABLE #T2 (Val STRING, SortKey INT); " +
+                "INSERT INTO #T2 VALUES ('first', 2), ('second', 1);"));
+            var byDifferentKey = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT STRING_AGG(Val, '|') WITHIN GROUP (ORDER BY SortKey) AS Res FROM #T2;")
+                .Statements[0]).FirstAsync();
+            Assert.Equal("second|first", byDifferentKey.Rows[0]["Res"]);
         }
 
         [Fact]

@@ -510,7 +510,12 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   final rewrite before accepting each row. It fails with a remediation diagnostic at the per-operator
   or process grant instead of growing without bound; same-database MSSQL continues to use pushdown.
   This establishes a bounded fail-fast contract rather than claiming spill-to-completion at 1B.)*
-- [ ] Reduce holistic aggregates to argument/order-key storage rather than full rows.
+- [x] Reduce holistic aggregates to argument/order-key storage rather than full rows. *(Incremental
+  states for STRING_AGG/LIST_AGG/GROUP_CONCAT retain only argument values, evaluated order keys,
+  separator state, distinct values when requested, and stable sequence ordinals. Percentile states
+  retain only decimal order values plus percentile/direction metadata. Finalization sorts this compact
+  state directly; unrelated row columns are no longer retained. Ordered string aggregation also now
+  correctly returns the argument ordered by a different key.)*
 - [ ] Add streaming/specialized window paths where frame semantics permit; a single huge window
   partition remains outside the initial claim.
 - [ ] Extend columnar kernels based on measured hotspots. Use `System.Numerics.Vector<T>` or
