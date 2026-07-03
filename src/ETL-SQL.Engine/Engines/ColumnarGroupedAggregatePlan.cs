@@ -105,7 +105,6 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             return false;
         }
         if (!IsSupportedKey(key.ElementType)) return false;
-        if (key.ElementType == typeof(string) && _valueColumns.Length != 0) return false;
         foreach (var valueColumn in _valueColumns)
         {
             try { if (!IsNumeric(batch.GetColumn(valueColumn).ElementType)) return false; }
@@ -158,6 +157,13 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                 batch.Schema.Fields[batch.Schema.GetOrdinal(_keyColumn)].LogicalType)!;
         }
         var valueType = batch.GetColumn(valueColumn).ElementType;
+        if (keyType == typeof(string))
+        {
+            var stringStateType = typeof(StringState<>).MakeGenericType(valueType);
+            return (IState)Activator.CreateInstance(
+                stringStateType, _context, _keyColumn, valueColumn,
+                batch.Schema.Fields[batch.Schema.GetOrdinal(valueColumn)].LogicalType)!;
+        }
         var stateType = typeof(State<,>).MakeGenericType(keyType, valueType);
         return (IState)Activator.CreateInstance(
             stateType, _context, _keyColumn, valueColumn,
@@ -338,6 +344,80 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                 }
                 table.Rows.Add(row);
             }
+        }
+
+        public void Dispose() => _result.Dispose();
+    }
+
+    private sealed class StringState<TValue> : IState where TValue : unmanaged, INumber<TValue>
+    {
+        private readonly IExecutionContext _context;
+        private readonly string _keyColumn;
+        private readonly string _valueColumn;
+        private readonly string _valueLogicalType;
+        private readonly NativeStringGroupAggregateResult<TValue> _result;
+
+        public StringState(
+            IExecutionContext context,
+            string keyColumn,
+            string valueColumn,
+            string valueLogicalType)
+        {
+            _context = context;
+            _keyColumn = keyColumn;
+            _valueColumn = valueColumn;
+            _valueLogicalType = valueLogicalType;
+            _result = new NativeStringGroupAggregateResult<TValue>(context.MemoryArbiter);
+        }
+
+        public void Accumulate(ColumnBatch batch, SelectionVector? selection)
+            => _result.Accumulate(
+                batch, _keyColumn, _valueColumn, selection, _context.CancellationToken);
+
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        {
+            var nullKey = new object();
+            Dictionary<object, Row>? existing = null;
+            if (!createRows)
+                existing = table.Rows.ToDictionary(row => row[GetKeyOrdinal(slots)] ?? nullKey);
+            foreach (var (key, state) in _result.Groups)
+            {
+                var restoredKey = key.IsNull ? null : key.Value;
+                var row = createRows ? table.NewRow() : existing![restoredKey ?? nullKey];
+                for (var index = 0; index < slots.Count; index++)
+                {
+                    var slot = slots[index];
+                    if (slot.Kind == SlotKind.Key)
+                    {
+                        if (createRows) row[index] = restoredKey;
+                        continue;
+                    }
+                    if (slot.Kind == SlotKind.Count && slot.CountStar)
+                    {
+                        if (createRows) row[index] = (decimal)state.RowCount;
+                        continue;
+                    }
+                    if (!string.Equals(slot.ValueColumn, _valueColumn, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    row[index] = slot.Kind switch
+                    {
+                        SlotKind.Count => (decimal)state.NonNullCount,
+                        SlotKind.Sum => state.NonNullCount == 0 ? null : state.Sum,
+                        SlotKind.Average => state.Average,
+                        SlotKind.Min => state.NonNullCount == 0 ? null : ColumnBatchAdapter.RestoreEngineValue(state.Min, _valueLogicalType),
+                        SlotKind.Max => state.NonNullCount == 0 ? null : ColumnBatchAdapter.RestoreEngineValue(state.Max, _valueLogicalType),
+                        _ => null
+                    };
+                }
+                if (createRows) table.Rows.Add(row);
+            }
+        }
+
+        private static int GetKeyOrdinal(IReadOnlyList<Slot> slots)
+        {
+            for (var index = 0; index < slots.Count; index++)
+                if (slots[index].Kind == SlotKind.Key) return index;
+            throw new InvalidOperationException("Grouped native output requires its key column.");
         }
 
         public void Dispose() => _result.Dispose();

@@ -137,6 +137,45 @@ public sealed class ColumnBatchGroupingTests
     }
 
     [Fact]
+    public void StringAggregateStateAccumulatesNumericValuesAcrossBatches()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Value", typeof(int), "INT")
+        });
+        using var first = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "A", " A ", "1", null }),
+            new ColumnBuffer<int>(new[] { 10, 0, 3, 7 }, 4, new byte[] { 0b0000_0010 })
+        }, 4);
+        using var second = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "1.0", "A", null }),
+            new ColumnBuffer<int>(new[] { 5, 20, 0 }, 3, new byte[] { 0b0000_0100 })
+        }, 3);
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        using var result = new NativeStringGroupAggregateResult<int>(arbiter);
+
+        result.Accumulate(first, "Key", "Value");
+        result.Accumulate(second, "Key", "Value");
+
+        var a = result.Groups[new NativeStringGroupKey(false, "A")];
+        Assert.Equal(3, a.RowCount);
+        Assert.Equal(2, a.NonNullCount);
+        Assert.Equal(30m, a.Sum);
+        Assert.Equal(15m, a.Average);
+        Assert.Equal(10, a.Min);
+        Assert.Equal(20, a.Max);
+        var numeric = result.Groups[new NativeStringGroupKey(false, 1m)];
+        Assert.Equal(8m, numeric.Sum);
+        var nullKey = result.Groups[new NativeStringGroupKey(true, null)];
+        Assert.Equal(2, nullKey.RowCount);
+        Assert.Equal(1, nullKey.NonNullCount);
+        Assert.Equal(result.EstimatedBytes, arbiter.ReservedBytes);
+    }
+
+    [Fact]
     public void GroupingFailsBoundedlyWhenCardinalityExceedsGrant()
     {
         using var batch = CreateBatch();

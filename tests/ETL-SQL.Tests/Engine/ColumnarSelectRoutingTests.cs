@@ -580,6 +580,75 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task StringKeyNumericAggregatesMatchRowPlannerWithoutRowReads()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Category", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Amount", typeof(int), "INT")
+        });
+        await using var native = new NativeOnlyDataSource(new[]
+        {
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(new string?[] { "A", " A ", "1", null }),
+                new ColumnBuffer<int>(new[] { 10, 0, 3, 7 }, 4, new byte[] { 0b0000_0010 })
+            }, 4),
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(new string?[] { "1.0", "A", null }),
+                new ColumnBuffer<int>(new[] { 5, 20, 0 }, 3, new byte[] { 0b0000_0100 })
+            }, 3)
+        }, throwOnRowRead: true);
+        await using var rowSource = new InMemoryDataSource();
+        rowSource.SetSchema(new[]
+        {
+            new ColumnDefinition("Category", "VARCHAR(20)", false),
+            new ColumnDefinition("Amount", "INT", false)
+        });
+        var rowBatch = new DataTable();
+        rowBatch.SetColumns(new[] { "Category", "Amount" });
+        foreach (var (category, amount) in new (string?, int?)[]
+        {
+            ("A", 10), (" A ", null), ("1", 3), (null, 7), ("1.0", 5), ("A", 20), (null, null)
+        })
+        {
+            var row = rowBatch.NewRow();
+            row["Category"] = category;
+            row["Amount"] = amount.HasValue ? (decimal)amount.Value : null;
+            rowBatch.Rows.Add(row);
+        }
+        await rowSource.WriteBatches(new[] { rowBatch }.ToAsyncEnumerable());
+        evaluator.Connections["native_string_groups"] = native;
+        evaluator.Connections["row_string_groups"] = rowSource;
+        const string projection = "Category, COUNT(*) AS RowCount, COUNT(Amount) AS ValueCount, " +
+            "SUM(Amount) AS Total, AVG(Amount) AS Mean, MIN(Amount) AS Minimum, MAX(Amount) AS Maximum";
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        var nativeRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM native_string_groups GROUP BY Category;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+        var rowRows = (await handler.EvaluateQuery(ParseSelect(
+            $"SELECT {projection} FROM row_string_groups GROUP BY Category;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows).Select(Normalize).OrderBy(value => value).ToArray();
+
+        Assert.Equal(rowRows, nativeRows);
+        Assert.Equal(0, native.RowReadAttempts);
+
+        static string Normalize(Row row) => string.Join("|", new[]
+        {
+            row["Category"]?.ToString() ?? "NULL",
+            row["RowCount"]?.ToString() ?? "NULL",
+            row["ValueCount"]?.ToString() ?? "NULL",
+            row["Total"]?.ToString() ?? "NULL",
+            row["Mean"]?.ToString() ?? "NULL",
+            row["Minimum"]?.ToString() ?? "NULL",
+            row["Maximum"]?.ToString() ?? "NULL"
+        });
+    }
+
+    [Fact]
     public async Task GroupedNativePlannerMatchesRowPipeline()
     {
         var definitions = new[]

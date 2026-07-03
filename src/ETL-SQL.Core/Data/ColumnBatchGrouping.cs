@@ -99,6 +99,101 @@ public readonly record struct NativeAggregateState<T>(
     public decimal? Average => NonNullCount == 0 ? null : Sum / NonNullCount;
 }
 
+/// <summary>Memory-accounted numeric aggregate state keyed by normalized UTF-8 values.</summary>
+public sealed class NativeStringGroupAggregateResult<TValue> : IDisposable
+    where TValue : unmanaged, INumber<TValue>
+{
+    private Dictionary<NativeStringGroupKey, NativeAggregateState<TValue>>? _groups = new();
+    private IMemoryGrantLease? _lease;
+
+    public NativeStringGroupAggregateResult(IMemoryGrantArbiter? memoryArbiter = null)
+    {
+        _lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
+        Groups = new ReadOnlyDictionary<NativeStringGroupKey, NativeAggregateState<TValue>>(_groups);
+    }
+
+    public IReadOnlyDictionary<NativeStringGroupKey, NativeAggregateState<TValue>> Groups { get; }
+    public long EstimatedBytes { get; private set; }
+
+    public void Accumulate(
+        ColumnBatch batch,
+        string keyColumnName,
+        string valueColumnName,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = _groups ?? throw new ObjectDisposedException(nameof(NativeStringGroupAggregateResult<TValue>));
+        var lease = _lease ?? throw new ObjectDisposedException(nameof(NativeStringGroupAggregateResult<TValue>));
+        var keys = batch.GetUtf8Column(keyColumnName);
+        var values = batch.GetColumn<TValue>(valueColumnName);
+        void AggregateRow(int row)
+        {
+            NativeStringGroupKey key;
+            var keyBytes = 0;
+            if (keys.IsNull(row)) key = new NativeStringGroupKey(true, null);
+            else
+            {
+                var encoded = keys.GetUtf8Bytes(row);
+                keyBytes = encoded.Length;
+                key = new NativeStringGroupKey(
+                    false, CompoundKey.NormalizeValue(Encoding.UTF8.GetString(encoded)));
+            }
+            if (!groups.TryGetValue(key, out var state))
+            {
+                var prospective = checked(
+                    EstimatedBytes + 96L + keyBytes * 2L + Unsafe.SizeOf<NativeAggregateState<TValue>>());
+                if (lease.RegisterAndCheckSpill(prospective))
+                    throw new ExecutionException(
+                        $"Native string GROUP BY requires more than {EstimatedBytes:N0} bytes of aggregate state. " +
+                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                EstimatedBytes = prospective;
+                state = new NativeAggregateState<TValue>(0, 0, 0, default, default);
+            }
+
+            state = state with { RowCount = state.RowCount + 1 };
+            if (!values.IsNull(row))
+            {
+                var value = values.Values.Span[row];
+                state = state.NonNullCount == 0
+                    ? state with { NonNullCount = 1, Sum = decimal.CreateChecked(value), Min = value, Max = value }
+                    : state with
+                    {
+                        NonNullCount = state.NonNullCount + 1,
+                        Sum = checked(state.Sum + decimal.CreateChecked(value)),
+                        Min = value < state.Min ? value : state.Min,
+                        Max = value > state.Max ? value : state.Max
+                    };
+            }
+            groups[key] = state;
+        }
+
+        if (selection == null)
+        {
+            for (var row = 0; row < batch.RowCount; row++)
+            {
+                if ((row & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+                AggregateRow(row);
+            }
+        }
+        else
+        {
+            foreach (var row in selection.Indices.Span)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((uint)row >= (uint)batch.RowCount)
+                    throw new ArgumentOutOfRangeException(nameof(selection), "Selection contains an invalid row ordinal.");
+                AggregateRow(row);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _groups, null)?.Clear();
+        Interlocked.Exchange(ref _lease, null)?.Dispose();
+    }
+}
+
 /// <summary>Memory-accounted key-only grouped row counts for COUNT(*) plans.</summary>
 public sealed class NativeGroupCountResult<TKey> : IDisposable where TKey : unmanaged
 {
