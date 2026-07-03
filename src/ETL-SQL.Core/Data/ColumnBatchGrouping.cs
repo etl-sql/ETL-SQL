@@ -3,12 +3,91 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
 
 public readonly record struct NativeGroupKey<T>(bool IsNull, T Value) where T : unmanaged;
+
+public readonly record struct NativeStringGroupKey(bool IsNull, object? Value);
+
+/// <summary>Memory-accounted COUNT(*) grouping over normalized UTF-8 keys.</summary>
+public sealed class NativeStringGroupCountResult : IDisposable
+{
+    private Dictionary<NativeStringGroupKey, long>? _groups = new();
+    private IMemoryGrantLease? _lease;
+
+    public NativeStringGroupCountResult(IMemoryGrantArbiter? memoryArbiter = null)
+    {
+        _lease = (memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance).AcquireLease();
+        Groups = new ReadOnlyDictionary<NativeStringGroupKey, long>(_groups);
+    }
+
+    public IReadOnlyDictionary<NativeStringGroupKey, long> Groups { get; }
+    public long EstimatedBytes { get; private set; }
+
+    public void Accumulate(
+        ColumnBatch batch,
+        string keyColumnName,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        var groups = _groups ?? throw new ObjectDisposedException(nameof(NativeStringGroupCountResult));
+        var lease = _lease ?? throw new ObjectDisposedException(nameof(NativeStringGroupCountResult));
+        var keys = batch.GetUtf8Column(keyColumnName);
+        void CountRow(int row)
+        {
+            NativeStringGroupKey key;
+            var keyBytes = 0;
+            if (keys.IsNull(row)) key = new NativeStringGroupKey(true, null);
+            else
+            {
+                var encoded = keys.GetUtf8Bytes(row);
+                keyBytes = encoded.Length;
+                key = new NativeStringGroupKey(
+                    false, CompoundKey.NormalizeValue(Encoding.UTF8.GetString(encoded)));
+            }
+            if (!groups.TryGetValue(key, out var count))
+            {
+                var prospective = checked(EstimatedBytes + 96L + keyBytes * 2L);
+                if (lease.RegisterAndCheckSpill(prospective))
+                    throw new ExecutionException(
+                        $"Native string GROUP BY requires more than {EstimatedBytes:N0} bytes of count state. " +
+                        "Increase Engine:TotalMemoryGrantMB or use spill-capable grouped execution.");
+                EstimatedBytes = prospective;
+            }
+            groups[key] = count + 1;
+        }
+
+        if (selection == null)
+        {
+            for (var row = 0; row < batch.RowCount; row++)
+            {
+                if ((row & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+                CountRow(row);
+            }
+        }
+        else
+        {
+            foreach (var row in selection.Indices.Span)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if ((uint)row >= (uint)batch.RowCount)
+                    throw new ArgumentOutOfRangeException(nameof(selection), "Selection contains an invalid row ordinal.");
+                CountRow(row);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _groups, null)?.Clear();
+        Interlocked.Exchange(ref _lease, null)?.Dispose();
+    }
+}
 
 public readonly record struct NativeAggregateState<T>(
     long RowCount,

@@ -109,6 +109,34 @@ public sealed class ColumnBatchGroupingTests
     }
 
     [Fact]
+    public void StringCountStateNormalizesTrimmedNumericAndNullKeysAcrossBatches()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(string), "VARCHAR(20)")
+        });
+        using var first = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "A", " A ", "1", null })
+        }, 4);
+        using var second = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "1.0", "a", null })
+        }, 3);
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        using var result = new NativeStringGroupCountResult(arbiter);
+
+        result.Accumulate(first, "Key");
+        result.Accumulate(second, "Key");
+
+        Assert.Equal(2, result.Groups[new NativeStringGroupKey(false, "A")]);
+        Assert.Equal(1, result.Groups[new NativeStringGroupKey(false, "a")]);
+        Assert.Equal(2, result.Groups[new NativeStringGroupKey(false, 1m)]);
+        Assert.Equal(2, result.Groups[new NativeStringGroupKey(true, null)]);
+        Assert.Equal(result.EstimatedBytes, arbiter.ReservedBytes);
+    }
+
+    [Fact]
     public void GroupingFailsBoundedlyWhenCardinalityExceedsGrant()
     {
         using var batch = CreateBatch();

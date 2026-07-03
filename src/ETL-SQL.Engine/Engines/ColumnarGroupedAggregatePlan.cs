@@ -105,6 +105,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
             return false;
         }
         if (!IsSupportedKey(key.ElementType)) return false;
+        if (key.ElementType == typeof(string) && _valueColumns.Length != 0) return false;
         foreach (var valueColumn in _valueColumns)
         {
             try { if (!IsNumeric(batch.GetColumn(valueColumn).ElementType)) return false; }
@@ -149,6 +150,8 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
         var keyType = batch.GetColumn(_keyColumn).ElementType;
         if (valueColumn == null)
         {
+            if (keyType == typeof(string))
+                return new StringCountState(_context, _keyColumn);
             var countType = typeof(CountState<>).MakeGenericType(keyType);
             return (IState)Activator.CreateInstance(
                 countType, _context, _keyColumn,
@@ -168,7 +171,7 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
 
     private static bool IsSupportedKey(Type type)
         => IsNumeric(type) || type == typeof(DateTime) || type == typeof(DateTimeOffset)
-            || type == typeof(TimeSpan) || type == typeof(Guid);
+            || type == typeof(TimeSpan) || type == typeof(Guid) || type == typeof(string);
 
     private static bool TryRewriteHaving(
         Expression? expression,
@@ -329,6 +332,44 @@ internal sealed class ColumnarGroupedAggregatePlan : IDisposable
                     row[index] = slots[index].Kind switch
                     {
                         SlotKind.Key => key.IsNull ? null : ColumnBatchAdapter.RestoreEngineValue(key.Value, _keyLogicalType),
+                        SlotKind.Count when slots[index].CountStar => (decimal)count,
+                        _ => null
+                    };
+                }
+                table.Rows.Add(row);
+            }
+        }
+
+        public void Dispose() => _result.Dispose();
+    }
+
+    private sealed class StringCountState : IState
+    {
+        private readonly IExecutionContext _context;
+        private readonly string _keyColumn;
+        private readonly NativeStringGroupCountResult _result;
+
+        public StringCountState(IExecutionContext context, string keyColumn)
+        {
+            _context = context;
+            _keyColumn = keyColumn;
+            _result = new NativeStringGroupCountResult(context.MemoryArbiter);
+        }
+
+        public void Accumulate(ColumnBatch batch, SelectionVector? selection)
+            => _result.Accumulate(batch, _keyColumn, selection, _context.CancellationToken);
+
+        public void WriteRows(DataTable table, IReadOnlyList<Slot> slots, bool createRows)
+        {
+            if (!createRows) throw new InvalidOperationException("String count state must create grouped output rows.");
+            foreach (var (key, count) in _result.Groups)
+            {
+                var row = table.NewRow();
+                for (var index = 0; index < slots.Count; index++)
+                {
+                    row[index] = slots[index].Kind switch
+                    {
+                        SlotKind.Key => key.IsNull ? null : key.Value,
                         SlotKind.Count when slots[index].CountStar => (decimal)count,
                         _ => null
                     };

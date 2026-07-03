@@ -526,6 +526,60 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task StringKeyCountGroupingUsesNormalizedNativeStateAcrossBatches()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Category", typeof(string), "VARCHAR(20)")
+        });
+        await using var source = new NativeOnlyDataSource(new[]
+        {
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(new string?[] { "A", " A ", "1", null })
+            }, 4),
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(new string?[] { "1.0", "a", null })
+            }, 3)
+        }, throwOnRowRead: true);
+        evaluator.Connections["categories"] = source;
+        var statement = ParseSelect(
+            "SELECT Category, COUNT(*) AS RowCount FROM categories GROUP BY Category;");
+
+        var rows = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows).ToArray();
+
+        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], "A"))["RowCount"]);
+        Assert.Equal(1m, Assert.Single(rows, row => Equals(row["Category"], "a"))["RowCount"]);
+        Assert.Equal(2m, Assert.Single(rows, row => Equals(row["Category"], 1m))["RowCount"]);
+        Assert.Equal(2m, Assert.Single(rows, row => row["Category"] == null)["RowCount"]);
+        Assert.Equal(0, source.RowReadAttempts);
+
+        await using var rowSource = new InMemoryDataSource();
+        rowSource.SetSchema(new[] { new ColumnDefinition("Category", "VARCHAR(20)", false) });
+        var rowBatch = new DataTable();
+        rowBatch.SetColumns(new[] { "Category" });
+        foreach (var value in new string?[] { "A", " A ", "1", null, "1.0", "a", null })
+        {
+            var row = rowBatch.NewRow();
+            row["Category"] = value;
+            rowBatch.Rows.Add(row);
+        }
+        await rowSource.WriteBatches(new[] { rowBatch }.ToAsyncEnumerable());
+        evaluator.Connections["row_categories"] = rowSource;
+        var rowResults = (await new SelectStatementHandler(NullLogger.Instance).EvaluateQuery(ParseSelect(
+            "SELECT Category, COUNT(*) AS RowCount FROM row_categories GROUP BY Category;"), evaluator).ToListAsync())
+            .SelectMany(batch => batch.Rows)
+            .Select(row => $"{row["Category"] ?? "NULL"}|{row["RowCount"]}")
+            .OrderBy(value => value).ToArray();
+        var nativeResults = rows.Select(row => $"{row["Category"] ?? "NULL"}|{row["RowCount"]}")
+            .OrderBy(value => value).ToArray();
+        Assert.Equal(rowResults, nativeResults);
+    }
+
+    [Fact]
     public async Task GroupedNativePlannerMatchesRowPipeline()
     {
         var definitions = new[]
