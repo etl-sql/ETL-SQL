@@ -1026,6 +1026,93 @@ public sealed class ColumnarSelectRoutingTests
             }, keys.Length);
     }
 
+    [Theory]
+    [InlineData("LEFT SEMI JOIN", "two")]
+    [InlineData("LEFT ANTI JOIN", "one|three")]
+    public async Task SemiAndAntiJoinPlannerEmitEachLeftRowOnce(string joinType, string expected)
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var left = CreateJoinSource(new[] { 1, 2, 3 }, new[] { "one", "two", "three" }, true);
+        await using var right = CreateJoinSource(new[] { 2, 2 }, new[] { "right-a", "right-b" }, true);
+        evaluator.Connections["planner_left"] = left;
+        evaluator.Connections["planner_right"] = right;
+        var statement = ParseSelect(
+            $"SELECT l.Label AS Label FROM planner_left l {joinType} planner_right r ON l.Key = r.Key;");
+
+        var labels = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => row["Label"]?.ToString()).OrderBy(value => value).ToArray();
+
+        Assert.Equal(expected.Split('|').OrderBy(value => value), labels);
+        Assert.Equal(0, left.RowReadAttempts);
+        Assert.Equal(0, right.RowReadAttempts);
+    }
+
+    [Fact]
+    public async Task JoinPlannerRejectsOversizedEstimateBeforeSafelyReplayingRowPipeline()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.OperatorMemoryGrantMB = 1;
+        await using var left = CreateJoinSource(
+            new[] { 1, 2 }, new[] { "one", "two" }, false, estimatedRowCount: 1_000_000);
+        await using var right = CreateJoinSource(
+            new[] { 2 }, new[] { "right" }, false, estimatedRowCount: 1_000_000);
+        evaluator.Connections["fallback_left"] = left;
+        evaluator.Connections["fallback_right"] = right;
+        var statement = ParseSelect(
+            "SELECT l.Label AS LeftLabel, r.Label AS RightLabel " +
+            "FROM fallback_left l INNER JOIN fallback_right r ON l.Key = r.Key;");
+
+        var row = Assert.Single((await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows));
+
+        Assert.Equal("two", row["LeftLabel"]);
+        Assert.Equal("right", row["RightLabel"]);
+        Assert.True(left.RowReadAttempts > 0);
+        Assert.True(right.RowReadAttempts > 0);
+    }
+
+    [Fact]
+    public async Task CompositeStringJoinPlannerUsesNormalizedNativeKeys()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Key", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        await using var left = new NativeOnlyDataSource(new[]
+        {
+            Batch(new string?[] { " A ", "a", null }, new[] { 1, 1, 1 }, new[] { "left-a", "left-lower", "left-null" })
+        }, true);
+        await using var right = new NativeOnlyDataSource(new[]
+        {
+            Batch(new string?[] { "A", "a", null }, new[] { 1, 1, 1 }, new[] { "right-a", "right-lower", "right-null" })
+        }, true);
+        evaluator.Connections["composite_left"] = left;
+        evaluator.Connections["composite_right"] = right;
+        var statement = ParseSelect(
+            "SELECT l.Label AS LeftLabel, r.Label AS RightLabel FROM composite_left l " +
+            "INNER JOIN composite_right r ON l.Region = r.Region AND l.Key = r.Key;");
+
+        var rows = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => $"{row["LeftLabel"]}|{row["RightLabel"]}").OrderBy(value => value).ToArray();
+
+        Assert.Equal(new[] { "left-a|right-a", "left-lower|right-lower" }, rows);
+        Assert.Equal(0, left.RowReadAttempts);
+        Assert.Equal(0, right.RowReadAttempts);
+
+        ColumnBatch Batch(string?[] regions, int[] keys, string[] labels)
+            => new(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(regions),
+                new ColumnBuffer<int>(keys, keys.Length),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, keys.Length);
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
@@ -1097,7 +1184,31 @@ public sealed class ColumnarSelectRoutingTests
         }, throwOnRowRead);
     }
 
-    private sealed class NativeOnlyDataSource(IEnumerable<ColumnBatch> batches, bool throwOnRowRead) :
+    private static NativeOnlyDataSource CreateJoinSource(
+        int[] keys,
+        string[] labels,
+        bool throwOnRowRead,
+        long? estimatedRowCount = null)
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        return new NativeOnlyDataSource(new[]
+        {
+            new ColumnBatch(schema, new IColumnBuffer[]
+            {
+                new ColumnBuffer<int>(keys, keys.Length),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, keys.Length)
+        }, throwOnRowRead, estimatedRowCount);
+    }
+
+    private sealed class NativeOnlyDataSource(
+        IEnumerable<ColumnBatch> batches,
+        bool throwOnRowRead,
+        long? estimatedRowCount = null) :
         IDataSource, IReplayableColumnarDataSource, IEstimatedCardinalityDataSource
     {
         private List<ColumnBatch>? _batches = batches.ToList();
@@ -1105,8 +1216,9 @@ public sealed class ColumnarSelectRoutingTests
         public string Path => string.Empty;
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "TEST_COLUMNAR";
-        public long EstimatedRowCount => (_batches ?? throw new ObjectDisposedException(nameof(NativeOnlyDataSource)))
-            .Sum(batch => (long)batch.RowCount);
+        public long EstimatedRowCount => estimatedRowCount
+            ?? (_batches ?? throw new ObjectDisposedException(nameof(NativeOnlyDataSource)))
+                .Sum(batch => (long)batch.RowCount);
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
         {

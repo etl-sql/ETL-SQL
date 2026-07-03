@@ -398,7 +398,7 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   typed/UTF-8 keys now build the exact incremental `CompoundKey` hash without allocating per-row key
   arrays, and recursive joins use the same pooled route for every key count. Broader initial-partition
   planner integration remains; adaptive fan-out is already supplied by the external sizing model.)*
-- [~] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
+- [x] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
   equi-join kernel now builds typed key-to-ordinal state, probes native buffers or selection vectors,
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds
   bounded build/output reservations until result disposal. The same bounded kernel now supports left
@@ -413,7 +413,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   construction supports unmatched emission after multi-batch probing. The SELECT planner now binds
   conservative single equi-join shapes over restart-safe cardinality-aware native sources, retains the
   right side under a grant, streams left batches, preserves projection order, and emits outer nulls
-  only after every right batch is probed. Spill partitioning and broader join shapes remain.)*
+  only after every right batch is probed. End-to-end coverage proves multi-batch outer, semi/anti,
+  normalized composite-string, and pre-consumption pressure fallback behavior. Oversized or broader
+  shapes route to the existing spill-capable heavy join pipeline.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width and UTF-8 keys now produce pooled typed sort runs from full batches or selection
   vectors using a cancellation-aware bottom-up merge, per-key null placement/direction, deterministic
