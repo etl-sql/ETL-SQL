@@ -166,6 +166,49 @@ public sealed class ColumnBatchJoinTests
         Assert.Equal(expected.Select(pair => pair.Right), actual.RightRows.ToArray());
     }
 
+    [Theory]
+    [InlineData(ColumnarJoinKind.Inner)]
+    [InlineData(ColumnarJoinKind.LeftOuter)]
+    [InlineData(ColumnarJoinKind.LeftSemi)]
+    [InlineData(ColumnarJoinKind.LeftAnti)]
+    public void CompositeJoinMatchesRowReferenceAndRejectsPartialNullKeys(ColumnarJoinKind kind)
+    {
+        (string? Region, int? Id)[] leftKeys =
+            { ("A", 1), (" A ", 1), ("A", 2), (null, 1), ("A", null), ("a", 1), ("X", 9) };
+        (string? Region, int? Id)[] rightKeys =
+            { ("A", 1), ("A", 1), ("A", 2), (null, 1), ("A", null), ("a", 1) };
+        using var left = CreateCompositeBatch(leftKeys);
+        using var right = CreateCompositeBatch(rightKeys);
+        using var actual = ColumnBatchJoinKernels.JoinComposite(
+            left, new[] { "Region", "Id" }, right, new[] { "Region", "Id" }, kind);
+
+        var expected = new List<(int Left, int Right)>();
+        for (var leftRow = 0; leftRow < leftKeys.Length; leftRow++)
+        {
+            var leftKey = leftKeys[leftRow];
+            var matches = leftKey.Region == null || leftKey.Id == null
+                ? Array.Empty<int>()
+                : Enumerable.Range(0, rightKeys.Length)
+                    .Where(rightRow => rightKeys[rightRow].Region != null && rightKeys[rightRow].Id != null &&
+                        new CompoundKey(leftKey.Region, leftKey.Id).Equals(
+                            new CompoundKey(rightKeys[rightRow].Region, rightKeys[rightRow].Id)))
+                    .ToArray();
+            if (matches.Length > 0)
+            {
+                if (kind == ColumnarJoinKind.LeftAnti) continue;
+                if (kind == ColumnarJoinKind.LeftSemi) expected.Add((leftRow, matches[0]));
+                else expected.AddRange(matches.Select(rightRow => (leftRow, rightRow)));
+            }
+            else if (kind is ColumnarJoinKind.LeftOuter or ColumnarJoinKind.LeftAnti)
+            {
+                expected.Add((leftRow, -1));
+            }
+        }
+
+        Assert.Equal(expected.Select(pair => pair.Left), actual.LeftRows.ToArray());
+        Assert.Equal(expected.Select(pair => pair.Right), actual.RightRows.ToArray());
+    }
+
     [Fact]
     public void JoinResultHoldsMemoryGrantUntilDisposed()
     {
@@ -228,6 +271,24 @@ public sealed class ColumnBatchJoinTests
         {
             Utf8ColumnBuffer.FromStrings(keys),
             new ColumnBuffer<int>(Enumerable.Range(1, keys.Length).ToArray(), keys.Length)
+        }, keys.Length);
+    }
+
+    private static ColumnBatch CreateCompositeBatch((string? Region, int? Id)[] keys)
+    {
+        var idValues = keys.Select(key => key.Id ?? 0).ToArray();
+        var idNulls = new byte[(keys.Length + 7) / 8];
+        for (var i = 0; i < keys.Length; i++)
+            if (keys[i].Id == null) idNulls[i >> 3] |= (byte)(1 << (i & 7));
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Id", typeof(int), "INT")
+        });
+        return new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(keys.Select(key => key.Region).ToArray()),
+            new ColumnBuffer<int>(idValues, idValues.Length, idNulls)
         }, keys.Length);
     }
 }

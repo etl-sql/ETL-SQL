@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
@@ -123,6 +124,69 @@ public static class ColumnBatchJoinKernels
 
         static object Normalize(Utf8ColumnBuffer keys, int row)
             => CompoundKey.NormalizeValue(Encoding.UTF8.GetString(keys.GetUtf8Bytes(row)))!;
+    }
+
+    public static NativeJoinPairs JoinComposite(
+        ColumnBatch left,
+        IReadOnlyList<string> leftKeyColumns,
+        ColumnBatch right,
+        IReadOnlyList<string> rightKeyColumns,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftKeyColumns);
+        ArgumentNullException.ThrowIfNull(rightKeyColumns);
+        if (leftKeyColumns.Count == 0 || leftKeyColumns.Count != rightKeyColumns.Count)
+            throw new ArgumentException("Composite joins require equal, non-empty key-column lists.");
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
+
+        var leftKeys = leftKeyColumns.Select(left.GetColumn).ToArray();
+        var rightKeys = rightKeyColumns.Select(right.GetColumn).ToArray();
+        return JoinCore(
+            left.RowCount,
+            right.RowCount,
+            row => HasNull(leftKeys, row),
+            row => HasNull(rightKeys, row),
+            row => CreateKey(leftKeys, row),
+            row => CreateKey(rightKeys, row),
+            row => EstimateKeyBytes(rightKeys, row),
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+
+        static bool HasNull(IReadOnlyList<IColumnBuffer> columns, int row)
+        {
+            for (var i = 0; i < columns.Count; i++)
+                if (columns[i].IsNull(row)) return true;
+            return false;
+        }
+
+        static CompoundKey CreateKey(IReadOnlyList<IColumnBuffer> columns, int row)
+            => columns.Count switch
+            {
+                1 => new CompoundKey(columns[0].GetBoxedValue(row)),
+                2 => new CompoundKey(columns[0].GetBoxedValue(row), columns[1].GetBoxedValue(row)),
+                3 => new CompoundKey(columns[0].GetBoxedValue(row), columns[1].GetBoxedValue(row),
+                    columns[2].GetBoxedValue(row)),
+                _ => new CompoundKey(columns.Select(column => column.GetBoxedValue(row)).ToArray())
+            };
+
+        static int EstimateKeyBytes(IReadOnlyList<IColumnBuffer> columns, int row)
+        {
+            var bytes = 0;
+            for (var i = 0; i < columns.Count; i++)
+            {
+                bytes = checked(bytes + (columns[i] is Utf8ColumnBuffer utf8
+                    ? utf8.GetUtf8Bytes(row).Length
+                    : 16));
+            }
+            return bytes;
+        }
     }
 
     private static NativeJoinPairs JoinCore<TKey>(

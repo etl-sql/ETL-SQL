@@ -402,8 +402,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   outer, semi, and anti semantics; unmatched rows use an explicit `-1` right ordinal, and randomized
   differential coverage proves duplicate/null behavior for all four variants. UTF-8 keys use
   `CompoundKey`-compatible trim/numeric/date normalization and differential coverage proves all four
-  variants across duplicates, nulls, and case-sensitive identity. Composite keys, direct payload
-  projection, planner binding, and spill partitioning remain.)*
+  variants across duplicates, nulls, and case-sensitive identity. Mixed fixed-width/UTF-8 composite
+  keys use the same normalized equality with SQL any-null-component non-matching semantics. Direct
+  payload projection, planner binding, and spill partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width keys now produce pooled typed sort runs from full batches or selection vectors using a
   cancellation-aware bottom-up merge, explicit null placement/direction, deterministic ties, and
@@ -423,7 +424,8 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   now cover inner/left outer/semi/anti joins across duplicates and nulls. Derived-column lineage
   through native arithmetic SELECT-INTO is covered without row materialization.
   Native arithmetic projection differentials cover typed-buffer arithmetic, integer division, and null
-  propagation against the row planner. Composite join differentials and broader scripts remain.)*
+  propagation against the row planner. Mixed-type composite join differentials cover all four join
+  variants; broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
