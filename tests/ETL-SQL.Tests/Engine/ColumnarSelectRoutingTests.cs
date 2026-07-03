@@ -854,6 +854,9 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(0, source.RowReadAttempts);
         Assert.Equal(2, destination.EstimatedRowCount);
         Assert.Equal(2L, evaluator.Variables["@@ROWCOUNT"]);
+        var lineage = evaluator.LineageTracker.GetLineage("#dest").ToList();
+        AssertDerivedColumnLineage("Doubled");
+        AssertDerivedColumnLineage("Remaining");
         var batches = await destination.ReadColumnBatches().ToListAsync();
         try
         {
@@ -864,6 +867,15 @@ public sealed class ColumnarSelectRoutingTests
         finally
         {
             foreach (var batch in batches) batch.Dispose();
+        }
+
+        void AssertDerivedColumnLineage(string targetColumn)
+        {
+            var entry = Assert.Single(lineage, entry =>
+                entry.Operation == "SELECT INTO" &&
+                string.Equals(entry.TargetColumn, targetColumn, StringComparison.OrdinalIgnoreCase));
+            Assert.Contains("col", entry.SourceTables, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Id", entry.SourceColumns, StringComparer.OrdinalIgnoreCase);
         }
     }
 

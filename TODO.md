@@ -419,7 +419,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   recording. String predicate coverage now proves case-sensitive/case-insensitive routing, Unicode
   fallback, numeric coercion, and null exclusion. Fixed-width join differentials now cover inner/left
   outer/semi/anti joins across duplicates and nulls. String/composite join differentials,
-  derived-column lineage, native arithmetic projection differentials, and broader scripts remain.)*
+  derived-column lineage through native arithmetic SELECT-INTO is covered without row materialization.
+  String/composite join differentials, native arithmetic projection result differentials, and broader
+  scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
