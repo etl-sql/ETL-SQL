@@ -7,6 +7,14 @@ using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Data;
 
+public enum ColumnarJoinKind
+{
+    Inner,
+    LeftOuter,
+    LeftSemi,
+    LeftAnti
+}
+
 /// <summary>Pooled packed left/right row ordinals produced by a native join.</summary>
 public sealed class NativeJoinPairs : IDisposable
 {
@@ -51,7 +59,21 @@ public static class ColumnBatchJoinKernels
         SelectionVector? leftSelection = null,
         SelectionVector? rightSelection = null,
         CancellationToken cancellationToken = default) where T : unmanaged
+        => Join<T>(left, leftKeyColumn, right, rightKeyColumn, ColumnarJoinKind.Inner,
+            memoryArbiter, leftSelection, rightSelection, cancellationToken);
+
+    public static NativeJoinPairs Join<T>(
+        ColumnBatch left,
+        string leftKeyColumn,
+        ColumnBatch right,
+        string rightKeyColumn,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default) where T : unmanaged
     {
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
         var leftKeys = left.GetColumn<T>(leftKeyColumn);
         var rightKeys = right.GetColumn<T>(rightKeyColumn);
         var leftValues = leftKeys.Values;
@@ -82,15 +104,23 @@ public static class ColumnBatchJoinKernels
 
             VisitOrdinals(left.RowCount, leftSelection, cancellationToken, leftRow =>
             {
-                if (leftKeys.IsNull(leftRow)) return;
-                if (!build.TryGetValue(leftValues.Span[leftRow], out var matches)) return;
-                foreach (var rightRow in matches)
+                List<int>? matches = null;
+                var matched = !leftKeys.IsNull(leftRow)
+                    && build.TryGetValue(leftValues.Span[leftRow], out matches);
+                if (matched)
                 {
-                    EnsureOutputCapacity(ref leftRows, ref rightRows, count + 1, lease, ref reservedBytes);
-                    leftRows![count] = leftRow;
-                    rightRows![count] = rightRow;
-                    count++;
+                    if (joinKind == ColumnarJoinKind.LeftAnti) return;
+                    if (joinKind == ColumnarJoinKind.LeftSemi)
+                    {
+                        Append(leftRow, matches![0]);
+                        return;
+                    }
+                    foreach (var rightRow in matches!) Append(leftRow, rightRow);
+                    return;
                 }
+
+                if (joinKind is ColumnarJoinKind.LeftOuter or ColumnarJoinKind.LeftAnti)
+                    Append(leftRow, -1);
             });
 
             EnsureOutputCapacity(ref leftRows, ref rightRows, 1, lease, ref reservedBytes);
@@ -105,6 +135,14 @@ public static class ColumnBatchJoinKernels
             leftRows = null;
             rightRows = null;
             return result;
+
+            void Append(int leftRow, int rightRow)
+            {
+                EnsureOutputCapacity(ref leftRows, ref rightRows, count + 1, lease, ref reservedBytes);
+                leftRows![count] = leftRow;
+                rightRows![count] = rightRow;
+                count++;
+            }
         }
         catch
         {

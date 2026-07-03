@@ -370,8 +370,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 - [~] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
   equi-join kernel now builds typed key-to-ordinal state, probes native buffers or selection vectors,
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds
-  bounded build/output reservations until result disposal. String/composite keys, direct payload
-  projection, outer/semi/anti variants, planner binding, and spill partitioning remain.)*
+  bounded build/output reservations until result disposal. The same bounded kernel now supports left
+  outer, semi, and anti semantics; unmatched rows use an explicit `-1` right ordinal, and randomized
+  differential coverage proves duplicate/null behavior for all four variants. String/composite keys,
+  direct payload projection, planner binding, and spill partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width keys now produce pooled typed sort runs from full batches or selection vectors using a
   cancellation-aware bottom-up merge, explicit null placement/direction, deterministic ties, and
@@ -387,8 +389,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   End-to-end grouped SELECT differentials now compare native and row planners across batches with null
   keys/values, filtering, and COUNT/SUM/AVG/MIN/MAX; native SELECT-INTO coverage also verifies lineage
   recording. String predicate coverage now proves case-sensitive/case-insensitive routing, Unicode
-  fallback, numeric coercion, and null exclusion. Join differentials, derived-column lineage, and
-  broader scripts remain.)*
+  fallback, numeric coercion, and null exclusion. Fixed-width join differentials now cover inner/left
+  outer/semi/anti joins across duplicates and nulls. String/composite join differentials,
+  derived-column lineage, and broader scripts remain.)*
 
 #### P4 — Partition sizing and spill-read fast paths
 
