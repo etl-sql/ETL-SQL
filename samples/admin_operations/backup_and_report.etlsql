@@ -1,0 +1,72 @@
+-- =============================================================================
+--  Backup Outcome Recorder + Alert  (administrator template — run as-is or adapt)
+-- =============================================================================
+--  This script does NOT perform the backup. Backups are taken by the CLI:
+--
+--      etl-sql admin backup ...
+--
+--  deliberately — there is no in-language BACKUP statement, because that would
+--  falsely imply ETL-SQL can back up an external PostgreSQL state store it does
+--  not own. This template's job is only to RECORD the outcome of that external
+--  backup and ALERT when it failed.
+--
+--  Intended wiring (OS scheduler — Task Scheduler / cron), two steps:
+--      1) etl-sql admin backup ...            <- takes the backup, sets $LASTEXITCODE / $?
+--      2) etl-sql run backup_and_report.etlsql \
+--             --var backup_exit_code=<code>   <- the step-1 exit code (0 = success)
+--             --var backup_target=nightly     <- a label for the email/marker
+--
+--  PowerShell example:
+--      etl-sql admin backup --out D:\backups\nightly
+--      etl-sql run backup_and_report.etlsql --var backup_exit_code=$LASTEXITCODE --var backup_target=nightly
+--
+--  It writes a durable pass/fail marker with SET_JOB_STATE (readable later with
+--  GET_JOB_STATE, e.g. by a monitoring script), and emails ops only on failure.
+--
+--  ADAPT: set the SMTP connection and recipient below. The caller MUST inject
+--  BOTH @backup_exit_code and @backup_target with --var (see above); referencing
+--  a variable that was not injected is an error, not a silent default.
+-- =============================================================================
+
+CREATE CONNECTION Mailer AS SMTP(
+    HOST     = 'smtp.example.com',
+    PORT     = 587,
+    USER     = 'etl-alerts@example.com',
+    PASSWORD = 'ENC:REPLACE_WITH_ENCRYPTED_PASSWORD'
+);
+
+DECLARE @recipient = 'ops-team@example.com';
+DECLARE @sender    = 'etl-alerts@example.com';
+
+-- Exit code 0 means the backup CLI succeeded; anything else is a failure.
+DECLARE @label   = @backup_target;
+DECLARE @failed  = (@backup_exit_code <> 0);
+DECLARE @status  = IIF(@failed, 'FAILURE', 'SUCCESS');
+DECLARE @stamp   = FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss');
+
+PRINT CONCAT('Backup "', @label, '" outcome: ', @status,
+             ' (exit code ', @backup_exit_code, ') at ', @stamp);
+
+-- Durable marker so a separate health check can assert the last backup succeeded
+-- and is recent. Committed only when this script completes successfully.
+SELECT SET_JOB_STATE('last_backup_status', @status);
+SELECT SET_JOB_STATE('last_backup_at', @stamp);
+SELECT SET_JOB_STATE('last_backup_exit_code', CAST(@backup_exit_code AS VARCHAR));
+
+-- Alert ops only when the backup failed — success is recorded silently.
+IF @failed
+BEGIN
+    SEND EMAIL
+        TO @recipient
+        FROM @sender
+        SUBJECT CONCAT('[ETL-SQL] Backup FAILED: ', @label)
+        BODY CONCAT(
+            'The backup "', @label, '" did not complete successfully.', CHAR(10), CHAR(10),
+            'Exit code: ', @backup_exit_code, CHAR(10),
+            'When: ', @stamp, CHAR(10), CHAR(10),
+            'Investigate the backup job output on the host. Until a backup succeeds, ',
+            'point-in-time recovery is degraded.')
+        AT Mailer;
+
+    PRINT 'Backup-failure alert sent.';
+END;

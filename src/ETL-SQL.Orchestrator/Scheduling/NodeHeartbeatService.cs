@@ -92,6 +92,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             capacity.TotalAvailableMemoryBytes,
                             capacity.MemoryLoadPercent,
                             capacity.ProcessCpuPercent,
+                            capacity.HostCpuPercent,
                             capacity.ProcessorCount,
                             capacity.IsOverloaded,
                             capacity.StateDiskFreeBytes,
@@ -110,7 +111,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         {
                             await metricsStore.AppendHostMetricAsync(new HostMetricSample(
                                 NodeId, capacity.CapturedAtUtc, capacity.MemoryLoadPercent, capacity.ProcessCpuPercent,
-                                HostCpuPercent: null, capacity.StateDiskFreeBytes, capacity.SpillDiskFreeBytes));
+                                HostCpuPercent: capacity.HostCpuPercent, capacity.StateDiskFreeBytes, capacity.SpillDiskFreeBytes));
                         }
                         catch (Exception metricsEx)
                         {

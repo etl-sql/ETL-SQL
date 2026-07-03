@@ -134,11 +134,15 @@ parse check. Watch the two gotchas found this session: the `SEND EMAIL` connecti
 2. ✅ **DONE** (`b18e48d3`) — `SHOW HOST METRICS [nodeId] [INTO]` read surface.
 3. ✅ **DONE** — Roll-up tables (`JobHistoryDaily`/`HostMetricsDaily`) + idempotent daily aggregation +
    long retention (`Orchestrator:HistoryRollupRetentionDays`, default 400). *(covers the JobHistory roll-up item)*
-4. `capacity_report.etlsql` ✅ **DONE** (`samples/admin_operations/`); `backup_and_report.etlsql` remains
-   — each verified in-process. *(read surfaces `SHOW JOB HISTORY` + `SHOW HOST METRICS` both exist)*
-5. Whole-host CPU probes (Windows, then Linux), incrementally — fills `HostMetrics.HostCpuPercent`
-   (currently null; the column, store, and `SHOW HOST METRICS` output already carry it).
-6. Operational-metrics Portal subscription. *(Portal-side, independent)*
+4. ✅ **DONE** — both templates shipped under `samples/admin_operations/`: `capacity_report.etlsql`
+   and `backup_and_report.etlsql` (records the external `admin backup` outcome via `SET_JOB_STATE`,
+   emails on failure; injected `@backup_exit_code`/`@backup_target`). Each verified in-process (mechanic
+   test + full-file parse check).
+5. ✅ **DONE** — Whole-host CPU probes: `NodeCapacityMonitor` samples OS-level CPU (Windows
+   `GetSystemTimes` / Linux `/proc/stat`, dependency-free) into `NodeCapacitySnapshot.HostCpuPercent`,
+   threaded through the heartbeat into `HostMetricSample.HostCpuPercent` (was null). First sample is null
+   (needs an interval); best-effort → null on unsupported platforms.
+6. Operational-metrics Portal digest/subscription. *(Portal-side, independent — remaining)*
 
 ## Guardrails
 
