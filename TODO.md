@@ -174,11 +174,13 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [x] Orphaned-RUNNING recovery (gap found while reviewing retention): a hard crash between job start and completion left a JobHistory row `RUNNING` forever — unprunable (retention skips RUNNING) and invisible to failure reporting. `ReconcileStaleRunningAsync(maxRuntime)` now marks RUNNING rows older than `Orchestrator:MaxJobRuntimeHours` (default 24) as `INTERRUPTED` on scheduler startup and each maintenance cycle; self-healing (a late completion overwrites it) and now caught by the failure digest. *(2 store tests)*
 - [x] Daily roll-up summary retained far longer than raw rows, so pruning bounds table growth without losing capacity-planning trend. Two idempotent, transactional roll-ups (DELETE-affected-days + re-INSERT, grouped by `substr(timestamp,1,10)` so it is portable across SQLite/Postgres): `JobHistoryDaily` (per day/job: run count, failure count, total rows, max peak memory) and `HostMetricsDaily` (per day/node: avg+max memory-load %, avg+max CPU %, min free state/spill disk). Run **before** raw pruning on the maintenance cycle via `RollUpJobHistoryAsync`/`RollUpHostMetricsAsync`; summaries pruned on their own long horizon `Orchestrator:HistoryRollupRetentionDays` (default 400). Read via `GetJobHistoryDailyAsync`/`GetHostMetricsDailyAsync`. *(store test: aggregation + idempotency + retention)*
 
+- [x] Portal operational-metrics digest: `OperationalMetricsDigestService` (hosted, HA leader-locked via `IClusterLockStore`) emails admins a scheduled digest over `OperationalMetricsService` — active/queued executions, 24h execution+delivery failure rates, storage usage, migration status — with threshold alerts (failure rate, queue depth, pending migrations) and an `AlertOnly` quiet mode. Config `Portal:OperationalDigest` (disabled by default). Pure composition in `OperationalMetricsDigest.Build`; send reuses the existing SMTP + `ISubscriptionScriptRunner` path so the credential stays in-process. *(6 digest-composition tests)*
+
 > **Host-utilization + capacity work (see
 > [`Docs/Design/HostUtilizationAndCapacityPlanning.md`](Docs/Design/HostUtilizationAndCapacityPlanning.md))
-> is complete** through step 5 — HostMetrics time series, `SHOW HOST METRICS`, daily roll-ups,
-> both admin templates, and whole-host CPU probes all shipped. The one remaining item is the
-> Portal-side operational-metrics digest/subscription (design step 6, independent).
+> is COMPLETE** — all six design steps shipped: HostMetrics time series, `SHOW HOST METRICS`, daily
+> roll-ups, both admin templates (`capacity_report` + `backup_and_report`), whole-host CPU probes, and
+> the Portal operational-metrics digest.
 
 #### Governance default
 - [x] `Portal:Audit:RequireRemoteDelivery` is now nullable; when unset it resolves to **on** for an enrolled deployment with a collector configured (`TransportEndpoint`), **off** for standalone/unenrolled or no-collector deployments. Explicit `true`/`false` always wins — upgrade-safe (a deployment without remote audit is never newly blocked). *(6 resolve unit cases; Administrators_Guide §4 updated)*

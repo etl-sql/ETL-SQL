@@ -386,6 +386,10 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionSe
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>());
 
+// Optional scheduled operational-metrics digest email (Portal:OperationalDigest; disabled by default).
+// HA-safe: a cluster lock ensures exactly one node sends per interval.
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OperationalMetricsDigestService>();
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());

@@ -885,12 +885,27 @@ or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns
   lookback, then schedule it daily). Because this digest runs inside the orchestrator, it cannot report
   its own host being down — so pair it with the external `/healthz` dead-man's-switch above and alert
   if the expected digest does not arrive.
+- **Backup outcome + alert** — `samples/admin_operations/backup_and_report.etlsql` records the outcome
+  of your external `etl-sql admin backup` run (durable `SET_JOB_STATE` markers) and emails ops on
+  failure. The OS scheduler runs the backup, then runs this script with the exit code:
+  `etl-sql run backup_and_report.etlsql --var backup_exit_code=$LASTEXITCODE --var backup_target=nightly`.
+  It never runs a backup itself.
+- **Portal operational digest** — the Portal can email administrators a scheduled digest of its own
+  operational metrics (active/queued executions, 24h execution and delivery failure rates, storage
+  usage, and migration status), with threshold alerts. Enable it under `Portal:OperationalDigest`
+  (`Enabled`, `IntervalHours`, `Recipients`, `SmtpAlias`; set `AlertOnly` to send only when a threshold
+  such as `FailureRatePercentThreshold`, `QueueDepthAlertThreshold`, or a pending migration is breached).
+  In an HA cluster a leader lock ensures exactly one node sends per interval.
 
 **Capacity and saturation.** Job history records each job's own `RowsProcessed`, `PeakMemoryBytes`, and
 `CpuTimeSeconds`, and the Portal exposes point-in-time operational metrics (active/queued executions,
 24h failure rates, hourly load, storage bytes). These describe *workload*. To answer "am I outgrowing
-this server," also collect **host** metrics (CPU %, memory headroom, free disk on the spill and state
-volumes) with OS-level monitoring — the application measures per-job cost, not the box's headroom.
+this server," the orchestrator now also captures **host** metrics — memory load, whole-host and per-process
+CPU %, and free disk on the state and spill volumes — sampled every node heartbeat into a `HostMetrics`
+time series (retained per `Orchestrator:HostMetricsRetentionDays`, rolled up daily for long-term trend).
+Read the recent window with `SHOW HOST METRICS [nodeId] [INTO #t]`, and use
+`samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. OS-level
+monitoring remains a good independent cross-check.
 
 ---
 

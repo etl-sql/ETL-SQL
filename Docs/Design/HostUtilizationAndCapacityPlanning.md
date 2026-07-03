@@ -1,11 +1,10 @@
 # Host Utilization Time Series & Capacity Reporting — Implementation Plan
 
-> **Status:** implementation plan (drafted 2026-07-02); most of it has now shipped. The
-> host-utilization **time series + read surface**, the **daily roll-up summary** (JobHistory + host
-> metrics), and the **capacity report** template are done (see the ✅ markers in *Sequencing*). Remaining:
-> the `backup_and_report.etlsql` template, whole-host CPU probes, and the Portal operational-metrics
-> subscription. Covers `TODO.md` → *Administrator operational review — follow-on hardening*. Grounded in
-> the code investigated during the 2026-07-01/02 session; file/method references below are current as of then.
+> **Status:** ✅ **COMPLETE** (drafted 2026-07-02, finished 2026-07-03). All six sequencing steps have
+> shipped: the host-utilization **time series + read surface**, the **daily roll-up summary** (JobHistory
+> + host metrics), both **admin templates** (`capacity_report` + `backup_and_report`), **whole-host CPU
+> probes**, and the **Portal operational-metrics digest**. Covers `TODO.md` → *Administrator operational
+> review — follow-on hardening*. Grounded in the code investigated during the 2026-07-01/02/03 session.
 
 ## What already exists (do not rebuild)
 
@@ -124,9 +123,12 @@ parse check. Watch the two gotchas found this session: the `SEND EMAIL` connecti
    item 5 ships), aggregate per job/day (counts, failures, peak memory, avg duration) and per node
    (min free disk, peak memory/CPU), and either `SEND EMAIL` a summary or write a report the Portal
    renders. The JobHistory half is buildable today; the host half waits on items 1–5.
-3. **Operational-metrics email** — a Portal subscription over `OperationalMetricsService` data
-   (active/queued, 24h failure rate, storage bytes). This is Portal-side, not orchestrator; likely a
-   report + subscription rather than a script.
+3. **Operational-metrics email** ✅ **DONE** — implemented not as a report+subscription (the
+   subscription path is report/dataset-bound and does not fit a system health snapshot) but as a hosted
+   `OperationalMetricsDigestService`: a leader-locked background loop that reads
+   `OperationalMetricsService`, composes a digest via the pure `OperationalMetricsDigest.Build` (subject,
+   body, threshold alerts), and sends it in-process through the existing SMTP + `ISubscriptionScriptRunner`
+   path. Config `Portal:OperationalDigest` (disabled by default).
 
 ## Sequencing
 
@@ -142,7 +144,10 @@ parse check. Watch the two gotchas found this session: the `SEND EMAIL` connecti
    `GetSystemTimes` / Linux `/proc/stat`, dependency-free) into `NodeCapacitySnapshot.HostCpuPercent`,
    threaded through the heartbeat into `HostMetricSample.HostCpuPercent` (was null). First sample is null
    (needs an interval); best-effort → null on unsupported platforms.
-6. Operational-metrics Portal digest/subscription. *(Portal-side, independent — remaining)*
+6. ✅ **DONE** — Operational-metrics Portal digest: `OperationalMetricsDigestService` (hosted, HA
+   leader-locked) emails admins a scheduled digest over `OperationalMetricsService` with threshold
+   alerts. Config `Portal:OperationalDigest` (disabled by default); pure composition in
+   `OperationalMetricsDigest.Build`. *(6 digest-composition tests)*
 
 ## Guardrails
 

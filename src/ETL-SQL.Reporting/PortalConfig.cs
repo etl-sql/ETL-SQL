@@ -24,6 +24,45 @@ public class PortalConfig
     public AuditConfig Audit { get; set; } = new();
     public PortalStorageConfig Storage { get; set; } = new();
     public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
+    public OperationalDigestConfig OperationalDigest { get; set; } = new();
+}
+
+/// <summary>
+/// A scheduled email digest of the portal's operational metrics (active/queued executions, 24h failure
+/// rates, storage usage, migration status) for administrators. Disabled by default — opt in per
+/// deployment. In a multi-node HA cluster a leader lock ensures exactly one node sends each interval.
+/// </summary>
+public class OperationalDigestConfig
+{
+    /// <summary>Enables the digest. Default false; requires <see cref="Recipients"/> and <see cref="SmtpAlias"/>.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Hours between digests. Minimum effective value is 1; default 24.</summary>
+    public int IntervalHours { get; set; } = 24;
+
+    /// <summary>Semicolon/comma-separated administrator recipients.</summary>
+    public string Recipients { get; set; } = string.Empty;
+
+    /// <summary>Alias of a configured SMTP connection used to send the digest.</summary>
+    public string SmtpAlias { get; set; } = string.Empty;
+
+    /// <summary>From address; when empty the SMTP connection's own from/username is used.</summary>
+    public string Sender { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, send only when at least one alert condition is met (failure rate, pending migrations,
+    /// queue backlog) — a quieter "alert me when something is wrong" mode. Default false (always send).
+    /// </summary>
+    public bool AlertOnly { get; set; }
+
+    /// <summary>Execution-failure rate (percent, over the 24h window) at or above which an alert is raised.</summary>
+    public int FailureRatePercentThreshold { get; set; } = 25;
+
+    /// <summary>Queued-execution count at or above which a backlog alert is raised.</summary>
+    public int QueueDepthAlertThreshold { get; set; } = 20;
+
+    /// <summary>Raise an alert when the catalog has unapplied EF migrations. Default true.</summary>
+    public bool AlertOnPendingMigrations { get; set; } = true;
 }
 
 public class PortalLoadBalancerConfig
