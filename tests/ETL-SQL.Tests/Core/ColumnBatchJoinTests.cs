@@ -242,6 +242,46 @@ public sealed class ColumnBatchJoinTests
     }
 
     [Fact]
+    public void RuntimeDispatchSelectsFixedStringAndCompositeKernels()
+    {
+        using var fixedLeft = CreateBatch(new[] { 1, 2 }, new byte[] { 0 });
+        using var fixedRight = CreateBatch(new[] { 2, 3 }, new byte[] { 0 });
+        using var fixedPairs = ColumnBatchJoinKernels.JoinAuto(
+            fixedLeft, new[] { "Key" }, fixedRight, new[] { "Key" }, ColumnarJoinKind.Inner);
+        Assert.Equal(new[] { 1 }, fixedPairs.LeftRows.ToArray());
+
+        using var stringLeft = CreateStringBatch(new string?[] { " A ", "x" });
+        using var stringRight = CreateStringBatch(new string?[] { "A", "y" });
+        using var stringPairs = ColumnBatchJoinKernels.JoinAuto(
+            stringLeft, new[] { "Key" }, stringRight, new[] { "Key" }, ColumnarJoinKind.Inner);
+        Assert.Equal(new[] { 0 }, stringPairs.LeftRows.ToArray());
+
+        using var compositeLeft = CreateCompositeBatch(new[] { ("A", (int?)1), ("B", (int?)2) });
+        using var compositeRight = CreateCompositeBatch(new[] { ("B", (int?)2), ("A", (int?)9) });
+        using var compositePairs = ColumnBatchJoinKernels.JoinAuto(
+            compositeLeft, new[] { "Region", "Id" }, compositeRight, new[] { "Region", "Id" },
+            ColumnarJoinKind.Inner);
+        Assert.Equal(new[] { 1 }, compositePairs.LeftRows.ToArray());
+    }
+
+    [Fact]
+    public void ConstructedOrdinalPairsHoldGrantAndSupportOuterSentinels()
+    {
+        var arbiter = new MemoryGrantArbiter(1_000_000);
+        var pairs = ColumnBatchJoinKernels.CreateOrdinalPairs(
+            new[] { 0, 2 }, new[] { -1, -1 }, arbiter);
+
+        Assert.Equal(new[] { 0, 2 }, pairs.LeftRows.ToArray());
+        Assert.All(pairs.RightRows.ToArray(), row => Assert.Equal(-1, row));
+        Assert.Equal(pairs.ReservedBytes, arbiter.ReservedBytes);
+        pairs.Dispose();
+        Assert.Equal(0, arbiter.ReservedBytes);
+
+        Assert.Throws<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() =>
+            ColumnBatchJoinKernels.CreateOrdinalPairs(new[] { 0 }, new[] { -1 }, new MemoryGrantArbiter(1)));
+    }
+
+    [Fact]
     public void JoinResultHoldsMemoryGrantUntilDisposed()
     {
         using var left = CreateBatch(new[] { 1, 2, 2, 0 }, 0b0000_1000);

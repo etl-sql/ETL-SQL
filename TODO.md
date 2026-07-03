@@ -408,8 +408,10 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   variants across duplicates, nulls, and case-sensitive identity. Mixed fixed-width/UTF-8 composite
   keys use the same normalized equality with SQL any-null-component non-matching semantics. Packed
   join ordinals now gather fixed-width and UTF-8 payload columns directly into independently owned
-  native batches, with unmatched outer rows represented by null buffers. Planner binding and spill
-  partitioning remain.)*
+  native batches, with unmatched outer rows represented by null buffers. Runtime dispatch binds
+  fixed-width, UTF-8, and composite physical keys without reflection, and bounded ordinal-pair
+  construction supports unmatched emission after multi-batch probing. SELECT planner binding and
+  spill partitioning remain.)*
 - [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width and UTF-8 keys now produce pooled typed sort runs from full batches or selection
   vectors using a cancellation-aware bottom-up merge, per-key null placement/direction, deterministic

@@ -53,6 +53,79 @@ public sealed class NativeJoinPairs : IDisposable
 
 public static class ColumnBatchJoinKernels
 {
+    public static NativeJoinPairs CreateOrdinalPairs(
+        ReadOnlySpan<int> leftRows,
+        ReadOnlySpan<int> rightRows,
+        IMemoryGrantArbiter? memoryArbiter = null)
+    {
+        if (leftRows.Length != rightRows.Length)
+            throw new ArgumentException("Left and right ordinal counts must match.");
+        var arbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
+        var lease = arbiter.AcquireLease();
+        int[]? left = null;
+        int[]? right = null;
+        try
+        {
+            left = ArrayPool<int>.Shared.Rent(Math.Max(1, leftRows.Length));
+            right = ArrayPool<int>.Shared.Rent(Math.Max(1, rightRows.Length));
+            var reservedBytes = (long)(left.Length + right.Length) * sizeof(int);
+            if (lease.RegisterAndCheckSpill(reservedBytes))
+                throw new ExecutionException("Native join ordinal output could not acquire its result-lifetime memory grant.");
+            leftRows.CopyTo(left);
+            rightRows.CopyTo(right);
+            var result = new NativeJoinPairs(left, right, leftRows.Length, lease, reservedBytes);
+            left = null;
+            right = null;
+            return result;
+        }
+        catch
+        {
+            if (left != null) ArrayPool<int>.Shared.Return(left, clearArray: false);
+            if (right != null) ArrayPool<int>.Shared.Return(right, clearArray: false);
+            lease.Dispose();
+            throw;
+        }
+    }
+
+    public static NativeJoinPairs JoinAuto(
+        ColumnBatch left,
+        IReadOnlyList<string> leftKeyColumns,
+        ColumnBatch right,
+        IReadOnlyList<string> rightKeyColumns,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftKeyColumns);
+        ArgumentNullException.ThrowIfNull(rightKeyColumns);
+        if (leftKeyColumns.Count != rightKeyColumns.Count || leftKeyColumns.Count == 0)
+            throw new ArgumentException("Join key lists must be equal and non-empty.");
+        if (leftKeyColumns.Count > 1)
+            return JoinComposite(left, leftKeyColumns, right, rightKeyColumns, joinKind,
+                memoryArbiter, leftSelection, rightSelection, cancellationToken);
+
+        var leftColumn = left.GetColumn(leftKeyColumns[0]);
+        var rightColumn = right.GetColumn(rightKeyColumns[0]);
+        if (leftColumn.ElementType != rightColumn.ElementType)
+            throw new NotSupportedException("Native join key physical types must match.");
+        if (leftColumn.ElementType == typeof(string))
+            return JoinUtf8(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind,
+                memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(byte)) return Join<byte>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(short)) return Join<short>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(int)) return Join<int>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(long)) return Join<long>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(double)) return Join<double>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(decimal)) return Join<decimal>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(DateTime)) return Join<DateTime>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(DateTimeOffset)) return Join<DateTimeOffset>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(TimeSpan)) return Join<TimeSpan>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(Guid)) return Join<Guid>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        throw new NotSupportedException($"Physical join key type '{leftColumn.ElementType.Name}' is not supported.");
+    }
+
     public static ColumnBatch ProjectPayloads(
         ColumnBatch left,
         ColumnBatch right,
