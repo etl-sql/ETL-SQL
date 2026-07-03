@@ -711,6 +711,39 @@ public sealed class ColumnarSelectRoutingTests
         }
     }
 
+    [Fact]
+    public async Task ArithmeticSelectIntoBuildsNativeOutputBuffersWithoutRowMaterialization()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource();
+        await using var destination = new AppendOnlyColumnDataSource(new[]
+        {
+            new ColumnDefinition("Doubled", "DECIMAL", false),
+            new ColumnDefinition("Remaining", "DECIMAL", false)
+        });
+        evaluator.Connections["col"] = source;
+        evaluator.Connections["#dest"] = destination;
+        var statement = ParseSelect(
+            "SELECT Id * 2 AS Doubled, 10 - Id AS Remaining INTO #dest FROM col WHERE Id IS NOT NULL;");
+
+        await new SelectStatementHandler(NullLogger.Instance).Execute(statement, evaluator);
+
+        Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(2, destination.EstimatedRowCount);
+        Assert.Equal(2L, evaluator.Variables["@@ROWCOUNT"]);
+        var batches = await destination.ReadColumnBatches().ToListAsync();
+        try
+        {
+            var batch = Assert.Single(batches);
+            Assert.Equal(new decimal[] { 2m, 6m }, batch.GetColumn<decimal>("Doubled").Values.ToArray());
+            Assert.Equal(new decimal[] { 9m, 7m }, batch.GetColumn<decimal>("Remaining").Values.ToArray());
+        }
+        finally
+        {
+            foreach (var batch in batches) batch.Dispose();
+        }
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();

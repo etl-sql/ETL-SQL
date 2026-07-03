@@ -492,8 +492,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         var sourceColumns = (await source.GetColumnsAsync()).ToArray();
         var targetColumns = (await destination.GetColumnsAsync()).ToArray();
-        string[] projectedColumns;
+        string[] projectedColumns = Array.Empty<string>();
         string[] outputColumns;
+        IReadOnlyList<ColumnBatchField>? expressionOutputFields = null;
         if (statement.Columns.Count == 1 && statement.Columns[0].Alias == null
             && statement.Columns[0].Expression is StarExpression star
             && star.Qualifier == null && star.Pattern == null
@@ -512,6 +513,22 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             outputColumns = statement.Columns
                 .Select((column, index) => column.Alias ?? projectedColumns[index])
                 .ToArray();
+        }
+        else if (destination is AppendOnlyColumnDataSource appendStore
+            && statement.Columns.All(column => column.Expression is IdentifierExpression || column.Alias != null))
+        {
+            outputColumns = statement.Columns.Select(column => column.Alias
+                ?? ((IdentifierExpression)column.Expression).Name.Split('.').Last()).ToArray();
+            if (outputColumns.Any(name => !appendStore.LogicalSchema.ContainsKey(name))) return null;
+            expressionOutputFields = outputColumns.Select(name =>
+            {
+                var definition = appendStore.LogicalSchema[name];
+                return new ColumnBatchField(
+                    name,
+                    ColumnBatchAdapter.GetPhysicalType(definition.DataType),
+                    definition.DataType,
+                    definition.IsNullable);
+            }).ToArray();
         }
         else
         {
@@ -533,6 +550,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         }
 
         var first = enumerator.Current;
+        if (expressionOutputFields != null
+            && !ColumnarProjectionCompiler.CanProjectToSchema(first, statement.Columns, expressionOutputFields))
+        {
+            first.Dispose();
+            await enumerator.DisposeAsync();
+            return null;
+        }
         SelectionVector? firstSelection = null;
         if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
             first, statement.WhereClause, out firstSelection,
@@ -562,6 +586,16 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         output = input;
                         input = null!;
                     }
+                    else if (expressionOutputFields != null)
+                    {
+                        using (selection)
+                            output = ColumnarProjectionCompiler.ProjectToColumnBatch(
+                                input, statement.Columns, expressionOutputFields, selection,
+                                context.CancellationToken);
+                        selection = null;
+                        input.Dispose();
+                        input = null!;
+                    }
                     else
                     {
                         using (selection)
@@ -587,6 +621,12 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
                 if (!await enumerator.MoveNextAsync()) yield break;
                 input = enumerator.Current;
+                if (expressionOutputFields != null
+                    && !ColumnarProjectionCompiler.CanProjectToSchema(input, statement.Columns, expressionOutputFields))
+                {
+                    input.Dispose();
+                    throw new InvalidOperationException("Columnar source changed to an incompatible projection schema during SELECT INTO.");
+                }
                 if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
                     input, statement.WhereClause, out selection,
                     cancellationToken: context.CancellationToken,

@@ -16,6 +16,85 @@ public static class ColumnarProjectionCompiler
     public static bool CanProject(ColumnBatch batch, IReadOnlyList<SelectColumn> columns)
         => columns.Count > 0 && columns.All(column => CanProject(batch, column.Expression));
 
+    public static bool CanProjectToSchema(
+        ColumnBatch batch,
+        IReadOnlyList<SelectColumn> columns,
+        IReadOnlyList<ColumnBatchField> outputFields)
+    {
+        if (columns.Count == 0 || columns.Count != outputFields.Count || !CanProject(batch, columns)) return false;
+        for (var index = 0; index < columns.Count; index++)
+        {
+            var output = outputFields[index];
+            if (columns[index].Expression is IdentifierExpression identifier)
+            {
+                TryGetColumn(batch, identifier, out var ordinal);
+                var source = batch.Schema.Fields[ordinal];
+                if (source.ElementType != output.ElementType
+                    || !source.LogicalType.Equals(output.LogicalType, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            else if (output.ElementType != typeof(decimal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static ColumnBatch ProjectToColumnBatch(
+        ColumnBatch batch,
+        IReadOnlyList<SelectColumn> columns,
+        IReadOnlyList<ColumnBatchField> outputFields,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!CanProjectToSchema(batch, columns, outputFields))
+            throw new NotSupportedException("The native projection is incompatible with the requested output schema.");
+        var selectedRows = selection?.Indices ?? default;
+        var hasSelection = selection != null;
+        var rowCount = selection?.Count ?? batch.RowCount;
+        var buffers = new List<IColumnBuffer>(columns.Count);
+        try
+        {
+            for (var index = 0; index < columns.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (columns[index].Expression is IdentifierExpression identifier)
+                {
+                    TryGetColumn(batch, identifier, out var ordinal);
+                    buffers.Add(ColumnBatchAdapter.CopyColumn(
+                        batch.Columns[ordinal], batch.RowCount, selectedRows, hasSelection, cancellationToken));
+                    continue;
+                }
+
+                var output = ColumnBuffer<decimal>.Rent(rowCount);
+                try
+                {
+                    for (var position = 0; position < rowCount; position++)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var sourceRow = hasSelection ? selectedRows.Span[position] : position;
+                        var value = Evaluate(batch, columns[index].Expression, sourceRow);
+                        if (value == null || value == DBNull.Value) output.SetNull(position);
+                        else output.Values.Span[position] = Convert.ToDecimal(value);
+                    }
+                    buffers.Add(output);
+                }
+                catch
+                {
+                    output.Dispose();
+                    throw;
+                }
+            }
+            return new ColumnBatch(new ColumnBatchSchema(outputFields), buffers, rowCount);
+        }
+        catch
+        {
+            foreach (var buffer in buffers) buffer.Dispose();
+            throw;
+        }
+    }
+
     public static DataTable ProjectToDataTable(
         ColumnBatch batch,
         IReadOnlyList<SelectColumn> columns,

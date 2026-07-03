@@ -229,7 +229,7 @@ public static class ColumnBatchAdapter
         }
     }
 
-    private static IColumnBuffer CopyColumn(
+    internal static IColumnBuffer CopyColumn(
         IColumnBuffer source,
         int sourceRowCount,
         ReadOnlyMemory<int> selectedRows,

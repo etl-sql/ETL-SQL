@@ -258,15 +258,16 @@ each spill, and emitted one chunk per processed batch. At 1B rows with 10K batch
   cannot coexist with retained table memory is handed directly to spill rather than retained. Focused
   tests prove overlap, grant-pressure backpressure, cancellation/failure cleanup, and zero leaked
   reservations.)*
-- [~] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
+- [x] Avoid `Row.Clone()` plus per-value Arrow rebuilding when input is already a native column batch.
   *(Compatible identity-projection `SELECT * INTO` now transfers retained native batches directly into
   a columnar sink with no row materialization or buffer rebuild. Supported filters compact selected
   ordinals directly into independently owned typed buffers; simple reordered/aliased identifier
   projections also compact and rename the native schema. UTF-8 selection copies offsets/data bytes
   directly without decoding managed strings. Fixed-width column/literal arithmetic projections now
-  read typed buffers directly and materialize only the required result boundary. Native expression
-  buffers for direct `SELECT INTO` transfer and row-backed destinations still use the compatibility
-  path.)*
+  read typed buffers directly; compatible arithmetic `SELECT INTO` builds owned decimal output buffers
+  and transfers them to the native sink without a row or Arrow rebuild. Row-backed destinations and
+  unsupported nested/function expressions intentionally remain compatibility boundaries rather than
+  silently changing semantics.)*
 - [x] Measure compression as an explicit disk-vs-CPU tradeoff; do not enable it by assumption.
   *(A reproducible 100K-row Release assessment now emits physical bytes, wall time, CPU time, and
   read-back checksums for compressed/uncompressed Arrow spill. On the 2026-06-30 workstation,
