@@ -90,6 +90,34 @@ public sealed class ColumnBatchSortingTests
         Assert.Equal(new[] { 1, 0 }, run.Ordinals.ToArray());
     }
 
+    [Fact]
+    public void CrossBatchComparisonMatchesRunCollationAndKeyOrdering()
+    {
+        using var first = CreateStringBatch(
+            new string?[] { "b", "A", null }, new[] { 2, 1, 9 });
+        using var second = CreateStringBatch(
+            new string?[] { "A", "a", "á" }, new[] { 2, 1, 0 });
+        var keys = new[]
+        {
+            new NativeSortKey("Region", NullsFirst: false, StringComparison: StringComparison.OrdinalIgnoreCase),
+            new NativeSortKey("Score", Descending: true)
+        };
+        var rows = new List<(ColumnBatch Batch, int Row, int Global)>
+        {
+            (first, 0, 0), (first, 1, 1), (first, 2, 2),
+            (second, 0, 3), (second, 1, 4), (second, 2, 5)
+        };
+
+        rows.Sort((left, right) =>
+        {
+            var order = ColumnBatchSortKernels.CompareRows(
+                left.Batch, left.Row, right.Batch, right.Row, keys);
+            return order != 0 ? order : left.Global.CompareTo(right.Global);
+        });
+
+        Assert.Equal(new[] { 3, 1, 4, 0, 5, 2 }, rows.Select(item => item.Global));
+    }
+
     private static ColumnBatch CreateBatch()
     {
         var schema = new ColumnBatchSchema(new[]
@@ -105,6 +133,11 @@ public sealed class ColumnBatchSortingTests
     }
 
     private static ColumnBatch CreateStringBatch()
+        => CreateStringBatch(
+            new string?[] { "b", "A", "a", null, "A", "á" },
+            new[] { 2, 2, 1, 9, 1, 0 });
+
+    private static ColumnBatch CreateStringBatch(string?[] regions, int[] scores)
     {
         var schema = new ColumnBatchSchema(new[]
         {
@@ -113,8 +146,8 @@ public sealed class ColumnBatchSortingTests
         });
         return new ColumnBatch(schema, new IColumnBuffer[]
         {
-            Utf8ColumnBuffer.FromStrings(new string?[] { "b", "A", "a", null, "A", "á" }),
-            new ColumnBuffer<int>(new[] { 2, 2, 1, 9, 1, 0 }, 6)
-        }, 6);
+            Utf8ColumnBuffer.FromStrings(regions),
+            new ColumnBuffer<int>(scores, scores.Length)
+        }, regions.Length);
     }
 }

@@ -42,6 +42,35 @@ public sealed class NativeSortRun : IDisposable
 
 public static class ColumnBatchSortKernels
 {
+    public static int CompareRows(
+        ColumnBatch leftBatch,
+        int leftRow,
+        ColumnBatch rightBatch,
+        int rightRow,
+        IReadOnlyList<NativeSortKey> keys)
+    {
+        ArgumentNullException.ThrowIfNull(keys);
+        if (keys.Count == 0) throw new ArgumentException("At least one sort key is required.", nameof(keys));
+        if ((uint)leftRow >= (uint)leftBatch.RowCount) throw new ArgumentOutOfRangeException(nameof(leftRow));
+        if ((uint)rightRow >= (uint)rightBatch.RowCount) throw new ArgumentOutOfRangeException(nameof(rightRow));
+        foreach (var key in keys)
+        {
+            var left = leftBatch.GetColumn(key.ColumnName);
+            var right = rightBatch.GetColumn(key.ColumnName);
+            if (left.ElementType != right.ElementType)
+                throw new NotSupportedException("Native sort key physical types changed across batches.");
+            var nullOrder = CompareCrossNulls(left, leftRow, right, rightRow, key.NullsFirst, out var bothPresent);
+            if (!bothPresent)
+            {
+                if (nullOrder != 0) return nullOrder;
+                continue;
+            }
+            var order = ComparePresent(left, leftRow, right, rightRow, key.StringComparison);
+            if (order != 0) return key.Descending ? -order : order;
+        }
+        return 0;
+    }
+
     public static NativeSortRun CreateRun<T>(
         ColumnBatch batch,
         string keyColumnName,
@@ -229,6 +258,39 @@ public static class ColumnBatchSortKernels
             };
     }
 
+    private static int ComparePresent(
+        IColumnBuffer left,
+        int leftRow,
+        IColumnBuffer right,
+        int rightRow,
+        StringComparison stringComparison)
+    {
+        if (left is Utf8ColumnBuffer leftUtf8 && right is Utf8ColumnBuffer rightUtf8)
+        {
+            if (stringComparison is not StringComparison.Ordinal and not StringComparison.OrdinalIgnoreCase)
+                throw new NotSupportedException("Native UTF-8 sorting supports ordinal collations only.");
+            var leftBytes = leftUtf8.GetUtf8Bytes(leftRow);
+            var rightBytes = rightUtf8.GetUtf8Bytes(rightRow);
+            if (IsAscii(leftBytes) && IsAscii(rightBytes))
+                return stringComparison == StringComparison.Ordinal
+                    ? leftBytes.SequenceCompareTo(rightBytes)
+                    : CompareAsciiIgnoreCase(leftBytes, rightBytes);
+            return string.Compare(Encoding.UTF8.GetString(leftBytes), Encoding.UTF8.GetString(rightBytes),
+                stringComparison);
+        }
+        if (left is ColumnBuffer<byte> lb && right is ColumnBuffer<byte> rb) return lb.Values.Span[leftRow].CompareTo(rb.Values.Span[rightRow]);
+        if (left is ColumnBuffer<short> ls && right is ColumnBuffer<short> rs) return ls.Values.Span[leftRow].CompareTo(rs.Values.Span[rightRow]);
+        if (left is ColumnBuffer<int> li && right is ColumnBuffer<int> ri) return li.Values.Span[leftRow].CompareTo(ri.Values.Span[rightRow]);
+        if (left is ColumnBuffer<long> ll && right is ColumnBuffer<long> rl) return ll.Values.Span[leftRow].CompareTo(rl.Values.Span[rightRow]);
+        if (left is ColumnBuffer<double> ld && right is ColumnBuffer<double> rd) return ld.Values.Span[leftRow].CompareTo(rd.Values.Span[rightRow]);
+        if (left is ColumnBuffer<decimal> lm && right is ColumnBuffer<decimal> rm) return lm.Values.Span[leftRow].CompareTo(rm.Values.Span[rightRow]);
+        if (left is ColumnBuffer<DateTime> ldt && right is ColumnBuffer<DateTime> rdt) return ldt.Values.Span[leftRow].CompareTo(rdt.Values.Span[rightRow]);
+        if (left is ColumnBuffer<DateTimeOffset> ldo && right is ColumnBuffer<DateTimeOffset> rdo) return ldo.Values.Span[leftRow].CompareTo(rdo.Values.Span[rightRow]);
+        if (left is ColumnBuffer<TimeSpan> lt && right is ColumnBuffer<TimeSpan> rt) return lt.Values.Span[leftRow].CompareTo(rt.Values.Span[rightRow]);
+        if (left is ColumnBuffer<Guid> lg && right is ColumnBuffer<Guid> rg) return lg.Values.Span[leftRow].CompareTo(rg.Values.Span[rightRow]);
+        throw new NotSupportedException($"Physical type '{left.ElementType.Name}' cannot be sorted natively.");
+    }
+
     private static int CompareNulls(
         IColumnBuffer column,
         int left,
@@ -238,6 +300,20 @@ public static class ColumnBatchSortKernels
     {
         var leftNull = column.IsNull(left);
         var rightNull = column.IsNull(right);
+        bothPresent = !leftNull && !rightNull;
+        return bothPresent || leftNull == rightNull ? 0 : (leftNull == nullsFirst ? -1 : 1);
+    }
+
+    private static int CompareCrossNulls(
+        IColumnBuffer left,
+        int leftRow,
+        IColumnBuffer right,
+        int rightRow,
+        bool nullsFirst,
+        out bool bothPresent)
+    {
+        var leftNull = left.IsNull(leftRow);
+        var rightNull = right.IsNull(rightRow);
         bothPresent = !leftNull && !rightNull;
         return bothPresent || leftNull == rightNull ? 0 : (leftNull == nullsFirst ? -1 : 1);
     }

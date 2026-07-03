@@ -1113,6 +1113,60 @@ public sealed class ColumnarSelectRoutingTests
             }, keys.Length);
     }
 
+    [Fact]
+    public async Task SortPlannerMergesFilteredMultiKeyNativeRunsWithoutRowReads()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.BatchSize = 2;
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Region", typeof(string), "VARCHAR(20)"),
+            new ColumnBatchField("Score", typeof(int), "INT"),
+            new ColumnBatchField("Label", typeof(string), "VARCHAR(20)")
+        });
+        await using var source = new NativeOnlyDataSource(new[]
+        {
+            Batch(new string?[] { "b", "A", null }, new[] { 2, 1, 9 }, new[] { "b", "A-one", "null" }),
+            Batch(new string?[] { "A", "a", "á" }, new[] { 2, 1, 0 }, new[] { "A-two", "a-one", "excluded" })
+        }, true);
+        evaluator.Connections["native_sort"] = source;
+        var statement = ParseSelect(
+            "SELECT Label, Region, Score FROM native_sort WHERE Score > 0 ORDER BY Region, Score DESC;");
+
+        var labels = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => row["Label"]?.ToString()).ToArray();
+
+        Assert.Equal(new[] { "null", "A-two", "A-one", "a-one", "b" }, labels);
+        Assert.Equal(0, source.RowReadAttempts);
+
+        ColumnBatch Batch(string?[] regions, int[] scores, string[] labels)
+            => new(schema, new IColumnBuffer[]
+            {
+                Utf8ColumnBuffer.FromStrings(regions),
+                new ColumnBuffer<int>(scores, scores.Length),
+                Utf8ColumnBuffer.FromStrings(labels)
+            }, scores.Length);
+    }
+
+    [Fact]
+    public async Task SortPlannerRejectsOversizedEstimateBeforeRowExternalSortFallback()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.OperatorMemoryGrantMB = 1;
+        await using var source = CreateJoinSource(
+            new[] { 1, 2 }, new[] { "one", "two" }, false, estimatedRowCount: 1_000_000);
+        evaluator.Connections["fallback_sort"] = source;
+        var statement = ParseSelect("SELECT Label FROM fallback_sort ORDER BY Key DESC;");
+
+        var labels = (await new SelectStatementHandler(NullLogger.Instance)
+            .EvaluateQuery(statement, evaluator).ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => row["Label"]?.ToString()).ToArray();
+
+        Assert.Equal(new[] { "two", "one" }, labels);
+        Assert.True(source.RowReadAttempts > 0);
+    }
+
     private static SelectStatement ParseSelect(string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();

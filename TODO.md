@@ -416,12 +416,15 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   only after every right batch is probed. End-to-end coverage proves multi-batch outer, semi/anti,
   normalized composite-string, and pre-consumption pressure fallback behavior. Oversized or broader
   shapes route to the existing spill-capable heavy join pipeline.)*
-- [~] Sort-key extraction and run generation without boxing; retain the bounded external merge.
+- [x] Sort-key extraction and run generation without boxing; retain the bounded external merge.
   *(Fixed-width and UTF-8 keys now produce pooled typed sort runs from full batches or selection
   vectors using a cancellation-aware bottom-up merge, per-key null placement/direction, deterministic
   ties, and transient/result memory grants. Multi-key comparison supports mixed native types plus
   ordinal and ordinal-ignore-case UTF-8 collation, with direct byte comparison for ASCII data.
-  Planner integration with the existing bounded external merge remains.)*
+  Cross-batch comparison uses identical semantics, and the SELECT planner now creates filtered native
+  runs under grants and performs a stable k-way merge while materializing only final result batches.
+  Oversized estimates or grant rejection occur before source consumption and route to the existing
+  bounded external-sort pipeline.)*
 - [~] Add adapters and differential tests proving columnar and row paths return identical results,
   null behavior, type coercion, collation behavior, lineage, and cancellation semantics. *(The row
   boundary adapter and deterministic differential coverage now compare fixed-width filtering,
