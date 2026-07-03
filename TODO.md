@@ -385,7 +385,9 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
   Low-cardinality UTF-8 keys now support native COUNT/SUM/AVG/MIN/MAX across batches and multiple
   numeric value columns with the same trim, numeric/date normalization, null grouping, and
   case-sensitive key identity as `CompoundKey`, under explicit result-lifetime grants. End-to-end
-  differentials match the row planner. Composite keys and spill partitioning remain.)*
+  differentials match the row planner. Fixed-width and string native grant exhaustion now reliably
+  returns to governed external partition aggregation. Composite keys and native in-plan spill
+  partitioning remain.)*
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and

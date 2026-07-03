@@ -318,7 +318,9 @@ public class ExternalAggregateEngine
                 return rows;
             }
         }
-        catch (ExecutionException ex) when (ex.Message.StartsWith("Native GROUP BY requires", StringComparison.Ordinal))
+        catch (ExecutionException ex) when (
+            ex.Message.StartsWith("Native ", StringComparison.Ordinal)
+            && ex.Message.Contains("GROUP BY requires", StringComparison.Ordinal))
         {
             return null;
         }

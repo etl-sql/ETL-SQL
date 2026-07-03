@@ -157,6 +157,31 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task StringGroupedNativeGrantFailureFallsBackToSpillPartitionAggregation()
+        {
+            var (eval, logger) = BuildContext();
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                var rows = MakeRows(30, new[] { "A", "B", "C" });
+                var (groupBy, columns, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+                Assert.Equal(3, result.Count);
+                Assert.Equal(30m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+                Assert.Equal(0, engine.ColumnarAggregateRows);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
         public async Task GroupSampleCanIncreaseFanOutWithoutLosingRows()
         {
             var (eval, logger) = BuildContext();
