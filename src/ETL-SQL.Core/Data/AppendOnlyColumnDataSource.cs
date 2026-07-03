@@ -19,12 +19,14 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<ColumnBatch> _segments = new();
+    private readonly List<byte[]?> _segmentTombstones = new();
     private readonly Dictionary<string, ColumnDefinition> _logicalSchema;
     private readonly string[] _columnNames;
     private DataTable _head;
     private readonly IMemoryGrantArbiter _memoryArbiter;
     private IMemoryGrantLease _headMemoryLease;
     private IMemoryGrantLease _constraintMemoryLease;
+    private IMemoryGrantLease _tombstoneMemoryLease;
     private readonly List<IUniqueConstraint> _uniqueConstraints;
     private readonly Stack<TransactionSnapshot> _transactionSnapshots = new();
     private bool _disposed;
@@ -32,6 +34,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     private long _headEstimatedBytes;
     private long _allocatedSegmentBytes;
     private long _constraintEstimatedBytes;
+    private long _tombstoneBytes;
 
     public AppendOnlyColumnDataSource(
         IEnumerable<ColumnDefinition> schema,
@@ -62,6 +65,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         }
         _headMemoryLease = _memoryArbiter.AcquireLease();
         _constraintMemoryLease = _memoryArbiter.AcquireLease();
+        _tombstoneMemoryLease = _memoryArbiter.AcquireLease();
         _head = CreateHead();
     }
 
@@ -70,7 +74,8 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     public int MutableHeadRows => _head.Rows.Count;
     public long EstimatedRowCount => Interlocked.Read(ref _rowCount);
     public long AllocatedSegmentBytes => Interlocked.Read(ref _allocatedSegmentBytes);
-    public long MemoryUsageBytes => AllocatedSegmentBytes + Interlocked.Read(ref _headEstimatedBytes) + Interlocked.Read(ref _constraintEstimatedBytes);
+    public long MemoryUsageBytes => AllocatedSegmentBytes + Interlocked.Read(ref _headEstimatedBytes)
+        + Interlocked.Read(ref _constraintEstimatedBytes) + Interlocked.Read(ref _tombstoneBytes);
     public IReadOnlyDictionary<string, ColumnDefinition> LogicalSchema => _logicalSchema;
     public IReadOnlyList<TableConstraint> TableConstraints { get; }
 
@@ -172,13 +177,17 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     {
         ThrowIfDisposed();
         ColumnBatch[] retained;
+        byte[]?[] tombstones;
         await _gate.WaitAsync(cancellationToken);
         try
         {
             ThrowIfDisposed();
             FreezeHead();
             lock (_segments)
+            {
                 retained = _segments.Select(segment => segment.Retain()).ToArray();
+                tombstones = _segmentTombstones.Select(bitmap => bitmap?.ToArray()).ToArray();
+            }
         }
         finally
         {
@@ -193,7 +202,16 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                 cancellationToken.ThrowIfCancellationRequested();
                 var batch = retained[next];
                 retained[next] = null!; // ownership transfers to the consumer
-                yield return batch;
+                var tombstone = tombstones[next];
+                if (tombstone == null)
+                {
+                    yield return batch;
+                    continue;
+                }
+                using (batch)
+                using (var selection = CreateLiveSelection(batch.RowCount, tombstone))
+                    yield return ColumnBatchAdapter.Compact(
+                        batch, _columnNames, selection, cancellationToken, _columnNames);
             }
         }
         finally
@@ -213,6 +231,86 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
 
     public Task<IEnumerable<string>> GetColumnsAsync()
         => Task.FromResult<IEnumerable<string>>(_columnNames.ToArray());
+
+    /// <summary>
+    /// Marks rows selected by a native predicate as deleted. Returns <c>null</c> without mutation when
+    /// the predicate cannot be bound to native buffers, allowing the caller to use row compatibility.
+    /// </summary>
+    public async Task<long?> DeleteWhereAsync(
+        Expression? predicate,
+        bool caseSensitiveComparison,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfDisposed();
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            ThrowIfDisposed();
+            FreezeHead();
+            var selections = new SelectionVector?[_segments.Count];
+            try
+            {
+                for (var index = 0; index < _segments.Count; index++)
+                {
+                    if (predicate == null)
+                        selections[index] = SelectionVector.FromIndices(Enumerable.Range(0, _segments[index].RowCount));
+                    else if (!ColumnarPredicateCompiler.TrySelect(
+                        _segments[index], predicate, out selections[index],
+                        cancellationToken: cancellationToken,
+                        caseSensitiveComparison: caseSensitiveComparison))
+                        return null;
+                }
+
+                var original = _segmentTombstones.Select(bitmap => bitmap?.ToArray()).ToArray();
+                var originalCount = _rowCount;
+                var addedBitmapBytes = 0L;
+                for (var index = 0; index < selections.Length; index++)
+                    if (_segmentTombstones[index] == null && selections[index]!.Count > 0)
+                        addedBitmapBytes = checked(addedBitmapBytes + (_segments[index].RowCount + 7L) / 8L);
+                var prospectiveBytes = checked(_tombstoneBytes + addedBitmapBytes);
+                if (_tombstoneMemoryLease.RegisterAndCheckSpill(prospectiveBytes))
+                    throw MemoryGrantExceeded(prospectiveBytes);
+
+                long deleted = 0;
+                try
+                {
+                    for (var index = 0; index < selections.Length; index++)
+                    {
+                        var selection = selections[index]!;
+                        if (selection.Count == 0) continue;
+                        var bitmap = _segmentTombstones[index] ??=
+                            new byte[(_segments[index].RowCount + 7) / 8];
+                        foreach (var row in selection.Indices.Span)
+                        {
+                            var mask = (byte)(1 << (row & 7));
+                            ref var slot = ref bitmap[row >> 3];
+                            if ((slot & mask) != 0) continue;
+                            slot |= mask;
+                            deleted++;
+                        }
+                    }
+                    _tombstoneBytes = prospectiveBytes;
+                    _rowCount -= deleted;
+                    RebuildConstraintsFromLiveRows(cancellationToken);
+                    return deleted;
+                }
+                catch
+                {
+                    _segmentTombstones.Clear();
+                    _segmentTombstones.AddRange(original);
+                    _rowCount = originalCount;
+                    RebaseTombstoneGrant(original.Sum(bitmap => (long)(bitmap?.LongLength ?? 0)));
+                    RebuildConstraintsFromLiveRows(cancellationToken);
+                    throw;
+                }
+            }
+            finally
+            {
+                foreach (var selection in selections) selection?.Dispose();
+            }
+        }
+        finally { _gate.Release(); }
+    }
 
     public async Task TruncateAsync()
     {
@@ -243,7 +341,9 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
             FreezeHead();
             ColumnBatch[] retained;
             lock (_segments) retained = _segments.Select(segment => segment.Retain()).ToArray();
-            _transactionSnapshots.Push(new TransactionSnapshot(retained, _rowCount));
+            byte[]?[] tombstones;
+            lock (_segments) tombstones = _segmentTombstones.Select(bitmap => bitmap?.ToArray()).ToArray();
+            _transactionSnapshots.Push(new TransactionSnapshot(retained, tombstones, _rowCount));
         }
         finally
         {
@@ -279,13 +379,17 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
                 throw new InvalidOperationException("No append-store transaction is active.");
             var snapshot = _transactionSnapshots.Pop();
             ClearCore();
-            var restored = snapshot.TakeSegments();
+            var (restored, tombstones) = snapshot.TakeSegments();
             try
             {
-                var stagedKeys = restored.SelectMany(StageKeys).ToList();
-                CommitKeys(stagedKeys);
-                lock (_segments) _segments.AddRange(restored);
+                lock (_segments)
+                {
+                    _segments.AddRange(restored);
+                    _segmentTombstones.AddRange(tombstones);
+                }
+                RebaseTombstoneGrant(tombstones.Sum(bitmap => (long)(bitmap?.LongLength ?? 0)));
                 Interlocked.Exchange(ref _rowCount, snapshot.RowCount);
+                RebuildConstraintsFromLiveRows(CancellationToken.None);
             }
             catch
             {
@@ -310,6 +414,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
             ClearCore();
             _headMemoryLease.Dispose();
             _constraintMemoryLease.Dispose();
+            _tombstoneMemoryLease.Dispose();
             _disposed = true;
         }
         finally
@@ -343,6 +448,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         {
             foreach (var segment in _segments) segment.Dispose();
             _segments.Clear();
+            _segmentTombstones.Clear();
         }
         _head = CreateHead();
         Interlocked.Exchange(ref _rowCount, 0);
@@ -353,6 +459,7 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
         _constraintEstimatedBytes = 0;
         _constraintMemoryLease.Dispose();
         _constraintMemoryLease = _memoryArbiter.AcquireLease();
+        RebaseTombstoneGrant(0);
     }
 
     private DataTable CreateHead()
@@ -474,6 +581,46 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
             throw MemoryGrantExceeded(_constraintEstimatedBytes);
     }
 
+    private void RebuildConstraintsFromLiveRows(CancellationToken cancellationToken)
+    {
+        foreach (var constraint in _uniqueConstraints) constraint.Clear();
+        _constraintEstimatedBytes = 0;
+        _constraintMemoryLease.Dispose();
+        _constraintMemoryLease = _memoryArbiter.AcquireLease();
+        for (var index = 0; index < _segments.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tombstone = _segmentTombstones[index];
+            if (tombstone == null)
+            {
+                CommitKeys(StageKeys(_segments[index]));
+                continue;
+            }
+            using var selection = CreateLiveSelection(_segments[index].RowCount, tombstone);
+            if (selection.Count == 0) continue;
+            using var live = ColumnBatchAdapter.Compact(
+                _segments[index], _columnNames, selection, cancellationToken, _columnNames);
+            CommitKeys(StageKeys(live));
+        }
+    }
+
+    private void RebaseTombstoneGrant(long bytes)
+    {
+        _tombstoneMemoryLease.Dispose();
+        _tombstoneMemoryLease = _memoryArbiter.AcquireLease();
+        if (bytes > 0 && _tombstoneMemoryLease.RegisterAndCheckSpill(bytes))
+            throw MemoryGrantExceeded(bytes);
+        _tombstoneBytes = bytes;
+    }
+
+    private static SelectionVector CreateLiveSelection(int rowCount, byte[] tombstones)
+    {
+        var rows = new List<int>(rowCount);
+        for (var row = 0; row < rowCount; row++)
+            if ((tombstones[row >> 3] & (1 << (row & 7))) == 0) rows.Add(row);
+        return SelectionVector.FromIndices(rows);
+    }
+
     private void AcceptSegment(ColumnBatch segment)
     {
         var bytes = segment.AllocatedBytes;
@@ -497,7 +644,11 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
             lease.Dispose();
             throw;
         }
-        lock (_segments) _segments.Add(segment);
+        lock (_segments)
+        {
+            _segments.Add(segment);
+            _segmentTombstones.Add(null);
+        }
         Interlocked.Add(ref _allocatedSegmentBytes, bytes);
     }
 
@@ -757,25 +908,30 @@ public sealed class AppendOnlyColumnDataSource : ITransactionalDataSource, IRepl
     private sealed class TransactionSnapshot : IDisposable
     {
         private ColumnBatch[]? _segments;
+        private byte[]?[]? _tombstones;
 
-        public TransactionSnapshot(ColumnBatch[] segments, long rowCount)
+        public TransactionSnapshot(ColumnBatch[] segments, byte[]?[] tombstones, long rowCount)
         {
             _segments = segments;
+            _tombstones = tombstones;
             RowCount = rowCount;
         }
 
         public long RowCount { get; }
 
-        public ColumnBatch[] TakeSegments()
+        public (ColumnBatch[] Segments, byte[]?[] Tombstones) TakeSegments()
         {
             var segments = _segments ?? throw new ObjectDisposedException(nameof(TransactionSnapshot));
+            var tombstones = _tombstones ?? throw new ObjectDisposedException(nameof(TransactionSnapshot));
             _segments = null;
-            return segments;
+            _tombstones = null;
+            return (segments, tombstones);
         }
 
         public void Dispose()
         {
             var segments = Interlocked.Exchange(ref _segments, null);
+            Interlocked.Exchange(ref _tombstones, null);
             if (segments != null) foreach (var segment in segments) segment.Dispose();
         }
     }

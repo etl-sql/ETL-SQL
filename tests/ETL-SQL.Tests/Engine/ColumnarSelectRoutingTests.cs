@@ -148,6 +148,44 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task NativeDeleteUsesTombstonesAndReleasesUniqueKeysWithoutDowngrade()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY, Name VARCHAR(20)); " +
+            "INSERT INTO #native VALUES (1, 'one'), (2, 'two'), (3, 'three'); " +
+            "DELETE FROM #native WHERE Id >= 2; " +
+            "INSERT INTO #native VALUES (2, 'replacement');"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var rows = (await native.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows)
+            .OrderBy(row => Convert.ToInt32(row["Id"])).ToList();
+        Assert.Equal(2, native.EstimatedRowCount);
+        Assert.Equal(new[] { 1, 2 }, rows.Select(row => Convert.ToInt32(row["Id"])).ToArray());
+        Assert.Equal("replacement", rows[1]["Name"]);
+    }
+
+    [Fact]
+    public async Task NativeDeleteTombstonesRollbackWithTransactionSnapshot()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT PRIMARY KEY); " +
+            "INSERT INTO #native VALUES (1), (2); " +
+            "BEGIN TRANSACTION; DELETE FROM #native WHERE Id = 1; ROLLBACK;"));
+
+        var native = Assert.IsType<AppendOnlyColumnDataSource>(evaluator.Connections["#native"]);
+        var ids = (await native.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows)
+            .Select(row => Convert.ToInt32(row["Id"])).OrderBy(id => id).ToArray();
+        Assert.Equal(new[] { 1, 2 }, ids);
+        Assert.Equal(2, native.EstimatedRowCount);
+    }
+
+    [Fact]
     public async Task ColumnarTempMutationDowngradeRestoresOriginalStoreOnRollback()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

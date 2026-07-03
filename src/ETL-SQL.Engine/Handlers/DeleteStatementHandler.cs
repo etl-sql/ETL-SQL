@@ -65,6 +65,22 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
                 return;
             }
 
+            if (connection is AppendOnlyColumnDataSource columnar && stmt.Output == null)
+            {
+                var nativeDeleted = await columnar.DeleteWhereAsync(
+                    stmt.WhereClause, context.CaseSensitiveComparison, context.CancellationToken);
+                if (nativeDeleted.HasValue)
+                {
+                    context.IncrementOperationCount(
+                        OperationType.EngineInternal,
+                        count: nativeDeleted.Value > int.MaxValue ? int.MaxValue : (int)nativeDeleted.Value);
+                    context.Telemetry.RowsProcessed += nativeDeleted.Value;
+                    if (context.IsVerbose)
+                        _logger.WriteLine($"Finished tombstoning {nativeDeleted.Value} rows in {connName}");
+                    return;
+                }
+            }
+
             connection = await TempTableStorageRouter.EnsureMutableAsync(context, connName, connection, "DELETE");
 
             // 1. Read existing and filter
