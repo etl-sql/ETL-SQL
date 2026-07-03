@@ -423,22 +423,40 @@ public class ExternalJoinEngine
             {
                 using (batch)
                 {
-                    var routes = Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray();
-                    for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                    NativePartitionRouting? nativeRouting = null;
+                    if (keys.Count == 1
+                        && batch.GetColumn(keys[0]) is Utf8ColumnBuffer)
+                        nativeRouting = ColumnBatchPartitionKernels.HashPartitionNormalizedUtf8(
+                            batch, keys[0], PartitionCount, depth,
+                            cancellationToken: _context.CancellationToken);
+
+                    var routes = nativeRouting == null
+                        ? Enumerable.Range(0, PartitionCount).Select(_ => new List<int>()).ToArray()
+                        : null;
+                    if (nativeRouting == null)
                     {
-                        var key = GetPartitionHashKey(batch, rowIndex, keys, depth);
-                        routes[(key.GetHashCode() & 0x7fffffff) % PartitionCount].Add(rowIndex);
+                        for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                        {
+                            var key = GetPartitionHashKey(batch, rowIndex, keys, depth);
+                            routes![(key.GetHashCode() & 0x7fffffff) % PartitionCount].Add(rowIndex);
+                        }
                     }
                     var columns = batch.Schema.Fields.Select(field => field.Name).ToArray();
-                    for (var partition = 0; partition < routes.Length; partition++)
+                    using (nativeRouting)
                     {
-                        if (routes[partition].Count == 0) continue;
-                        using var selection = SelectionVector.FromIndices(routes[partition]);
-                        using var compacted = ColumnBatchAdapter.Compact(
-                            batch, columns, selection, _context.CancellationToken);
-                        await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
-                        counts[partition] += compacted.RowCount;
-                        ColumnarRepartitionRows += compacted.RowCount;
+                        for (var partition = 0; partition < PartitionCount; partition++)
+                        {
+                            var routed = nativeRouting?.GetPartition(partition);
+                            if (routed?.Length == 0 || nativeRouting == null && routes![partition].Count == 0) continue;
+                            using var selection = nativeRouting != null
+                                ? SelectionVector.FromIndices(routed!.Value.Span)
+                                : SelectionVector.FromIndices(routes![partition]);
+                            using var compacted = ColumnBatchAdapter.Compact(
+                                batch, columns, selection, _context.CancellationToken);
+                            await ((IColumnarSpillWriter)writers[partition]).WriteBatchAsync(compacted);
+                            counts[partition] += compacted.RowCount;
+                            ColumnarRepartitionRows += compacted.RowCount;
+                        }
                     }
                 }
             }

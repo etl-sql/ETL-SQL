@@ -64,6 +64,25 @@ public sealed class SelectionVector : IDisposable
         }
     }
 
+    public static SelectionVector FromIndices(ReadOnlySpan<int> indices)
+    {
+        var result = new SelectionVector(indices.Length);
+        try
+        {
+            foreach (var index in indices)
+            {
+                if (index < 0) throw new ArgumentOutOfRangeException(nameof(indices));
+                result.Add(index);
+            }
+            return result;
+        }
+        catch
+        {
+            result.Dispose();
+            throw;
+        }
+    }
+
     public void Dispose()
     {
         var indices = Interlocked.Exchange(ref _indices, null);

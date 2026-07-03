@@ -85,6 +85,15 @@ public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<Compou
 
     public override int GetHashCode() => _hashCode;
 
+    /// <summary>Computes the same salted single-value hash used by a one-column compound key.</summary>
+    public static int GetNormalizedHashCode(int setIndex, object? normalizedValue)
+    {
+        var hash = new HashCode();
+        hash.Add(setIndex);
+        hash.Add(normalizedValue);
+        return hash.ToHashCode();
+    }
+
     public static bool operator ==(CompoundKey left, CompoundKey right) => left.Equals(right);
     public static bool operator !=(CompoundKey left, CompoundKey right) => !left.Equals(right);
 

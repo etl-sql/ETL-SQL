@@ -1,7 +1,9 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data;
 
@@ -76,6 +78,67 @@ public static class ColumnBatchPartitionKernels
                 if (column.IsNull(row)) return 0;
                 var hash = EqualityComparer<T>.Default.GetHashCode(values.Span[row]);
                 return (int)((uint)hash % (uint)partitionCount);
+            }
+
+            VisitOrdinals(batch.RowCount, selection, cancellationToken, row => counts[PartitionFor(row)]++);
+            for (var partition = 0; partition < partitionCount; partition++)
+                offsets[partition + 1] = checked(offsets[partition] + counts[partition]);
+            offsets.AsSpan(0, partitionCount).CopyTo(cursors);
+            VisitOrdinals(batch.RowCount, selection, cancellationToken, row =>
+            {
+                var partition = PartitionFor(row);
+                ordinals[cursors[partition]++] = row;
+            });
+
+            var result = new NativePartitionRouting(ordinals, offsets, candidateCount, partitionCount);
+            ordinals = null;
+            offsets = null;
+            return result;
+        }
+        finally
+        {
+            if (counts != null) ArrayPool<int>.Shared.Return(counts, clearArray: true);
+            if (cursors != null) ArrayPool<int>.Shared.Return(cursors, clearArray: true);
+            if (ordinals != null) ArrayPool<int>.Shared.Return(ordinals, clearArray: false);
+            if (offsets != null) ArrayPool<int>.Shared.Return(offsets, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// Routes UTF-8 keys using the same normalization and salted hash as one-column CompoundKey.
+    /// Equal numeric/date strings and trimmed strings therefore cannot split across partitions.
+    /// </summary>
+    public static NativePartitionRouting HashPartitionNormalizedUtf8(
+        ColumnBatch batch,
+        string keyColumnName,
+        int partitionCount,
+        int hashSalt = 0,
+        SelectionVector? selection = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (partitionCount <= 0) throw new ArgumentOutOfRangeException(nameof(partitionCount));
+        var column = batch.GetUtf8Column(keyColumnName);
+        var candidateCount = selection?.Count ?? batch.RowCount;
+        int[]? counts = null;
+        int[]? offsets = null;
+        int[]? cursors = null;
+        int[]? ordinals = null;
+        try
+        {
+            counts = ArrayPool<int>.Shared.Rent(partitionCount);
+            offsets = ArrayPool<int>.Shared.Rent(partitionCount + 1);
+            cursors = ArrayPool<int>.Shared.Rent(partitionCount);
+            ordinals = ArrayPool<int>.Shared.Rent(Math.Max(1, candidateCount));
+            counts.AsSpan(0, partitionCount).Clear();
+            offsets.AsSpan(0, partitionCount + 1).Clear();
+
+            int PartitionFor(int row)
+            {
+                object? normalized = null;
+                if (!column.IsNull(row))
+                    normalized = CompoundKey.NormalizeValue(Encoding.UTF8.GetString(column.GetUtf8Bytes(row)));
+                var hash = CompoundKey.GetNormalizedHashCode(hashSalt, normalized);
+                return (hash & 0x7fffffff) % partitionCount;
             }
 
             VisitOrdinals(batch.RowCount, selection, cancellationToken, row => counts[PartitionFor(row)]++);

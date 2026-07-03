@@ -381,8 +381,11 @@ unsupported expressions. Scalar typed-buffer loops come first; SIMD is an optimi
 - [~] Hash partition routing directly from column buffers. *(Fixed-width nullable keys now route
   directly into one contiguous pooled ordinal buffer using a two-pass count/prefix/fill algorithm,
   with optional selection-vector input, deterministic null routing, cancellation cleanup, and
-  O(rows + partitions) storage. String/composite hashing, planner integration, and adaptive fan-out
-  remain.)*
+  O(rows + partitions) storage. Normalized UTF-8 keys now use the same salted hash as one-column
+  `CompoundKey`, keeping trimmed/numeric/date-equivalent values together; recursive external joins
+  consume that pooled routing directly instead of allocating one `List<int>` per partition. Composite
+  hashing and broader initial-partition planner integration remain; adaptive fan-out is already supplied
+  by the external operator sizing model.)*
 - [~] Equi-join build/probe over typed key vectors and packed payload columns. *(A fixed-width inner
   equi-join kernel now builds typed key-to-ordinal state, probes native buffers or selection vectors,
   applies SQL null non-matching semantics, emits duplicate-preserving packed ordinal pairs, and holds

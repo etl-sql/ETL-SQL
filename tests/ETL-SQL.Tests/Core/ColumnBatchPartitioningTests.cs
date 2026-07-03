@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 using Xunit;
 
 namespace ETL_SQL.Tests.Core;
@@ -63,6 +64,33 @@ public sealed class ColumnBatchPartitioningTests
         using var batch = CreateBatch();
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             ColumnBatchPartitionKernels.HashPartition<int>(batch, "Key", 0));
+    }
+
+    [Fact]
+    public void Utf8RoutingUsesCompoundKeyNormalizationAndSalt()
+    {
+        var schema = new ColumnBatchSchema(new[]
+        {
+            new ColumnBatchField("Key", typeof(string), "VARCHAR(20)")
+        });
+        using var batch = new ColumnBatch(schema, new IColumnBuffer[]
+        {
+            Utf8ColumnBuffer.FromStrings(new string?[] { "A", " A ", "1", "1.0", null, "a" })
+        }, 6);
+        using var routing = ColumnBatchPartitionKernels.HashPartitionNormalizedUtf8(
+            batch, "Key", 7, hashSalt: 3);
+
+        var partitionByRow = new Dictionary<int, int>();
+        for (var partition = 0; partition < routing.PartitionCount; partition++)
+            foreach (var row in routing.GetPartition(partition).Span) partitionByRow[row] = partition;
+        Assert.Equal(partitionByRow[0], partitionByRow[1]);
+        Assert.Equal(partitionByRow[2], partitionByRow[3]);
+        Assert.Equal(
+            new CompoundKey(3, new object?[] { 1m }).GetHashCode(),
+            CompoundKey.GetNormalizedHashCode(3, 1m));
+        Assert.Equal(
+            (CompoundKey.GetNormalizedHashCode(3, null) & 0x7fffffff) % 7,
+            partitionByRow[4]);
     }
 
     private static ColumnBatch CreateBatch()
