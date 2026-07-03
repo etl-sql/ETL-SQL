@@ -889,7 +889,8 @@ or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns
   of your external `etl-sql admin backup` run (durable `SET_JOB_STATE` markers) and emails ops on
   failure. The OS scheduler runs the backup, then runs this script with the exit code:
   `etl-sql run backup_and_report.etlsql --var backup_exit_code=$LASTEXITCODE --var backup_target=nightly`.
-  It never runs a backup itself.
+  It never runs a backup itself. Inspect the markers from any session with
+  `SHOW JOB STATE '<job>' [INTO #t]` — the cross-job read surface over everything `SET_JOB_STATE` saved.
 - **Portal operational digest** — the Portal can email administrators a scheduled digest of its own
   operational metrics (active/queued executions, 24h execution and delivery failure rates, storage
   usage, and migration status), with threshold alerts. Enable it under `Portal:OperationalDigest`

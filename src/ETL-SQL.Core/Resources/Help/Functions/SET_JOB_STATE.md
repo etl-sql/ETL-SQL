@@ -31,6 +31,7 @@ position). A bare `SET_JOB_STATE(...);` line is a syntax error.
 - If running from the CLI, state falls back to a local JSON `.etlstate` file next to the script.
 - Read values back with `GET_JOB_STATE(key)` — in the same script on a later run, or from a
   different monitoring script running under the same job/script context.
+- To inspect saved state across jobs (all keys, any job) use `SHOW JOB STATE ['<job>'] [INTO #t]`.
 - Used in conjunction with `GET_JOB_STATE` for incremental watermarking.
 
 ## Example

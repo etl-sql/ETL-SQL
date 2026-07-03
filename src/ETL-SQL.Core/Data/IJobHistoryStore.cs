@@ -155,7 +155,18 @@ public interface IJobHistoryStore
     // State Management
     Task<string?> GetJobStateAsync(string jobName, string key);
     Task SetJobStateAsync(string jobName, string key, string? value);
+
+    /// <summary>
+    /// Enumerates saved job-state entries (watermarks, markers), optionally for a single job —
+    /// the read surface behind <c>SHOW JOB STATE</c>. Unlike <see cref="GetJobStateAsync"/>, which is
+    /// scoped to one known key, this lets an administrator inspect any job's state without knowing
+    /// its keys in advance. Ordered by job then key; capped by <paramref name="limit"/>.
+    /// </summary>
+    Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobName = null, int limit = 1000);
 }
+
+/// <summary>One saved job-state key/value pair (see SET_JOB_STATE / GET_JOB_STATE).</summary>
+public sealed record JobStateEntry(string JobName, string StateKey, string? StateValue, DateTime UpdatedAt);
 
 public interface IJobScheduleQueryStore
 {

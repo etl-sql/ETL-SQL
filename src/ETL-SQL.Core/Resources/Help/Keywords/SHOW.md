@@ -19,6 +19,7 @@ Subjects:
 - **VERSION** — engine version and build metadata.
 - **SUBSCRIPTIONS** — defined report subscriptions.
 - **JOB HISTORY ['<job>'] [AT conn]** — recent job execution records (all jobs, or one named job).
+- **JOB STATE ['<job>']** — saved job-state key/value pairs written by SET_JOB_STATE (watermarks, backup markers): JobName, StateKey, StateValue, UpdatedAt. Lists every key for any orchestrator job — unlike GET_JOB_STATE, which reads one known key in the caller's own context. CLI-run scripts keep their state in a local .etlstate file, which this does not show.
 - **HOST METRICS ['<nodeId>']** — host-utilization time series for capacity planning: per node, the last 24 hours of memory-load %, CPU %, and free disk (MB) on the state and spill volumes, newest first. Optionally filter to one node id.
 - **REPORT '<name>'** — portal report metadata.
 - **REPORT HISTORY '<name>'** — portal report refresh/history rows.
@@ -58,6 +59,10 @@ SHOW LOCKS;
 
 -- Check active jobs
 SHOW JOBS;
+
+-- Inspect a job's watermarks / backup markers from any session
+SHOW JOB STATE 'nightly_backup_report' INTO #st;
+SELECT StateKey, StateValue, UpdatedAt FROM #st;
 
 -- Capacity planning: find nodes low on spill/state disk in the last 24h
 SHOW HOST METRICS INTO #hm;

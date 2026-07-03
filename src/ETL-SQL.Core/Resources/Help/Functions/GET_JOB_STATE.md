@@ -19,6 +19,7 @@ GET_JOB_STATE(key)
 ## Remarks
 - If running as a scheduled orchestrator job, state is retrieved from the orchestrator store.
 - If running from the CLI, state falls back to a local JSON `.etlstate` file next to the script.
+- To inspect saved state across jobs (all keys, any job) use `SHOW JOB STATE ['<job>'] [INTO #t]`.
 - Used in conjunction with `SET_JOB_STATE` for incremental watermarking.
 
 ## Example

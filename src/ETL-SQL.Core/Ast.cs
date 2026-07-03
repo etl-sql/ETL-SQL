@@ -2225,6 +2225,13 @@ public sealed record ShowHostMetricsStatement : Statement
     public ShowHostMetricsStatement(string? nodeId = null) { NodeId = nodeId; }
 }
 
+public sealed record ShowJobStateStatement : Statement
+{
+    public string? JobName { get; }
+    public string? IntoTable { get; set; }
+    public ShowJobStateStatement(string? jobName = null) { JobName = jobName; }
+}
+
 public sealed record ShowJobsStatement : Statement
 {
     public string? IntoTable { get; set; }

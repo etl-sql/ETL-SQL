@@ -504,7 +504,14 @@ public class Lexer
                     break;
                 case '?':
                     Advance();
-                    if (char.IsDigit(CurrentChar))
+                    if (CurrentChar == '?')
+                    {
+                        // ?? — null-coalescing shorthand (a ?? b → COALESCE(a, b)). Unambiguous:
+                        // two adjacent positional parameters is never valid syntax.
+                        Advance();
+                        tokens.Add(new Token(TokenType.DOUBLE_QUESTION, "??", startLine, startColumn, startLine, startColumn + 2, startOffset, startOffset + 2));
+                    }
+                    else if (char.IsDigit(CurrentChar))
                     {
                         while (char.IsDigit(CurrentChar))
                         {

@@ -1351,6 +1351,30 @@ namespace ETL_SQL.Orchestrator.Storage
             await command.ExecuteNonQueryAsync();
         }
 
+        public async Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobName = null, int limit = 1000)
+        {
+            await EnsureInitializedAsync();
+            using var connection = _dialect.CreateConnection();
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            var sql = "SELECT JobName, StateKey, StateValue, UpdatedAt FROM JobState ";
+            if (!string.IsNullOrEmpty(jobName)) { sql += "WHERE JobName = @job "; command.AddParam("@job", jobName); }
+            sql += "ORDER BY JobName, StateKey LIMIT @limit;";
+            command.CommandText = sql;
+            command.AddParam("@limit", limit);
+
+            var results = new List<JobStateEntry>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+                results.Add(new JobStateEntry(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    DateTime.Parse(reader.GetString(3), null, System.Globalization.DateTimeStyles.RoundtripKind)));
+            return results;
+        }
+
         public async Task<BundleVersionInfo> PublishBundleAsync(BundlePublishRequest request)
         {
             await EnsureInitializedAsync();

@@ -112,7 +112,7 @@ public partial class ExpressionParser
 
     private Expression ParseComparison()
     {
-        var left = ParseShift();
+        var left = ParseCoalesce();
         while (_parser.Current.Type == TokenType.EQUALS || _parser.Current.Type == TokenType.NOT_EQUALS ||
                _parser.Current.Type == TokenType.LESS_THAN || _parser.Current.Type == TokenType.GREATER_THAN ||
                _parser.Current.Type == TokenType.LESS_EQUALS || _parser.Current.Type == TokenType.GREATER_EQUALS ||
@@ -242,11 +242,33 @@ public partial class ExpressionParser
             }
             else
             {
-                var right = ParseTerm();
+                // Coalesce level so `x = amount ?? 0` parses as `x = (amount ?? 0)` — ?? binds
+                // tighter than comparison on both sides. Strictly more accepting than ParseTerm.
+                var right = ParseCoalesce();
                 left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
         }
         return left;
+    }
+
+    /// <summary>
+    /// The ?? null-coalescing shorthand: <c>a ?? b [?? c ...]</c> lowers at parse time to the
+    /// existing <c>COALESCE(a, b, c)</c> function call, so the evaluator, lineage tracking, and SQL
+    /// pushdown all see plain COALESCE (universal SQL) — no new runtime semantics. Binds tighter
+    /// than comparisons (<c>amount ?? 0 &gt; 5</c> means <c>(amount ?? 0) &gt; 5</c>) and looser
+    /// than arithmetic (<c>a + b ?? 0</c> means <c>(a + b) ?? 0</c>). CASE/COALESCE remain the
+    /// documented portable standard; this is an ETL-SQL dialect convenience.
+    /// </summary>
+    private Expression ParseCoalesce()
+    {
+        var left = ParseShift();
+        if (_parser.Current.Type != TokenType.DOUBLE_QUESTION) return left;
+
+        var opToken = _parser.Current;
+        var args = new List<Expression> { left };
+        while (_parser.Match(TokenType.DOUBLE_QUESTION))
+            args.Add(ParseShift());
+        return new FunctionCallExpression("COALESCE", args) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
     }
 
     private Expression ParseShift()

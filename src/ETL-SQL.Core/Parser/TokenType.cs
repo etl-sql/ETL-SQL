@@ -122,6 +122,7 @@ public enum TokenType
     RSHIFT,     // >>
     QUESTION,   // ?
     PARAMETER,  // ? or ?n
+    DOUBLE_QUESTION, // ?? (null-coalescing shorthand; lowers to COALESCE at parse time)
     COLUMN_TAG, // /*@d: ... */
 
     // ── Report-SQL tokens (Phase 9A) ───────────────────────────────────

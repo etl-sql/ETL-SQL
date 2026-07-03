@@ -2064,6 +2064,20 @@ ROLLBACK;            -- or ROLLBACK TRAN
 ### 14.3 Comparison Operators
 `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`
 
+### 14.4 Null-Coalescing Shorthand `??`
+`a ?? b [?? c ...]` is ETL-SQL dialect shorthand that compiles to `COALESCE(a, b, c)` at parse time —
+the engine, lineage tracking, and SQL pushdown all see a plain `COALESCE`, so scripts using `??` push
+down to every connector unchanged. `CASE`/`COALESCE` remain the portable standard to teach; `??` is a
+convenience.
+
+Precedence: binds tighter than comparisons and looser than arithmetic —
+`amount ?? 0 > 5` means `(amount ?? 0) > 5`, and `a + b ?? 0` means `(a + b) ?? 0`.
+
+```sql
+SELECT amount ?? 0 AS amount FROM #orders;
+SELECT nickname ?? legal_name ?? '(unknown)' AS display_name FROM #people;
+```
+
 #### `BETWEEN`
 Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).
 
@@ -2095,7 +2109,7 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 | `1` | `NULL` | `TRUE` | `FALSE` |
 | `NULL` | `NULL` | `FALSE` | `TRUE` |
 
-### 14.4 Temporal Expressions
+### 14.5 Temporal Expressions
 
 #### `AT TIME ZONE`
 Converts a `DATETIME` or `DATETIMEOFFSET` expression to the target timezone. If the input has no offset, it is assumed to be **UTC**.
@@ -2231,6 +2245,10 @@ SHOW JOBS;
 SHOW JOB HISTORY;
 SHOW JOB HISTORY NightlyArchive;
 
+-- Saved job-state key/value pairs (SET_JOB_STATE watermarks/markers): all jobs or one
+SHOW JOB STATE;
+SHOW JOB STATE 'NightlyArchive';
+
 -- Host-utilization time series (capacity planning): all nodes or one node id
 SHOW HOST METRICS;
 SHOW HOST METRICS 'app-server-01:1234:ab...';
@@ -2238,6 +2256,7 @@ SHOW HOST METRICS 'app-server-01:1234:ab...';
 -- Direct output to a temporary table
 SHOW JOBS INTO #jobs;
 SHOW JOB HISTORY INTO #history;
+SHOW JOB STATE INTO #job_state;
 SHOW HOST METRICS INTO #host_metrics;
 ```
 
@@ -2505,6 +2524,7 @@ CREATE TAG FOR TABLE <table> [COLUMN <col>] (<tag> = <expr> [, <tag> = <expr> ..
 SHOW JOBS          [INTO #temp];
 SHOW ACTIVE JOBS   [INTO #temp];
 SHOW JOB HISTORY [<jobName>]  [INTO #temp];
+SHOW JOB STATE   [<jobName>]  [INTO #temp];
 KILL JOB <HistoryId>;
 ```
 
