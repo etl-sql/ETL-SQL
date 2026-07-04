@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -65,6 +66,9 @@ public class DropReportObjectStatementHandler(ILogger logger) : IStatementHandle
                             if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                                 throw new ExecutionException($"Security Violation: Cannot delete non-JSON file via DROP TEMPLATE. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
 
+                            resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                                .Authorize(context, resolvedPath, FileSystemAccessKind.Delete, validateFileType: false)
+                                .CanonicalPath;
                             context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
                             File.Delete(resolvedPath);
                             _logger.Debug("Deleted template file: {Path}", resolvedPath);
@@ -85,7 +89,13 @@ public class DropReportObjectStatementHandler(ILogger logger) : IStatementHandle
                         var themeDir = Path.Combine(context.ReportContext.TemplatePath, "Themes");
                         string fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? stmt.Name : stmt.Name + ".json";
                         string filePath = context.ResolvePath(Path.Combine(themeDir, fileName));
-                        if (File.Exists(filePath)) File.Delete(filePath);
+                        if (File.Exists(filePath))
+                        {
+                            filePath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                                .Authorize(context, filePath, FileSystemAccessKind.Delete, validateFileType: false)
+                                .CanonicalPath;
+                            File.Delete(filePath);
+                        }
                     }
                     catch (Exception ex)
                     {

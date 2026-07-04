@@ -71,7 +71,17 @@ public class AlterConnectionStatementHandler(
 
         // Resolve path for file-based connectors
         if (FileConnectorTypes.Contains(connectionType ?? string.Empty))
+        {
             target = context.ResolvePath(target);
+            // Empty targets are built from options below; ${placeholder} targets defer
+            // resolution to use time — both are authorized on the fully resolved path later.
+            if (!string.IsNullOrWhiteSpace(target) && !target.Contains("${"))
+            {
+                target = new FileSystemPolicyAuthorizer(context.SecurityService)
+                    .Authorize(context, target, FileSystemAccessKind.Enumerate, validateFileType: false)
+                    .CanonicalPath;
+            }
+        }
 
         var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty)
             ?? throw new ExecutionException($"Connection type '{connectionType}' is not registered.");

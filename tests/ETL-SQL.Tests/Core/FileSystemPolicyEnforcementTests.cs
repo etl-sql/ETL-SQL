@@ -94,6 +94,18 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task CreateConnection_EnterpriseRootsDenyFileRootOutside_AllowInside()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"CREATE CONNECTION policy_enf_bad AS DIRECTORY('{_outside}');"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        await ExecuteAsync($"CREATE CONNECTION policy_enf_ok AS DIRECTORY('{_root}');");
+    }
+
+    [Fact]
     public async Task Standalone_Unenrolled_RemainsUnrestrictedByOrganizationPolicy()
     {
         var src = Path.Combine(_root, "merge_standalone.csv");
