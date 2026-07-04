@@ -27,7 +27,8 @@ public class MergeFilesStatementHandler : IStatementHandler
 
         // Security check
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
-        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
+        var destAuth = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
+        dest = destAuth.CanonicalPath;
 
         if (context.IsWhatIf)
         {
@@ -60,7 +61,7 @@ public class MergeFilesStatementHandler : IStatementHandler
         }
 
         // Resolve list of source files
-        var files = new List<string>();
+        var files = new List<AuthorizedFileSystemPath>();
         if (srcVal is string srcStr)
         {
             string resolvedSrc = context.ResolvePath(srcStr);
@@ -77,14 +78,14 @@ public class MergeFilesStatementHandler : IStatementHandler
                     var matched = Directory.GetFiles(dir, pattern);
                     Array.Sort(matched, StringComparer.OrdinalIgnoreCase);
                     files.AddRange(matched.Select(file => pathAuthorizer.Authorize(
-                        context, file, FileSystemAccessKind.Read, validateFileType: false).CanonicalPath));
+                        context, file, FileSystemAccessKind.Read, validateFileType: false)));
                 }
             }
             else
             {
-                resolvedSrc = pathAuthorizer.Authorize(context, resolvedSrc, FileSystemAccessKind.Read,
-                    validateFileType: false).CanonicalPath;
-                if (File.Exists(resolvedSrc)) files.Add(resolvedSrc);
+                var sourceAuth = pathAuthorizer.Authorize(context, resolvedSrc, FileSystemAccessKind.Read,
+                    validateFileType: false);
+                if (File.Exists(sourceAuth.CanonicalPath)) files.Add(sourceAuth);
             }
         }
         else if (srcVal is System.Collections.IEnumerable list)
@@ -107,9 +108,9 @@ public class MergeFilesStatementHandler : IStatementHandler
                 if (!string.IsNullOrEmpty(path))
                 {
                     string resolved = context.ResolvePath(path);
-                    resolved = pathAuthorizer.Authorize(context, resolved, FileSystemAccessKind.Read,
-                        validateFileType: false).CanonicalPath;
-                    if (File.Exists(resolved)) files.Add(resolved);
+                    var sourceAuth = pathAuthorizer.Authorize(context, resolved, FileSystemAccessKind.Read,
+                        validateFileType: false);
+                    if (File.Exists(sourceAuth.CanonicalPath)) files.Add(sourceAuth);
                 }
             }
         }
@@ -128,15 +129,15 @@ public class MergeFilesStatementHandler : IStatementHandler
         if (context.IsVerbose)
             context.Log($"[MergeFiles] Merging {files.Count} files into '{dest}' (Header strip: {header})");
 
-        using (var writer = new StreamWriter(dest, false, Encoding.UTF8))
+        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth), Encoding.UTF8))
         {
             bool isFirstFile = true;
             foreach (var file in files)
             {
                 context.CancellationToken.ThrowIfCancellationRequested();
-                context.IncrementOperationCount(OperationType.FileSystem, file, 1);
+                context.IncrementOperationCount(OperationType.FileSystem, file.CanonicalPath, 1);
 
-                using (var reader = new StreamReader(file, Encoding.UTF8))
+                using (var reader = new StreamReader(pathAuthorizer.OpenValidatedRead(context, file), Encoding.UTF8))
                 {
                     if (header && !isFirstFile)
                     {

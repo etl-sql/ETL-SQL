@@ -29,9 +29,11 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
 
         // Security check
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
-        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
-            validateFileType: false).CanonicalPath;
-        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
+        var sourceAuth = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false);
+        var destAuth = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
+        source = sourceAuth.CanonicalPath;
+        dest = destAuth.CanonicalPath;
 
         // Runaway operation count
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -69,8 +71,8 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
         if (context.IsVerbose)
             context.Log($"[ConvertEncoding] Converting '{source}' ({fromEncoding.EncodingName}) -> '{dest}' ({toEncoding.EncodingName})");
 
-        using (var reader = new StreamReader(source, fromEncoding))
-        using (var writer = new StreamWriter(dest, false, toEncoding))
+        using (var reader = new StreamReader(pathAuthorizer.OpenValidatedRead(context, sourceAuth), fromEncoding))
+        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth), toEncoding))
         {
             char[] buffer = new char[8192];
             int read;

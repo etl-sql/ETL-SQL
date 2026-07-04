@@ -129,6 +129,106 @@ public sealed class FileSystemPolicyAuthorizerTests
     }
 
     [Fact]
+    public void OpenValidated_AllowsGenuineTargetAndTruncatesAfterValidation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_handle_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var file = Path.Combine(root, "genuine.txt");
+            File.WriteAllText(file, "stale content that must be truncated");
+            var authorized = authorizer.Authorize(context.Object, file, FileSystemAccessKind.Write,
+                validateFileType: false);
+
+            using (var writer = new StreamWriter(authorizer.OpenValidatedWrite(context.Object, authorized)))
+                writer.Write("fresh");
+
+            var readAuth = authorizer.Authorize(context.Object, file, FileSystemAccessKind.Read,
+                validateFileType: false);
+            using var reader = new StreamReader(authorizer.OpenValidatedRead(context.Object, readAuth));
+            Assert.Equal("fresh", reader.ReadToEnd());
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void OpenValidated_DetectsLinkSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_race_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_race_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sub = Path.Combine(root, "sub");
+            Directory.CreateDirectory(sub);
+            var canonical = Path.Combine(sub, "swap.txt");
+            File.WriteAllText(canonical, "authorized");
+            var authorized = authorizer.Authorize(context.Object, canonical, FileSystemAccessKind.Write,
+                validateFileType: false);
+
+            // Simulate the check/use race: after authorization, a parent directory is replaced
+            // with a link pointing outside the approved root. On Windows a junction is used
+            // because (unlike symlinks) creating one requires no privilege.
+            var target = Path.Combine(outside, "swap.txt");
+            File.WriteAllText(target, "protected");
+            Directory.Delete(sub, recursive: true);
+            if (OperatingSystem.IsWindows())
+            {
+                using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                    "cmd.exe", $"/c mklink /J \"{sub}\" \"{outside}\"")
+                { UseShellExecute = false, CreateNoWindow = true });
+                mklink!.WaitForExit();
+                Assert.Equal(0, mklink.ExitCode);
+            }
+            else
+            {
+                Directory.CreateSymbolicLink(sub, outside);
+            }
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.OpenValidatedWrite(context.Object, authorized));
+            Assert.Contains("final path", denied.Decision.Reason);
+            // Validation happens before truncation, so the link's target survives intact.
+            Assert.Equal("protected", File.ReadAllText(target));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void SafeZipExtractor_RejectsTraversalBeforeWritingEntry()
     {
         var root = Path.Combine(Path.GetTempPath(), $"policy_zip_{Guid.NewGuid():N}");

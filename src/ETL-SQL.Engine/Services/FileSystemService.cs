@@ -32,11 +32,12 @@ public class FileSystemService(ILogger logger)
         {
             context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
             var sourceFile = authorizer.Authorize(context, file.FullName,
-                FileSystemAccessKind.Read).CanonicalPath;
-            string targetFilePath = authorizer.Authorize(context,
-                Path.Combine(destinationDir, file.Name), FileSystemAccessKind.Write).CanonicalPath;
-            await using (var sourceStream = File.OpenRead(sourceFile))
-            await using (var destStream = new FileStream(targetFilePath, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+                FileSystemAccessKind.Read);
+            var targetFile = authorizer.Authorize(context,
+                Path.Combine(destinationDir, file.Name), FileSystemAccessKind.Write);
+            await using (var sourceStream = authorizer.OpenValidatedRead(context, sourceFile))
+            await using (var destStream = authorizer.OpenValidatedWrite(context, targetFile,
+                truncate: true, failIfExists: !overwrite))
             {
                 await sourceStream.CopyToAsync(destStream);
             }

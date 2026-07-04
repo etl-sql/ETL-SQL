@@ -63,6 +63,60 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
         return new AuthorizedFileSystemPath(canonical, access, allowed);
     }
 
+    /// <summary>
+    /// Opens the authorized file for reading and verifies the OS-resolved final path of the
+    /// opened handle still matches the authorized canonical target (link-race re-check).
+    /// </summary>
+    public FileStream OpenValidatedRead(IExecutionContext context, AuthorizedFileSystemPath authorized) =>
+        OpenValidatedCore(context, authorized, FileMode.Open, FileAccess.Read, FileShare.Read,
+            truncate: false);
+
+    /// <summary>
+    /// Opens the authorized file for writing with the handle-based link-race re-check. The file
+    /// is opened without truncation first; only after the handle's final path is verified is it
+    /// truncated, so a swapped link never destroys data at an unauthorized target.
+    /// </summary>
+    public FileStream OpenValidatedWrite(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized,
+        bool truncate = true,
+        bool failIfExists = false) =>
+        OpenValidatedCore(context, authorized,
+            failIfExists ? FileMode.CreateNew : FileMode.OpenOrCreate,
+            FileAccess.ReadWrite, FileShare.None, truncate);
+
+    private FileStream OpenValidatedCore(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized,
+        FileMode mode,
+        FileAccess fileAccess,
+        FileShare share,
+        bool truncate)
+    {
+        var stream = new FileStream(authorized.CanonicalPath, mode, fileAccess, share, 4096,
+            FileOptions.Asynchronous);
+        try
+        {
+            var finalPath = FileHandleFinalPath.Resolve(stream.SafeFileHandle);
+            if (finalPath != null && !FileHandleFinalPath.Matches(finalPath, authorized.CanonicalPath))
+            {
+                var snapshot = RefreshSnapshotAtBoundary(context);
+                throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+                    PolicyKey(authorized.Access),
+                    Sanitize(authorized.CanonicalPath, authorized.CanonicalPath),
+                    EffectiveConstraint(snapshot, authorized.Access),
+                    "The opened file handle resolved to a different final path than the authorized target (possible link substitution)."));
+            }
+            if (truncate && fileAccess != FileAccess.Read) stream.SetLength(0);
+            return stream;
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
     private static ExecutionPolicySnapshot RefreshSnapshotAtBoundary(IExecutionContext context) =>
         OperationPolicyBoundary.Refresh(context, "<filesystem-operation>");
 
