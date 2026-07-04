@@ -49,6 +49,54 @@ public sealed class FileSystemPolicyAuthorizerTests
     }
 
     [Fact]
+    public void Authorize_RejectsNonCanonicalWindowsForms()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var root = Path.Combine(Path.GetTempPath(), $"policy_forms_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            // NTFS alternate data stream inside the approved root: passes prefix checks but
+            // evades extension checks — must be rejected on form.
+            var ads = Assert.Throws<FileSystemPolicyDeniedException>(() => authorizer.Authorize(
+                context.Object, Path.Combine(root, "data.csv:hidden"), FileSystemAccessKind.Write,
+                validateFileType: false));
+            Assert.Contains("Alternate data stream", ads.Decision.Reason);
+
+            // Extended-length/device namespace prefixes skip Win32 normalization.
+            var device = Assert.Throws<FileSystemPolicyDeniedException>(() => authorizer.Authorize(
+                context.Object, @"\\?\" + Path.Combine(root, "data.csv"), FileSystemAccessKind.Read,
+                validateFileType: false));
+            Assert.Contains("namespace path prefixes", device.Decision.Reason);
+
+            // Win32 strips trailing dots/spaces at open time, so 'pipeline.etlsql ' would bypass
+            // the script-immutability write check yet still write pipeline.etlsql.
+            var trailing = Assert.Throws<FileSystemPolicyDeniedException>(() => authorizer.Authorize(
+                context.Object, Path.Combine(root, "pipeline.etlsql "), FileSystemAccessKind.Write,
+                validateFileType: false));
+            Assert.Contains("dot or space", trailing.Decision.Reason);
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void Authorize_WriteRechecksScriptImmutability()
     {
         var root = Path.Combine(Path.GetTempPath(), $"policy_write_{Guid.NewGuid():N}");
