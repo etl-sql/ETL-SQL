@@ -389,7 +389,7 @@ FROM #products;
 | `NULLIF` | `NULLIF(v1, v2)` | `NULL` if `v1 = v2`, else `v1` |
 | `IS_NULL` | `IS_NULL(expr)` | `TRUE` if expression is null |
 | `IS_NOT_NULL` | `IS_NOT_NULL(expr)` | `TRUE` if expression is not null |
-| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional return |
+| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional — compiles to `CASE WHEN` (short-circuits, pushes down as CASE) |
 | `DECODE` | `DECODE(val, s1, r1, ..., default)` | Oracle-style `CASE` shorthand |
 | `CASE...WHEN...END` | — | Sequential conditional evaluation |
 

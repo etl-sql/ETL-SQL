@@ -271,6 +271,25 @@ public partial class ExpressionParser
         return new FunctionCallExpression("COALESCE", args) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
     }
 
+    /// <summary>
+    /// IIF(cond, a, b) is T-SQL shorthand for <c>CASE WHEN cond THEN a ELSE b END</c>; lowering it at
+    /// parse time (like ?? → COALESCE) gives it true CASE semantics — <b>short-circuit evaluation</b>
+    /// (the untaken branch never runs, so <c>IIF(x = 0, 0, 1/x)</c> is safe, matching T-SQL) — and
+    /// pushes down to every connector as universal CASE instead of a T-SQL-only function. Only the
+    /// plain three-argument form lowers; anything else falls through to the runtime function.
+    /// </summary>
+    private static Expression LowerIifToCase(FunctionCallExpression call)
+    {
+        if (!call.FunctionName.Equals("IIF", StringComparison.OrdinalIgnoreCase)) return call;
+        if (call.Arguments.Count != 3 || call.IsDistinct
+            || call.Filter != null || call.Window != null || call.WithinGroupOrderBy != null) return call;
+
+        return new CaseExpression(
+            new List<(Expression Condition, Expression Result)> { (call.Arguments[0], call.Arguments[1]) },
+            call.Arguments[2])
+        { Line = call.Line, Column = call.Column, EndLine = call.EndLine, EndColumn = call.EndColumn };
+    }
+
     private Expression ParseShift()
     {
         var left = ParseTerm();
@@ -630,7 +649,7 @@ public partial class ExpressionParser
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITHIN GROUP");
                     funcCall.WithinGroupOrderBy = orderBy;
                 }
-                return funcCall;
+                return LowerIifToCase(funcCall);
             }
 
 
@@ -714,7 +733,7 @@ public partial class ExpressionParser
                 while (_parser.Match(TokenType.COMMA))
                     args.Add(_parser.ParseExpression());
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
-                return new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                return LowerIifToCase(new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn });
             }
             while (_parser.Match(TokenType.DOT))
             {
