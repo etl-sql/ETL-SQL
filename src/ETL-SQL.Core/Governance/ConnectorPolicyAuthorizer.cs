@@ -68,10 +68,22 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         if (!snapshot.IsEnrolled) return;
         var allowed = GovernedList(snapshot, "Security:AllowedHosts:");
         if (allowed.Length == 0) return;
-        if (allowed.Any(pattern => HostMatches(pattern, host))) return;
+
+        // Normalize obfuscated IP literals so allowlist matching and range checks see one form.
+        var normalized = NetworkDestinationRules.Normalize(host);
+
+        // A loopback/link-local/private/metadata address is reachable only when an operator lists
+        // it explicitly — a wildcard entry (e.g. "*") must never grant access to internal ranges.
+        var explicitMatch = allowed.Any(pattern =>
+            !pattern.Contains('*') && HostMatches(pattern, normalized));
+        if (NetworkDestinationRules.IsRestrictedRange(normalized) && !explicitMatch)
+            throw new SecurityException(
+                $"Enterprise policy denied connection to internal address '{normalized}' (loopback/link-local/private range not explicitly permitted).");
+
+        if (allowed.Any(pattern => HostMatches(pattern, normalized))) return;
 
         throw new SecurityException(
-            $"Enterprise policy denied connection to host '{host}' (not in the authorized host list).");
+            $"Enterprise policy denied connection to host '{normalized}' (not in the authorized host list).");
     }
 
     private static bool HostMatches(string pattern, string host)

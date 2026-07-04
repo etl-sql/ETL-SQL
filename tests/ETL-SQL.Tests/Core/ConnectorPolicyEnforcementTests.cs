@@ -37,6 +37,30 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task DestinationHost_WildcardAllowlistStillDeniesObfuscatedInternalAddress()
+    {
+        // "*" allows any public host, but must never grant access to an internal range — even
+        // when the loopback address is obfuscated as a 32-bit decimal literal.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["*"]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION pg AS POSTGRES(HOST = '2130706433', DATABASE = 'd');"));
+        Assert.Contains("internal address", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DestinationHost_ExplicitlyListedInternalAddressIsPermitted()
+    {
+        // When an operator explicitly lists the internal address, it passes the authorizer
+        // (the connection may still fail later, but not on a policy denial).
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["127.0.0.1"]));
+
+        var error = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION pg AS POSTGRES(HOST = '127.0.0.1', DATABASE = 'd');"));
+        Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(error));
+    }
+
+    [Fact]
     public async Task EmbeddedUrlCredentials_RejectedRegardlessOfPolicy()
     {
         EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
