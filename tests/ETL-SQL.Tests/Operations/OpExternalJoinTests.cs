@@ -166,24 +166,21 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext(partitions: 2);
             eval.JoinSpillThreshold = 10_000_000;   // disable row-count repartition
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
-            long saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
             // Precise byte accounting: 256 KB is well below the ~3 MB build side, so the depth-0 build
             // trips the governor and must recursively repartition (4000 distinct keys split cleanly)
-            // until each sub-partition's build fits — the path this test exercises.
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 256 * 1024;
-            try
-            {
-                // left: 4000 distinct keys once each (probe). right: same 4000 keys ×5 (build, 20000 rows).
-                var left = JoinRows(4000, 4000, "lval");
-                var right = JoinRows(20000, 4000, "rval");
-                var engine = new ExternalJoinEngine(eval, logger);
+            // until each sub-partition's build fits — the path this test exercises. Private arbiter:
+            // leftover shared reservations from earlier tests would shrink the budget unpredictably.
+            eval.MemoryArbiter = new MemoryGrantArbiter(256 * 1024);
 
-                var results = await engine.ApplyHashJoinExternal(
-                    left, right, InnerOnId, new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
+            // left: 4000 distinct keys once each (probe). right: same 4000 keys ×5 (build, 20000 rows).
+            var left = JoinRows(4000, 4000, "lval");
+            var right = JoinRows(20000, 4000, "rval");
+            var engine = new ExternalJoinEngine(eval, logger);
 
-                Assert.Equal(20000, results.Count); // each of 4000 left rows matches 5 right rows
-            }
-            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = saved; }
+            var results = await engine.ApplyHashJoinExternal(
+                left, right, InnerOnId, new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
+
+            Assert.Equal(20000, results.Count); // each of 4000 left rows matches 5 right rows
         }
 
 
@@ -193,25 +190,20 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext(partitions: 2);
             eval.JoinSpillThreshold = 10_000_000;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
-            var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 16 * 1024;
-            try
-            {
-                var left = JoinRows(4000, 4000, "lval");
-                var right = JoinRows(20000, 4000, "rval");
-                var engine = new ExternalJoinEngine(eval, logger);
+            // Private arbiter: leftover shared reservations from earlier tests would erase the
+            // deliberately tight budget this test's native repartition path depends on.
+            eval.MemoryArbiter = new MemoryGrantArbiter(16 * 1024);
 
-                var results = await engine.ApplyHashJoinExternal(
-                    left, right, InnerOnId,
-                    new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
+            var left = JoinRows(4000, 4000, "lval");
+            var right = JoinRows(20000, 4000, "rval");
+            var engine = new ExternalJoinEngine(eval, logger);
 
-                Assert.Equal(20000, results.Count);
-                Assert.True(engine.ColumnarRepartitionRows > 0);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
-            }
+            var results = await engine.ApplyHashJoinExternal(
+                left, right, InnerOnId,
+                new List<string> { "id" }, new List<string> { "id" }).ToListAsync();
+
+            Assert.Equal(20000, results.Count);
+            Assert.True(engine.ColumnarRepartitionRows > 0);
         }
 
         // Note: no "SpillOrFail throws" test here. That path requires the heap-growth guard to trip

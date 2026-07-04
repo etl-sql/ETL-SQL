@@ -48,6 +48,11 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 {
     public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
     public ExecutionIdentity? ExecutionIdentity { get; set; }
+    /// <summary>
+    /// Process-wide by default; settable so tests (and future per-tenant hosting) can bound an
+    /// evaluator with an isolated budget instead of mutating <see cref="MemoryGrantArbiter.Shared"/>.
+    /// </summary>
+    public IMemoryGrantArbiter MemoryArbiter { get; set; } = MemoryGrantArbiter.Shared;
     private readonly IEnumerable<IStatementHandler> _handlers;
     private readonly IServiceProvider _serviceProvider = null!;
     private readonly Core.Functions.IFunctionRegistry _functionRegistry;
@@ -1341,7 +1346,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             DisplayExecuteTree = DisplayExecuteTree,
             MaxGroupingSets = MaxGroupingSets,
             ExecutionPolicy = ExecutionPolicy,
-            ExecutionIdentity = ExecutionIdentity
+            ExecutionIdentity = ExecutionIdentity,
+            MemoryArbiter = MemoryArbiter
         };
 
         fork.Telemetry.IsProfiling = Telemetry.IsProfiling;

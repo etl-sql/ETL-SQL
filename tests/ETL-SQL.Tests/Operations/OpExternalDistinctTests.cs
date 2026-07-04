@@ -80,24 +80,19 @@ public sealed class ExternalDistinctTests
         var context = services.GetRequiredService<Evaluator>();
         context.ExternalHashPartitions = 2;
         context.JoinSpillThreshold = 4;
-        var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-        MemoryGrantArbiter.Shared.TotalBudgetBytes = 64L * 1024 * 1024;
-        try
-        {
-            var rows = Enumerable.Range(0, 20)
-                .Select(id => new Row { ["id"] = id % 10, ["value"] = "v" + (id % 10) })
-                .ToAsyncEnumerable();
-            var engine = new ExternalDistinctEngine(context);
+        // Private arbiter: leftover shared reservations from earlier tests would erase the headroom
+        // this test's native build path depends on.
+        context.MemoryArbiter = new MemoryGrantArbiter(64L * 1024 * 1024);
 
-            var results = await engine.ApplyAsync(rows).ToListAsync();
+        var rows = Enumerable.Range(0, 20)
+            .Select(id => new Row { ["id"] = id % 10, ["value"] = "v" + (id % 10) })
+            .ToAsyncEnumerable();
+        var engine = new ExternalDistinctEngine(context);
 
-            Assert.Equal(10, results.Count);
-            Assert.Equal(20, engine.ColumnarBuildRows);
-            Assert.True(engine.ColumnarRepartitionRows > 0);
-        }
-        finally
-        {
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
-        }
+        var results = await engine.ApplyAsync(rows).ToListAsync();
+
+        Assert.Equal(10, results.Count);
+        Assert.Equal(20, engine.ColumnarBuildRows);
+        Assert.True(engine.ColumnarRepartitionRows > 0);
     }
 }

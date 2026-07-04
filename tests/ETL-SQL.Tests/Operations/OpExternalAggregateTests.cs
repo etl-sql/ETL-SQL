@@ -120,40 +120,35 @@ namespace ETL_SQL.Tests.Operations.Operations
         public async Task NumericGroupedAggregateConsumesNativeSpillBatches()
         {
             var (eval, logger) = BuildContext();
-            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64L * 1024 * 1024;
-            try
+            // Private arbiter: the shared instance can carry reservations from earlier tests in the
+            // same host, which would erase the headroom this test's native routing depends on.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64L * 1024 * 1024);
+
+            var rows = Enumerable.Range(0, 100)
+                .Select(id => new Row { ["group_id"] = id % 10, ["value"] = 1m })
+                .ToAsyncEnumerable();
+            var groupBy = new List<Expression> { new IdentifierExpression("group_id") };
+            var columns = new List<SelectColumn>
             {
-                var rows = Enumerable.Range(0, 100)
-                    .Select(id => new Row { ["group_id"] = id % 10, ["value"] = 1m })
-                    .ToAsyncEnumerable();
-                var groupBy = new List<Expression> { new IdentifierExpression("group_id") };
-                var columns = new List<SelectColumn>
+                new(new IdentifierExpression("group_id"), "group_id"),
+                new(new FunctionCallExpression("COUNT", new List<Expression>
                 {
-                    new(new IdentifierExpression("group_id"), "group_id"),
-                    new(new FunctionCallExpression("COUNT", new List<Expression>
-                    {
-                        new IdentifierExpression("value")
-                    }), "cnt"),
-                    new(new FunctionCallExpression("SUM", new List<Expression>
-                    {
-                        new IdentifierExpression("value")
-                    }), "total")
-                };
-                var engine = new ExternalAggregateEngine(eval, logger);
+                    new IdentifierExpression("value")
+                }), "cnt"),
+                new(new FunctionCallExpression("SUM", new List<Expression>
+                {
+                    new IdentifierExpression("value")
+                }), "total")
+            };
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                var result = await engine.ApplyAggregationExternal(
-                    rows, groupBy, columns, new List<string> { "group_id", "cnt", "total" }).ToListAsync();
+            var result = await engine.ApplyAggregationExternal(
+                rows, groupBy, columns, new List<string> { "group_id", "cnt", "total" }).ToListAsync();
 
-                Assert.Equal(10, result.Count);
-                Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["cnt"])));
-                Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["total"])));
-                Assert.Equal(100, engine.ColumnarAggregateRows);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
-            }
+            Assert.Equal(10, result.Count);
+            Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["cnt"])));
+            Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["total"])));
+            Assert.Equal(100, engine.ColumnarAggregateRows);
         }
 
         [Fact]
@@ -359,27 +354,24 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext();
             eval.ExternalHashPartitions = 2;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
-            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
             // 64 KB holds only a few hundred groups, so the 3000-group input trips the governor at
             // depth 0 and must recursively repartition (halving group count per level) until each
-            // sub-partition fits — the path this test exercises.
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64 * 1024;
-            try
-            {
-                const int rows = 30000, groups = 3000;
-                var (groupBy, cols, names) = CountSumByCategory();
-                var engine = new ExternalAggregateEngine(eval, logger);
+            // sub-partition fits — the path this test exercises. Private arbiter: leftover shared
+            // reservations from earlier tests would shrink the budget below what repartition can fit.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
 
-                var result = await engine.ApplyAggregationExternal(
-                    MakeGroupedRows(rows, groups), groupBy, cols, names).ToListAsync();
+            const int rows = 30000, groups = 3000;
+            var (groupBy, cols, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                // High cardinality CAN be split, so SpillOrFail completes via recursive repartition.
-                Assert.Equal(groups, result.Count);
-                Assert.All(result, r => Assert.Equal(10m, Convert.ToDecimal(r["cnt"]))); // each group appears rows/groups times
-                decimal totalSum = result.Sum(r => Convert.ToDecimal(r["s"]));
-                Assert.Equal((decimal)rows * (rows + 1) / 2, totalSum); // no rows lost or duplicated
-            }
-            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
+            var result = await engine.ApplyAggregationExternal(
+                MakeGroupedRows(rows, groups), groupBy, cols, names).ToListAsync();
+
+            // High cardinality CAN be split, so SpillOrFail completes via recursive repartition.
+            Assert.Equal(groups, result.Count);
+            Assert.All(result, r => Assert.Equal(10m, Convert.ToDecimal(r["cnt"]))); // each group appears rows/groups times
+            decimal totalSum = result.Sum(r => Convert.ToDecimal(r["s"]));
+            Assert.Equal((decimal)rows * (rows + 1) / 2, totalSum); // no rows lost or duplicated
         }
 
         [Fact]
@@ -388,24 +380,19 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext();
             eval.ExternalHashPartitions = 2;
             eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
-            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
-            MemoryGrantArbiter.Shared.TotalBudgetBytes = 64 * 1024;
-            try
-            {
-                const int groups = 10000;
-                var (groupBy, columns, names) = CountSumByCategory();
-                var engine = new ExternalAggregateEngine(eval, logger);
+            // Private arbiter: the shared instance can carry reservations from earlier tests in the
+            // same host, which would erase the headroom this test's native routing depends on.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
 
-                var result = await engine.ApplyAggregationExternal(
-                    MakeGroupedRows(groups, groups), groupBy, columns, names).ToListAsync();
+            const int groups = 10000;
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
 
-                Assert.Equal(groups, result.Count);
-                Assert.Equal(groups, engine.ColumnarAggregateRows);
-            }
-            finally
-            {
-                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
-            }
+            var result = await engine.ApplyAggregationExternal(
+                MakeGroupedRows(groups, groups), groupBy, columns, names).ToListAsync();
+
+            Assert.Equal(groups, result.Count);
+            Assert.Equal(groups, engine.ColumnarAggregateRows);
         }
 
         // GROUP_CONCAT retains only its argument values (not full rows), but a single large group is

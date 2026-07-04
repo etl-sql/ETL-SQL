@@ -3,6 +3,7 @@ using System.Diagnostics;
 namespace ETL_SQL.Tests.Scale;
 
 internal sealed record ScenarioResourceMetrics(
+    long StartWorkingSetBytes,
     long PeakWorkingSetBytes,
     long PeakPrivateBytes,
     long PeakManagedHeapBytes,
@@ -42,6 +43,7 @@ internal sealed class ScenarioResourceSampler : IDisposable
             var elapsed = Math.Max(0.001, (now.Timestamp - _baseline.Timestamp).TotalSeconds);
             var cpu = now.CpuTime - _baseline.CpuTime;
             var result = new ScenarioResourceMetrics(
+                _baseline.WorkingSetBytes,
                 _peakWorkingSet,
                 _peakPrivateBytes,
                 _peakManagedHeap,
@@ -93,7 +95,8 @@ internal sealed class ScenarioResourceSampler : IDisposable
             GC.CollectionCount(0),
             GC.CollectionCount(1),
             GC.CollectionCount(2),
-            GC.GetTotalPauseDuration());
+            GC.GetTotalPauseDuration(),
+            _process.WorkingSet64);
     }
 
     public void Dispose()
@@ -111,5 +114,6 @@ internal sealed class ScenarioResourceSampler : IDisposable
         int Gen0Collections,
         int Gen1Collections,
         int Gen2Collections,
-        TimeSpan GcPauseTime);
+        TimeSpan GcPauseTime,
+        long WorkingSetBytes);
 }
