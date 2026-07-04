@@ -989,6 +989,15 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
         }
         catch
         {
+            // Observe an in-flight spill write before disposing the extent writer: the pending
+            // task writes through extentWriter, so disposing/deleting underneath it races the
+            // live write (and leaves its spill accounting nondeterministic). Its own failure is
+            // secondary to the original exception.
+            if (pendingSpillWrite != null)
+            {
+                try { await AwaitPendingSpillAsync(); }
+                catch { /* preserve the original exception */ }
+            }
             if (extentWriter != null)
             {
                 try

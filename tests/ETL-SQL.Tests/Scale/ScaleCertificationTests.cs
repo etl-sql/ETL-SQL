@@ -98,7 +98,11 @@ namespace ETL_SQL.Tests.Scale
         private static void AssertSpilled(Evaluator ev, string scenario)
         {
             Assert.True(ev.Telemetry.TotalSpilledBytes > 0,
-                $"{scenario} expected spill evidence, but TotalSpilledBytes was 0.");
+                $"{scenario} expected spill evidence, but TotalSpilledBytes was 0. Diagnostics: " +
+                $"TempTableSpillThresholdRows={ev.TempTableSpillThresholdRows}, BatchSize={ev.BatchSize}, " +
+                $"TelemetryEnabled={ev.Telemetry.TelemetryEnabled}, RowsProcessed={ev.Telemetry.RowsProcessed}, " +
+                $"ArbiterBudget={ev.MemoryArbiter.TotalBudgetBytes}, ArbiterReserved={ev.MemoryArbiter.ReservedBytes}, " +
+                $"Connections=[{string.Join(", ", ev.Connections.Select(c => $"{c.Key}:{c.Value?.GetType().Name}"))}]");
         }
 
         private static async Task<Evaluator> EvWithRows(int rowCount, int groups = 10)
