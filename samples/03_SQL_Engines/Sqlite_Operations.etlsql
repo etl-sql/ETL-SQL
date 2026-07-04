@@ -3,7 +3,7 @@
 CREATE CONNECTION sqlite_mem AS SQLITE(DATABASE = ':memory:');
 
 -- 2. File-Based SQLite database
-CREATE CONNECTION sqlite_db AS SQLITE(PATH = 'samples/output/local_store.db');
+CREATE CONNECTION sqlite_db AS SQLITE(DATABASE = 'samples/output/local_store.db');
 
 -- Create a table in the file-based SQLite database
 EXECUTE sqlite_db BEGIN

@@ -1,11 +1,11 @@
 # SQLITE
 Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver. Supports local transactions, schema inspection, and data loading.
 
-Syntax:
+## Syntax
+
 ```sql
 CREATE CONNECTION <name> AS SQLITE(
   DATABASE        = 'C:\data\mydb.db',
-  PASSWORD        = '<password>',
   TIMEOUT_SECONDS = 30
 );
 
@@ -15,15 +15,17 @@ CREATE CONNECTION <name> AS SQLITE(
 );
 ```
 
-Aliases:
-  SQLITE3
+## Options
 
-Options:
+- **Alias: SQLITE3** — accepted connector token for compatibility
 - **DATABASE = 'path'** — file path to SQLite database file or ':memory:' (defaults to ':memory:' if empty)
-- **PATH = 'path'** — alias for DATABASE
-- **PASSWORD = 'pwd'** — encryption password (only supported if SQLCipher is linked natively on the host)
 - **TIMEOUT_SECONDS = n** — command/query execution timeout in seconds (default 30)
 - **TABLE = 'name'** — default table for unqualified SELECT/INSERT operations
+
+SQLite files are not encrypted by this connector. Use filesystem or volume encryption for sensitive
+data. The shipped native SQLite library is not SQLCipher, so `PASSWORD` is not accepted.
+
+## Examples
 
 ```sql
 -- Create an in-memory SQLite database connection
@@ -59,5 +61,5 @@ SELECT id, name, price
   WHERE price > 20.0;
 ```
 
-References:
+## References
 - [Data Connectors](../../../../../Docs/Reference/Data_Connectors.md)

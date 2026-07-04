@@ -355,7 +355,7 @@ Connectors are registered at startup and queried for metadata. They are stateles
 | `Task<IEnumerable<string>> GetProceduresAsync(context, connStr)` | Schema introspection |
 | `string BuildConnectionString(properties)` | Construct a connection string from a property bag |
 | `string? GetHost(connStr, options)` | Returns target host for network-based connectors to support egress validation |
-| `bool IsFileBased` | True if the connector is file-based (CSV, Parquet, SQLite) and requires path resolution |
+| `bool IsFileBased` | True for direct file connectors such as CSV and Parquet. Embedded SQL connectors resolve provider path fields inside their data-source boundary. |
 | `int CommandTimeoutSeconds` | Default command timeout in seconds (OLTP: 30, Warehouse: 1800) |
 | `bool IsDataWarehouse` | True if targeting an analytical data warehouse |
 | `ICatalogMetadataProvider? GetCatalogProvider(connStr)` | Returns a metadata provider for schema/lineage enrichment |

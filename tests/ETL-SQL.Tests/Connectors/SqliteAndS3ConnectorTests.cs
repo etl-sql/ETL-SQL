@@ -11,6 +11,7 @@ using Amazon.S3.Model;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.S3;
 using ETL_SQL.Connectors.Sqlite;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
 using Moq;
@@ -40,10 +41,14 @@ namespace ETL_SQL.Tests.Connectors
             var connector = new SqliteConnector();
             Assert.Equal("SQLITE", connector.Name);
             Assert.Contains("SQLITE3", connector.Aliases);
+            Assert.False(connector.IsFileBased);
             Assert.NotEmpty(connector.GetHelp());
             Assert.NotEmpty(connector.GetSupportedFunctions());
             Assert.NotEmpty(connector.GetSupportedKeywords());
             Assert.NotEmpty(connector.GetSupportedOptions());
+            Assert.Contains("DATABASE", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("PATH", connector.GetSupportedOptions().Keys);
+            Assert.DoesNotContain("PASSWORD", connector.GetSupportedOptions().Keys);
         }
 
         [Fact]
@@ -56,7 +61,7 @@ namespace ETL_SQL.Tests.Connectors
             mockContext.Setup(c => c.ResolvePath(rawPath)).Returns(resolvedPath);
 
             var connector = new SqliteConnector();
-            var options = new Dictionary<string, string> { { "PATH", rawPath } };
+            var options = new Dictionary<string, string> { { "DATABASE", rawPath } };
             string connStr = connector.BuildConnectionString(options);
             var dataSource = (SqliteDataSource)connector.CreateDataSource(mockContext.Object, connStr, options);
 
@@ -78,6 +83,101 @@ namespace ETL_SQL.Tests.Connectors
         }
 
         [Fact]
+        public void SqliteConnector_SharedMemoryMode_DoesNotResolveDatabaseNameAsPath()
+        {
+            var mockContext = CreateMockContext();
+
+            var dataSource = (SqliteDataSource)new SqliteConnector().CreateDataSource(
+                mockContext.Object, "Data Source=shared-cache;Mode=Memory;Cache=Shared;");
+
+            mockContext.Verify(c => c.ResolvePath(It.IsAny<string>()), Times.Never);
+            Assert.Contains("Mode=Memory", dataSource.ConnectionString);
+        }
+
+        [Fact]
+        public void SqliteConnector_RawPassword_IsRejectedWithoutSqlCipher()
+        {
+            var mockContext = CreateMockContext();
+
+            var error = Assert.Throws<ExecutionException>(() =>
+                new SqliteConnector().CreateDataSource(
+                    mockContext.Object, "Data Source=:memory:;Password=not-encryption;"));
+
+            Assert.Contains("does not ship SQLCipher", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("not-encryption", error.Message, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void SqliteConnector_RawConnectionString_ResolvesOnlyDataSourcePath()
+        {
+            var mockContext = CreateMockContext();
+            var rawPath = "data/read-only.db";
+            var resolvedPath = Path.Combine(Path.GetTempPath(), "data", "read-only.db");
+            mockContext.Setup(c => c.ResolvePath(rawPath)).Returns(resolvedPath);
+
+            var dataSource = (SqliteDataSource)new SqliteConnector().CreateDataSource(
+                mockContext.Object, $"Data Source={rawPath};Mode=ReadOnly;");
+
+            mockContext.Verify(c => c.ResolvePath(rawPath), Times.Once);
+            Assert.Contains(resolvedPath, dataSource.ConnectionString);
+            Assert.Contains("Mode=ReadOnly", dataSource.ConnectionString);
+        }
+
+        [Fact]
+        public void SqliteConnector_ProtectedPathFailure_IsAnExecutionException()
+        {
+            var mockContext = CreateMockContext();
+            mockContext.Setup(c => c.ResolvePath(It.IsAny<string>()))
+                .Throws(new ExecutionException("Path is outside approved roots."));
+
+            var error = Assert.Throws<ExecutionException>(() =>
+                new SqliteConnector().CreateDataSource(
+                    mockContext.Object, "Data Source=C:\\Windows\\System32\\blocked.db;"));
+
+            Assert.Contains("approved roots", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task SqliteDataSource_ConnectionOpenFailure_IsSanitized()
+        {
+            var mockContext = CreateMockContext();
+            var missing = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "missing.db");
+            mockContext.Setup(c => c.ResolvePath(missing)).Returns(missing);
+            var dataSource = new SqliteDataSource(
+                mockContext.Object, $"Data Source={missing};Mode=ReadOnly;");
+
+            var error = await Assert.ThrowsAsync<ExecutionException>(() => dataSource.GetTablesAsync());
+
+            Assert.DoesNotContain("Data Source=", error.Message, StringComparison.OrdinalIgnoreCase);
+            await dataSource.DisposeAsync();
+        }
+
+        [Fact]
+        public async Task SqliteDataSource_DisposingTableView_DoesNotOwnRootTransaction()
+        {
+            var mockContext = CreateMockContext();
+            var options = new Dictionary<string, string> { ["DATABASE"] = ":memory:" };
+            var connector = new SqliteConnector();
+            var root = (SqliteDataSource)connector.CreateDataSource(
+                mockContext.Object, connector.BuildConnectionString(options), options);
+
+            await root.BeginTransactionAsync();
+            await foreach (var _ in root.ExecuteRawSql("CREATE TABLE items (id INTEGER)")) { }
+            var tableView = (SqliteDataSource)root.WithTable("items");
+            await tableView.DisposeAsync();
+            await foreach (var _ in root.ExecuteRawSql("INSERT INTO items (id) VALUES (1)")) { }
+
+            var count = 0L;
+            await foreach (var batch in root.ExecuteRawSql("SELECT COUNT(*) AS count FROM items"))
+                count = Convert.ToInt64(batch.Rows[0]["count"]);
+
+            Assert.Equal(1, count);
+            await root.RollbackAsync();
+            await root.DisposeAsync();
+            await root.DisposeAsync();
+        }
+
+        [Fact]
         public async Task SqliteDataSource_InMemory_ReadWrite_Success()
         {
             var mockContext = CreateMockContext();
@@ -90,21 +190,10 @@ namespace ETL_SQL.Tests.Connectors
 
             try
             {
-                // We keep the connection open using a transaction so the in-memory database persists
-                await sessionSource.BeginTransactionAsync();
-
-                // Get the connection via reflection to run DDL on the in-memory database
-                var connField = typeof(SqliteDataSource).GetField("_transactionalConnection", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                var conn = (Microsoft.Data.Sqlite.SqliteConnection)connField.GetValue(sessionSource);
-                Assert.NotNull(conn);
-
-                using (var cmd = new Microsoft.Data.Sqlite.SqliteCommand("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT)", conn))
-                {
-                    cmd.Transaction = (Microsoft.Data.Sqlite.SqliteTransaction)typeof(SqliteDataSource)
-                        .GetField("_activeTransaction", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                        .GetValue(sessionSource);
-                    await cmd.ExecuteNonQueryAsync();
-                }
+                // Root and table views share transaction state without sharing disposal ownership.
+                await dataSource.BeginTransactionAsync();
+                await foreach (var _ in dataSource.ExecuteRawSql(
+                    "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, role TEXT)")) { }
 
                 // Write batches
                 var table = new DataTable();
@@ -119,7 +208,7 @@ namespace ETL_SQL.Tests.Connectors
                 }
 
                 await sessionSource.WriteBatches(GetBatches(), append: true);
-                await sessionSource.CommitAsync();
+                await dataSource.CommitAsync();
 
                 // To read the in-memory data, we must start another transaction or keep connection open,
                 // because once CommitAsync finishes, the transactional connection is closed and database is destroyed.

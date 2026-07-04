@@ -167,7 +167,7 @@ Connectors define how to communicate with external data sources.
 | `MSSQL` | SQL | [MSSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MSSQL.md) | HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, ... |
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
-| `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, PATH, PASSWORD, TIMEOUT_SECONDS, TABLE |
+| `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, TIMEOUT_SECONDS, TABLE |
 | `MYSQL` | SQL | [MYSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MYSQL.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ALLOW_PUBLIC_KEY_RETRIEVAL, ALLOW_USER_VARIABLES, ... |
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
@@ -2114,5 +2114,4 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `@trusted` | Tag | Standard governance tag |
 | `@unit` | Tag | Standard governance tag |
 <!-- END GENERATED CANONICAL TOKEN INDEX -->
-
 
