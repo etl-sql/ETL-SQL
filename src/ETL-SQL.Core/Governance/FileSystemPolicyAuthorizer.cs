@@ -61,29 +61,8 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
         return new AuthorizedFileSystemPath(canonical, access, allowed);
     }
 
-    private static ExecutionPolicySnapshot RefreshSnapshotAtBoundary(IExecutionContext context)
-    {
-        var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
-            EnterprisePolicyRuntime.Current, Environment.UserName,
-            context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
-            "unknown");
-        var current = EnterprisePolicyRuntime.Current;
-        var freshness = snapshot.GetFreshness(current);
-        if (!freshness.CanContinue)
-        {
-            var denied = OperationPolicyDecision.Deny(snapshot, "EnterprisePolicy:Freshness",
-                "<filesystem-operation>", "available, unexpired enterprise policy",
-                freshness.Reason ?? "Enterprise policy is not valid.");
-            throw new FileSystemPolicyDeniedException(denied);
-        }
-        if (freshness.CurrentPolicyChanged)
-        {
-            snapshot = ExecutionPolicySnapshot.Capture(current, snapshot.Actor, snapshot.ExecutionMode,
-                snapshot.ScriptHash, snapshot.JobId, snapshot.CorrelationId);
-            context.ExecutionPolicy = snapshot;
-        }
-        return snapshot;
-    }
+    private static ExecutionPolicySnapshot RefreshSnapshotAtBoundary(IExecutionContext context) =>
+        OperationPolicyBoundary.Refresh(context, "<filesystem-operation>");
 
     private static void EnforceEnterpriseRoots(
         ExecutionPolicySnapshot snapshot,

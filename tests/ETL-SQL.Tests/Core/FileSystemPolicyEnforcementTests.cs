@@ -106,6 +106,36 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task FileOperationCount_EnterpriseCeilingDeniesBeyondLimit()
+    {
+        var src = Path.Combine(_root, "op_src.txt");
+        await File.WriteAllTextAsync(src, "x");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxFileOps: 2));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c1.txt")}' WITH(OVERWRITE=ON);\n" +
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c2.txt")}' WITH(OVERWRITE=ON);\n" +
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c3.txt")}' WITH(OVERWRITE=ON);"));
+        Assert.Contains("MaxFileOperationsPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        // Operations within the ceiling completed; the one beyond it was denied before executing.
+        Assert.True(File.Exists(Path.Combine(_root, "op_c2.txt")));
+        Assert.False(File.Exists(Path.Combine(_root, "op_c3.txt")));
+    }
+
+    [Fact]
+    public async Task DirectoryRecursionDepth_EnterpriseCeilingDenies()
+    {
+        var srcRoot = Path.Combine(_root, "deep_src");
+        Directory.CreateDirectory(Path.Combine(srcRoot, "a", "b", "c"));
+        await File.WriteAllTextAsync(Path.Combine(srcRoot, "a", "b", "c", "leaf.txt"), "x");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxRecursiveDepth: 1));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"COPY DIRECTORY '{srcRoot}' TO '{Path.Combine(_root, "deep_dst")}';"));
+        Assert.Contains("MaxRecursiveNestingDepth", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Standalone_Unenrolled_RemainsUnrestrictedByOrganizationPolicy()
     {
         var src = Path.Combine(_root, "merge_standalone.csv");
@@ -125,11 +155,19 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
         await evaluator.Evaluate(script);
     }
 
-    private static EffectiveEnterprisePolicy EnrolledPolicy(string root)
+    private static EffectiveEnterprisePolicy EnrolledPolicy(
+        string root,
+        int? maxFileOps = null,
+        int? maxRecursiveDepth = null)
     {
         var document = new OrganizationPolicyDocument
         {
-            Filesystem = new FilesystemPolicySection { ApprovedRoots = [root] }
+            Filesystem = new FilesystemPolicySection { ApprovedRoots = [root] },
+            Execution = new ExecutionPolicySection
+            {
+                MaxFileOperationsPerScript = maxFileOps,
+                MaxRecursiveNestingDepth = maxRecursiveDepth
+            }
         };
         return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
             DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),

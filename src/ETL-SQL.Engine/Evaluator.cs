@@ -1377,12 +1377,23 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         var total = System.Threading.Interlocked.Add(ref _operationCount, count);
         _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+        // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
+        if (type == OperationType.FileSystem && IsEnterpriseGoverned)
+            OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxFileOperationsPerScript",
+                total, "<file-operation-count>");
     }
+
+    private bool IsEnterpriseGoverned =>
+        ExecutionPolicy?.IsEnrolled ?? EnterprisePolicyRuntime.Current.IsEnrolled;
 
     public IDisposable EnterRecursiveScope()
     {
         CurrentRecursiveDepth++;
         _securityService.CheckRunawayProtection(OperationType.FileSystem, _operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
+        // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
+        if (IsEnterpriseGoverned)
+            OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxRecursiveNestingDepth",
+                CurrentRecursiveDepth, "<recursive-nesting-depth>");
         return new RecursiveScope(this);
     }
 
