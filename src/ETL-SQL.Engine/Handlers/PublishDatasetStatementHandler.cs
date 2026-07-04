@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -63,6 +64,9 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
             if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
                 sourcePath += ".etlds";
         }
+        sourcePath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, sourcePath, FileSystemAccessKind.Read, validateFileType: false)
+            .CanonicalPath;
         if (!File.Exists(sourcePath))
             throw new ExecutionException(
                 $"PUBLISH DATASET '{stmt.DatasetName}': source file not found: '{sourcePath}'.",

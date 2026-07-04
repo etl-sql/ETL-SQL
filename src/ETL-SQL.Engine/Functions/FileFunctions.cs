@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Functions;
 
@@ -36,11 +37,20 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("PATH_DIRECTORY", PathDirectory, "PATH_DIRECTORY(path): Extracts the directory information from a path.");
         }
 
+        /// <summary>
+        /// Resolves and authorizes a script-selected local path at the canonical filesystem
+        /// policy boundary (safe zones plus enterprise approved roots and policy freshness).
+        /// </summary>
+        private static string AuthorizeLocalPath(IExecutionContext context, string rawPath, FileSystemAccessKind access) =>
+            new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(rawPath), access, validateFileType: false)
+                .CanonicalPath;
+
         private static object? FileHash(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return null;
             string rawPath = args[0]?.ToString() ?? "";
-            string resolvedPath = context.ResolvePath(rawPath);
+            string resolvedPath = AuthorizeLocalPath(context, rawPath, FileSystemAccessKind.Read);
             if (!File.Exists(resolvedPath)) return null;
 
             string algo = "SHA256";
@@ -82,7 +92,7 @@ namespace ETL_SQL.Engine.Functions
         private static object? FileSize(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return null;
-            string resolvedPath = context.ResolvePath(args[0]?.ToString() ?? "");
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
             if (!File.Exists(resolvedPath)) return null;
             return (decimal)new FileInfo(resolvedPath).Length;
         }
@@ -90,7 +100,7 @@ namespace ETL_SQL.Engine.Functions
         private static object? FileModified(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return null;
-            string resolvedPath = context.ResolvePath(args[0]?.ToString() ?? "");
+            string resolvedPath = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read);
             if (!File.Exists(resolvedPath)) return null;
             return new FileInfo(resolvedPath).LastWriteTime;
         }
@@ -151,14 +161,14 @@ namespace ETL_SQL.Engine.Functions
         private static Task<object?> FileExists(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
-            var res = File.Exists(context.ResolvePath(args[0]?.ToString() ?? ""));
+            var res = File.Exists(AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read));
             return Task.FromResult<object?>((object?)(res ? 1m : 0m));
         }
 
         private static Task<object?> DirectoryExists(List<object?> args, IExecutionContext context)
         {
             if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
-            var res = Directory.Exists(context.ResolvePath(args[0]?.ToString() ?? ""));
+            var res = Directory.Exists(AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Read));
             return Task.FromResult<object?>((object?)(res ? 1m : 0m));
         }
 
@@ -168,7 +178,7 @@ namespace ETL_SQL.Engine.Functions
             table.SetColumns(new[] { "Name", "Path", "Extension", "Size", "LastModified" });
 
             if (args.Count < 1 || args[0] == null) return table;
-            string path = context.ResolvePath(args[0]?.ToString() ?? "");
+            string path = AuthorizeLocalPath(context, args[0]?.ToString() ?? "", FileSystemAccessKind.Enumerate);
             bool recursive = args.Count >= 2 && args[1] != null && (args[1] is bool b ? b : (args[1] is string s ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) : Convert.ToBoolean(args[1])));
 
             if (!Directory.Exists(path)) return table;

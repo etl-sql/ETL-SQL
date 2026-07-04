@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -55,6 +56,10 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
 
         if (!filePath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
             throw new ExecutionException($"Security violation: theme file must have .json extension. Target: {filePath}", null, stmt.Line, stmt.Column);
+
+        filePath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, filePath, FileSystemAccessKind.Write, validateFileType: false)
+            .CanonicalPath;
 
         context.IncrementOperationCount(OperationType.FileSystem, filePath);
 

@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -28,9 +29,11 @@ public class SplitFileStatementHandler : IStatementHandler
         string destDir = context.ResolvePath(destDirVal);
 
         // Security check
-        context.SecurityService.ValidatePath(source);
-        context.SecurityService.ValidatePath(destDir);
-        context.SecurityService.ValidateWriteAccess(destDir);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false).CanonicalPath;
+        destDir = pathAuthorizer.Authorize(context, destDir, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
 
         // Runaway operation count
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -96,7 +99,7 @@ public class SplitFileStatementHandler : IStatementHandler
 
                     if (writer == null)
                     {
-                        currentDestFile = ResolvePartPath(context, destDir, prefix, fileIndex, extension, stmt);
+                        currentDestFile = ResolvePartPath(context, pathAuthorizer, destDir, prefix, fileIndex, extension, stmt);
                         if (File.Exists(currentDestFile))
                         {
                             if (overwrite) File.Delete(currentDestFile);
@@ -158,17 +161,14 @@ public class SplitFileStatementHandler : IStatementHandler
         }
     }
 
-    private static string ResolvePartPath(IExecutionContext context, string destDir, string prefix, int fileIndex, string extension, SplitFileStatement stmt)
+    private static string ResolvePartPath(IExecutionContext context, FileSystemPolicyAuthorizer pathAuthorizer, string destDir, string prefix, int fileIndex, string extension, SplitFileStatement stmt)
     {
         var partPath = Path.GetFullPath(Path.Combine(destDir, $"{prefix}{fileIndex}{extension}"));
         var destRoot = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!partPath.StartsWith(destRoot, StringComparison.OrdinalIgnoreCase))
             throw new ExecutionException("Generated split file path escaped the destination directory.", null, stmt.Line, stmt.Column);
 
-        context.SecurityService.ValidatePath(partPath);
-        context.SecurityService.ValidateWriteAccess(partPath);
-        context.SecurityService.ValidateFileType(partPath);
-        return partPath;
+        return pathAuthorizer.Authorize(context, partPath, FileSystemAccessKind.Write).CanonicalPath;
     }
 
     private long ParseSizeLimit(string sizeStr)

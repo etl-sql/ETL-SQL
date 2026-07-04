@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using PgpCore;
 
@@ -29,7 +30,9 @@ public class CreatePgpKeyPairStatementHandler : IStatementHandler
         var pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString();
         if (string.IsNullOrEmpty(pathVal)) throw new ExecutionException("Path must be specified for CREATE PGP_KEY_PAIR.");
 
-        string path = context.ResolvePath(pathVal);
+        string path = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(pathVal), FileSystemAccessKind.Write, validateFileType: false)
+            .CanonicalPath;
 
         if (context.IsWhatIf)
         {

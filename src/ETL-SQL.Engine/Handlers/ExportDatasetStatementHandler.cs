@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -72,6 +73,9 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
             if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
                 targetPath += ".etlds";
         }
+        targetPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, targetPath, FileSystemAccessKind.Write, validateFileType: false)
+            .CanonicalPath;
 
         var tempPlain = Path.Combine(Path.GetTempPath(), $"__ds_export_{Guid.NewGuid():N}.parquet");
         using var fileTransaction = DatasetFileTransaction.Create(targetPath);

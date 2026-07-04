@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -27,10 +28,10 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
         string dest = context.ResolvePath(destVal);
 
         // Security check
-        context.SecurityService.ValidatePath(source);
-        context.SecurityService.ValidatePath(dest);
-        context.SecurityService.ValidateWriteAccess(dest);
-        context.SecurityService.ValidateFileType(dest);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false).CanonicalPath;
+        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
 
         // Runaway operation count
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);

@@ -13,6 +13,13 @@ namespace ETL_SQL.Tests.Hardening
     {
         private readonly Mock<ILogger> _logger = new Mock<ILogger>();
 
+        private void SetupSecurity(Mock<IExecutionContext> mockContext)
+        {
+            var security = new ETL_SQL.Services.SecurityService(_logger.Object) { IsTestMode = true };
+            mockContext.SetupGet(c => c.SecurityService).Returns(security);
+            mockContext.SetupProperty(c => c.ExecutionPolicy);
+        }
+
         [Fact]
         public async Task CreateSshKeyPair_ShouldGenerateValidRsaKeys()
         {
@@ -21,6 +28,7 @@ namespace ETL_SQL.Tests.Hardening
             string tempPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-SSH", Guid.NewGuid().ToString());
 
             var mockContext = new Mock<IExecutionContext>();
+            SetupSecurity(mockContext);
             mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns(tempPath);
             mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
                 .ReturnsAsync((Expression e, Row r, bool d) => e is LiteralExpression l ? l.Value : null);
@@ -64,6 +72,7 @@ namespace ETL_SQL.Tests.Hardening
             string tempPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-SSH-Pass", Guid.NewGuid().ToString());
 
             var mockContext = new Mock<IExecutionContext>();
+            SetupSecurity(mockContext);
             mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns(tempPath);
             mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
                 .ReturnsAsync((Expression e, Row r, bool d) =>

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -34,6 +35,9 @@ public class ExpectSchemaStatementHandler : IStatementHandler
         {
             var cleanPath = stmt.SchemaPath.Trim('\'', '"');
             var resolvedPath = context.ResolvePath(cleanPath);
+            resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, resolvedPath, FileSystemAccessKind.Read, validateFileType: false)
+                .CanonicalPath;
             if (!File.Exists(resolvedPath))
             {
                 throw new ExecutionException($"EXPECT SCHEMA: JSON specification file not found at '{resolvedPath}'.");

@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -24,7 +25,9 @@ public class WaitForFileStatementHandler : IStatementHandler
         string resolvedPath = context.ResolvePath(rawPath);
 
         // Security validation
-        context.SecurityService.ValidatePath(resolvedPath);
+        resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, resolvedPath, FileSystemAccessKind.Read, validateFileType: false)
+            .CanonicalPath;
 
         int timeoutSec = 30; // Default timeout
         if (stmt.Timeout != null)

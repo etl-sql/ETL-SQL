@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -25,9 +26,8 @@ public class MergeFilesStatementHandler : IStatementHandler
         string dest = context.ResolvePath(destVal);
 
         // Security check
-        context.SecurityService.ValidatePath(dest);
-        context.SecurityService.ValidateWriteAccess(dest);
-        context.SecurityService.ValidateFileType(dest);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
 
         if (context.IsWhatIf)
         {
@@ -70,17 +70,20 @@ public class MergeFilesStatementHandler : IStatementHandler
                 if (string.IsNullOrEmpty(dir)) dir = Directory.GetCurrentDirectory();
                 string pattern = Path.GetFileName(resolvedSrc);
 
-                context.SecurityService.ValidatePath(dir);
+                dir = pathAuthorizer.Authorize(context, dir, FileSystemAccessKind.Enumerate,
+                    validateFileType: false).CanonicalPath;
                 if (Directory.Exists(dir))
                 {
                     var matched = Directory.GetFiles(dir, pattern);
                     Array.Sort(matched, StringComparer.OrdinalIgnoreCase);
-                    files.AddRange(matched);
+                    files.AddRange(matched.Select(file => pathAuthorizer.Authorize(
+                        context, file, FileSystemAccessKind.Read, validateFileType: false).CanonicalPath));
                 }
             }
             else
             {
-                context.SecurityService.ValidatePath(resolvedSrc);
+                resolvedSrc = pathAuthorizer.Authorize(context, resolvedSrc, FileSystemAccessKind.Read,
+                    validateFileType: false).CanonicalPath;
                 if (File.Exists(resolvedSrc)) files.Add(resolvedSrc);
             }
         }
@@ -104,7 +107,8 @@ public class MergeFilesStatementHandler : IStatementHandler
                 if (!string.IsNullOrEmpty(path))
                 {
                     string resolved = context.ResolvePath(path);
-                    context.SecurityService.ValidatePath(resolved);
+                    resolved = pathAuthorizer.Authorize(context, resolved, FileSystemAccessKind.Read,
+                        validateFileType: false).CanonicalPath;
                     if (File.Exists(resolved)) files.Add(resolved);
                 }
             }

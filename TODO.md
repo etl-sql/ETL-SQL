@@ -6,16 +6,13 @@ release begins.
 
 ---
 
-## Active priority override — Billion-row execution performance
+## Priority note — Billion-row pause lifted (2026-07-03)
 
-**Decision (2026-06-30):** pause new Enterprise Phase 3–5 feature work after the already-committed
-execution-policy and filesystem-authorizer foundations. Resume enterprise enforcement after the engine
-has a credible, measured path to large analytical workloads. Security fixes and regressions remain
-in scope; this pause applies to new enterprise capability.
-
-The active implementation plan is under **Scale & operator-algorithm assessment** below. The target is
-an ETL-SQL-owned columnar execution path—not embedding DuckDB or delegating the product's execution
-model to another database.
+The 2026-06-30 pause on Enterprise Phase 3–5 feature work is **lifted**: the billion-row performance
+program reached its certification gates (Gates A–F all passed; Gate F 1B run certified at commit
+`c398036d`). Enterprise Phase 3 enforcement work is active again. The columnar execution plan under
+**Scale & operator-algorithm assessment** below is retained as the performance record and for
+follow-on P5/remeasurement work.
 
 ---
 
@@ -40,10 +37,10 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 > `ROADMAP.md` — promote the highest-value Phase 6 items here only after Phases 3–5 expose the final
 > operational requirements.
 
-### Phase 3: Policy Authority & Operation-Boundary Enforcement — PAUSED
+### Phase 3: Policy Authority & Operation-Boundary Enforcement — ACTIVE
 
-> **Paused 2026-06-30:** preserve completed work and tests, but do not start another Phase 3 slice until
-> the active billion-row performance program reaches its certification gates.
+> **Resumed 2026-07-03** (paused 2026-06-30 for the billion-row program, whose certification gates have
+> passed). Completed work and tests from before the pause are preserved below.
 
 #### 3.1 Policy authority
 - [ ] Add an administrator-only policy API and Portal workflow to validate, version, publish, supersede, and retrieve organization policies by tenant/environment.
@@ -60,7 +57,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [x] Return structured allow/deny decisions with policy key, sanitized requested value/target, effective constraint, and correlation data. *(`OperationPolicyDecision` is the shared operation-boundary result contract.)*
 
 #### 3.3 Filesystem enforcement
-- [ ] Route all script-driven reads, writes, deletes, moves, copies, archive extraction, directory enumeration, spill, export, snapshot, and artifact paths through one canonical path-authorizer.
+- [~] Route all script-driven reads, writes, deletes, moves, copies, archive extraction, directory enumeration, spill, export, snapshot, and artifact paths through one canonical path-authorizer. *(Routed through `FileSystemPolicyAuthorizer`: file/directory ops, sync, transfer, zip extraction (pre-existing); now also BULK INSERT, SPLIT/MERGE FILES, CONVERT FILE ENCODING, VERIFY FILE INTEGRITY, WAITFOR FILE, EXPECT SCHEMA, EXPORT/PUBLISH DATASET, LINEAGE exports, CREATE LINEAGE, RUN SCRIPT/EXECUTE script reads, CREATE TEMPLATE/THEME, SET TEMPLATE_PATH, SSH/PGP key-pair output, bundle keyfile/source/export paths, and FILE_* / DIRECTORY_* scalar+table functions. End-to-end enforcement suite `FileSystemPolicyEnforcementTests` proves enterprise-root deny/allow plus unenrolled-standalone freedom. Remaining: connector-created data sources (CREATE/ALTER CONNECTION roots), report-object/portal-subscription artifact paths, engine-owned spill/cache policy limits.)*
 - [ ] Enforce approved roots, read/write distinctions, maximum recursive depth, file-operation count, extension/type restrictions, and protected application/system paths.
 - [ ] Resolve canonical targets before access and prevent bypass through `..`, relative paths, mixed separators/case, UNC/device paths, alternate data streams, symbolic links, junctions, hard links, and archive traversal.
 - [ ] Re-check immediately before mutation to reduce check/use races; use handle-based validation where the platform supports it.

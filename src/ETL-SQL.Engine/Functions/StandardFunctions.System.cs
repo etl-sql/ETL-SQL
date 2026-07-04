@@ -6,12 +6,22 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Functions
 {
     public static partial class StandardFunctions
     {
+        /// <summary>
+        /// Resolves and authorizes a script-selected local path at the canonical filesystem
+        /// policy boundary (safe zones plus enterprise approved roots and policy freshness).
+        /// </summary>
+        private static string AuthorizeLocalPath(IExecutionContext context, string rawPath) =>
+            new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(rawPath), FileSystemAccessKind.Read, validateFileType: false)
+                .CanonicalPath;
+
         private static void RegisterSystemFunctions(IFunctionRegistry registry)
         {
             registry.RegisterWithHelp("APPEND_TO_LIST", AddToList, "APPEND_TO_LIST(@list, value): Adds an item to a list variable. Returns the new list.");
@@ -24,8 +34,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
             registry.RegisterWithHelp("UNNEST", Unnest, "UNNEST(list): Table-valued — expands a list/array into one 'Value' row per element. Use in FROM or CROSS APPLY.");
             registry.RegisterWithHelp("FLATTEN", Flatten, "FLATTEN(list): Like UNNEST but flattens one level of nested lists.");
-            registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
-            registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
+            registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(AuthorizeLocalPath(ctx, args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
+            registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(AuthorizeLocalPath(ctx, args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
 
             registry.RegisterWithHelp("HASHBYTES", HashBytes, "HASHBYTES('algo', val): Returns a cryptographic hash (MD5, SHA1, SHA256, SHA512).");
             registry.RegisterWithHelp("NEWID", (args, ctx) => NewUuidV7(), "NEWID(): Returns a new unique identifier (UUID v7).");

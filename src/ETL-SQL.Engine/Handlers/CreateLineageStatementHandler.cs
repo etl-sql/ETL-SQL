@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Lineage;
 
@@ -36,7 +37,9 @@ public class CreateLineageStatementHandler : IStatementHandler
         }
         else
         {
-            var path = context.ResolvePath(source);
+            var path = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(source), FileSystemAccessKind.Read, validateFileType: false)
+                .CanonicalPath;
             if (!File.Exists(path))
                 throw new ExecutionException($"CREATE LINEAGE: lineage source file not found: {source}");
             try
