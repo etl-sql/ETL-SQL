@@ -72,8 +72,8 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 #### 3.5 Process, Docker, resource, and script-setting enforcement
 - [ ] Gate external executables, arguments, working directories, environment inheritance, shell invocation, Docker images/registries, mounts, networks, privilege flags, and host access.
 - [ ] Enforce parallelism, recursion, file-operation, email, string/result, memory/spill, execution-time, and other governed resource ceilings at runtime.
-- [ ] Prevent `SET`, environment variables, command-line options, report parameters, saved sessions, plugins, and child processes from weakening locked or constrained values.
-- [ ] Permit users to choose stricter limits; reject weaker values before execution and retain the enterprise value.
+- [~] Prevent `SET`, environment variables, command-line options, report parameters, saved sessions, plugins, and child processes from weakening locked or constrained values. *(`SET MAX_PARALLEL_DEGREE / MAX_FILE_OPERATIONS / MAX_RECURSIVE_DEPTH` now enforce the enterprise ceiling via `OperationPolicyBoundary.EnforceCeiling` before the local `ValidateThresholdOverride` runs — and unlike the local guardrail this has no approved-safe-zone bypass, so a locked value cannot be weakened even inside a safe zone. Remaining: env-var / command-line / report-parameter override paths for the same keys, and extending to the other governed ceilings once they are added to the policy document.)*
+- [~] Permit users to choose stricter limits; reject weaker values before execution and retain the enterprise value. *(A weaker `SET` is rejected before it applies (the enterprise value is retained); a stricter value is accepted. Proven by test for MAX_PARALLEL_DEGREE. Same behavior extends to the other governed threshold keys mapped above.)*
 - [ ] Make every denial deterministic across in-process and spawned-process execution.
 
 #### Phase 3 completion gates
