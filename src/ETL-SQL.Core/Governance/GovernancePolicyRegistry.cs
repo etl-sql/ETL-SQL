@@ -141,6 +141,14 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             minimumValue: 0L);
 
         yield return new(
+            "Security:AllowedDockerImages",
+            GovernancePolicyScope.Execution,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "Docker image references a script may run via USE DOCKER(...).",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
             "Security:MaxParallelDegree",
             GovernancePolicyScope.Execution,
             GovernancePolicyClassification.Constrained,

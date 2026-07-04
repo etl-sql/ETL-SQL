@@ -27,6 +27,7 @@ public sealed record OrganizationPolicyDocument
     public ConnectorPolicySection Connectors { get; init; } = new();
     public FilesystemPolicySection Filesystem { get; init; } = new();
     public ExecutionPolicySection Execution { get; init; } = new();
+    public ProcessPolicySection Process { get; init; } = new();
     public RemoteExecutionPolicySection RemoteExecution { get; init; } = new();
     public MutationGuardrailPolicySection MutationGuardrails { get; init; } = new();
 
@@ -48,6 +49,8 @@ public sealed record OrganizationPolicyDocument
             values["Security:MaxRecursiveNestingDepth"] = Execution.MaxRecursiveNestingDepth.Value;
         if (Execution.MaxSpillBytesPerScript.HasValue)
             values["Security:MaxSpillBytesPerScript"] = Execution.MaxSpillBytesPerScript.Value;
+        if (Process.AllowedDockerImages.Count > 0)
+            values["Security:AllowedDockerImages"] = Process.AllowedDockerImages;
         values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
         values["Security:RemoteExecutionMode"] = RemoteExecution.Mode.ToString();
         if (RemoteExecution.AllowedHosts.Count > 0)
@@ -96,6 +99,16 @@ public sealed record ExecutionPolicySection
     /// Null means the authoritative organization policy does not bound spill volume.
     /// </summary>
     public long? MaxSpillBytesPerScript { get; init; }
+}
+
+public sealed record ProcessPolicySection
+{
+    /// <summary>
+    /// Docker image references a script may run via <c>USE DOCKER(...)</c>. An entry may be an exact
+    /// <c>repo:tag</c>, a tagless <c>repo</c> (matches any tag), or a <c>prefix/*</c> registry/namespace
+    /// wildcard. Empty means the authoritative organization policy does not constrain Docker images.
+    /// </summary>
+    public IReadOnlyList<string> AllowedDockerImages { get; init; } = Array.Empty<string>();
 }
 
 public sealed record RemoteExecutionPolicySection
@@ -150,6 +163,7 @@ public static class OrganizationPolicySchema
         ValidateConnectorTypes(document.Connectors.AllowedTypes, errors);
         ValidateAbsoluteRoots(document.Filesystem.ApprovedRoots, errors);
         ValidateWriteExtensions(document.Filesystem.AllowedWriteExtensions, errors);
+        ValidateDockerImages(document.Process.AllowedDockerImages, errors);
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
 
@@ -219,6 +233,18 @@ public static class OrganizationPolicySchema
                 errors.Add($"Filesystem allowed write extension '{extension}' is not a valid extension.");
             else if (!seen.Add(normalized))
                 errors.Add($"Filesystem allowed write extension '{extension}' is duplicated.");
+        }
+    }
+
+    private static void ValidateDockerImages(IReadOnlyList<string> images, List<string> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var image in images)
+        {
+            if (string.IsNullOrWhiteSpace(image))
+                errors.Add("Process allowed Docker images cannot contain blank entries.");
+            else if (!seen.Add(image.Trim()))
+                errors.Add($"Process allowed Docker image '{image}' is duplicated.");
         }
     }
 

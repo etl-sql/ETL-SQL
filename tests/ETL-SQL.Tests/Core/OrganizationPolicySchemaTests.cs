@@ -114,6 +114,32 @@ public class OrganizationPolicySchemaTests
     }
 
     [Fact]
+    public void Validate_RejectsBlankDockerImage()
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            Process = new ProcessPolicySection { AllowedDockerImages = new[] { "postgres", "  " } }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("Docker images cannot contain blank"));
+    }
+
+    [Fact]
+    public void ToPolicyValues_FlattensDockerImages()
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            Process = new ProcessPolicySection { AllowedDockerImages = new[] { "postgres:15", "myreg.io/*" } }
+        };
+
+        var flat = EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues());
+
+        Assert.Equal("postgres:15", flat["Security:AllowedDockerImages:0"]);
+        Assert.Equal("myreg.io/*", flat["Security:AllowedDockerImages:1"]);
+    }
+
+    [Fact]
     public void ToPolicyValues_FlattensWriteExtensionsAndSpillCeiling()
     {
         var document = new OrganizationPolicyDocument

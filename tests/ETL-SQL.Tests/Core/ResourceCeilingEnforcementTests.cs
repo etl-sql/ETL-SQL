@@ -44,6 +44,17 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         Assert.Null(ex);
     }
 
+    [Fact]
+    public async Task UseDocker_ImageOutsideEnterpriseAllowlist_IsDeniedBeforeStart()
+    {
+        // Denial fires before the Docker manager is touched, so no Docker daemon is needed.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedDockerImages: ["postgres"]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() =>
+            ExecuteAsync("USE DOCKER('redis:7');"));
+        Assert.Contains("Docker image", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task ExecuteAsync(string sql)
     {
         var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
@@ -51,11 +62,14 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         await evaluator.Evaluate(script);
     }
 
-    private static EffectiveEnterprisePolicy EnrolledPolicy(int? maxParallelDegree = null)
+    private static EffectiveEnterprisePolicy EnrolledPolicy(
+        int? maxParallelDegree = null,
+        string[]? allowedDockerImages = null)
     {
         var document = new OrganizationPolicyDocument
         {
-            Execution = new ExecutionPolicySection { MaxParallelDegree = maxParallelDegree }
+            Execution = new ExecutionPolicySection { MaxParallelDegree = maxParallelDegree },
+            Process = new ProcessPolicySection { AllowedDockerImages = allowedDockerImages ?? [] }
         };
         return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
             DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
