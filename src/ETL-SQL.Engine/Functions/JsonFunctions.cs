@@ -44,9 +44,88 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("JSON_TABLE", JsonTable, "JSON_TABLE(json, path): Expands a JSON array or object into a table.");
             registry.RegisterWithHelp("JSON_EXTRACT", JsonValue, "JSON_EXTRACT(json, path): Alias for JSON_VALUE.");
             registry.RegisterWithHelp("OPENJSON", OpenJson, "OPENJSON(json[, path]): Expands JSON into a table (SQL Server style).");
+            registry.RegisterWithHelp("JSON_GET", JsonGet, "JSON_GET(json, key_or_index): One JSON access step — object field by string key or array element by integer index (negative counts from the end) — returned as JSON. The -> operator compiles to this; chain for deep access.");
+            registry.RegisterWithHelp("JSON_GET_TEXT", JsonGetText, "JSON_GET_TEXT(json, key_or_index): Like JSON_GET but returns the value as text (strings unquoted). The ->> operator compiles to this.");
         }
 
         // ── Scalar helpers ────────────────────────────────────────────────────
+
+        /// <summary>
+        /// One JSON access step (the -> operator, PostgreSQL semantics): an object field by string
+        /// key, or an array element by integer index (negative indexes count from the end). Returns
+        /// the selected value serialised as JSON (strings keep their quotes), so results chain into
+        /// further -> / ->> steps. Null-propagating: a missing key, out-of-range index, kind
+        /// mismatch, or invalid JSON yields NULL, never an error.
+        /// </summary>
+        private static object? JsonGet(List<object?> args, IExecutionContext ctx)
+        {
+            var element = NavigateOneStep(args);
+            return element?.GetRawText();
+        }
+
+        /// <summary>
+        /// One JSON access step returning text (the ->> operator, PostgreSQL semantics): strings are
+        /// returned unquoted, numbers/booleans as their literal text, JSON null as NULL, and
+        /// objects/arrays as their raw JSON text.
+        /// </summary>
+        private static object? JsonGetText(List<object?> args, IExecutionContext ctx)
+        {
+            var element = NavigateOneStep(args);
+            if (element == null) return null;
+            return element.Value.ValueKind switch
+            {
+                JsonValueKind.String => element.Value.GetString(),
+                JsonValueKind.Null => null,
+                _ => element.Value.GetRawText()
+            };
+        }
+
+        /// <summary>Shared -> / ->> navigation: selects one field or element from the JSON in args[0].</summary>
+        private static JsonElement? NavigateOneStep(List<object?> args)
+        {
+            if (args.Count < 2) return null;
+            string? json = args[0]?.ToString();
+            object? selector = args[1];
+            if (string.IsNullOrEmpty(json) || selector == null) return null;
+
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                // Integer selector → array element (negative counts from the end, as in PostgreSQL).
+                if (IsIntegral(selector, out var index))
+                {
+                    if (root.ValueKind != JsonValueKind.Array) return null;
+                    var length = root.GetArrayLength();
+                    if (index < 0) index += length;
+                    if (index < 0 || index >= length) return null;
+                    return root[index].Clone();
+                }
+
+                // String selector → object field.
+                if (root.ValueKind != JsonValueKind.Object) return null;
+                return root.TryGetProperty(selector.ToString()!, out var prop) ? prop.Clone() : null;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException)
+            {
+                return null;
+            }
+        }
+
+        private static bool IsIntegral(object selector, out int index)
+        {
+            switch (selector)
+            {
+                case int i: index = i; return true;
+                case long l when l >= int.MinValue && l <= int.MaxValue: index = (int)l; return true;
+                case decimal d when d == decimal.Truncate(d) && d >= int.MinValue && d <= int.MaxValue:
+                    index = (int)d; return true;
+                case double db when db == Math.Truncate(db) && db >= int.MinValue && db <= int.MaxValue:
+                    index = (int)db; return true;
+                default: index = 0; return false;
+            }
+        }
 
         /// <summary>
         /// Extracts a scalar value from a JSON string at the given JSONPath.

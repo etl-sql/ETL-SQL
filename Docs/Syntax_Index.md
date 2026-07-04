@@ -347,6 +347,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `ERROR_LINE()` | System | [ERROR_LINE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_LINE.md) | Error line in CATCH block |
 | `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) / [JSON_EXTRACT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXTRACT.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
 | `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_QUERY.md) | Extracts object/array from JSON |
+| `JSON_GET(json, key)` / `->` | JSON | [JSON_GET.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_GET.md) | One access step (field/element) as JSON; the `->` operator |
+| `JSON_GET_TEXT(json, key)` / `->>` | JSON | [JSON_GET_TEXT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_GET_TEXT.md) | One access step as text; the `->>` operator |
 | `JSON_MODIFY(json, path, new_value)` | JSON | [JSON_MODIFY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_MODIFY.md) | Updates JSON string |
 | `ISJSON(string)` | JSON | [ISJSON.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISJSON.md) | 1 if valid JSON |
 | `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXISTS.md) | 1 if path exists |
@@ -1866,6 +1868,8 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CHECKSUM` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
 | `?? ` | Operator | Null-coalescing shorthand; compiles to `COALESCE` at parse time (see Grammar §14.4) |
+| `=> :` | Operator | Arrow conditional; chains compile to one `CASE WHEN` at parse time (see Grammar §14.5) |
+| `-> ->>` | Operator | JSON field/element access (Postgres style); compile to `JSON_GET`/`JSON_GET_TEXT` (see Grammar §14.6) |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |
 | `CORR` | Function | Canonical built-in function |

@@ -54,12 +54,42 @@ public partial class ExpressionParser
                     _parser.Current.Column);
             }
 
-            return ParseOr();
+            return ParseArrow();
         }
         finally
         {
             _expressionDepth--;
         }
+    }
+
+    /// <summary>
+    /// The => arrow conditional: <c>cond => a : b</c> lowers at parse time to
+    /// <c>CASE WHEN cond THEN a ELSE b END</c>, and chains flatten into one CASE —
+    /// <c>c1 => v1 : c2 => v2 : v3</c> becomes <c>CASE WHEN c1 THEN v1 WHEN c2 THEN v2 ELSE v3 END</c>.
+    /// Like ?? → COALESCE and IIF → CASE, the evaluator, lineage, and pushdown all see the canonical
+    /// CASE node (short-circuit, universal SQL). Lowest precedence (below OR), so
+    /// <c>a OR b => x : y</c> means <c>(a OR b) => x : y</c>. The final else branch is REQUIRED:
+    /// a dangling <c>expr => val</c> is a syntax error, never an implicit NULL.
+    /// </summary>
+    private Expression ParseArrow()
+    {
+        var operand = ParseOr();
+        if (_parser.Current.Type != TokenType.ARROW) return operand;
+
+        var arrowToken = _parser.Current;
+        var whenClauses = new List<(Expression Condition, Expression Result)>();
+        while (_parser.Match(TokenType.ARROW))
+        {
+            var result = ParseOr();
+            whenClauses.Add((operand, result));
+            _parser.Consume(TokenType.COLON,
+                "Expected ':' after '=>' result — the arrow conditional requires an else branch (cond => value : else)");
+            operand = ParseOr();
+            // Loop: if another '=>' follows, that operand was the next WHEN condition;
+            // otherwise it is the final ELSE.
+        }
+        return new CaseExpression(whenClauses, operand)
+        { Line = arrowToken.Line, Column = arrowToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
     }
 
     private Expression ParseOr()
@@ -318,13 +348,35 @@ public partial class ExpressionParser
 
     private Expression ParseFactor()
     {
-        var left = ParsePrimary();
+        var left = ParseJsonAccess();
         while (_parser.Current.Type == TokenType.STAR || _parser.Current.Type == TokenType.SLASH || _parser.Current.Type == TokenType.MODULO)
         {
             var opToken = _parser.Advance();
             var op = opToken.Type;
-            var right = ParsePrimary();
+            var right = ParseJsonAccess();
             left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column };
+        }
+        return left;
+    }
+
+    /// <summary>
+    /// The -> / ->> JSON access operators (PostgreSQL/MySQL/SQLite style): <c>json -> key</c> returns
+    /// the field or array element as JSON (chainable), <c>json ->> key</c> returns it as text. Both
+    /// lower at parse time to the JSON_GET / JSON_GET_TEXT functions — canonical AST, so the
+    /// evaluator, lineage, and pushdown see plain function calls. Left-associative and binding
+    /// tighter than arithmetic: <c>a -> 'x' ->> 'y'</c> is <c>JSON_GET_TEXT(JSON_GET(a,'x'),'y')</c>.
+    /// The key may be any expression — a string field name, an integer array index, or a variable.
+    /// </summary>
+    private Expression ParseJsonAccess()
+    {
+        var left = ParsePrimary();
+        while (_parser.Current.Type == TokenType.JSON_ARROW || _parser.Current.Type == TokenType.JSON_ARROW_TEXT)
+        {
+            var opToken = _parser.Advance();
+            var right = ParsePrimary();
+            var fn = opToken.Type == TokenType.JSON_ARROW ? "JSON_GET" : "JSON_GET_TEXT";
+            left = new FunctionCallExpression(fn, new List<Expression> { left, right })
+            { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
         }
         return left;
     }

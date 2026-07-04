@@ -563,6 +563,8 @@ END
 | :--- | :--- | :--- |
 | `JSON_VALUE` / `JSON_EXTRACT` | `JSON_VALUE(json, path)` | Scalar extracted value (alias: `JSON_EXTRACT`) |
 | `JSON_QUERY` | `JSON_QUERY(json, path)` | JSON object/array fragment |
+| `JSON_GET` | `JSON_GET(json, key_or_index)` — or `json -> key` | One access step as JSON (chainable); the `->` operator |
+| `JSON_GET_TEXT` | `JSON_GET_TEXT(json, key_or_index)` — or `json ->> key` | One access step as text (strings unquoted); the `->>` operator |
 | `JSON_MODIFY` | `JSON_MODIFY(json, path, val)` | Updated JSON string |
 | `ISJSON` | `ISJSON(str)` | `1` if valid JSON |
 | `JSON_EXISTS` | `JSON_EXISTS(json, path)` | `1` if path exists |

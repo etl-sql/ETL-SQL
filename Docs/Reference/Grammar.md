@@ -2078,6 +2078,40 @@ SELECT amount ?? 0 AS amount FROM #orders;
 SELECT nickname ?? legal_name ?? '(unknown)' AS display_name FROM #people;
 ```
 
+### 14.5 Arrow Conditional `=>`
+`cond => value : else` is ETL-SQL dialect shorthand that compiles to
+`CASE WHEN cond THEN value ELSE else END` at parse time. Chains flatten into **one** CASE with
+multiple WHEN arms — evaluated top to bottom, exactly like CASE (short-circuit; universal SQL on
+pushdown):
+
+```sql
+-- CASE WHEN score >= 90 THEN 'A' WHEN score >= 80 THEN 'B' ELSE 'F' END
+SELECT score >= 90 => 'A' : score >= 80 => 'B' : 'F' AS grade FROM #tests;
+```
+
+Rules:
+- The final `: else` branch is **required** — a dangling `cond => value` is a syntax error, never an
+  implicit NULL.
+- Lowest precedence (below `OR`): `a OR b => x : y` means `(a OR b) => x : y`.
+- A `NULL`/UNKNOWN condition falls through to the next arm/else (standard CASE behavior).
+- `CASE` remains the documented portable standard; `=>` is a convenience.
+
+### 14.6 JSON Access Operators `->` / `->>`
+PostgreSQL/MySQL/SQLite-style JSON access, compiled at parse time to the `JSON_GET` /
+`JSON_GET_TEXT` functions:
+- `json -> key` — object field (string key) or array element (integer index; negative counts from
+  the end) **as JSON** — strings keep their quotes, so steps chain.
+- `json ->> key` — the same access **as text** — strings unquoted; objects/arrays as raw JSON text.
+
+Left-associative and binding tighter than arithmetic. Null-propagating: a missing key, out-of-range
+index, or invalid JSON yields `NULL`, never an error.
+
+```sql
+SELECT doc -> 'customer' -> 'address' ->> 'city' AS city FROM #orders;
+SELECT doc ->> 'qty' ?? '0' AS qty FROM #orders;   -- combines with ??
+SELECT '[10,20,30]' ->> -1;                        -- '30' (negative index from the end)
+```
+
 #### `BETWEEN`
 Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).
 
@@ -2109,7 +2143,7 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 | `1` | `NULL` | `TRUE` | `FALSE` |
 | `NULL` | `NULL` | `FALSE` | `TRUE` |
 
-### 14.5 Temporal Expressions
+### 14.7 Temporal Expressions
 
 #### `AT TIME ZONE`
 Converts a `DATETIME` or `DATETIMEOFFSET` expression to the target timezone. If the input has no offset, it is assumed to be **UTC**.
