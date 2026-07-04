@@ -1,4 +1,5 @@
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
@@ -80,6 +81,28 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         var error = await Record.ExceptionAsync(() => ExecuteAsync(
             "CREATE CONNECTION pg AS POSTGRES(HOST = 'db.example.com', DATABASE = 'd');"));
         Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(error));
+    }
+
+    [Fact]
+    public async Task RestoredSavedConnection_DeniedByCurrentPolicyIsDropped()
+    {
+        // A connection saved under a looser policy must not be reusable once policy tightens:
+        // restoring a POSTGRES connection while only SQLITE is permitted drops it (no exception).
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedTypes: ["SQLITE"]));
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        var state = new SessionState
+        {
+            SessionId = "conn-policy-restore",
+            Connections = new List<ETL_SQL.Core.Data.ConnectionInfo>
+            {
+                new() { Name = "pg", Type = "POSTGRES", ConnectionString = "Host=db.example.com;Database=d" }
+            }
+        };
+
+        await evaluator.LoadSessionState(state);
+
+        Assert.False(evaluator.Connections.ContainsKey("pg"),
+            "A saved connection denied by current policy must not be restored.");
     }
 
     private static Exception? Unwrap(Exception? ex)

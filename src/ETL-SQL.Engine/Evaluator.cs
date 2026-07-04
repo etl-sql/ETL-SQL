@@ -1064,14 +1064,28 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
         DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
 
+        var connectionAuthorizer = new ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer(_securityService);
         foreach (var conn in state.Connections)
         {
             var connector = _connectorRegistry.GetConnector(conn.Type);
-            if (connector != null)
+            if (connector == null) continue;
+
+            // A saved connection must satisfy CURRENT organization policy before it is restored —
+            // otherwise a connection saved under a looser policy could be reused to reach a now-denied
+            // connector type or destination. A denial drops the connection rather than aborting the
+            // whole session restore.
+            try
             {
-                var ds = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
-                _connections[conn.Name] = ds;
+                connectionAuthorizer.Authorize(this, conn.Type,
+                    connector.GetHost(conn.ConnectionString, conn.Options), conn.ConnectionString);
             }
+            catch (ETL_SQL.Core.Governance.ConnectorPolicyDeniedException ex)
+            {
+                _logger.Warning("Saved connection '{Name}' was not restored: {Reason}", conn.Name, ex.Decision.Reason);
+                continue;
+            }
+
+            _connections[conn.Name] = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
         }
 
         LineageTracker.Clear();
