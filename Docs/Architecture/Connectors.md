@@ -229,7 +229,7 @@ public interface IConnector
 The `CommandTimeoutSeconds` property on `IConnector` is a per-connector default. Individual connections can override it at creation time:
 
 ```sql
-CREATE CONNECTION my_redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver}', …, TIMEOUT_SECONDS=3600);
+CREATE CONNECTION my_redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver}', TIMEOUT_SECONDS=3600);
 ```
 
 The `TIMEOUT_SECONDS` value in the `WITH` clause is stored in the connection's options dictionary (`IDataSource.Options["TIMEOUT_SECONDS"]`). SQL connectors read it in their constructor and apply it to every `DbCommand.CommandTimeout` they create. Non-SQL connectors may ignore it.

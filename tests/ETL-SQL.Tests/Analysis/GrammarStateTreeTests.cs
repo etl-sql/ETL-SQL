@@ -134,11 +134,12 @@ namespace ETL_SQL.Tests.Analysis
             Assert.NotNull(error1);
             Assert.Contains("Expected one of: AS", error1);
 
-            // Scenario 2: Missing parentheses
-            var tokens2 = Tokenize("CREATE CONNECTION my_conn AS FLATFILE PATH = 'x'").ToList();
+            // Scenario 2: Missing option value (just option name followed by close paren)
+            var tokens2 = Tokenize("CREATE CONNECTION my_conn AS FLATFILE ( PATH )").ToList();
             bool result2 = tree.ValidateSequence(tokens2, out var error2);
             Assert.False(result2);
             Assert.NotNull(error2);
+            Assert.Contains("Unexpected token ')'", error2);
         }
 
         [Fact]

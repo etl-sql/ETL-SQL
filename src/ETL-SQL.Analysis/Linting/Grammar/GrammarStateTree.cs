@@ -39,37 +39,34 @@ public class GrammarStateTree
     public bool ValidateSequence(IEnumerable<Token> tokens, out string? errorMessage)
     {
         errorMessage = null;
-        var tokenList = tokens.Where(t => t.Type != TokenType.EOF).ToList();
+        var tokenList = tokens.Where(t => t.Type != TokenType.EOF && t.Type != TokenType.SEMICOLON).ToList();
         if (!tokenList.Any())
         {
             return true;
         }
 
+        var walker = new TokenWalker(this);
         var firstToken = tokenList[0];
-        StateNode? current = GetStartNode(firstToken.Value);
+        StateNode? startNode = GetStartNode(firstToken.Value);
 
-        if (current == null)
+        int startIndex = 0;
+        if (startNode != null)
         {
-            // Fallback to checking Root transitions directly
-            current = Root;
-            errorMessage = $"Unknown starting keyword or token '{firstToken.Value}'.";
-            return false;
+            walker.ActiveStates.Clear();
+            walker.ActiveStates.Add(startNode);
+            startIndex = 1; // Already matched first token via start node
         }
 
-        // We already matched the first token by getting the start node, so start walking from the second token
-        for (int i = 1; i < tokenList.Count; i++)
+        for (int i = startIndex; i < tokenList.Count; i++)
         {
             var token = tokenList[i];
-            var transition = current.Transitions.FirstOrDefault(t => t.Condition(token));
-
-            if (transition == null)
+            bool success = walker.Consume(token);
+            if (!success)
             {
-                var expected = string.Join(", ", current.Transitions.Select(t => t.Label ?? t.Target.Name).Distinct());
+                var expected = string.Join(", ", walker.ActiveStates.SelectMany(s => s.Transitions).Select(t => t.Label ?? t.Target.Name).Distinct());
                 errorMessage = $"Line {token.Line}, Col {token.Column}: Unexpected token '{token.Value}'. Expected one of: {expected}.";
                 return false;
             }
-
-            current = transition.Target;
         }
 
         return true;

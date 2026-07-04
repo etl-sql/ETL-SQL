@@ -33,20 +33,49 @@ public static class DefaultGrammar
         var optionValueNode = new StateNode("CONN_OPTION_VALUE");
         var commaNode = new StateNode("CONN_OPTION_COMMA");
         var closeParenNode = new StateNode("CONN_PAREN_CLOSE");
+        var singleStringValueNode = new StateNode("CONN_SINGLE_STRING");
 
-        // CREATE -> CONNECTION
+        var orNode = new StateNode("CONN_OR");
+        var alterNode = new StateNode("CONN_ALTER");
+        var alterStartNode = new StateNode("ALTER");
+
+        var typedConnectionNode = new StateNode("CONN_TYPED");
+
+        // CREATE -> CONNECTION or OR -> ALTER -> CONNECTION
         createNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
+        createNode.AddTransitionTo("OR", orNode, SuggestionType.Keyword);
+        orNode.AddTransitionTo("ALTER", alterNode, SuggestionType.Keyword);
+        alterNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
+        
+        // CREATE -> <type> -> CONNECTION
+        createNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsConnectorType(t.Value),
+            typedConnectionNode,
+            "<connector_type>",
+            SuggestionType.Connection,
+            context => LanguageMetadata.ConnectorTypes
+        ));
+        typedConnectionNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
+
         tree.RegisterStartNode("CREATE", createNode);
+
+        // ALTER CONNECTION
+        alterStartNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
+        tree.RegisterStartNode("ALTER", alterStartNode);
 
         // CONNECTION -> name (wildcard identifier or keyword)
         connectionNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(t.Value),
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             nameNode,
             "<connection_name>"
         ));
 
-        // name -> AS
+        var connWithNode = new StateNode("CONN_WITH");
+
+        // name -> AS or WITH
         nameNode.AddTransitionTo("AS", asNode, SuggestionType.Keyword);
+        nameNode.AddTransitionTo("WITH", connWithNode, SuggestionType.Keyword);
+        connWithNode.AddTokenTransition(TokenType.LPAREN, openParenNode, "(");
 
         // AS -> type (FLATFILE, MSSQL, etc. - can be lexed as keywords)
         asNode.AddTransition(new StateTransition(
@@ -57,16 +86,40 @@ public static class DefaultGrammar
             context => LanguageMetadata.ConnectorTypes
         ));
 
-        // type -> (
+        // type -> ( or option_name (unparenthesized options)
         typeNode.AddTokenTransition(TokenType.LPAREN, openParenNode, "(");
-
-        // ( -> option_name (options like PATH, COMPRESS can be lexed as keywords)
-        openParenNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(t.Value),
+        typeNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             optionNameNode,
             "<option_name>",
             SuggestionType.OptionName,
             context => GetSupportedOptions(context, metadata)
+        ));
+
+        // ( -> option_name (options like PATH, COMPRESS can be lexed as keywords)
+        openParenNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            optionNameNode,
+            "<option_name>",
+            SuggestionType.OptionName,
+            context => GetSupportedOptions(context, metadata)
+        ));
+
+        // ( -> single string connection literal or variable or identifier reference
+        openParenNode.AddTokenTransition(TokenType.STRING_LITERAL, singleStringValueNode, "<connection_string>");
+        openParenNode.AddTokenTransition(TokenType.VARIABLE, singleStringValueNode, "<variable>");
+        openParenNode.AddTokenTransition(TokenType.IDENTIFIER, singleStringValueNode, "<identifier>");
+        
+        // ( -> ) (empty options list)
+        openParenNode.AddTokenTransition(TokenType.RPAREN, closeParenNode, ")");
+
+        // single string connection literal -> ) or ,
+        singleStringValueNode.AddTokenTransition(TokenType.RPAREN, closeParenNode, ")");
+        singleStringValueNode.AddTokenTransition(TokenType.COMMA, commaNode, ",");
+        singleStringValueNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.DOT || t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            singleStringValueNode,
+            "<property_path>"
         ));
 
         // option_name -> =
@@ -79,13 +132,25 @@ public static class DefaultGrammar
                 walker.StateBag["LastOptionValue"] = token.Value;
             });
 
-        // option_value -> , or )
+        // option_value -> , or ) or next option_name (for space-separated lists)
         optionValueNode.AddTokenTransition(TokenType.COMMA, commaNode, ",");
         optionValueNode.AddTokenTransition(TokenType.RPAREN, closeParenNode, ")");
+        optionValueNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            optionNameNode,
+            "<option_name>",
+            SuggestionType.OptionName,
+            context => GetSupportedOptions(context, metadata)
+        ));
+        optionValueNode.AddTransition(new StateTransition(
+            t => t.Type != TokenType.COMMA && t.Type != TokenType.RPAREN,
+            optionValueNode,
+            "<expression_token>"
+        ));
 
         // , -> option_name
         commaNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(t.Value),
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             optionNameNode,
             "<option_name>",
             SuggestionType.OptionName,
@@ -135,9 +200,10 @@ public static class DefaultGrammar
 
         var withNode = new StateNode("FILE_WITH");
         var withOpenParenNode = new StateNode("FILE_WITH_PAREN_OPEN");
-        var withOverwriteNode = new StateNode("FILE_WITH_OVERWRITE");
+        var withOptionNameNode = new StateNode("FILE_WITH_OPTION_NAME");
         var withEqualsNode = new StateNode("FILE_WITH_EQUALS");
-        var withValueNode = new StateNode("FILE_WITH_VAL");
+        var withOptionValueNode = new StateNode("FILE_WITH_OPTION_VAL");
+        var withCommaNode = new StateNode("FILE_WITH_COMMA");
         var withCloseParenNode = new StateNode("FILE_WITH_PAREN_CLOSE");
 
         var atNode = new StateNode("FILE_AT");
@@ -161,6 +227,11 @@ public static class DefaultGrammar
         fileKeywordNode.AddWildcardTransition(sourceNode, "<source>");
 
         // Source path transitions
+        sourceNode.AddTransition(new StateTransition(
+            t => !IsFileOperationTerminator(t.Value) && t.Type != TokenType.SEMICOLON,
+            sourceNode,
+            "<source_token>"
+        ));
         sourceNode.AddTransitionTo("TO", toNode, SuggestionType.Keyword);
         sourceNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
         sourceNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
@@ -171,6 +242,11 @@ public static class DefaultGrammar
         toNode.AddWildcardTransition(destinationNode, "<destination>");
 
         // Destination transitions
+        destinationNode.AddTransition(new StateTransition(
+            t => !IsDestinationTerminator(t.Value) && t.Type != TokenType.SEMICOLON,
+            destinationNode,
+            "<destination_token>"
+        ));
         destinationNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
         destinationNode.AddTransitionTo("PASSWORD", passwordKeywordNode, SuggestionType.Keyword);
         destinationNode.AddTransitionTo("KEYFILE", keyfileKeywordNode, SuggestionType.Keyword);
@@ -204,20 +280,45 @@ public static class DefaultGrammar
 
         // AT connection
         atNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(t.Value),
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             atConnectionNode,
             "<connection_name>",
             SuggestionType.Connection
         ));
         atConnectionNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
 
-        // WITH(OVERWRITE = ON/OFF)
+        // WITH(OVERWRITE = ON/OFF, FORMAT = ZIP, etc.)
         withNode.AddTokenTransition(TokenType.LPAREN, withOpenParenNode, "(");
-        withOpenParenNode.AddTransitionTo("OVERWRITE", withOverwriteNode, SuggestionType.OptionName);
-        withOverwriteNode.AddTokenTransition(TokenType.EQUALS, withEqualsNode, "=");
-        withEqualsNode.AddTransitionTo("ON", withValueNode, SuggestionType.OptionValue);
-        withEqualsNode.AddTransitionTo("OFF", withValueNode, SuggestionType.OptionValue);
-        withValueNode.AddTokenTransition(TokenType.RPAREN, withCloseParenNode, ")");
+
+        withOpenParenNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            withOptionNameNode,
+            "<option_name>"
+        ));
+
+        withOptionNameNode.AddTokenTransition(TokenType.EQUALS, withEqualsNode, "=");
+
+        withEqualsNode.AddWildcardTransition(withOptionValueNode, "<option_value>");
+
+        withOptionValueNode.AddTokenTransition(TokenType.COMMA, withCommaNode, ",");
+        withOptionValueNode.AddTokenTransition(TokenType.RPAREN, withCloseParenNode, ")");
+        
+        withOptionValueNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            withOptionNameNode,
+            "<option_name>"
+        ));
+        withOptionValueNode.AddTransition(new StateTransition(
+            t => t.Type != TokenType.COMMA && t.Type != TokenType.RPAREN,
+            withOptionValueNode,
+            "<expression_token>"
+        ));
+
+        withCommaNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            withOptionNameNode,
+            "<option_name>"
+        ));
     }
 
     private static IEnumerable<string> GetSupportedOptions(SuggestionContext context, IMetadataManager? metadata)
@@ -286,5 +387,40 @@ public static class DefaultGrammar
         }
         catch { }
         return null;
+    }
+
+    private static bool IsWord(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        char first = value[0];
+        if (!char.IsLetter(first)) return false;
+        
+        for (int i = 1; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (!char.IsLetterOrDigit(c) && c != '_') return false;
+        }
+        return true;
+    }
+
+    private static bool IsFileOperationTerminator(string val)
+    {
+        if (string.IsNullOrEmpty(val)) return false;
+        return val.Equals("TO", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("WITH", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("PGP_KEY", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("AT", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDestinationTerminator(string val)
+    {
+        if (string.IsNullOrEmpty(val)) return false;
+        return val.Equals("WITH", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("KEYFILE", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("PGP_KEY", StringComparison.OrdinalIgnoreCase) ||
+               val.Equals("AT", StringComparison.OrdinalIgnoreCase);
     }
 }

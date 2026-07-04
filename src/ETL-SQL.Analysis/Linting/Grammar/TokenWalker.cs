@@ -32,6 +32,11 @@ public class TokenWalker
     public bool Consume(Token token)
     {
         if (token.Type == TokenType.EOF) return true;
+        if (token.Type == TokenType.SEMICOLON)
+        {
+            Reset();
+            return true;
+        }
 
         var nextStates = new HashSet<StateNode>();
 
