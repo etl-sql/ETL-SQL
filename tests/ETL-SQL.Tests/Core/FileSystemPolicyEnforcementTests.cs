@@ -136,6 +136,41 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task WriteExtensionAllowlist_EnterprisePolicyDeniesDisallowedExtension()
+    {
+        var src = Path.Combine(_root, "ext_src.csv");
+        await File.WriteAllTextAsync(src, "h\n1\n");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, allowedWriteExtensions: ["csv"]));
+
+        // Writing a .csv is permitted; writing a .txt is denied by the allowlist.
+        await ExecuteAsync(
+            $"MERGE FILES '{src}' TO '{Path.Combine(_root, "ext_ok.csv")}' WITH (HEADER = OFF, OVERWRITE = ON);");
+        Assert.True(File.Exists(Path.Combine(_root, "ext_ok.csv")));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"MERGE FILES '{src}' TO '{Path.Combine(_root, "ext_bad.txt")}' WITH (HEADER = OFF, OVERWRITE = ON);"));
+        Assert.Contains("write extensions", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(_root, "ext_bad.txt")));
+    }
+
+    [Fact]
+    public async Task SpillCeiling_EnterprisePolicyDeniesBeyondLimit()
+    {
+        // A 4 KB ceiling is exceeded quickly by a forced-spill temp table, which fails the script.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxSpillBytes: 4096));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "SET TEMP_TABLE_SPILL_THRESHOLD = 10;\n" +
+            "CREATE TABLE #big (id INT, payload VARCHAR);\n" +
+            "DECLARE @i INT = 0;\n" +
+            "WHILE @i < 2000 BEGIN\n" +
+            "  INSERT INTO #big VALUES (@i, 'padding-value-to-grow-spill-bytes');\n" +
+            "  SET @i = @i + 1;\n" +
+            "END"));
+        Assert.Contains("MaxSpillBytesPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Standalone_Unenrolled_RemainsUnrestrictedByOrganizationPolicy()
     {
         var src = Path.Combine(_root, "merge_standalone.csv");
@@ -158,15 +193,22 @@ public sealed class FileSystemPolicyEnforcementTests : IDisposable
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         string root,
         int? maxFileOps = null,
-        int? maxRecursiveDepth = null)
+        int? maxRecursiveDepth = null,
+        long? maxSpillBytes = null,
+        string[]? allowedWriteExtensions = null)
     {
         var document = new OrganizationPolicyDocument
         {
-            Filesystem = new FilesystemPolicySection { ApprovedRoots = [root] },
+            Filesystem = new FilesystemPolicySection
+            {
+                ApprovedRoots = [root],
+                AllowedWriteExtensions = allowedWriteExtensions ?? []
+            },
             Execution = new ExecutionPolicySection
             {
                 MaxFileOperationsPerScript = maxFileOps,
-                MaxRecursiveNestingDepth = maxRecursiveDepth
+                MaxRecursiveNestingDepth = maxRecursiveDepth,
+                MaxSpillBytesPerScript = maxSpillBytes
             }
         };
         return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",

@@ -2,7 +2,7 @@
 Writes data from a #temp table to a file or an external connection.
 
 ## Syntax
-```sql
+```text
 -- Export to a flat file
 EXPORT #orders TO 'output/orders.csv';
 
@@ -18,7 +18,9 @@ EXPORT #orders TO MyDB.dbo.OrdersArchive;
 
 -- Export to SFTP
 EXPORT #report TO SftpConn:'reports/daily.csv';
+```
 
+```sql
 -- Create a portable dataset copy with a one-time transport password
 EXPORT DATASET &sales
 TO 'C:\Transfer\sales.parquet'

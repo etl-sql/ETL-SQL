@@ -38,12 +38,16 @@ public sealed record OrganizationPolicyDocument
             values["Connectors:AllowedTypes"] = Connectors.AllowedTypes;
         if (Filesystem.ApprovedRoots.Count > 0)
             values["Security:ApprovedSafeZones"] = Filesystem.ApprovedRoots;
+        if (Filesystem.AllowedWriteExtensions.Count > 0)
+            values["Security:AllowedWriteExtensions"] = Filesystem.AllowedWriteExtensions;
         if (Execution.MaxParallelDegree.HasValue)
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
             values["Security:MaxFileOperationsPerScript"] = Execution.MaxFileOperationsPerScript.Value;
         if (Execution.MaxRecursiveNestingDepth.HasValue)
             values["Security:MaxRecursiveNestingDepth"] = Execution.MaxRecursiveNestingDepth.Value;
+        if (Execution.MaxSpillBytesPerScript.HasValue)
+            values["Security:MaxSpillBytesPerScript"] = Execution.MaxSpillBytesPerScript.Value;
         values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
         values["Security:RemoteExecutionMode"] = RemoteExecution.Mode.ToString();
         if (RemoteExecution.AllowedHosts.Count > 0)
@@ -64,6 +68,13 @@ public sealed record ConnectorPolicySection
 public sealed record FilesystemPolicySection
 {
     public IReadOnlyList<string> ApprovedRoots { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// File extensions (with or without a leading dot) that script-driven writes may target.
+    /// Empty means the authoritative organization policy does not constrain write extensions
+    /// beyond the local <see cref="Services.SecurityService"/> file-type rules.
+    /// </summary>
+    public IReadOnlyList<string> AllowedWriteExtensions { get; init; } = Array.Empty<string>();
 }
 
 public sealed record ExecutionPolicySection
@@ -79,6 +90,12 @@ public sealed record ExecutionPolicySection
     public int? MaxParallelDegree { get; init; }
     public int? MaxFileOperationsPerScript { get; init; }
     public int? MaxRecursiveNestingDepth { get; init; }
+
+    /// <summary>
+    /// Maximum total bytes a single script may spill to engine-owned temp/cache storage.
+    /// Null means the authoritative organization policy does not bound spill volume.
+    /// </summary>
+    public long? MaxSpillBytesPerScript { get; init; }
 }
 
 public sealed record RemoteExecutionPolicySection
@@ -132,6 +149,7 @@ public static class OrganizationPolicySchema
 
         ValidateConnectorTypes(document.Connectors.AllowedTypes, errors);
         ValidateAbsoluteRoots(document.Filesystem.ApprovedRoots, errors);
+        ValidateWriteExtensions(document.Filesystem.AllowedWriteExtensions, errors);
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
 
@@ -185,6 +203,25 @@ public static class OrganizationPolicySchema
         }
     }
 
+    private static void ValidateWriteExtensions(IReadOnlyList<string> extensions, List<string> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var extension in extensions)
+        {
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                errors.Add("Filesystem allowed write extensions cannot contain blank entries.");
+                continue;
+            }
+
+            var normalized = extension.Trim().TrimStart('.');
+            if (normalized.Length == 0 || normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                errors.Add($"Filesystem allowed write extension '{extension}' is not a valid extension.");
+            else if (!seen.Add(normalized))
+                errors.Add($"Filesystem allowed write extension '{extension}' is duplicated.");
+        }
+    }
+
     private static void ValidateExecution(ExecutionPolicySection execution, List<string> errors)
     {
         if (execution.AllowedModes.Count == 0)
@@ -195,6 +232,8 @@ public static class OrganizationPolicySchema
             errors.Add("Execution max file operations per script must be zero or greater.");
         if (execution.MaxRecursiveNestingDepth.HasValue && execution.MaxRecursiveNestingDepth.Value < 0)
             errors.Add("Execution max recursive nesting depth must be zero or greater.");
+        if (execution.MaxSpillBytesPerScript.HasValue && execution.MaxSpillBytesPerScript.Value < 0)
+            errors.Add("Execution max spill bytes per script must be zero or greater.");
     }
 
     private static void ValidateRemoteExecution(RemoteExecutionPolicySection remote, List<string> errors)

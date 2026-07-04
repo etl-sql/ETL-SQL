@@ -8,6 +8,11 @@ namespace ETL_SQL.Analysis.Linting.Grammar;
 
 public class TokenWalker
 {
+    [ThreadStatic]
+    private static TokenWalker? _currentThreadWalker;
+
+    public static TokenWalker? CurrentThreadWalker => _currentThreadWalker;
+
     private readonly GrammarStateTree _tree;
     public HashSet<StateNode> ActiveStates { get; private set; } = new();
     public Dictionary<string, object> StateBag { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -31,12 +36,15 @@ public class TokenWalker
     /// </summary>
     public bool Consume(Token token)
     {
-        if (token.Type == TokenType.EOF) return true;
-        if (token.Type == TokenType.SEMICOLON)
+        _currentThreadWalker = this;
+        try
         {
-            Reset();
-            return true;
-        }
+            if (token.Type == TokenType.EOF) return true;
+            if (token.Type == TokenType.SEMICOLON)
+            {
+                Reset();
+                return true;
+            }
 
         var nextStates = new HashSet<StateNode>();
 
@@ -72,6 +80,11 @@ public class TokenWalker
 
         ActiveStates = nextStates;
         return true;
+        }
+        finally
+        {
+            _currentThreadWalker = null;
+        }
     }
 
     /// <summary>

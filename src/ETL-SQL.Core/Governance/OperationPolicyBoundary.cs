@@ -54,6 +54,23 @@ public static class OperationPolicyBoundary
             $"Enterprise policy limits {policyKey} to {ceiling}; the script reached {observedValue}."));
     }
 
+    /// <summary>
+    /// Enforces <c>Security:MaxSpillBytesPerScript</c> against the cumulative engine-owned spill
+    /// total. Reads the captured snapshot directly rather than refreshing, because this runs in the
+    /// per-write spill hot path; security revocation/expiry is enforced at operation boundaries.
+    /// </summary>
+    public static void EnforceSpillCeiling(IExecutionContext context, long totalSpilledBytes)
+    {
+        var snapshot = context.ExecutionPolicy;
+        if (snapshot is null || !snapshot.IsEnrolled) return;
+        if (!TryGetGovernedLong(snapshot, "Security:MaxSpillBytesPerScript", out var ceiling)) return;
+        if (totalSpilledBytes <= ceiling) return;
+
+        throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+            "Security:MaxSpillBytesPerScript", "<engine-spill>", $"<= {ceiling} bytes",
+            $"Enterprise policy Security:MaxSpillBytesPerScript limits script spill to {ceiling} bytes; the script has spilled {totalSpilledBytes}."));
+    }
+
     public static bool TryGetGovernedLong(ExecutionPolicySnapshot snapshot, string key, out long value)
     {
         value = 0;

@@ -50,6 +50,7 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
             if (validateFileType) securityService.ValidateFileType(canonical,
                 context.AllowUnknownFileTypes, context.AllowedFileTypeOverrides);
             EnforceEnterpriseRoots(snapshot, canonical, access);
+            EnforceWriteExtensions(snapshot, canonical, access);
         }
         catch (SecurityException ex) when (ex is not FileSystemPolicyDeniedException)
         {
@@ -169,6 +170,33 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
         if (roots.Any(root => SafePath.TryResolveWithinRoot(root, canonical, out _))) return;
 
         throw new SecurityException($"Enterprise policy denied {access.ToString().ToLowerInvariant()} access outside approved filesystem roots.");
+    }
+
+    /// <summary>
+    /// When an enrolled policy declares an allowed write-extension set, denies a mutating access
+    /// whose canonical target has an extension outside it. Directory-targeting operations
+    /// (Enumerate) and extension-less writes are not constrained here.
+    /// </summary>
+    private static void EnforceWriteExtensions(
+        ExecutionPolicySnapshot snapshot,
+        string canonical,
+        FileSystemAccessKind access)
+    {
+        if (!snapshot.IsEnrolled || !IsMutation(access)) return;
+        var allowed = snapshot.GovernedValues
+            .Where(pair => pair.Key.StartsWith("Security:AllowedWriteExtensions:",
+                StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(pair.Value))
+            .Select(pair => pair.Value!.Trim().TrimStart('.'))
+            .ToArray();
+        if (allowed.Length == 0) return;
+
+        var extension = Path.GetExtension(canonical).TrimStart('.');
+        if (extension.Length == 0) return;
+        if (allowed.Any(value => string.Equals(value, extension, StringComparison.OrdinalIgnoreCase)))
+            return;
+
+        throw new SecurityException(
+            $"Enterprise policy limits write extensions to [{string.Join(", ", allowed)}]; '.{extension}' is not permitted.");
     }
 
     private static bool IsMutation(FileSystemAccessKind access) =>

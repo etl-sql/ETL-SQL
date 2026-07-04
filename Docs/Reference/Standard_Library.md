@@ -461,7 +461,7 @@ DECLARE @max_id INT = (SELECT MAX(order_id) FROM #staging);
 
 IF @max_id IS NOT NULL
 BEGIN
-    SET_JOB_STATE('last_loaded_id', CAST(@max_id AS VARCHAR));
+    SELECT SET_JOB_STATE('last_loaded_id', CAST(@max_id AS VARCHAR));
 END
 ```
 

@@ -315,6 +315,8 @@ public partial class SpillStore : ISpillStore
                 long inc = json.Length + 2;
                 _context.Telemetry.TotalSpilledBytes += inc;
                 BytesWritten += inc;
+                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                    _context, _context.Telemetry.TotalSpilledBytes);
             }
             await _writer.WriteLineAsync(json);
         }
@@ -515,6 +517,8 @@ public partial class SpillStore : ISpillStore
                 long inc = row.Columns.Count * 16L;
                 _context.Telemetry.TotalSpilledBytes += inc;
                 BytesWritten += inc;
+                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                    _context, _context.Telemetry.TotalSpilledBytes);
             }
 
             if (_buffer.Count >= _flushBatchSize)
@@ -564,6 +568,8 @@ public partial class SpillStore : ISpillStore
             {
                 _context.Telemetry.TotalSpilledBytes += telemetryBytes;
                 BytesWritten += telemetryBytes;
+                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                    _context, _context.Telemetry.TotalSpilledBytes);
             }
         }
 
@@ -589,6 +595,8 @@ public partial class SpillStore : ISpillStore
                 var increment = batch.AllocatedBytes;
                 _context.Telemetry.TotalSpilledBytes += increment;
                 BytesWritten += increment;
+                ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
+                    _context, _context.Telemetry.TotalSpilledBytes);
             }
         }
 

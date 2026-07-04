@@ -87,6 +87,49 @@ public class OrganizationPolicySchemaTests
     }
 
     [Fact]
+    public void Validate_RejectsInvalidWriteExtension()
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            Filesystem = new FilesystemPolicySection
+            {
+                AllowedWriteExtensions = new[] { "csv", "bad/slash" }
+            }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("not a valid extension"));
+    }
+
+    [Fact]
+    public void Validate_RejectsNegativeSpillCeiling()
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            Execution = new ExecutionPolicySection { MaxSpillBytesPerScript = -1 }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, e => e.Contains("max spill bytes"));
+    }
+
+    [Fact]
+    public void ToPolicyValues_FlattensWriteExtensionsAndSpillCeiling()
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            Filesystem = new FilesystemPolicySection { AllowedWriteExtensions = new[] { ".csv", "txt" } },
+            Execution = new ExecutionPolicySection { MaxSpillBytesPerScript = 1024 }
+        };
+
+        var flat = EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues());
+
+        Assert.Equal(".csv", flat["Security:AllowedWriteExtensions:0"]);
+        Assert.Equal("txt", flat["Security:AllowedWriteExtensions:1"]);
+        Assert.Equal("1024", flat["Security:MaxSpillBytesPerScript"]);
+    }
+
+    [Fact]
     public void Validate_RejectsAllowedHostsModeWithoutHosts()
     {
         var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument

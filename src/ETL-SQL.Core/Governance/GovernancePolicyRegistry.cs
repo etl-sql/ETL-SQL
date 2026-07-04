@@ -91,6 +91,14 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             "Directories explicitly approved for script file operations and elevated file-operation limits.");
 
         yield return new(
+            "Security:AllowedWriteExtensions",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Allowed,
+            GovernancePolicyValueKind.StringList,
+            "File extensions that script-driven writes may target under authoritative policy.",
+            defaultValue: Array.Empty<string>());
+
+        yield return new(
             "Security:AllowedHosts",
             GovernancePolicyScope.Network,
             GovernancePolicyClassification.Allowed,
@@ -123,6 +131,14 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             "Maximum directory recursion depth permitted for script-driven file operations.",
             defaultValue: 5,
             minimumValue: 0);
+
+        yield return new(
+            "Security:MaxSpillBytesPerScript",
+            GovernancePolicyScope.Filesystem,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Long,
+            "Maximum total bytes a script may spill to engine-owned temp/cache storage.",
+            minimumValue: 0L);
 
         yield return new(
             "Security:MaxParallelDegree",

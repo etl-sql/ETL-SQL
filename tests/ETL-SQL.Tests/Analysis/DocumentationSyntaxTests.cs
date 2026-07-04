@@ -93,8 +93,16 @@ namespace ETL_SQL.Tests.Analysis
                         bool shouldValidate = false;
                         if (tree.GetStartNode(firstToken.Value) != null)
                         {
-                            // Skip template placeholders like <Provider>
-                            bool hasPlaceholders = tokens.Any(t => t.Type == TokenType.LESS_THAN || t.Type == TokenType.GREATER_THAN);
+                            // Skip template placeholders like <Provider>, [optional], or |
+                            bool hasPlaceholders = tokens.Any(t => 
+                                t.Type == TokenType.LESS_THAN || 
+                                t.Type == TokenType.GREATER_THAN ||
+                                t.Value == "[" || 
+                                t.Value == "]" || 
+                                t.Value == "|" || 
+                                t.Value.Contains("<") || 
+                                t.Value.Contains(">")
+                            );
                             
                             if (!hasPlaceholders)
                             {
@@ -134,10 +142,116 @@ namespace ETL_SQL.Tests.Analysis
             Assert.True(checkedSnippets > 0, "Expected to find and check at least one snippet starting with supported grammar keywords.");
         }
 
+        private static readonly HashSet<string> StartKeywords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "CREATE", "ALTER", "COMPRESS", "ENCRYPT", "DECRYPT",
+            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE",
+            "IF", "WHILE", "FOR", "FOREACH", "BEGIN", "END",
+            "RUN", "WAITFOR", "WAIT", "SEND", "EXPORT", "TAG",
+            "SET", "PRINT", "DECLARE", "THROW", "DROP",
+            "REBUILD", "PUBLISH", "REFRESH", "DISCONNECT",
+            "REVOKE", "RESTART", "SHUTDOWN", "SHOW", "BULK", "RETURN",
+            "MOVE", "COPY", "EXECUTE", "EXEC", "PARALLEL", "USE", "GRANT", "COMMIT", "ROLLBACK",
+            "ASSERT", "BREAK", "CONTINUE", "RAISERROR", "RAISEERROR", "RECEIVE", "KILL"
+        };
+
+        private static readonly HashSet<string> ContinuationKeywords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "THEN", "ON", "INTO", "USING", "AND", "OR", "AS", "WITH", "AT", "TO", "IN", "ELSE", "DELAY", "TIME", "UNTIL", "WHEN"
+        };
+
+        private static bool IsContinuationToken(Token token)
+        {
+            if (token.Type == TokenType.COMMA ||
+                token.Type == TokenType.EQUALS ||
+                token.Type == TokenType.PLUS ||
+                token.Type == TokenType.MINUS ||
+                token.Type == TokenType.STAR ||
+                token.Type == TokenType.SLASH ||
+                token.Type == TokenType.DOT ||
+                token.Type == TokenType.LPAREN ||
+                token.Type == TokenType.LESS_THAN ||
+                token.Type == TokenType.GREATER_THAN)
+            {
+                return true;
+            }
+
+            return ContinuationKeywords.Contains(token.Value);
+        }
+
+        private static bool ShouldPreventSplit(string statementStart, string nextKeyword)
+        {
+            if (statementStart.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) && 
+                nextKeyword.Equals("SET", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase) && 
+                nextKeyword.Equals("SET", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) && 
+                nextKeyword.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if (statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase) && 
+                (nextKeyword.Equals("INSERT", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("DELETE", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+            if ((statementStart.Equals("EXECUTE", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("EXEC", StringComparison.OrdinalIgnoreCase)) && 
+                nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if ((statementStart.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("EXPORT", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("PUBLISH", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase)) && 
+                (nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("ENCRYPT", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("DECRYPT", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("COMPRESS", StringComparison.OrdinalIgnoreCase) ||
+                 nextKeyword.Equals("REFRESH", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+            if (statementStart.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) && 
+                nextKeyword.Equals("TRANSACTION", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if ((statementStart.Equals("IF", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("WHILE", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("FOR", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("FOREACH", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("ELSE", StringComparison.OrdinalIgnoreCase)) && 
+                nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            if ((statementStart.Equals("SELECT", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
+                 statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase)) && 
+                nextKeyword.Equals("END", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+            return false;
+        }
+
         private static List<List<Token>> SplitTokensIntoStatements(List<Token> tokens)
         {
             var results = new List<List<Token>>();
             var current = new List<Token>();
+            int parenthesisDepth = 0;
 
             foreach (var token in tokens)
             {
@@ -146,12 +260,36 @@ namespace ETL_SQL.Tests.Analysis
                     continue;
                 }
 
+                if (token.Type == TokenType.LPAREN)
+                {
+                    parenthesisDepth++;
+                }
+                else if (token.Type == TokenType.RPAREN)
+                {
+                    parenthesisDepth--;
+                }
+
+                if (current.Any() && parenthesisDepth == 0)
+                {
+                    var lastToken = current.Last();
+                    var firstToken = current.FirstOrDefault(t => t.Type != TokenType.EOF);
+                    if (token.Line > lastToken.Line && 
+                        StartKeywords.Contains(token.Value) &&
+                        !IsContinuationToken(lastToken) &&
+                        (firstToken == null || !ShouldPreventSplit(firstToken.Value, token.Value)))
+                    {
+                        results.Add(current);
+                        current = new List<Token>();
+                    }
+                }
+
                 current.Add(token);
 
                 if (token.Type == TokenType.SEMICOLON)
                 {
                     results.Add(current);
                     current = new List<Token>();
+                    parenthesisDepth = 0;
                 }
             }
 
