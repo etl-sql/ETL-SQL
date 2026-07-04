@@ -15,10 +15,9 @@ promise are defined in
 in v0.13.0. Standalone installations must remain unenrolled, unrestricted by organization policy, and
 independent of network services.*
 
-> **Status (work started):** Phases 3–5 and the v0.14.0 release gates are now **active and tracked in
-> [`TODO.md`](TODO.md)** — that is the working copy. The detail below is retained here for reference.
-> **Phase 6 (Operations Control Plane) remains candidate scope** and stays in this roadmap; promote its
-> highest-value items into `TODO.md` only after Phases 3–5 expose the final operational requirements.
+> **Status:** Phase 3 and the v0.14.0 release gates are active in [`TODO.md`](TODO.md). Phases 4–5 are
+> deferred to v0.15.0 and remain here as the source plan. **Phase 6 (Operations Control Plane) remains
+> candidate scope**; promote roadmap work into `TODO.md` only when its target release begins.
 
 ### Shipped foundation
 
@@ -74,7 +73,7 @@ independent of network services.*
 - [ ] Bypass suites cover Windows and Linux paths, links, DNS/redirect behavior, connector aliases, child processes, Docker mounts, script overrides, and concurrent policy refresh.
 - [ ] Existing standalone tests prove no enterprise endpoint, certificate, cache, or organization restriction is required when unenrolled.
 
-### Phase 4: Central Security Events
+### v0.15.0 Phase 4: Central Security Events
 
 #### Event contract and emission
 
@@ -98,7 +97,7 @@ independent of network services.*
 - [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
 - [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
 
-### Phase 5: Certification & Operations
+### v0.15.0 Phase 5: Certification & Operations
 
 #### Certification lanes
 
@@ -183,7 +182,7 @@ requirements; unfinished items may move to the next release without weakening th
 #### v0.14.0 release gates
 
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
-- [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
+- [ ] Pass full functional, performance, migration, recovery, v0.14.0-scoped enterprise certification, and standalone regression suites.
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
 ---

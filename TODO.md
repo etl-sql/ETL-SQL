@@ -8,7 +8,7 @@ release begins.
 
 ## Priority note — Billion-row pause lifted (2026-07-03)
 
-The 2026-06-30 pause on Enterprise Phase 3–5 feature work is **lifted**: the billion-row performance
+The 2026-06-30 pause on Enterprise Phase 3 feature work is **lifted**: the billion-row performance
 program reached its certification gates (Gates A–F all passed; Gate F 1B run certified at commit
 `c398036d`). Enterprise Phase 3 enforcement work is active again. The columnar execution plan under
 **Scale & operator-algorithm assessment** below is retained as the performance record and for
@@ -33,9 +33,9 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 > interceptor) and parts of these phases may be partially implemented. Don't treat a roadmap line as
 > net-new work until confirmed.
 >
-> **Scope note:** ROADMAP Phase 6 (Operations Control Plane) is *candidate scope* and stays in
-> `ROADMAP.md` — promote the highest-value Phase 6 items here only after Phases 3–5 expose the final
-> operational requirements.
+> **Scope note:** Enterprise Phases 4–5 and ROADMAP Phase 6 (Operations Control Plane) remain in
+> `ROADMAP.md`. Phases 4–5 are deferred to v0.15.0; promote roadmap work here only when that release
+> begins.
 
 ### Phase 3: Policy Authority & Operation-Boundary Enforcement — ACTIVE
 
@@ -81,42 +81,6 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] A repository-wide security review finds no direct sensitive operation that bypasses the shared authorizer.
 - [ ] Bypass suites cover Windows and Linux paths, links, DNS/redirect behavior, connector aliases, child processes, Docker mounts, script overrides, and concurrent policy refresh.
 - [ ] Existing standalone tests prove no enterprise endpoint, certificate, cache, or organization restriction is required when unenrolled.
-
-### Phase 4: Central Security Events
-
-#### Event contract and emission
-- [ ] Define a versioned structured security-event schema with stable event ID, severity/type, timestamp, actor/effective identity, host/node, tenant, script/job/correlation IDs, policy version/hash, sanitized target, decision, and reason.
-- [ ] Emit events for override attempts, denied filesystem/network/connector/process/Docker operations, policy signature/expiry/rollback failures, stale or unavailable policy, machine enrollment changes, and repeated resource-limit violations.
-- [ ] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
-- [ ] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
-
-#### Durable delivery and monitoring
-- [ ] Provide a durable local security-event outbox for every executable, with bounded storage, atomic append, retry, batching, deduplication, jittered backoff, and crash recovery.
-- [ ] Deliver to an HTTPS/SIEM collector using machine identity; define acknowledgement and idempotency behavior.
-- [ ] Add Windows Event Log and syslog/structured-file sinks for bootstrap failures that occur before HTTPS delivery is available.
-- [ ] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
-- [ ] Add optional fail-closed thresholds for terminal delivery failure, oldest-event age, pending count, and outbox bytes; standalone mode remains local-only by default.
-- [ ] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
-
-#### Phase 4 completion gates
-- [ ] Fault-injection tests cover collector outage, duplicate delivery, acknowledgement loss, corrupt outbox state, disk pressure, process crash, redaction, and recovery.
-- [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
-- [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
-
-### Phase 5: Certification & Operations
-
-#### Certification lanes
-- [ ] Add Windows and Linux enterprise certification lanes for enrollment, signed retrieval, cache/offline operation, dynamic refresh, operation enforcement, and event delivery.
-- [ ] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server, scheduled jobs, spawned runners, and parallel execution.
-- [ ] Run malicious-input and bypass drills covering policy tampering, stale/expired policy, signing-key rotation, machine revocation, path/link races, DNS rebinding, connector aliases, Docker escape-oriented options, and log injection.
-- [ ] Prove standalone regression behavior with no enrollment, no enterprise network calls, and unchanged local workflows.
-
-#### Deployment and recovery
-- [ ] Document policy-authority deployment, signing-key custody/rotation, machine enrollment/revocation, service-identity permissions, staged rollout, emergency policy publication, and unenrollment governance.
-- [ ] Document cache and outbox backup/restore rules; restored machines must not duplicate machine identity or silently reuse credentials in another environment.
-- [ ] Define upgrade ordering and compatibility across bootstrap, envelope, policy, event, and collector schema versions.
-- [ ] Provide outage runbooks for policy authority, certificate expiry, invalid publication, SIEM outage, disk exhaustion, and fail-closed fleet recovery.
-- [ ] Add support-bundle diagnostics that expose versions, hashes, timestamps, and health without policy payload values, trust material, credentials, or sensitive event targets.
 
 ### Administrator operational review — follow-on hardening (2026-07-01)
 
@@ -189,7 +153,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 
 ### v0.14.0 release gates
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
-- [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
+- [ ] Pass full functional, performance, migration, recovery, v0.14.0-scoped enterprise certification, and standalone regression suites.
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
 ---
