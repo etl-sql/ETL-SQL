@@ -43,8 +43,9 @@ namespace ETL_SQL.Connectors.Rest
             _logger = context.Logger;
             _timeoutSeconds = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
-            // Security Hardening: egress control
+            // Security Hardening: egress control (local guardrail + enterprise host/range policy)
             context.SecurityService.ValidateHost(new Uri(url).Host);
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, new Uri(url).Host);
 
             // Set default User-Agent as many APIs (like GitHub) require it
             if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
@@ -237,6 +238,7 @@ namespace ETL_SQL.Connectors.Rest
                     throw new ExecutionException("OAuth2 TOKEN_URL is not a valid absolute URI.");
                 }
                 _context?.SecurityService.ValidateHost(uri.Host);
+                if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, uri.Host);
 
                 _options.TryGetValue("SCOPE", out var scope);
 
@@ -1291,6 +1293,7 @@ namespace ETL_SQL.Connectors.Rest
             }
 
             _context?.SecurityService.ValidateHost(uri.Host);
+            if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, uri.Host);
         }
 
         private int GetMaxRedirects()
@@ -1361,6 +1364,7 @@ namespace ETL_SQL.Connectors.Rest
 
                 // Re-validate every hop against the egress policy before following it.
                 _context?.SecurityService.ValidateHost(target.Host);
+                if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, target.Host);
 
                 // Strip credentials when the redirect crosses to a different host OR downgrades the
                 // transport (HTTPS -> HTTP). A same-host downgrade would otherwise leak the bearer

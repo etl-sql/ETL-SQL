@@ -63,6 +63,19 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
             $"Enterprise policy permits connector types [{string.Join(", ", allowed)}]; '{connectorType}' is not allowed.");
     }
 
+    /// <summary>
+    /// Applies the enterprise destination-host allowlist and internal-range denial to a single host,
+    /// for connectors that resolve request URLs dynamically after connection creation (e.g. REST
+    /// redirect/pagination/template targets). No-op when standalone or unenrolled.
+    /// </summary>
+    public static void EnforceEnterpriseHost(IExecutionContext context, string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host)) return;
+        var snapshot = context.ExecutionPolicy;
+        if (snapshot is null || !snapshot.IsEnrolled) return;
+        EnforceEnterpriseHosts(snapshot, host);
+    }
+
     private static void EnforceEnterpriseHosts(ExecutionPolicySnapshot snapshot, string host)
     {
         if (!snapshot.IsEnrolled) return;

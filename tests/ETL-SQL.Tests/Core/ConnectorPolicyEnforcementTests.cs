@@ -105,6 +105,25 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
             "A saved connection denied by current policy must not be restored.");
     }
 
+    [Fact]
+    public void EnforceEnterpriseHost_DeniesObfuscatedInternalHostForDynamicRequests()
+    {
+        // The static entry point used by REST redirect/pagination/template requests applies the
+        // same wildcard-safe internal-range denial as connection creation.
+        var policy = EnrolledPolicy(allowedHosts: ["*"]);
+        var context = new Moq.Mock<IExecutionContext>();
+        context.SetupGet(c => c.ExecutionPolicy).Returns(ExecutionPolicySnapshot.Capture(
+            policy, "operator", ScriptExecutionMode.Batch, "hash"));
+
+        Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context.Object, "2130706433"));
+
+        // A public host under "*" is permitted.
+        var ex = Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context.Object, "api.example.com"));
+        Assert.Null(ex);
+    }
+
     private static Exception? Unwrap(Exception? ex)
     {
         while (ex is not null)
