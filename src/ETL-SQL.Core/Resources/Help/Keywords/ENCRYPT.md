@@ -40,6 +40,7 @@ etlsql encrypt --password "my-passphrase" --value "db-password-here"
 - `USE PASSWORD` must be called before any statement that reads an `ENC:` value or an ENCRYPTED/SENSITIVE variable.
 - The session password is held in memory only and is never logged or written to disk.
 - Encryption uses AES-256. The `ENC:` blob includes a salt; the same plaintext produces different blobs each time.
+- **Order of Operations** — Always compress BEFORE encrypting. Compressing encrypted data is ineffective because encryption maximises entropy. The linter will warn if this order is violated.
 - See: USE, CREATE CONNECTION, DECLARE
 
 References:

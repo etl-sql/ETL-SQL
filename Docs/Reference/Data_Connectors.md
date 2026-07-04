@@ -542,6 +542,8 @@ General-purpose connector for delimited and fixed-width text files.
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
+> **Note:** When both `COMPRESS=ON` and `ENCRYPT=ON` are specified, the engine always applies compression first, then encryption — regardless of option order. This is because encryption maximises entropy, making subsequent compression ineffective.
+
 Querying a `FLATFILE` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
 
 *Examples:*

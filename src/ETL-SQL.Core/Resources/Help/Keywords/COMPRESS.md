@@ -37,6 +37,7 @@ DECOMPRESS FILE 'downloads/archive.zip' TO 'staging/';
 - GZIP is for single-file compression; ZIP supports multiple files and directories.
 - `DECOMPRESS FILE` to a directory path extracts all contents into that directory.
 - Compressed files can be used directly with EXPORT by pointing to `.gz` destinations on supported connections (e.g., S3, SFTP).
+- **Order of Operations** — Always compress BEFORE encrypting. Compressing encrypted data is ineffective because encryption maximises entropy. The linter will warn if this order is violated.
 - See: COPY, EXPORT, ENCRYPT
 
 References:
