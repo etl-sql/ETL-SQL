@@ -1,0 +1,98 @@
+using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ETL_SQL.Tests.Core;
+
+/// <summary>
+/// End-to-end proof that CREATE/ALTER CONNECTION routes through <see cref="ConnectorPolicyAuthorizer"/>
+/// and enforces enterprise connector-type and destination-host allowlists before a connection is
+/// created, rejects URL-embedded credentials regardless of policy, and leaves unenrolled
+/// (standalone) execution unrestricted by organization policy.
+/// </summary>
+public sealed class ConnectorPolicyEnforcementTests : IDisposable
+{
+    public void Dispose() => EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+    [Fact]
+    public async Task ConnectorType_EnterpriseAllowlistDeniesDisallowedType()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedTypes: ["SQLITE"]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION pg AS POSTGRES(HOST = 'db.example.com', DATABASE = 'd');"));
+        Assert.Contains("connector type", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DestinationHost_EnterpriseAllowlistDeniesUnlistedHost()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["db.corp.internal"]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION pg AS POSTGRES(HOST = 'evil.example.com', DATABASE = 'd');"));
+        Assert.Contains("authorized host list", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task EmbeddedUrlCredentials_RejectedRegardlessOfPolicy()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION api AS REST('https://user:s3cret@api.example.com/v1');"));
+        Assert.Contains("Credentials embedded", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Standalone_Unenrolled_ConnectorTypeAndHostUnrestricted()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+        // A disallowed-by-nothing POSTGRES connection to an arbitrary host passes the authorizer;
+        // it may still fail later on an actual connection attempt, but never on a policy denial.
+        var error = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION pg AS POSTGRES(HOST = 'db.example.com', DATABASE = 'd');"));
+        Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(error));
+    }
+
+    private static Exception? Unwrap(Exception? ex)
+    {
+        while (ex is not null)
+        {
+            if (ex is ConnectorPolicyDeniedException) return ex;
+            ex = ex.InnerException;
+        }
+        return null;
+    }
+
+    private static async Task ExecuteAsync(string sql)
+    {
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        await evaluator.Evaluate(script);
+    }
+
+    private static EffectiveEnterprisePolicy EnrolledPolicy(
+        string[]? allowedTypes = null,
+        string[]? allowedHosts = null)
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            Connectors = new ConnectorPolicySection { AllowedTypes = allowedTypes ?? [] },
+            RemoteExecution = new RemoteExecutionPolicySection
+            {
+                Mode = allowedHosts is { Length: > 0 }
+                    ? RemoteExecutionMode.AllowedHosts
+                    : RemoteExecutionMode.Disabled,
+                AllowedHosts = allowedHosts ?? []
+            }
+        };
+        return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
+            DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
+            DateTimeOffset.UtcNow, document,
+            EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues()));
+    }
+}

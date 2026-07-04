@@ -157,14 +157,12 @@ public class CreateConnectionStatementHandler(
                 }
             }
 
-            ds = connector.CreateDataSource(context, target, options, templateSchema);
+            // Security Hardening: authorize connector type + destination host before the data
+            // source is created (i.e. before any DNS resolution / connection attempt).
+            new ConnectorPolicyAuthorizer(context.SecurityService).Authorize(
+                context, connectionType ?? string.Empty, connector.GetHost(target, options), target);
 
-            // Security Hardening: Validate host for network-based connectors
-            var host = connector.GetHost(target, options);
-            if (host != null)
-            {
-                context.SecurityService.ValidateHost(host);
-            }
+            ds = connector.CreateDataSource(context, target, options, templateSchema);
         }
         else
         {

@@ -92,6 +92,11 @@ public class AlterConnectionStatementHandler(
             catch (Exception ex) { throw new ExecutionException($"Failed to build connection string: {ex.Message}"); }
         }
 
+        // Security Hardening: authorize connector type + destination host before creating the
+        // data source (before any DNS resolution / connection attempt).
+        new ConnectorPolicyAuthorizer(context.SecurityService).Authorize(
+            context, connectionType ?? string.Empty, connector.GetHost(target, options), target);
+
         var newDs = connector.CreateDataSource(context, target, options);
 
         if (context.IsWhatIf)
