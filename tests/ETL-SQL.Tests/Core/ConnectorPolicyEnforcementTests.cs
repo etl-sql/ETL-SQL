@@ -127,6 +127,72 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         Assert.Null(ex);
     }
 
+    [Fact]
+    public async Task DestinationScheme_EnterpriseAllowlistDeniesDisallowedScheme()
+    {
+        // Only https is permitted; a REST connection over http is denied at creation.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["*"], allowedSchemes: ["https"]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION api AS REST('http://api.example.com/v1');"));
+        Assert.Contains("schemes", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        // The same host over https passes the authorizer.
+        var ok = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION api2 AS REST('https://api.example.com/v1');"));
+        Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(ok));
+    }
+
+    [Fact]
+    public async Task DestinationPort_EnterpriseAllowlistDeniesDisallowedPort()
+    {
+        // 443 is permitted; an explicit :8080 on an allowed host is denied.
+        EnterprisePolicyRuntime.SetCurrent(
+            EnrolledPolicy(allowedHosts: ["*"], allowedPorts: [443]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "CREATE CONNECTION api AS REST('https://api.example.com:8080/v1');"));
+        Assert.Contains("port", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        // The scheme-default 443 (no explicit port) is allowed.
+        var ok = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION api2 AS REST('https://api.example.com/v1');"));
+        Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(ok));
+    }
+
+    [Fact]
+    public void EnforceEnterpriseUrl_AppliesSchemeAndPortRulesOnDynamicRequests()
+    {
+        // The dynamic REST path (redirects/pagination) enforces scheme and port, so a redirect to a
+        // denied port on an allowed host is blocked even when the host allowlist is a wildcard.
+        var policy = EnrolledPolicy(allowedHosts: ["*"], allowedSchemes: ["https"], allowedPorts: [443]);
+        EnterprisePolicyRuntime.SetCurrent(policy);
+        var context = new Moq.Mock<IExecutionContext>();
+        context.SetupGet(c => c.ExecutionPolicy).Returns(ExecutionPolicySnapshot.Capture(
+            policy, "operator", ScriptExecutionMode.Batch, "hash"));
+        context.SetupGet(c => c.SecurityService).Returns(
+            new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance));
+
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context.Object, new Uri("https://api.example.com:8080/v1")));
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context.Object, new Uri("http://api.example.com/v1")));
+
+        var ok = Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context.Object, new Uri("https://api.example.com/v1")));
+        Assert.Null(ok);
+    }
+
+    [Fact]
+    public async Task Standalone_Unenrolled_SchemeAndPortUnrestricted()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+        var error = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION api AS REST('http://api.example.com:8080/v1');"));
+        Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(error));
+    }
+
     private static Exception? Unwrap(Exception? ex)
     {
         while (ex is not null)
@@ -146,11 +212,18 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
 
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         string[]? allowedTypes = null,
-        string[]? allowedHosts = null)
+        string[]? allowedHosts = null,
+        string[]? allowedSchemes = null,
+        int[]? allowedPorts = null)
     {
         var document = new OrganizationPolicyDocument
         {
             Connectors = new ConnectorPolicySection { AllowedTypes = allowedTypes ?? [] },
+            Network = new NetworkPolicySection
+            {
+                AllowedSchemes = allowedSchemes ?? [],
+                AllowedPorts = allowedPorts ?? []
+            },
             RemoteExecution = new RemoteExecutionPolicySection
             {
                 Mode = allowedHosts is { Length: > 0 }

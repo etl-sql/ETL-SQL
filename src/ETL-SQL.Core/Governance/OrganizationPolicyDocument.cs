@@ -26,6 +26,7 @@ public sealed record OrganizationPolicyDocument
     public string SchemaVersion { get; init; } = CurrentSchemaVersion;
     public ConnectorPolicySection Connectors { get; init; } = new();
     public FilesystemPolicySection Filesystem { get; init; } = new();
+    public NetworkPolicySection Network { get; init; } = new();
     public ExecutionPolicySection Execution { get; init; } = new();
     public ProcessPolicySection Process { get; init; } = new();
     public RemoteExecutionPolicySection RemoteExecution { get; init; } = new();
@@ -41,6 +42,10 @@ public sealed record OrganizationPolicyDocument
             values["Security:ApprovedSafeZones"] = Filesystem.ApprovedRoots;
         if (Filesystem.AllowedWriteExtensions.Count > 0)
             values["Security:AllowedWriteExtensions"] = Filesystem.AllowedWriteExtensions;
+        if (Network.AllowedSchemes.Count > 0)
+            values["Security:AllowedSchemes"] = Network.AllowedSchemes;
+        if (Network.AllowedPorts.Count > 0)
+            values["Security:AllowedPorts"] = Network.AllowedPorts.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
         if (Execution.MaxParallelDegree.HasValue)
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
@@ -82,6 +87,24 @@ public sealed record FilesystemPolicySection
     /// beyond the local <see cref="Services.SecurityService"/> file-type rules.
     /// </summary>
     public IReadOnlyList<string> AllowedWriteExtensions { get; init; } = Array.Empty<string>();
+}
+
+public sealed record NetworkPolicySection
+{
+    /// <summary>
+    /// URL schemes a connector destination may use (case-insensitive, e.g. <c>https</c>, <c>sftp</c>).
+    /// Empty means the authoritative organization policy does not constrain schemes beyond the local
+    /// egress guardrails. Enforced only for destinations that carry a scheme (URL-shaped targets and
+    /// per-request REST URLs); it does not apply to ADO connection strings that name no scheme.
+    /// </summary>
+    public IReadOnlyList<string> AllowedSchemes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Destination ports a connector may reach. Empty means the authoritative organization policy
+    /// does not constrain ports. Enforced only when the destination carries an explicit or
+    /// scheme-implied port; a target with no discernible port is not blocked by this rule.
+    /// </summary>
+    public IReadOnlyList<int> AllowedPorts { get; init; } = Array.Empty<int>();
 }
 
 public sealed record ExecutionPolicySection
@@ -187,6 +210,7 @@ public static class OrganizationPolicySchema
         ValidateConnectorTypes(document.Connectors.AllowedTypes, errors);
         ValidateAbsoluteRoots(document.Filesystem.ApprovedRoots, errors);
         ValidateWriteExtensions(document.Filesystem.AllowedWriteExtensions, errors);
+        ValidateNetwork(document.Network, errors);
         ValidateDockerImages(document.Process.AllowedDockerImages, errors);
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
@@ -269,6 +293,35 @@ public static class OrganizationPolicySchema
                 errors.Add("Process allowed Docker images cannot contain blank entries.");
             else if (!seen.Add(image.Trim()))
                 errors.Add($"Process allowed Docker image '{image}' is duplicated.");
+        }
+    }
+
+    private static void ValidateNetwork(NetworkPolicySection network, List<string> errors)
+    {
+        var seenSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var scheme in network.AllowedSchemes)
+        {
+            if (string.IsNullOrWhiteSpace(scheme))
+            {
+                errors.Add("Network allowed schemes cannot contain blank entries.");
+                continue;
+            }
+
+            var trimmed = scheme.Trim();
+            // A URI scheme is letters/digits/+/-/. starting with a letter (RFC 3986).
+            if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, "^[a-zA-Z][a-zA-Z0-9+.\\-]*$"))
+                errors.Add($"Network allowed scheme '{scheme}' is not a valid URI scheme.");
+            else if (!seenSchemes.Add(trimmed))
+                errors.Add($"Network allowed scheme '{scheme}' is duplicated.");
+        }
+
+        var seenPorts = new HashSet<int>();
+        foreach (var port in network.AllowedPorts)
+        {
+            if (port is < 1 or > 65535)
+                errors.Add($"Network allowed port '{port}' must be between 1 and 65535.");
+            else if (!seenPorts.Add(port))
+                errors.Add($"Network allowed port '{port}' is duplicated.");
         }
     }
 

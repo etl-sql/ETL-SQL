@@ -39,6 +39,11 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
                 securityService.ValidateHost(host);
                 EnforceEnterpriseHosts(snapshot, host);
             }
+            // Scheme/port rules apply only to URL-shaped targets (REST, and other connectors whose
+            // connection string is an absolute URI); ADO connection strings name no scheme and are
+            // governed by the host allowlist alone.
+            if (Uri.TryCreate(target, UriKind.Absolute, out var uri))
+                EnforceSchemeAndPort(snapshot, uri);
         }
         catch (SecurityException ex) when (ex is not ConnectorPolicyDeniedException)
         {
@@ -83,6 +88,51 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
                 host, EffectiveConstraint(snapshot), ex.Message);
             throw new ConnectorPolicyDeniedException(denied, ex);
         }
+    }
+
+    /// <summary>
+    /// Applies the enterprise host, scheme, and port allowlists to a fully-formed request URL. Use
+    /// on the dynamic REST path (initial request, redirects, pagination, template targets) where the
+    /// scheme and port are known and a redirect could otherwise reach a denied port/scheme on an
+    /// allowed host. No-op when standalone or unenrolled.
+    /// </summary>
+    public static void EnforceEnterpriseUrl(IExecutionContext context, Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+        var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
+        try
+        {
+            context.SecurityService.ValidateHost(url.Host);
+            EnforceEnterpriseHosts(snapshot, url.Host);
+            EnforceSchemeAndPort(snapshot, url);
+        }
+        catch (SecurityException ex) when (ex is not ConnectorPolicyDeniedException)
+        {
+            var denied = OperationPolicyDecision.Deny(snapshot, "Connectors:Destination",
+                $"{url.Scheme}://{url.Host}:{url.Port}", EffectiveConstraint(snapshot), ex.Message);
+            throw new ConnectorPolicyDeniedException(denied, ex);
+        }
+    }
+
+    private static void EnforceSchemeAndPort(ExecutionPolicySnapshot snapshot, Uri url)
+    {
+        if (!snapshot.IsEnrolled) return;
+
+        var allowedSchemes = GovernedList(snapshot, "Security:AllowedSchemes:");
+        if (allowedSchemes.Length > 0
+            && !allowedSchemes.Any(scheme => string.Equals(scheme, url.Scheme, StringComparison.OrdinalIgnoreCase)))
+            throw new SecurityException(
+                $"Enterprise policy permits schemes [{string.Join(", ", allowedSchemes)}]; '{url.Scheme}' is not allowed.");
+
+        var allowedPorts = GovernedList(snapshot, "Security:AllowedPorts:");
+        if (allowedPorts.Length == 0) return;
+
+        // Uri.Port is the explicit port or the scheme's default (-1 only for schemes without one).
+        var port = url.Port;
+        if (port < 0) return;
+        if (!allowedPorts.Any(value => int.TryParse(value, out var allowed) && allowed == port))
+            throw new SecurityException(
+                $"Enterprise policy permits ports [{string.Join(", ", allowedPorts)}]; port {port} is not allowed.");
     }
 
     private static void EnforceEnterpriseHosts(ExecutionPolicySnapshot snapshot, string host)
