@@ -154,7 +154,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 ### v0.14.0 release gates
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
 - [ ] Pass full functional, performance, migration, recovery, v0.14.0-scoped enterprise certification, and standalone regression suites.
-- [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
+- [x] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required. *(Administrators_Guide §Enrollment states enrollment "cannot stop a user from downloading, compiling, or running unrelated software" and mandates Windows Defender Application Control/AppLocker (or equivalent OS controls) for mandatory enforcement; ReportPortal guide states the audit table is "not tamper-proof — by design" against an administrator with DB access. A doc scan found no contradicting overclaim. `SecurityBoundaryDocTests` pins the caveat + WDAC/AppLocker mandate so a future edit cannot silently overclaim the boundary.)*
 
 ---
 
