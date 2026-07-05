@@ -164,6 +164,59 @@ public sealed class PolicyAuthorityServiceTests
     }
 
     [Fact]
+    public async Task StagedVersion_ActivatesOnlyWhileItStillIssuesLaterThanActive()
+    {
+        var (svc, _) = NewAuthority();
+
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "1.0.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30));
+        var staged = await svc.PublishAsync(SampleDoc(), "acme", "prod", "1.1.0", "alice", "bob",
+            DateTimeOffset.UtcNow.AddDays(30), staged: true);
+
+        // Staged publish does not change what machines retrieve.
+        Assert.Equal(PolicyRolloutState.Staged, staged.RolloutState);
+        Assert.Equal("1.0.0", (await svc.RetrieveActiveEnvelopeAsync("acme", "prod"))!.PolicyVersion);
+
+        var activated = await svc.ActivateStagedAsync("acme", "prod", "1.1.0");
+        Assert.Equal(PolicyRolloutState.Active, activated.RolloutState);
+        Assert.Equal("1.1.0", (await svc.RetrieveActiveEnvelopeAsync("acme", "prod"))!.PolicyVersion);
+
+        // Activating a non-staged version is refused.
+        await Assert.ThrowsAsync<PolicyAuthorityException>(
+            () => svc.ActivateStagedAsync("acme", "prod", "1.0.0"));
+
+        // A staged version overtaken by a newer publish would be rejected by clients (older
+        // issuance), so the authority refuses to activate it and demands a republish.
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "2.0.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30), staged: true);
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "2.1.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30));
+        var stale = await Assert.ThrowsAsync<PolicyAuthorityException>(
+            () => svc.ActivateStagedAsync("acme", "prod", "2.0.0"));
+        Assert.Contains("republish", stale.Message);
+    }
+
+    [Fact]
+    public async Task Rollback_MarksTheAbandonedVersionRolledBackInHistory()
+    {
+        var store = new InMemoryPolicyAuthorityStore();
+        var svc = new PolicyAuthorityService(store, new RsaPolicyEnvelopeSigner(RSA.Create(2048)));
+
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "1.0.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30));
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "2.0.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30));
+        await svc.RollbackToAsync("acme", "prod", "1.0.0", "2.0.1-rollback",
+            "carol", null, DateTimeOffset.UtcNow.AddDays(30));
+
+        var history = await store.ListAsync("acme", "prod");
+        Assert.Equal(PolicyRolloutState.RolledBack,
+            history.Single(v => v.PolicyVersion == "2.0.0").RolloutState);
+        Assert.Equal(PolicyRolloutState.Active,
+            history.Single(v => v.PolicyVersion == "2.0.1-rollback").RolloutState);
+    }
+
+    [Fact]
     public async Task History_IsImmutableAndBoundToTenantEnvironment()
     {
         var store = new InMemoryPolicyAuthorityStore();

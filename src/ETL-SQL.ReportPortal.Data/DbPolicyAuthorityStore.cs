@@ -55,15 +55,16 @@ public sealed class DbPolicyAuthorityStore(PortalDbContext db) : IPolicyAuthorit
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
-    public async Task MarkSupersededAsync(
-        string tenant, string environment, string policyVersion, CancellationToken ct = default)
+    public async Task SetRolloutStateAsync(
+        string tenant, string environment, string policyVersion, PolicyRolloutState state,
+        CancellationToken ct = default)
     {
         var row = await db.PolicyVersions
             .FirstOrDefaultAsync(x => x.Tenant == tenant && x.Environment == environment
                 && x.PolicyVersion == policyVersion, ct)
             .ConfigureAwait(false);
         if (row is null) return;
-        row.RolloutState = nameof(PolicyRolloutState.Superseded);
+        row.RolloutState = state.ToString();
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 

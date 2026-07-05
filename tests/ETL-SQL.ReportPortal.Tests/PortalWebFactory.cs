@@ -152,7 +152,13 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
             services.AddSingleton<ETL_SQL.Core.Data.IClusterLockStore>(testStore);
 
             ConfigureHostedServices(services);
+            CustomizeServices(services);
         });
+    }
+
+    /// <summary>Last-chance hook over the service collection (e.g. swapping the policy signer).</summary>
+    protected virtual void CustomizeServices(IServiceCollection services)
+    {
     }
 
     /// <summary>Last-chance hook over the in-memory configuration before it is added.</summary>

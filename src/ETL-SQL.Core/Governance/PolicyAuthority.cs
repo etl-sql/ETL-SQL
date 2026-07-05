@@ -123,7 +123,7 @@ public interface IPolicyAuthorityStore
     Task<PublishedPolicyVersion?> GetActiveAsync(string tenant, string environment, CancellationToken ct = default);
     Task<IReadOnlyList<PublishedPolicyVersion>> ListAsync(string tenant, string environment, CancellationToken ct = default);
     Task AppendAsync(PublishedPolicyVersion version, CancellationToken ct = default);
-    Task MarkSupersededAsync(string tenant, string environment, string policyVersion, CancellationToken ct = default);
+    Task SetRolloutStateAsync(string tenant, string environment, string policyVersion, PolicyRolloutState state, CancellationToken ct = default);
 }
 
 public sealed class PolicyAuthorityException(string message) : Exception(message);
@@ -198,9 +198,53 @@ public sealed class PolicyAuthorityService(
 
         await store.AppendAsync(version, ct).ConfigureAwait(false);
         if (!staged && active is not null)
-            await store.MarkSupersededAsync(tenant, environment, active.PolicyVersion, ct).ConfigureAwait(false);
+            await store.SetRolloutStateAsync(tenant, environment, active.PolicyVersion,
+                PolicyRolloutState.Superseded, ct).ConfigureAwait(false);
         return version;
     }
+
+    /// <summary>
+    /// Promotes a staged version to active, superseding the current active version. The staged
+    /// envelope keeps its original signature and issuance time, so promotion is only legal while the
+    /// staged version still issues later than the active one — clients reject older issuance. A
+    /// staged version that has been overtaken by a newer publish must be republished instead.
+    /// </summary>
+    public async Task<PublishedPolicyVersion> ActivateStagedAsync(
+        string tenant, string environment, string policyVersion, CancellationToken ct = default)
+    {
+        var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
+        var staged = versions.FirstOrDefault(v =>
+            string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal))
+            ?? throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' was not found for {tenant}/{environment}.");
+        if (staged.RolloutState != PolicyRolloutState.Staged)
+            throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' is {staged.RolloutState}; only a staged version can be activated.");
+
+        var active = versions.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active);
+        if (active is not null && staged.IssuedAtUtc <= active.IssuedAtUtc)
+            throw new PolicyAuthorityException(
+                $"Staged version '{policyVersion}' was issued before the current active version " +
+                $"'{active.PolicyVersion}' and would be rejected by clients; republish the document as a new version.");
+
+        // Activate first: if interrupted between the two writes, the store briefly holds two active
+        // versions and GetActiveAsync deterministically serves the newer one — safer than a window
+        // with no active policy at all.
+        await store.SetRolloutStateAsync(tenant, environment, policyVersion,
+            PolicyRolloutState.Active, ct).ConfigureAwait(false);
+        if (active is not null)
+            await store.SetRolloutStateAsync(tenant, environment, active.PolicyVersion,
+                PolicyRolloutState.Superseded, ct).ConfigureAwait(false);
+        return staged with { RolloutState = PolicyRolloutState.Active };
+    }
+
+    public Task<IReadOnlyList<PublishedPolicyVersion>> ListVersionsAsync(
+        string tenant, string environment, CancellationToken ct = default) =>
+        store.ListAsync(tenant, environment, ct);
+
+    public Task<PublishedPolicyVersion?> GetActiveVersionAsync(
+        string tenant, string environment, CancellationToken ct = default) =>
+        store.GetActiveAsync(tenant, environment, ct);
 
     /// <summary>Returns the active signed envelope for a tenant/environment, for a machine to retrieve.</summary>
     public async Task<SignedOrganizationPolicyEnvelope?> RetrieveActiveEnvelopeAsync(
@@ -231,8 +275,14 @@ public sealed class PolicyAuthorityService(
         var document = OrganizationPolicySchema.ParseJson(
             Encoding.UTF8.GetString(Convert.FromBase64String(envelope.PolicyPayload)));
 
+        var abandoned = versions.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active);
         var republished = await PublishAsync(document, tenant, environment, newPolicyVersion,
             author, reviewer, expiresAtUtc, staged: false, ct).ConfigureAwait(false);
+        // The publish marked the abandoned version Superseded; record it as RolledBack so the
+        // durable history distinguishes an emergency rollback from a routine supersession.
+        if (abandoned is not null)
+            await store.SetRolloutStateAsync(tenant, environment, abandoned.PolicyVersion,
+                PolicyRolloutState.RolledBack, ct).ConfigureAwait(false);
         return republished with { RolloutState = PolicyRolloutState.Active };
     }
 
@@ -274,7 +324,7 @@ public sealed class InMemoryPolicyAuthorityStore : IPolicyAuthorityStore
         return Task.CompletedTask;
     }
 
-    public Task MarkSupersededAsync(string tenant, string environment, string policyVersion, CancellationToken ct = default)
+    public Task SetRolloutStateAsync(string tenant, string environment, string policyVersion, PolicyRolloutState state, CancellationToken ct = default)
     {
         lock (Gate(tenant, environment))
         {
@@ -282,7 +332,7 @@ public sealed class InMemoryPolicyAuthorityStore : IPolicyAuthorityStore
             if (list is null) return Task.CompletedTask;
             for (var i = 0; i < list.Count; i++)
                 if (string.Equals(list[i].PolicyVersion, policyVersion, StringComparison.Ordinal))
-                    list[i] = list[i] with { RolloutState = PolicyRolloutState.Superseded };
+                    list[i] = list[i] with { RolloutState = state };
         }
         return Task.CompletedTask;
     }
