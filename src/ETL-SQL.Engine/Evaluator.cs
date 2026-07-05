@@ -166,6 +166,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             throw new SecurityException($"SMTP send limit exceeded: this script attempted to send {count} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
         }
+        // Enterprise ceiling binds regardless of the local (SET-overridable) limit above.
+        if (IsEnterpriseGoverned)
+            ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceCeiling(this,
+                "Security:MaxSmtpEmailsPerScript", count, "<smtp-send>");
     }
     public int MaxInternalOperations
     {

@@ -49,6 +49,8 @@ public sealed record OrganizationPolicyDocument
             values["Security:MaxRecursiveNestingDepth"] = Execution.MaxRecursiveNestingDepth.Value;
         if (Execution.MaxSpillBytesPerScript.HasValue)
             values["Security:MaxSpillBytesPerScript"] = Execution.MaxSpillBytesPerScript.Value;
+        if (Execution.MaxSmtpEmailsPerScript.HasValue)
+            values["Security:MaxSmtpEmailsPerScript"] = Execution.MaxSmtpEmailsPerScript.Value;
         if (Process.AllowedDockerImages.Count > 0)
             values["Security:AllowedDockerImages"] = Process.AllowedDockerImages;
         values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
@@ -99,6 +101,12 @@ public sealed record ExecutionPolicySection
     /// Null means the authoritative organization policy does not bound spill volume.
     /// </summary>
     public long? MaxSpillBytesPerScript { get; init; }
+
+    /// <summary>
+    /// Maximum SMTP messages one script may send. Null means the authoritative organization policy
+    /// does not bound outbound email.
+    /// </summary>
+    public int? MaxSmtpEmailsPerScript { get; init; }
 }
 
 public sealed record ProcessPolicySection
@@ -260,6 +268,8 @@ public static class OrganizationPolicySchema
             errors.Add("Execution max recursive nesting depth must be zero or greater.");
         if (execution.MaxSpillBytesPerScript.HasValue && execution.MaxSpillBytesPerScript.Value < 0)
             errors.Add("Execution max spill bytes per script must be zero or greater.");
+        if (execution.MaxSmtpEmailsPerScript.HasValue && execution.MaxSmtpEmailsPerScript.Value < 0)
+            errors.Add("Execution max SMTP emails per script must be zero or greater.");
     }
 
     private static void ValidateRemoteExecution(RemoteExecutionPolicySection remote, List<string> errors)

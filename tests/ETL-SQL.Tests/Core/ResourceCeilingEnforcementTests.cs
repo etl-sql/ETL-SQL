@@ -45,6 +45,27 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task SetMaxSmtpEmails_WeakerThanEnterpriseCeiling_IsDenied()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxSmtpEmails: 1));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() =>
+            ExecuteAsync("SET MAX_SMTP_EMAILS_PER_SCRIPT = 1000;"));
+        Assert.Contains("MaxSmtpEmailsPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RecordSmtpEmailSend_BeyondEnterpriseCeiling_IsDenied()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxSmtpEmails: 1));
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+
+        evaluator.RecordSmtpEmailSend(); // first send within the ceiling
+        var denied = Assert.ThrowsAny<Exception>(() => evaluator.RecordSmtpEmailSend());
+        Assert.Contains("MaxSmtpEmailsPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UseDocker_ImageOutsideEnterpriseAllowlist_IsDeniedBeforeStart()
     {
         // Denial fires before the Docker manager is touched, so no Docker daemon is needed.
@@ -64,11 +85,16 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
 
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         int? maxParallelDegree = null,
+        int? maxSmtpEmails = null,
         string[]? allowedDockerImages = null)
     {
         var document = new OrganizationPolicyDocument
         {
-            Execution = new ExecutionPolicySection { MaxParallelDegree = maxParallelDegree },
+            Execution = new ExecutionPolicySection
+            {
+                MaxParallelDegree = maxParallelDegree,
+                MaxSmtpEmailsPerScript = maxSmtpEmails
+            },
             Process = new ProcessPolicySection { AllowedDockerImages = allowedDockerImages ?? [] }
         };
         return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
