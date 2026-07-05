@@ -97,6 +97,22 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         Assert.Null(ex);
     }
 
+    [Fact]
+    public void RemoteExecutionMode_Disabled_DeniesRemoteModeRun()
+    {
+        // Remote mode isn't produced by the engine today, so this exercises the boundary directly.
+        var policy = EnrolledPolicy(); // default RemoteExecution.Mode = Disabled
+        var snapshot = ExecutionPolicySnapshot.Capture(policy, "operator", ScriptExecutionMode.Remote, "hash");
+
+        var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+            OperationPolicyBoundary.EnforceRemoteExecutionMode(snapshot));
+        Assert.Contains("remote execution", denied.Decision.Reason, StringComparison.OrdinalIgnoreCase);
+
+        // A non-remote (Batch) run under the same policy is unaffected.
+        var batch = ExecutionPolicySnapshot.Capture(policy, "operator", ScriptExecutionMode.Batch, "hash");
+        Assert.Null(Record.Exception(() => OperationPolicyBoundary.EnforceRemoteExecutionMode(batch)));
+    }
+
     private static async Task ExecuteAsync(string sql)
     {
         var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();

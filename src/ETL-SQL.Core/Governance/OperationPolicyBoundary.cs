@@ -93,6 +93,24 @@ public static class OperationPolicyBoundary
             $"Enterprise policy does not permit the '{mode}' execution mode."));
     }
 
+    /// <summary>
+    /// Enforces <c>Security:RemoteExecutionMode</c> at execution start: a run captured in
+    /// <see cref="ScriptExecutionMode.Remote"/> is denied when the enrolled policy disables remote
+    /// execution. The <c>TrustedOrchestrator</c>/<c>AllowedHosts</c> host-gating is applied by the
+    /// remote-dispatch path that produces a Remote-mode snapshot. No-op for non-remote runs and when
+    /// standalone/unenrolled.
+    /// </summary>
+    public static void EnforceRemoteExecutionMode(ExecutionPolicySnapshot snapshot)
+    {
+        if (!snapshot.IsEnrolled || snapshot.ExecutionMode != ScriptExecutionMode.Remote) return;
+        if (!snapshot.GovernedValues.TryGetValue("Security:RemoteExecutionMode", out var mode)) return;
+        if (!string.Equals(mode, "Disabled", StringComparison.OrdinalIgnoreCase)) return;
+
+        throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+            "Security:RemoteExecutionMode", "Remote", "remote execution disabled",
+            "Enterprise policy disables remote execution."));
+    }
+
     public static bool TryGetGovernedLong(ExecutionPolicySnapshot snapshot, string key, out long value)
     {
         value = 0;

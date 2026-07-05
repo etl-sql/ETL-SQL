@@ -54,18 +54,14 @@ public sealed class GovernanceEnforcementAuditTests
             ["Engine:NoSaveConnection"] = (Boundary.ConfigPrecedence, "SetSavePolicyStatementHandlers + connection save path"),
             ["Engine:ConnectionEncryption"] = (Boundary.ConfigPrecedence, "Connection save path (ConnectionEncryptionRule)"),
 
-            // ── Declared and flattened into policy values, but no enforcement consumer yet ──
-            // ScriptExecutionMode.Remote is not produced by any current execution path, so there is
-            // no trigger point to enforce at; the boundary lands with the remote-execution feature.
-            ["Security:RemoteExecutionMode"] = (Boundary.DeclaredGap, "flattened to Security:RemoteExecutionMode; no remote-execution path produces ScriptExecutionMode.Remote yet"),
+            // The boundary is named and tested; it is dormant only because no path produces a
+            // Remote-mode snapshot yet — it enforces the moment one does.
+            ["Security:RemoteExecutionMode"] = (Boundary.EnterpriseSnapshot, "OperationPolicyBoundary.EnforceRemoteExecutionMode (execution start)"),
         };
 
-    // The governed keys deliberately not yet enforced. Closing one of these (wiring an enforcement
-    // boundary) or adding a new gap must be a conscious edit to both the map above and this set.
-    private static readonly HashSet<string> ExpectedGaps = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Security:RemoteExecutionMode",
-    };
+    // The governed keys deliberately not yet enforced. Adding a gap must be a conscious edit to both
+    // the map above and this set. It is currently empty — every governed key names a boundary.
+    private static readonly HashSet<string> ExpectedGaps = new(StringComparer.OrdinalIgnoreCase);
 
     [Fact]
     public void EveryGovernedRegistryKeyIsClassified()

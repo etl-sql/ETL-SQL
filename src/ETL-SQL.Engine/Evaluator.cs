@@ -782,8 +782,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
                 System.Text.Encoding.UTF8.GetBytes(canonicalScript))).ToLowerInvariant();
             ExecutionPolicy = ExecutionPolicySnapshot.Capture(
                 EnterprisePolicyRuntime.Current, actor, mode, scriptHash, JobName);
-            // Enterprise execution-mode allowlist — gate the whole run before any statement executes.
+            // Enterprise execution-mode gates — applied before any statement executes.
             Core.Governance.OperationPolicyBoundary.EnforceAllowedExecutionMode(ExecutionPolicy);
+            Core.Governance.OperationPolicyBoundary.EnforceRemoteExecutionMode(ExecutionPolicy);
 
             foreach (var rs in LastResultSets) rs.Clear();
             LastResultSets.Clear();
