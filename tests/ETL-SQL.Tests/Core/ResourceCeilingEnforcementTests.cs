@@ -76,6 +76,27 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         Assert.Contains("Docker image", denied.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ExecutionMode_OutsideEnterpriseAllowlist_IsDenied()
+    {
+        // Only Scheduled is permitted; a normal (Batch/Interactive) run is denied at execution start.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedExecutionModes: [ScriptExecutionMode.Scheduled]));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync("PRINT 'hello';"));
+        Assert.Contains("execution mode", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExecutionMode_WithinEnterpriseAllowlist_IsAllowed()
+    {
+        // The default allowlist includes Batch and Interactive, so a normal run proceeds.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(
+            allowedExecutionModes: [ScriptExecutionMode.Interactive, ScriptExecutionMode.Batch, ScriptExecutionMode.Scheduled]));
+
+        var ex = await Record.ExceptionAsync(() => ExecuteAsync("PRINT 'hello';"));
+        Assert.Null(ex);
+    }
+
     private static async Task ExecuteAsync(string sql)
     {
         var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
@@ -86,15 +107,19 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         int? maxParallelDegree = null,
         int? maxSmtpEmails = null,
-        string[]? allowedDockerImages = null)
+        string[]? allowedDockerImages = null,
+        ScriptExecutionMode[]? allowedExecutionModes = null)
     {
+        var execution = new ExecutionPolicySection
+        {
+            MaxParallelDegree = maxParallelDegree,
+            MaxSmtpEmailsPerScript = maxSmtpEmails
+        };
+        if (allowedExecutionModes is not null)
+            execution = execution with { AllowedModes = allowedExecutionModes };
         var document = new OrganizationPolicyDocument
         {
-            Execution = new ExecutionPolicySection
-            {
-                MaxParallelDegree = maxParallelDegree,
-                MaxSmtpEmailsPerScript = maxSmtpEmails
-            },
+            Execution = execution,
             Process = new ProcessPolicySection { AllowedDockerImages = allowedDockerImages ?? [] }
         };
         return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
