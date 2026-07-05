@@ -151,6 +151,14 @@ public static class OrganizationPolicySchema
     public static IReadOnlyCollection<string> SupportedSchemaVersions =>
         new ReadOnlyCollection<string>(SupportedVersions.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToArray());
 
+    /// <summary>Serializes a document with the same options the client parser uses, so a published
+    /// envelope round-trips through <see cref="ParseAndValidateJson"/>.</summary>
+    public static string Serialize(OrganizationPolicyDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return JsonSerializer.Serialize(document, JsonOptions);
+    }
+
     public static OrganizationPolicyDocument ParseJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
