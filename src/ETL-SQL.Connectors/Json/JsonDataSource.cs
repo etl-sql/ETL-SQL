@@ -83,6 +83,7 @@ namespace ETL_SQL.Connectors.Json
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             var allRows = new List<IDictionary<string, object?>>();
             bool alreadyJson = false;
             string? singleJson = null;

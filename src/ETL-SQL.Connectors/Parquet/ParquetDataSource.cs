@@ -124,6 +124,7 @@ namespace ETL_SQL.Connectors.Parquet
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             var enumerator = batches.GetAsyncEnumerator();
             if (!await enumerator.MoveNextAsync())
             {

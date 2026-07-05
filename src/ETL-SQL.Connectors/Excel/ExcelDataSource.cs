@@ -146,7 +146,7 @@ namespace ETL_SQL.Connectors.Excel
 
         public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)
         {
-            _context?.SecurityService.ValidateWriteAccess(_filePath);
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
             var existingRows = new List<Dictionary<string, object?>>();
             var existingColumns = new List<string>();

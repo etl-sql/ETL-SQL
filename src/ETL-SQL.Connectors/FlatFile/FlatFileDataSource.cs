@@ -582,15 +582,8 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
-            // Security Hardening: Block writing to script files (local guardrail) and re-check the
-            // resolved destination against the enterprise policy at the write boundary — the base
-            // connection path is authorized at CREATE CONNECTION, but a per-use resolution (e.g. a
-            // ${placeholder} target) is only enterprise-checked here.
-            _context?.SecurityService.ValidateWriteAccess(_filePath);
-            if (_context != null)
-                new ETL_SQL.Core.Governance.FileSystemPolicyAuthorizer(_context.SecurityService)
-                    .Authorize(_context, _filePath, ETL_SQL.Core.Governance.FileSystemAccessKind.Write,
-                        validateFileType: false);
+            // Security Hardening: local write guardrail + enterprise policy re-check at the boundary.
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
             string tempFile = System.IO.Path.GetTempFileName();
             try

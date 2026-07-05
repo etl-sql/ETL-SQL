@@ -303,6 +303,7 @@ namespace ETL_SQL.Connectors.Xml
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             bool alreadyXml = false;
             string? singleXml = null;
 

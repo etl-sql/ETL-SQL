@@ -6,6 +6,22 @@ namespace ETL_SQL.Core.Common
 {
     public static class FileConnectorPathHelper
     {
+        /// <summary>
+        /// Authorizes a file-connector write at its I/O boundary: the local write guardrail (blocks
+        /// script files / dangerous types) plus the enterprise <c>FileSystemPolicyAuthorizer</c>. The
+        /// base connection path is authorized at CREATE CONNECTION, but a per-use resolution (e.g. a
+        /// <c>${placeholder}</c> target, or a connection created before policy tightened) is only
+        /// enterprise-checked here. No-op when there is no execution context.
+        /// </summary>
+        public static void AuthorizeWrite(ETL_SQL.Core.IExecutionContext? context, string filePath)
+        {
+            if (context == null || string.IsNullOrEmpty(filePath)) return;
+            context.SecurityService.ValidateWriteAccess(filePath);
+            new ETL_SQL.Core.Governance.FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, filePath, ETL_SQL.Core.Governance.FileSystemAccessKind.Write,
+                    validateFileType: false);
+        }
+
         public static string CoerceFilePathExtension(string path, bool encrypt, bool compress)
         {
             if (string.IsNullOrEmpty(path)) return path;
