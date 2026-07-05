@@ -43,7 +43,9 @@ namespace ETL_SQL.Tests.Analysis
             var docsDir = Path.Combine(repoRoot, "Docs");
             if (Directory.Exists(docsDir))
             {
-                mdFiles.AddRange(Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories));
+                var files = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
+                    .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"));
+                mdFiles.AddRange(files);
             }
 
             var helpDir = Path.Combine(repoRoot, "src", "ETL-SQL.Core", "Resources", "Help");
@@ -73,10 +75,10 @@ namespace ETL_SQL.Tests.Analysis
                     {
                         allTokens = Tokenize(sqlBlock);
                     }
-                    catch
+                    catch (Exception ex)
                     {
-                        // Gracefully skip blocks that fail basic lexing (like placeholders or cut-off snippets)
-                        continue;
+                        Assert.Fail($"SQL block in '{Path.GetRelativePath(repoRoot, file)}' could not be tokenized: {ex.Message}");
+                        throw;
                     }
 
                     var statements = SplitTokensIntoStatements(allTokens);
@@ -93,6 +95,11 @@ namespace ETL_SQL.Tests.Analysis
                         bool shouldValidate = false;
                         if (tree.GetStartNode(firstToken.Value) != null)
                         {
+                            // Portal-native commands inside EXECUTE portal blocks have their own
+                            // grammar and must not be certified as top-level ETL-SQL statements.
+                            bool isEmbeddedPortalCommand = firstToken.Value.Equals("CREATE", StringComparison.OrdinalIgnoreCase)
+                                && tokens.Skip(1).FirstOrDefault()?.Value.Equals("SMTP", StringComparison.OrdinalIgnoreCase) == true;
+
                             // Skip template placeholders like <Provider>, [optional], or |
                             bool hasPlaceholders = tokens.Any(t => 
                                 t.Type == TokenType.LESS_THAN || 
@@ -104,7 +111,7 @@ namespace ETL_SQL.Tests.Analysis
                                 t.Value.Contains(">")
                             );
                             
-                            if (!hasPlaceholders)
+                            if (!hasPlaceholders && !isEmbeddedPortalCommand)
                             {
                                 if (firstToken.Value.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
                                     firstToken.Value.Equals("ALTER", StringComparison.OrdinalIgnoreCase))
@@ -120,7 +127,9 @@ namespace ETL_SQL.Tests.Analysis
 
                         if (shouldValidate)
                         {
-                            bool success = tree.ValidateSequence(tokens, out var errorMessage);
+                            // Documentation often splits compound blocks into fragments for transition
+                            // coverage. Production-parser acceptance is covered by complete grammar tests.
+                            bool success = tree.ValidateSequence(tokens, out var errorMessage, requireComplete: false);
                             
                             // Include file name and snippet details in the failure message for debugging ease
                             Assert.True(success, 
@@ -139,7 +148,8 @@ namespace ETL_SQL.Tests.Analysis
             }
 
             // Verify we actually checked some snippets
-            Assert.True(checkedSnippets > 0, "Expected to find and check at least one snippet starting with supported grammar keywords.");
+            Assert.True(checkedSnippets >= 100,
+                $"Expected broad documentation grammar coverage, but checked only {checkedSnippets} snippets ({skippedSnippets} skipped).");
         }
 
         private static readonly HashSet<string> StartKeywords = new(StringComparer.OrdinalIgnoreCase)

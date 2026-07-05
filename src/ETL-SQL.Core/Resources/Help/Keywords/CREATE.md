@@ -19,7 +19,7 @@ Creates connections, temporary tables, indexes, or named sets.
 -- Connection
 CREATE CONNECTION MyDB AS MSSQL (
   SERVER = 'sql01', DATABASE = 'Sales',
-  USERNAME = 'sa', PASSWORD = ENC:abc123==
+  USER = 'sa', PASSWORD = 'ENC:abc123=='
 );
 
 -- Temp table (explicit schema)

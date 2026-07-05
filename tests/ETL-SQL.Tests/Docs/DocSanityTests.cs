@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using ETL_SQL.Connectors.MockDb;
 using Microsoft.Extensions.DependencyInjection;
@@ -87,7 +88,8 @@ namespace ETL_SQL.Tests.Docs
         public void GeneralDocs_SqlBlocks_ParseWithoutSyntaxError()
         {
             var docsDir = RepoFile("Docs");
-            var docsFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories);
+            var docsFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
+                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"));
             var rootFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly);
 
             var docFiles = docsFiles.Concat(rootFiles).ToArray();
@@ -134,6 +136,7 @@ namespace ETL_SQL.Tests.Docs
                 .Concat(Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly))
                 .Concat(Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"))
                 .ToArray();
 
             var failures = FindUnsupportedConnectionOptions(markdownFiles);

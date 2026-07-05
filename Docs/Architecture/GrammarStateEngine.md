@@ -65,7 +65,7 @@ A stateful walker that consumes tokens sequentially and tracks the active set of
 
 ## 2. Partial Evaluation for Doc-Testing
 
-Standard compiler parsers fail when processing partial code blocks, making documentation validation difficult. The Grammar State Engine solves this through **non-deterministic partial evaluation**:
+Standard compiler parsers fail when processing partial code blocks, making documentation transition coverage difficult. The Grammar State Engine supports **non-deterministic partial evaluation**, while complete sequences built by `DefaultGrammar` are also checked by the production parser so the state tree cannot certify parser-invalid syntax:
 
 1. **Self-Contained Snippets**: The engine validates single statements or blocks without demanding complete environment registration (like database connections).
 2. **Wildcard Fallbacks**: Transitions like `AddWildcardTransition()` match any valid expression token. If a template script references `#temp` tables that were not previously declared, the wildcard absorbs them, permitting validation of isolated middle-of-the-road snippets.
@@ -76,7 +76,7 @@ Standard compiler parsers fail when processing partial code blocks, making docum
 
 ## 3. Semantic Autocomplete Bindings
 
-To serve zero-noise, highly context-aware autocompletions in the LSP and TUI, `GrammarLanguageService` binds active grammar states directly to workspace metadata:
+To serve context-aware autocompletions in the LSP and TUI, `GrammarLanguageService` binds active grammar states directly to workspace metadata. The base language service also contributes general keyword, function, and symbol suggestions as a fallback:
 
 1. **State Identification**: The walker evaluates the document script up to the cursor. It looks at the transition labels of all current active states.
 2. **Metadata Injection**:

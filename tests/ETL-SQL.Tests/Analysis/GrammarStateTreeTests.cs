@@ -98,6 +98,26 @@ namespace ETL_SQL.Tests.Analysis
             Assert.Contains(pathB, walker.ActiveStates);
         }
 
+        [Fact]
+        public void TokenWalker_AmbiguousBranches_KeepIndependentStateBags()
+        {
+            var tree = new GrammarStateTree();
+            var start = new StateNode("START");
+            var pathA = new StateNode("PATH_A");
+            var pathB = new StateNode("PATH_B");
+
+            start.AddTransition(new StateTransition(_ => true, pathA, onTransition: (_, walker) => walker.StateBag["depth"] = 1));
+            start.AddTransition(new StateTransition(_ => true, pathB, onTransition: (_, walker) => walker.StateBag["depth"] = 2));
+            tree.RegisterStartNode("GO", start);
+
+            var walker = new TokenWalker(tree);
+            Assert.True(walker.Consume(CreateToken(TokenType.IDENTIFIER, "GO")));
+            Assert.True(walker.Consume(CreateToken(TokenType.IDENTIFIER, "branch")));
+
+            Assert.Equal(1, walker.GetStateBag(pathA)["depth"]);
+            Assert.Equal(2, walker.GetStateBag(pathB)["depth"]);
+        }
+
         private IEnumerable<Token> Tokenize(string sql)
         {
             var lexer = new Lexer(sql);
@@ -140,6 +160,15 @@ namespace ETL_SQL.Tests.Analysis
             Assert.False(result2);
             Assert.NotNull(error2);
             Assert.Contains("Unexpected token ')'", error2);
+
+            Assert.False(tree.ValidateSequence(Tokenize("CREATE MSSQL CONNECTION c AS MSSQL()"), out _));
+            Assert.False(tree.ValidateSequence(Tokenize("CREATE CONNECTION c WITH(PATH='x')"), out _));
+            Assert.False(tree.ValidateSequence(Tokenize("CREATE CONNECTION c AS MSSQL PATH='x'"), out _));
+            Assert.False(tree.ValidateSequence(Tokenize("CREATE CONNECTION c AS MSSQL(PATH='x' USER='u')"), out _));
+
+            // A valid prefix is not a complete statement.
+            Assert.False(tree.ValidateSequence(Tokenize("CREATE"), out var incompleteError));
+            Assert.Contains("Production parser rejected", incompleteError);
         }
 
         [Fact]
@@ -153,11 +182,11 @@ namespace ETL_SQL.Tests.Analysis
             Assert.True(result1);
             Assert.Null(error1);
 
-            // Scenario 2: Short-form (without FILE) and in-place (without TO)
+            // The grammar must not certify the legacy short form rejected by the parser.
             var tokens2 = Tokenize("COMPRESS 'C:\\raw.csv'").ToList();
             bool result2 = tree.ValidateSequence(tokens2, out var error2);
-            Assert.True(result2);
-            Assert.Null(error2);
+            Assert.False(result2);
+            Assert.NotNull(error2);
         }
 
         [Fact]
@@ -177,11 +206,11 @@ namespace ETL_SQL.Tests.Analysis
             Assert.True(result2);
             Assert.Null(error2);
 
-            // Scenario 3: Decrypt with Pgpkey
+            // PGP_KEY is not part of the production parser's DECRYPT syntax.
             var tokens3 = Tokenize("DECRYPT 'C:\\raw.pgp' PGP_KEY 'C:\\pub.asc'").ToList();
             bool result3 = tree.ValidateSequence(tokens3, out var error3);
-            Assert.True(result3);
-            Assert.Null(error3);
+            Assert.False(result3);
+            Assert.NotNull(error3);
         }
 
         [Fact]

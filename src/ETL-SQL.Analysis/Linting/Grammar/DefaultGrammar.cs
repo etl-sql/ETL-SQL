@@ -12,7 +12,7 @@ public static class DefaultGrammar
 {
     public static GrammarStateTree Build(IMetadataManager? metadata = null)
     {
-        var tree = new GrammarStateTree();
+        var tree = new GrammarStateTree(requireParserAcceptance: true);
 
         var sharedWithNode = new StateNode("FILE_WITH");
         var sharedAtNode = new StateNode("FILE_AT");
@@ -48,8 +48,9 @@ public static class DefaultGrammar
         var orNode = new StateNode("CONN_OR");
         var alterNode = new StateNode("CONN_ALTER");
         var alterStartNode = new StateNode("ALTER");
-
-        var typedConnectionNode = new StateNode("CONN_TYPED");
+        var alterConnectionNode = new StateNode("ALTER_CONNECTION");
+        var alterNameNode = new StateNode("ALTER_CONN_NAME");
+        var alterWithNode = new StateNode("ALTER_CONN_WITH");
 
         // CREATE -> CONNECTION or OR -> ALTER -> CONNECTION
         createNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
@@ -75,21 +76,20 @@ public static class DefaultGrammar
         ));
         createSetsContent.AddTransitionTo("END", tree.Root, SuggestionType.Keyword);
 
-        // CREATE -> <type> -> CONNECTION
-        createNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || LanguageMetadata.IsConnectorType(t.Value),
-            typedConnectionNode,
-            "<connector_type>",
-            SuggestionType.Connection,
-            context => LanguageMetadata.ConnectorTypes
-        ));
-        typedConnectionNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
-
         tree.RegisterStartNode("CREATE", createNode);
 
         // ALTER CONNECTION
-        alterStartNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
+        alterStartNode.AddTransitionTo("CONNECTION", alterConnectionNode, SuggestionType.Keyword);
         tree.RegisterStartNode("ALTER", alterStartNode);
+
+        alterConnectionNode.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || t.Type == TokenType.STRING_LITERAL || IsWord(t.Value),
+            alterNameNode,
+            "<connection_name>"
+        ));
+        alterNameNode.AddTransitionTo("AS", asNode, SuggestionType.Keyword);
+        alterNameNode.AddTransitionTo("WITH", alterWithNode, SuggestionType.Keyword);
+        alterWithNode.AddTokenTransition(TokenType.LPAREN, openParenNode, "(");
 
         // CONNECTION -> name (wildcard identifier, string literal, or keyword)
         connectionNode.AddTransition(new StateTransition(
@@ -98,12 +98,9 @@ public static class DefaultGrammar
             "<connection_name>"
         ));
 
-        var connWithNode = new StateNode("CONN_WITH");
-
-        // name -> AS or WITH
+        // The production parser accepts only CREATE CONNECTION name AS TYPE(...).
+        // Keep completion grammar aligned with that contract.
         nameNode.AddTransitionTo("AS", asNode, SuggestionType.Keyword);
-        nameNode.AddTransitionTo("WITH", connWithNode, SuggestionType.Keyword);
-        connWithNode.AddTokenTransition(TokenType.LPAREN, openParenNode, "(");
 
         // AS -> type (FLATFILE, MSSQL, etc. - can be lexed as keywords)
         asNode.AddTransition(new StateTransition(
@@ -114,15 +111,8 @@ public static class DefaultGrammar
             context => LanguageMetadata.ConnectorTypes
         ));
 
-        // type -> ( or option_name (unparenthesized options)
+        // Connection arguments are always parenthesized.
         typeNode.AddTokenTransition(TokenType.LPAREN, openParenNode, "(");
-        typeNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
-            optionNameNode,
-            "<option_name>",
-            SuggestionType.OptionName,
-            context => GetSupportedOptions(context, metadata)
-        ));
 
         // ( -> option_name (options like PATH, COMPRESS can be lexed as keywords)
         openParenNode.AddTransition(new StateTransition(
@@ -160,20 +150,16 @@ public static class DefaultGrammar
                 walker.StateBag["LastOptionValue"] = token.Value;
             });
 
-        // option_value -> , or ) or next option_name (for space-separated lists)
+        // Named options must be comma-separated, matching ParseCreateConnection.
         optionValueNode.AddTokenTransition(TokenType.COMMA, commaNode, ",");
         optionValueNode.AddTokenTransition(TokenType.RPAREN, closeParenNode, ")");
         optionValueNode.AddTransition(new StateTransition(
-            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
-            optionNameNode,
-            "<option_name>",
-            SuggestionType.OptionName,
-            context => GetSupportedOptions(context, metadata)
-        ));
-        optionValueNode.AddTransition(new StateTransition(
             t => t.Type != TokenType.COMMA && t.Type != TokenType.RPAREN,
             optionValueNode,
-            "<expression_token>"
+            "<expression_token>",
+            contextCondition: (token, walker) => token.Type != TokenType.EQUALS ||
+                (walker.StateBag.TryGetValue("LastOptionValue", out var firstValue) &&
+                 firstValue?.ToString()?.Equals("ENC", StringComparison.OrdinalIgnoreCase) == true)
         ));
 
         // , -> option_name
@@ -591,18 +577,18 @@ public static class DefaultGrammar
         var querySubqueryEnd = new StateNode("QUERY_SUBQUERY_END");
         var querySubqueryAlias = new StateNode("QUERY_SUBQUERY_ALIAS");
 
-        int GetQueryDepth() => TokenWalker.CurrentThreadWalker != null && TokenWalker.CurrentThreadWalker.StateBag.TryGetValue("QueryParenDepth", out var d) ? (int)d : 0;
+        static int GetQueryDepth(TokenWalker walker) => walker.StateBag.TryGetValue("QueryParenDepth", out var d) ? (int)d : 0;
 
         fromSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
             (token, walker) => {
-                int d = GetQueryDepth();
+                int d = GetQueryDepth(walker);
                 walker.StateBag["QueryParenDepth"] = d + 1;
             }
         );
         
         joinSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
             (token, walker) => {
-                int d = GetQueryDepth();
+                int d = GetQueryDepth(walker);
                 walker.StateBag["QueryParenDepth"] = d + 1;
             }
         );
@@ -612,14 +598,15 @@ public static class DefaultGrammar
         void AddSubqueryEndTransition(StateNode fromState)
         {
             fromState.AddTransition(new StateTransition(
-                t => t.Type == TokenType.RPAREN && GetQueryDepth() > 0,
+                t => t.Type == TokenType.RPAREN,
                 querySubqueryEnd,
                 ")",
                 null, null,
                 (token, walker) => {
-                    int d = GetQueryDepth();
+                    int d = GetQueryDepth(walker);
                     walker.StateBag["QueryParenDepth"] = Math.Max(0, d - 1);
-                }
+                },
+                contextCondition: (_, walker) => GetQueryDepth(walker) > 0
             ));
         }
 
@@ -985,7 +972,7 @@ public static class DefaultGrammar
         waitforTime.AddWildcardTransition(tree.Root, "<time_expression>");
 
         // Wait until parenthesized/unparenthesized condition transitions
-        int GetWaitUntilDepth() => TokenWalker.CurrentThreadWalker != null && TokenWalker.CurrentThreadWalker.StateBag.TryGetValue("WaitUntilParenDepth", out var d) ? (int)d : 0;
+        static int GetWaitUntilDepth(TokenWalker walker) => walker.StateBag.TryGetValue("WaitUntilParenDepth", out var d) ? (int)d : 0;
 
         waitUntilCondition.AddTransition(new StateTransition(
             t => t.Type == TokenType.LPAREN,
@@ -993,39 +980,41 @@ public static class DefaultGrammar
             "(",
             null, null,
             (token, walker) => {
-                int d = GetWaitUntilDepth();
+                int d = GetWaitUntilDepth(walker);
                 walker.StateBag["WaitUntilParenDepth"] = d + 1;
             }
         ));
 
         waitUntilCondition.AddTransition(new StateTransition(
-            t => t.Type == TokenType.RPAREN && GetWaitUntilDepth() > 0,
+            t => t.Type == TokenType.RPAREN,
             waitUntilCondition,
             ")",
             null, null,
             (token, walker) => {
-                int d = GetWaitUntilDepth();
+                int d = GetWaitUntilDepth(walker);
                 walker.StateBag["WaitUntilParenDepth"] = Math.Max(0, d - 1);
-            }
+            },
+            contextCondition: (_, walker) => GetWaitUntilDepth(walker) > 0
         ));
 
         waitUntilCondition.AddTransition(new StateTransition(
-            t => tree.GetStartNode(t.Value) != null && GetWaitUntilDepth() == 0,
+            t => tree.GetStartNode(t.Value) != null,
             tree.Root,
             "<next_statement>",
             null, null,
-            (token, walker) => walker.StateBag.Remove("WaitUntilParenDepth")
+            (token, walker) => walker.StateBag.Remove("WaitUntilParenDepth"),
+            contextCondition: (_, walker) => GetWaitUntilDepth(walker) == 0
         ));
 
         waitUntilCondition.AddTransition(new StateTransition(
-            t => t.Type != TokenType.LPAREN && t.Type != TokenType.RPAREN && t.Type != TokenType.SEMICOLON && 
-                 (tree.GetStartNode(t.Value) == null || GetWaitUntilDepth() > 0),
+            t => t.Type != TokenType.LPAREN && t.Type != TokenType.RPAREN && t.Type != TokenType.SEMICOLON,
             waitUntilCondition,
-            "<condition_token>"
+            "<condition_token>",
+            contextCondition: (token, walker) => tree.GetStartNode(token.Value) == null || GetWaitUntilDepth(walker) > 0
         ));
 
         // Parenthesized condition nesting depth support
-        int GetWaitForDepth() => TokenWalker.CurrentThreadWalker != null && TokenWalker.CurrentThreadWalker.StateBag.TryGetValue("WaitForParenDepth", out var d) ? (int)d : 0;
+        static int GetWaitForDepth(TokenWalker walker) => walker.StateBag.TryGetValue("WaitForParenDepth", out var d) ? (int)d : 0;
 
         waitforCondition.AddTransition(new StateTransition(
             t => t.Type == TokenType.LPAREN,
@@ -1033,28 +1022,30 @@ public static class DefaultGrammar
             "(",
             null, null,
             (token, walker) => {
-                int d = GetWaitForDepth();
+                int d = GetWaitForDepth(walker);
                 walker.StateBag["WaitForParenDepth"] = d + 1;
             }
         ));
 
         waitforCondition.AddTransition(new StateTransition(
-            t => t.Type == TokenType.RPAREN && GetWaitForDepth() > 1,
+            t => t.Type == TokenType.RPAREN,
             waitforCondition,
             ")",
             null, null,
             (token, walker) => {
-                int d = GetWaitForDepth();
+                int d = GetWaitForDepth(walker);
                 walker.StateBag["WaitForParenDepth"] = Math.Max(1, d - 1);
-            }
+            },
+            contextCondition: (_, walker) => GetWaitForDepth(walker) > 1
         ));
 
         waitforCondition.AddTransition(new StateTransition(
-            t => t.Type == TokenType.RPAREN && GetWaitForDepth() <= 1,
+            t => t.Type == TokenType.RPAREN,
             tree.Root,
             ")",
             null, null,
-            (token, walker) => walker.StateBag.Remove("WaitForParenDepth")
+            (token, walker) => walker.StateBag.Remove("WaitForParenDepth"),
+            contextCondition: (_, walker) => GetWaitForDepth(walker) <= 1
         ));
 
         waitforCondition.AddTransition(new StateTransition(
@@ -1549,7 +1540,7 @@ public static class DefaultGrammar
         AddBeginTransitions(execAtConn);
 
         // Pushdown content transitions
-        int GetDepth() => TokenWalker.CurrentThreadWalker != null && TokenWalker.CurrentThreadWalker.StateBag.TryGetValue("ExecBlockDepth", out var d) ? (int)d : 0;
+        static int GetDepth(TokenWalker walker) => walker.StateBag.TryGetValue("ExecBlockDepth", out var d) ? (int)d : 0;
 
         execPushdownContent.AddTransition(new StateTransition(
             t => t.Value.Equals("BEGIN", StringComparison.OrdinalIgnoreCase),
@@ -1557,28 +1548,30 @@ public static class DefaultGrammar
             "BEGIN",
             null, null,
             (token, walker) => {
-                int d = GetDepth();
+                int d = GetDepth(walker);
                 walker.StateBag["ExecBlockDepth"] = d + 1;
             }
         ));
 
         execPushdownContent.AddTransition(new StateTransition(
-            t => t.Value.Equals("END", StringComparison.OrdinalIgnoreCase) && GetDepth() > 1,
+            t => t.Value.Equals("END", StringComparison.OrdinalIgnoreCase),
             execPushdownContent,
             "END",
             null, null,
             (token, walker) => {
-                int d = GetDepth();
+                int d = GetDepth(walker);
                 walker.StateBag["ExecBlockDepth"] = Math.Max(1, d - 1);
-            }
+            },
+            contextCondition: (_, walker) => GetDepth(walker) > 1
         ));
 
         execPushdownContent.AddTransition(new StateTransition(
-            t => t.Value.Equals("END", StringComparison.OrdinalIgnoreCase) && GetDepth() <= 1,
+            t => t.Value.Equals("END", StringComparison.OrdinalIgnoreCase),
             tree.Root,
             "END",
             null, null,
-            (token, walker) => walker.StateBag.Remove("ExecBlockDepth")
+            (token, walker) => walker.StateBag.Remove("ExecBlockDepth"),
+            contextCondition: (_, walker) => GetDepth(walker) <= 1
         ));
 
         execPushdownContent.AddTransition(new StateTransition(

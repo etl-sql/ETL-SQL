@@ -13,6 +13,7 @@ public class StateTransition
     public SuggestionType? SuggestType { get; }
     public Func<SuggestionContext, IEnumerable<string>>? CustomSuggestionsProvider { get; }
     public Action<Token, TokenWalker>? OnTransition { get; }
+    public Func<Token, TokenWalker, bool>? ContextCondition { get; }
 
     public StateTransition(
         Func<Token, bool> condition,
@@ -20,7 +21,8 @@ public class StateTransition
         string? label = null,
         SuggestionType? suggestType = null,
         Func<SuggestionContext, IEnumerable<string>>? customSuggestionsProvider = null,
-        Action<Token, TokenWalker>? onTransition = null)
+        Action<Token, TokenWalker>? onTransition = null,
+        Func<Token, TokenWalker, bool>? contextCondition = null)
     {
         Condition = condition;
         Target = target;
@@ -28,5 +30,9 @@ public class StateTransition
         SuggestType = suggestType;
         CustomSuggestionsProvider = customSuggestionsProvider;
         OnTransition = onTransition;
+        ContextCondition = contextCondition;
     }
+
+    public bool Matches(Token token, TokenWalker walker) =>
+        Condition(token) && (ContextCondition?.Invoke(token, walker) ?? true);
 }

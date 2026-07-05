@@ -8,14 +8,16 @@ namespace ETL_SQL.Analysis.Linting.Grammar;
 
 public class TokenWalker
 {
-    [ThreadStatic]
-    private static TokenWalker? _currentThreadWalker;
-
-    public static TokenWalker? CurrentThreadWalker => _currentThreadWalker;
-
     private readonly GrammarStateTree _tree;
+    private Dictionary<StateNode, Dictionary<string, object>> _stateBags = new();
+    private Dictionary<string, object> _currentStateBag = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<StateNode> ActiveStates { get; private set; } = new();
-    public Dictionary<string, object> StateBag { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, object> StateBag => _currentStateBag;
+
+    public IReadOnlyDictionary<string, object> GetStateBag(StateNode state) =>
+        _stateBags.TryGetValue(state, out var bag)
+            ? bag
+            : new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 
     public TokenWalker(GrammarStateTree tree)
     {
@@ -27,7 +29,11 @@ public class TokenWalker
     {
         ActiveStates.Clear();
         ActiveStates.Add(_tree.Root);
-        StateBag.Clear();
+        _currentStateBag = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        _stateBags = new Dictionary<StateNode, Dictionary<string, object>>
+        {
+            [_tree.Root] = _currentStateBag
+        };
     }
 
     /// <summary>
@@ -36,9 +42,6 @@ public class TokenWalker
     /// </summary>
     public bool Consume(Token token)
     {
-        _currentThreadWalker = this;
-        try
-        {
             if (token.Type == TokenType.EOF) return true;
             if (token.Type == TokenType.SEMICOLON)
             {
@@ -47,16 +50,25 @@ public class TokenWalker
             }
 
         var nextStates = new HashSet<StateNode>();
+        var nextStateBags = new Dictionary<StateNode, Dictionary<string, object>>();
 
         foreach (var state in ActiveStates)
         {
+            var sourceBag = _stateBags.TryGetValue(state, out var existingBag)
+                ? existingBag
+                : new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
             // Check transitions from this state
             foreach (var transition in state.Transitions)
             {
-                if (transition.Condition(token))
+                _currentStateBag = sourceBag;
+                if (transition.Matches(token, this))
                 {
                     nextStates.Add(transition.Target);
+                    var branchBag = new Dictionary<string, object>(sourceBag, StringComparer.OrdinalIgnoreCase);
+                    _currentStateBag = branchBag;
                     transition.OnTransition?.Invoke(token, this);
+                    nextStateBags.TryAdd(transition.Target, branchBag);
                 }
             }
 
@@ -68,7 +80,11 @@ public class TokenWalker
                 {
                     nextStates.Add(startNode);
                     // For start node keywords, we can also store the starting keyword in StateBag
-                    StateBag["StartKeyword"] = token.Value;
+                    var startBag = new Dictionary<string, object>(sourceBag, StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["StartKeyword"] = token.Value
+                    };
+                    nextStateBags.TryAdd(startNode, startBag);
                 }
             }
         }
@@ -79,12 +95,10 @@ public class TokenWalker
         }
 
         ActiveStates = nextStates;
+        _stateBags = nextStateBags;
+        _currentStateBag = _stateBags.Values.FirstOrDefault()
+            ?? new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         return true;
-        }
-        finally
-        {
-            _currentThreadWalker = null;
-        }
     }
 
     /// <summary>
