@@ -38,6 +38,8 @@ public sealed class GovernanceEnforcementAuditTests
             ["Security:MaxParallelDegree"] = (Boundary.EnterpriseSnapshot, "SetThresholdStatementHandler → OperationPolicyBoundary.EnforceCeiling"),
             ["Security:MaxSmtpEmailsPerScript"] = (Boundary.EnterpriseSnapshot, "Evaluator.RecordSmtpEmailSend → OperationPolicyBoundary.EnforceCeiling"),
             ["Connectors:AllowedTypes"] = (Boundary.EnterpriseSnapshot, "ConnectorPolicyAuthorizer.EnforceAllowedTypes"),
+            ["Security:RequireWhatIfForDestructiveStatements"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
+            ["Security:RequireTransactionForMutations"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
 
             // ── Enforced via config precedence by a named local/Portal boundary ──
             ["Security:PathProtectionMode"] = (Boundary.ConfigPrecedence, "SecurityService.ValidatePath (ProtectionMode)"),
@@ -54,8 +56,6 @@ public sealed class GovernanceEnforcementAuditTests
             // ── Declared and flattened into policy values, but no enforcement consumer yet ──
             ["Security:AllowedExecutionModes"] = (Boundary.DeclaredGap, "flattened to Security:AllowedExecutionModes; no runtime execution-mode gate yet"),
             ["Security:RemoteExecutionMode"] = (Boundary.DeclaredGap, "flattened to Security:RemoteExecutionMode; no remote-execution gate yet"),
-            ["Security:RequireWhatIfForDestructiveStatements"] = (Boundary.DeclaredGap, "flattened; no destructive-statement what-if gate yet"),
-            ["Security:RequireTransactionForMutations"] = (Boundary.DeclaredGap, "flattened; no mutation-transaction gate yet"),
         };
 
     // The governed keys deliberately not yet enforced. Closing one of these (wiring an enforcement
@@ -64,8 +64,6 @@ public sealed class GovernanceEnforcementAuditTests
     {
         "Security:AllowedExecutionModes",
         "Security:RemoteExecutionMode",
-        "Security:RequireWhatIfForDestructiveStatements",
-        "Security:RequireTransactionForMutations",
     };
 
     [Fact]

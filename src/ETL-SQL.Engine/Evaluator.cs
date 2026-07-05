@@ -1176,6 +1176,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             return;
         }
 
+        // Enterprise mutation guardrails (require-what-if / require-transaction) — no-op unless
+        // enrolled and the statement mutates a persistent (non-#temp) target.
+        Governance.MutationGuardrailPolicy.Enforce(this, statement);
+
         if (_statementHandlers.TryGetValue(statement.GetType(), out var handler))
         {
             try
