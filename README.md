@@ -356,11 +356,11 @@ We make no claim that it is perfect — if you hit a bug, please [open an issue]
 
 ## Release Build
 
-Maintainers can run the release script to validate, package, and publish the 0.13.0 artifacts:
+Maintainers can run the release script to validate, package, and publish the 0.14.0 artifacts:
 
 ```powershell
 .\scripts\Test-PreRelease.ps1
-.\scripts\Master-Release.ps1 -Version "0.13.0"
+.\scripts\Master-Release.ps1 -Version "0.14.0"
 ```
 
 ---
