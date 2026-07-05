@@ -11,6 +11,11 @@ namespace ETL_SQL.Analysis.Services;
 
 public class GrammarLanguageService : LanguageService
 {
+    private static readonly HashSet<string> TableLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "<table_source>", "<join_table>", "<temp_table>", "<target_table>", "<source_table>", "<table_name>"
+    };
+
     private readonly GrammarStateTree _grammarTree;
 
     public GrammarLanguageService(IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null, Core.Functions.IFunctionRegistry? functionRegistry = null)
@@ -80,7 +85,7 @@ public class GrammarLanguageService : LanguageService
             foreach (var transition in state.Transitions)
             {
                 var label = transition.Label ?? "";
-                if (IsTableLabel(label))
+                if (TableLabels.Contains(label))
                 {
                     exp.ExpectsTable = true;
                 }
@@ -110,32 +115,28 @@ public class GrammarLanguageService : LanguageService
         return exp;
     }
 
-    private bool IsTableLabel(string label)
-    {
-        return label.Equals("<table_source>", StringComparison.OrdinalIgnoreCase) ||
-               label.Equals("<join_table>", StringComparison.OrdinalIgnoreCase) ||
-               label.Equals("<temp_table>", StringComparison.OrdinalIgnoreCase) ||
-               label.Equals("<target_table>", StringComparison.OrdinalIgnoreCase) ||
-               label.Equals("<source_table>", StringComparison.OrdinalIgnoreCase) ||
-               label.Equals("<table_name>", StringComparison.OrdinalIgnoreCase);
-    }
-
     private async Task InjectSemanticSuggestionsAsync(List<Suggestion> results, SemanticExpectations exp, SuggestionContext context)
     {
-        if (exp.ExpectsConnection)
+        List<ConnectionInfo>? conns = null;
+
+        if (exp.ExpectsConnection || exp.ExpectsTable)
         {
-            var conns = _metadata.GetConnections(context.DocumentUri);
+            conns = _metadata.GetConnections(context.DocumentUri);
+        }
+
+        if (exp.ExpectsConnection && conns != null)
+        {
             results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 10)));
         }
 
-        if (exp.ExpectsTable)
+        if (exp.ExpectsTable && conns != null)
         {
-            await InjectTableSuggestionsAsync(results, context);
+            await InjectTableSuggestionsAsync(results, conns, context);
         }
 
         if (exp.ExpectsVariable)
         {
-            InjectVariableSuggestions(results, context);
+            results.AddRange(GetVariableSuggestions(context));
         }
 
         if (exp.ExpectsColumn)
@@ -144,9 +145,8 @@ public class GrammarLanguageService : LanguageService
         }
     }
 
-    private async Task InjectTableSuggestionsAsync(List<Suggestion> results, SuggestionContext context)
+    private async Task InjectTableSuggestionsAsync(List<Suggestion> results, List<ConnectionInfo> conns, SuggestionContext context)
     {
-        var conns = _metadata.GetConnections(context.DocumentUri);
         results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 10)));
 
         var tempTables = Regex.Matches(context.FullScript, @"(#\w+)")
@@ -176,15 +176,6 @@ public class GrammarLanguageService : LanguageService
             }
             catch { }
         }
-    }
-
-    private void InjectVariableSuggestions(List<Suggestion> results, SuggestionContext context)
-    {
-        var variables = Regex.Matches(context.ScriptBefore, @"(@\w+)")
-            .Cast<Match>()
-            .Select(m => m.Value)
-            .Distinct();
-        results.AddRange(variables.Select(v => new Suggestion(v, SuggestionType.Variable, Priority: 5)));
     }
 
     private async Task InjectColumnSuggestionsAsync(List<Suggestion> results, SuggestionContext context)

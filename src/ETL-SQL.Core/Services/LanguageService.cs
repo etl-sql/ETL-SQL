@@ -157,7 +157,7 @@ public class LanguageService : ILanguageService
         return results;
     }
 
-    private List<Suggestion> GetVariableSuggestions(SuggestionContext context)
+    protected List<Suggestion> GetVariableSuggestions(SuggestionContext context)
     {
         try { return Regex.Matches(context.ScriptBefore, @"(@\w+)").Cast<Match>().Select(m => new Suggestion(m.Value, SuggestionType.Variable)).Distinct().ToList(); }
         catch { return new List<Suggestion>(); }
