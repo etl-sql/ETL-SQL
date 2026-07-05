@@ -68,6 +68,7 @@ namespace ETL_SQL.Connectors.Excel
 
         private async IAsyncEnumerable<ETL_SQL.Data.DataTable> ReadBatchesCore(int batchSize)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             var baseStream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xlsx");

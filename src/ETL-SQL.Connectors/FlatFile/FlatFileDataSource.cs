@@ -396,6 +396,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath))
                 yield break;
 

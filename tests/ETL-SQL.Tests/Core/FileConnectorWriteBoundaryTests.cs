@@ -55,6 +55,23 @@ public sealed class FileConnectorWriteBoundaryTests : IDisposable
             "The write must be denied before the file is produced.");
     }
 
+    [Fact]
+    public async Task Read_FromConnectionOutsideRootsAfterEnrolling_IsDeniedAtReadBoundary()
+    {
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        var target = Path.Combine(_outside, "in.csv").Replace("\\", "\\\\");
+
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        await Run(evaluator, $"CREATE CONNECTION csv_in AS FLATFILE('{target}', HEADER = 'ON');");
+
+        // Enroll with approved roots excluding the connection's path: the read boundary denies even
+        // though the base path was authorized (here, unrestricted) at CREATE CONNECTION.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledWithRoot(_root));
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() =>
+            Run(evaluator, "SELECT * FROM csv_in;"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task Run(Evaluator evaluator, string sql)
     {
         var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();

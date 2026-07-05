@@ -56,6 +56,7 @@ namespace ETL_SQL.Connectors.Parquet
 
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             string effectivePath = _filePath;

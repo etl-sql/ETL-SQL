@@ -71,6 +71,7 @@ namespace ETL_SQL.Connectors.Xml
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             Func<Stream> opener = () => FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xml");

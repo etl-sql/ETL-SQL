@@ -22,6 +22,20 @@ namespace ETL_SQL.Core.Common
                     validateFileType: false);
         }
 
+        /// <summary>
+        /// Authorizes a file-connector read at its I/O boundary against the enterprise
+        /// <c>FileSystemPolicyAuthorizer</c> (approved roots / policy freshness). Defense-in-depth for
+        /// per-use path resolution: the base connection path is authorized at CREATE CONNECTION.
+        /// No-op when there is no execution context.
+        /// </summary>
+        public static void AuthorizeRead(ETL_SQL.Core.IExecutionContext? context, string filePath)
+        {
+            if (context == null || string.IsNullOrEmpty(filePath)) return;
+            new ETL_SQL.Core.Governance.FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, filePath, ETL_SQL.Core.Governance.FileSystemAccessKind.Read,
+                    validateFileType: false);
+        }
+
         public static string CoerceFilePathExtension(string path, bool encrypt, bool compress)
         {
             if (string.IsNullOrEmpty(path)) return path;
