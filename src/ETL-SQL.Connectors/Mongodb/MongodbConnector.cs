@@ -25,7 +25,7 @@ namespace ETL_SQL.Connectors.Mongodb
             var host = GetHost(connectionString);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             try
@@ -104,7 +104,7 @@ namespace ETL_SQL.Connectors.Mongodb
             var host = GetHost(connectionString, options);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             return new MongodbDataSource(context, connectionString, db ?? "test", collection, options);

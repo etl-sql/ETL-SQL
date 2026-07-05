@@ -306,7 +306,32 @@ or running unrelated software. Environments requiring mandatory enforcement must
 launch through Windows Defender Application Control/AppLocker, managed software deployment, container
 admission policy, or equivalent operating-system controls.
 
+Filesystem approved-root enforcement canonicalizes paths and resolves symbolic links and junctions,
+but a path cannot reliably identify every hard-link alias to the same underlying file. Treat hard-link
+creation as an operating-system privilege boundary: deny it to ETL-SQL service accounts and protect
+approved roots with ACLs or equivalent mount permissions. ETL-SQL does not claim hard-link containment
+against a local administrator.
+
 #### Authoritative organization policy
+
+The Portal policy authority signs published envelopes with an RSA certificate whose private key remains
+in the operating-system certificate store. Configure only its thumbprint; never export the private key
+into Portal JSON, environment variables, backups, configuration exports, logs, or support bundles:
+
+```json
+{
+  "Portal": {
+    "PolicyAuthority": {
+      "SigningCertThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"
+    }
+  }
+}
+```
+
+Install the certificate in `LocalMachine/My` where possible; `CurrentUser/My` is the fallback. Grant the
+Portal service identity permission to use its private key. An unset thumbprint disables publication with
+a deterministic configuration error. Install and grant a replacement certificate before changing the
+thumbprint, and retain the former public key until enrolled clients trust the replacement.
 
 On every normal process startup, an enrolled installation requests a signed policy envelope from the configured
 HTTPS endpoint. The request carries `X-ETL-SQL-Tenant`, `X-ETL-SQL-Enrollment`, and `X-ETL-SQL-Machine` headers
@@ -348,18 +373,27 @@ Long-running Portal, Report Player, and Orchestrator hosts refresh policy every 
 policy reloads the enterprise configuration overlay. If live retrieval and verified cache recovery both fail
 under fail-closed enrollment, the host logs a critical error and stops rather than continuing beyond policy
 freshness. Supervise these processes with Windows Services, systemd, Kubernetes, or an equivalent service manager
-so an unhealthy policy dependency is visible and restart behavior follows organizational policy. Governance policy documents inside `policyPayload` use schema version `1.0`. Currently supported policies govern plaintext secrets permission and audit outbox transport rules:
+so an unhealthy policy dependency is visible and restart behavior follows organizational policy.
+Governance policy documents inside `policyPayload` use schema version `1.0`. Execution limits include
+parallelism, file/recursion operations, spill volume, SMTP sends, and maximum materialized string bytes:
 
 ```json
 {
   "schemaVersion": "1.0",
+  "execution": {
+    "maxStringResultSize": 104857600
+  },
   "mutationGuardrails": {
     "requireRemoteAuditForMutations": true
   }
 }
 ```
 
-Verified policy values are added after JSON, environment variables, command-line configuration, and test/deployment overrides, giving the authoritative enterprise policy final configuration precedence. Lower-authority sources can no longer replace those effective values. Additional operation-boundary enforcement policies (such as filesystem roots, allowed connector types, and execution resource ceilings) are planned for a future release; administrators should not treat configuration precedence alone as complete containment.
+Verified policy values are added after JSON, environment variables, command-line configuration, and
+test/deployment overrides, giving the authoritative enterprise policy final configuration precedence.
+Operation-boundary checks additionally prevent scripts from weakening governed ceilings. Portal report
+execution timeouts and paged result limits remain host availability controls rather than organization-policy
+keys: scripts cannot raise them, and each host enforces its configured timeout or page limit independently.
 
 Run `etl-sql enterprise status` to retrieve and verify policy and report `Live`, `Cached`, or `Unavailable`, the
 policy version, source, issuance, expiry, governed key names, and any live-retrieval warning. Trust keys,

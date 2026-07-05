@@ -55,6 +55,16 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task SetMaxStringResultSize_WeakerThanEnterpriseCeiling_IsDenied()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxStringResultSize: 1024));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() =>
+            ExecuteAsync("SET MAX_STRING_RESULT_SIZE = 2048;"));
+        Assert.Contains("MaxStringResultSize", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RecordSmtpEmailSend_BeyondEnterpriseCeiling_IsDenied()
     {
         EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxSmtpEmails: 1));
@@ -123,13 +133,15 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
     private static EffectiveEnterprisePolicy EnrolledPolicy(
         int? maxParallelDegree = null,
         int? maxSmtpEmails = null,
+        long? maxStringResultSize = null,
         string[]? allowedDockerImages = null,
         ScriptExecutionMode[]? allowedExecutionModes = null)
     {
         var execution = new ExecutionPolicySection
         {
             MaxParallelDegree = maxParallelDegree,
-            MaxSmtpEmailsPerScript = maxSmtpEmails
+            MaxSmtpEmailsPerScript = maxSmtpEmails,
+            MaxStringResultSize = maxStringResultSize
         };
         if (allowedExecutionModes is not null)
             execution = execution with { AllowedModes = allowedExecutionModes };

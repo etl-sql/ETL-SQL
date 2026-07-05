@@ -313,6 +313,17 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTranspor
 });
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
+// Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
+// (no exportable private key persisted); when unset the authority reports "not configured".
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =>
+{
+    var thumbprint = builder.Configuration["Portal:PolicyAuthority:SigningCertThumbprint"];
+    return string.IsNullOrWhiteSpace(thumbprint)
+        ? new ETL_SQL.Core.Governance.DisabledPolicyEnvelopeSigner()
+        : new ETL_SQL.Core.Governance.CertificatePolicyEnvelopeSigner(thumbprint);
+});
+builder.Services.AddScoped<ETL_SQL.Core.Governance.IPolicyAuthorityStore, ETL_SQL.ReportPortal.Data.DbPolicyAuthorityStore>();
+builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 // Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time
 // reauthorization; persisted job scripts are credential-free triggers.

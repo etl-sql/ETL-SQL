@@ -8,6 +8,9 @@
     },
     "FirstRun": {
       "AdminUsername": "admin"
+    },
+    "PolicyAuthority": {
+      "SigningCertThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"
     }
   },
   "ConnectionStrings": {

@@ -82,7 +82,7 @@ namespace ETL_SQL.Connectors.MySql
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
             var dbBuilder = new MySqlConnectionStringBuilder(connectionString);
             var schema = dbBuilder.Database;

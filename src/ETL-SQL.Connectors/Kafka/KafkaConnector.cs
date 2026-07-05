@@ -24,7 +24,7 @@ namespace ETL_SQL.Connectors.Kafka
             var host = GetHost(connectionString);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             try
@@ -107,7 +107,7 @@ namespace ETL_SQL.Connectors.Kafka
                     var host = parts[0].Trim();
                     if (!string.IsNullOrEmpty(host))
                     {
-                        context.SecurityService.ValidateHost(host);
+                        ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
                     }
                 }
             }

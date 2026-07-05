@@ -49,7 +49,7 @@ namespace ETL_SQL.Connectors.Snowflake
                 var validationHost = SnowflakeConnector.IsLocalOrExplicitEndpoint(host) || HasEmulatorEndpointOptions(connectionString, options)
                     ? host
                     : host.Contains('.') ? host : host + ".snowflakecomputing.com";
-                context.SecurityService.ValidateHost(validationHost);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, validationHost);
             }
 
             // Zero-Trust Path Resolution for PRIVATE_KEY_FILE

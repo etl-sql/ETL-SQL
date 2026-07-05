@@ -109,7 +109,7 @@ namespace ETL_SQL.Connectors
             // Security Hardening: egress control
             if (context != null)
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
                 // Validate key file path if provided
                 if (_keyFilePath != null)
@@ -139,7 +139,7 @@ namespace ETL_SQL.Connectors
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             return await Task.FromResult("SFTP Server");
         }
         public HashSet<string> GetSupportedFunctions() => new();
@@ -297,6 +297,8 @@ namespace ETL_SQL.Connectors
         private async Task RunClientOperationAsync(Action<SftpClient> operation)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_context != null)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _host);
             await _clientLock.WaitAsync();
             try
             {
@@ -312,6 +314,8 @@ namespace ETL_SQL.Connectors
         private async Task<T> RunClientOperationAsync<T>(Func<SftpClient, T> operation)
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            if (_context != null)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _host);
             await _clientLock.WaitAsync();
             try
             {

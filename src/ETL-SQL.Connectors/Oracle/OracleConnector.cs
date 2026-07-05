@@ -20,7 +20,7 @@ namespace ETL_SQL.Connectors.Oracle
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
             using var conn = new OracleConnection(connectionString);
             await conn.OpenAsync();
@@ -77,7 +77,7 @@ namespace ETL_SQL.Connectors.Oracle
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
             var procs = new List<string>();
             using var conn = new OracleConnection(connectionString);

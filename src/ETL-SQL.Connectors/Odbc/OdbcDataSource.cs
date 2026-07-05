@@ -36,7 +36,7 @@ namespace ETL_SQL.Connectors.Odbc
 
             // Security Hardening: egress control
             var host = OdbcConnector.GetHostStatic(connectionString, options);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
         public string ConnectionString => _connectionString;

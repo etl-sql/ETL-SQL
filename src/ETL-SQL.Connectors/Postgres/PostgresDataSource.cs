@@ -42,7 +42,7 @@ namespace ETL_SQL.Connectors.Postgres
 
             // Security Hardening: egress control
             var host = PostgresConnector.GetHostStatic(connectionString, options);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
         public string ConnectionString => _connectionString;

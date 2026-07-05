@@ -109,5 +109,8 @@ public sealed class ConfigurationExportSecretExclusionTests
         // The user is emitted with a password placeholder, never the hash.
         Assert.Contains($"CREATE USER 'secret_user_{suffix}'", script);
         Assert.Contains($"PORTAL_USER_SECRET_USER_{suffix.ToUpperInvariant()}_PASSWORD", script);
+        Assert.DoesNotContain("SigningCertThumbprint", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("policy-signing certificate thumbprints and private keys", script,
+            StringComparison.OrdinalIgnoreCase);
     }
 }

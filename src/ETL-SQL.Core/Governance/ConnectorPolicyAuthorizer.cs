@@ -71,9 +71,18 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     public static void EnforceEnterpriseHost(IExecutionContext context, string? host)
     {
         if (string.IsNullOrWhiteSpace(host)) return;
-        var snapshot = context.ExecutionPolicy;
-        if (snapshot is null || !snapshot.IsEnrolled) return;
-        EnforceEnterpriseHosts(snapshot, host);
+        var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
+        try
+        {
+            context.SecurityService.ValidateHost(host);
+            EnforceEnterpriseHosts(snapshot, host);
+        }
+        catch (SecurityException ex) when (ex is not ConnectorPolicyDeniedException)
+        {
+            var denied = OperationPolicyDecision.Deny(snapshot, "Connectors:Destination",
+                host, EffectiveConstraint(snapshot), ex.Message);
+            throw new ConnectorPolicyDeniedException(denied, ex);
+        }
     }
 
     private static void EnforceEnterpriseHosts(ExecutionPolicySnapshot snapshot, string host)

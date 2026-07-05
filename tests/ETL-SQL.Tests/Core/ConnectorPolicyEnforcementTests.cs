@@ -111,11 +111,14 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         // The static entry point used by REST redirect/pagination/template requests applies the
         // same wildcard-safe internal-range denial as connection creation.
         var policy = EnrolledPolicy(allowedHosts: ["*"]);
+        EnterprisePolicyRuntime.SetCurrent(policy);
         var context = new Moq.Mock<IExecutionContext>();
         context.SetupGet(c => c.ExecutionPolicy).Returns(ExecutionPolicySnapshot.Capture(
             policy, "operator", ScriptExecutionMode.Batch, "hash"));
+        context.SetupGet(c => c.SecurityService).Returns(
+            new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance));
 
-        Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
             ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context.Object, "2130706433"));
 
         // A public host under "*" is permitted.

@@ -24,7 +24,7 @@ namespace ETL_SQL.Connectors.Neo4j
             var host = GetHost(connectionString);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             try
@@ -124,7 +124,7 @@ namespace ETL_SQL.Connectors.Neo4j
             var host = GetHost(connectionString, options);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             return new Neo4jDataSource(context, connectionString, null, options);

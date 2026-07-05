@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Tests.Core;
@@ -30,6 +31,63 @@ public sealed class PolicyAuthorityServiceTests
         PolicyEndpoint = "https://policy.example.test/etl-sql",
         PolicySigningPublicKey = signingPublicKeyPem
     };
+
+    [Fact]
+    public async Task CertificateSigner_ProducesClientVerifiableEnvelope_WithoutExportingPrivateKey()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=ETL-SQL Policy Test", rsa,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+        using var signer = new CertificatePolicyEnvelopeSigner(certificate);
+        var service = new PolicyAuthorityService(new InMemoryPolicyAuthorityStore(), signer);
+
+        await service.PublishAsync(SampleDoc(), "acme", "prod", "cert-1", "alice", "bob",
+            DateTimeOffset.UtcNow.AddHours(1));
+        var envelope = await service.RetrieveActiveEnvelopeAsync("acme", "prod");
+
+        Assert.NotNull(envelope);
+        Assert.NotNull(EnterprisePolicySignature.VerifyAndParse(
+            envelope!, Enrollment("acme", signer.PublicKeyPem), DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void DisabledSigner_FailsWithoutLeakingConfigurationMaterial()
+    {
+        var signer = new DisabledPolicyEnvelopeSigner();
+        var error = Assert.Throws<PolicyAuthorityException>(() => _ = signer.PublicKeyPem);
+        Assert.Equal(DisabledPolicyEnvelopeSigner.Reason, error.Message);
+        Assert.DoesNotContain("private", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CertificateSigner_LoadsPrivateKeyByCurrentUserStoreThumbprint()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new CertificateRequest("CN=ETL-SQL Policy Store Test", rsa,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        using var generated = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+        using var certificate = X509CertificateLoader.LoadPkcs12(
+            generated.Export(X509ContentType.Pkcs12), password: null,
+            X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable);
+        using var store = new X509Store(StoreName.My, StoreLocation.CurrentUser);
+        store.Open(OpenFlags.ReadWrite);
+        store.Add(certificate);
+        try
+        {
+            using var signer = new CertificatePolicyEnvelopeSigner(certificate.Thumbprint);
+            var service = new PolicyAuthorityService(new InMemoryPolicyAuthorityStore(), signer);
+            await service.PublishAsync(SampleDoc(), "acme", "prod", "store-1", "alice", null,
+                DateTimeOffset.UtcNow.AddMinutes(30));
+            Assert.NotNull(await service.RetrieveActiveEnvelopeAsync("acme", "prod"));
+        }
+        finally
+        {
+            store.Remove(certificate);
+        }
+    }
 
     [Fact]
     public async Task Published_Envelope_VerifiesAndParsesThroughTheClient()

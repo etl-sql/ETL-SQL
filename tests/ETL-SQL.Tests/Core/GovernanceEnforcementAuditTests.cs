@@ -45,7 +45,7 @@ public sealed class GovernanceEnforcementAuditTests
             // ── Enforced via config precedence by a named local/Portal boundary ──
             ["Security:PathProtectionMode"] = (Boundary.ConfigPrecedence, "SecurityService.ValidatePath (ProtectionMode)"),
             ["Security:AllowedEnvVars"] = (Boundary.ConfigPrecedence, "SecurityService.ValidateEnvVar"),
-            ["Security:MaxStringResultSize"] = (Boundary.ConfigPrecedence, "SecurityService.ValidateStringSize (registry-only; not yet deliverable via policy document)"),
+            ["Security:MaxStringResultSize"] = (Boundary.EnterpriseSnapshot, "SetThresholdStatementHandler + SecurityService.ValidateStringSize"),
             ["Secrets:Provider"] = (Boundary.ConfigPrecedence, "SecretProviderFactory → ConnectionSecretResolver"),
             ["Audit:RemoteDeliveryRequired"] = (Boundary.ConfigPrecedence, "AuditFailClosedInterceptor / AuditDeliveryGate"),
             ["Audit:OutboxMaxBytes"] = (Boundary.ConfigPrecedence, "AuditDeliveryGate / AuditOutboxTransportService"),

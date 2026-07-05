@@ -42,7 +42,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
             // Security Hardening: egress control
             var host = SqlServerConnector.GetHostStatic(connectionString, options);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
         public string ConnectionString => _connectionString;

@@ -29,6 +29,7 @@ public sealed class ConfigurationExportService(PortalDbContext db)
         "password hashes / encrypted credentials (placeholders emitted instead)",
         "refresh tokens, sessions, share links, embed tokens (security capabilities are never configuration)",
         "job execution history, audit rows, report snapshots, cached dataset parquet files",
+        "policy-signing certificate thumbprints and private keys (host configuration / OS key store only)",
         "favorites and saved views (personal state)"
     ];
 

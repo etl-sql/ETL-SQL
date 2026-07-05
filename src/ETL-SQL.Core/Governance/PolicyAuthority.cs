@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
@@ -53,6 +54,66 @@ public sealed class RsaPolicyEnvelopeSigner : IPolicyEnvelopeSigner, IDisposable
     public string Sign(SignedOrganizationPolicyEnvelope envelope) =>
         EnterprisePolicySignature.Sign(envelope, _key);
     public void Dispose() => _key.Dispose();
+}
+
+/// <summary>
+/// Signs with the private key of a certificate referenced by thumbprint in the OS certificate store
+/// (LocalMachine then CurrentUser). The private key never leaves the store — the authority holds only
+/// this reference, satisfying "external certificate/key-store reference; no exportable private key".
+/// </summary>
+public sealed class CertificatePolicyEnvelopeSigner : IPolicyEnvelopeSigner, IDisposable
+{
+    private readonly System.Security.Cryptography.X509Certificates.X509Certificate2 _cert;
+    private readonly RSA _privateKey;
+
+    public CertificatePolicyEnvelopeSigner(string thumbprint) : this(FindCertificate(thumbprint)) { }
+
+    internal CertificatePolicyEnvelopeSigner(
+        System.Security.Cryptography.X509Certificates.X509Certificate2 certificate)
+    {
+        _cert = certificate;
+        _privateKey = _cert.GetRSAPrivateKey()
+            ?? throw new PolicyAuthorityException("Policy signing certificate has no accessible RSA private key.");
+    }
+
+    public string PublicKeyPem => _privateKey.ExportSubjectPublicKeyInfoPem();
+    public string Sign(SignedOrganizationPolicyEnvelope envelope) =>
+        EnterprisePolicySignature.Sign(envelope, _privateKey);
+
+    private static System.Security.Cryptography.X509Certificates.X509Certificate2 FindCertificate(string thumbprint)
+    {
+        var normalized = thumbprint.Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant();
+        foreach (var location in new[]
+        {
+            System.Security.Cryptography.X509Certificates.StoreLocation.LocalMachine,
+            System.Security.Cryptography.X509Certificates.StoreLocation.CurrentUser
+        })
+        {
+            using var store = new System.Security.Cryptography.X509Certificates.X509Store(
+                System.Security.Cryptography.X509Certificates.StoreName.My, location);
+            store.Open(System.Security.Cryptography.X509Certificates.OpenFlags.ReadOnly);
+            foreach (var cert in store.Certificates)
+            {
+                if (cert.HasPrivateKey && string.Equals(cert.Thumbprint, normalized, StringComparison.OrdinalIgnoreCase))
+                    return cert;
+                cert.Dispose();
+            }
+        }
+        throw new PolicyAuthorityException(
+            $"Policy signing certificate '{normalized}' was not found with an accessible private key.");
+    }
+
+    public void Dispose() { _privateKey.Dispose(); _cert.Dispose(); }
+}
+
+/// <summary>Placeholder signer used when the authority is not configured — every operation fails with
+/// a clear message so the admin API returns a deterministic "not configured" result.</summary>
+public sealed class DisabledPolicyEnvelopeSigner : IPolicyEnvelopeSigner
+{
+    public const string Reason =
+        "Policy authority signing is not configured (set Portal:PolicyAuthority:SigningCertThumbprint).";
+    public string PublicKeyPem => throw new PolicyAuthorityException(Reason);
+    public string Sign(SignedOrganizationPolicyEnvelope envelope) => throw new PolicyAuthorityException(Reason);
 }
 
 /// <summary>Persistence for published policy versions. Implementations must preserve every published

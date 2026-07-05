@@ -106,7 +106,7 @@ namespace ETL_SQL.Connectors
             // Security Hardening: Validate host against egress rules
             if (!string.IsNullOrEmpty(_host))
             {
-                context.SecurityService.ValidateHost(_host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, _host);
             }
         }
 
@@ -114,7 +114,7 @@ namespace ETL_SQL.Connectors
         {
             if (!string.IsNullOrEmpty(_host))
             {
-                context.SecurityService.ValidateHost(_host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, _host);
             }
 
             try

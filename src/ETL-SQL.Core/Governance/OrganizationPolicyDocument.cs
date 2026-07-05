@@ -51,6 +51,8 @@ public sealed record OrganizationPolicyDocument
             values["Security:MaxSpillBytesPerScript"] = Execution.MaxSpillBytesPerScript.Value;
         if (Execution.MaxSmtpEmailsPerScript.HasValue)
             values["Security:MaxSmtpEmailsPerScript"] = Execution.MaxSmtpEmailsPerScript.Value;
+        if (Execution.MaxStringResultSize.HasValue)
+            values["Security:MaxStringResultSize"] = Execution.MaxStringResultSize.Value;
         if (Process.AllowedDockerImages.Count > 0)
             values["Security:AllowedDockerImages"] = Process.AllowedDockerImages;
         values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
@@ -107,6 +109,12 @@ public sealed record ExecutionPolicySection
     /// does not bound outbound email.
     /// </summary>
     public int? MaxSmtpEmailsPerScript { get; init; }
+
+    /// <summary>
+    /// Maximum bytes a single string result may materialize. Null leaves the local safety limit in
+    /// force without imposing an additional organization ceiling.
+    /// </summary>
+    public long? MaxStringResultSize { get; init; }
 }
 
 public sealed record ProcessPolicySection
@@ -278,6 +286,8 @@ public static class OrganizationPolicySchema
             errors.Add("Execution max spill bytes per script must be zero or greater.");
         if (execution.MaxSmtpEmailsPerScript.HasValue && execution.MaxSmtpEmailsPerScript.Value < 0)
             errors.Add("Execution max SMTP emails per script must be zero or greater.");
+        if (execution.MaxStringResultSize.HasValue && execution.MaxStringResultSize.Value < 0)
+            errors.Add("Execution max string result size must be zero or greater.");
     }
 
     private static void ValidateRemoteExecution(RemoteExecutionPolicySection remote, List<string> errors)

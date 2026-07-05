@@ -42,7 +42,7 @@ namespace ETL_SQL.Connectors.Oracle
 
             // Security Hardening: egress control
             var host = OracleConnector.GetHostStatic(connectionString, options);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
         public IDataSource WithTable(string tableName) => new OracleDataSource(_context!, _connectionString, tableName, _options);

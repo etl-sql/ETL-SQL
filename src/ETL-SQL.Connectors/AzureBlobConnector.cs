@@ -52,7 +52,7 @@ namespace ETL_SQL.Connectors
 
             // Security Hardening: egress control
             var host = GetHostStatic(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
 
@@ -170,6 +170,10 @@ namespace ETL_SQL.Connectors
         private BlobContainerClient GetContainer()
         {
             if (_client == null || _containerName == null) throw new InvalidOperationException("Connector not initialized with connection details.");
+            if (_context != null)
+            {
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _client.Uri.Host);
+            }
             return _client.GetBlobContainerClient(_containerName);
         }
 

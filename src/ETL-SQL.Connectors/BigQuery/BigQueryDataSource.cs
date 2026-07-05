@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors.BigQuery
 
             _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 1800;
 
-            context.SecurityService.ValidateHost("bigquery.googleapis.com");
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, "bigquery.googleapis.com");
         }
 
         public string ConnectionString => _connectionString;
