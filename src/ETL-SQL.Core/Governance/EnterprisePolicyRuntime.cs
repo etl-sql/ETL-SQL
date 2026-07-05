@@ -127,6 +127,15 @@ public interface ISignedEnterprisePolicySource
         CancellationToken cancellationToken = default);
 }
 
+/// <summary>Header names shared by the enrolled-machine client and the policy-authority server so
+/// the retrieval contract cannot drift between them.</summary>
+public static class EnterprisePolicyTransport
+{
+    public const string TenantHeader = "X-ETL-SQL-Tenant";
+    public const string EnrollmentHeader = "X-ETL-SQL-Enrollment";
+    public const string MachineHeader = "X-ETL-SQL-Machine";
+}
+
 public sealed class HttpsSignedEnterprisePolicySource(HttpClient http, Uri endpoint) : ISignedEnterprisePolicySource
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -139,9 +148,9 @@ public sealed class HttpsSignedEnterprisePolicySource(HttpClient http, Uri endpo
         if (endpoint.Scheme != Uri.UriSchemeHttps)
             throw new InvalidOperationException("Enterprise policy endpoint must use HTTPS.");
         using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
-        request.Headers.Add("X-ETL-SQL-Tenant", enrollment.Tenant);
-        request.Headers.Add("X-ETL-SQL-Enrollment", enrollment.EnrollmentId);
-        request.Headers.Add("X-ETL-SQL-Machine", enrollment.MachineId);
+        request.Headers.Add(EnterprisePolicyTransport.TenantHeader, enrollment.Tenant);
+        request.Headers.Add(EnterprisePolicyTransport.EnrollmentHeader, enrollment.EnrollmentId);
+        request.Headers.Add(EnterprisePolicyTransport.MachineHeader, enrollment.MachineId);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             cancellationToken).ConfigureAwait(false);

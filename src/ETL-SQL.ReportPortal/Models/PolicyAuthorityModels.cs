@@ -23,6 +23,33 @@ public record PolicyRollbackRequest(
     string? Reviewer,
     DateTimeOffset ExpiresAtUtc);
 
+public record PolicyMachineRegisterRequest(
+    string MachineId,
+    string EnrollmentId,
+    string Tenant,
+    string Environment,
+    string? ClientCertificateThumbprint);
+
+public record PolicyMachineRevokeRequest(string? Reason);
+
+public record PolicyMachineDto(
+    string MachineId,
+    string EnrollmentId,
+    string Tenant,
+    string Environment,
+    bool RequiresClientCertificate,
+    bool Revoked,
+    DateTimeOffset? RevokedAtUtc,
+    string? RevokedReason,
+    DateTimeOffset RegisteredAtUtc,
+    DateTimeOffset? LastSeenAtUtc)
+{
+    public static PolicyMachineDto From(ETL_SQL.ReportPortal.Data.PolicyMachineEntity m) => new(
+        m.MachineId, m.EnrollmentId, m.Tenant, m.Environment,
+        !string.IsNullOrWhiteSpace(m.ClientCertificateThumbprint),
+        m.Revoked, m.RevokedAtUtc, m.RevokedReason, m.RegisteredAtUtc, m.LastSeenAtUtc);
+}
+
 public record PolicyVersionDto(
     string Tenant,
     string Environment,

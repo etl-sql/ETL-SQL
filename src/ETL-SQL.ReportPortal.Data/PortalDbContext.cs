@@ -32,6 +32,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
+    public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -178,6 +179,12 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             // retrieval and supersession bounded on the append-only table.
             e.HasIndex(x => new { x.Tenant, x.Environment, x.PolicyVersion }).IsUnique();
             e.HasIndex(x => new { x.Tenant, x.Environment, x.RolloutState });
+        });
+
+        builder.Entity<PolicyMachineEntity>(e =>
+        {
+            e.HasIndex(x => x.MachineId).IsUnique();
+            e.HasIndex(x => new { x.Tenant, x.Environment });
         });
 
         builder.Entity<AuditLog>(e =>

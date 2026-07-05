@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using System.Text.Json;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -20,6 +22,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class PolicyAuthorityController(
     PolicyAuthorityService authority,
     IPolicyEnvelopeSigner signer,
+    PortalDbContext db,
     AuditService audit) : ControllerBase
 {
     private int CurrentUserId =>
@@ -130,6 +133,96 @@ public class PolicyAuthorityController(
         {
             return BadRequest(new { error = ex.Message });
         }
+    }
+
+    // ── Machine registry ──────────────────────────────────────────────────────
+    // Retrieval responses are bound to the tenant/environment registered here, never to what a
+    // caller claims; revocation makes the identity unusable immediately.
+
+    [HttpGet("machines")]
+    public async Task<IActionResult> ListMachines(
+        [FromQuery] string? tenant, [FromQuery] string? environment, CancellationToken cancellationToken)
+    {
+        var query = db.PolicyMachines.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(tenant))
+            query = query.Where(m => m.Tenant == tenant);
+        if (!string.IsNullOrWhiteSpace(environment))
+            query = query.Where(m => m.Environment == environment);
+        var machines = await query.OrderBy(m => m.Id).ToListAsync(cancellationToken);
+        return Ok(machines.Select(PolicyMachineDto.From));
+    }
+
+    [HttpPost("machines")]
+    public async Task<IActionResult> RegisterMachine(
+        [FromBody] PolicyMachineRegisterRequest request, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParseExact(request.MachineId, "N", out _)
+            || !Guid.TryParseExact(request.EnrollmentId, "N", out _))
+            return BadRequest(new { error = "Machine and enrollment IDs must be 32-character GUIDs." });
+        if (string.IsNullOrWhiteSpace(request.Tenant) || string.IsNullOrWhiteSpace(request.Environment))
+            return BadRequest(new { error = "tenant and environment are required." });
+
+        string? thumbprint = null;
+        if (!string.IsNullOrWhiteSpace(request.ClientCertificateThumbprint))
+        {
+            thumbprint = request.ClientCertificateThumbprint
+                .Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant();
+            if (thumbprint.Length is not (40 or 64) || thumbprint.Any(c => !Uri.IsHexDigit(c)))
+                return BadRequest(new { error = "Client certificate thumbprint must be a SHA-1 or SHA-256 hexadecimal value." });
+        }
+
+        var existing = await db.PolicyMachines
+            .FirstOrDefaultAsync(m => m.MachineId == request.MachineId, cancellationToken);
+        if (existing is not null && !existing.Revoked)
+            return BadRequest(new
+            {
+                error = $"Machine '{request.MachineId}' is already registered to " +
+                        $"{existing.Tenant}/{existing.Environment}; revoke it before re-registering."
+            });
+
+        var reRegistered = existing is not null;
+        if (existing is null)
+        {
+            existing = new PolicyMachineEntity { MachineId = request.MachineId };
+            db.PolicyMachines.Add(existing);
+        }
+        existing.EnrollmentId = request.EnrollmentId;
+        existing.Tenant = request.Tenant;
+        existing.Environment = request.Environment;
+        existing.ClientCertificateThumbprint = thumbprint;
+        existing.Revoked = false;
+        existing.RevokedAtUtc = null;
+        existing.RevokedReason = null;
+        existing.RegisteredAtUtc = DateTimeOffset.UtcNow;
+        existing.LastSeenAtUtc = null;
+        await db.SaveChangesAsync(cancellationToken);
+
+        await audit.LogAsync(CurrentUserId, "REGISTER_POLICY_MACHINE", "PolicyMachine",
+            request.MachineId,
+            $"Tenant={request.Tenant}; Environment={request.Environment}; " +
+            $"ClientCertRequired={thumbprint is not null}; ReRegistered={reRegistered}");
+        return Ok(PolicyMachineDto.From(existing));
+    }
+
+    [HttpPost("machines/{machineId}/revoke")]
+    public async Task<IActionResult> RevokeMachine(
+        string machineId, [FromBody] PolicyMachineRevokeRequest request, CancellationToken cancellationToken)
+    {
+        var machine = await db.PolicyMachines
+            .FirstOrDefaultAsync(m => m.MachineId == machineId, cancellationToken);
+        if (machine is null)
+            return NotFound(new { error = $"Machine '{machineId}' is not registered." });
+        if (!machine.Revoked)
+        {
+            machine.Revoked = true;
+            machine.RevokedAtUtc = DateTimeOffset.UtcNow;
+            machine.RevokedReason = request.Reason;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await audit.LogAsync(CurrentUserId, "REVOKE_POLICY_MACHINE", "PolicyMachine", machineId,
+            $"Tenant={machine.Tenant}; Environment={machine.Environment}; Reason={request.Reason ?? "none"}");
+        return Ok(PolicyMachineDto.From(machine));
     }
 
     [HttpPost("rollback")]

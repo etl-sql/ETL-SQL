@@ -420,6 +420,29 @@ public class PolicyVersionEntity
     public DateTimeOffset PublishedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>
+/// An enrolled machine known to the policy authority. Retrieval responses are bound to the
+/// tenant/environment recorded here — never to what the caller claims — and requests are refused
+/// when the identity is unknown, revoked, or presents enrollment/tenant details that no longer
+/// match this registration (a reassigned or copied identity).
+/// </summary>
+public class PolicyMachineEntity
+{
+    public long Id { get; set; }
+    public string MachineId { get; set; } = "";
+    public string EnrollmentId { get; set; } = "";
+    public string Tenant { get; set; } = "";
+    public string Environment { get; set; } = "";
+    /// <summary>SHA-1 (40 hex) or SHA-256 (64 hex) thumbprint. When set, the machine must present
+    /// a TLS client certificate with this thumbprint.</summary>
+    public string? ClientCertificateThumbprint { get; set; }
+    public bool Revoked { get; set; }
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+    public string? RevokedReason { get; set; }
+    public DateTimeOffset RegisteredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastSeenAtUtc { get; set; }
+}
+
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────
 
 public class DatasetJob
