@@ -77,9 +77,12 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     {
         if (string.IsNullOrWhiteSpace(host)) return;
         var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
+        // The local egress guardrail throws a plain SecurityException; keep it outside the wrapping
+        // try so a local denial is reported as-is and not misclassified as an enterprise
+        // ConnectorPolicyDeniedException. Only organization-policy denials are wrapped.
+        context.SecurityService.ValidateHost(host);
         try
         {
-            context.SecurityService.ValidateHost(host);
             EnforceEnterpriseHosts(snapshot, host);
         }
         catch (SecurityException ex) when (ex is not ConnectorPolicyDeniedException)
@@ -100,9 +103,10 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
     {
         ArgumentNullException.ThrowIfNull(url);
         var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-probe>");
+        // Local egress guardrail throws a plain SecurityException, unwrapped (see EnforceEnterpriseHost).
+        context.SecurityService.ValidateHost(url.Host);
         try
         {
-            context.SecurityService.ValidateHost(url.Host);
             EnforceEnterpriseHosts(snapshot, url.Host);
             EnforceSchemeAndPort(snapshot, url);
         }
