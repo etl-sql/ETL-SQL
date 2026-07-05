@@ -109,17 +109,18 @@ See [Docs/Architecture/Engine.md](Docs/Architecture/Engine.md) for the full proj
 | :--- | :--- |
 | `main` | Stable, releasable at any time. No direct commits. |
 | `dev` | Active development. PRs merge here first. |
-| `feature/<name>` | New features — branch from `dev`. |
-| `fix/<name>` | Bug fixes — branch from `dev` (or `main` for hotfixes). |
-| `docs/<name>` | Documentation-only changes — branch from `dev`. |
+| `release/v<version>` | Version-specific staging (e.g., `release/v0.15.0`). Stage features/fixes before merging to `main`. |
+| `feature/<name>` | New features — branch from active `release/v<version>` (or `dev`). |
+| `fix/<name>` | Bug fixes — branch from active `release/v<version>` (or `main` for hotfixes). |
+| `docs/<name>` | Documentation-only changes — branch from active `release/v<version>` or `dev`. |
 
 ```bash
-# Start a new feature
-git checkout dev
+# Start a new feature targeting a version release (e.g., v0.15.0)
+git checkout release/v0.15.0
 git pull
 git checkout -b feature/my-feature
 
-# When ready, open a PR targeting dev
+# When ready, open a PR targeting release/v0.15.0
 ```
 
 ---

@@ -16,7 +16,7 @@ Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 ## Phase 0 — Pre-flight
 
 - [ ] Working tree is clean or only contains intended release changes (`git status`).
-- [ ] You are on the release branch (e.g. `vx.y.z`), branched from an up-to-date `main`.
+- [ ] You are on the release branch (e.g., `release/vx.y.z`), with all version features merged in.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
