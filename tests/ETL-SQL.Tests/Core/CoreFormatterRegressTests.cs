@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Core
         [Fact]
         public void TestTrailingCommas()
         {
-            var options = new FormatterOptions { LeadingCommas = false };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string sql = "SELECT col1, col2, col3 FROM t";
             string formatted = SqlFormatter.Format(sql, options);
 

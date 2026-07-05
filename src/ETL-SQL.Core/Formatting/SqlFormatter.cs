@@ -11,21 +11,8 @@ namespace ETL_SQL.Core.Formatting;
 /// </summary>
 public class FormatterOptions
 {
-    private bool _leadingCommas = true;
-    private string _commaPlacement = "leading";
-
-    public bool LeadingCommas
-    {
-        get => _leadingCommas;
-        set
-        {
-            _leadingCommas = value;
-            _commaPlacement = value ? "leading" : "trailing";
-        }
-    }
     public bool RightAlignKeywords { get; set; } = false;
     public int IndentSize { get; set; } = 4;
-    public bool UpperCaseKeywords { get; set; } = true;
 
     // Customizable settings (personalities)
     public string KeywordCasing { get; set; } = "upper"; // "upper", "lower", "pascal", "preserve"
@@ -35,15 +22,7 @@ public class FormatterOptions
     public bool CaseWhenThenNewLine { get; set; } = true;
     public bool BreakoutWindowFunctions { get; set; } = true;
 
-    public string CommaPlacement
-    {
-        get => _commaPlacement;
-        set
-        {
-            _commaPlacement = value;
-            _leadingCommas = value.Equals("leading", StringComparison.OrdinalIgnoreCase);
-        }
-    }
+    public string CommaPlacement { get; set; } = "leading";
     public bool FormatMetadataTags { get; set; } = true;
 
     public static FormatterOptions? LoadFromWorkspace(string? startFilePath)
@@ -65,18 +44,6 @@ public class FormatterOptions
                     });
                     if (loaded != null)
                     {
-                        // Sync legacy setting with casing setting
-                        if (loaded.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase))
-                            loaded.UpperCaseKeywords = true;
-                        else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
-                            loaded.UpperCaseKeywords = false;
-
-                        // Sync comma placement setting with legacy setting
-                        if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
-                            loaded.LeadingCommas = true;
-                        else if (loaded.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))
-                            loaded.LeadingCommas = false;
-
                         return loaded;
                     }
                 }
@@ -110,18 +77,6 @@ public class FormatterOptions
                     });
                     if (loaded != null)
                     {
-                        // Sync legacy setting with casing setting
-                        if (loaded.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase))
-                            loaded.UpperCaseKeywords = true;
-                        else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
-                            loaded.UpperCaseKeywords = false;
-
-                        // Sync comma placement setting with legacy setting
-                        if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
-                            loaded.LeadingCommas = true;
-                        else if (loaded.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))
-                            loaded.LeadingCommas = false;
-
                         return loaded;
                     }
                 }
@@ -139,18 +94,6 @@ public class FormatterOptions
                 });
                 if (loaded != null)
                 {
-                    // Sync legacy setting with casing setting
-                    if (loaded.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase))
-                        loaded.UpperCaseKeywords = true;
-                    else if (loaded.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || loaded.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
-                        loaded.UpperCaseKeywords = false;
-
-                    // Sync comma placement setting with legacy setting
-                    if (loaded.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
-                        loaded.LeadingCommas = true;
-                    else if (loaded.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))
-                        loaded.LeadingCommas = false;
-
                     return loaded;
                 }
             }
@@ -196,12 +139,6 @@ public static class SqlFormatter
     {
         if (string.IsNullOrWhiteSpace(script)) return script;
         options ??= new FormatterOptions();
-
-        // Sync legacy options with standard options
-        if (options.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase) && !options.UpperCaseKeywords)
-        {
-            options.KeywordCasing = "preserve"; // Fallback if custom unset
-        }
 
         // Normalize line endings and cleanup
         string input = script.Replace("\r\n", "\n").Replace("\r", "\n");

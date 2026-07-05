@@ -13,6 +13,51 @@ namespace ETL_SQL.Tests.Core
     public class FormatterTests
     {
         [Fact]
+        public void FormatterOptions_DefaultsAndJsonSurfaceRemainDocumentedContract()
+        {
+            var defaults = new FormatterOptions();
+            Assert.Equal("upper", defaults.KeywordCasing);
+            Assert.Equal(4, defaults.IndentSize);
+            Assert.Equal(100, defaults.LineWidth);
+            Assert.True(defaults.IndentJoins);
+            Assert.False(defaults.OnClauseOnNewLine);
+            Assert.True(defaults.CaseWhenThenNewLine);
+            Assert.True(defaults.BreakoutWindowFunctions);
+            Assert.Equal("leading", defaults.CommaPlacement);
+            Assert.False(defaults.RightAlignKeywords);
+            Assert.True(defaults.FormatMetadataTags);
+
+            var json = """
+                {
+                  "keywordCasing": "lower",
+                  "indentSize": 2,
+                  "lineWidth": 120,
+                  "indentJoins": false,
+                  "onClauseOnNewLine": true,
+                  "caseWhenThenNewLine": false,
+                  "breakoutWindowFunctions": false,
+                  "commaPlacement": "trailing",
+                  "rightAlignKeywords": true,
+                  "formatMetadataTags": false
+                }
+                """;
+            var loaded = System.Text.Json.JsonSerializer.Deserialize<FormatterOptions>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            Assert.NotNull(loaded);
+            Assert.Equal("lower", loaded.KeywordCasing);
+            Assert.Equal(2, loaded.IndentSize);
+            Assert.Equal(120, loaded.LineWidth);
+            Assert.False(loaded.IndentJoins);
+            Assert.True(loaded.OnClauseOnNewLine);
+            Assert.False(loaded.CaseWhenThenNewLine);
+            Assert.False(loaded.BreakoutWindowFunctions);
+            Assert.Equal("trailing", loaded.CommaPlacement);
+            Assert.True(loaded.RightAlignKeywords);
+            Assert.False(loaded.FormatMetadataTags);
+        }
+
+        [Fact]
         public void TestBasicFormatting()
         {
             string sql = "SELECT a, b FROM table WHERE c = 1";
@@ -24,7 +69,7 @@ namespace ETL_SQL.Tests.Core
         }
 
         [Fact]
-        public void TestLeadingCommas()
+        public void TestLeadingCommaPlacement()
         {
             string sql = "SELECT col1, col2, col3 FROM t";
             string formatted = SqlFormatter.Format(sql).Replace("\r\n", "\n");
@@ -70,7 +115,7 @@ namespace ETL_SQL.Tests.Core
         public void TestSubqueryNestingInVisual()
         {
             string sql = "CREATE VISUAL SalesBar AS BAR ( SOURCE = (SELECT product, revenue FROM orders WHERE id = 1), MAPPINGS (X = product) );";
-            var options = new FormatterOptions { LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             // Verify that the SELECT statement is indented inside parenthesized block
@@ -129,7 +174,7 @@ namespace ETL_SQL.Tests.Core
         public void TestUniversalCommaFormatting()
         {
             // Trailing Commas option
-            var opt = new FormatterOptions { CommaPlacement = "trailing", LeadingCommas = false };
+            var opt = new FormatterOptions { CommaPlacement = "trailing" };
             string sql = "SELECT col1, col2 FROM t";
             string res = SqlFormatter.Format(sql, opt).Replace("\r\n", "\n");
             Assert.Contains("col1,\n", res);
@@ -140,7 +185,7 @@ namespace ETL_SQL.Tests.Core
         public void TestCteFormatting()
         {
             string sql = "WITH MyCte AS (SELECT col1, col2 FROM Table1) SELECT * FROM MyCte;";
-            var options = new FormatterOptions { LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             Assert.Contains("WITH MyCte AS (\n    SELECT\n        col1,\n        col2\n    FROM Table1\n)", formatted);
@@ -151,7 +196,7 @@ namespace ETL_SQL.Tests.Core
         public void TestSubqueryInFromFormatting()
         {
             string sql = "SELECT * FROM (SELECT id, name FROM customers) c JOIN orders o ON c.id = o.customer_id;";
-            var options = new FormatterOptions { LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             Assert.Contains("FROM (\n    SELECT\n        id,\n        name\n    FROM customers\n) c", formatted);
@@ -162,7 +207,7 @@ namespace ETL_SQL.Tests.Core
         public void TestVisualFormattingFromProposal()
         {
             string sql = "CREATE VISUAL SalesBar AS BAR ( SOURCE = (SELECT product, SUM(revenue) AS revenue FROM &orders WHERE region = @region GROUP BY product), MAPPINGS (X = product, Y = revenue) );";
-            var options = new FormatterOptions { LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             // Verify outer visual alignment and indentation
@@ -187,7 +232,7 @@ namespace ETL_SQL.Tests.Core
         public void TestSpecialShorthandFormatting()
         {
             string sql = "SELECT * FROM t WHERE 1=1 AND (1=0 OR col1 = a OR col2 = b);";
-            var options = new FormatterOptions { LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             string expected = "SELECT\n" +
@@ -205,7 +250,7 @@ namespace ETL_SQL.Tests.Core
         public void TestMetadataTagFormatting()
         {
             string sql = "SELECT id /* @d: The identity column; @pii; */, name FROM customers;";
-            var options = new FormatterOptions { FormatMetadataTags = true, LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { FormatMetadataTags = true, CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             string expected = "SELECT\n" +
@@ -223,7 +268,7 @@ namespace ETL_SQL.Tests.Core
         public void TestMetadataTagFormattingDisabled()
         {
             string sql = "SELECT id /* @d: The identity column; @pii; */, name FROM customers;";
-            var options = new FormatterOptions { FormatMetadataTags = false, LeadingCommas = false, CommaPlacement = "trailing" };
+            var options = new FormatterOptions { FormatMetadataTags = false, CommaPlacement = "trailing" };
             string formatted = SqlFormatter.Format(sql, options).Replace("\r\n", "\n");
 
             Assert.Contains("id /* @d: The identity column; @pii; */,", formatted);
