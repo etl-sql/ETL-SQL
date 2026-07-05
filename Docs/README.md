@@ -85,6 +85,7 @@ Architecture docs explain how the current source tree works. Interface contracts
 | Connectors | [Architecture/Connectors.md](Architecture/Connectors.md) |
 | Orchestrator | [Architecture/Orchestrator.md](Architecture/Orchestrator.md) |
 | Language server | [Architecture/LanguageServer.md](Architecture/LanguageServer.md) |
+| Grammar state engine | [Architecture/GrammarStateEngine.md](Architecture/GrammarStateEngine.md) |
 | Presentation layer | [Architecture/Presentation.md](Architecture/Presentation.md) |
 | TUI editor | [Architecture/TuiEditor.md](Architecture/TuiEditor.md) |
 | VS Code extension | [Architecture/VSCodeExtension.md](Architecture/VSCodeExtension.md) |

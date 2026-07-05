@@ -46,7 +46,7 @@ public interface ILanguageService
 
 public class LanguageService : ILanguageService
 {
-    private readonly IMetadataManager _metadata;
+    protected readonly IMetadataManager _metadata;
     private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
     private readonly Core.Functions.IFunctionRegistry? _functionRegistry;
 
@@ -180,7 +180,7 @@ public class LanguageService : ILanguageService
         return results;
     }
 
-    private async Task<List<Suggestion>> GetPatternSuggestionsAsync(SuggestionContext context)
+    protected virtual async Task<List<Suggestion>> GetPatternSuggestionsAsync(SuggestionContext context)
     {
         var results = new List<Suggestion>();
         try

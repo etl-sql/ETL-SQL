@@ -71,6 +71,28 @@ public static class OperationPolicyBoundary
             $"Enterprise policy Security:MaxSpillBytesPerScript limits script spill to {ceiling} bytes; the script has spilled {totalSpilledBytes}."));
     }
 
+    /// <summary>
+    /// Enforces <c>Security:AllowedExecutionModes</c> against the mode captured in the snapshot at
+    /// execution start. No-op when standalone/unenrolled or when the policy lists no modes.
+    /// </summary>
+    public static void EnforceAllowedExecutionMode(ExecutionPolicySnapshot snapshot)
+    {
+        if (!snapshot.IsEnrolled) return;
+        var allowed = snapshot.GovernedValues
+            .Where(pair => pair.Key.StartsWith("Security:AllowedExecutionModes:",
+                StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(pair.Value))
+            .Select(pair => pair.Value!.Trim())
+            .ToArray();
+        if (allowed.Length == 0) return;
+
+        var mode = snapshot.ExecutionMode.ToString();
+        if (allowed.Any(value => string.Equals(value, mode, StringComparison.OrdinalIgnoreCase))) return;
+
+        throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+            "Security:AllowedExecutionModes", mode, $"permitted modes: [{string.Join(", ", allowed)}]",
+            $"Enterprise policy does not permit the '{mode}' execution mode."));
+    }
+
     public static bool TryGetGovernedLong(ExecutionPolicySnapshot snapshot, string key, out long value)
     {
         value = 0;

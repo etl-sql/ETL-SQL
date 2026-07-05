@@ -104,7 +104,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
                         services.AddSingleton<IFunctionRegistry>(functionRegistry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
-                        services.AddSingleton<ILanguageService, LanguageService>();
+                        services.AddSingleton<ILanguageService, ETL_SQL.Analysis.Services.GrammarLanguageService>();
                         services.AddSingleton<DocumentStateStore>();
                         services.AddSingleton<TextDocumentHandler>();
 

@@ -40,6 +40,7 @@ public sealed class GovernanceEnforcementAuditTests
             ["Connectors:AllowedTypes"] = (Boundary.EnterpriseSnapshot, "ConnectorPolicyAuthorizer.EnforceAllowedTypes"),
             ["Security:RequireWhatIfForDestructiveStatements"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
             ["Security:RequireTransactionForMutations"] = (Boundary.EnterpriseSnapshot, "MutationGuardrailPolicy.Enforce (statement dispatch)"),
+            ["Security:AllowedExecutionModes"] = (Boundary.EnterpriseSnapshot, "OperationPolicyBoundary.EnforceAllowedExecutionMode (execution start)"),
 
             // ── Enforced via config precedence by a named local/Portal boundary ──
             ["Security:PathProtectionMode"] = (Boundary.ConfigPrecedence, "SecurityService.ValidatePath (ProtectionMode)"),
@@ -54,15 +55,15 @@ public sealed class GovernanceEnforcementAuditTests
             ["Engine:ConnectionEncryption"] = (Boundary.ConfigPrecedence, "Connection save path (ConnectionEncryptionRule)"),
 
             // ── Declared and flattened into policy values, but no enforcement consumer yet ──
-            ["Security:AllowedExecutionModes"] = (Boundary.DeclaredGap, "flattened to Security:AllowedExecutionModes; no runtime execution-mode gate yet"),
-            ["Security:RemoteExecutionMode"] = (Boundary.DeclaredGap, "flattened to Security:RemoteExecutionMode; no remote-execution gate yet"),
+            // ScriptExecutionMode.Remote is not produced by any current execution path, so there is
+            // no trigger point to enforce at; the boundary lands with the remote-execution feature.
+            ["Security:RemoteExecutionMode"] = (Boundary.DeclaredGap, "flattened to Security:RemoteExecutionMode; no remote-execution path produces ScriptExecutionMode.Remote yet"),
         };
 
     // The governed keys deliberately not yet enforced. Closing one of these (wiring an enforcement
     // boundary) or adding a new gap must be a conscious edit to both the map above and this set.
     private static readonly HashSet<string> ExpectedGaps = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Security:AllowedExecutionModes",
         "Security:RemoteExecutionMode",
     };
 

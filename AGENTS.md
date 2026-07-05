@@ -251,6 +251,7 @@ Use this map to find the right document for any task.
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
 | Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md)** |
 | Report Portal auth, HA topology, API, health checks | **[Architecture/ReportPortal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md)** |
+| Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/GrammarStateEngine.md)** |
 | C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Engine_Coding_Standards.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
 | Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Language_Syntax_Standards.md)** |
