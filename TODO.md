@@ -77,7 +77,7 @@ reload, fail-closed host refresh (`9e0dfbc`). All v0.14.0 work consumes `Enterpr
 - [ ] Make every denial deterministic across in-process and spawned-process execution.
 
 #### Phase 3 completion gates
-- [ ] Every governed key maps to a named enforcement boundary or is removed from the policy schema as non-enforceable.
+- [~] Every governed key maps to a named enforcement boundary or is removed from the policy schema as non-enforceable. *(Living audit: `GovernanceEnforcementAuditTests` classifies all 24 `GovernancePolicyRegistry` keys — 10 enforced against the execution-policy snapshot at named boundaries, 10 via config-precedence local/Portal boundaries, and 4 acknowledged gaps (`Security:AllowedExecutionModes`, `Security:RemoteExecutionMode`, `Security:RequireWhatIfForDestructiveStatements`, `Security:RequireTransactionForMutations`) that are flattened into policy values but have no enforcement consumer yet. The test fails on any unclassified/stale key or gap-set drift, so a new governed key cannot ship unenforced silently. Closing the 4 gaps (execution-mode + mutation-guardrail enforcement boundaries) is the remaining work to make this `[x]`.)*
 - [ ] A repository-wide security review finds no direct sensitive operation that bypasses the shared authorizer.
 - [ ] Bypass suites cover Windows and Linux paths, links, DNS/redirect behavior, connector aliases, child processes, Docker mounts, script overrides, and concurrent policy refresh.
 - [ ] Existing standalone tests prove no enterprise endpoint, certificate, cache, or organization restriction is required when unenrolled.
