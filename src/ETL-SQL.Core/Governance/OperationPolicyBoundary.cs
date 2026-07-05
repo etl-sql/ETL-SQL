@@ -111,6 +111,23 @@ public static class OperationPolicyBoundary
             "Enterprise policy disables remote execution."));
     }
 
+    /// <summary>
+    /// Returns <paramref name="observedValue"/> clamped down to the enterprise ceiling for
+    /// <paramref name="policyKey"/> when the snapshot is enrolled and governs that key; otherwise the
+    /// value is returned unchanged. Applied at execution start to bind initial threshold values that
+    /// arrive via configuration, environment variables, command-line options, saved sessions, or
+    /// report parameters — override sources that never pass through the <c>SET</c> ceiling — so a
+    /// locked value cannot be weakened by any path. Deterministic in-process and across spawned
+    /// processes, since every host captures the snapshot at execution begin.
+    /// </summary>
+    public static long ClampToGovernedCeiling(
+        ExecutionPolicySnapshot snapshot, string policyKey, long observedValue)
+    {
+        if (!snapshot.IsEnrolled) return observedValue;
+        if (!TryGetGovernedLong(snapshot, policyKey, out var ceiling)) return observedValue;
+        return Math.Min(observedValue, ceiling);
+    }
+
     public static bool TryGetGovernedLong(ExecutionPolicySnapshot snapshot, string key, out long value)
     {
         value = 0;

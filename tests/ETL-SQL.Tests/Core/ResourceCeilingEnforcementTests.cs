@@ -123,6 +123,49 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         Assert.Null(Record.Exception(() => OperationPolicyBoundary.EnforceRemoteExecutionMode(batch)));
     }
 
+    [Fact]
+    public async Task PreSetThresholds_WithoutRuntimeCeiling_AreClampedAtExecutionBegin()
+    {
+        // MaxParallelDegree (consumed directly by the parallel handler) and MaxStringResultSize have
+        // no runtime enterprise ceiling, so a value that arrived via config / env var / CLI option /
+        // restored session — sources that never pass through the SET ceiling — is clamped down to the
+        // locked value at execution begin.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxParallelDegree: 4, maxStringResultSize: 2048));
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        evaluator.MaxParallelDegree = 999;
+        evaluator.MaxStringResultSize = 1 << 20;
+
+        await evaluator.Evaluate(new Parser(new Lexer("PRINT 'go';").Tokenize(), "PRINT 'go';").Parse());
+
+        Assert.Equal(4, evaluator.MaxParallelDegree);
+        Assert.Equal(2048, evaluator.MaxStringResultSize);
+    }
+
+    [Fact]
+    public async Task PreSetThresholds_StricterThanEnterpriseCeiling_ArePreserved()
+    {
+        // A stricter (smaller) local value is the operator's prerogative and must survive the clamp.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(maxParallelDegree: 8));
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        evaluator.MaxParallelDegree = 2;
+
+        await evaluator.Evaluate(new Parser(new Lexer("PRINT 'go';").Tokenize(), "PRINT 'go';").Parse());
+
+        Assert.Equal(2, evaluator.MaxParallelDegree);
+    }
+
+    [Fact]
+    public async Task PreSetThresholds_Standalone_AreNotClamped()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        evaluator.MaxParallelDegree = 999;
+
+        await evaluator.Evaluate(new Parser(new Lexer("PRINT 'go';").Tokenize(), "PRINT 'go';").Parse());
+
+        Assert.Equal(999, evaluator.MaxParallelDegree);
+    }
+
     private static async Task ExecuteAsync(string sql)
     {
         var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
@@ -134,6 +177,8 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         int? maxParallelDegree = null,
         int? maxSmtpEmails = null,
         long? maxStringResultSize = null,
+        int? maxFileOperations = null,
+        int? maxRecursiveDepth = null,
         string[]? allowedDockerImages = null,
         ScriptExecutionMode[]? allowedExecutionModes = null)
     {
@@ -141,7 +186,9 @@ public sealed class ResourceCeilingEnforcementTests : IDisposable
         {
             MaxParallelDegree = maxParallelDegree,
             MaxSmtpEmailsPerScript = maxSmtpEmails,
-            MaxStringResultSize = maxStringResultSize
+            MaxStringResultSize = maxStringResultSize,
+            MaxFileOperationsPerScript = maxFileOperations,
+            MaxRecursiveNestingDepth = maxRecursiveDepth
         };
         if (allowedExecutionModes is not null)
             execution = execution with { AllowedModes = allowedExecutionModes };

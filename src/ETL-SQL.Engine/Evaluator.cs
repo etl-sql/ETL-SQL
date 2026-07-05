@@ -766,6 +766,32 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     private HashSet<string>? _expandedViews;
 
+    /// <summary>
+    /// At execution start, clamp the governed resource thresholds that have no runtime ceiling down
+    /// to the enterprise maximum. Their initial values may have arrived via configuration,
+    /// environment variables, command-line options, a restored saved session, or report parameters —
+    /// override sources that never pass through the <c>SET</c> ceiling. Clamping here (rather than at
+    /// each override site) makes a locked value impossible to weaken by any path, and is
+    /// deterministic in-process and across spawned processes because every host captures the snapshot
+    /// at this same boundary.
+    ///
+    /// Only <c>MaxParallelDegree</c> (consumed directly by the parallel handler) and
+    /// <c>MaxStringResultSize</c> lack a runtime enterprise ceiling and so must be clamped here.
+    /// <c>MaxFileOperationsPerScript</c>, <c>MaxRecursiveNestingDepth</c>, and
+    /// <c>MaxSmtpEmailsPerScript</c> are re-checked against the governed ceiling at each operation
+    /// (see <c>OperationPolicyBoundary.EnforceCeiling</c> call sites), so a high initial value is
+    /// already denied at runtime with the deterministic policy message — lowering their local limit
+    /// here would only mask that enterprise denial behind the local guardrail's message.
+    /// </summary>
+    private void BindGovernedThresholdCeilings()
+    {
+        if (ExecutionPolicy is not { IsEnrolled: true } snapshot) return;
+        MaxParallelDegree = (int)Core.Governance.OperationPolicyBoundary.ClampToGovernedCeiling(
+            snapshot, "Security:MaxParallelDegree", MaxParallelDegree);
+        MaxStringResultSize = Core.Governance.OperationPolicyBoundary.ClampToGovernedCeiling(
+            snapshot, "Security:MaxStringResultSize", MaxStringResultSize);
+    }
+
     public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
     {
         if (CurrentRecursiveDepth == 0)
@@ -785,6 +811,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             // Enterprise execution-mode gates — applied before any statement executes.
             Core.Governance.OperationPolicyBoundary.EnforceAllowedExecutionMode(ExecutionPolicy);
             Core.Governance.OperationPolicyBoundary.EnforceRemoteExecutionMode(ExecutionPolicy);
+            BindGovernedThresholdCeilings();
 
             foreach (var rs in LastResultSets) rs.Clear();
             LastResultSets.Clear();
