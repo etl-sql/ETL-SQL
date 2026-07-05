@@ -397,6 +397,29 @@ public class AuditOutboxMessage
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+// ── Enterprise Policy Authority ───────────────────────────────────────────────
+
+/// <summary>
+/// An immutable published organization-policy version served by the policy authority. Rows are
+/// append-only; supersession flips <see cref="RolloutState"/> but never deletes or rewrites payload.
+/// </summary>
+public class PolicyVersionEntity
+{
+    public long Id { get; set; }
+    public string Tenant { get; set; } = "";
+    public string Environment { get; set; } = "";
+    public string PolicyVersion { get; set; } = "";
+    public string PolicyHash { get; set; } = "";
+    public DateTimeOffset IssuedAtUtc { get; set; }
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+    public string Author { get; set; } = "";
+    public string? Reviewer { get; set; }
+    public string? SupersededVersion { get; set; }
+    public string RolloutState { get; set; } = "Active";
+    public string SignedEnvelopeJson { get; set; } = "{}";
+    public DateTimeOffset PublishedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────
 
 public class DatasetJob
