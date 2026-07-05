@@ -430,7 +430,9 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.SnapshotMigratio
 builder.Services.AddHealthChecks()
     .AddCheck<PortalDbHealthCheck>("db", HealthStatus.Unhealthy, ["ready"])
     .AddCheck<OrchestratorHealthCheck>("orchestrator", HealthStatus.Degraded, ["live"])
-    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"]);
+    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"])
+    .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.PolicyAuthorityHealthCheck>(
+        "policy-authority", HealthStatus.Degraded, ["live"]);
 
 builder.Services.AddControllers();
 

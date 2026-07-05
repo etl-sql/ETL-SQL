@@ -217,6 +217,22 @@ public sealed class PolicyAuthorityServiceTests
     }
 
     [Fact]
+    public async Task VerifiesWithKey_DetectsSigningKeyRotation()
+    {
+        var (svc, signer) = NewAuthority();
+        await svc.PublishAsync(SampleDoc(), "acme", "prod", "1.0.0", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30));
+        var envelope = (await svc.RetrieveActiveEnvelopeAsync("acme", "prod"))!;
+
+        // Still signed by the current key → no rotation; a different key → rotation detected.
+        Assert.True(EnterprisePolicySignature.VerifiesWithKey(envelope, signer.PublicKeyPem));
+        using var rotated = RSA.Create(2048);
+        Assert.False(EnterprisePolicySignature.VerifiesWithKey(
+            envelope, rotated.ExportSubjectPublicKeyInfoPem()));
+        Assert.False(EnterprisePolicySignature.VerifiesWithKey(envelope, "not a pem"));
+    }
+
+    [Fact]
     public async Task History_IsImmutableAndBoundToTenantEnvironment()
     {
         var store = new InMemoryPolicyAuthorityStore();

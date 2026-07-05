@@ -30,6 +30,20 @@ public class PolicyAuthorityController(
 
     private string CurrentUserName => User.Identity?.Name ?? $"user:{CurrentUserId}";
 
+    /// <summary>True when the previously active envelope no longer verifies under the currently
+    /// configured signing key — i.e. this publish is the first after a signing-key rotation. The
+    /// durable audit trail records rotations because machines pin the key at enrollment and must be
+    /// re-enrolled (or re-provisioned) to accept envelopes signed with the new key.</summary>
+    private bool SigningKeyRotatedSince(PublishedPolicyVersion? previousActive)
+    {
+        if (previousActive is null)
+            return false;
+        var envelope = JsonSerializer.Deserialize<SignedOrganizationPolicyEnvelope>(
+            previousActive.SignedEnvelopeJson, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return envelope is not null
+            && !EnterprisePolicySignature.VerifiesWithKey(envelope, signer.PublicKeyPem);
+    }
+
     [HttpGet("status")]
     public IActionResult GetStatus()
     {
@@ -100,6 +114,8 @@ public class PolicyAuthorityController(
 
         try
         {
+            var previousActive = await authority.GetActiveVersionAsync(
+                request.Tenant, request.Environment, cancellationToken);
             var version = await authority.PublishAsync(
                 document, request.Tenant, request.Environment, request.PolicyVersion,
                 CurrentUserName, request.Reviewer, request.ExpiresAtUtc, request.Staged,
@@ -107,7 +123,8 @@ public class PolicyAuthorityController(
             await audit.LogAsync(CurrentUserId, "PUBLISH_ORG_POLICY", "OrganizationPolicy",
                 $"{request.Tenant}/{request.Environment}",
                 $"Version={version.PolicyVersion}; Staged={request.Staged}; " +
-                $"Hash={version.PolicyHash}; Superseded={version.SupersededVersion ?? "none"}");
+                $"Hash={version.PolicyHash}; Superseded={version.SupersededVersion ?? "none"}; " +
+                $"SigningKeyRotated={SigningKeyRotatedSince(previousActive)}");
             return Ok(PolicyVersionDto.From(version));
         }
         catch (Exception ex) when (ex is PolicyAuthorityException or ArgumentException)

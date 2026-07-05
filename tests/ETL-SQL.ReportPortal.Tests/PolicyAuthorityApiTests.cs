@@ -204,16 +204,41 @@ public class PolicyAuthorityApiTests
         Assert.Equal("RolledBack", states["2.1.0"]);
         Assert.Equal("Active", states["3.0.0"]);
 
-        // Publication, activation, and rollback each leave a durable audit record.
+        // Publication, activation, and rollback each leave a durable audit record, and each publish
+        // records whether the signing key rotated since the previously active version.
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var auditActions = await db.AuditLogs
+        var auditRows = await db.AuditLogs
             .Where(a => a.ResourceType == "OrganizationPolicy" && a.ResourceId == "acme/prod")
-            .Select(a => a.Action)
+            .Select(a => new { a.Action, a.Detail })
             .ToListAsync();
-        Assert.Equal(4, auditActions.Count(a => a == "PUBLISH_ORG_POLICY"));
-        Assert.Single(auditActions, a => a == "ACTIVATE_ORG_POLICY");
-        Assert.Single(auditActions, a => a == "ROLLBACK_ORG_POLICY");
+        Assert.Equal(4, auditRows.Count(a => a.Action == "PUBLISH_ORG_POLICY"));
+        Assert.Single(auditRows, a => a.Action == "ACTIVATE_ORG_POLICY");
+        Assert.Single(auditRows, a => a.Action == "ROLLBACK_ORG_POLICY");
+        Assert.All(auditRows.Where(a => a.Action == "PUBLISH_ORG_POLICY"),
+            a => Assert.Contains("SigningKeyRotated=False", a.Detail));
+    }
+
+    [Fact]
+    public async Task HealthEndpoint_ReportsPolicyAuthorityAvailability()
+    {
+        // Unconfigured signing is a valid standalone state and must not degrade the node.
+        using (var factory = new PortalWebFactory())
+        using (var client = factory.CreateClient())
+        {
+            var health = await client.GetStringAsync("/health");
+            Assert.Contains("policy-authority", health);
+            Assert.Contains("not configured", health);
+        }
+
+        // With a configured signer the check proves the key material is accessible.
+        using (var factory = new SigningPortalFactory())
+        using (var client = factory.CreateClient())
+        {
+            var health = await client.GetStringAsync("/health");
+            Assert.Contains("policy-authority", health);
+            Assert.Contains("signing key is accessible", health);
+        }
     }
 
     private static async Task<JsonObject> PublishAsync(

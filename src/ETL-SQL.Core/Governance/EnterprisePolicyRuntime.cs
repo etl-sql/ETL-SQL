@@ -61,6 +61,24 @@ public static class EnterprisePolicySignature
         Convert.ToBase64String(privateKey.SignData(
             GetSigningPayload(envelope), HashAlgorithmName.SHA256, RSASignaturePadding.Pss));
 
+    /// <summary>Checks only whether the envelope's signature verifies under the given public key —
+    /// no metadata validation. Used by the authority to detect signing-key rotation (a stored
+    /// envelope that no longer verifies under the currently configured key).</summary>
+    public static bool VerifiesWithKey(SignedOrganizationPolicyEnvelope envelope, string publicKeyPem)
+    {
+        try
+        {
+            using var key = RSA.Create();
+            key.ImportFromPem(publicKeyPem);
+            return key.VerifyData(GetSigningPayload(envelope), Convert.FromBase64String(envelope.Signature),
+                HashAlgorithmName.SHA256, RSASignaturePadding.Pss);
+        }
+        catch (Exception ex) when (ex is CryptographicException or ArgumentException or FormatException)
+        {
+            return false;
+        }
+    }
+
     public static OrganizationPolicyDocument VerifyAndParse(
         SignedOrganizationPolicyEnvelope envelope,
         EnterpriseEnrollmentDocument enrollment,
