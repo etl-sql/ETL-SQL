@@ -7,7 +7,10 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > **Tooling note.** The authoritative validation gate is `scripts/Test-PreRelease.ps1`
 > (POSIX: `scripts/test-pre-release.sh`). Version bumping is `scripts/Set-Version.ps1`. Cross-platform
 > packaging is `scripts/Master-Release.ps1`, which calls `scripts/publish_release.ps1`
-> (checksums + SBOM) and `scripts/build_msi.ps1`. There is **no** `Invoke-Release.ps1`.
+> (checksums + SBOM) and `scripts/build_msi.ps1`. The mechanical Phases 3–5 below (gate check →
+> version consistency → notes → push/CI → tag → watch `release.yml` → attach `sha256sums`/`sbom`)
+> are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
+> `-DryRun` first, and `-Force` to continue a partial release.
 
 Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 
