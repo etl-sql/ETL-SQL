@@ -58,6 +58,17 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
         }
 
         string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
+        // Qualified-name plan, rebuilt only when the incoming rows' schema instance changes (rows in
+        // one stream share a schema): an expanded schema carrying the canonical columns plus real
+        // "from.col" columns mirroring their canonical slots. Building the eval row as one values
+        // array over that shared schema replaces the previous per-row form — a row.Columns
+        // dictionary copy plus one interpolated "from.col" string and dynamic-dictionary entry per
+        // column per row, ~40% of the Gate F round-trip's total allocation (see
+        // certification-results/spill-alloc-profile). Real columns (not schema aliases) so every
+        // consumer — enumeration, fallbacks, correlated-subquery capture — sees the qualified names.
+        ETL_SQL.Data.TableSchema? qualifySource = null;
+        ETL_SQL.Data.TableSchema? qualifiedSchema = null;
+        int[] qualifiedSlots = System.Array.Empty<int>();
         await foreach (var batch in batches)
         {
             foreach (var row in batch.Rows)
@@ -66,10 +77,42 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 var evalRow = row;
                 if (!string.IsNullOrEmpty(fromName))
                 {
-                    evalRow = row.Clone();
-                    foreach (var kv in row.Columns)
+                    if (row.Schema != null && !row.HasDynamicColumns)
                     {
-                        if (!kv.Key.Contains(".")) evalRow[$"{fromName}.{kv.Key}"] = kv.Value;
+                        if (!ReferenceEquals(row.Schema, qualifySource))
+                        {
+                            var source = row.Schema;
+                            var names = new List<string>(source.ColumnCount * 2);
+                            var slots = new List<int>(source.ColumnCount);
+                            for (int i = 0; i < source.ColumnCount; i++) names.Add(source.GetName(i));
+                            for (int i = 0; i < source.ColumnCount; i++)
+                            {
+                                var name = source.GetName(i);
+                                if (name.Contains('.')) continue;
+                                names.Add($"{fromName}.{name}");
+                                slots.Add(i);
+                            }
+                            qualifiedSchema = new ETL_SQL.Data.TableSchema(names);
+                            source.CopyAliasesTo(qualifiedSchema);
+                            qualifiedSlots = slots.ToArray();
+                            qualifySource = source;
+                        }
+
+                        int canonical = row.Schema.ColumnCount;
+                        var values = new object?[canonical + qualifiedSlots.Length];
+                        for (int i = 0; i < canonical; i++) values[i] = row[i];
+                        for (int i = 0; i < qualifiedSlots.Length; i++)
+                            values[canonical + i] = values[qualifiedSlots[i]];
+                        evalRow = new ETL_SQL.Data.Row(qualifiedSchema!, values);
+                    }
+                    else
+                    {
+                        // Schemaless rows / dynamic extras: legacy per-column qualification.
+                        evalRow = row.Clone();
+                        foreach (var kv in row.Columns)
+                        {
+                            if (!kv.Key.Contains(".")) evalRow[$"{fromName}.{kv.Key}"] = kv.Value;
+                        }
                     }
                 }
 

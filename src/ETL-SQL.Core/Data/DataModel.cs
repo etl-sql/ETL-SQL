@@ -465,6 +465,19 @@ public class Row
         return -1;
     }
 
+    /// <summary>
+    /// Clone whose lookups resolve through <paramref name="schema"/>. When the layouts match (same
+    /// names, same order — e.g. an alias-bearing copy of this row's schema) this is a values-array
+    /// copy plus a schema swap, with no per-column migration: the allocation-free way for query
+    /// engines to attach qualified-name evaluation schemas to streamed rows.
+    /// </summary>
+    public Row CloneWithSchema(TableSchema schema)
+    {
+        var copy = Clone();
+        copy.SetSchema(schema);
+        return copy;
+    }
+
     public Row Clone()
     {
         Row row;
