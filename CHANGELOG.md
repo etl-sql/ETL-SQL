@@ -12,9 +12,15 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.14.0] — 2026-07-03
+## [0.14.0] — 2026-07-05
 
 ### Added
+
+**Enterprise Policy Enforcement & Monitoring (Phase 3)**
+- Added an administrator-only policy-authority API (`api/admin/policy-authority`) to validate, version, sign, publish (staged or active), activate a staged version, emergency-rollback, and retrieve organization policies per tenant/environment, backed by a durable append-only published-version history (dual-provider SQLite/PostgreSQL migrations).
+- Added machine-authenticated policy distribution (`GET api/policy-authority/envelope`): enrolled machines retrieve their signed policy using enrollment headers plus an optional TLS client certificate; responses are bound to the registered tenant/environment, and unknown, revoked, or reassigned machine identities are refused and audited.
+- Added a policy-authority availability health check and signing-key-rotation tracking; publication, activation, rollback, machine revocation, and distribution denials are recorded in the durable audit trail.
+- Added staged rollout and emergency rollback with monotonic issuance, so clients that reject older issuance times always converge on the newer signed version.
 
 **Billion-Row Columnar Execution Foundations**
 - Designed and implemented a native, high-performance, append-only segmented `#temp` storage engine with `ColumnBatch` buffers to bypass row-at-a-time (`Row`/`DataTable`) overhead.
@@ -58,7 +64,11 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 ### Security
 
 - **Execution Policy Enforcement Boundary:** Added execution policy snapshot context (`ExecutionPolicySnapshot`) and dynamic policy validation.
-- **Filesystem Policy Boundary:** Restricted local paths in remote file transfers, directory synchronization, and recursive file/directory operations.
+- **Shared Enforcement Snapshot:** An immutable policy snapshot is captured when execution begins and propagated unchanged through CLI, TUI, Report Player, Portal, Orchestrator, parallel branches, recursion, and scheduled jobs, making denials deterministic across in-process and spawned execution.
+- **Governed Connector Egress:** Enforced enterprise connector-type, destination host, scheme, and port allowlists before DNS resolution and connection creation, including dynamic REST redirect/pagination/template targets. Local egress denials surface as a plain security error; organization-policy denials carry the governed key and correlation identity.
+- **DNS-Rebinding & Proxy-Bypass Hardening:** The REST connector re-validates the DNS-resolved address at connect time and pins the socket to the validated set, and disables ambient proxy use — closing rebind-to-internal-IP and proxy-bypass paths. Obfuscated IP literals are normalized and loopback/link-local/private/CGNAT/ULA ranges are denied unless explicitly listed; URL-embedded credentials are rejected regardless of policy.
+- **Filesystem Policy Boundary:** Restricted local paths in remote file transfers, directory synchronization, and recursive file/directory operations. `COPY FILE` and recursive directory copy stream through handle-validated opens (OS-resolved final-path re-check after open) to resist link-substitution races; delete/move/copy re-authorize immediately before the OS call.
+- **Governed Resource Ceilings:** `MAX_PARALLEL_DEGREE`, `MAX_FILE_OPERATIONS`, `MAX_RECURSIVE_DEPTH`, `MAX_SMTP_EMAILS_PER_SCRIPT`, and `MAX_STRING_RESULT_SIZE` cannot be weakened by `SET`, configuration, environment variables, command-line options, restored sessions, or report parameters; the enterprise ceiling is bound from the immutable execution snapshot at execution start and re-checked at each operation boundary.
 - **Allowed Extension Tightening:** Removed generic `.tmp` from whitelisted user file extensions to prevent insecure temp file usage.
 
 ## [0.13.0] — 2026-06-28
