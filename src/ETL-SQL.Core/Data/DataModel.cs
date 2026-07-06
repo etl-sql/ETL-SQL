@@ -277,6 +277,16 @@ public class Row
         }
     }
 
+    /// <summary>
+    /// Number of columns this row carries (schema slots + dynamic entries), allocation-free.
+    /// Prefer this over <c>Columns.Count</c> on hot paths — the <see cref="Columns"/> property
+    /// materializes a fresh dictionary on every access.
+    /// </summary>
+    public int ColumnCount => (_schema?.ColumnCount ?? 0) + (_dynamicColumns?.Count ?? 0);
+
+    /// <summary>True when the row carries dynamic (non-schema) column entries.</summary>
+    public bool HasDynamicColumns => _dynamicColumns is { Count: > 0 };
+
     public bool HasColumn(string columnName)
     {
         if (_schema != null && _schema.Contains(columnName)) return true;
@@ -363,6 +373,19 @@ public class Row
     {
         if (_schema == schema) return;
 
+        // Fast path: re-schema-ing between layout-identical schema instances (same names, same
+        // order) is the common per-row case on ingest/readback (batch schema -> table schema).
+        // Positional identity mapping is exactly what the occurrence-based migration below produces
+        // for identical layouts — including duplicate names — so keep the values array and skip the
+        // per-row occurrence dictionary (~10% of the Gate F round-trip's total allocation; see
+        // certification-results/spill-alloc-profile).
+        if (_values != null && _schema != null && _dynamicColumns == null
+            && _values.Length == schema.ColumnCount && HasSameLayout(_schema, schema))
+        {
+            _schema = schema;
+            return;
+        }
+
         var oldSchema = _schema;
         var oldValues = _values;
         _schema = schema;
@@ -411,6 +434,18 @@ public class Row
             foreach (var k in keysToRemove) _dynamicColumns.Remove(k);
             if (_dynamicColumns.Count == 0) _dynamicColumns = null;
         }
+    }
+
+    /// <summary>Same column names in the same order (duplicates included), compared case-insensitively.</summary>
+    private static bool HasSameLayout(TableSchema a, TableSchema b)
+    {
+        if (a.ColumnCount != b.ColumnCount) return false;
+        for (int i = 0; i < a.ColumnCount; i++)
+        {
+            if (!string.Equals(a.GetName(i), b.GetName(i), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
     }
 
     private static int FindOccurrenceIndex(TableSchema schema, string columnName, int occurrenceIndex)
@@ -513,7 +548,7 @@ public class DataTable
     {
         PrepareRowForAdd(row);
 
-        if (!Schema.Constraints.Any(RequiresAsyncValidation))
+        if (!AnyConstraintRequiresAsyncValidation())
         {
             ValidateSynchronousConstraints(row);
             IncrementRowsAdded();
@@ -522,6 +557,20 @@ public class DataTable
         }
 
         return AddRowWithAsyncConstraints(row);
+    }
+
+    /// <summary>
+    /// Allocation-free equivalent of <c>Schema.Constraints.Any(RequiresAsyncValidation)</c>.
+    /// AddRowAsync runs once per row on the hottest ingest paths; the LINQ form allocated a fresh
+    /// instance-method delegate plus a boxed list enumerator per call (~1.7 GB per 10M rows in the
+    /// Gate F round-trip profile).
+    /// </summary>
+    private bool AnyConstraintRequiresAsyncValidation()
+    {
+        var constraints = Schema.Constraints;
+        for (int i = 0; i < constraints.Count; i++)
+            if (RequiresAsyncValidation(constraints[i])) return true;
+        return false;
     }
 
     private async System.Threading.Tasks.Task AddRowWithAsyncConstraints(Row row)
@@ -555,7 +604,7 @@ public class DataTable
     {
         PrepareRowForAdd(row);
 
-        if (Schema.Constraints.Any(RequiresAsyncValidation))
+        if (AnyConstraintRequiresAsyncValidation())
         {
             throw new Core.Common.Exceptions.ExecutionException(
                 "DataTable.AddRow cannot validate CHECK or FOREIGN KEY constraints synchronously. Use AddRowAsync.");
@@ -593,11 +642,19 @@ public class DataTable
             }
 
             if (!cache.Add(row))
-            {
-                var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
-                throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
-            }
+                ThrowUniqueViolation(constraint, row);
         }
+    }
+
+    // Kept out of ValidateSynchronousConstraints: the error-message lambda captures `row`, and the
+    // compiler allocates that closure at method entry — once per AddRowAsync call, even with zero
+    // constraints (~1 GB per 10M rows in the Gate F round-trip profile). In a separate throw helper
+    // the closure only exists on the violation path.
+    private static void ThrowUniqueViolation(TableConstraintInfo constraint, Row row)
+    {
+        var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
+        throw new Core.Common.Exceptions.ExecutionException(
+            $"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
     }
 
     private bool RequiresAsyncValidation(TableConstraintInfo constraint) =>

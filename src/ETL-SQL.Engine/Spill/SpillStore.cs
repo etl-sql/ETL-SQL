@@ -514,7 +514,9 @@ public partial class SpillStore : ISpillStore
 
             if (_context.Telemetry?.TelemetryEnabled ?? false)
             {
-                long inc = row.Columns.Count * 16L;
+                // Row.ColumnCount, not Row.Columns.Count — the Columns property materializes a
+                // fresh dictionary per access, which on this per-row path was measurable churn.
+                long inc = row.ColumnCount * 16L;
                 _context.Telemetry.TotalSpilledBytes += inc;
                 BytesWritten += inc;
                 ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceSpillCeiling(
@@ -525,7 +527,53 @@ public partial class SpillStore : ISpillStore
                 await FlushBatchAsync();
         }
 
-        private static Row SnapshotRow(Row row)
+        // Snapshot plan, rebuilt only when the incoming rows' schema instance changes (rows in one
+        // spill partition share a schema): the expanded schema carries canonical columns plus alias
+        // names as real columns so qualified names survive the Arrow round-trip, and the alias map
+        // records which canonical slot each alias mirrors.
+        private ETL_SQL.Data.TableSchema? _snapshotSourceSchema;
+        private ETL_SQL.Data.TableSchema? _snapshotExpandedSchema;
+        private int[] _snapshotAliasSources = System.Array.Empty<int>();
+
+        private Row SnapshotRow(Row row)
+        {
+            var schema = row.Schema;
+            // Schemaless rows and rows carrying dynamic extras take the legacy dictionary copy —
+            // cold once readback rehydrates schema-backed rows.
+            if (schema == null || row.HasDynamicColumns) return SnapshotRowDynamic(row);
+
+            if (!ReferenceEquals(schema, _snapshotSourceSchema))
+            {
+                var names = new List<string>(schema.ColumnCount);
+                var aliasSources = new List<int>();
+                var seenAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < schema.ColumnCount; i++) names.Add(schema.GetName(i));
+                for (int i = 0; i < schema.ColumnCount; i++)
+                {
+                    foreach (var alias in schema.EnumerateAliasesOf(schema.GetName(i)))
+                    {
+                        if (!seenAliases.Add(alias)) continue; // duplicate canonical names re-enumerate aliases
+                        names.Add(alias);
+                        aliasSources.Add(i);
+                    }
+                }
+                _snapshotExpandedSchema = new ETL_SQL.Data.TableSchema(names);
+                _snapshotAliasSources = aliasSources.ToArray();
+                _snapshotSourceSchema = schema;
+            }
+
+            // One values-array copy per row (the snapshot must survive caller mutation) and no
+            // per-row dictionaries — this was ~20% of the Gate F round-trip's total allocation
+            // (a dynamic-dictionary copy per spilled row; see certification-results/spill-alloc-profile).
+            int canonical = schema.ColumnCount;
+            var values = new object?[canonical + _snapshotAliasSources.Length];
+            for (int i = 0; i < canonical; i++) values[i] = row[i];
+            for (int i = 0; i < _snapshotAliasSources.Length; i++)
+                values[canonical + i] = row[_snapshotAliasSources[i]];
+            return new Row(_snapshotExpandedSchema!, values);
+        }
+
+        private static Row SnapshotRowDynamic(Row row)
         {
             var copy = new Row();
             foreach (var kvp in row.Columns) copy[kvp.Key] = kvp.Value;
@@ -559,7 +607,7 @@ public partial class SpillStore : ISpillStore
                 }
 
                 _buffer.Add(snapshot);
-                telemetryBytes += row.Columns.Count * 16L;
+                telemetryBytes += row.ColumnCount * 16L; // allocation-free; see WriteRowAsync
                 if (_buffer.Count >= _flushBatchSize)
                     await FlushBatchAsync();
             }
@@ -901,6 +949,12 @@ public partial class SpillStore : ISpillStore
         private int _currentBatchRow;
         private SpillReadMode _readMode;
 
+        // Row-extraction caches, built once from the stream's (single, fixed) Arrow schema: a shared
+        // TableSchema so rehydrated rows are array-backed instead of per-row dynamic dictionaries,
+        // and pre-resolved logical types so metadata keys are not re-interpolated per row per column.
+        private ETL_SQL.Data.TableSchema? _rowSchema;
+        private string?[]? _logicalTypes;
+
         public string ChunkName => _chunkName;
 
         public ArrowSpillReader(string path, string chunkName, byte[] key, bool encrypt, bool compress)
@@ -981,15 +1035,29 @@ public partial class SpillStore : ISpillStore
             }
         }
 
-        private static Row ExtractRow(RecordBatch batch, int rowIndex)
+        private Row ExtractRow(RecordBatch batch, int rowIndex)
         {
-            var row = new Row();
-            for (int i = 0; i < batch.Schema.FieldsList.Count; i++)
+            // The Arrow stream format carries one schema for the whole file, so the shared
+            // TableSchema and per-column logical types are built once and reused for every row.
+            // Array-backed rows here removed ~20% of the Gate F round-trip's total allocation
+            // (a Dictionary<string,object> + entry array per rehydrated row) plus the per-row
+            // metadata-key string interpolation — see certification-results/spill-alloc-profile.
+            if (_rowSchema == null || _logicalTypes == null)
             {
-                var field = batch.Schema.FieldsList[i];
-                var logicalType = GetLogicalType(batch.Schema, i);
-                row[field.Name] = ExtractValue(batch.Column(i), rowIndex, logicalType);
+                var fields = batch.Schema.FieldsList;
+                var names = new string[fields.Count];
+                _logicalTypes = new string?[fields.Count];
+                for (int i = 0; i < fields.Count; i++)
+                {
+                    names[i] = fields[i].Name;
+                    _logicalTypes[i] = GetLogicalType(batch.Schema, i);
+                }
+                _rowSchema = new ETL_SQL.Data.TableSchema(names);
             }
+
+            var row = new Row(_rowSchema);
+            for (int i = 0; i < _logicalTypes.Length; i++)
+                row[i] = ExtractValue(batch.Column(i), rowIndex, _logicalTypes[i]);
             return row;
         }
 
