@@ -118,6 +118,38 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         }
     }
 
+    /// <summary>
+    /// Connect-time DNS-rebinding defense. Validates an address the target host actually resolved to,
+    /// immediately before the socket connects, against the process-wide enterprise policy. Under a
+    /// host allowlist a resolved loopback/link-local/private/CGNAT/ULA/metadata address is denied
+    /// unless that exact address is explicitly listed — so a name that passed the earlier name-based
+    /// allowlist cannot rebind to an internal IP between check and connect. No-op when standalone /
+    /// unenrolled or when no host allowlist is configured (parity with the name-based check). Reads
+    /// <see cref="EnterprisePolicyRuntime.Current"/> because the connect callback runs below the
+    /// request context; a policy change between request and connect fails closed to the current policy.
+    /// </summary>
+    public static void EnforceResolvedAddress(string host, System.Net.IPAddress address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        var policy = EnterprisePolicyRuntime.Current;
+        if (!policy.IsEnrolled) return;
+
+        var allowed = policy.ConfigurationValues
+            .Where(pair => pair.Key.StartsWith("Security:AllowedHosts:", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(pair.Value))
+            .Select(pair => pair.Value!.Trim())
+            .ToArray();
+        if (allowed.Length == 0) return;
+
+        var literal = address.ToString();
+        var explicitMatch = allowed.Any(pattern =>
+            !pattern.Contains('*') && HostMatches(pattern, literal));
+        if (NetworkDestinationRules.IsRestrictedRange(literal) && !explicitMatch)
+            throw new SecurityException(
+                $"Enterprise policy denied connection to '{host}': it resolved to internal address '{literal}' " +
+                "(DNS rebinding to a loopback/link-local/private range is blocked; list the address explicitly to allow it).");
+    }
+
     private static void EnforceSchemeAndPort(ExecutionPolicySnapshot snapshot, Uri url)
     {
         if (!snapshot.IsEnrolled) return;

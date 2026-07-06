@@ -193,6 +193,50 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         Assert.IsNotType<ConnectorPolicyDeniedException>(Unwrap(error));
     }
 
+    [Fact]
+    public void EnforceResolvedAddress_DeniesRebindToInternalIp_UnderHostAllowlist()
+    {
+        // DNS-rebinding defense: a name that passed the name-based allowlist ("*") must still be
+        // denied at connect time if it resolved to a loopback/internal address.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["*"]));
+
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress("api.example.com", System.Net.IPAddress.Loopback));
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress(
+                "api.example.com", System.Net.IPAddress.Parse("169.254.169.254"))); // link-local metadata
+        Assert.ThrowsAny<ETL_SQL.Services.SecurityException>(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress(
+                "api.example.com", System.Net.IPAddress.Parse("10.0.0.5")));         // private range
+
+        // A public resolved address is permitted under "*".
+        Assert.Null(Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress("api.example.com", System.Net.IPAddress.Parse("93.184.216.34"))));
+    }
+
+    [Fact]
+    public void EnforceResolvedAddress_AllowsExplicitlyListedInternalIp()
+    {
+        // When an operator lists the internal address explicitly, the resolved connection is allowed.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["127.0.0.1"]));
+        Assert.Null(Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress("localhost", System.Net.IPAddress.Loopback)));
+    }
+
+    [Fact]
+    public void EnforceResolvedAddress_NoOpWhenStandaloneOrNoAllowlist()
+    {
+        // Standalone: no organization restriction applies at connect time.
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        Assert.Null(Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress("localhost", System.Net.IPAddress.Loopback)));
+
+        // Enrolled but with no host allowlist configured: parity with the name-based check (no-op).
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy());
+        Assert.Null(Record.Exception(() =>
+            ConnectorPolicyAuthorizer.EnforceResolvedAddress("localhost", System.Net.IPAddress.Loopback)));
+    }
+
     private static Exception? Unwrap(Exception? ex)
     {
         while (ex is not null)
