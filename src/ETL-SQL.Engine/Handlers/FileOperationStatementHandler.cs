@@ -183,17 +183,28 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Copy:
                     if (dest != null)
                     {
-                        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write).CanonicalPath;
+                        // Re-authorize source (read) and destination (write) immediately before the
+                        // copy and stream the bytes through handle-validated opens, so a link swapped
+                        // in after the path check cannot redirect the read or the write to an
+                        // unauthorized target (TOCTOU / link-race hardening — the write handle is
+                        // non-destructive until its final path is verified). Consistent with the
+                        // recursive directory-copy path.
+                        var copySource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read);
+                        var copyDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
-                        context.SecurityService.ValidateWriteAccess(dest);
-                        context.SecurityService.ValidateFileType(dest);
+                        context.SecurityService.ValidateWriteAccess(copyDest.CanonicalPath);
+                        context.SecurityService.ValidateFileType(copyDest.CanonicalPath);
 
-                        if (File.Exists(dest))
+                        if (!overwrite && File.Exists(copyDest.CanonicalPath))
+                            throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {copyDest.CanonicalPath}");
+
+                        await using (var sourceStream = pathAuthorizer.OpenValidatedRead(context, copySource))
+                        await using (var destStream = pathAuthorizer.OpenValidatedWrite(context, copyDest,
+                            truncate: true, failIfExists: !overwrite))
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            await sourceStream.CopyToAsync(destStream);
                         }
-                        File.Copy(source, dest, overwrite);
+                        dest = copyDest.CanonicalPath;
                     }
                     break;
                 case FileOpType.Move:
