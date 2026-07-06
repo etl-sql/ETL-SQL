@@ -785,25 +785,35 @@ function getSessionId(document: vscode.TextDocument): string {
 }
 
 function forceKillProcesses() {
-    try {
-        if (os.platform() === 'win32') {
-            const username = process.env.USERNAME;
-            const cmd = username 
-                ? `taskkill /F /FI "USERNAME eq ${username}" /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe`
-                : 'taskkill /F /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe';
-            cp.execSync(cmd, { stdio: 'ignore' });
-        } else {
-            const user = process.env.USER || process.env.LOGNAME;
-            if (user) {
-                cp.execSync(`pkill -9 -u "${user}" -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true`, { stdio: 'ignore' });
-                cp.execSync(`pkill -9 -u "${user}" -x "ETL-SQL" || true`, { stdio: 'ignore' });
-            } else {
-                cp.execSync('pkill -9 -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true', { stdio: 'ignore' });
-                cp.execSync('pkill -9 -x "ETL-SQL" || true', { stdio: 'ignore' });
-            }
+    // Pass arguments as an array via execFileSync (no shell), so the OS username taken from the
+    // environment (USERNAME / USER / LOGNAME) can never be interpreted as part of the command even
+    // if it contains shell metacharacters. Each kill is run and its non-zero exit ignored
+    // independently (pkill/taskkill exit non-zero when nothing matches), preserving the previous
+    // "|| true" semantics without a shell.
+    const tryExec = (file: string, args: string[]) => {
+        try {
+            cp.execFileSync(file, args, { stdio: 'ignore' });
+        } catch {
+            // Ignore errors (e.g. no matching processes are running)
         }
-    } catch {
-        // Ignore errors (e.g. if processes are not running)
+    };
+
+    if (os.platform() === 'win32') {
+        const username = process.env.USERNAME;
+        const targets = ['/IM', 'ETL-SQL.exe', '/IM', 'ETL-SQL-LSP.exe', '/IM', 'ETL-SQL-Report.exe', '/IM', 'ETL-SQL-Player.exe'];
+        tryExec('taskkill', username
+            ? ['/F', '/FI', `USERNAME eq ${username}`, ...targets]
+            : ['/F', ...targets]);
+    } else {
+        const user = process.env.USER || process.env.LOGNAME;
+        const daemonPattern = 'ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player';
+        if (user) {
+            tryExec('pkill', ['-9', '-u', user, '-f', daemonPattern]);
+            tryExec('pkill', ['-9', '-u', user, '-x', 'ETL-SQL']);
+        } else {
+            tryExec('pkill', ['-9', '-f', daemonPattern]);
+            tryExec('pkill', ['-9', '-x', 'ETL-SQL']);
+        }
     }
 }
 
