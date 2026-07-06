@@ -111,17 +111,12 @@ namespace ETL_SQL.Tests.Analysis
                                 t.Value.Contains(">")
                             );
 
-                            if (!hasPlaceholders && !isEmbeddedPortalCommand)
+                            bool isReplaceFunction = firstToken.Value.Equals("REPLACE", StringComparison.OrdinalIgnoreCase)
+                                && tokens.Skip(1).FirstOrDefault()?.Value == "(";
+
+                            if (!hasPlaceholders && !isEmbeddedPortalCommand && !isReplaceFunction)
                             {
-                                if (firstToken.Value.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
-                                    firstToken.Value.Equals("ALTER", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    shouldValidate = tokens.Any(t => t.Value.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase));
-                                }
-                                else
-                                {
-                                    shouldValidate = true;
-                                }
+                                shouldValidate = true;
                             }
                         }
 

@@ -36,6 +36,9 @@ public class GrammarLanguageServiceTests
         Assert.Contains("CONNECTION", texts);
         Assert.Contains("TABLE", texts);
         Assert.Contains("DATASET", texts);
+        Assert.DoesNotContain("SELECT", texts);
+        Assert.DoesNotContain("FROM", texts);
+        Assert.DoesNotContain("WHERE", texts);
 
         // 3. Test database schema suggestions in FROM clause (expecting table name)
         context = new SuggestionContext

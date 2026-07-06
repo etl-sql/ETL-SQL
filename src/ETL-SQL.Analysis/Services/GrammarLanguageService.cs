@@ -24,6 +24,63 @@ public class GrammarLanguageService : LanguageService
         _grammarTree = DefaultGrammar.Build(metadata);
     }
 
+    public override async Task<List<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
+    {
+        var suggestions = await base.GetSuggestionsAsync(context);
+
+        try
+        {
+            var walker = RunWalker(context);
+
+            // Check if strict (no wildcards match in any active state)
+            bool strict = true;
+            foreach (var state in walker.ActiveStates)
+            {
+                foreach (var transition in state.Transitions)
+                {
+                    // Check if wildcard: matches both an identifier and a string token
+                    var token1 = new Token(TokenType.IDENTIFIER, "___wildcard_test_1___", 0, 0, 0, 0);
+                    var token2 = new Token(TokenType.STRING, "___wildcard_test_2___", 0, 0, 0, 0);
+                    if (transition.Matches(token1, walker) && transition.Matches(token2, walker))
+                    {
+                        strict = false;
+                        break;
+                    }
+                }
+                if (!strict) break;
+            }
+
+            if (strict)
+            {
+                var activeLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var state in walker.ActiveStates)
+                {
+                    foreach (var transition in state.Transitions)
+                    {
+                        if (transition.Label != null)
+                        {
+                            activeLabels.Add(transition.Label);
+                        }
+                    }
+                }
+
+                // Filter keywords and functions (keeping standard tags starting with @)
+                suggestions = suggestions.Where(s =>
+                    (s.Type != SuggestionType.Keyword && s.Type != SuggestionType.Function) ||
+                    s.Text.StartsWith("@") ||
+                    activeLabels.Contains(s.Text)
+                ).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            context.Logger?.Error($"GrammarLanguageService.GetSuggestionsAsync error: {ex.Message}");
+        }
+
+        return suggestions;
+    }
+
+
     protected override async Task<List<Suggestion>> GetPatternSuggestionsAsync(SuggestionContext context)
     {
         var results = new List<Suggestion>();
@@ -198,3 +255,4 @@ public class GrammarLanguageService : LanguageService
         }
     }
 }
+

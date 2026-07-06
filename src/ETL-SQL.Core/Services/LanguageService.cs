@@ -57,7 +57,7 @@ public class LanguageService : ILanguageService
         _functionRegistry = functionRegistry;
     }
 
-    public async Task<List<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
+    public virtual async Task<List<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
     {
         try
         {
@@ -550,3 +550,4 @@ public class LanguageService : ILanguageService
         }
     }
 }
+

@@ -31,7 +31,9 @@ CREATE TABLE #staging (
 CREATE INDEX idx_id ON #staging (id);
 
 -- Named set
-CREATE SETS !Regions AS ('North', 'South', 'East', 'West');
+CREATE SETS !Regions BEGIN
+  @North = 'North', @South = 'South', @East = 'East', @West = 'West'
+END;
 
 -- Query view
 CREATE VIEW ActiveOrders AS
@@ -57,3 +59,4 @@ END;
 
 References:
 - [Grammar](../../../../../Docs/Reference/Grammar.md)
+

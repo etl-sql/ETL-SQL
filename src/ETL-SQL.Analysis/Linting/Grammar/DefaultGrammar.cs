@@ -24,6 +24,7 @@ public static class DefaultGrammar
         ConfigureControlFlow(tree);
         ConfigureSpecializedOperations(tree, sharedWithNode, sharedAtNode, sharedToNode);
         ConfigureCommonStatements(tree);
+        ConfigureCreateAlterReplace(tree);
         ConfigureExecute(tree);
         ConfigureParallel(tree);
 
@@ -1390,22 +1391,70 @@ public static class DefaultGrammar
             ));
         }
 
-        // 7. General ALTER statements (non-connection ones)
-        var alterNode = tree.GetStartNode("ALTER");
+    }
+
+    private static void ConfigureCreateAlterReplace(GrammarStateTree tree)
+    {
+        var createNode = tree.GetStartNode("CREATE");
+        var alterStartNode = tree.GetStartNode("ALTER");
+        
+        var replaceNode = new StateNode("REPLACE");
+        tree.RegisterStartNode("REPLACE", replaceNode);
+
+        StateNode? alterNode = null;
+        if (createNode != null)
+        {
+            var orNode = createNode.Transitions.FirstOrDefault(t => t.Label != null && t.Label.Equals("OR", StringComparison.OrdinalIgnoreCase))?.Target;
+            if (orNode != null)
+            {
+                orNode.AddTransitionTo("REPLACE", replaceNode, SuggestionType.Keyword);
+                alterNode = orNode.Transitions.FirstOrDefault(t => t.Label != null && t.Label.Equals("ALTER", StringComparison.OrdinalIgnoreCase))?.Target;
+            }
+        }
+
+        var ddlExpr = new StateNode("DDL_EXPR");
+        ddlExpr.AddTransition(new StateTransition(
+            t => t.Type != TokenType.SEMICOLON,
+            ddlExpr,
+            "<expression_token>"
+        ));
+
+        var ddlKeywords = new[] {
+            "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", 
+            "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX", "TAG", "LINEAGE",
+            "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION", "SHARE", "EMBED", "SAVED", "ALERT", 
+            "SMTP", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR", "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "REPORT", "UNIQUE"
+        };
+
+        foreach (var keyword in ddlKeywords)
+        {
+            if (createNode != null)
+            {
+                createNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
+            }
+            if (alterStartNode != null)
+            {
+                alterStartNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
+            }
+            if (alterNode != null)
+            {
+                alterNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
+            }
+            replaceNode.AddTransitionTo(keyword, ddlExpr, SuggestionType.Keyword);
+        }
+
+        // For REPLACE, we can also support SETS and CONNECTION using the generic loop state
+        replaceNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
+        replaceNode.AddTransitionTo("CONNECTION", ddlExpr, SuggestionType.Keyword);
+
+        // For ALTER, we also want to support SETS using the generic loop state
+        if (alterStartNode != null)
+        {
+            alterStartNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
+        }
         if (alterNode != null)
         {
-            // Connect alterNode to a generic path for non-CONNECTION targets
-            var alterExpr = new StateNode("ALTER_EXPR");
-            alterNode.AddTransition(new StateTransition(
-                t => !t.Value.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase),
-                alterExpr,
-                "<expression>"
-            ));
-            alterExpr.AddTransition(new StateTransition(
-                t => t.Type != TokenType.SEMICOLON,
-                alterExpr,
-                "<expression_token>"
-            ));
+            alterNode.AddTransitionTo("SETS", ddlExpr, SuggestionType.Keyword);
         }
     }
 
@@ -1680,3 +1729,5 @@ public static class DefaultGrammar
         parallelForStepVal.AddTransitionTo("BEGIN", tree.Root, SuggestionType.Keyword);
     }
 }
+
+
