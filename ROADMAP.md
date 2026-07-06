@@ -15,8 +15,9 @@ promise are defined in
 in v0.13.0. Standalone installations must remain unenrolled, unrestricted by organization policy, and
 independent of network services.*
 
-> **Status:** Phase 3 and the v0.14.0 release gates are active in [`TODO.md`](TODO.md). Phases 4–5 are
-> deferred to v0.15.0 and remain here as the source plan. **Phase 6 (Operations Control Plane) remains
+> **Status:** Phase 3 and the v0.14.0 release gates are active in [`TODO.md`](TODO.md). Residual Phase 3
+> hardening plus Phases 4–5 are deferred to v0.15.0 and remain here as the source plan. **Phase 6
+> (Operations Control Plane) remains
 > candidate scope**; promote roadmap work into `TODO.md` only when its target release begins.
 
 ### Shipped foundation
@@ -72,6 +73,19 @@ independent of network services.*
 - [ ] A repository-wide security review finds no direct sensitive operation that bypasses the shared authorizer.
 - [ ] Bypass suites cover Windows and Linux paths, links, DNS/redirect behavior, connector aliases, child processes, Docker mounts, script overrides, and concurrent policy refresh.
 - [ ] Existing standalone tests prove no enterprise endpoint, certificate, cache, or organization restriction is required when unenrolled.
+
+### v0.15.0 Deferred Phase 3 hardening
+
+- [ ] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on
+  supported platforms; add link/junction substitution tests at each mutation boundary.
+- [ ] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the
+  REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report
+  Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
+- [ ] Add a Portal administrator UI for policy validation, version history, staged publication,
+  activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.
+- [ ] Run and retain the deferred performance lane plus Windows and Linux enterprise certification
+  evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone
+  behavior.
 
 ### v0.15.0 Phase 4: Central Security Events
 
