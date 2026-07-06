@@ -41,8 +41,8 @@ namespace ETL_SQL.Core.Common
             if (string.IsNullOrEmpty(path)) return path;
 
             // Do not coerce temporary, backup, or staging files used internally by the engine
-            if (path.Contains(".tmp", StringComparison.OrdinalIgnoreCase) || 
-                path.Contains(".bak", StringComparison.OrdinalIgnoreCase) || 
+            if (path.Contains(".tmp", StringComparison.OrdinalIgnoreCase) ||
+                path.Contains(".bak", StringComparison.OrdinalIgnoreCase) ||
                 path.Contains(".staged", StringComparison.OrdinalIgnoreCase))
             {
                 return path;

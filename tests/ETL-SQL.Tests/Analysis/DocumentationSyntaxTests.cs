@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Analysis
             var tree = DefaultGrammar.Build();
 
             var mdFiles = new List<string>();
-            
+
             // Gather all markdown files in Docs/ and Resources/Help/
             var docsDir = Path.Combine(repoRoot, "Docs");
             if (Directory.Exists(docsDir))
@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Analysis
                 foreach (Match match in matches)
                 {
                     var sqlBlock = match.Groups[1].Value.Trim();
-                    
+
                     List<Token> allTokens;
                     try
                     {
@@ -101,16 +101,16 @@ namespace ETL_SQL.Tests.Analysis
                                 && tokens.Skip(1).FirstOrDefault()?.Value.Equals("SMTP", StringComparison.OrdinalIgnoreCase) == true;
 
                             // Skip template placeholders like <Provider>, [optional], or |
-                            bool hasPlaceholders = tokens.Any(t => 
-                                t.Type == TokenType.LESS_THAN || 
+                            bool hasPlaceholders = tokens.Any(t =>
+                                t.Type == TokenType.LESS_THAN ||
                                 t.Type == TokenType.GREATER_THAN ||
-                                t.Value == "[" || 
-                                t.Value == "]" || 
-                                t.Value == "|" || 
-                                t.Value.Contains("<") || 
+                                t.Value == "[" ||
+                                t.Value == "]" ||
+                                t.Value == "|" ||
+                                t.Value.Contains("<") ||
                                 t.Value.Contains(">")
                             );
-                            
+
                             if (!hasPlaceholders && !isEmbeddedPortalCommand)
                             {
                                 if (firstToken.Value.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
@@ -130,13 +130,13 @@ namespace ETL_SQL.Tests.Analysis
                             // Documentation often splits compound blocks into fragments for transition
                             // coverage. Production-parser acceptance is covered by complete grammar tests.
                             bool success = tree.ValidateSequence(tokens, out var errorMessage, requireComplete: false);
-                            
+
                             // Include file name and snippet details in the failure message for debugging ease
-                            Assert.True(success, 
+                            Assert.True(success,
                                 $"Syntax error in documentation file '{Path.GetRelativePath(repoRoot, file)}':\n" +
                                 $"Snippet:\n{string.Join(" ", tokens.Select(t => t.Value))}\n\n" +
                                 $"Error: {errorMessage}");
-                                
+
                             checkedSnippets++;
                         }
                         else
@@ -191,22 +191,22 @@ namespace ETL_SQL.Tests.Analysis
 
         private static bool ShouldPreventSplit(string statementStart, string nextKeyword)
         {
-            if (statementStart.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) && 
+            if (statementStart.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) &&
                 nextKeyword.Equals("SET", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            if (statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase) && 
+            if (statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase) &&
                 nextKeyword.Equals("SET", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            if (statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) && 
+            if (statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) &&
                 nextKeyword.Equals("SELECT", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
-            if (statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase) && 
+            if (statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase) &&
                 (nextKeyword.Equals("INSERT", StringComparison.OrdinalIgnoreCase) ||
                  nextKeyword.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||
                  nextKeyword.Equals("DELETE", StringComparison.OrdinalIgnoreCase)))
@@ -214,7 +214,7 @@ namespace ETL_SQL.Tests.Analysis
                 return true;
             }
             if ((statementStart.Equals("EXECUTE", StringComparison.OrdinalIgnoreCase) ||
-                 statementStart.Equals("EXEC", StringComparison.OrdinalIgnoreCase)) && 
+                 statementStart.Equals("EXEC", StringComparison.OrdinalIgnoreCase)) &&
                 nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -222,7 +222,7 @@ namespace ETL_SQL.Tests.Analysis
             if ((statementStart.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("EXPORT", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("PUBLISH", StringComparison.OrdinalIgnoreCase) ||
-                 statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase)) && 
+                 statementStart.Equals("ALTER", StringComparison.OrdinalIgnoreCase)) &&
                 (nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) ||
                  nextKeyword.Equals("ENCRYPT", StringComparison.OrdinalIgnoreCase) ||
                  nextKeyword.Equals("DECRYPT", StringComparison.OrdinalIgnoreCase) ||
@@ -231,7 +231,7 @@ namespace ETL_SQL.Tests.Analysis
             {
                 return true;
             }
-            if (statementStart.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) && 
+            if (statementStart.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) &&
                 nextKeyword.Equals("TRANSACTION", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -240,7 +240,7 @@ namespace ETL_SQL.Tests.Analysis
                  statementStart.Equals("WHILE", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("FOR", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("FOREACH", StringComparison.OrdinalIgnoreCase) ||
-                 statementStart.Equals("ELSE", StringComparison.OrdinalIgnoreCase)) && 
+                 statementStart.Equals("ELSE", StringComparison.OrdinalIgnoreCase)) &&
                 nextKeyword.Equals("BEGIN", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -249,7 +249,7 @@ namespace ETL_SQL.Tests.Analysis
                  statementStart.Equals("INSERT", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) ||
                  statementStart.Equals("DELETE", StringComparison.OrdinalIgnoreCase) ||
-                 statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase)) && 
+                 statementStart.Equals("MERGE", StringComparison.OrdinalIgnoreCase)) &&
                 nextKeyword.Equals("END", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
@@ -283,7 +283,7 @@ namespace ETL_SQL.Tests.Analysis
                 {
                     var lastToken = current.Last();
                     var firstToken = current.FirstOrDefault(t => t.Type != TokenType.EOF);
-                    if (token.Line > lastToken.Line && 
+                    if (token.Line > lastToken.Line &&
                         StartKeywords.Contains(token.Value) &&
                         !IsContinuationToken(lastToken) &&
                         (firstToken == null || !ShouldPreventSplit(firstToken.Value, token.Value)))

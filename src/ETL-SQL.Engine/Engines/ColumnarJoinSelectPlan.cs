@@ -199,38 +199,38 @@ internal sealed class ColumnarJoinSelectPlan
         {
             var yielded = false;
             await foreach (var leftBatch in _left.ReadColumnBatches(_context.BatchSize, _context.CancellationToken))
-            using (leftBatch)
-            {
-                var matched = new bool[leftBatch.RowCount];
-                foreach (var rightBatch in _rightBatches)
+                using (leftBatch)
                 {
-                    using var pairs = ColumnBatchJoinKernels.JoinAuto(
-                        leftBatch, _plan._leftKeys, rightBatch, _plan._rightKeys, ColumnarJoinKind.Inner,
-                        _context.MemoryArbiter, cancellationToken: _context.CancellationToken);
-                    foreach (var row in pairs.LeftRows.Span) matched[row] = true;
-                    if (_plan._kind is ColumnarJoinKind.Inner or ColumnarJoinKind.LeftOuter && pairs.Count > 0)
+                    var matched = new bool[leftBatch.RowCount];
+                    foreach (var rightBatch in _rightBatches)
                     {
-                        yielded = true;
-                        yield return Project(leftBatch, rightBatch, pairs);
+                        using var pairs = ColumnBatchJoinKernels.JoinAuto(
+                            leftBatch, _plan._leftKeys, rightBatch, _plan._rightKeys, ColumnarJoinKind.Inner,
+                            _context.MemoryArbiter, cancellationToken: _context.CancellationToken);
+                        foreach (var row in pairs.LeftRows.Span) matched[row] = true;
+                        if (_plan._kind is ColumnarJoinKind.Inner or ColumnarJoinKind.LeftOuter && pairs.Count > 0)
+                        {
+                            yielded = true;
+                            yield return Project(leftBatch, rightBatch, pairs);
+                        }
                     }
-                }
 
-                if (_plan._kind == ColumnarJoinKind.Inner) continue;
-                var selected = Enumerable.Range(0, matched.Length)
-                    .Where(row => _plan._kind switch
-                    {
-                        ColumnarJoinKind.LeftOuter => !matched[row],
-                        ColumnarJoinKind.LeftSemi => matched[row],
-                        ColumnarJoinKind.LeftAnti => !matched[row],
-                        _ => false
-                    }).ToArray();
-                if (selected.Length == 0) continue;
-                var rightRows = Enumerable.Repeat(-1, selected.Length).ToArray();
-                using var selectedPairs = ColumnBatchJoinKernels.CreateOrdinalPairs(
-                    selected, rightRows, _context.MemoryArbiter);
-                yielded = true;
-                yield return Project(leftBatch, null, selectedPairs);
-            }
+                    if (_plan._kind == ColumnarJoinKind.Inner) continue;
+                    var selected = Enumerable.Range(0, matched.Length)
+                        .Where(row => _plan._kind switch
+                        {
+                            ColumnarJoinKind.LeftOuter => !matched[row],
+                            ColumnarJoinKind.LeftSemi => matched[row],
+                            ColumnarJoinKind.LeftAnti => !matched[row],
+                            _ => false
+                        }).ToArray();
+                    if (selected.Length == 0) continue;
+                    var rightRows = Enumerable.Repeat(-1, selected.Length).ToArray();
+                    using var selectedPairs = ColumnBatchJoinKernels.CreateOrdinalPairs(
+                        selected, rightRows, _context.MemoryArbiter);
+                    yielded = true;
+                    yield return Project(leftBatch, null, selectedPairs);
+                }
             if (!yielded)
             {
                 var empty = new DataTable();

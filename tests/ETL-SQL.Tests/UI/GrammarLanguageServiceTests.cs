@@ -2,12 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.Core.Services;
 using ETL_SQL.Analysis.Services;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Common;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Services;
 using Xunit;
 
 namespace ETL_SQL.Tests.UI;

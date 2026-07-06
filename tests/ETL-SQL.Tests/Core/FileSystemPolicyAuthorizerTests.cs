@@ -1,10 +1,10 @@
+using System.IO.Compression;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Moq;
-using System.IO.Compression;
 
 namespace ETL_SQL.Tests.Core;
 

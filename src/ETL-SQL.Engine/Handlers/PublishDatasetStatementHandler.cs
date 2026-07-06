@@ -60,7 +60,7 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 sourcePath = sourcePath.Substring(0, sourcePath.Length - 12);
             else if (sourcePath.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
                 sourcePath = sourcePath.Substring(0, sourcePath.Length - 4);
-            
+
             if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
                 sourcePath += ".etlds";
         }

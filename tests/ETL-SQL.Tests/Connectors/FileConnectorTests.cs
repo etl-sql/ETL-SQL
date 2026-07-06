@@ -541,7 +541,7 @@ namespace ETL_SQL.Tests.Connectors
             };
 
             var ds = new FlatFileDataSource(Ctx, outPath, opts);
-            
+
             // Verify path coercion: it should end with .zip because of encryption + compression
             Assert.EndsWith(".zip", ds.Path);
 
@@ -571,7 +571,7 @@ namespace ETL_SQL.Tests.Connectors
             };
 
             var ds = new FlatFileDataSource(Ctx, outPath, opts);
-            
+
             // Verify path coercion: it should end with .pgp because of encryption only
             Assert.EndsWith(".pgp", ds.Path);
 
@@ -900,7 +900,7 @@ namespace ETL_SQL.Tests.Connectors
 
             var dt = new ETL_SQL.Data.DataTable();
             dt.SetColumns(new[] { "ID", "Name", "Salary" });
-            
+
             var r1 = dt.NewRow(); r1["ID"] = 1; r1["Name"] = "Alice"; r1["Salary"] = 12000.50m; await dt.AddRowAsync(r1);
             var r2 = dt.NewRow(); r2["ID"] = 2; r2["Name"] = "Bob"; r2["Salary"] = 15000.00m; await dt.AddRowAsync(r2);
 

@@ -288,7 +288,7 @@ namespace ETL_SQL.Connectors.Excel
                             entryName = entryName.Substring(0, entryName.Length - 4);
                         else if (entryName.EndsWith(".pgp", StringComparison.OrdinalIgnoreCase))
                             entryName = entryName.Substring(0, entryName.Length - 4);
-                        
+
                         zip.CreateEntryFromFile(tempFile, entryName);
                     }
                     fileToEncrypt = zippedTemp;

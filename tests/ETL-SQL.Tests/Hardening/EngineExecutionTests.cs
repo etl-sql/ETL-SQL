@@ -408,7 +408,8 @@ namespace ETL_SQL.Tests.Hardening
             var count = new FunctionCallExpression("COUNT", new List<Expression>
             {
                 new IdentifierExpression("*")
-            }) { Window = window };
+            })
+            { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {
@@ -461,7 +462,8 @@ namespace ETL_SQL.Tests.Hardening
             var count = new FunctionCallExpression("COUNT", new List<Expression>
             {
                 new IdentifierExpression("*")
-            }) { Window = window };
+            })
+            { Window = window };
             var stmt = new SelectStatement(
                 new List<SelectColumn>
                 {

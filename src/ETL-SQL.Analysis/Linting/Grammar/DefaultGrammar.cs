@@ -57,7 +57,7 @@ public static class DefaultGrammar
         createNode.AddTransitionTo("OR", orNode, SuggestionType.Keyword);
         orNode.AddTransitionTo("ALTER", alterNode, SuggestionType.Keyword);
         alterNode.AddTransitionTo("CONNECTION", connectionNode, SuggestionType.Keyword);
-        
+
         // CREATE SETS !name BEGIN ... END
         var createSets = new StateNode("CREATE_SETS");
         var createSetsBang = new StateNode("CREATE_SETS_BANG");
@@ -127,7 +127,7 @@ public static class DefaultGrammar
         openParenNode.AddTokenTransition(TokenType.STRING_LITERAL, singleStringValueNode, "<connection_string>");
         openParenNode.AddTokenTransition(TokenType.VARIABLE, singleStringValueNode, "<variable>");
         openParenNode.AddTokenTransition(TokenType.IDENTIFIER, singleStringValueNode, "<identifier>");
-        
+
         // ( -> ) (empty options list)
         openParenNode.AddTokenTransition(TokenType.RPAREN, closeParenNode, ")");
 
@@ -145,7 +145,8 @@ public static class DefaultGrammar
 
         // = -> option_value
         equalsNode.AddWildcardTransition(optionValueNode, "<option_value>", SuggestionType.OptionValue, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 // Save option value to walker state bag for later reference
                 walker.StateBag["LastOptionValue"] = token.Value;
             });
@@ -277,7 +278,7 @@ public static class DefaultGrammar
         // Password logic: PASSWORD 'val' or PASSWORD('val')
         passwordKeywordNode.AddTokenTransition(TokenType.LPAREN, passwordValNode, "(");
         passwordKeywordNode.AddWildcardTransition(passwordValNode, "<password>");
-        
+
         passwordValNode.AddWildcardTransition(passwordValNode, "<password>"); // Handles inner expression
         passwordValNode.AddTokenTransition(TokenType.RPAREN, destinationNode, ")"); // Jump back to destination choices
         passwordValNode.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
@@ -323,7 +324,7 @@ public static class DefaultGrammar
 
         withOptionValueNode.AddTokenTransition(TokenType.COMMA, withCommaNode, ",");
         withOptionValueNode.AddTokenTransition(TokenType.RPAREN, withCloseParenNode, ")");
-        
+
         withOptionValueNode.AddTransition(new StateTransition(
             t => t.Type == TokenType.IDENTIFIER || t.Type == TokenType.VARIABLE || IsWord(t.Value),
             withOptionNameNode,
@@ -415,7 +416,7 @@ public static class DefaultGrammar
         if (string.IsNullOrEmpty(value)) return false;
         char first = value[0];
         if (!char.IsLetter(first)) return false;
-        
+
         for (int i = 1; i < value.Length; i++)
         {
             char c = value[i];
@@ -433,12 +434,12 @@ public static class DefaultGrammar
         var intoTable = new StateNode("SELECT_INTO_TABLE");
         var fromNode = new StateNode("SELECT_FROM");
         var fromSource = new StateNode("SELECT_FROM_SOURCE");
-        
+
         var joinTypeNode = new StateNode("SELECT_JOIN_TYPE");
         var joinNode = new StateNode("SELECT_JOIN");
         var joinSource = new StateNode("SELECT_JOIN_SOURCE");
         var joinOnNode = new StateNode("SELECT_JOIN_ON");
-        
+
         var whereNode = new StateNode("SELECT_WHERE");
         var groupKey = new StateNode("SELECT_GROUP");
         var groupBy = new StateNode("SELECT_GROUP_BY");
@@ -461,10 +462,10 @@ public static class DefaultGrammar
         // INTO
         intoNode.AddWildcardTransition(intoTable, "<temp_table>");
         intoTable.AddTransition(new StateTransition(
-            t => !t.Value.Equals("FROM", StringComparison.OrdinalIgnoreCase) && 
-                 !t.Value.Equals("UNION", StringComparison.OrdinalIgnoreCase) && 
-                 !t.Value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) && 
-                 !t.Value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase) && 
+            t => !t.Value.Equals("FROM", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("UNION", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) &&
+                 !t.Value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase) &&
                  t.Type != TokenType.SEMICOLON,
             intoTable,
             "<into_table_token>"
@@ -544,12 +545,12 @@ public static class DefaultGrammar
 
         // Set operators (UNION, UNION ALL, EXCEPT, INTERSECT)
         var unionNode = new StateNode("UNION");
-        
+
         void AddUnionTransitions(StateNode fromState)
         {
             fromState.AddTransition(new StateTransition(
-                t => t.Value.Equals("UNION", StringComparison.OrdinalIgnoreCase) || 
-                     t.Value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) || 
+                t => t.Value.Equals("UNION", StringComparison.OrdinalIgnoreCase) ||
+                     t.Value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) ||
                      t.Value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase),
                 unionNode,
                 "UNION/EXCEPT/INTERSECT"
@@ -568,7 +569,7 @@ public static class DefaultGrammar
         var unionAll = new StateNode("UNION_ALL");
         unionNode.AddTransitionTo("ALL", unionAll, SuggestionType.Keyword);
         unionNode.AddTransitionTo("DISTINCT", unionAll, SuggestionType.Keyword);
-        
+
         unionNode.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
         unionAll.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
 
@@ -580,14 +581,16 @@ public static class DefaultGrammar
         static int GetQueryDepth(TokenWalker walker) => walker.StateBag.TryGetValue("QueryParenDepth", out var d) ? (int)d : 0;
 
         fromSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetQueryDepth(walker);
                 walker.StateBag["QueryParenDepth"] = d + 1;
             }
         );
-        
+
         joinSource.AddTokenTransition(TokenType.LPAREN, querySubqueryStart, "(", null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetQueryDepth(walker);
                 walker.StateBag["QueryParenDepth"] = d + 1;
             }
@@ -602,7 +605,8 @@ public static class DefaultGrammar
                 querySubqueryEnd,
                 ")",
                 null, null,
-                (token, walker) => {
+                (token, walker) =>
+                {
                     int d = GetQueryDepth(walker);
                     walker.StateBag["QueryParenDepth"] = Math.Max(0, d - 1);
                 },
@@ -620,14 +624,14 @@ public static class DefaultGrammar
         // AS alias
         querySubqueryEnd.AddTransitionTo("AS", querySubqueryAlias, SuggestionType.Keyword);
         querySubqueryAlias.AddWildcardTransition(fromSource, "<alias_name>");
-        
+
         // Direct alias (without AS)
         querySubqueryEnd.AddTransition(new StateTransition(
             t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
             fromSource,
             "<alias_name>"
         ));
-        
+
         // No alias (e.g. subquery in IN clause or just without alias)
         querySubqueryEnd.AddTransition(new StateTransition(
             t => t.Type != TokenType.IDENTIFIER && !IsWord(t.Value) && t.Type != TokenType.SEMICOLON,
@@ -651,7 +655,7 @@ public static class DefaultGrammar
         ));
         insertTable.AddTransitionTo("VALUES", insertValues, SuggestionType.Keyword);
         insertTable.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword); // insert-select
-        
+
         insertValues.AddTransition(new StateTransition(
             t => t.Type != TokenType.SEMICOLON,
             insertValues,
@@ -722,14 +726,14 @@ public static class DefaultGrammar
             "<source_table_token>"
         ));
         mergeSource.AddTransitionTo("ON", mergeOn, SuggestionType.Keyword);
-        
+
         mergeOn.AddTransition(new StateTransition(
             t => !t.Value.Equals("WHEN", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
             mergeOn,
             "<merge_condition_token>"
         ));
         mergeOn.AddTransitionTo("WHEN", mergeWhen, SuggestionType.Keyword);
-        
+
         mergeWhen.AddTransition(new StateTransition(
             t => t.Value.Equals("MATCHED", StringComparison.OrdinalIgnoreCase) || t.Value.Equals("NOT", StringComparison.OrdinalIgnoreCase),
             mergeMatched,
@@ -808,7 +812,7 @@ public static class DefaultGrammar
         ));
 
         mergeFilesDest.AddTransitionTo("WITH", withNode, SuggestionType.Keyword);
-        
+
         mergeFilesDest.AddTransition(new StateTransition(
             t => tree.GetStartNode(t.Value) != null,
             tree.Root,
@@ -842,7 +846,7 @@ public static class DefaultGrammar
 
         tree.RegisterStartNode("IF", ifNode);
         ifNode.AddWildcardTransition(ifCondition, "<condition>");
-        
+
         // IF condition can transition to BEGIN or reset to Root, or to ELSE
         ifCondition.AddTransition(new StateTransition(
             t => !t.Value.Equals("BEGIN", StringComparison.OrdinalIgnoreCase) && !t.Value.Equals("ELSE", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
@@ -936,7 +940,7 @@ public static class DefaultGrammar
         tree.RegisterStartNode("RUN", runNode);
         runNode.AddTransitionTo("SCRIPT", runScriptNode, SuggestionType.Keyword);
         runScriptNode.AddWildcardTransition(scriptPath, "<script_path>");
-        
+
         scriptPath.AddTransition(new StateTransition(
             t => !t.Value.Equals("WITH", StringComparison.OrdinalIgnoreCase) &&
                  !t.Value.Equals("AT", StringComparison.OrdinalIgnoreCase) &&
@@ -964,7 +968,7 @@ public static class DefaultGrammar
         // Wait FOR UNTIL condition
         var waitNode = new StateNode("WAIT");
         var waitUntilCondition = new StateNode("WAIT_UNTIL_CONDITION");
-        
+
         tree.RegisterStartNode("WAIT", waitNode);
         waitNode.AddTransitionTo("UNTIL", waitUntilCondition, SuggestionType.Keyword);
 
@@ -979,7 +983,8 @@ public static class DefaultGrammar
             waitUntilCondition,
             "(",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetWaitUntilDepth(walker);
                 walker.StateBag["WaitUntilParenDepth"] = d + 1;
             }
@@ -990,7 +995,8 @@ public static class DefaultGrammar
             waitUntilCondition,
             ")",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetWaitUntilDepth(walker);
                 walker.StateBag["WaitUntilParenDepth"] = Math.Max(0, d - 1);
             },
@@ -1021,7 +1027,8 @@ public static class DefaultGrammar
             waitforCondition,
             "(",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetWaitForDepth(walker);
                 walker.StateBag["WaitForParenDepth"] = d + 1;
             }
@@ -1032,7 +1039,8 @@ public static class DefaultGrammar
             waitforCondition,
             ")",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetWaitForDepth(walker);
                 walker.StateBag["WaitForParenDepth"] = Math.Max(1, d - 1);
             },
@@ -1063,11 +1071,11 @@ public static class DefaultGrammar
         var sendFilePath = new StateNode("SEND_FILE_PATH");
 
         tree.RegisterStartNode("SEND", sendNode);
-        
+
         // Email path
         sendNode.AddTransitionTo("EMAIL", sendEmail, SuggestionType.Keyword);
         sendEmail.AddWildcardTransition(emailSubject, "<subject>");
-        
+
         emailSubject.AddTransition(new StateTransition(
             t => !t.Value.Equals("AT", StringComparison.OrdinalIgnoreCase) && !t.Value.Equals("WITH", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
             emailSubject,
@@ -1105,7 +1113,7 @@ public static class DefaultGrammar
         var exportNode = new StateNode("EXPORT");
         var exportDataset = new StateNode("EXPORT_DATASET");
         var datasetName = new StateNode("EXPORT_DATASET_NAME");
-        
+
         var exportScript = new StateNode("EXPORT_SCRIPT");
         var scriptSource = new StateNode("EXPORT_SCRIPT_SOURCE");
 
@@ -1245,7 +1253,7 @@ public static class DefaultGrammar
             var setVarEquals = new StateNode("SET_VAR_EQUALS");
             var setVarExpr = new StateNode("SET_VAR_EXPR");
             var setVarMember = new StateNode("SET_VAR_MEMBER");
-            
+
             setNode.AddTokenTransition(TokenType.VARIABLE, setVar, "<variable_name>");
             setVar.AddTokenTransition(TokenType.DOT, setVarMember, ".");
             setVarMember.AddTransition(new StateTransition(
@@ -1282,23 +1290,23 @@ public static class DefaultGrammar
             ));
 
             // ON/OFF options (e.g. SET WHAT_IF ON, SET PROFILING OFF, etc.)
-            var onOffOptions = new[] { 
-                "WHAT_IF", "PROFILING", "PROFILE", "SHOW_SECRETS", "SHOW_PASSWORD", 
-                "ALLOW_PLAINTEXT_SECRETS", "NO_SAVE_SENSITIVE", "NO_SAVE_CONNECTION", 
-                "CONNECTION_ENCRYPTION", "PERSIST", "SPILL_ENCRYPTION", "SPILL_COMPRESSION", 
-                "TELEMETRY", "INTERACTIVE_MODE", "CASE_SENSITIVE", "LINEAGE", 
-                "TRUNCATE_STRING", "SKIP_ERROR", "WITH_PROMPT" 
+            var onOffOptions = new[] {
+                "WHAT_IF", "PROFILING", "PROFILE", "SHOW_SECRETS", "SHOW_PASSWORD",
+                "ALLOW_PLAINTEXT_SECRETS", "NO_SAVE_SENSITIVE", "NO_SAVE_CONNECTION",
+                "CONNECTION_ENCRYPTION", "PERSIST", "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
+                "TELEMETRY", "INTERACTIVE_MODE", "CASE_SENSITIVE", "LINEAGE",
+                "TRUNCATE_STRING", "SKIP_ERROR", "WITH_PROMPT"
             };
 
             foreach (var opt in onOffOptions)
             {
                 var optNode = new StateNode("SET_" + opt);
                 setNode.AddTransitionTo(opt, optNode, SuggestionType.Keyword);
-                
+
                 // Allow option name -> ON/OFF
                 optNode.AddTransitionTo("ON", tree.Root, SuggestionType.Keyword);
                 optNode.AddTransitionTo("OFF", tree.Root, SuggestionType.Keyword);
-                
+
                 // Allow option name -> = -> ON/OFF
                 var optEqualsNode = new StateNode("SET_" + opt + "_EQUALS");
                 optNode.AddTokenTransition(TokenType.EQUALS, optEqualsNode, "=");
@@ -1324,11 +1332,11 @@ public static class DefaultGrammar
             {
                 var optNode = new StateNode("SET_" + opt);
                 setNode.AddTransitionTo(opt, optNode, SuggestionType.Keyword);
-                
+
                 // Allow option name -> = -> value
                 var optEqualsNode = new StateNode("SET_" + opt + "_EQUALS");
                 optNode.AddTokenTransition(TokenType.EQUALS, optEqualsNode, "=");
-                
+
                 var optValNode = new StateNode("SET_" + opt + "_VAL");
                 optEqualsNode.AddWildcardTransition(optValNode, "<value>");
                 optValNode.AddTransition(new StateTransition(
@@ -1336,7 +1344,7 @@ public static class DefaultGrammar
                     optValNode,
                     "<value>"
                 ));
-                
+
                 // Also allow option name -> value directly
                 optNode.AddWildcardTransition(optValNode, "<value>");
             }
@@ -1365,9 +1373,9 @@ public static class DefaultGrammar
         ));
 
         // 6. Generic administrative/enterprise statements
-        foreach (var cmd in new[] { 
-            "REBUILD", "PUBLISH", "REFRESH", "DISCONNECT", "REVOKE", "RESTART", "SHUTDOWN", 
-            "SHOW", "GRANT", "USE", "COMMIT", "ROLLBACK", "RETURN", "BREAK", "CONTINUE", 
+        foreach (var cmd in new[] {
+            "REBUILD", "PUBLISH", "REFRESH", "DISCONNECT", "REVOKE", "RESTART", "SHUTDOWN",
+            "SHOW", "GRANT", "USE", "COMMIT", "ROLLBACK", "RETURN", "BREAK", "CONTINUE",
             "RAISERROR", "RAISEERROR", "ASSERT", "KILL"
         })
         {
@@ -1547,7 +1555,8 @@ public static class DefaultGrammar
             execPushdownContent,
             "BEGIN",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetDepth(walker);
                 walker.StateBag["ExecBlockDepth"] = d + 1;
             }
@@ -1558,7 +1567,8 @@ public static class DefaultGrammar
             execPushdownContent,
             "END",
             null, null,
-            (token, walker) => {
+            (token, walker) =>
+            {
                 int d = GetDepth(walker);
                 walker.StateBag["ExecBlockDepth"] = Math.Max(1, d - 1);
             },
@@ -1635,11 +1645,11 @@ public static class DefaultGrammar
         var parallelForStart = new StateNode("PARALLEL_FOR_START");
         var parallelForTo = new StateNode("PARALLEL_FOR_TO");
         var parallelForEnd = new StateNode("PARALLEL_FOR_END");
-        
+
         parallelFor.AddTokenTransition(TokenType.VARIABLE, parallelForVar, "<loop_variable>");
         parallelForVar.AddTokenTransition(TokenType.EQUALS, parallelForEquals, "=");
         parallelForEquals.AddWildcardTransition(parallelForStart, "<start_expression>");
-        
+
         parallelForStart.AddTransition(new StateTransition(
             t => !t.Value.Equals("TO", StringComparison.OrdinalIgnoreCase) && t.Type != TokenType.SEMICOLON,
             parallelForStart,

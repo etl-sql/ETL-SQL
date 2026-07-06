@@ -193,16 +193,25 @@ public class SubscriptionDeliverySecurityTests
 
         var smtp = new SmtpConnection
         {
-            Alias = $"smtp-{suffix}", Host = "smtp.test.local", Port = 2525, Username = "u",
-            EncryptedPassword = protector.Protect("pw"), FromAddress = "portal@test.local", UseSsl = false
+            Alias = $"smtp-{suffix}",
+            Host = "smtp.test.local",
+            Port = 2525,
+            Username = "u",
+            EncryptedPassword = protector.Protect("pw"),
+            FromAddress = "portal@test.local",
+            UseSsl = false
         };
         db.SmtpConnections.Add(smtp);
         await db.SaveChangesAsync();
 
         var subscription = new Subscription
         {
-            ReportId = report.Id, UserId = owner.Id, Format = SubscriptionFormat.Link,
-            SmtpAlias = smtp.Alias, Recipients = recipientEmail, IsActive = true
+            ReportId = report.Id,
+            UserId = owner.Id,
+            Format = SubscriptionFormat.Link,
+            SmtpAlias = smtp.Alias,
+            Recipients = recipientEmail,
+            IsActive = true
         };
         db.Subscriptions.Add(subscription);
         await db.SaveChangesAsync();

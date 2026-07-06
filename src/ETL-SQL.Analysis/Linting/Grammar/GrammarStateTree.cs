@@ -20,7 +20,7 @@ public class GrammarStateTree
     public void RegisterStartNode(string keyword, StateNode node)
     {
         _startNodes[keyword] = node;
-        
+
         // Also connect the Root node to this start node using a transition
         Root.Transitions.Add(new StateTransition(
             t => t.Value.Equals(keyword, StringComparison.OrdinalIgnoreCase),

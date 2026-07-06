@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using ETL_SQL.Analysis.Linting.Grammar;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Services;
-using ETL_SQL.Analysis.Linting.Grammar;
 
 namespace ETL_SQL.Analysis.Services;
 

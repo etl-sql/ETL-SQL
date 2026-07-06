@@ -19,7 +19,7 @@ namespace ETL_SQL.Tests.Analysis
         public void ValidateSequence_WithSimpleManualPath_SucceedsAndFailsCorrectly()
         {
             var tree = new GrammarStateTree();
-            
+
             var fooNode = new StateNode("FOO");
             var barNode = new StateNode("BAR");
 
@@ -60,7 +60,7 @@ namespace ETL_SQL.Tests.Analysis
         public void TokenWalker_ProcessesAmbiguousTransitions_MaintainsAllValidStates()
         {
             var tree = new GrammarStateTree();
-            
+
             var fooNode = new StateNode("FOO");
             var pathA = new StateNode("PATH_A");
             var pathB = new StateNode("PATH_B");
@@ -81,7 +81,7 @@ namespace ETL_SQL.Tests.Analysis
             tree.RegisterStartNode("foo", fooNode);
 
             var walker = new TokenWalker(tree);
-            
+
             // Consume first token "foo" (starts the state tree transition to FOO node)
             bool result1 = walker.Consume(CreateToken(TokenType.IDENTIFIER, "foo"));
             Assert.True(result1);
@@ -91,7 +91,7 @@ namespace ETL_SQL.Tests.Analysis
             // Consume second token "bar" (transitions to both PATH_A and PATH_B)
             bool result2 = walker.Consume(CreateToken(TokenType.IDENTIFIER, "bar"));
             Assert.True(result2);
-            
+
             // Both pathA and pathB should be active states
             Assert.Equal(2, walker.ActiveStates.Count);
             Assert.Contains(pathA, walker.ActiveStates);
@@ -224,7 +224,7 @@ namespace ETL_SQL.Tests.Analysis
             var suggestionsRoot = walker.GetSuggestions(context);
             // ROOT node does not have direct suggestions (the transitions are registered on startNode keywords)
             // But we can check transition targets or verify suggestions after consuming CREATE
-            
+
             bool res1 = walker.Consume(CreateToken(TokenType.CREATE, "CREATE"));
             Assert.True(res1);
             var suggestionsCreate = walker.GetSuggestions(context);

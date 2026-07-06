@@ -161,7 +161,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && await nativeJoinPlan!.TryOpenAsync(context) is { } nativeJoinExecution)
         {
             await using (nativeJoinExecution)
-            await foreach (var batch in nativeJoinExecution.ExecuteAsync()) yield return batch;
+                await foreach (var batch in nativeJoinExecution.ExecuteAsync()) yield return batch;
             yield break;
         }
 
@@ -169,7 +169,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && await nativeSortPlan!.TryOpenAsync(context) is { } nativeSortExecution)
         {
             await using (nativeSortExecution)
-            await foreach (var batch in nativeSortExecution.ExecuteAsync()) yield return batch;
+                await foreach (var batch in nativeSortExecution.ExecuteAsync()) yield return batch;
             yield break;
         }
 

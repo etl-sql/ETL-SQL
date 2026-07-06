@@ -69,7 +69,7 @@ public class ExportDatasetStatementHandler(ILogger logger) : IStatementHandler
                 targetPath = targetPath.Substring(0, targetPath.Length - 12);
             else if (targetPath.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
                 targetPath = targetPath.Substring(0, targetPath.Length - 4);
-            
+
             if (!targetPath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
                 targetPath += ".etlds";
         }

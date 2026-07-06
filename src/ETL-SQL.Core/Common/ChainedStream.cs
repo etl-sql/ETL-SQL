@@ -18,10 +18,10 @@ namespace ETL_SQL.Core.Common
         public override bool CanSeek => _innerStream.CanSeek;
         public override bool CanWrite => _innerStream.CanWrite;
         public override long Length => _innerStream.Length;
-        public override long Position 
-        { 
-            get => _innerStream.Position; 
-            set => _innerStream.Position = value; 
+        public override long Position
+        {
+            get => _innerStream.Position;
+            set => _innerStream.Position = value;
         }
 
         public override void Flush() => _innerStream.Flush();

@@ -354,7 +354,7 @@ namespace ETL_SQL.Connectors.Oracle
         private static object? MapOracleValue(object value)
         {
             if (value == null || value == DBNull.Value) return null;
-            
+
             if (value is OracleTimeStampTZ timestampTz)
                 return new DateTimeOffset(
                     DateTime.SpecifyKind(timestampTz.Value, DateTimeKind.Unspecified),

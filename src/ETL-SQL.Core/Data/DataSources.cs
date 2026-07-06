@@ -794,145 +794,145 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 await _lock.WaitAsync();
                 try
                 {
-                if (ReplaceOnConflict)
-                {
-                    var uniqueKeys = new List<List<string>>();
-                    foreach (var kv in Schema)
+                    if (ReplaceOnConflict)
                     {
-                        if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
+                        var uniqueKeys = new List<List<string>>();
+                        foreach (var kv in Schema)
                         {
-                            uniqueKeys.Add(new List<string> { kv.Key });
+                            if (kv.Value.IsUnique || kv.Value.IsPrimaryKey)
+                            {
+                                uniqueKeys.Add(new List<string> { kv.Key });
+                            }
                         }
-                    }
-                    foreach (var tc in TableConstraints)
-                    {
-                        if (tc is TablePrimaryKeyConstraint pk)
+                        foreach (var tc in TableConstraints)
                         {
-                            uniqueKeys.Add(pk.Columns);
+                            if (tc is TablePrimaryKeyConstraint pk)
+                            {
+                                uniqueKeys.Add(pk.Columns);
+                            }
+                            else if (tc is TableUniqueConstraint uk)
+                            {
+                                uniqueKeys.Add(uk.Columns);
+                            }
                         }
-                        else if (tc is TableUniqueConstraint uk)
-                        {
-                            uniqueKeys.Add(uk.Columns);
-                        }
-                    }
 
-                    var rowsToDelete = new List<Row>();
-                    foreach (var newRow in b.Rows)
-                    {
-                        foreach (var keyCols in uniqueKeys)
+                        var rowsToDelete = new List<Row>();
+                        foreach (var newRow in b.Rows)
+                        {
+                            foreach (var keyCols in uniqueKeys)
+                            {
+                                foreach (var batch in _batches)
+                                {
+                                    foreach (var existingRow in batch.Rows)
+                                    {
+                                        bool allMatch = true;
+                                        foreach (var col in keyCols)
+                                        {
+                                            var existVal = existingRow[col];
+                                            var newVal = newRow[col];
+                                            if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
+                                            {
+                                                allMatch = false;
+                                                break;
+                                            }
+                                            if (!IsSoftEqual(existVal, newVal))
+                                            {
+                                                allMatch = false;
+                                                break;
+                                            }
+                                        }
+                                        if (allMatch && !rowsToDelete.Contains(existingRow))
+                                        {
+                                            rowsToDelete.Add(existingRow);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (rowsToDelete.Count > 0)
                         {
                             foreach (var batch in _batches)
                             {
-                                foreach (var existingRow in batch.Rows)
+                                foreach (var r in rowsToDelete)
                                 {
-                                    bool allMatch = true;
-                                    foreach (var col in keyCols)
+                                    if (batch.Rows.Remove(r))
                                     {
-                                        var existVal = existingRow[col];
-                                        var newVal = newRow[col];
-                                        if (existVal == null || existVal == DBNull.Value || newVal == null || newVal == DBNull.Value)
-                                        {
-                                            allMatch = false;
-                                            break;
-                                        }
-                                        if (!IsSoftEqual(existVal, newVal))
-                                        {
-                                            allMatch = false;
-                                            break;
-                                        }
+                                        _totalRowCount--;
                                     }
-                                    if (allMatch && !rowsToDelete.Contains(existingRow))
+                                }
+                            }
+                            if (_index.Count > 0)
+                            {
+                                foreach (var col in _index.Keys.ToList())
+                                {
+                                    if (_index.TryGetColumns(col, out var cols))
                                     {
-                                        rowsToDelete.Add(existingRow);
+                                        _index.RebuildIndex(cols!, _batches);
                                     }
                                 }
                             }
                         }
                     }
 
-                    if (rowsToDelete.Count > 0)
+                    var processedBatch = new DataTable();
+                    processedBatch.SetColumns(_columnOrder);
+
+                    foreach (var row in b.Rows)
                     {
-                        foreach (var batch in _batches)
+                        try
                         {
-                            foreach (var r in rowsToDelete)
-                            {
-                                if (batch.Rows.Remove(r))
-                                {
-                                    _totalRowCount--;
-                                }
-                            }
+                            var rowClone = takeOwnership ? row : row.Clone();
+                            await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
+                            await processedBatch.AddRowAsync(rowClone);
                         }
-                        if (_index.Count > 0)
+                        catch (RowSkipException)
                         {
-                            foreach (var col in _index.Keys.ToList())
-                            {
-                                if (_index.TryGetColumns(col, out var cols))
-                                {
-                                    _index.RebuildIndex(cols!, _batches);
-                                }
-                            }
+                            // Skip this row
                         }
                     }
-                }
 
-                var processedBatch = new DataTable();
-                processedBatch.SetColumns(_columnOrder);
+                    if (processedBatch.Rows.Count == 0) continue;
 
-                foreach (var row in b.Rows)
-                {
-                    try
+                    long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
+                    long processedBatchBytes = EstimateResidentMemoryBytes(processedBatch) +
+                        EstimateIndexGrowthBytes(processedBatch.Rows.Count);
+                    bool rowThresholdExceeded = _totalRowCount + processedBatch.Rows.Count > threshold;
+
+                    // Account the producer slot independently from the resident table and the pending
+                    // writer slot. If the writer currently owns the available headroom, wait for it and
+                    // retry before admitting another batch. This is the pipeline's memory backpressure.
+                    var pipelineArbiter = ExecutionContext?.MemoryArbiter ?? MemoryGrantArbiter.Shared;
+                    batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
+                    bool batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
+                    if (!batchReserved && pendingSpillWrite != null)
                     {
-                        var rowClone = takeOwnership ? row : row.Clone();
-                        await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
-                        await processedBatch.AddRowAsync(rowClone);
-                    }
-                    catch (RowSkipException)
-                    {
-                        // Skip this row
-                    }
-                }
-
-                if (processedBatch.Rows.Count == 0) continue;
-
-                long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
-                long processedBatchBytes = EstimateResidentMemoryBytes(processedBatch) +
-                    EstimateIndexGrowthBytes(processedBatch.Rows.Count);
-                bool rowThresholdExceeded = _totalRowCount + processedBatch.Rows.Count > threshold;
-
-                // Account the producer slot independently from the resident table and the pending
-                // writer slot. If the writer currently owns the available headroom, wait for it and
-                // retry before admitting another batch. This is the pipeline's memory backpressure.
-                var pipelineArbiter = ExecutionContext?.MemoryArbiter ?? MemoryGrantArbiter.Shared;
-                batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
-                bool batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
-                if (!batchReserved && pendingSpillWrite != null)
-                {
-                    await AwaitPendingSpillAsync();
-                    batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
-                }
-
-                bool bytePressure = !batchReserved;
-                if (!rowThresholdExceeded && !bytePressure)
-                {
-                    // Transfer accounting from the transient producer slot to retained table memory.
-                    batchLease?.Dispose();
-                    batchLease = null;
-                    bytePressure = _memoryLease?.RegisterAndCheckSpill(
-                        _residentEstimatedBytes + processedBatchBytes) == true;
-                    if (bytePressure)
-                    {
-                        // Best effort reservation for the immediate writer slot. If the resident
-                        // table already consumes the grant this may still be rejected; the batch is
-                        // then synchronously handed to spill rather than retained.
-                        batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
+                        await AwaitPendingSpillAsync();
                         batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
-                        if (!batchReserved)
+                    }
+
+                    bool bytePressure = !batchReserved;
+                    if (!rowThresholdExceeded && !bytePressure)
+                    {
+                        // Transfer accounting from the transient producer slot to retained table memory.
+                        batchLease?.Dispose();
+                        batchLease = null;
+                        bytePressure = _memoryLease?.RegisterAndCheckSpill(
+                            _residentEstimatedBytes + processedBatchBytes) == true;
+                        if (bytePressure)
                         {
-                            batchLease?.Dispose();
-                            batchLease = null;
+                            // Best effort reservation for the immediate writer slot. If the resident
+                            // table already consumes the grant this may still be rejected; the batch is
+                            // then synchronously handed to spill rather than retained.
+                            batchLease = ExecutionContext == null ? null : pipelineArbiter.AcquireLease();
+                            batchReserved = batchLease?.RegisterAndCheckSpill(processedBatchBytes) != true;
+                            if (!batchReserved)
+                            {
+                                batchLease?.Dispose();
+                                batchLease = null;
+                            }
                         }
                     }
-                }
 
                     if (bytePressure || rowThresholdExceeded)
                     {
