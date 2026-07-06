@@ -24,9 +24,17 @@ that result into an unsupported blanket billion-row claim.
 
 ### Phase 1: Spill allocation and GC efficiency
 
-- [ ] Profile the Gate F `#temp` round trip by allocation type and call site; publish retained bytes,
+- [x] Profile the Gate F `#temp` round trip by allocation type and call site; publish retained bytes,
   cumulative allocation, allocation rate, GC counts/pause, CPU time, and physical I/O before changing
-  the implementation.
+  the implementation. *(Harness: `SpillAllocationProfilingTests` + `AllocationTypeProfiler`
+  (GCAllocationTick by-type sampling) + `ProcessIoCounters`, operator entry
+  `scripts/Test-SpillAllocProfile.ps1`; call-site stacks via `dotnet-trace --profile gc-verbose`.
+  Published 10M baseline `certification-results/spill-alloc-profile/`: 495k rows/s, 16.3 GB
+  allocated (1,708 B/row) vs 252 MB spill, GC 944/449/103 with 7.4 s pause of a 20.2 s run,
+  retained delta 6.2 MB — churn, not leaks. Top churn: Dictionary<string,object>/Entry[]/Object[]/
+  Row (~50% is row-shape overhead), plus per-row `Func<TableConstraintInfo,bool>` +
+  DisplayClass closures from `DataTable.AddRowAsync` (`DataModel.cs:516`) — the target list for
+  the pooled-buffer item below.)*
 - [ ] Remove avoidable row, batch, Arrow-builder, and serialization object churn through pooled or
   reusable buffers with explicit ownership and deterministic release.
 - [ ] Add allocation and GC regression budgets at 10M/50M plus the operator-run 1B certification;
