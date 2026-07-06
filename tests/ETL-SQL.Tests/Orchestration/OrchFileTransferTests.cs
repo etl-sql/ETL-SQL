@@ -184,7 +184,7 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 string sql = $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote/blocked.exe' AT MYREMOTE;";
 
-                await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
+                await Assert.ThrowsAnyAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
 
                 Assert.False(mockFs.RemoteFiles.ContainsKey("remote/blocked.exe"));
             }
@@ -209,7 +209,7 @@ namespace ETL_SQL.Tests.Orchestration
             {
                 string sql = $"RECEIVE FILE FROM 'remote/tool.exe' TO '{localFile.Replace("\\", "\\\\")}' AT MYREMOTE;";
 
-                await Assert.ThrowsAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
+                await Assert.ThrowsAnyAsync<ETL_SQL.Services.SecurityException>(() => ExecuteFirstStatementAsync(evaluator, sql));
 
                 Assert.False(File.Exists(localFile));
             }

@@ -5,9 +5,11 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -115,6 +117,121 @@ namespace ETL_SQL.Tests.Operations.Operations
         }
 
         [Fact]
+        public async Task NumericGroupedAggregateConsumesNativeSpillBatches()
+        {
+            var (eval, logger) = BuildContext();
+            // Private arbiter: the shared instance can carry reservations from earlier tests in the
+            // same host, which would erase the headroom this test's native routing depends on.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64L * 1024 * 1024);
+
+            var rows = Enumerable.Range(0, 100)
+                .Select(id => new Row { ["group_id"] = id % 10, ["value"] = 1m })
+                .ToAsyncEnumerable();
+            var groupBy = new List<Expression> { new IdentifierExpression("group_id") };
+            var columns = new List<SelectColumn>
+            {
+                new(new IdentifierExpression("group_id"), "group_id"),
+                new(new FunctionCallExpression("COUNT", new List<Expression>
+                {
+                    new IdentifierExpression("value")
+                }), "cnt"),
+                new(new FunctionCallExpression("SUM", new List<Expression>
+                {
+                    new IdentifierExpression("value")
+                }), "total")
+            };
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            var result = await engine.ApplyAggregationExternal(
+                rows, groupBy, columns, new List<string> { "group_id", "cnt", "total" }).ToListAsync();
+
+            Assert.Equal(10, result.Count);
+            Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["cnt"])));
+            Assert.All(result, row => Assert.Equal(10m, Convert.ToDecimal(row["total"])));
+            Assert.Equal(100, engine.ColumnarAggregateRows);
+        }
+
+        [Fact]
+        public async Task StringGroupedNativeGrantFailureFallsBackToSpillPartitionAggregation()
+        {
+            var (eval, logger) = BuildContext();
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                var rows = MakeRows(30, new[] { "A", "B", "C" });
+                var (groupBy, columns, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+                Assert.Equal(3, result.Count);
+                Assert.Equal(30m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+                Assert.Equal(0, engine.ColumnarAggregateRows);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
+        public async Task GroupSampleCanIncreaseFanOutWithoutLosingRows()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.OperatorMemoryGrantMB = 1;
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var rows = Enumerable.Range(0, 4096)
+                    .Select(id => new Row
+                    {
+                        ["category"] = "g" + id,
+                        ["value"] = 1m,
+                        ["payload"] = payload + id
+                    })
+                    .ToAsyncEnumerable();
+                var (groupBy, columns, names) = CountSumByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
+
+                Assert.Equal(4096, result.Count);
+                Assert.Equal(4096m, result.Sum(row => Convert.ToDecimal(row["cnt"])));
+                Assert.True(engine.PartitionCount > 2);
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
+        public async Task ExactInputEstimateCanReduceOversizedConfiguredBaseline()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 64;
+            eval.OperatorMemoryGrantMB = 1;
+            var rows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["category"] = "g" + id, ["value"] = 1m })
+                .ToList();
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            var result = await engine.ApplyAggregationExternal(
+                rows.ToAsyncEnumerable(), groupBy, columns, names,
+                knownRowCount: rows.Count,
+                knownInputBytes: RowWidthEstimator.EstimateTotalBytes(rows)).ToListAsync();
+
+            Assert.Equal(16, result.Count);
+            Assert.True(engine.PartitionCount < 64);
+        }
+
+        [Fact]
         public async Task ApplyAggregationExternal_EmptyInput_ReturnsEmptyResult()
         {
             var (eval, logger) = BuildContext();
@@ -200,6 +317,124 @@ namespace ETL_SQL.Tests.Operations.Operations
             // Global aggregate (no group by) should return a single row with count = 50
             Assert.Single(result);
             Assert.Equal(50m, Convert.ToDecimal(result[0]["cnt"]));
+        }
+
+        // ── RAM governor ──────────────────────────────────────────────────────
+        // These force a small memory ceiling so the in-memory group build trips the governor.
+        // The governor uses precise byte accounting (bytes added per new group), so the ceiling must
+        // be feasible — large enough that a sufficiently-split partition fits, but smaller than the
+        // full group set — for SpillOrFail to complete by recursive repartitioning. ExternalHashPartitions=2
+        // makes each repartition step roughly halve a partition's group count.
+
+        private static IAsyncEnumerable<Row> MakeGroupedRows(int count, int distinctGroups)
+        {
+            return Create(count, distinctGroups).ToAsyncEnumerable();
+            static IEnumerable<Row> Create(int n, int groups)
+            {
+                for (int i = 0; i < n; i++)
+                    yield return new Row { ["category"] = "g" + (i % groups), ["value"] = (decimal)(i + 1) };
+            }
+        }
+
+        private static (List<Expression> groupBy, List<SelectColumn> cols, List<string> names) CountSumByCategory()
+        {
+            var groupBy = new List<Expression> { new IdentifierExpression("category") };
+            var cols = new List<SelectColumn>
+            {
+                new SelectColumn(new IdentifierExpression("category"), "category"),
+                new SelectColumn(new FunctionCallExpression("COUNT", new List<Expression>{ new IdentifierExpression("value") }), "cnt"),
+                new SelectColumn(new FunctionCallExpression("SUM", new List<Expression>{ new IdentifierExpression("value") }), "s"),
+            };
+            return (groupBy, cols, new List<string> { "category", "cnt", "s" });
+        }
+
+        [Fact]
+        public async Task Governor_SpillOrFail_HighCardinality_CompletesViaRepartition()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+            // 64 KB holds only a few hundred groups, so the 3000-group input trips the governor at
+            // depth 0 and must recursively repartition (halving group count per level) until each
+            // sub-partition fits — the path this test exercises. Private arbiter: leftover shared
+            // reservations from earlier tests would shrink the budget below what repartition can fit.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
+
+            const int rows = 30000, groups = 3000;
+            var (groupBy, cols, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            var result = await engine.ApplyAggregationExternal(
+                MakeGroupedRows(rows, groups), groupBy, cols, names).ToListAsync();
+
+            // High cardinality CAN be split, so SpillOrFail completes via recursive repartition.
+            Assert.Equal(groups, result.Count);
+            Assert.All(result, r => Assert.Equal(10m, Convert.ToDecimal(r["cnt"]))); // each group appears rows/groups times
+            decimal totalSum = result.Sum(r => Convert.ToDecimal(r["s"]));
+            Assert.Equal((decimal)rows * (rows + 1) / 2, totalSum); // no rows lost or duplicated
+        }
+
+        [Fact]
+        public async Task HighCardinalityTailConsumesNativeSpillBatchesWithAdaptiveFanOut()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOrFail;
+            // Private arbiter: the shared instance can carry reservations from earlier tests in the
+            // same host, which would erase the headroom this test's native routing depends on.
+            eval.MemoryArbiter = new MemoryGrantArbiter(64 * 1024);
+
+            const int groups = 10000;
+            var (groupBy, columns, names) = CountSumByCategory();
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            var result = await engine.ApplyAggregationExternal(
+                MakeGroupedRows(groups, groups), groupBy, columns, names).ToListAsync();
+
+            Assert.Equal(groups, result.Count);
+            Assert.Equal(groups, engine.ColumnarAggregateRows);
+        }
+
+        // GROUP_CONCAT retains only its argument values (not full rows), but a single large group is
+        // still unsplittable and exercises SpillOnly churn under an intentionally tiny grant.
+        private static (List<Expression> groupBy, List<SelectColumn> cols, List<string> names) ConcatByCategory()
+        {
+            var groupBy = new List<Expression> { new IdentifierExpression("category") };
+            var cols = new List<SelectColumn>
+            {
+                new SelectColumn(new IdentifierExpression("category"), "category"),
+                new SelectColumn(new FunctionCallExpression("GROUP_CONCAT", new List<Expression>{ new IdentifierExpression("value") }), "g"),
+            };
+            return (groupBy, cols, new List<string> { "category", "g" });
+        }
+
+        // Note: no "SpillOrFail throws" test. That path requires the heap-growth guard to trip at a
+        // specific moment, which is non-deterministic across a shared-process test run (a GC freeing
+        // prior tests' garbage can offset the build's growth). The governor's bounded-memory behavior
+        // is verified deterministically by the high-cardinality / churn tests; EnforcePolicy is a
+        // trivial policy switch.
+
+        [Fact]
+        public async Task Governor_SpillOnly_Churns_ProducesCorrectResult()
+        {
+            var (eval, logger) = BuildContext();
+            eval.ExternalHashPartitions = 2;
+            eval.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            long savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 1;
+            try
+            {
+                // Unsplittable single group with value-only holistic state; churn mode completes.
+                var (groupBy, cols, names) = ConcatByCategory();
+                var engine = new ExternalAggregateEngine(eval, logger);
+
+                var result = await engine.ApplyAggregationExternal(
+                    MakeGroupedRows(20000, distinctGroups: 1), groupBy, cols, names).ToListAsync();
+
+                Assert.Single(result);
+                Assert.False(string.IsNullOrEmpty(result[0]["g"]?.ToString()));
+            }
+            finally { MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget; }
         }
 
         [Fact]

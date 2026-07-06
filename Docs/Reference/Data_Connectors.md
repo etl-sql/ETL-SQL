@@ -478,6 +478,37 @@ END;
 
 ---
 
+### 2.9 SQLite (`SQLITE`)
+Aliases: `SQLITE3`
+
+Connects to local or in-memory SQLite databases using the lightweight Microsoft.Data.Sqlite driver. Supports local transactions, schema inspection, and data loading.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `DATABASE` | File path to the SQLite database or `:memory:` | Yes (structured form) |
+| `TIMEOUT_SECONDS` | Command/query execution timeout in seconds (Default: `30`) | No |
+| `TABLE` | Default table context for unqualified operations | No |
+
+> [!IMPORTANT]
+> SQLite files are not encrypted by this connector. Protect sensitive databases with filesystem and
+> volume encryption. `PASSWORD` is intentionally unsupported because the shipped native SQLite
+> library is not SQLCipher.
+
+*Examples:*
+
+```sql
+-- Standard unencrypted in-memory database
+CREATE CONNECTION local_mem AS SQLITE(DATABASE=':memory:');
+
+-- Standard unencrypted file-based database
+CREATE CONNECTION local_db AS SQLITE(DATABASE='C:\Data\local.db', TIMEOUT_SECONDS=30);
+
+-- Traditional connection string form
+CREATE CONNECTION legacy_db AS SQLITE('Data Source=C:\Data\legacy.db;Mode=ReadOnly;');
+```
+
+---
+
 ## 3. Flat File & Document Connectors
 
 ### 3.1 Flat Files (`FLATFILE`)
@@ -510,6 +541,8 @@ General-purpose connector for delimited and fixed-width text files.
 | `ALGORITHM` | Hash algorithm: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+> **Note:** When both `COMPRESS=ON` and `ENCRYPT=ON` are specified, the engine always applies compression first, then encryption — regardless of option order. This is because encryption maximises entropy, making subsequent compression ineffective.
 
 Querying a `FLATFILE` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
 
@@ -769,9 +802,20 @@ Secure File Transfer Protocol over SSH. Supports password and key-pair authentic
 | `PASSWORD` | Login password — use for password auth only | No |
 | `KEYFILE` | Path to the private SSH key — use for key auth only | No |
 | `PASSPHRASE` | Passphrase for the private key (if set) | No |
+| `TIMEOUT_SECONDS` | Connection timeout in seconds (Default: `30`) | No |
+| `HOST_KEY_FINGERPRINT` | Pinned server host-key fingerprint (`SHA256:base64` or MD5 hex). When set, a mismatch **rejects** the connection (MITM protection). Unset = connect but warn. | No |
+| `ATOMIC_UPLOAD` | `true`/`false` (Default: `false`). Upload to a temp name then rename into place so consumers never read a partial file. Requires rename permission on the target directory. | No |
 
 > [!CAUTION]
 > `PASSWORD` and `KEYFILE` are mutually exclusive. Providing both will cause an authentication error.
+
+> [!IMPORTANT]
+> For internet-facing / vendor transfers, **pin `HOST_KEY_FINGERPRINT`**. Without it the client trusts
+> whatever server answers, leaving outbound transfers open to man-in-the-middle interception; the
+> connector logs a warning on every unpinned connection. Get the value with
+> `ssh-keygen -lf <server_host_key>` (the `SHA256:...` string it prints). Where the vendor grants
+> rename permission, also set `ATOMIC_UPLOAD=TRUE` so a polling consumer never picks up a half-written
+> file.
 
 *Examples:*
 ```sql
@@ -780,6 +824,15 @@ CREATE CONNECTION sftp_pwd AS SFTP(HOST='sftp.example.com', USER='admin', PASSWO
 
 -- Key-pair authentication (recommended for production)
 CREATE CONNECTION sftp_key AS SFTP('sftp.example.com', USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
+
+-- Hardened outbound vendor delivery: pinned host key + atomic upload
+CREATE CONNECTION vendor_out AS SFTP(
+  HOST                 = 'sftp.partner.com',
+  USER                 = 'deploy',
+  KEYFILE              = '/home/etl/.ssh/partner_rsa',
+  HOST_KEY_FINGERPRINT = 'SHA256:n0uukFPxColrSHu5cxRc8g3z6BdHm4gTZZbhTP2Xoxc',
+  ATOMIC_UPLOAD        = 'TRUE'
+);
 ```
 
 ---

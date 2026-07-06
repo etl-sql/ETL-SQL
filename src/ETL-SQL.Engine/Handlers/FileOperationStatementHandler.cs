@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -103,6 +105,20 @@ public class FileOperationStatementHandler : IStatementHandler
         string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
         string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
         string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        var sourceAccess = stmt.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename
+            ? FileSystemAccessKind.Move
+            : FileSystemAccessKind.Read;
+        source = pathAuthorizer.Authorize(context, source, sourceAccess,
+            validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
+        if (dest != null)
+        {
+            var destinationAccess = stmt.Type == FileOpType.Decompress
+                ? FileSystemAccessKind.Extract
+                : FileSystemAccessKind.Write;
+            dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
+                validateFileType: destinationAccess != FileSystemAccessKind.Extract).CanonicalPath;
+        }
 
         // Security Hardening: Count this as a file operation for runaway protection
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -143,6 +159,7 @@ public class FileOperationStatementHandler : IStatementHandler
             switch (stmt.Type)
             {
                 case FileOpType.Delete:
+                    source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete).CanonicalPath;
                     // Security Hardening: Block deleting script files and dangerous file types
                     context.SecurityService.ValidateWriteAccess(source);
                     context.SecurityService.ValidateFileType(source);
@@ -166,21 +183,35 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Copy:
                     if (dest != null)
                     {
+                        // Re-authorize source (read) and destination (write) immediately before the
+                        // copy and stream the bytes through handle-validated opens, so a link swapped
+                        // in after the path check cannot redirect the read or the write to an
+                        // unauthorized target (TOCTOU / link-race hardening — the write handle is
+                        // non-destructive until its final path is verified). Consistent with the
+                        // recursive directory-copy path.
+                        var copySource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read);
+                        var copyDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
-                        context.SecurityService.ValidateWriteAccess(dest);
-                        context.SecurityService.ValidateFileType(dest);
+                        context.SecurityService.ValidateWriteAccess(copyDest.CanonicalPath);
+                        context.SecurityService.ValidateFileType(copyDest.CanonicalPath);
 
-                        if (File.Exists(dest))
+                        if (!overwrite && File.Exists(copyDest.CanonicalPath))
+                            throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {copyDest.CanonicalPath}");
+
+                        await using (var sourceStream = pathAuthorizer.OpenValidatedRead(context, copySource))
+                        await using (var destStream = pathAuthorizer.OpenValidatedWrite(context, copyDest,
+                            truncate: true, failIfExists: !overwrite))
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            await sourceStream.CopyToAsync(destStream);
                         }
-                        File.Copy(source, dest, overwrite);
+                        dest = copyDest.CanonicalPath;
                     }
                     break;
                 case FileOpType.Move:
                     if (dest != null)
                     {
+                        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Move).CanonicalPath;
+                        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Move).CanonicalPath;
                         // Security Hardening: Block writing to script files and dangerous types
                         context.SecurityService.ValidateWriteAccess(dest);
                         context.SecurityService.ValidateFileType(dest);
@@ -253,7 +284,7 @@ public class FileOperationStatementHandler : IStatementHandler
 
                         if (File.Exists(source))
                         {
-                            ZipFile.ExtractToDirectory(source, dest, overwrite);
+                            SafeZipExtractor.Extract(source, dest, overwrite, context, pathAuthorizer);
                             context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
                         }
                         else
@@ -277,7 +308,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         else if (stmt.KeyFile != null)
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
-                            CryptoUtils.EncryptFileWithSsh(source, dest, keyFilePath, overwrite);
+                            await CryptoUtils.EncryptFileWithSshAsync(source, dest, keyFilePath, overwrite);
                         }
                         else
                         {
@@ -306,7 +337,7 @@ public class FileOperationStatementHandler : IStatementHandler
                         {
                             string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            CryptoUtils.DecryptFileWithSsh(source, dest, keyFilePath, overwrite, pwd);
+                            await CryptoUtils.DecryptFileWithSshAsync(source, dest, keyFilePath, overwrite, pwd);
                         }
                         else
                         {

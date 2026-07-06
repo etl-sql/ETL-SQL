@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -27,10 +28,12 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
         string dest = context.ResolvePath(destVal);
 
         // Security check
-        context.SecurityService.ValidatePath(source);
-        context.SecurityService.ValidatePath(dest);
-        context.SecurityService.ValidateWriteAccess(dest);
-        context.SecurityService.ValidateFileType(dest);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        var sourceAuth = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false);
+        var destAuth = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
+        source = sourceAuth.CanonicalPath;
+        dest = destAuth.CanonicalPath;
 
         // Runaway operation count
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -68,8 +71,8 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
         if (context.IsVerbose)
             context.Log($"[ConvertEncoding] Converting '{source}' ({fromEncoding.EncodingName}) -> '{dest}' ({toEncoding.EncodingName})");
 
-        using (var reader = new StreamReader(source, fromEncoding))
-        using (var writer = new StreamWriter(dest, false, toEncoding))
+        using (var reader = new StreamReader(pathAuthorizer.OpenValidatedRead(context, sourceAuth), fromEncoding))
+        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth), toEncoding))
         {
             char[] buffer = new char[8192];
             int read;

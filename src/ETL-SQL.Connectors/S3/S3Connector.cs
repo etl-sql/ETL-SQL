@@ -67,7 +67,7 @@ namespace ETL_SQL.Connectors.S3
             var host = GetHost(connectionString, _options);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             if (client != null)
@@ -78,6 +78,9 @@ namespace ETL_SQL.Connectors.S3
 
         private IAmazonS3 GetClient()
         {
+            if (_context != null)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(
+                    _context, GetHost(_bucketName, _options));
             if (_client != null) return _client;
 
             var config = new AmazonS3Config();
@@ -128,7 +131,7 @@ namespace ETL_SQL.Connectors.S3
             var host = GetHost(connectionString, opts);
             if (!string.IsNullOrEmpty(host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
 
             try

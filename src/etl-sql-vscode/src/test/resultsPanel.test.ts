@@ -9,7 +9,15 @@ vi.mock('fs', () => ({
             return '<html><head></head><body><div id="root"></div></body></html>';
         }
         throw new Error('File not found');
-    })
+    }),
+    promises: {
+        readFile: vi.fn().mockImplementation((path: string) => {
+            if (path.endsWith('index.html') || path.endsWith('welcome.html')) {
+                return Promise.resolve('<html><head></head><body><div id="root"></div></body></html>');
+            }
+            return Promise.reject(new Error('File not found'));
+        })
+    }
 }));
 
 describe('ResultsPanel Webview Provider', () => {
@@ -69,10 +77,10 @@ describe('ResultsPanel Webview Provider', () => {
         );
     });
 
-    it('should generate HTML with nonce, CSP, and window variables', () => {
+    it('should generate HTML with nonce, CSP, and window variables', async () => {
         const { webviewView } = createMockWebviewView();
 
-        provider.resolveWebviewView(webviewView as any);
+        await provider.resolveWebviewView(webviewView as any);
 
         const html = webviewView.webview.html;
         expect(html).toContain('<meta http-equiv="Content-Security-Policy"');
@@ -93,7 +101,7 @@ describe('ResultsPanel Webview Provider', () => {
         );
 
         // 2. Resolve the webview
-        provider.resolveWebviewView(webviewView as any);
+        await provider.resolveWebviewView(webviewView as any);
         expect(webviewView.webview.postMessage).not.toHaveBeenCalled();
 
         // 3. Send the 'ready' signal from the webview
@@ -109,7 +117,7 @@ describe('ResultsPanel Webview Provider', () => {
     it('should deliver postMessage immediately if ready', async () => {
         const { webviewView, triggerMessage } = createMockWebviewView();
 
-        provider.resolveWebviewView(webviewView as any);
+        await provider.resolveWebviewView(webviewView as any);
         triggerMessage({ type: 'ready' });
 
         ResultsPanel.postMessage({ type: 'clear' });
@@ -122,7 +130,7 @@ describe('ResultsPanel Webview Provider', () => {
         const handler = vi.fn();
 
         ResultsPanel.setOnMessageReceived(handler);
-        provider.resolveWebviewView(webviewView as any);
+        await provider.resolveWebviewView(webviewView as any);
 
         const testMsg = { type: 'custom', payload: 'hello' };
         triggerMessage(testMsg);

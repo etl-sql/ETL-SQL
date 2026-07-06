@@ -21,7 +21,7 @@ These three pieces are designed as one cohesive feature. Implementing them indep
 
 ## Goals
 
-- A report writer can declare `DECLARE @start RELDATE = D-1` and a subscription will always pass "yesterday at midnight" without any hardcoding.
+- A report writer can declare `DECLARE @start RELDATE = 'D-1'` and a subscription will always pass "yesterday at midnight" without any hardcoding.
 - A user subscribing via the portal sees INPUT parameter fields tailored to the parameter's type (text, number, date-picker, RELDATE quick-pick, chip input).
 - Administrators can script subscriptions with full parameter control via `CREATE SUBSCRIPTION`.
 - Parameters saved on a subscription are editable post-creation from the "My Subscriptions" view.
@@ -38,8 +38,8 @@ These three pieces are designed as one cohesive feature. Implementing them indep
 `RELDATE` parameters encode a relative date *expression* rather than a fixed value. The engine resolves the expression to a concrete `DATETIME` at execution time.
 
 ```sql
-DECLARE @start RELDATE = D-1;   -- yesterday at midnight
-DECLARE @end   RELDATE = D;     -- today at midnight
+DECLARE @start RELDATE = 'D-1';   -- yesterday at midnight
+DECLARE @end   RELDATE = 'D';     -- today at midnight
 ```
 
 #### Anchors
@@ -110,7 +110,7 @@ Example with `WEEK_START_DAY = 'Wednesday'`, today = Thursday April 17:
 `RELDATE` also accepts a fixed ISO date string. The resolver distinguishes them by the first character: letter → expression; digit → fixed date.
 
 ```sql
-DECLARE @start RELDATE = D-1;         -- relative expression
+DECLARE @start RELDATE = 'D-1';       -- relative expression
 DECLARE @end   RELDATE = '2026-12-31'; -- fixed passthrough
 ```
 

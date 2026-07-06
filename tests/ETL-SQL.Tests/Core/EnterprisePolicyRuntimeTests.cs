@@ -160,6 +160,62 @@ public sealed class EnterprisePolicyRuntimeTests
     }
 
     [Fact]
+    public void ExecutionSnapshot_FreezesPolicyValuesAndCorrelationContext()
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Security:MaxParallelDegree"] = "4"
+        };
+        var effective = new EffectiveEnterprisePolicy(true, true, "Live", "v7", "test",
+            Now.AddMinutes(-5), Now.AddHours(1), Now, Policy(maxParallel: 4), values);
+
+        var snapshot = ExecutionPolicySnapshot.Capture(effective, "svc-orchestrator",
+            ScriptExecutionMode.Scheduled, "script-hash", "job-42", "correlation-42", Now);
+        values["Security:MaxParallelDegree"] = "999";
+
+        Assert.True(snapshot.IsEnrolled);
+        Assert.Equal("v7", snapshot.PolicyVersion);
+        Assert.NotNull(snapshot.PolicyHash);
+        Assert.Equal("4", snapshot.GovernedValues["Security:MaxParallelDegree"]);
+        Assert.Equal("job-42", snapshot.JobId);
+        Assert.Equal("correlation-42", snapshot.CorrelationId);
+        Assert.Equal(ScriptExecutionMode.Scheduled, snapshot.ExecutionMode);
+    }
+
+    [Fact]
+    public void ExecutionSnapshot_FreshnessFailsExpiredPolicyAndFlagsOrdinaryRefresh()
+    {
+        var initial = Effective(maxParallel: 4, version: "v1");
+        var snapshot = ExecutionPolicySnapshot.Capture(initial, "operator",
+            ScriptExecutionMode.Batch, "script-hash", capturedAtUtc: Now);
+
+        var refreshed = Effective(maxParallel: 2, version: "v2");
+        var refreshResult = snapshot.GetFreshness(refreshed, Now);
+        var expiryResult = snapshot.GetFreshness(initial, Now.AddDays(2));
+
+        Assert.True(refreshResult.CanContinue);
+        Assert.True(refreshResult.CurrentPolicyChanged);
+        Assert.False(expiryResult.CanContinue);
+        Assert.Contains("expired", expiryResult.Reason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OperationDecision_IncludesPolicyAndExecutionCorrelation()
+    {
+        var snapshot = ExecutionPolicySnapshot.Capture(Effective(4, "v1"), "operator",
+            ScriptExecutionMode.Batch, "script-hash", "job-1", "corr-1", Now);
+
+        var decision = OperationPolicyDecision.Deny(snapshot, "Filesystem:ApprovedRoots",
+            "<outside-approved-root>", "approved roots only", "Target is outside approved roots.");
+
+        Assert.False(decision.IsAllowed);
+        Assert.Equal("corr-1", decision.CorrelationId);
+        Assert.Equal("job-1", decision.JobId);
+        Assert.Equal("v1", decision.PolicyVersion);
+        Assert.Equal(snapshot.PolicyHash, decision.PolicyHash);
+    }
+
+    [Fact]
     public async Task ProtectedFileCache_RoundTripsAndInvokesProtection()
     {
         var root = Path.Combine(Path.GetTempPath(), "enterprise_policy_cache_" + Guid.NewGuid().ToString("N"));

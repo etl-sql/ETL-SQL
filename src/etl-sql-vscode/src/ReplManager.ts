@@ -2,6 +2,7 @@ import * as cp from 'child_process';
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { ResultsPanel } from './resultsPanel';
+import { redactSecrets } from './logger';
 
 export interface EngineMessage {
     type: string;
@@ -159,7 +160,7 @@ export class ReplManager {
                     } catch {
                         // Non-JSON line from engine (startup noise etc.)
                         if (this._debugMode) {
-                            this._outputChannel?.appendLine(`[Engine] ${trimmed}`);
+                            this._outputChannel?.appendLine(redactSecrets(`[Engine] ${trimmed}`));
                         }
                     }
                 }
@@ -169,7 +170,7 @@ export class ReplManager {
             child.stderr?.on('data', (data) => {
                 const text = data.toString().trimEnd();
                 if (text) {
-                    this._outputChannel?.appendLine(text);
+                    this._outputChannel?.appendLine(redactSecrets(text));
                 }
             });
 
@@ -293,7 +294,7 @@ export class ReplManager {
         // Log text messages to the output channel (once, here).
         if (msg.type === 'message') {
             const prefix = msg.level === 'error' ? '[ERROR] ' : (msg.level === 'warning' ? '[WARN] ' : '');
-            this._outputChannel?.appendLine(`${prefix}${msg.text}`);
+            this._outputChannel?.appendLine(redactSecrets(`${prefix}${msg.text}`));
         }
 
         if (msg.type === 'variables') {

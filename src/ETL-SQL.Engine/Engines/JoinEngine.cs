@@ -138,7 +138,11 @@ public class JoinEngine
                     _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 
                     var externalEngine = new ExternalJoinEngine(_context, _logger);
-                    allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin, hashKeysLeft, hashKeysRight).ToListAsync();
+                    allBufferedRows = await externalEngine.ApplyHashJoinExternal(
+                        allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), effectiveJoin,
+                        hashKeysLeft, hashKeysRight,
+                        knownBuildRowCount: joinRows.Count,
+                        knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(joinRows)).ToListAsync();
                 }
                 else
                 {
@@ -382,6 +386,33 @@ public class JoinEngine
         var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
         var rightAlias = join.Table.Alias ?? join.Table.TableName;
 
+        var streamingLeftKeys = new List<string>();
+        var streamingRightKeys = new List<string>();
+        var rightSource = await _context.ResolveDataSourceAsync(join.Table);
+        var estimatedRightRows = (rightSource as IEstimatedCardinalityDataSource)?.EstimatedRowCount;
+        var knownLargeRight = estimatedRightRows > _context.JoinSpillThreshold;
+        var isInnerEquiJoin = join.JoinType.Equals("INNER", StringComparison.OrdinalIgnoreCase)
+            || join.JoinType.Equals("INNER JOIN", StringComparison.OrdinalIgnoreCase)
+            || join.JoinType.Equals("JOIN", StringComparison.OrdinalIgnoreCase);
+        if (knownLargeRight && isInnerEquiJoin && !join.IsFuzzy && !join.IsAsof
+            && TryExtractEqualityKeys(
+                join.Condition, leftAlias, rightAlias, streamingLeftKeys, streamingRightKeys))
+        {
+            _logger.WriteLine(
+                $"[yellow]HYPER-SCALE: Right-side estimate ({estimatedRightRows} rows) exceeds threshold. " +
+                "Streaming both sides directly into ExternalJoinEngine.[/]");
+            var externalJoin = new ExternalJoinEngine(_context, _logger);
+            await foreach (var row in externalJoin.ApplyHashJoinExternal(
+                leftStream,
+                GetJoinRowsAsyncEnumerable(join),
+                join,
+                streamingLeftKeys,
+                streamingRightKeys,
+                knownBuildRowCount: estimatedRightRows!.Value))
+                yield return row;
+            yield break;
+        }
+
         var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
 
         // Pre-filter the right-side join table using predicates in WHERE that reference ONLY this table.
@@ -477,7 +508,9 @@ public class JoinEngine
             _logger.WriteLine($"[yellow]HYPER-SCALE: Right side ({joinRows.Count} rows) exceeds threshold. Using ExternalJoinEngine.[/]");
             var externalJoin = new ExternalJoinEngine(_context, _logger);
             await foreach (var r in externalJoin.ApplyHashJoinExternal(
-                leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight))
+                leftRows, joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight,
+                knownBuildRowCount: joinRows.Count,
+                knownBuildBytes: RowWidthEstimator.EstimateTotalBytes(joinRows)))
                 yield return r;
             yield break;
         }

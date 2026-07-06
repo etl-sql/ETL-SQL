@@ -125,7 +125,49 @@ public static class EvaluationUtils
     {
         if (val is DateTime d) { dt = d; return true; }
         if (val is DateTimeOffset dto) { dt = dto.DateTime; return true; }
+        if (SafeTryParseDateTimeOffset(val?.ToString() ?? "", out var dto2))
+        {
+            dt = dto2.DateTime;
+            return true;
+        }
         return SafeTryParseDate(val?.ToString() ?? "", out dt);
+    }
+
+    public static bool TryToDateTimeOffset(object? val, out DateTimeOffset dto)
+    {
+        if (val is DateTimeOffset dtoBe) { dto = dtoBe; return true; }
+        if (val is DateTime dt) { dto = new DateTimeOffset(dt); return true; }
+        return SafeTryParseDateTimeOffset(val?.ToString() ?? "", out dto);
+    }
+
+    public static bool SafeTryParseDateTimeOffset(string s, out DateTimeOffset dto)
+    {
+        s = s?.Trim() ?? "";
+        if (string.IsNullOrEmpty(s)) { dto = default; return false; }
+
+        string[] formats = {
+            "yyyy-MM-dd HH:mm:ss.ffffff zzz",
+            "yyyy-MM-dd HH:mm:ss.fff zzz",
+            "yyyy-MM-dd HH:mm:ss zzz",
+            "yyyy-MM-ddTHH:mm:ss.ffffffzzz",
+            "yyyy-MM-ddTHH:mm:ss.fffzzz",
+            "yyyy-MM-ddTHH:mm:sszzz",
+            "yyyy-MM-dd",
+            "yyyyMMdd",
+            "yyyy-MM-dd HH:mm:ss"
+        };
+
+        if (DateTimeOffset.TryParseExact(s, formats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dto))
+        {
+            return true;
+        }
+
+        if (DateTimeOffset.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dto))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     public static bool SafeTryParseDate(string s, out DateTime dt)

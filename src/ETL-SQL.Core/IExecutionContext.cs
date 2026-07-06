@@ -139,8 +139,11 @@ public interface ITelemetryContext
     long RowsProcessed { get; set; }
     long LastStatementRowsProcessed { get; set; }
     long TotalSpilledBytes { get; set; }
+    long SpillReadBytes { get; set; }
+    int SpillExtentCount { get; set; }
     bool TelemetryEnabled { get; set; }
     int PartitionsCount { get; set; }
+    int PartitionPassCount { get; set; }
     long AggregateGroupsCount { get; set; }
     double AggregateExpansionRatio { get; set; }
     long LastExecutionTimeMs { get; set; }
@@ -211,6 +214,12 @@ public interface IDataContext
     /// Defaults to the shared instance; unbounded until <c>Engine:TotalMemoryGrantMB</c> is set.
     /// </summary>
     IMemoryGrantArbiter MemoryArbiter => MemoryGrantArbiter.Shared;
+    /// <summary>
+    /// RAM governor policy: what an in-memory operator does when it would breach the memory ceiling
+    /// (<c>Engine:TotalMemoryGrantMB</c>, via <see cref="MemoryArbiter"/>) and cannot spill further.
+    /// Defaults to <see cref="MemoryGovernorPolicy.SpillOrFail"/>.
+    /// </summary>
+    MemoryGovernorPolicy MemoryGovernorPolicy => MemoryGovernorPolicy.SpillOrFail;
     /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
     int MaxInMemoryBatches { get; set; }
     /// <summary>Number of rows before subquery results spill to disk.</summary>
@@ -273,6 +282,14 @@ public interface IEngineContext
     int MaxLastResultRows { get; set; }
     int ForeachPageSize { get; set; }
     int? PreviewLimit { get; set; }
+    /// <summary>Maximum live non-temporary connections in one script. Zero disables the ceiling.</summary>
+    int MaxConnectionsPerScript { get; set; }
+    /// <summary>Maximum live #temp tables in one script. Zero disables the ceiling.</summary>
+    int MaxTempTablesPerScript { get; set; }
+    /// <summary>Maximum variables in the active script scope. Zero disables the ceiling.</summary>
+    int MaxVariablesPerScript { get; set; }
+    /// <summary>Maximum live visual definitions in one report script. Zero disables the ceiling.</summary>
+    int MaxVisualsPerScript { get; set; }
     bool FunctionExists(string name);
     bool ProcedureExists(string name);
 }
@@ -329,6 +346,16 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
                                     ITransactionContext, ILineageContext, IDockerContext,
                                     ILoggingContext, IEvaluationContext, IDataContext, IEngineContext, IVariableContext
 {
+    /// <summary>Immutable enterprise-policy state captured for the current top-level execution.</summary>
+    Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+
+    /// <summary>
+    /// Authenticated identity the script runs under, injected by the trusted host. Sole source for
+    /// the identity system variables and HAS_GROUP/HAS_ROLE. Null when no identity was injected
+    /// (e.g. non-interactive/standalone execution); row-level predicates then fail closed.
+    /// </summary>
+    Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
+
     // Property-based access to sub-contexts for better interface segregation (TODO-91)
     IVariableContext VarContext { get; }
     IReportContext ReportContext { get; }

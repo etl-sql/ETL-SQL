@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Services;
@@ -39,6 +40,18 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
 
         if (isTemp || !connections.ContainsKey(connName))
         {
+            if (isTemp && !connections.ContainsKey(connName))
+                LiveObjectLimits.EnsureTempTableCapacity(_evaluator);
+
+            if (isTemp && _evaluator.UseColumnarTempTables && !_evaluator.IsPersistentSession && IsColumnarEligible(stmt))
+            {
+                connections[connName] = new AppendOnlyColumnDataSource(
+                    stmt.Columns,
+                    segmentRowCapacity: _evaluator.BatchSize,
+                    memoryArbiter: ((IExecutionContext)_evaluator).MemoryArbiter,
+                    tableConstraints: stmt.TableConstraints);
+                return;
+            }
             var mem = new InMemoryDataSource();
             mem.ExecutionContext = _evaluator;
             mem.Validator = _evaluator;
@@ -52,6 +65,26 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
                 var cols = stmt.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.IsIdentity ? " IDENTITY" : "")}{(c.DefaultExpression != null ? $" DEFAULT {c.DefaultExpression.ToSql()}" : "")}");
                 await foreach (var _ in sqlConn.ExecuteRawSql($"CREATE TABLE {_evaluator.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} (\n  {string.Join(",\n  ", cols)}\n);")) { }
             }
+        }
+    }
+
+    private static bool IsColumnarEligible(CreateTableStatement statement)
+    {
+        if (statement.Columns.Any(column => column.IsIdentity
+            || column.DefaultExpression != null
+            || column.CheckConstraint != null
+            || column.ForeignKey != null))
+            return false;
+        if (statement.TableConstraints.Any(constraint => constraint is TableCheckConstraint or TableForeignKeyConstraint))
+            return false;
+        try
+        {
+            foreach (var column in statement.Columns) ColumnBatchAdapter.GetPhysicalType(column.DataType);
+            return statement.Columns.Count > 0;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
         }
     }
 
@@ -210,6 +243,13 @@ public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeMan
         if (connection is InMemoryDataSource mem)
         {
             foreach (var col in stmt.Columns) mem.CreateIndex(col, stmt.IsUnique);
+            _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
+        }
+        else if (connection is AppendOnlyColumnDataSource)
+        {
+            var mutable = (InMemoryDataSource)await TempTableStorageRouter.EnsureMutableAsync(
+                _evaluator, connName, connection, "CREATE INDEX");
+            foreach (var col in stmt.Columns) mutable.CreateIndex(col, stmt.IsUnique);
             _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
         }
         else

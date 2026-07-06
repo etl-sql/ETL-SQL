@@ -6,7 +6,7 @@ VERBOSE:
     FROM 'sender@example.com'
     SUBJECT 'Subject line'
     BODY 'Message body'
-    [@ connectionName]
+    [AT connectionName]
     [CC ['cc1@example.com', ...]]
     [BCC ['bcc1@example.com', ...]]
     [ATTACH ['path/to/file', ...]]
@@ -23,7 +23,7 @@ Parameters:
   ATTACH  - Optional list of local file paths to attach
 
 Examples:
-  SEND EMAIL TO 'user@corp.com' FROM 'etl@corp.com' SUBJECT 'Report' BODY 'See attached.' @ MySmtp;
+  SEND EMAIL TO 'user@corp.com' FROM 'etl@corp.com' SUBJECT 'Report' BODY 'See attached.' AT MySmtp;
   SEND EMAIL(MySmtp, 'user@corp.com', 'etl@corp.com', 'Report', 'See attached.');
 
 References:

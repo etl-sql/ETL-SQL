@@ -99,49 +99,46 @@ The existing `CREATE CONNECTION` stores host, port, username, and password. Nati
 **Snowflake:**
 ```sql
 -- Username + password
-CREATE CONNECTION sf_prod AS SNOWFLAKE
-    HOST      = 'myorg-myaccount.snowflakecomputing.com'
-    DATABASE  = 'ANALYTICS'
-    SCHEMA    = 'PUBLIC'
-    WAREHOUSE = 'COMPUTE_WH'
-    USERNAME  = 'etlsql_svc'
-    PASSWORD  = @sf_password;
+CREATE CONNECTION sf_prod AS SNOWFLAKE(
+    HOST = 'myorg-myaccount.snowflakecomputing.com',
+    DATABASE = 'ANALYTICS',
+    SCHEMA = 'PUBLIC',
+    WAREHOUSE = 'COMPUTE_WH',
+    USERNAME = 'etlsql_svc',
+    PASSWORD = @sf_password);
 
 -- Key-pair authentication (recommended for service accounts)
-CREATE CONNECTION sf_prod AS SNOWFLAKE
-    HOST      = 'myorg-myaccount.snowflakecomputing.com'
-    DATABASE  = 'ANALYTICS'
-    WAREHOUSE = 'COMPUTE_WH'
-    USERNAME  = 'etlsql_svc'
-    OPTIONS   (PRIVATE_KEY_FILE = '/keys/rsa_key.p8');
+CREATE CONNECTION sf_prod AS SNOWFLAKE(
+    HOST = 'myorg-myaccount.snowflakecomputing.com',
+    DATABASE = 'ANALYTICS',
+    WAREHOUSE = 'COMPUTE_WH',
+    USERNAME = 'etlsql_svc',
+    PRIVATE_KEY_FILE = '/keys/rsa_key.p8');
 ```
 
 **BigQuery:**
 ```sql
 -- Service account JSON file
-CREATE CONNECTION bq_prod AS BIGQUERY
-    PROJECT         = 'my-gcp-project'
-    CREDENTIAL_FILE = '/credentials/sa-key.json';
+CREATE CONNECTION bq_prod AS BIGQUERY(
+    PROJECT = 'my-gcp-project',
+    CREDENTIAL_FILE = '/credentials/sa-key.json');
 
 -- Application Default Credentials (workload identity, Cloud Run, etc.)
-CREATE CONNECTION bq_prod AS BIGQUERY
-    PROJECT = 'my-gcp-project';
+CREATE CONNECTION bq_prod AS BIGQUERY(PROJECT = 'my-gcp-project');
 ```
 
 **ODBC-based data warehouse (existing syntax, shown for completeness):**
 ```sql
-CREATE CONNECTION redshift_prod AS ODBC
-    DSN      = 'RedshiftProd'
-    USERNAME = 'etlsql_svc'
-    PASSWORD = @rs_password;
+CREATE CONNECTION redshift_prod AS ODBC(
+    DSN = 'RedshiftProd',
+    USERNAME = 'etlsql_svc',
+    PASSWORD = @rs_password);
 
-CREATE CONNECTION databricks_prod AS ODBC
-    HOST    = 'adb-xxxxx.azuredatabricks.net'
-    OPTIONS (
-        DRIVER     = 'Databricks ODBC Driver',
-        HTTP_PATH  = '/sql/1.0/warehouses/xxxxx',
-        AUTH_TOKEN = @databricks_token
-    );
+CREATE CONNECTION databricks_prod AS ODBC(
+    HOST = 'adb-xxxxx.azuredatabricks.net',
+    DRIVER = 'Databricks ODBC Driver',
+    HTTP_PATH = '/sql/1.0/warehouses/xxxxx',
+    AUTH_TOKEN = @databricks_token);
 ```
 
 Sensitive values (`PASSWORD`, auth tokens, `CREDENTIAL_FILE` path) reference variables so they can be injected at runtime and are stored encrypted in the connector registry.

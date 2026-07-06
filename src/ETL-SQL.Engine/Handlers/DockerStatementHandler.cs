@@ -30,6 +30,10 @@ public class DockerStatementHandler : IStatementHandler
             throw new ExecutionException("Docker image name cannot be null or empty.");
         }
 
+        // Enterprise image allowlist — checked before any action (including WHAT IF) so a denied
+        // image is reported deterministically without touching Docker.
+        ETL_SQL.Core.Governance.ProcessPolicyRules.EnforceDockerImage(context, imageName);
+
         // Start the container and track it in the evaluator's manager
         _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
 

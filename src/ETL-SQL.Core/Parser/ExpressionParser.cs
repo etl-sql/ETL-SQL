@@ -54,12 +54,42 @@ public partial class ExpressionParser
                     _parser.Current.Column);
             }
 
-            return ParseOr();
+            return ParseArrow();
         }
         finally
         {
             _expressionDepth--;
         }
+    }
+
+    /// <summary>
+    /// The => arrow conditional: <c>cond => a : b</c> lowers at parse time to
+    /// <c>CASE WHEN cond THEN a ELSE b END</c>, and chains flatten into one CASE —
+    /// <c>c1 => v1 : c2 => v2 : v3</c> becomes <c>CASE WHEN c1 THEN v1 WHEN c2 THEN v2 ELSE v3 END</c>.
+    /// Like ?? → COALESCE and IIF → CASE, the evaluator, lineage, and pushdown all see the canonical
+    /// CASE node (short-circuit, universal SQL). Lowest precedence (below OR), so
+    /// <c>a OR b => x : y</c> means <c>(a OR b) => x : y</c>. The final else branch is REQUIRED:
+    /// a dangling <c>expr => val</c> is a syntax error, never an implicit NULL.
+    /// </summary>
+    private Expression ParseArrow()
+    {
+        var operand = ParseOr();
+        if (_parser.Current.Type != TokenType.ARROW) return operand;
+
+        var arrowToken = _parser.Current;
+        var whenClauses = new List<(Expression Condition, Expression Result)>();
+        while (_parser.Match(TokenType.ARROW))
+        {
+            var result = ParseOr();
+            whenClauses.Add((operand, result));
+            _parser.Consume(TokenType.COLON,
+                "Expected ':' after '=>' result — the arrow conditional requires an else branch (cond => value : else)");
+            operand = ParseOr();
+            // Loop: if another '=>' follows, that operand was the next WHEN condition;
+            // otherwise it is the final ELSE.
+        }
+        return new CaseExpression(whenClauses, operand)
+        { Line = arrowToken.Line, Column = arrowToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
     }
 
     private Expression ParseOr()
@@ -112,7 +142,7 @@ public partial class ExpressionParser
 
     private Expression ParseComparison()
     {
-        var left = ParseShift();
+        var left = ParseCoalesce();
         while (_parser.Current.Type == TokenType.EQUALS || _parser.Current.Type == TokenType.NOT_EQUALS ||
                _parser.Current.Type == TokenType.LESS_THAN || _parser.Current.Type == TokenType.GREATER_THAN ||
                _parser.Current.Type == TokenType.LESS_EQUALS || _parser.Current.Type == TokenType.GREATER_EQUALS ||
@@ -242,11 +272,52 @@ public partial class ExpressionParser
             }
             else
             {
-                var right = ParseTerm();
+                // Coalesce level so `x = amount ?? 0` parses as `x = (amount ?? 0)` — ?? binds
+                // tighter than comparison on both sides. Strictly more accepting than ParseTerm.
+                var right = ParseCoalesce();
                 left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
         }
         return left;
+    }
+
+    /// <summary>
+    /// The ?? null-coalescing shorthand: <c>a ?? b [?? c ...]</c> lowers at parse time to the
+    /// existing <c>COALESCE(a, b, c)</c> function call, so the evaluator, lineage tracking, and SQL
+    /// pushdown all see plain COALESCE (universal SQL) — no new runtime semantics. Binds tighter
+    /// than comparisons (<c>amount ?? 0 &gt; 5</c> means <c>(amount ?? 0) &gt; 5</c>) and looser
+    /// than arithmetic (<c>a + b ?? 0</c> means <c>(a + b) ?? 0</c>). CASE/COALESCE remain the
+    /// documented portable standard; this is an ETL-SQL dialect convenience.
+    /// </summary>
+    private Expression ParseCoalesce()
+    {
+        var left = ParseShift();
+        if (_parser.Current.Type != TokenType.DOUBLE_QUESTION) return left;
+
+        var opToken = _parser.Current;
+        var args = new List<Expression> { left };
+        while (_parser.Match(TokenType.DOUBLE_QUESTION))
+            args.Add(ParseShift());
+        return new FunctionCallExpression("COALESCE", args) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+    }
+
+    /// <summary>
+    /// IIF(cond, a, b) is T-SQL shorthand for <c>CASE WHEN cond THEN a ELSE b END</c>; lowering it at
+    /// parse time (like ?? → COALESCE) gives it true CASE semantics — <b>short-circuit evaluation</b>
+    /// (the untaken branch never runs, so <c>IIF(x = 0, 0, 1/x)</c> is safe, matching T-SQL) — and
+    /// pushes down to every connector as universal CASE instead of a T-SQL-only function. Only the
+    /// plain three-argument form lowers; anything else falls through to the runtime function.
+    /// </summary>
+    private static Expression LowerIifToCase(FunctionCallExpression call)
+    {
+        if (!call.FunctionName.Equals("IIF", StringComparison.OrdinalIgnoreCase)) return call;
+        if (call.Arguments.Count != 3 || call.IsDistinct
+            || call.Filter != null || call.Window != null || call.WithinGroupOrderBy != null) return call;
+
+        return new CaseExpression(
+            new List<(Expression Condition, Expression Result)> { (call.Arguments[0], call.Arguments[1]) },
+            call.Arguments[2])
+        { Line = call.Line, Column = call.Column, EndLine = call.EndLine, EndColumn = call.EndColumn };
     }
 
     private Expression ParseShift()
@@ -277,13 +348,35 @@ public partial class ExpressionParser
 
     private Expression ParseFactor()
     {
-        var left = ParsePrimary();
+        var left = ParseJsonAccess();
         while (_parser.Current.Type == TokenType.STAR || _parser.Current.Type == TokenType.SLASH || _parser.Current.Type == TokenType.MODULO)
         {
             var opToken = _parser.Advance();
             var op = opToken.Type;
-            var right = ParsePrimary();
+            var right = ParseJsonAccess();
             left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column };
+        }
+        return left;
+    }
+
+    /// <summary>
+    /// The -> / ->> JSON access operators (PostgreSQL/MySQL/SQLite style): <c>json -> key</c> returns
+    /// the field or array element as JSON (chainable), <c>json ->> key</c> returns it as text. Both
+    /// lower at parse time to the JSON_GET / JSON_GET_TEXT functions — canonical AST, so the
+    /// evaluator, lineage, and pushdown see plain function calls. Left-associative and binding
+    /// tighter than arithmetic: <c>a -> 'x' ->> 'y'</c> is <c>JSON_GET_TEXT(JSON_GET(a,'x'),'y')</c>.
+    /// The key may be any expression — a string field name, an integer array index, or a variable.
+    /// </summary>
+    private Expression ParseJsonAccess()
+    {
+        var left = ParsePrimary();
+        while (_parser.Current.Type == TokenType.JSON_ARROW || _parser.Current.Type == TokenType.JSON_ARROW_TEXT)
+        {
+            var opToken = _parser.Advance();
+            var right = ParsePrimary();
+            var fn = opToken.Type == TokenType.JSON_ARROW ? "JSON_GET" : "JSON_GET_TEXT";
+            left = new FunctionCallExpression(fn, new List<Expression> { left, right })
+            { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
         }
         return left;
     }
@@ -608,7 +701,7 @@ public partial class ExpressionParser
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITHIN GROUP");
                     funcCall.WithinGroupOrderBy = orderBy;
                 }
-                return funcCall;
+                return LowerIifToCase(funcCall);
             }
 
 
@@ -692,7 +785,7 @@ public partial class ExpressionParser
                 while (_parser.Match(TokenType.COMMA))
                     args.Add(_parser.ParseExpression());
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
-                return new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                return LowerIifToCase(new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn });
             }
             while (_parser.Match(TokenType.DOT))
             {

@@ -63,7 +63,7 @@ namespace ETL_SQL.Connectors
             // Security Hardening: Validate site host against egress policy
             if (!string.IsNullOrEmpty(_siteUrl) && Uri.TryCreate(_siteUrl, UriKind.Absolute, out var uri))
             {
-                context.SecurityService.ValidateHost(uri.Host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, uri.Host);
             }
 
             // Setup HTTP client based on authentication mode
@@ -98,7 +98,7 @@ namespace ETL_SQL.Connectors
                 return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
             }
 
-            context.SecurityService.ValidateHost(uri.Host);
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, uri.Host);
 
             try
             {

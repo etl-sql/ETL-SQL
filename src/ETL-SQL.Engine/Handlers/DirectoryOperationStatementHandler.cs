@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
 
@@ -74,6 +75,21 @@ public class DirectoryOperationStatementHandler : IStatementHandler
         string path = context.ResolvePath(pathVal);
 
         string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        var sourceAccess = stmt.Type is DirectoryOpType.Delete or DirectoryOpType.DeleteContents
+            or DirectoryOpType.Move or DirectoryOpType.Rename
+            ? FileSystemAccessKind.Move
+            : FileSystemAccessKind.Read;
+        path = pathAuthorizer.Authorize(context, path, sourceAccess,
+            validateFileType: stmt.Type == DirectoryOpType.Decompress).CanonicalPath;
+        if (dest != null)
+        {
+            var destinationAccess = stmt.Type == DirectoryOpType.Decompress
+                ? FileSystemAccessKind.Extract
+                : FileSystemAccessKind.Write;
+            dest = pathAuthorizer.Authorize(context, dest, destinationAccess,
+                validateFileType: stmt.Type == DirectoryOpType.Compress).CanonicalPath;
+        }
 
         bool overwrite = true; // Default to true for backward compatibility
         if (stmt.Overwrite != null)
@@ -121,10 +137,14 @@ public class DirectoryOperationStatementHandler : IStatementHandler
             switch (stmt.Type)
             {
                 case DirectoryOpType.Create:
+                    path = pathAuthorizer.Authorize(context, path, FileSystemAccessKind.Write,
+                        validateFileType: false).CanonicalPath;
                     Directory.CreateDirectory(path);
                     _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Delete:
+                    path = pathAuthorizer.Authorize(context, path, FileSystemAccessKind.Delete,
+                        validateFileType: false).CanonicalPath;
                     // Security Hardening: Block deleting directories containing scripts (or with script extensions)
                     context.SecurityService.ValidateWriteAccess(path);
 
@@ -201,7 +221,7 @@ public class DirectoryOperationStatementHandler : IStatementHandler
 
                         if (File.Exists(path))
                         {
-                            ZipFile.ExtractToDirectory(path, dest, overwrite);
+                            SafeZipExtractor.Extract(path, dest, overwrite, context, pathAuthorizer);
                             _logger.WriteLine($"Directory decompressed: {path} -> {dest}", ConsoleColor.Green);
                         }
                         else

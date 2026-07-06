@@ -77,6 +77,48 @@ public class ExecutionController(
         return Accepted(new { jobId });
     }
 
+    // ── 2.1b  POST /api/reports/{id}/execute-as/{targetUserId} ────────────────
+    // Run the report under a target user's row-level-security identity — admin impersonation (support
+    // / reproduction) or Publisher preview-as (authoring / testing RLS predicates). The *real actor's*
+    // own authority gates execution and dataset/connection access; only the author-written RLS
+    // predicates see the target identity, so this exposes no data the caller couldn't already reach.
+    // Available to administrators and to editors (Manage) of the report's folder. Never cached; both
+    // identities audited. See Docs/Design/RowLevelSecurity.md.
+    [HttpPost("reports/{id:int}/execute-as/{targetUserId:int}")]
+    public async Task<IActionResult> ExecuteAs(int id, int targetUserId, [FromBody] ExecuteRequest? req)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        // Editors (Manage) can preview-as their own reports; admins can run-as on any report.
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (!IsAdmin && (perm is null || perm < FolderPermission.Manage)) return Forbid();
+
+        var target = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId);
+        if (target is null) return NotFound(new { error = "Target user not found." });
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var jobId = await jobService.EnqueueExecutionAsync(
+            id,
+            CurrentUserId,
+            resolvedScriptPath,
+            req?.Parameters,
+            isAdministrator: IsAdmin,
+            actorType: ActorType,
+            actorId: ActorId,
+            effectiveScopes: EffectiveScopes,
+            correlationId: HttpContext.TraceIdentifier,
+            impersonatedUserId: targetUserId);
+
+        // Audit records the real actor (CurrentUserId) acting as the target.
+        await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT_AS", "Report", id.ToString(),
+            $"targetUserId={targetUserId}");
+
+        return Accepted(new { jobId });
+    }
+
     // ── 2.1  GET /api/jobs/{jobId} ────────────────────────────────────────────
 
     [HttpGet("jobs/{jobId}")]

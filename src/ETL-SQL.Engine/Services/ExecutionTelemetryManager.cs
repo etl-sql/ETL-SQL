@@ -27,9 +27,30 @@ public class ExecutionTelemetryManager : ITelemetryContext
         set => System.Threading.Interlocked.Exchange(ref _totalSpilledBytes, value);
     }
 
+    private long _spillReadBytes;
+    public long SpillReadBytes
+    {
+        get => System.Threading.Interlocked.Read(ref _spillReadBytes);
+        set => System.Threading.Interlocked.Exchange(ref _spillReadBytes, value);
+    }
+
+    private int _spillExtentCount;
+    public int SpillExtentCount
+    {
+        get => System.Threading.Volatile.Read(ref _spillExtentCount);
+        set => System.Threading.Interlocked.Exchange(ref _spillExtentCount, value);
+    }
+
     public bool TelemetryEnabled { get; set; } = true;
 
     public int PartitionsCount { get; set; } = 0;
+
+    private int _partitionPassCount;
+    public int PartitionPassCount
+    {
+        get => System.Threading.Volatile.Read(ref _partitionPassCount);
+        set => System.Threading.Interlocked.Exchange(ref _partitionPassCount, value);
+    }
 
     private long _aggregateGroupsCount = 0;
     public long AggregateGroupsCount
@@ -75,7 +96,10 @@ public class ExecutionTelemetryManager : ITelemetryContext
         RowsProcessed = 0;
         LastStatementRowsProcessed = 0;
         TotalSpilledBytes = 0;
+        SpillReadBytes = 0;
+        SpillExtentCount = 0;
         PartitionsCount = 0;
+        PartitionPassCount = 0;
         AggregateGroupsCount = 0;
         AggregateExpansionRatio = 1.0;
         LastExecutionTimeMs = 0;

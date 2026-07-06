@@ -11,6 +11,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Services;
@@ -300,7 +301,9 @@ public class PublishBundleStatementHandler(IBundleStore store) : IStatementHandl
         {
             if (string.IsNullOrWhiteSpace(stmt.KeyFile))
                 throw new ExecutionException("PUBLISH BUNDLE ENCRYPT = KEYFILE requires KEYFILE = 'path'.");
-            var keyPath = context.ResolvePath(stmt.KeyFile);
+            var keyPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(stmt.KeyFile), FileSystemAccessKind.Read, validateFileType: false)
+                .CanonicalPath;
             encryptionPassword = File.Exists(keyPath)
                 ? await File.ReadAllTextAsync(keyPath)
                 : throw new ExecutionException($"PUBLISH BUNDLE keyfile not found: {keyPath}");
@@ -310,7 +313,10 @@ public class PublishBundleStatementHandler(IBundleStore store) : IStatementHandl
             throw new ExecutionException($"Unsupported PUBLISH BUNDLE encryption mode: {stmt.EncryptionMode}");
         }
 
-        var preflight = await BundlePublishSupport.PreflightAsync(stmt.BundleName, context.ResolvePath(source),
+        var sourceRoot = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(source), FileSystemAccessKind.Enumerate, validateFileType: false)
+            .CanonicalPath;
+        var preflight = await BundlePublishSupport.PreflightAsync(stmt.BundleName, sourceRoot,
             stmt.EntryPath, publishPassword, encryptionPassword);
         var version = await store.PublishBundleAsync(new BundlePublishRequest(
             stmt.BundleName,
@@ -341,7 +347,10 @@ public class ValidateBundleStatementHandler : IStatementHandler
             : stmt.Password;
         var source = (await context.EvaluateValue(stmt.SourcePath, new Row()))?.ToString()
             ?? throw new ExecutionException("VALIDATE BUNDLE source path evaluated to null.");
-        var result = await BundlePublishSupport.PreflightAsync(stmt.BundleName, context.ResolvePath(source),
+        var sourceRoot = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(source), FileSystemAccessKind.Enumerate, validateFileType: false)
+            .CanonicalPath;
+        var result = await BundlePublishSupport.PreflightAsync(stmt.BundleName, sourceRoot,
             stmt.EntryPath, publishPassword, SecurityService.GetMachineKey());
         context.Log($"Bundle '{stmt.BundleName}' validated: {result.Files.Count} file(s), {result.Dependencies.Count} dependency edge(s).", ConsoleColor.Green);
     }
@@ -375,7 +384,9 @@ public class ExportScriptStatementHandler(IBundleStore store) : IStatementHandle
         if (files.Count == 0)
             throw new ExecutionException($"Bundle '{uri.BundleName}' version {version} has no files.");
 
-        var targetDir = context.ResolvePath(target);
+        var targetDir = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(target), FileSystemAccessKind.Write, validateFileType: false)
+            .CanonicalPath;
         Directory.CreateDirectory(targetDir);
         foreach (var file in files)
         {

@@ -275,6 +275,40 @@ public static class MachineBoundCrypto
         return magic.AsSpan().SequenceEqual(FileMagicV2);
     }
 
+    private static bool TryReadFileMagic(Stream fs)
+    {
+        if (fs.Length < FileMagicV2.Length) return false;
+        var magic = new byte[FileMagicV2.Length];
+        fs.ReadExactly(magic, 0, FileMagicV2.Length);
+        return magic.AsSpan().SequenceEqual(FileMagicV2);
+    }
+
+    public static Stream DecryptStream(Stream fsIn)
+    {
+        if (TryReadFileMagic(fsIn))
+        {
+            var iv = new byte[AesIvLength];
+            fsIn.ReadExactly(iv, 0, AesIvLength);
+            var cipherStart = fsIn.Position;
+            var cipherLength = fsIn.Length - cipherStart - FileTagLength;
+            if (cipherLength < 0)
+                throw new CryptographicException("Ciphertext is too short.");
+
+            var fileKey = GetMachineFileKey();
+            fsIn.Position = cipherStart;
+            var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
+            var aes = Aes.Create();
+            var decryptor = aes.CreateDecryptor(fileKey, iv);
+            return new ChainedStream(new CryptoStream(limitedCipher, decryptor, CryptoStreamMode.Read), aes);
+        }
+
+        fsIn.Position = 0;
+        using var ms = new MemoryStream();
+        fsIn.CopyTo(ms);
+        var plaintext = Unprotect(ms.ToArray());
+        return new MemoryStream(plaintext);
+    }
+
     private static void TryDeleteFile(string path)
     {
         try { if (File.Exists(path)) File.Delete(path); } catch { }

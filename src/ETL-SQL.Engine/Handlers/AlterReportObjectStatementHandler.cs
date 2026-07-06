@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -136,6 +137,10 @@ public class AlterReportObjectStatementHandler(ILogger logger) : IStatementHandl
 
             if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
+
+            resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, resolvedPath, FileSystemAccessKind.Write, validateFileType: false)
+                .CanonicalPath;
 
             context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
             var jsonOptions = new JsonSerializerOptions { WriteIndented = true };

@@ -423,7 +423,8 @@ export async function generateScriptFromSpec(context: vscode.ExtensionContext, e
         vscode.window.showInformationMessage(`Successfully generated ETL-SQL script: ${path.basename(saveUri.fsPath)}`);
 
     } catch (err: any) {
-        log(`Failed to generate script: ${err.message}`, 'error');
-        vscode.window.showErrorMessage(`ETL-SQL Script Generation Failed: ${err.message}`);
+        const cleanMessage = (err?.message || String(err)).replace(/(key=)([^&]+)/gi, '$1[REDACTED]');
+        log(`Failed to generate script: ${cleanMessage}`, 'error');
+        vscode.window.showErrorMessage(`ETL-SQL Script Generation Failed: ${cleanMessage}`);
     }
 }

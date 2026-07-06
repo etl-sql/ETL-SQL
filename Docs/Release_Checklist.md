@@ -16,7 +16,7 @@ Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 ## Phase 0 — Pre-flight
 
 - [ ] Working tree is clean or only contains intended release changes (`git status`).
-- [ ] You are on the release branch (e.g. `vx.y.z`), branched from an up-to-date `main`.
+- [ ] You are on the release branch (e.g., `release/vx.y.z`), with all version features merged in.
 - [ ] `ROADMAP.md` items for this release are either done or explicitly deferred.
 - [ ] `TODO.md` active-release items are closed or moved to `ROADMAP.md`.
 - [ ] No `SECRET:` / API keys / connection strings committed (`git diff vLAST..HEAD`).
@@ -46,6 +46,14 @@ Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
 - [ ] No open **High/Critical** findings (see the per-release review note in `Docs/Operations/`).
 - [ ] Any accepted Medium/Low findings are recorded in the release notes or `Docs/Operations/`.
 - [ ] New third-party dependencies are reflected in `THIRD-PARTY-INVENTORY.md` and `NOTICES.md`.
+
+### Feature security watchlist (resolve before the named capability ships)
+
+- [x] **RLS Publisher preview-as data access — RESOLVED (2026-07-02).** Not an escalation and needs
+      no separate grant: a report author already has full access to the data their query reaches, so
+      preview-as (like admin run-as) only changes RLS-predicate evaluation, while the previewer's own
+      authority still gates dataset/connection access. Data isolation from an author is a DB-layer
+      responsibility, out of scope. See open question 1 in [`Docs/Design/RowLevelSecurity.md`](Design/RowLevelSecurity.md).
 
 ## Phase 3 — Local validation gate (authoritative)
 

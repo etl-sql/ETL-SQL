@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,7 +31,43 @@ namespace ETL_SQL.Connectors.Rest
         private readonly int _timeoutSeconds;
         // Auto-redirect is disabled so the connector follows redirects explicitly and re-validates every
         // target host against the egress allowlist (SSRF hardening). See SendWithRedirectsAsync.
-        private static readonly HttpClient _httpClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+        // UseProxy is disabled so an ambient system proxy cannot route around the egress controls
+        // (proxy-bypass hardening), and a ConnectCallback re-validates the DNS-resolved address at
+        // connect time (DNS-rebinding hardening) before pinning the socket to the validated IPs.
+        private static readonly HttpClient _httpClient = new HttpClient(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            ConnectCallback = ConnectValidatedAsync
+        });
+
+        private static async ValueTask<Stream> ConnectValidatedAsync(
+            SocketsHttpConnectionContext context, CancellationToken cancellationToken)
+        {
+            var host = context.DnsEndPoint.Host;
+            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+            if (addresses.Length == 0)
+                throw new SocketException((int)SocketError.HostNotFound);
+
+            // Validate every address the host resolved to before connecting; if any is a denied
+            // internal address the whole connection is refused (an attacker controls which IP a
+            // rebinding name returns, so a single internal candidate is fatal). We then connect to the
+            // exact validated set — no second DNS lookup — so the socket cannot rebind to a fresh IP.
+            foreach (var address in addresses)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceResolvedAddress(host, address);
+
+            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
         private const int DefaultMaxRedirects = 5;
 
         private string? _cachedToken;
@@ -43,8 +82,8 @@ namespace ETL_SQL.Connectors.Rest
             _logger = context.Logger;
             _timeoutSeconds = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
 
-            // Security Hardening: egress control
-            context.SecurityService.ValidateHost(new Uri(url).Host);
+            // Security Hardening: egress control (local guardrail + enterprise host/scheme/port/range policy)
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context, new Uri(url));
 
             // Set default User-Agent as many APIs (like GitHub) require it
             if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
@@ -236,7 +275,7 @@ namespace ETL_SQL.Connectors.Rest
                 {
                     throw new ExecutionException("OAuth2 TOKEN_URL is not a valid absolute URI.");
                 }
-                _context?.SecurityService.ValidateHost(uri.Host);
+                if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, uri);
 
                 _options.TryGetValue("SCOPE", out var scope);
 
@@ -1290,7 +1329,7 @@ namespace ETL_SQL.Connectors.Rest
                 throw new ExecutionException("Generated API request URL is not a valid absolute URI.");
             }
 
-            _context?.SecurityService.ValidateHost(uri.Host);
+            if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, uri);
         }
 
         private int GetMaxRedirects()
@@ -1360,7 +1399,7 @@ namespace ETL_SQL.Connectors.Rest
                 }
 
                 // Re-validate every hop against the egress policy before following it.
-                _context?.SecurityService.ValidateHost(target.Host);
+                if (_context != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, target);
 
                 // Strip credentials when the redirect crosses to a different host OR downgrades the
                 // transport (HTTPS -> HTTP). A same-host downgrade would otherwise leak the bearer

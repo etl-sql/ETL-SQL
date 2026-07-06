@@ -65,12 +65,6 @@ namespace ETL_SQL.Connectors.FlatFile
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
-
             _options = options;
             _hasHeader = true;
             _delimiter = ',';
@@ -224,6 +218,13 @@ namespace ETL_SQL.Connectors.FlatFile
             }
 
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         /// <summary>
@@ -395,93 +396,87 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath))
                 yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = PrepareReadPath(tempFiles, ".csv");
+            ValidateFileAccess();
 
-            try
+            using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".csv");
+            using var reader = new StreamReader(stream, _encoding);
+            var recordReader = new RecordReader(reader, _rowDelimiter);
+
+            for (int i = 0; i < _startAtRows; i++) await recordReader.ReadRecordAsync();
+
+            string? headerLine = null;
+            if (_headerFile != null)
             {
-                using var reader = new StreamReader(effectivePath, _encoding);
-                var recordReader = new RecordReader(reader, _rowDelimiter);
-
-                for (int i = 0; i < _startAtRows; i++) await recordReader.ReadRecordAsync();
-
-                string? headerLine = null;
-                if (_headerFile != null)
+                if (System.IO.File.Exists(_headerFile))
                 {
-                    if (System.IO.File.Exists(_headerFile))
-                    {
-                        headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                    }
-                    else
-                    {
-                        headerLine = _headerFile;
-                    }
-
-                    if (_hasHeader) await recordReader.ReadRecordAsync();
+                    headerLine = (await System.IO.File.ReadAllTextAsync(_headerFile)).Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
                 }
                 else
                 {
-                    headerLine = await recordReader.ReadRecordAsync();
+                    headerLine = _headerFile;
                 }
 
-                if (string.IsNullOrWhiteSpace(headerLine))
-                    yield break;
+                if (_hasHeader) await recordReader.ReadRecordAsync();
+            }
+            else
+            {
+                headerLine = await recordReader.ReadRecordAsync();
+            }
 
-                var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
-                var currentBatch = new DataTable();
+            if (string.IsNullOrWhiteSpace(headerLine))
+                yield break;
 
-                if (_hasHeader)
+            var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
+            var currentBatch = new DataTable();
+
+            if (_hasHeader)
+            {
+                currentBatch.SetColumns(headers.Select(h => h.Trim()));
+            }
+            else
+            {
+                var colNames = _fixedColumns != null
+                    ? _fixedColumns.Select(c => c.Name).ToList()
+                    : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                currentBatch.SetColumns(colNames);
+                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
+            }
+
+            var actualHeaders = new List<string>(currentBatch.ColumnNames);
+            int totalRowsRead = 0;
+
+            var lineQueue = new Queue<string>();
+            string? line;
+            while ((line = await recordReader.ReadRecordAsync()) != null)
+            {
+                lineQueue.Enqueue(line);
+                if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
                 {
-                    currentBatch.SetColumns(headers.Select(h => h.Trim()));
-                }
-                else
-                {
-                    var colNames = _fixedColumns != null
-                        ? _fixedColumns.Select(c => c.Name).ToList()
-                        : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
-                    currentBatch.SetColumns(colNames);
-                    await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
-                }
+                    var dataLine = lineQueue.Dequeue();
+                    await ProcessDataLine(dataLine, currentBatch, actualHeaders);
+                    totalRowsRead++;
 
-                var actualHeaders = new List<string>(currentBatch.ColumnNames);
-                int totalRowsRead = 0;
-
-                var lineQueue = new Queue<string>();
-                string? line;
-                while ((line = await recordReader.ReadRecordAsync()) != null)
-                {
-                    lineQueue.Enqueue(line);
-                    if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
+                    if (currentBatch.Rows.Count >= batchSize)
                     {
-                        var dataLine = lineQueue.Dequeue();
-                        await ProcessDataLine(dataLine, currentBatch, actualHeaders);
-                        totalRowsRead++;
-
-                        if (currentBatch.Rows.Count >= batchSize)
-                        {
-                            yield return currentBatch;
-                            currentBatch = new DataTable();
-                            currentBatch.SetColumns(actualHeaders);
-                        }
+                        yield return currentBatch;
+                        currentBatch = new DataTable();
+                        currentBatch.SetColumns(actualHeaders);
                     }
                 }
-
-                if (_countAtEndPattern != null && lineQueue.Count > _endAtRows)
-                {
-                    var countLine = lineQueue.Dequeue();
-                    ValidateFooterCount(countLine, totalRowsRead);
-                }
-
-                if (currentBatch.Rows.Count > 0)
-                    yield return currentBatch;
             }
-            finally
+
+            if (_countAtEndPattern != null && lineQueue.Count > _endAtRows)
             {
-                DeleteTempFiles(tempFiles);
+                var countLine = lineQueue.Dequeue();
+                ValidateFooterCount(countLine, totalRowsRead);
             }
+
+            if (currentBatch.Rows.Count > 0)
+                yield return currentBatch;
         }
 
         private sealed class RecordReader
@@ -588,8 +583,8 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
-            // Security Hardening: Block writing to script files
-            _context?.SecurityService.ValidateWriteAccess(_filePath);
+            // Security Hardening: local write guardrail + enterprise policy re-check at the boundary.
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
 
             string tempFile = System.IO.Path.GetTempFileName();
             try
@@ -721,27 +716,46 @@ namespace ETL_SQL.Connectors.FlatFile
                     }
                 }
 
+                string fileToEncrypt = tempFile;
+                string? zippedTemp = null;
+
+                if (_compress)
+                {
+                    zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
+                    using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
+                    {
+                        string entryName = System.IO.Path.GetFileName(_filePath);
+                        if (entryName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        else if (entryName.EndsWith(".pgp", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        
+                        zip.CreateEntryFromFile(tempFile, entryName);
+                    }
+                    fileToEncrypt = zippedTemp;
+                }
+
                 if (_encryption.Enabled)
                 {
-                    _encryption.EncryptFile(tempFile, _filePath);
+                    _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
                 {
-                    string zipPath = _filePath;
-                    if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
-                    var zipDir = System.IO.Path.GetDirectoryName(zipPath);
-                    if (!string.IsNullOrEmpty(zipDir)) System.IO.Directory.CreateDirectory(zipDir);
-                    if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
-                    using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
-                    {
-                        zip.CreateEntryFromFile(tempFile, System.IO.Path.GetFileName(_filePath));
-                    }
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
+                    System.IO.File.Move(fileToEncrypt, _filePath, true);
                 }
                 else
                 {
                     var dir = System.IO.Path.GetDirectoryName(_filePath);
                     if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     System.IO.File.Move(tempFile, _filePath, true);
+                }
+
+                if (zippedTemp != null && System.IO.File.Exists(zippedTemp))
+                {
+                    try { System.IO.File.Delete(zippedTemp); } catch { /* best effort */ }
                 }
             }
             finally
@@ -754,10 +768,7 @@ namespace ETL_SQL.Connectors.FlatFile
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            var tempFiles = new List<string>();
-            string effectivePath;
-            try { effectivePath = PrepareReadPath(tempFiles, ".csv"); }
-            catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
+            ValidateFileAccess();
 
             try
             {
@@ -771,7 +782,8 @@ namespace ETL_SQL.Connectors.FlatFile
                 }
                 else
                 {
-                    using var reader = new StreamReader(effectivePath, _encoding);
+                    using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".csv");
+                    using var reader = new StreamReader(stream, _encoding);
                     for (int i = 0; i < _startAtRows; i++) await reader.ReadLineAsync();
                     headerLine = await reader.ReadLineAsync();
                 }
@@ -782,10 +794,6 @@ namespace ETL_SQL.Connectors.FlatFile
                 return headers.Select((h, i) => $"Col{i + 1}");
             }
             catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            finally
-            {
-                DeleteTempFiles(tempFiles);
-            }
         }
 
         private void ValidateFileAccess()

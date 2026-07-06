@@ -6,6 +6,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -63,6 +64,24 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
                 _logger.WriteLine($"WHAT IF: Would delete rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
                 return;
             }
+
+            if (connection is AppendOnlyColumnDataSource columnar && stmt.Output == null)
+            {
+                var nativeDeleted = await columnar.DeleteWhereAsync(
+                    stmt.WhereClause, context.CaseSensitiveComparison, context.CancellationToken);
+                if (nativeDeleted.HasValue)
+                {
+                    context.IncrementOperationCount(
+                        OperationType.EngineInternal,
+                        count: nativeDeleted.Value > int.MaxValue ? int.MaxValue : (int)nativeDeleted.Value);
+                    context.Telemetry.RowsProcessed += nativeDeleted.Value;
+                    if (context.IsVerbose)
+                        _logger.WriteLine($"Finished tombstoning {nativeDeleted.Value} rows in {connName}");
+                    return;
+                }
+            }
+
+            connection = await TempTableStorageRouter.EnsureMutableAsync(context, connName, connection, "DELETE");
 
             // 1. Read existing and filter
             int deletedCount = 0;

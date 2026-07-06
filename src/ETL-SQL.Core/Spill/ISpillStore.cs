@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Spill;
@@ -25,6 +26,22 @@ public interface ISpillReader : IAsyncDisposable
     string ChunkName { get; }
     Task<Row?> ReadRowAsync();
     IAsyncEnumerable<Row> AsEnumerableAsync();
+}
+
+/// <summary>Optional capability for writing owned native batches without reconstructing rows.</summary>
+public interface IColumnarSpillWriter
+{
+    Task WriteBatchAsync(ColumnBatch batch);
+}
+
+/// <summary>
+/// Optional capability implemented by spill readers that can expose native typed batches without
+/// reconstructing a <see cref="Row"/> object graph. A reader must be consumed through either this
+/// interface or <see cref="ISpillReader"/>'s row methods, not both.
+/// </summary>
+public interface IColumnarSpillReader
+{
+    IAsyncEnumerable<ColumnBatch> AsColumnBatchesAsync();
 }
 
 /// <summary>

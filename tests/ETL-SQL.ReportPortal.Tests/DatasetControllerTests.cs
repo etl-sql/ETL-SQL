@@ -1119,12 +1119,12 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     {
         var token = await GetAdminTokenAsync();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var name = $"#export_{suffix}";
+        var name = $"#export_{suffix}_12345";
         var folder = $"/export_{suffix}";
         var schema = """[{"name":"ID","type":"INT"},{"name":"Name","type":"VARCHAR"}]""";
 
         // 1. Write the Parquet file
-        var datasetFileName = $"export_{suffix}.parquet";
+        var datasetFileName = $"export_{suffix}_12345.parquet";
         var datasetFile = Path.Combine(_factory.TempDir, "datasets", datasetFileName);
 
         var ds = new ETL_SQL.Connectors.Parquet.ParquetDataSource(

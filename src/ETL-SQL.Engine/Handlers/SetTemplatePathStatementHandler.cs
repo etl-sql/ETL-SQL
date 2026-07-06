@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -25,7 +26,9 @@ public class SetTemplatePathStatementHandler(ILogger logger) : IStatementHandler
         string path = val.ToString()!;
 
         // Security: Use context.ResolvePath to ensure it's within allowed bounds
-        string resolvedPath = context.ResolvePath(path);
+        string resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(path), FileSystemAccessKind.Enumerate, validateFileType: false)
+            .CanonicalPath;
 
         context.ReportContext.TemplatePath = resolvedPath;
 

@@ -444,10 +444,25 @@ public class SystemParser : ParserComponent
                     jobName = Advance().Value;
                 stmt = new ShowJobHistoryStatement(jobName);
             }
+            else if (MatchIdentifier("STATE"))
+            {
+                string? jobName = null;
+                if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
+                    jobName = Advance().Value;
+                stmt = new ShowJobStateStatement(jobName);
+            }
             else
-                throw new SyntaxException("Expected HISTORY after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected HISTORY or STATE after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
         }
         else if (Match(TokenType.JOBS)) stmt = new ShowJobsStatement();
+        else if (MatchIdentifier("HOST"))
+        {
+            ConsumeIdentifierValue("METRICS", "Expected METRICS after SHOW HOST");
+            string? nodeId = null;
+            if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
+                nodeId = Advance().Value;
+            stmt = new ShowHostMetricsStatement(nodeId);
+        }
         else if (MatchIdentifier("PUBLISHED"))
         {
             ConsumeIdentifierValue("BUNDLES", "Expected BUNDLES after SHOW PUBLISHED");
@@ -731,6 +746,8 @@ public class SystemParser : ParserComponent
             {
                 ShowProfileStatement sps => sps with { IntoTable = tempTable },
                 ShowJobHistoryStatement sjh => sjh with { IntoTable = tempTable },
+                ShowHostMetricsStatement shm => shm with { IntoTable = tempTable },
+                ShowJobStateStatement sjs => sjs with { IntoTable = tempTable },
                 ShowVariablesStatement v => v with { IntoTable = tempTable },
                 ShowConnectionsStatement c => c with { IntoTable = tempTable },
                 ShowConnectionConfigStatement cc => cc with { IntoTable = tempTable },

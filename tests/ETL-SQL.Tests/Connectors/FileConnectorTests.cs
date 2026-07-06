@@ -152,7 +152,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task FlatFile_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.csv", "id,name\n1,Alice", "secure.csv.enc", password);
+            var path = WriteEncryptedZip("secure.csv", "id,name\n1,Alice", "secure.csv.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
@@ -529,6 +529,66 @@ namespace ETL_SQL.Tests.Connectors
             Assert.DoesNotContain("id", lines[0]);
         }
 
+        [Fact]
+        public async Task FlatFile_WriteBatches_EncryptedAndCompressed_Roundtrips()
+        {
+            var outPath = Path.Combine(_dir, "out_enc_comp.csv");
+            var opts = new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "ON",
+                ["PASSWORD"] = "my-secret-pwd",
+                ["COMPRESS"] = "ON"
+            };
+
+            var ds = new FlatFileDataSource(Ctx, outPath, opts);
+            
+            // Verify path coercion: it should end with .zip because of encryption + compression
+            Assert.EndsWith(".zip", ds.Path);
+
+            var dt = new ETL_SQL.Data.DataTable();
+            dt.SetColumns(new[] { "id", "name" });
+            var row = dt.NewRow(); row["id"] = 1; row["name"] = "Alice"; await dt.AddRowAsync(row);
+
+            await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+            Assert.True(File.Exists(ds.Path));
+
+            // Read it back
+            var readDs = new FlatFileDataSource(Ctx, ds.Path, opts);
+            var batches = await Read(readDs);
+            Assert.Single(batches);
+            Assert.Equal("Alice", batches[0].Rows[0]["name"]?.ToString());
+        }
+
+        [Fact]
+        public async Task FlatFile_WriteBatches_EncryptedOnly_Roundtrips()
+        {
+            var outPath = Path.Combine(_dir, "out_enc.csv");
+            var opts = new Dictionary<string, string>
+            {
+                ["ENCRYPT"] = "ON",
+                ["PASSWORD"] = "my-secret-pwd",
+                ["COMPRESS"] = "OFF"
+            };
+
+            var ds = new FlatFileDataSource(Ctx, outPath, opts);
+            
+            // Verify path coercion: it should end with .pgp because of encryption only
+            Assert.EndsWith(".pgp", ds.Path);
+
+            var dt = new ETL_SQL.Data.DataTable();
+            dt.SetColumns(new[] { "id", "name" });
+            var row = dt.NewRow(); row["id"] = 1; row["name"] = "Bob"; await dt.AddRowAsync(row);
+
+            await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+            Assert.True(File.Exists(ds.Path));
+
+            // Read it back
+            var readDs = new FlatFileDataSource(Ctx, ds.Path, opts);
+            var batches = await Read(readDs);
+            Assert.Single(batches);
+            Assert.Equal("Bob", batches[0].Rows[0]["name"]?.ToString());
+        }
+
         // ── FlatFileConnector ──────────────────────────────────────────────────
 
         [Fact]
@@ -625,7 +685,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task Json_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.json", "[{\"id\":1,\"name\":\"Alice\"}]", "secure.json.enc", password);
+            var path = WriteEncryptedZip("secure.json", "[{\"id\":1,\"name\":\"Alice\"}]", "secure.json.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
@@ -728,7 +788,7 @@ namespace ETL_SQL.Tests.Connectors
         public async Task Xml_EncryptedZip_ReadsRows()
         {
             const string password = "ZipPass123!";
-            var path = WriteEncryptedZip("secure.xml", "<root><row><id>1</id><name>Alice</name></row></root>", "secure.xml.enc", password);
+            var path = WriteEncryptedZip("secure.xml", "<root><row><id>1</id><name>Alice</name></row></root>", "secure.xml.zip", password);
             var opts = new Dictionary<string, string>
             {
                 ["ENCRYPT"] = "ON",
@@ -829,6 +889,87 @@ namespace ETL_SQL.Tests.Connectors
             Assert.Equal("Alice", batches[0].Rows[0]["Name"]?.ToString());
             Assert.Equal(new[] { "ID", "Name" }, columns);
             Assert.Contains("Employees", tables);
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task Excel_WriteBatches_ProducesReadableFile()
+        {
+            var outPath = Path.Combine(_dir, "written.xlsx");
+            var ds = new ExcelDataSource(Ctx, outPath);
+
+            var dt = new ETL_SQL.Data.DataTable();
+            dt.SetColumns(new[] { "ID", "Name", "Salary" });
+            
+            var r1 = dt.NewRow(); r1["ID"] = 1; r1["Name"] = "Alice"; r1["Salary"] = 12000.50m; await dt.AddRowAsync(r1);
+            var r2 = dt.NewRow(); r2["ID"] = 2; r2["Name"] = "Bob"; r2["Salary"] = 15000.00m; await dt.AddRowAsync(r2);
+
+            await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+            Assert.True(File.Exists(outPath));
+
+            // Verify using the read path of the same connector
+            var readDs = new ExcelDataSource(Ctx, outPath);
+            var batches = await readDs.ReadBatches().ToListAsync();
+            var columns = (await readDs.GetColumnsAsync()).ToList();
+
+            Assert.Single(batches);
+            Assert.Equal(2, batches[0].Rows.Count);
+            Assert.Equal(new[] { "ID", "Name", "Salary" }, columns);
+            Assert.Equal("1", batches[0].Rows[0]["ID"]?.ToString());
+            Assert.Equal("Alice", batches[0].Rows[0]["Name"]?.ToString());
+            Assert.Equal("12000.5", batches[0].Rows[0]["Salary"]?.ToString());
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task Excel_WriteBatches_AppendMode_AppendsRows()
+        {
+            var outPath = Path.Combine(_dir, "append.xlsx");
+            var ds = new ExcelDataSource(Ctx, outPath);
+
+            var dt1 = new ETL_SQL.Data.DataTable();
+            dt1.SetColumns(new[] { "ID", "Name" });
+            var r1 = dt1.NewRow(); r1["ID"] = 1; r1["Name"] = "Alice"; await dt1.AddRowAsync(r1);
+            await ds.WriteBatches(new[] { dt1 }.ToAsyncEnumerable(), append: false);
+
+            var dt2 = new ETL_SQL.Data.DataTable();
+            dt2.SetColumns(new[] { "ID", "Name" });
+            var r2 = dt2.NewRow(); r2["ID"] = 2; r2["Name"] = "Bob"; await dt2.AddRowAsync(r2);
+            await ds.WriteBatches(new[] { dt2 }.ToAsyncEnumerable(), append: true);
+
+            var readDs = new ExcelDataSource(Ctx, outPath);
+            var batches = await readDs.ReadBatches().ToListAsync();
+            Assert.Equal(2, batches.Sum(b => b.Rows.Count));
+            Assert.Equal("Alice", batches[0].Rows[0]["Name"]?.ToString());
+            Assert.Equal("Bob", batches[0].Rows[1]["Name"]?.ToString());
+        }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task Excel_WriteBatches_AppendMode_SanitizedSheetName_PreservesExistingRows()
+        {
+            // A sheet name with Excel-illegal chars (':' '/') is sanitized to spaces on write.
+            // Append must look up the existing sheet by the sanitized name, not overwrite it.
+            var outPath = Path.Combine(_dir, "append-sanitized.xlsx");
+            var opts = new Dictionary<string, string> { ["SHEET"] = "Q1:2026/Data" };
+
+            var ds1 = new ExcelDataSource(Ctx, outPath, opts);
+            var dt1 = new ETL_SQL.Data.DataTable();
+            dt1.SetColumns(new[] { "ID", "Name" });
+            var r1 = dt1.NewRow(); r1["ID"] = 1; r1["Name"] = "Alice"; await dt1.AddRowAsync(r1);
+            await ds1.WriteBatches(new[] { dt1 }.ToAsyncEnumerable(), append: false);
+
+            var ds2 = new ExcelDataSource(Ctx, outPath, opts);
+            var dt2 = new ETL_SQL.Data.DataTable();
+            dt2.SetColumns(new[] { "ID", "Name" });
+            var r2 = dt2.NewRow(); r2["ID"] = 2; r2["Name"] = "Bob"; await dt2.AddRowAsync(r2);
+            await ds2.WriteBatches(new[] { dt2 }.ToAsyncEnumerable(), append: true);
+
+            var readDs = new ExcelDataSource(Ctx, outPath, opts);
+            var batches = await readDs.ReadBatches().ToListAsync();
+            Assert.Equal(2, batches.Sum(b => b.Rows.Count));
+            Assert.Equal("Alice", batches[0].Rows[0]["Name"]?.ToString());
+            Assert.Equal("Bob", batches[0].Rows[1]["Name"]?.ToString());
         }
 
         // ── ConnectionStringBuilder ────────────────────────────────────────────

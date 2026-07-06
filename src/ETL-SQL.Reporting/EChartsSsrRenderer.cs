@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.ClearScript.V8;
 
 namespace ETL_SQL.Reporting
@@ -124,7 +125,68 @@ namespace ETL_SQL.Reporting
             if (string.IsNullOrWhiteSpace(visual.ChartConfig)) return null;
             if (_initFailed) return null;
 
-            _poolSemaphore.Wait();
+            // Bounded wait: under sustained render pressure, fall back to the static renderer
+            // (callers treat null as "SSR unavailable") rather than parking request threads.
+            if (!_poolSemaphore.Wait(TimeSpan.FromSeconds(10))) return null;
+            PooledEngine? pooled = null;
+            try
+            {
+                if (_initFailed) return null;
+
+                if (!_pool.TryDequeue(out pooled))
+                {
+                    lock (_initLock)
+                    {
+                        if (_initFailed) return null;
+                        try
+                        {
+                            pooled = CreateEngine();
+                        }
+                        catch (Exception ex)
+                        {
+                            _initFailed = true;
+                            OnError?.Invoke("ECharts SSR engine failed to initialize (V8/echarts unavailable); " +
+                                            "all chart exports will use the static renderer", ex);
+                            return null;
+                        }
+                    }
+                }
+
+                EnsureMapRegistered(pooled, visual.ChartConfig!);
+                return pooled.Engine.Script.__renderChartSvg(visual.ChartConfig, width, height) as string;
+            }
+            catch (Exception ex)
+            {
+                OnError?.Invoke("ECharts SSR render failed; falling back to the static chart renderer", ex);
+                return null; // caller falls back to the static renderer
+            }
+            finally
+            {
+                if (pooled != null)
+                {
+                    if (_initFailed)
+                    {
+                        pooled.Dispose();
+                    }
+                    else
+                    {
+                        _pool.Enqueue(pooled);
+                    }
+                }
+                _poolSemaphore.Release();
+            }
+        }
+
+        /// <summary>
+        /// Render the visual's ECharts option to an SVG string asynchronously, or null if it has no
+        /// chart option or rendering is unavailable.
+        /// </summary>
+        public async Task<string?> RenderSvgAsync(VisualManifest visual, int width = 600, int height = 350, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(visual.ChartConfig)) return null;
+            if (_initFailed) return null;
+
+            await _poolSemaphore.WaitAsync(cancellationToken);
             PooledEngine? pooled = null;
             try
             {

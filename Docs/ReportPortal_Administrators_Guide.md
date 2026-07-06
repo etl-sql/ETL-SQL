@@ -167,6 +167,12 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     },
     "Engine": {
       "StartOfWeek": "Monday"
+    },
+    "Orchestrator": {
+      "ApiUrl": null,
+      "ApiKey": "",
+      "SameHost": false,
+      "DatabasePath": "../Orchestrator/etlsql.db"
     }
   }
 }
@@ -225,6 +231,10 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Identity.Ldap.RoleMappings` | *(empty)* | Key-value pairs mapping Active Directory groups (full DNs or short CNs) to Portal Roles (`Admin`, `Publisher`, `Viewer`). |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). |
+| `Orchestrator.ApiUrl` | *(empty)* | Base URL of the Orchestrator Service HTTP API. |
+| `Orchestrator.ApiKey` | *(empty)* | Shared secret API key used for authenticating Orchestrator HTTP calls. |
+| `Orchestrator.SameHost` | `false` | Set to `true` to enable managing the Orchestrator Windows Service control locally from the portal. |
+| `Orchestrator.DatabasePath` | `../Orchestrator/etlsql.db` | Location of the Orchestrator's SQLite DB from Portal context (used to query job status/history locally). |
 
 > [!IMPORTANT]
 > **`Jwt.Secret` must be set before production use.** Generate a strong random string of at least 32 characters and set it via an environment variable rather than storing it in the checked-in `appsettings.json`:
@@ -1724,7 +1734,9 @@ The job detail panel's history table includes per-execution performance data:
 | `Portal:Orchestrator:ApiUrl` | Portal `appsettings.json` / env var | Base URL of the Orchestrator Service HTTP API |
 | `Portal:Orchestrator:ApiKey` | Portal `appsettings.json` / env var | Shared secret sent as `X-Orchestrator-Key` header |
 | `Portal:Orchestrator:SameHost` | Portal `appsettings.json` / env var | `true` enables the **Start** button using Windows `ServiceController` |
+| `Portal:Orchestrator:DatabasePath` | Portal `appsettings.json` / env var | Location of the Orchestrator's SQLite DB from Portal context (used to query job status/history locally). Defaults to `../Orchestrator/etlsql.db` relative to the Portal's database directory. |
 | `portal-orchestrator.json` | Sidecar file next to portal database | Overrides for URL/key saved via the Admin UI; takes precedence over env vars |
+| `Orchestrator:DatabasePath` | Orchestrator `appsettings.json` / env var | Path to the Orchestrator's SQLite database. Defaults to `%LocalAppData%/ETL-SQL/etlsql.db` if unset. |
 | `Orchestrator:ApiKey` | Orchestrator `appsettings.json` / env var | Key the Orchestrator validates against incoming `X-Orchestrator-Key` headers |
 | `Orchestrator:ScriptRoot` | Orchestrator `appsettings.json` / env var | Root directory for the script file browser exposed to the portal |
 

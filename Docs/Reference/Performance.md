@@ -1,6 +1,6 @@
 # ETL-SQL Performance Reference
 
-**Applies to ETL-SQL 0.13.0**
+**Applies to ETL-SQL 0.14.0**
 
 This document explains when the engine spills to disk, what each threshold controls, how to tune them, and what to expect from large-workload performance.
 
@@ -181,13 +181,14 @@ There is no global spill coordinator — if a query triggers multiple external e
 
 ## 7. Scale certification baseline
 
-The `scripts/Test-ScaleCertification.ps1` script provides repeatable certification runs at three tiers:
+The `scripts/Test-ScaleCertification.ps1` script provides repeatable certification runs at four tiers:
 
-| Tier | Row scale factor | Target use |
-| :--- | :--- | :--- |
-| Smoke | 1× (50k–100k rows) | CI gate, fast feedback |
-| Standard | 10× (500k–1M rows) | Pre-release validation |
-| Stress | 100× (5M–10M rows) | Capacity planning |
+| Tier | Row scale factor | Typical Row Count | Memory Ceiling | Target use |
+| :--- | :--- | :--- | :--- | :--- |
+| **Smoke** | 1× | 50k–100k rows | 1 GB | CI gate, fast feedback |
+| **Standard** | 10× | 500k–1M rows | 4 GB | Pre-release validation |
+| **Stress** | 100× | 5M–10M rows | 8 GB | Capacity planning |
+| **Huge** | 500× | 25M–50M rows | 16 GB | Maximum volume certification |
 
 Run certification locally:
 

@@ -397,6 +397,52 @@ public class AuditOutboxMessage
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }
 
+// ── Enterprise Policy Authority ───────────────────────────────────────────────
+
+/// <summary>
+/// An immutable published organization-policy version served by the policy authority. Rows are
+/// append-only; supersession flips <see cref="RolloutState"/> but never deletes or rewrites payload.
+/// </summary>
+public class PolicyVersionEntity
+{
+    public long Id { get; set; }
+    public string Tenant { get; set; } = "";
+    public string Environment { get; set; } = "";
+    public string PolicyVersion { get; set; } = "";
+    public string PolicyHash { get; set; } = "";
+    public DateTimeOffset IssuedAtUtc { get; set; }
+    public DateTimeOffset ExpiresAtUtc { get; set; }
+    public string Author { get; set; } = "";
+    public string? Reviewer { get; set; }
+    public string? SupersededVersion { get; set; }
+    public string RolloutState { get; set; } = "Active";
+    public string SignedEnvelopeJson { get; set; } = "{}";
+    public DateTimeOffset PublishedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
+/// <summary>
+/// An enrolled machine known to the policy authority. Retrieval responses are bound to the
+/// tenant/environment recorded here — never to what the caller claims — and requests are refused
+/// when the identity is unknown, revoked, or presents enrollment/tenant details that no longer
+/// match this registration (a reassigned or copied identity).
+/// </summary>
+public class PolicyMachineEntity
+{
+    public long Id { get; set; }
+    public string MachineId { get; set; } = "";
+    public string EnrollmentId { get; set; } = "";
+    public string Tenant { get; set; } = "";
+    public string Environment { get; set; } = "";
+    /// <summary>SHA-1 (40 hex) or SHA-256 (64 hex) thumbprint. When set, the machine must present
+    /// a TLS client certificate with this thumbprint.</summary>
+    public string? ClientCertificateThumbprint { get; set; }
+    public bool Revoked { get; set; }
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+    public string? RevokedReason { get; set; }
+    public DateTimeOffset RegisteredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastSeenAtUtc { get; set; }
+}
+
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────
 
 public class DatasetJob

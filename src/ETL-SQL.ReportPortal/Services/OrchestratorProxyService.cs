@@ -43,9 +43,9 @@ public class OrchestratorProxyService(
         catch (Exception ex) { logger.LogDebug(ex, "Orchestrator status unavailable."); return null; }
     }
 
-    public async Task<List<JobDefinitionDto>> GetJobsAsync()
+    public async Task<List<JobDefinitionDto>> GetJobsAsync(int limit = 1000, int offset = 0)
     {
-        try { return await GetJsonAsync<List<JobDefinitionDto>>("api/scheduled-jobs") ?? []; }
+        try { return await GetJsonAsync<List<JobDefinitionDto>>($"api/scheduled-jobs?limit={Math.Clamp(limit, 1, 1000)}&offset={Math.Max(0, offset)}") ?? []; }
         catch (Exception ex) { logger.LogDebug(ex, "Orchestrator job list unavailable."); return []; }
     }
 

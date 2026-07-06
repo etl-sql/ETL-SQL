@@ -25,6 +25,13 @@ public static class SystemVariableProvider
         if (name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheHits;
         if (name.Equals("@@SUBQUERY_CACHE_MISSES", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheMisses;
 
+        // Identity variables for row-level security. Null when no identity was injected, so a
+        // well-formed predicate (WHERE HAS_GROUP(...)) fails closed rather than exposing all rows.
+        if (name.Equals("@@CURRENT_USER", StringComparison.OrdinalIgnoreCase)) return context.ExecutionIdentity?.EffectiveUser;
+        if (name.Equals("@@CURRENT_USER_ID", StringComparison.OrdinalIgnoreCase)) return context.ExecutionIdentity?.EffectiveUserId;
+        if (name.Equals("@@REAL_USER", StringComparison.OrdinalIgnoreCase)) return context.ExecutionIdentity?.RealUser;
+        if (name.Equals("@@IS_ADMIN", StringComparison.OrdinalIgnoreCase)) return context.ExecutionIdentity?.IsAdmin ?? false;
+
         return null;
     }
 }

@@ -122,6 +122,10 @@ public enum TokenType
     RSHIFT,     // >>
     QUESTION,   // ?
     PARAMETER,  // ? or ?n
+    DOUBLE_QUESTION, // ?? (null-coalescing shorthand; lowers to COALESCE at parse time)
+    ARROW,           // => (arrow conditional; chain lowers to CASE WHEN at parse time)
+    JSON_ARROW,      // -> (JSON field/element access; lowers to JSON_GET at parse time)
+    JSON_ARROW_TEXT, // ->> (JSON field/element access as text; lowers to JSON_GET_TEXT)
     COLUMN_TAG, // /*@d: ... */
 
     // ── Report-SQL tokens (Phase 9A) ───────────────────────────────────

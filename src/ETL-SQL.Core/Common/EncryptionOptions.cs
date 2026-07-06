@@ -107,6 +107,30 @@ public class EncryptionOptions
     }
 
     /// <summary>
+    /// Decrypts a stream if encryption is enabled.
+    /// </summary>
+    public Stream DecryptStream(Stream inputStream)
+    {
+        if (!Enabled)
+        {
+            return inputStream;
+        }
+
+        if (IsMachineBound)
+        {
+            return MachineBoundCrypto.DecryptStream(inputStream);
+        }
+        else if (!string.IsNullOrEmpty(KeyFile))
+        {
+            return CryptoUtils.DecryptStreamWithSsh(inputStream, KeyFile, Passphrase);
+        }
+        else
+        {
+            return CryptoUtils.DecryptStream(inputStream, Password, Algorithm);
+        }
+    }
+
+    /// <summary>
     /// Encrypts a file if encryption is enabled.
     /// </summary>
     /// <param name="inputFile">The plain source file.</param>

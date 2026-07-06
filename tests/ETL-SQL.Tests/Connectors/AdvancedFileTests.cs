@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -133,9 +133,10 @@ namespace ETL_SQL.Tests.Connectors
                 await eval.Evaluate(new Lexer($"CREATE CONNECTION EncryptedCsv AS FLATFILE('{encCsv}', ENCRYPT='ON', PASSWORD='MyPass123');").TokenizeToScript());
 
                 await eval.Evaluate(new Lexer("INSERT INTO EncryptedCsv SELECT * FROM RawCsv;").TokenizeToScript());
-                Assert.True(File.Exists(encCsv), "Encrypted file not created");
+                string resolvedEncCsv = eval.ResolvePath(encCsv) + ".pgp";
+                Assert.True(File.Exists(resolvedEncCsv), "Encrypted file not created");
 
-                string rawContent = await File.ReadAllTextAsync(encCsv);
+                string rawContent = await File.ReadAllTextAsync(resolvedEncCsv);
                 Assert.DoesNotContain("secret", rawContent);
 
                 await eval.Evaluate(new Lexer("SELECT * FROM EncryptedCsv;").TokenizeToScript());
@@ -152,6 +153,7 @@ namespace ETL_SQL.Tests.Connectors
             {
                 File.Delete(csv);
                 File.Delete(encCsv);
+                File.Delete(eval.ResolvePath(encCsv) + ".pgp");
                 File.Delete(zipCsv);
             }
         }

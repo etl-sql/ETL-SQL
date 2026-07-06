@@ -19,6 +19,10 @@ public class EvaluatorOptions
     public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
     public int MaxSmtpEmailsPerScript { get; set; } = SecurityService.DefaultMaxSmtpEmailsPerScript;
     public int MaxInternalOperations { get; set; } = 100000;
+    public int MaxConnectionsPerScript { get; set; } = 100;
+    public int MaxTempTablesPerScript { get; set; } = 100;
+    public int MaxVariablesPerScript { get; set; } = 100;
+    public int MaxVisualsPerScript { get; set; } = 100;
 
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
@@ -39,6 +43,7 @@ public class EvaluatorOptions
     public int ExternalSortChunkSize { get; set; } = 100000;
     public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
     public int OperatorMemoryGrantMB { get; set; } = 256;
+    public MemoryGovernorPolicy MemoryGovernorPolicy { get; set; } = MemoryGovernorPolicy.SpillOrFail;
     public int SubqueryCacheSize { get; set; } = 5000;
     public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
     public long TempTableSpillThresholdRows { get; set; }
@@ -57,6 +62,7 @@ public class EvaluatorOptions
     public string SpillFormat { get; set; } = "Arrow";
     public bool AutoRollbackOnFinish { get; set; } = true;
     public bool ReuseLoopNodes { get; set; } = true;
+    public bool UseColumnarTempTables { get; set; } = true;
     public bool DisplayExecuteTree { get; set; } = true;
     public bool IsProfiling { get; set; } = true;
 

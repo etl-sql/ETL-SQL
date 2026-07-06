@@ -37,6 +37,9 @@ public class CreateConnectionStatementHandler(
         bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
         bool isInteractive = context.InteractiveMode;
 
+        if (!alreadyExists && !context.IsWhatIf)
+            LiveObjectLimits.EnsureConnectionCapacity(context);
+
         if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !isInteractive)
             throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists. Use ALTER CONNECTION to modify it.");
 
@@ -109,6 +112,14 @@ public class CreateConnectionStatementHandler(
         if (connector.IsFileBased)
         {
             target = context.ResolvePath(target);
+            // Empty targets are built from options below; ${placeholder} targets defer
+            // resolution to use time — both are authorized on the fully resolved path later.
+            if (!string.IsNullOrWhiteSpace(target) && !target.Contains("${"))
+            {
+                target = new FileSystemPolicyAuthorizer(context.SecurityService)
+                    .Authorize(context, target, FileSystemAccessKind.Enumerate, validateFileType: false)
+                    .CanonicalPath;
+            }
         }
 
         IDataSource ds;
@@ -146,14 +157,12 @@ public class CreateConnectionStatementHandler(
                 }
             }
 
-            ds = connector.CreateDataSource(context, target, options, templateSchema);
+            // Security Hardening: authorize connector type + destination host before the data
+            // source is created (i.e. before any DNS resolution / connection attempt).
+            new ConnectorPolicyAuthorizer(context.SecurityService).Authorize(
+                context, connectionType ?? string.Empty, connector.GetHost(target, options), target);
 
-            // Security Hardening: Validate host for network-based connectors
-            var host = connector.GetHost(target, options);
-            if (host != null)
-            {
-                context.SecurityService.ValidateHost(host);
-            }
+            ds = connector.CreateDataSource(context, target, options, templateSchema);
         }
         else
         {

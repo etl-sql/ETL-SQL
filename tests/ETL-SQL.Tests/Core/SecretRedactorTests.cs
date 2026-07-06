@@ -28,6 +28,26 @@ public sealed class SecretRedactorTests
         Assert.Contains("SECRET:********", redacted);
     }
 
+    [Theory]
+    [InlineData("bolt://neo4j:s3cret@db.example.com:7687", "bolt://neo4j:********@db.example.com:7687")]
+    [InlineData("postgres://etl:p4ss.w0rd@10.0.0.5/analytics", "postgres://etl:********@10.0.0.5/analytics")]
+    [InlineData("connect failed for mongodb://svc:top%40secret@cluster0/db retrying",
+                "connect failed for mongodb://svc:********@cluster0/db retrying")]
+    public void Redact_MasksUrlEmbeddedCredentials(string input, string expected)
+    {
+        Assert.Equal(expected, SecretRedactor.Redact(input));
+    }
+
+    [Theory]
+    [InlineData("https://example.com:8080/user@domain/page")] // port + @ in path is not userinfo
+    [InlineData("https://example.com/docs")]
+    [InlineData("file://C:/data/output.csv")]
+    [InlineData("mailto:someone@example.com")]
+    public void Redact_LeavesCredentialFreeUrisIntact(string input)
+    {
+        Assert.Equal(input, SecretRedactor.Redact(input));
+    }
+
     [Fact]
     public void DiagnosticsAndExecutionExceptions_RedactMessages()
     {

@@ -40,7 +40,7 @@ namespace ETL_SQL.Connectors.Email
             // Security Hardening: egress control
             if (_options.TryGetValue("HOST", out var host))
             {
-                context.SecurityService.ValidateHost(host);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             }
         }
 

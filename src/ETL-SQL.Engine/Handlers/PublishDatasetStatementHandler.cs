@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -51,6 +52,21 @@ public class PublishDatasetStatementHandler(ILogger logger) : IStatementHandler
                 null, stmt.Line, stmt.Column);
 
         var sourcePath = context.ResolvePath(stmt.SourcePath);
+        if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+        {
+            if (sourcePath.EndsWith(".parquet", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 8);
+            else if (sourcePath.EndsWith(".parquet.enc", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 12);
+            else if (sourcePath.EndsWith(".enc", StringComparison.OrdinalIgnoreCase))
+                sourcePath = sourcePath.Substring(0, sourcePath.Length - 4);
+            
+            if (!sourcePath.EndsWith(".etlds", StringComparison.OrdinalIgnoreCase))
+                sourcePath += ".etlds";
+        }
+        sourcePath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, sourcePath, FileSystemAccessKind.Read, validateFileType: false)
+            .CanonicalPath;
         if (!File.Exists(sourcePath))
             throw new ExecutionException(
                 $"PUBLISH DATASET '{stmt.DatasetName}': source file not found: '{sourcePath}'.",

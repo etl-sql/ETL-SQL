@@ -1,6 +1,6 @@
 # ETL-SQL Connectors Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.13.0**
+**Applies to ETL-SQL 0.14.0**
 
 This document describes the internal mechanics of the ETL-SQL data access layer. It is the primary reference for understanding the connection lifecycle, the registry system, the batching pipeline, and the threading and security contracts that all connectors must honour. It is written for engineers who need to understand not just what the system does but why it is designed the way it is.
 
@@ -229,7 +229,7 @@ public interface IConnector
 The `CommandTimeoutSeconds` property on `IConnector` is a per-connector default. Individual connections can override it at creation time:
 
 ```sql
-CREATE CONNECTION my_redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver}', …, TIMEOUT_SECONDS=3600);
+CREATE CONNECTION my_redshift AS ODBC(DRIVER='{Amazon Redshift ODBC Driver}', TIMEOUT_SECONDS=3600);
 ```
 
 The `TIMEOUT_SECONDS` value in the `WITH` clause is stored in the connection's options dictionary (`IDataSource.Options["TIMEOUT_SECONDS"]`). SQL connectors read it in their constructor and apply it to every `DbCommand.CommandTimeout` they create. Non-SQL connectors may ignore it.

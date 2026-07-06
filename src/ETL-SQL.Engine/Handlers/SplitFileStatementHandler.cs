@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -28,9 +29,12 @@ public class SplitFileStatementHandler : IStatementHandler
         string destDir = context.ResolvePath(destDirVal);
 
         // Security check
-        context.SecurityService.ValidatePath(source);
-        context.SecurityService.ValidatePath(destDir);
-        context.SecurityService.ValidateWriteAccess(destDir);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        var sourceAuth = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false);
+        source = sourceAuth.CanonicalPath;
+        destDir = pathAuthorizer.Authorize(context, destDir, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
 
         // Runaway operation count
         context.IncrementOperationCount(OperationType.FileSystem, source, 1);
@@ -80,7 +84,7 @@ public class SplitFileStatementHandler : IStatementHandler
         if (context.IsVerbose)
             context.Log($"[SplitFile] Splitting '{source}' into '{destDir}' using prefix '{prefix}' ({limitType} limit: {limitValue})");
 
-        using (var reader = new StreamReader(source, Encoding.UTF8))
+        using (var reader = new StreamReader(pathAuthorizer.OpenValidatedRead(context, sourceAuth), Encoding.UTF8))
         {
             int fileIndex = 1;
             long currentCount = 0;
@@ -96,14 +100,15 @@ public class SplitFileStatementHandler : IStatementHandler
 
                     if (writer == null)
                     {
-                        currentDestFile = ResolvePartPath(context, destDir, prefix, fileIndex, extension, stmt);
+                        var partAuth = ResolvePartPath(context, pathAuthorizer, destDir, prefix, fileIndex, extension, stmt);
+                        currentDestFile = partAuth.CanonicalPath;
                         if (File.Exists(currentDestFile))
                         {
                             if (overwrite) File.Delete(currentDestFile);
                             else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {currentDestFile}");
                         }
 
-                        writer = new StreamWriter(currentDestFile, false, Encoding.UTF8);
+                        writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, partAuth), Encoding.UTF8);
                         currentCount = 0;
                     }
 
@@ -158,17 +163,14 @@ public class SplitFileStatementHandler : IStatementHandler
         }
     }
 
-    private static string ResolvePartPath(IExecutionContext context, string destDir, string prefix, int fileIndex, string extension, SplitFileStatement stmt)
+    private static AuthorizedFileSystemPath ResolvePartPath(IExecutionContext context, FileSystemPolicyAuthorizer pathAuthorizer, string destDir, string prefix, int fileIndex, string extension, SplitFileStatement stmt)
     {
         var partPath = Path.GetFullPath(Path.Combine(destDir, $"{prefix}{fileIndex}{extension}"));
         var destRoot = Path.GetFullPath(destDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!partPath.StartsWith(destRoot, StringComparison.OrdinalIgnoreCase))
             throw new ExecutionException("Generated split file path escaped the destination directory.", null, stmt.Line, stmt.Column);
 
-        context.SecurityService.ValidatePath(partPath);
-        context.SecurityService.ValidateWriteAccess(partPath);
-        context.SecurityService.ValidateFileType(partPath);
-        return partPath;
+        return pathAuthorizer.Authorize(context, partPath, FileSystemAccessKind.Write);
     }
 
     private long ParseSizeLimit(string sizeStr)

@@ -384,8 +384,28 @@ public class Lexer
                     Advance();
                     break;
                 case '-':
-                    tokens.Add(new Token(TokenType.MINUS, "-", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
-                    Advance();
+                    // '--' comments are consumed before this switch, so a '-' here is never a comment.
+                    if (Peek() == '>')
+                    {
+                        // -> / ->> — JSON field/element access (PostgreSQL/MySQL/SQLite style).
+                        // Unambiguous: '-' followed by '>' was never valid ('>' is not a prefix operator).
+                        Advance();
+                        Advance();
+                        if (CurrentChar == '>')
+                        {
+                            Advance();
+                            tokens.Add(new Token(TokenType.JSON_ARROW_TEXT, "->>", startLine, startColumn, _line, _column, startOffset, _position));
+                        }
+                        else
+                        {
+                            tokens.Add(new Token(TokenType.JSON_ARROW, "->", startLine, startColumn, _line, _column, startOffset, _position));
+                        }
+                    }
+                    else
+                    {
+                        tokens.Add(new Token(TokenType.MINUS, "-", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
+                        Advance();
+                    }
                     break;
                 case '/':
                     tokens.Add(new Token(TokenType.SLASH, "/", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
@@ -440,8 +460,19 @@ public class Lexer
                     Advance();
                     break;
                 case '=':
-                    tokens.Add(new Token(TokenType.EQUALS, "=", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
-                    Advance();
+                    if (Peek() == '>')
+                    {
+                        // => — arrow conditional (cond => a : b). Unambiguous: '=' followed by '>'
+                        // was never valid ('>' is not a prefix operator).
+                        Advance();
+                        Advance();
+                        tokens.Add(new Token(TokenType.ARROW, "=>", startLine, startColumn, _line, _column, startOffset, _position));
+                    }
+                    else
+                    {
+                        tokens.Add(new Token(TokenType.EQUALS, "=", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
+                        Advance();
+                    }
                     break;
                 case '<':
                     if (Peek() == '=')
@@ -504,7 +535,14 @@ public class Lexer
                     break;
                 case '?':
                     Advance();
-                    if (char.IsDigit(CurrentChar))
+                    if (CurrentChar == '?')
+                    {
+                        // ?? — null-coalescing shorthand (a ?? b → COALESCE(a, b)). Unambiguous:
+                        // two adjacent positional parameters is never valid syntax.
+                        Advance();
+                        tokens.Add(new Token(TokenType.DOUBLE_QUESTION, "??", startLine, startColumn, startLine, startColumn + 2, startOffset, startOffset + 2));
+                    }
+                    else if (char.IsDigit(CurrentChar))
                     {
                         while (char.IsDigit(CurrentChar))
                         {

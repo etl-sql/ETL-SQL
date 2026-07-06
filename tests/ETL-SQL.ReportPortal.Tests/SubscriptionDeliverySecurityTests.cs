@@ -142,6 +142,99 @@ public class SubscriptionDeliverySecurityTests
         Assert.DoesNotContain(smtp.Alias, persistedTrigger, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("recipient-rls@test.local", true)]   // resolvable portal user → runs under their identity
+    [InlineData("stranger@external.test", false)]     // not a portal user → cannot filter → fails clearly
+    public async Task RlsReport_DeliversUnderRecipientIdentity_OrFailsForUnknownRecipient(
+        string recipientEmail, bool recipientIsKnownUser)
+    {
+        using var factory = new PortalWebFactory();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
+        var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
+        var suffix = Guid.NewGuid().ToString("N");
+
+        var owner = new PortalUser { UserName = $"owner-{suffix}", Email = $"owner-{suffix}@test.local", IsActive = true };
+        db.Users.Add(owner);
+        var ownerGroup = new Group { Name = $"owner-grp-{suffix}" };
+        db.Groups.Add(ownerGroup);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"F {suffix}", Path = $"/f-{suffix}", OwnerId = owner.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = owner.Id, GroupId = ownerGroup.Id });
+        db.FolderAcls.Add(new FolderAcl { FolderId = folder.Id, GroupId = ownerGroup.Id, Permission = FolderPermission.Read });
+
+        // Recipient is a portal user in a region group only in the resolvable case.
+        var region = new Group { Name = $"Region:East {suffix}" };
+        db.Groups.Add(region);
+        await db.SaveChangesAsync();
+        if (recipientIsKnownUser)
+        {
+            var recipient = new PortalUser
+            {
+                UserName = $"rls-recipient-{suffix}",
+                Email = recipientEmail,
+                NormalizedEmail = recipientEmail.ToUpperInvariant(),
+                IsActive = true
+            };
+            db.Users.Add(recipient);
+            await db.SaveChangesAsync();
+            db.UserGroups.Add(new UserGroup { UserId = recipient.Id, GroupId = region.Id });
+        }
+
+        // Identity-sensitive report (references HAS_GROUP).
+        var scriptPath = Path.Combine(config.ScriptRootPath, $"rls-delivery-{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SELECT 1 AS Value INTO #data WHERE HAS_GROUP('Region:East');");
+        var report = new Report { FolderId = folder.Id, Name = $"R {suffix}", ScriptPath = scriptPath, CreatedBy = owner.Id };
+        db.Reports.Add(report);
+
+        var smtp = new SmtpConnection
+        {
+            Alias = $"smtp-{suffix}", Host = "smtp.test.local", Port = 2525, Username = "u",
+            EncryptedPassword = protector.Protect("pw"), FromAddress = "portal@test.local", UseSsl = false
+        };
+        db.SmtpConnections.Add(smtp);
+        await db.SaveChangesAsync();
+
+        var subscription = new Subscription
+        {
+            ReportId = report.Id, UserId = owner.Id, Format = SubscriptionFormat.Link,
+            SmtpAlias = smtp.Alias, Recipients = recipientEmail, IsActive = true
+        };
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        var runner = new RecordingSubscriptionRunner();
+        var service = new SubscriptionDeliveryService(db, config, protector, new FolderPermissionService(db),
+            new AuditService(db, new Microsoft.AspNetCore.Http.HttpContextAccessor()),
+            runner, NullLogger<SubscriptionDeliveryService>.Instance);
+
+        var result = await service.DeliverAsync(subscription.Id);
+
+        var ledgerDetail = (await db.SubscriptionDeliveries
+            .Where(d => d.SubscriptionId == subscription.Id)
+            .OrderByDescending(d => d.Id)
+            .FirstOrDefaultAsync())?.Detail;
+
+        if (recipientIsKnownUser)
+        {
+            Assert.True(runner.CallCount == 1, $"runner not called; ledger detail: {ledgerDetail}");
+            Assert.NotNull(runner.LastIdentity);
+            Assert.Equal($"rls-recipient-{suffix}", runner.LastIdentity!.EffectiveUser);
+            Assert.Contains($"Region:East {suffix}", runner.LastIdentity.Groups);
+        }
+        else
+        {
+            // Unknown recipient: never executed, and the failure reason is explicit in the ledger.
+            Assert.Equal(0, runner.CallCount);
+            Assert.Equal(SubscriptionDeliveryOutcome.Failed, result.Outcome);
+            Assert.Contains("not a known portal user", ledgerDetail, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     [Fact]
     public async Task Reconcile_RewritesLegacySecretScriptsAndRemovesOrphans()
     {
@@ -230,14 +323,17 @@ public class SubscriptionDeliverySecurityTests
     {
         public int CallCount { get; private set; }
         public string? Script { get; private set; }
+        public ETL_SQL.Core.Governance.ExecutionIdentity? LastIdentity { get; private set; }
 
         public Task<(bool Success, string? Error)> RunAsync(
             string scriptText,
             string sessionId,
-            CancellationToken ct)
+            CancellationToken ct,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
             CallCount++;
             Script = scriptText;
+            LastIdentity = executionIdentity;
             return Task.FromResult<(bool, string?)>((true, null));
         }
     }

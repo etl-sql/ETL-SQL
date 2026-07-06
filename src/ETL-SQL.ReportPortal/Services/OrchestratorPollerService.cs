@@ -49,17 +49,19 @@ public class OrchestratorPollerService(
         {
             var store = storeFactory.Create(orchDbPath);
             await store.InitializeAsync();
-            completions = (await store.GetHistoryAsync(limit: int.MaxValue))
-                .Where(entry => string.Equals(
-                    entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
-                .Select(entry => (
-                    entry.JobName,
-                    EndTime: entry.EndTime?.ToUniversalTime()))
-                .Where(entry =>
-                    entry.EndTime > _lastPollTime
-                    && entry.EndTime <= pollUpperBound)
-                .OrderBy(entry => entry.EndTime)
-                .Select(entry => (entry.JobName, entry.EndTime!.Value))
+            const int pageSize = 1000;
+            var completedRows = new List<ETL_SQL.Core.Data.JobHistoryEntry>();
+            for (var offset = 0; ; offset += pageSize)
+            {
+                var page = (await store.GetCompletedHistoryAsync(
+                    _lastPollTime, pollUpperBound, pageSize, offset)).ToList();
+                completedRows.AddRange(page);
+                if (page.Count < pageSize) break;
+            }
+
+            completions = completedRows
+                .Where(entry => string.Equals(entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase))
+                .Select(entry => (entry.JobName, EndTime: entry.EndTime!.Value.ToUniversalTime()))
                 .ToList();
         }
         catch (Exception ex)

@@ -10,6 +10,18 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Engines;
+
+/// <summary>
+/// Internal signal raised by <see cref="AggregateEngine.ApplyAggregation"/> when its in-memory
+/// group state grows past the RAM governor ceiling. The external aggregate engine catches this to
+/// repartition the offending partition (or apply the governor policy), rather than letting the
+/// in-memory build consume unbounded RAM.
+/// </summary>
+internal sealed class AggregateMemoryPressureException : Exception
+{
+    public AggregateMemoryPressureException(string message) : base(message) { }
+}
+
 /// <summary>
 /// Core engine for performing in-memory aggregations (SUM, AVG, MIN, MAX, COUNT, etc.) with GROUP BY and HAVING support.
 /// </summary>
@@ -25,7 +37,16 @@ public class AggregateEngine
     }
 
     /// <summary>Applies aggregation logic to a stream of rows, grouping them and calculating aggregate functions.</summary>
-    public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
+    /// <param name="memoryCeilingBytes">
+    /// When &gt; 0, the single-pass group build tracks the live group-state footprint by precise byte
+    /// accounting (the real memory of incremental aggregation is O(groups), not O(rows)) and throws
+    /// <see cref="AggregateMemoryPressureException"/> once it exceeds the ceiling, so the caller (the
+    /// external aggregate engine) can repartition instead of growing unbounded. 0 (default) disables
+    /// the check — all existing callers are unaffected. Note: holistic aggregates that buffer whole
+    /// rows per group (GenericState) grow beyond this per-group estimate; bounding those is tracked
+    /// separately (TODO "Holistic aggregates buffer whole rows").
+    /// </param>
+    public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long memoryCeilingBytes = 0)
     {
         // When groupingSet is present, expand into multiple GROUP BY passes and union the results.
         if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
@@ -39,7 +60,7 @@ public class AggregateEngine
             foreach (var activeGroupBy in expandedSets)
             {
                 // Pass the materialized list to avoid further materialization in recursive calls
-                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null);
+                var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null, memoryCeilingBytes);
 
                 // Mark which columns were NULL-substituted (GROUPING() support)
                 var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
@@ -123,6 +144,12 @@ public class AggregateEngine
         // Single-Pass Aggregation
         var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
 
+        // RAM governor (precise byte accounting): track the live group-state footprint and bail out
+        // (so the external engine can repartition) before it consumes unbounded RAM. We count bytes as
+        // groups are created — O(groups) is the real memory of incremental aggregation — instead of
+        // sampling the GC heap, which was process-wide and reactive.
+        var budget = new MemoryBudgetGuard(memoryCeilingBytes);
+
         await foreach (var row in inputStream)
         {
             CompoundKey key;
@@ -155,6 +182,16 @@ public class AggregateEngine
                 var hStates = havingAggSpecs.Select(s => CreateState(s.Function)).ToArray();
                 states = (sStates, hStates);
                 groupStates[key] = states;
+
+                if (budget.Enabled)
+                {
+                    // Each new group adds its key plus a fixed per-state cost (most states are O(1)
+                    // running accumulators) plus dictionary-entry overhead.
+                    budget.Add(RowMemory.EstimateKeyBytes(key) + (sStates.Length + hStates.Length) * 64L + 48L);
+                    if (budget.Exceeded())
+                        throw new AggregateMemoryPressureException(
+                            $"Aggregation in-memory group state exceeded the memory governor ceiling (~{memoryCeilingBytes / (1024 * 1024)} MB).");
+                }
             }
 
             // Update states
@@ -804,6 +841,11 @@ public class AggregateEngine
             "ANY" => new BooleanAggregateState(requireAll: false),
             "SOME" => new BooleanAggregateState(requireAll: false),
             "APPROX_COUNT_DISTINCT" => new ApproxCountDistinctState(),
+            "VAR" or "VAR_SAMP" or "VARP" or "VAR_POP"
+                or "STDEV" or "STDDEV" or "STDDEV_SAMP" or "STDEVP" or "STDDEV_POP" => new VarianceState(name),
+            "COVAR_SAMP" or "COVAR_POP" or "CORR" => new CovarianceState(name),
+            "STRING_AGG" or "LIST_AGG" or "GROUP_CONCAT" => new StringCollectionState(name),
+            "PERCENTILE_CONT" or "PERCENTILE_DISC" => new PercentileState(name == "PERCENTILE_CONT"),
             _ => new GenericState(f)
         };
     }
@@ -1125,6 +1167,201 @@ public class AggregateEngine
         public async ValueTask<object?> Finalize(AggregateEngine engine)
         {
             return await engine.EvaluateAggregate(_f, _rows);
+        }
+    }
+
+    private sealed class StringCollectionState(string functionName) : IAggregateState
+    {
+        private readonly List<CollectedValue> _values = new();
+        private HashSet<object?>? _distinct;
+        private string? _separator;
+        private long _sequence;
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            _function ??= f;
+            var value = f.Arguments.Count == 0 ? null : await context.EvaluateValue(f.Arguments[0], row);
+            if (functionName == "GROUP_CONCAT" && (value == null || value == DBNull.Value)) return;
+            if (f.IsDistinct && !(_distinct ??= new HashSet<object?>()).Add(value)) return;
+            if (_separator == null && f.Arguments.Count >= 2)
+                _separator = (await context.EvaluateValue(f.Arguments[1], row))?.ToString();
+            object?[]? keys = null;
+            if (f.WithinGroupOrderBy is { Count: > 0 })
+            {
+                keys = new object?[f.WithinGroupOrderBy.Count];
+                for (var index = 0; index < keys.Length; index++)
+                    keys[index] = await context.EvaluateValue(f.WithinGroupOrderBy[index].Expression, row);
+            }
+            _values.Add(new CollectedValue(value, keys, _sequence++));
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_values.Count == 0)
+                return new ValueTask<object?>(functionName == "GROUP_CONCAT" ? null : string.Empty);
+            if (_values[0].OrderKeys != null)
+            {
+                _values.Sort((left, right) =>
+                {
+                    for (var index = 0; index < left.OrderKeys!.Length; index++)
+                    {
+                        var order = engine._context.CompareConstants(left.OrderKeys[index], right.OrderKeys![index]);
+                        if (order != 0)
+                            return engineOrderDescending(index) ? -order : order;
+                    }
+                    return left.Sequence.CompareTo(right.Sequence);
+                });
+            }
+            var separator = _separator ?? ",";
+            var values = _values.Select(item => item.Value?.ToString() ?? string.Empty);
+            return new ValueTask<object?>(string.Join(separator, values));
+
+            bool engineOrderDescending(int index)
+                => _function!.WithinGroupOrderBy![index].Descending;
+        }
+
+        private FunctionCallExpression? _function;
+
+        private readonly record struct CollectedValue(object? Value, object?[]? OrderKeys, long Sequence);
+    }
+
+    private sealed class PercentileState(bool continuous) : IAggregateState
+    {
+        private readonly List<decimal> _values = new();
+        private double? _percentile;
+        private bool _descending;
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context) || f.WithinGroupOrderBy is not { Count: > 0 }) return;
+            if (_percentile == null && f.Arguments.Count > 0)
+            {
+                _percentile = Math.Clamp(
+                    Convert.ToDouble(await context.EvaluateValue(f.Arguments[0], row)), 0.0, 1.0);
+                _descending = f.WithinGroupOrderBy[0].Descending;
+            }
+            var value = await context.EvaluateValue(f.WithinGroupOrderBy[0].Expression, row);
+            if (value != null) _values.Add(SafeToDecimal(value, context));
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_values.Count == 0 || _percentile == null) return new ValueTask<object?>((object?)null);
+            _values.Sort();
+            if (_descending) _values.Reverse();
+            if (!continuous)
+            {
+                for (var index = 0; index < _values.Count; index++)
+                    if ((double)(index + 1) / _values.Count >= _percentile.Value)
+                        return new ValueTask<object?>(_values[index]);
+                return new ValueTask<object?>(_values[^1]);
+            }
+            if (_values.Count == 1) return new ValueTask<object?>(_values[0]);
+            var rowNumber = _percentile.Value * (_values.Count - 1);
+            var lower = (int)Math.Floor(rowNumber);
+            var upper = (int)Math.Ceiling(rowNumber);
+            if (lower == upper) return new ValueTask<object?>(_values[lower]);
+            var fraction = (decimal)(rowNumber - lower);
+            return new ValueTask<object?>(_values[lower] + fraction * (_values[upper] - _values[lower]));
+        }
+    }
+
+    /// <summary>
+    /// Incremental single-pass VAR/VAR_SAMP/VARP/VAR_POP/STDEV/STDDEV(_SAMP/_POP)/STDEVP state via
+    /// Welford's online algorithm — O(1) memory per group instead of buffering every row through
+    /// <see cref="GenericState"/>. Accumulates in double for numerical stability and returns decimal.
+    /// </summary>
+    private sealed class VarianceState : IAggregateState
+    {
+        private readonly bool _population;
+        private readonly bool _sqrt;
+        private long _n;
+        private double _mean;
+        private double _m2;
+
+        public VarianceState(string name)
+        {
+            var u = name.ToUpperInvariant();
+            _sqrt = u.StartsWith("STDEV", StringComparison.Ordinal) || u.StartsWith("STDDEV", StringComparison.Ordinal);
+            _population = u is "VARP" or "VAR_POP" or "STDEVP" or "STDDEV_POP";
+        }
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            var val = await context.EvaluateValue(f.Arguments[0], row);
+            if (val == null) return;
+            double x = (double)SafeToDecimal(val, context);
+            _n++;
+            double delta = x - _mean;
+            _mean += delta / _n;
+            _m2 += delta * (x - _mean);
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_n == 0 || (!_population && _n == 1)) return new ValueTask<object?>((object?)null);
+            double variance = _population ? _m2 / _n : _m2 / (_n - 1);
+            if (variance < 0) variance = 0; // clamp tiny negative drift from floating-point rounding
+            double result = _sqrt ? Math.Sqrt(variance) : variance;
+            return new ValueTask<object?>((object?)(decimal)result);
+        }
+    }
+
+    /// <summary>
+    /// Incremental single-pass COVAR_SAMP/COVAR_POP/CORR state via the online co-moment algorithm.
+    /// Pairs are counted only when both arguments are non-null (matching the buffered semantics).
+    /// O(1) memory per group; correlation uses population co-moments (the per-n factors cancel).
+    /// </summary>
+    private sealed class CovarianceState : IAggregateState
+    {
+        private readonly bool _population;
+        private readonly bool _correlation;
+        private long _n;
+        private double _meanX;
+        private double _meanY;
+        private double _c;
+        private double _m2x;
+        private double _m2y;
+
+        public CovarianceState(string name)
+        {
+            var u = name.ToUpperInvariant();
+            _correlation = u == "CORR";
+            _population = _correlation || u == "COVAR_POP";
+        }
+
+        public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+        {
+            if (!await PassesFilter(row, f, context)) return;
+            var xv = await context.EvaluateValue(f.Arguments[0], row);
+            var yv = await context.EvaluateValue(f.Arguments[1], row);
+            if (xv == null || yv == null) return;
+            double x = (double)SafeToDecimal(xv, context);
+            double y = (double)SafeToDecimal(yv, context);
+            _n++;
+            double dx = x - _meanX;
+            double dy = y - _meanY;
+            _meanX += dx / _n;
+            _meanY += dy / _n;
+            _c += dx * (y - _meanY);
+            _m2x += dx * (x - _meanX);
+            _m2y += dy * (y - _meanY);
+        }
+
+        public ValueTask<object?> Finalize(AggregateEngine engine)
+        {
+            if (_correlation)
+            {
+                if (_n == 0) return new ValueTask<object?>((object?)null);
+                double denom = Math.Sqrt(_m2x * _m2y);
+                if (denom == 0 || double.IsNaN(denom)) return new ValueTask<object?>((object?)null);
+                return new ValueTask<object?>((object?)(decimal)(_c / denom));
+            }
+            if (_n == 0 || (!_population && _n == 1)) return new ValueTask<object?>((object?)null);
+            double cov = _population ? _c / _n : _c / (_n - 1);
+            return new ValueTask<object?>((object?)(decimal)cov);
         }
     }
 }

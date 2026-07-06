@@ -24,7 +24,8 @@ public sealed class MultiInstanceCoordinationTests
     {
         private int _calls;
         public int CallCount => _calls;
-        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct)
+        public Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
+            ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
             Interlocked.Increment(ref _calls);
             return Task.FromResult<(bool, string?)>((true, null));

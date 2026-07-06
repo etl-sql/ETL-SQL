@@ -12,15 +12,15 @@ public class RunScriptDependencyPreflightRule : ILintRule
     public string Name => "RunScriptDependencyPreflight";
     public string Description => "Preflights literal RUN SCRIPT file dependencies for syntax and undeclared variable errors.";
 
-    public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
+    public async Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
     {
         var results = new List<LintResult>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AnalyzeScript(script, context.DocumentUri, visited, results);
-        return Task.FromResult<IEnumerable<LintResult>>(results);
+        await AnalyzeScriptAsync(script, context.DocumentUri, visited, results);
+        return results;
     }
 
-    private void AnalyzeScript(
+    private async Task AnalyzeScriptAsync(
         Script script,
         string documentUri,
         HashSet<string> visited,
@@ -42,7 +42,7 @@ public class RunScriptDependencyPreflightRule : ILintRule
             Script childScript;
             try
             {
-                var source = File.ReadAllText(childPath);
+                var source = await File.ReadAllTextAsync(childPath);
                 childScript = new Parser(new Lexer(source).Tokenize(), source).Parse();
             }
             catch (Exception ex)
@@ -71,7 +71,8 @@ public class RunScriptDependencyPreflightRule : ILintRule
             }
 
             var childContext = new DefaultLintContext { DocumentUri = childPath };
-            foreach (var finding in new UndeclaredVariableRule().AnalyzeAsync(childScript, childContext).GetAwaiter().GetResult())
+            var variableFindings = await new UndeclaredVariableRule().AnalyzeAsync(childScript, childContext);
+            foreach (var finding in variableFindings)
             {
                 results.Add(new LintResult
                 {
@@ -83,7 +84,7 @@ public class RunScriptDependencyPreflightRule : ILintRule
                 });
             }
 
-            AnalyzeScript(childScript, childPath, visited, results);
+            await AnalyzeScriptAsync(childScript, childPath, visited, results);
         }
     }
 

@@ -605,6 +605,69 @@ namespace ETL_SQL.Tests.Engine
             Assert.NotNull(eval.LastResult?.Rows[0]["SD"]);
         }
 
+        // ── Incremental (Welford) algebraic stats ─────────────────────────────
+        // These exercise VarianceState/CovarianceState (single-pass, O(1)/group)
+        // and pin the known statistical results for the dataset.
+
+        [Fact]
+        public async Task IncrementalStats_VarianceAndStdDev_CorrectValues()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                SELECT 2 AS N INTO #T;
+                INSERT INTO #T VALUES (3), (4);
+                SELECT VAR(N) AS VS, VARP(N) AS VP, STDDEV(N) AS SD, STDDEV_POP(N) AS SDP FROM #T;
+            "));
+            var r = eval.LastResult!.Rows[0];
+            Assert.Equal(1.0, Convert.ToDouble(r["VS"]), 6);            // sample variance of 2,3,4
+            Assert.Equal(2.0 / 3.0, Convert.ToDouble(r["VP"]), 6);       // population variance
+            Assert.Equal(1.0, Convert.ToDouble(r["SD"]), 6);            // sample stddev
+            Assert.Equal(Math.Sqrt(2.0 / 3.0), Convert.ToDouble(r["SDP"]), 6); // population stddev
+        }
+
+        [Fact]
+        public async Task IncrementalStats_CovarianceAndCorrelation_CorrectValues()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                SELECT 1 AS X, 2 AS Y INTO #T;
+                INSERT INTO #T VALUES (2, 4), (3, 6);
+                SELECT COVAR_POP(X, Y) AS CVP, COVAR_SAMP(X, Y) AS CVS, CORR(X, Y) AS RHO FROM #T;
+            "));
+            var r = eval.LastResult!.Rows[0];
+            Assert.Equal(4.0 / 3.0, Convert.ToDouble(r["CVP"]), 6);
+            Assert.Equal(2.0, Convert.ToDouble(r["CVS"]), 6);
+            Assert.Equal(1.0, Convert.ToDouble(r["RHO"]), 6);           // perfectly correlated
+        }
+
+        [Fact]
+        public async Task IncrementalStats_PerGroup_IsSinglePass()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                SELECT 'a' AS G, 2 AS N INTO #T;
+                INSERT INTO #T VALUES ('a', 4), ('b', 10), ('b', 20);
+                SELECT G, VARP(N) AS VP FROM #T GROUP BY G ORDER BY G;
+            "));
+            var rows = eval.LastResult!.Rows;
+            Assert.Equal(2, rows.Count);
+            Assert.Equal(1.0, Convert.ToDouble(rows[0]["VP"]), 6);       // a: 2,4
+            Assert.Equal(25.0, Convert.ToDouble(rows[1]["VP"]), 6);      // b: 10,20
+        }
+
+        [Fact]
+        public async Task IncrementalStats_SingleRow_SampleVarianceIsNull()
+        {
+            var eval = Eval();
+            await eval.Evaluate(Parse(@"
+                SELECT 5 AS N INTO #T;
+                SELECT VAR(N) AS VS, VARP(N) AS VP FROM #T;
+            "));
+            var r = eval.LastResult!.Rows[0];
+            Assert.Null(r["VS"]);                                       // sample variance undefined at n=1
+            Assert.Equal(0.0, Convert.ToDouble(r["VP"]), 6);            // population variance of one value
+        }
+
         // ── GenerateSeries ────────────────────────────────────────────────────
 
         [Fact]

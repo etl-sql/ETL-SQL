@@ -14,6 +14,12 @@ public class TokenService(PortalConfig config)
     public const string ServiceIdentityType = "service";
     public const string ServiceAccountIdClaim = "service_account_id";
     public const string ScopeClaim = "scope";
+
+    // Pinning iss/aud scopes these tokens to portal API access: another token type signed
+    // with the same shared secret (or a portal token replayed against a different consumer
+    // of that secret) no longer validates interchangeably.
+    public const string TokenIssuer = "etl-sql-portal";
+    public const string TokenAudience = "etl-sql-portal-api";
     public int ServiceTokenLifetimeSeconds => Math.Min(15, Math.Max(1, config.Jwt.ExpiryMinutes)) * 60;
 
     public string GenerateJwt(PortalUser user, IList<string> roles)
@@ -32,6 +38,8 @@ public class TokenService(PortalConfig config)
         var key = JwtSigningKeyRing.Current(config.Jwt);
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var token = new JwtSecurityToken(
+            issuer: TokenIssuer,
+            audience: TokenAudience,
             claims: claims,
             expires: DateTime.UtcNow.AddMinutes(config.Jwt.ExpiryMinutes),
             signingCredentials: creds);
@@ -65,6 +73,8 @@ public class TokenService(PortalConfig config)
 
         var key = JwtSigningKeyRing.Current(config.Jwt);
         var token = new JwtSecurityToken(
+            issuer: TokenIssuer,
+            audience: TokenAudience,
             claims: claims,
             expires: DateTime.UtcNow.AddSeconds(ServiceTokenLifetimeSeconds),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));

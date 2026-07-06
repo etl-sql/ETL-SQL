@@ -167,7 +167,7 @@ Connectors define how to communicate with external data sources.
 | `MSSQL` | SQL | [MSSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MSSQL.md) | HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, ... |
 | `POSTGRES` | SQL | [POSTGRES.md](../src/ETL-SQL.Core/Resources/Help/Connectors/POSTGRES.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ... |
 | `ORACLE` | SQL | [ORACLE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ORACLE.md) | HOST, PORT, SERVICE_NAME, USER, PASSWORD, ... |
-| `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, PATH, PASSWORD, TIMEOUT_SECONDS, TABLE |
+| `SQLITE` | SQL | [SQLITE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SQLITE.md) | DATABASE, TIMEOUT_SECONDS, TABLE |
 | `MYSQL` | SQL | [MYSQL.md](../src/ETL-SQL.Core/Resources/Help/Connectors/MYSQL.md) | HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, ALLOW_PUBLIC_KEY_RETRIEVAL, ALLOW_USER_VARIABLES, ... |
 | `ODBC` | SQL | [ODBC.md](../src/ETL-SQL.Core/Resources/Help/Connectors/ODBC.md) | DSN, DRIVER, SERVER, DATABASE, UID, PASSWORD, ... |
 | `SNOWFLAKE` | SQL | [SNOWFLAKE.md](../src/ETL-SQL.Core/Resources/Help/Connectors/SNOWFLAKE.md) | HOST, DATABASE, SCHEMA, WAREHOUSE, USERNAME, PASSWORD, PRIVATE_KEY_FILE, ... |
@@ -347,6 +347,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `ERROR_LINE()` | System | [ERROR_LINE.md](../src/ETL-SQL.Core/Resources/Help/Functions/ERROR_LINE.md) | Error line in CATCH block |
 | `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_VALUE.md) / [JSON_EXTRACT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXTRACT.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
 | `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_QUERY.md) | Extracts object/array from JSON |
+| `JSON_GET(json, key)` / `->` | JSON | [JSON_GET.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_GET.md) | One access step (field/element) as JSON; the `->` operator |
+| `JSON_GET_TEXT(json, key)` / `->>` | JSON | [JSON_GET_TEXT.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_GET_TEXT.md) | One access step as text; the `->>` operator |
 | `JSON_MODIFY(json, path, new_value)` | JSON | [JSON_MODIFY.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_MODIFY.md) | Updates JSON string |
 | `ISJSON(string)` | JSON | [ISJSON.md](../src/ETL-SQL.Core/Resources/Help/Functions/ISJSON.md) | 1 if valid JSON |
 | `JSON_EXISTS(json, path)` | JSON | [JSON_EXISTS.md](../src/ETL-SQL.Core/Resources/Help/Functions/JSON_EXISTS.md) | 1 if path exists |
@@ -945,6 +947,8 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `SHOW ACTIVE SESSIONS`| Portal   | Lists unrevoked, unexpired portal refresh sessions |
 | `SHOW JOBS`           | Orch     | Lists scheduled background tasks |
 | `SHOW JOB HISTORY`    | Orch     | Lists history of executed background tasks |
+| `SHOW JOB STATE`      | Orch     | Lists saved job-state key/value pairs (SET_JOB_STATE watermarks/markers) for any job |
+| `SHOW HOST METRICS`   | Orch     | Host-utilization time series (memory/CPU/free disk) per node for capacity planning; last 24h |
 | `SHOW LINEAGE HISTORY FOR TABLE` | Lineage | Cross-run catalog: all lineage entries that wrote to a table; supports `AT <connection>` for remote Orchestrators |
 | `SHOW LINEAGE HISTORY FOR TAG`   | Lineage | Cross-run catalog: all entries whose tags match a key/value; supports `AT <connection>` for remote Orchestrators |
 | `SHOW PUBLISHED BUNDLES` | Orch  | Lists latest published bundle versions |
@@ -1303,6 +1307,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | :--- | :--- | :--- |
 | `ALL` | Join | Canonical language token |
 | `APPLY` | Join | Canonical language token |
+| `ASOF` | Join | Canonical language token |
 | `CROSS` | Join | Canonical language token |
 | `EXCEPT` | Join | Canonical language token |
 | `FULL` | Join | Canonical language token |
@@ -1311,6 +1316,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `INTERSECT` | Join | Canonical language token |
 | `JOIN` | Join | Canonical language token |
 | `KEEP` | Join | Canonical language token |
+| `LATERAL` | Join | Canonical language token |
 | `LEFT` | Join | Canonical language token |
 | `OUTER` | Join | Canonical language token |
 | `RIGHT` | Join | Canonical language token |
@@ -1716,10 +1722,12 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CLOSE` | General | Canonical language token |
 | `COLUMNS` | General | Canonical language token |
 | `COMMENT` | General | Canonical language token |
+| `CONNECTION_PREVIEW_LIMIT` | General | Canonical language token |
 | `CONNECTIONS` | General | Canonical language token |
 | `CONVERT` | General | Canonical language token |
 | `DATA_SOURCE` | General | Canonical language token |
 | `DELETE_EXTRA` | General | Canonical language token |
+| `DESCRIBE` | General | Canonical language token |
 | `DISABLE` | General | Canonical language token |
 | `DISCONNECT` | General | Canonical language token |
 | `ENABLE` | General | Canonical language token |
@@ -1755,6 +1763,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `OCTET_LENGTH` | General | Canonical language token |
 | `OFF` | General | Canonical language token |
 | `ON` | General | Canonical language token |
+| `OPERATOR_MEMORY_GRANT` | General | Canonical language token |
 | `OUTPUT` | General | Canonical language token |
 | `OVERLAY` | General | Canonical language token |
 | `PARALLEL` | General | Canonical language token |
@@ -1766,10 +1775,12 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REFRESH` | General | Canonical language token |
 | `REFRESH_REPORT` | General | Canonical language token |
 | `REFRESH_VISUALS` | General | Canonical language token |
+| `REPEATABLE` | General | Canonical language token |
 | `REQUIRE` | General | Canonical language token |
 | `REQUIRED` | General | Canonical language token |
 | `RESTART` | General | Canonical language token |
 | `SAFE` | General | Canonical language token |
+| `SAMPLE` | General | Canonical language token |
 | `SESSION` | General | Canonical language token |
 | `SESSIONS` | General | Canonical language token |
 | `SETS` | General | Canonical language token |
@@ -1856,6 +1867,9 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CHARINDEX` | Function | Canonical built-in function |
 | `CHECKSUM` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
+| `?? ` | Operator | Null-coalescing shorthand; compiles to `COALESCE` at parse time (see Grammar §14.4) |
+| `=> :` | Operator | Arrow conditional; chains compile to one `CASE WHEN` at parse time (see Grammar §14.5) |
+| `-> ->>` | Operator | JSON field/element access (Postgres style); compile to `JSON_GET`/`JSON_GET_TEXT` (see Grammar §14.6) |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |
 | `CORR` | Function | Canonical built-in function |
@@ -1961,6 +1975,8 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `REGEXP_SUBSTR` | Function | Canonical built-in function |
 | `RELDATE` | Function | Canonical built-in function |
 | `REMOVE_FROM_LIST` | Function | Canonical built-in function |
+| `REMOVE_HIDDEN_CHARACTERS` | Function | Canonical built-in function |
+| `REMOVE_HTML_CHARACTERS` | Function | Canonical built-in function |
 | `REPEAT` | Function | Canonical built-in function |
 | `REPLACE` | Function | Canonical built-in function |
 | `REPLICATE` | Function | Canonical built-in function |

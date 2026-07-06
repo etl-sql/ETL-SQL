@@ -13,6 +13,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
@@ -45,6 +46,13 @@ public class ReturnException : Exception
 /// </summary>
 public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
 {
+    public ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+    public ExecutionIdentity? ExecutionIdentity { get; set; }
+    /// <summary>
+    /// Process-wide by default; settable so tests (and future per-tenant hosting) can bound an
+    /// evaluator with an isolated budget instead of mutating <see cref="MemoryGrantArbiter.Shared"/>.
+    /// </summary>
+    public IMemoryGrantArbiter MemoryArbiter { get; set; } = MemoryGrantArbiter.Shared;
     private readonly IEnumerable<IStatementHandler> _handlers;
     private readonly IServiceProvider _serviceProvider = null!;
     private readonly Core.Functions.IFunctionRegistry _functionRegistry;
@@ -158,12 +166,20 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             throw new SecurityException($"SMTP send limit exceeded: this script attempted to send {count} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
         }
+        // Enterprise ceiling binds regardless of the local (SET-overridable) limit above.
+        if (IsEnterpriseGoverned)
+            ETL_SQL.Core.Governance.OperationPolicyBoundary.EnforceCeiling(this,
+                "Security:MaxSmtpEmailsPerScript", count, "<smtp-send>");
     }
     public int MaxInternalOperations
     {
         get => _options.MaxInternalOperations;
         set { _options.MaxInternalOperations = value; _securityService.MaxInternalOperations = value; }
     }
+    public int MaxConnectionsPerScript { get => _options.MaxConnectionsPerScript; set => _options.MaxConnectionsPerScript = value; }
+    public int MaxTempTablesPerScript { get => _options.MaxTempTablesPerScript; set => _options.MaxTempTablesPerScript = value; }
+    public int MaxVariablesPerScript { get => _options.MaxVariablesPerScript; set => _options.MaxVariablesPerScript = value; }
+    public int MaxVisualsPerScript { get => _options.MaxVisualsPerScript; set => _options.MaxVisualsPerScript = value; }
 
     public bool IsPersistentSession { get; set; }
     public bool IsResuming { get; set; }
@@ -175,6 +191,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
     /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
     public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
+    public bool UseColumnarTempTables { get => _options.UseColumnarTempTables; set => _options.UseColumnarTempTables = value; }
     public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
     public string? LineageNamespace { get => _options.LineageNamespace; set => _options.LineageNamespace = value; }
     public string? JobName { get => _options.JobName; set => _options.JobName = value; }
@@ -283,6 +300,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public int ExternalSortChunkSize { get => _options.ExternalSortChunkSize; set => _options.ExternalSortChunkSize = value; }
     public int WindowSpillThreshold { get => _options.WindowSpillThreshold; set => _options.WindowSpillThreshold = value; }
     public int OperatorMemoryGrantMB { get => _options.OperatorMemoryGrantMB; set => _options.OperatorMemoryGrantMB = value; }
+    public MemoryGovernorPolicy MemoryGovernorPolicy { get => _options.MemoryGovernorPolicy; set => _options.MemoryGovernorPolicy = value; }
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
@@ -517,6 +535,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         OperatorMemoryGrantMB = DefaultThresholds.OperatorMemoryGrantMB(config);
         // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
         MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
+        MemoryGovernorPolicy = DefaultThresholds.MemoryGovernorPolicy(config);
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
 
         _options.BatchSize = BatchSize;
@@ -528,10 +547,15 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
         MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
         MaxInternalOperations = config?.GetValue<int>("Security:MaxInternalOperations", 100000) ?? 100000;
+        MaxConnectionsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxConnectionsPerScript", 100) ?? 100);
+        MaxTempTablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxTempTablesPerScript", 100) ?? 100);
+        MaxVariablesPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVariablesPerScript", 100) ?? 100);
+        MaxVisualsPerScript = Math.Max(0, config?.GetValue<int>("Engine:MaxVisualsPerScript", 100) ?? 100);
         WeekStartDay = DefaultThresholds.StartOfWeek(config);
         ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
+        UseColumnarTempTables = config?.GetValue("Engine:UseColumnarTempTables", true) ?? true;
         LineageEnabled = DefaultThresholds.LineageEnabled(config);
         LineageNamespace = config?.GetValue<string>("Lineage:Namespace") ?? "etl-sql";
         LineageImportCatalog = config?.GetValue<bool>("Lineage:ImportCatalogMetadata") ?? false;
@@ -719,7 +743,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             var tokens = new Lexer(viewDdl).Tokenize();
             var viewScript = new ETL_SQL.Core.Parser.Parser(tokens, viewDdl).Parse();
-            var viewTracker = new LineageTracker(ETL_SQL.Common.NullLogger.Instance);
+            var viewTracker = new LineageTracker(_logger);
             new LineageAnalyzer(viewTracker).Analyze(viewScript);
 
             foreach (var entry in viewTracker.GetFullLineage())
@@ -742,10 +766,53 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
 
     private HashSet<string>? _expandedViews;
 
+    /// <summary>
+    /// At execution start, clamp the governed resource thresholds that have no runtime ceiling down
+    /// to the enterprise maximum. Their initial values may have arrived via configuration,
+    /// environment variables, command-line options, a restored saved session, or report parameters —
+    /// override sources that never pass through the <c>SET</c> ceiling. Clamping here (rather than at
+    /// each override site) makes a locked value impossible to weaken by any path, and is
+    /// deterministic in-process and across spawned processes because every host captures the snapshot
+    /// at this same boundary.
+    ///
+    /// Only <c>MaxParallelDegree</c> (consumed directly by the parallel handler) and
+    /// <c>MaxStringResultSize</c> lack a runtime enterprise ceiling and so must be clamped here.
+    /// <c>MaxFileOperationsPerScript</c>, <c>MaxRecursiveNestingDepth</c>, and
+    /// <c>MaxSmtpEmailsPerScript</c> are re-checked against the governed ceiling at each operation
+    /// (see <c>OperationPolicyBoundary.EnforceCeiling</c> call sites), so a high initial value is
+    /// already denied at runtime with the deterministic policy message — lowering their local limit
+    /// here would only mask that enterprise denial behind the local guardrail's message.
+    /// </summary>
+    private void BindGovernedThresholdCeilings()
+    {
+        if (ExecutionPolicy is not { IsEnrolled: true } snapshot) return;
+        MaxParallelDegree = (int)Core.Governance.OperationPolicyBoundary.ClampToGovernedCeiling(
+            snapshot, "Security:MaxParallelDegree", MaxParallelDegree);
+        MaxStringResultSize = Core.Governance.OperationPolicyBoundary.ClampToGovernedCeiling(
+            snapshot, "Security:MaxStringResultSize", MaxStringResultSize);
+    }
+
     public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
     {
         if (CurrentRecursiveDepth == 0)
         {
+            var actor = script.Metadata.TryGetValue("author", out var author)
+                && !string.IsNullOrWhiteSpace(author) ? author : Environment.UserName;
+            var mode = InteractiveMode
+                ? ScriptExecutionMode.Interactive
+                : string.IsNullOrWhiteSpace(JobName)
+                    ? ScriptExecutionMode.Batch
+                    : ScriptExecutionMode.Scheduled;
+            var canonicalScript = string.Join("\n", script.Statements.Select(statement => statement.ToSql()));
+            var scriptHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(canonicalScript))).ToLowerInvariant();
+            ExecutionPolicy = ExecutionPolicySnapshot.Capture(
+                EnterprisePolicyRuntime.Current, actor, mode, scriptHash, JobName);
+            // Enterprise execution-mode gates — applied before any statement executes.
+            Core.Governance.OperationPolicyBoundary.EnforceAllowedExecutionMode(ExecutionPolicy);
+            Core.Governance.OperationPolicyBoundary.EnforceRemoteExecutionMode(ExecutionPolicy);
+            BindGovernedThresholdCeilings();
+
             foreach (var rs in LastResultSets) rs.Clear();
             LastResultSets.Clear();
             ClearResults();
@@ -1031,14 +1098,28 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
         DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
 
+        var connectionAuthorizer = new ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer(_securityService);
         foreach (var conn in state.Connections)
         {
             var connector = _connectorRegistry.GetConnector(conn.Type);
-            if (connector != null)
+            if (connector == null) continue;
+
+            // A saved connection must satisfy CURRENT organization policy before it is restored —
+            // otherwise a connection saved under a looser policy could be reused to reach a now-denied
+            // connector type or destination. A denial drops the connection rather than aborting the
+            // whole session restore.
+            try
             {
-                var ds = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
-                _connections[conn.Name] = ds;
+                connectionAuthorizer.Authorize(this, conn.Type,
+                    connector.GetHost(conn.ConnectionString, conn.Options), conn.ConnectionString);
             }
+            catch (ETL_SQL.Core.Governance.ConnectorPolicyDeniedException ex)
+            {
+                _logger.Warning("Saved connection '{Name}' was not restored: {Reason}", conn.Name, ex.Decision.Reason);
+                continue;
+            }
+
+            _connections[conn.Name] = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
         }
 
         LineageTracker.Clear();
@@ -1124,6 +1205,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             if (node != null) node.Status = ExecutionStatus.Completed;
             return;
         }
+
+        // Enterprise mutation guardrails (require-what-if / require-transaction) — no-op unless
+        // enrolled and the statement mutates a persistent (non-#temp) target.
+        Governance.MutationGuardrailPolicy.Enforce(this, statement);
 
         if (_statementHandlers.TryGetValue(statement.GetType(), out var handler))
         {
@@ -1245,6 +1330,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public async Task CommitTransaction() => await _transactionManager.CommitTransaction();
     public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
     public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+    internal void ReplaceDataSourceForTransaction(string connectionName, IDataSource original, IDataSource replacement)
+        => _transactionManager.ReplaceDataSource(connectionName, original, replacement, _connections);
 
 
 
@@ -1309,7 +1396,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             ScriptPassword = ScriptPassword,
             SessionId = SessionId,
             DisplayExecuteTree = DisplayExecuteTree,
-            MaxGroupingSets = MaxGroupingSets
+            MaxGroupingSets = MaxGroupingSets,
+            ExecutionPolicy = ExecutionPolicy,
+            ExecutionIdentity = ExecutionIdentity,
+            MemoryArbiter = MemoryArbiter
         };
 
         fork.Telemetry.IsProfiling = Telemetry.IsProfiling;
@@ -1339,12 +1429,23 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     {
         var total = System.Threading.Interlocked.Add(ref _operationCount, count);
         _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+        // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
+        if (type == OperationType.FileSystem && IsEnterpriseGoverned)
+            OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxFileOperationsPerScript",
+                total, "<file-operation-count>");
     }
+
+    private bool IsEnterpriseGoverned =>
+        ExecutionPolicy?.IsEnrolled ?? EnterprisePolicyRuntime.Current.IsEnrolled;
 
     public IDisposable EnterRecursiveScope()
     {
         CurrentRecursiveDepth++;
         _securityService.CheckRunawayProtection(OperationType.FileSystem, _operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
+        // Enterprise ceiling binds regardless of the local Allow*/safe-zone overrides above.
+        if (IsEnterpriseGoverned)
+            OperationPolicyBoundary.EnforceCeiling(this, "Security:MaxRecursiveNestingDepth",
+                CurrentRecursiveDepth, "<recursive-nesting-depth>");
         return new RecursiveScope(this);
     }
 

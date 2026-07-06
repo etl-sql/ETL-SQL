@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
@@ -12,27 +14,54 @@ namespace ETL_SQL.Connectors.Sqlite
 {
     public class SqliteDataSource : IDatabaseSource, ITransactionalDataSource
     {
-        private string _connectionString;
+        private readonly string _connectionString;
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly int _commandTimeout;
-        private SqliteConnection? _transactionalConnection;
-        private SqliteTransaction? _activeTransaction;
+        private readonly TransactionState _transactionState;
+        private readonly bool _ownsTransactionState;
+
+        private sealed class TransactionState
+        {
+            public SqliteConnection? Connection;
+            public SqliteTransaction? Transaction;
+        }
 
         public SqliteDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
+            : this(context, connectionString, tableName, options, new TransactionState(), ownsTransactionState: true)
+        {
+        }
+
+        private SqliteDataSource(IExecutionContext context, string connectionString, string? tableName,
+            Dictionary<string, string>? options, TransactionState transactionState, bool ownsTransactionState)
         {
             _context = context;
             _logger = context.Logger;
             _tableName = tableName;
             _options = options;
-            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
+            _transactionState = transactionState;
+            _ownsTransactionState = ownsTransactionState;
 
             // Zero-Trust Path Resolution
             var builder = new SqliteConnectionStringBuilder(connectionString);
+            if (!string.IsNullOrEmpty(builder.Password))
+                throw new ExecutionException(
+                    "SQLite PASSWORD is unsupported because this distribution does not ship SQLCipher. " +
+                    "Use filesystem or volume encryption instead.");
+
+            _commandTimeout = options != null
+                && options.TryGetValue("TIMEOUT_SECONDS", out var ts)
+                && int.TryParse(ts, out var t)
+                && t > 0
+                    ? t
+                    : builder.DefaultTimeout > 0 ? builder.DefaultTimeout : 30;
+
             string dbPath = builder.DataSource;
-            if (dbPath != ":memory:" && !string.IsNullOrEmpty(dbPath) && context != null)
+            if (builder.Mode != SqliteOpenMode.Memory
+                && dbPath != ":memory:"
+                && !string.IsNullOrEmpty(dbPath))
             {
                 dbPath = context.ResolvePath(dbPath);
                 builder.DataSource = dbPath;
@@ -49,21 +78,27 @@ namespace ETL_SQL.Connectors.Sqlite
 
         public IDataSource WithTable(string tableName)
         {
-            var ds = new SqliteDataSource(_context!, _connectionString, tableName, _options);
-            ds._transactionalConnection = _transactionalConnection;
-            ds._activeTransaction = _activeTransaction;
-            return ds;
+            return new SqliteDataSource(_context!, _connectionString, tableName, _options,
+                _transactionState, ownsTransactionState: false);
         }
 
         private async Task<(SqliteConnection Connection, bool IsShared)> GetConnectionAsync()
         {
-            if (_transactionalConnection != null)
+            if (_transactionState.Connection != null)
             {
-                return (_transactionalConnection, true);
+                return (_transactionState.Connection, true);
             }
-            var conn = new SqliteConnection(_connectionString);
-            await conn.OpenAsync();
-            return (conn, false);
+            var connection = new SqliteConnection(_connectionString);
+            try
+            {
+                await connection.OpenAsync(_context?.CancellationToken ?? CancellationToken.None);
+                return (connection, false);
+            }
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await connection.DisposeAsync();
+                throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
         }
 
         public async Task<string> GetVersionAsync()
@@ -72,8 +107,8 @@ namespace ETL_SQL.Connectors.Sqlite
             try
             {
                 using var cmd = CreateCommand("SELECT sqlite_version()", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                var result = await cmd.ExecuteScalarAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                var result = await cmd.ExecuteScalarAsync(_context?.CancellationToken ?? CancellationToken.None);
                 return result?.ToString() ?? "Unknown SQLite Version";
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
@@ -91,7 +126,8 @@ namespace ETL_SQL.Connectors.Sqlite
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
             ConnectorExceptionWrapper.WrapAsync(ReadBatchesCore(batchSize), "SQLite", ShouldWrapProviderException);
 
-        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
+        private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQLite data source read.");
@@ -100,8 +136,8 @@ namespace ETL_SQL.Connectors.Sqlite
             try
             {
                 using var cmd = CreateCommand($"SELECT * FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = await cmd.ExecuteReaderAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                using var reader = await cmd.ExecuteReaderAsync(EffectiveCancellationToken(cancellationToken));
 
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
@@ -112,7 +148,7 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -149,25 +185,23 @@ namespace ETL_SQL.Connectors.Sqlite
 
             var (conn, isShared) = await GetConnectionAsync();
             SqliteTransaction? trans = null;
-            if (!isShared)
-            {
-                trans = conn.BeginTransaction();
-            }
+            SqliteCommand? insertCmd = null;
 
             try
             {
+                if (!isShared)
+                    trans = conn.BeginTransaction();
+
                 if (!append)
                 {
                     using var truncCmd = CreateCommand($"DELETE FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
                     if (trans != null) truncCmd.Transaction = trans;
-                    else if (_activeTransaction != null) truncCmd.Transaction = _activeTransaction;
-                    await truncCmd.ExecuteNonQueryAsync();
+                    else if (_transactionState.Transaction != null) truncCmd.Transaction = _transactionState.Transaction;
+                    await truncCmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
                 }
 
-                string insertSql = "";
-                SqliteCommand? insertCmd = null;
-
-                await foreach (var batch in batches)
+                await foreach (var batch in batches.WithCancellation(
+                    _context?.CancellationToken ?? CancellationToken.None))
                 {
                     if (batch.Rows.Count == 0) continue;
 
@@ -176,11 +210,10 @@ namespace ETL_SQL.Connectors.Sqlite
                         var colNames = batch.ColumnNames.ToList();
                         var cols = string.Join(", ", colNames.Select(c => $"\"{c.Replace("\"", "\"\"")}\""));
                         var pars = string.Join(", ", colNames.Select((c, idx) => $"$p{idx}"));
-                        insertSql = $"INSERT INTO \"{_tableName.Replace("\"", "\"\"")}\" ({cols}) VALUES ({pars})";
-
+                        var insertSql = $"INSERT INTO \"{_tableName.Replace("\"", "\"\"")}\" ({cols}) VALUES ({pars})";
                         insertCmd = CreateCommand(insertSql, conn);
                         if (trans != null) insertCmd.Transaction = trans;
-                        else if (_activeTransaction != null) insertCmd.Transaction = _activeTransaction;
+                        else if (_transactionState.Transaction != null) insertCmd.Transaction = _transactionState.Transaction;
 
                         for (int idx = 0; idx < colNames.Count; idx++)
                         {
@@ -194,7 +227,7 @@ namespace ETL_SQL.Connectors.Sqlite
                         {
                             insertCmd.Parameters[idx].Value = row[idx] ?? DBNull.Value;
                         }
-                        await insertCmd.ExecuteNonQueryAsync();
+                        await insertCmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
                     }
                 }
 
@@ -213,6 +246,7 @@ namespace ETL_SQL.Connectors.Sqlite
             }
             finally
             {
+                if (insertCmd != null) await insertCmd.DisposeAsync();
                 if (trans != null) await trans.DisposeAsync();
                 if (!isShared) await conn.DisposeAsync();
             }
@@ -229,8 +263,8 @@ namespace ETL_SQL.Connectors.Sqlite
             try
             {
                 using var cmd = CreateCommand($"DELETE FROM \"{_tableName.Replace("\"", "\"\"")}\"", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                await cmd.ExecuteNonQueryAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                await cmd.ExecuteNonQueryAsync(_context?.CancellationToken ?? CancellationToken.None);
             }
             catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
@@ -256,10 +290,10 @@ namespace ETL_SQL.Connectors.Sqlite
             {
                 // PRAGMA table_info returns columns: cid, name, type, notnull, dflt_value, pk
                 using var cmd = CreateCommand($"PRAGMA table_info(\"{tableName.Replace("\"", "\"\"")}\")", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = await cmd.ExecuteReaderAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
                 var columns = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
                 {
                     columns.Add(reader.GetString(1)); // name is the second column
                 }
@@ -281,10 +315,10 @@ namespace ETL_SQL.Connectors.Sqlite
             try
             {
                 using var cmd = CreateCommand("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = await cmd.ExecuteReaderAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
                 var tables = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
                 {
                     tables.Add(reader.GetString(0));
                 }
@@ -306,10 +340,10 @@ namespace ETL_SQL.Connectors.Sqlite
             try
             {
                 using var cmd = CreateCommand("SELECT name FROM sqlite_master WHERE type = 'view'", conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                using var reader = await cmd.ExecuteReaderAsync();
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
+                using var reader = await cmd.ExecuteReaderAsync(_context?.CancellationToken ?? CancellationToken.None);
                 var views = new List<string>();
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(_context?.CancellationToken ?? CancellationToken.None))
                 {
                     views.Add(reader.GetString(0));
                 }
@@ -328,13 +362,14 @@ namespace ETL_SQL.Connectors.Sqlite
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) =>
             ConnectorExceptionWrapper.WrapAsync(ExecuteRawSqlCore(sql, parameters), "SQLite", ShouldWrapProviderException);
 
-        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters)
+        private async IAsyncEnumerable<DataTable> ExecuteRawSqlCore(string sql, IEnumerable<object?>? parameters,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             var (conn, isShared) = await GetConnectionAsync();
             try
             {
                 using var cmd = CreateCommand(sql, conn);
-                if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
+                if (_transactionState.Transaction != null) cmd.Transaction = _transactionState.Transaction;
 
                 if (parameters != null)
                 {
@@ -345,7 +380,7 @@ namespace ETL_SQL.Connectors.Sqlite
                     }
                 }
 
-                using var reader = await cmd.ExecuteReaderAsync();
+                using var reader = await cmd.ExecuteReaderAsync(EffectiveCancellationToken(cancellationToken));
                 var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
@@ -367,7 +402,7 @@ namespace ETL_SQL.Connectors.Sqlite
                 var currentBatch = new DataTable();
                 currentBatch.SetColumns(columns);
 
-                while (await reader.ReadAsync())
+                while (await reader.ReadAsync(EffectiveCancellationToken(cancellationToken)))
                 {
                     var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
@@ -401,57 +436,101 @@ namespace ETL_SQL.Connectors.Sqlite
         // ITransactionalDataSource
         public async Task BeginTransactionAsync()
         {
-            if (_transactionalConnection == null)
+            try
             {
-                _transactionalConnection = new SqliteConnection(_connectionString);
-                await _transactionalConnection.OpenAsync();
+                if (_transactionState.Transaction != null)
+                    throw new InvalidOperationException("A SQLite transaction is already active.");
+
+                if (_transactionState.Connection == null)
+                {
+                    _transactionState.Connection = new SqliteConnection(_connectionString);
+                    await _transactionState.Connection.OpenAsync(_context?.CancellationToken ?? CancellationToken.None);
+                }
+                _transactionState.Transaction = _transactionState.Connection.BeginTransaction();
             }
-            _activeTransaction = _transactionalConnection.BeginTransaction();
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
+            {
+                await CloseTransactionStateAsync(rollback: false, suppressErrors: true);
+                throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
         }
 
         public async Task CommitAsync()
         {
-            if (_activeTransaction != null)
+            try
             {
-                await _activeTransaction.CommitAsync();
-                await _activeTransaction.DisposeAsync();
-                _activeTransaction = null;
+                if (_transactionState.Transaction != null)
+                    await _transactionState.Transaction.CommitAsync(_context?.CancellationToken ?? CancellationToken.None);
             }
-            if (_transactionalConnection != null)
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
-                await _transactionalConnection.CloseAsync();
-                await _transactionalConnection.DisposeAsync();
-                _transactionalConnection = null;
+                throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
+            finally
+            {
+                await CloseTransactionStateAsync(rollback: false, suppressErrors: true);
             }
         }
 
         public async Task RollbackAsync()
         {
-            if (_activeTransaction != null)
+            try
             {
-                await _activeTransaction.RollbackAsync();
-                await _activeTransaction.DisposeAsync();
-                _activeTransaction = null;
+                if (_transactionState.Transaction != null)
+                    await _transactionState.Transaction.RollbackAsync(_context?.CancellationToken ?? CancellationToken.None);
             }
-            if (_transactionalConnection != null)
+            catch (Exception ex) when (ShouldWrapProviderException(ex))
             {
-                await _transactionalConnection.CloseAsync();
-                await _transactionalConnection.DisposeAsync();
-                _transactionalConnection = null;
+                throw ConnectorExceptionWrapper.Wrap("SQLite", ex);
+            }
+            finally
+            {
+                await CloseTransactionStateAsync(rollback: false, suppressErrors: true);
             }
         }
 
         public async ValueTask DisposeAsync()
         {
-            if (_activeTransaction != null)
+            if (_ownsTransactionState)
+                await CloseTransactionStateAsync(rollback: true, suppressErrors: true);
+        }
+
+        private async Task CloseTransactionStateAsync(bool rollback, bool suppressErrors)
+        {
+            try
             {
-                await _activeTransaction.DisposeAsync();
+                if (rollback && _transactionState.Transaction != null)
+                    await _transactionState.Transaction.RollbackAsync(CancellationToken.None);
             }
-            if (_transactionalConnection != null)
+            catch when (suppressErrors) { }
+
+            try
             {
-                await _transactionalConnection.DisposeAsync();
+                if (_transactionState.Transaction != null)
+                    await _transactionState.Transaction.DisposeAsync();
+            }
+            catch when (suppressErrors) { }
+            finally
+            {
+                _transactionState.Transaction = null;
+            }
+
+            try
+            {
+                if (_transactionState.Connection != null)
+                    await _transactionState.Connection.DisposeAsync();
+            }
+            catch when (suppressErrors) { }
+            finally
+            {
+                _transactionState.Connection = null;
             }
         }
+
+        private CancellationToken EffectiveCancellationToken(CancellationToken enumeratorToken) =>
+            enumeratorToken.CanBeCanceled
+                ? enumeratorToken
+                : _context?.CancellationToken ?? CancellationToken.None;
 
         private SqliteCommand CreateCommand(string sql, SqliteConnection conn)
         {

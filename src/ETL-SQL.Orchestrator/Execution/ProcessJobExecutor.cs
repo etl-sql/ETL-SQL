@@ -56,8 +56,11 @@ namespace ETL_SQL.Orchestrator.Execution
             WarmRunnerPools.Clear();
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default, string? jobName = null, long queueWaitMs = 0, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
+            // Out-of-process execution does not carry a row-level-security identity across the process
+            // boundary; identity-sensitive scripts therefore fail closed in this path. Subscription
+            // per-recipient delivery uses the in-process ScriptExecutorAdapter. See Docs/Design/RowLevelSecurity.md.
             CleanupOldTempScripts(force: false);
 
             // Write script to a temp file — ETL-SQL.exe run expects a file path

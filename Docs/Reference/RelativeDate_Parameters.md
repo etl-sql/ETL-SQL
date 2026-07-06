@@ -9,8 +9,8 @@ This document specifies the `RELDATE` type, the `LIST` type, and the week-start 
 Subscriptions need parameters that mean "yesterday" or "last month" without hardcoding a date. The `RELDATE` type lets a report writer express a time offset once in a `DECLARE` statement; the engine resolves it to an actual datetime at execution time — whether that execution comes from a subscription, a scheduled job, or a manual run.
 
 ```sql
-DECLARE @start RELDATE = D-1;   -- yesterday at midnight
-DECLARE @end   RELDATE = D;     -- today at midnight
+DECLARE @start RELDATE = 'D-1';   -- yesterday at midnight
+DECLARE @end   RELDATE = 'D';     -- today at midnight
 ```
 
 When the subscription fires at 6 AM on April 17, `@start` = `2026-04-16 00:00:00`, `@end` = `2026-04-17 00:00:00`. Every run resolves fresh.
@@ -106,7 +106,17 @@ Valid values: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`
 
 ### Time zone
 
-All period anchors (`D`, `W`, `M`, `Q`, `Y` and their variants) resolve in **server local time**. `N` resolves in server local time; `NU` resolves in UTC. For time zone conversions, use the `FOR TIMEZONE` clause or pass the time zone as a separate parameter.
+All period anchors (`D`, `W`, `M`, `Q`, `Y` and their variants) resolve in **server local time** by default. `N` resolves in server local time; `NU` resolves in UTC.
+
+To evaluate relative date snapping under a specific timezone calendar, append a timezone suffix inside the quoted expression (e.g., `'D-1 EST'`, `'D America/New_York'`, `'N-2H UTC'`). When a suffix is provided:
+1. The calendar day snap is determined based on the target timezone's clock.
+2. The resolved value is returned as a timezone-aware `DATETIMEOFFSET` type, preserving the correct timezone offset for that date (including DST transitions).
+
+Without a suffix, RELDATE remains a timezone-neutral `DATETIME` for compatibility. A nonexistent local
+time in a DST gap is rejected; an ambiguous time in a DST fold uses the smaller offset (normally the
+standard-time occurrence).
+
+For a complete list of timezone abbreviations and behavior, refer to the [Dates and Times Guide](Dates_and_Times.md).
 
 ### Fixed date passthrough
 
@@ -181,7 +191,7 @@ An **Advanced** toggle reveals a text input accepting any valid RELDATE expressi
 
 ## Resolution context
 
-RELDATE expressions resolve at **execution time** regardless of how the report runs — subscription, manual run, scheduled job, or `dotnet run --project src/ETL-SQL.App -- run`. There is no subscription-only context. A developer can test `DECLARE @start RELDATE = D-1` locally and get the same result the subscription will get when it fires.
+RELDATE expressions resolve at **execution time** regardless of how the report runs — subscription, manual run, scheduled job, or `dotnet run --project src/ETL-SQL.App -- run`. There is no subscription-only context. A developer can test `DECLARE @start RELDATE = 'D-1'` locally and get the same result the subscription will get when it fires.
 
 The expression string (`D-1`) is what gets stored in the subscription's parameter table, not a resolved date. Each execution resolves it fresh against the clock at that moment.
 
@@ -191,8 +201,8 @@ The expression string (`D-1`) is what gets stored in the subscription's paramete
 
 ```sql
 -- Daily sales report: always pull yesterday's complete data
-DECLARE @start RELDATE = D-1;
-DECLARE @end   RELDATE = D;
+DECLARE @start RELDATE = 'D-1';
+DECLARE @end   RELDATE = 'D';
 
 SELECT * FROM Sales
 WHERE SaleDate >= @start AND SaleDate < @end;
@@ -200,8 +210,8 @@ WHERE SaleDate >= @start AND SaleDate < @end;
 
 ```sql
 -- Monthly executive summary: last full month
-DECLARE @period_start RELDATE = M-1;
-DECLARE @period_end   RELDATE = ME-1;
+DECLARE @period_start RELDATE = 'M-1';
+DECLARE @period_end   RELDATE = 'ME-1';
 
 SELECT Region, SUM(Revenue) AS Revenue
 FROM Sales
@@ -219,7 +229,7 @@ WHERE (@regions IS NULL OR Region IN (SELECT value FROM STRING_SPLIT(@regions, '
 
 ```sql
 -- Near-real-time: last 2 hours rolling window
-DECLARE @since RELDATE = N-2H;
+DECLARE @since RELDATE = 'N-2H';
 
 SELECT * FROM Events WHERE EventTime >= @since;
 ```
@@ -228,6 +238,6 @@ SELECT * FROM Events WHERE EventTime >= @since;
 -- Script using US Sunday-start weeks
 SET WEEK_START_DAY = 'Sunday';
 
-DECLARE @week_start RELDATE = W-1;   -- last Sunday
-DECLARE @week_end   RELDATE = WE-1;  -- last Saturday
+DECLARE @week_start RELDATE = 'W-1';   -- last Sunday
+DECLARE @week_end   RELDATE = 'WE-1';  -- last Saturday
 ```

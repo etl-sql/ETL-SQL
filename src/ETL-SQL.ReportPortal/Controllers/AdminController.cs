@@ -131,35 +131,27 @@ public class AdminController(
 
         if (!string.IsNullOrWhiteSpace(q))
         {
-            var allFilteredUsers = await query
-                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-                .OrderBy(u => u.UserName)
-                .ToListAsync();
-
-            var term = q.Trim();
-            var matchedUsers = allFilteredUsers.Where(u =>
-                (u.UserName != null && u.UserName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.Email != null && u.Email.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.FirstName != null && u.FirstName.Contains(term, StringComparison.OrdinalIgnoreCase)) ||
-                (u.LastName != null && u.LastName.Contains(term, StringComparison.OrdinalIgnoreCase))
-            ).ToList();
-
-            total = matchedUsers.Count;
-            users = matchedUsers
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            // Filter server-side so the database does the matching and pagination instead of loading the
+            // whole users table into memory. ToLower()+Contains translates to LOWER(col) LIKE '%term%',
+            // which is case-insensitive on both SQLite and PostgreSQL (the previous
+            // Contains(..., StringComparison.OrdinalIgnoreCase) overload is not EF-translatable, so it
+            // forced full materialization + client-side filtering/paging).
+            var term = q.Trim().ToLower();
+            query = query.Where(u =>
+                (u.UserName != null && u.UserName.ToLower().Contains(term)) ||
+                (u.Email != null && u.Email.ToLower().Contains(term)) ||
+                (u.FirstName != null && u.FirstName.ToLower().Contains(term)) ||
+                (u.LastName != null && u.LastName.ToLower().Contains(term)));
         }
-        else
-        {
-            total = await query.CountAsync();
-            users = await query
-                .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
-                .OrderBy(u => u.UserName)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-        }
+
+        total = await query.CountAsync();
+        users = await query
+            .AsNoTracking()
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .OrderBy(u => u.UserName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
 
         var items = new List<UserDto>();
         foreach (var u in users)
@@ -289,10 +281,14 @@ public class AdminController(
 
         var results = new List<BulkMutationResult>();
         var updatedIds = new List<int>();
+        // Fetch all targeted users in one query (was an N+1 — one round-trip per item). Entities stay
+        // tracked; the per-user SaveChangesAsync below is intentional so one optimistic-concurrency
+        // conflict does not fail the whole batch.
+        var requestedIds = items.Select(item => item.Id).ToList();
+        var usersById = await db.Users.Where(u => requestedIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
         foreach (var item in items)
         {
-            var user = await db.Users.FirstOrDefaultAsync(candidate => candidate.Id == item.Id);
-            if (user is null)
+            if (!usersById.TryGetValue(item.Id, out var user))
             {
                 results.Add(new(item.Id, "NotFound"));
                 continue;
@@ -746,13 +742,20 @@ public class AdminController(
         var results = new List<BulkMutationResult>();
         var affectedUserIds = new HashSet<int>();
         var deleted = 0;
+        // Load every targeted group (with the navigations the delete touches) in one split query — was
+        // an N+1 that re-queried each group inside the loop. Entities stay tracked; the per-group
+        // SaveChangesAsync below is intentional so one optimistic-concurrency conflict does not fail the
+        // whole batch. AsSplitQuery avoids a cartesian explosion across the two collection includes.
+        var requestedIds = items.Select(item => item.Id).ToList();
+        var groupsById = await db.Groups
+            .Include(value => value.UserGroups)
+            .Include(value => value.FolderAcls)
+            .Where(value => requestedIds.Contains(value.Id))
+            .AsSplitQuery()
+            .ToDictionaryAsync(value => value.Id);
         foreach (var item in items)
         {
-            var group = await db.Groups
-                .Include(value => value.UserGroups)
-                .Include(value => value.FolderAcls)
-                .FirstOrDefaultAsync(value => value.Id == item.Id);
-            if (group is null)
+            if (!groupsById.TryGetValue(item.Id, out var group))
             {
                 results.Add(new(item.Id, "NotFound"));
                 continue;
@@ -781,7 +784,12 @@ public class AdminController(
             }
             catch (DbUpdateConcurrencyException)
             {
-                db.ChangeTracker.Clear();
+                // Detach only this group's graph: after a failed save it stays tracked as Deleted and
+                // would otherwise leak into the next group's SaveChanges. Clearing the whole
+                // ChangeTracker (the old single-query approach) would detach the rest of the batch.
+                db.Entry(group).State = EntityState.Detached;
+                foreach (var membership in group.UserGroups) db.Entry(membership).State = EntityState.Detached;
+                foreach (var acl in group.FolderAcls) db.Entry(acl).State = EntityState.Detached;
                 var currentVersion = await db.Groups
                     .Where(value => value.Id == item.Id)
                     .Select(value => (long?)value.Version)
@@ -1120,6 +1128,7 @@ public class AdminController(
         await deliveryStatus.SynchronizeAllAsync();
 
         var viewLogs = await db.AuditLogs
+            .AsNoTracking()
             .Where(a => a.Action == "VIEW_SNAPSHOT"
                 && a.ResourceType == "Report"
                 && a.ResourceId != null
@@ -1150,6 +1159,7 @@ public class AdminController(
             .ToDictionaryAsync(x => x.ReportId, x => x.Failures);
 
         var reports = await db.Reports
+            .AsNoTracking()
             .Include(r => r.Folder)
             .Where(r => !r.IsDeleted)
             .OrderBy(r => r.Folder.Path)

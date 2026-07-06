@@ -62,14 +62,14 @@ namespace ETL_SQL.Connectors
             _client = CreateClient(_host, _port, username, password, useSsl, passive);
 
             // Security Hardening: egress control
-            context.SecurityService.ValidateHost(_host);
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, _host);
         }
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
             return await Task.FromResult("FTP Server");
         }
         public HashSet<string> GetSupportedFunctions() => new();
@@ -113,6 +113,8 @@ namespace ETL_SQL.Connectors
         private void EnsureConnected()
         {
             if (_client == null) throw new ExecutionException("FTP Client is not initialized.");
+            if (_context != null)
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(_context, _host);
             if (!_client.IsConnected)
             {
                 _client.Connect();

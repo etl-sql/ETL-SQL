@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -11,12 +12,32 @@ public class SetThresholdStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(SetThresholdStatement);
 
+    /// <summary>
+    /// Threshold overrides that map to an enterprise-governed maximum. A SET may only make these
+    /// stricter (smaller); attempting a weaker value is denied and the enterprise value retained —
+    /// unlike the local <see cref="ETL_SQL.Services.SecurityService.ValidateThresholdOverride"/>
+    /// guardrail, this enterprise ceiling has no approved-safe-zone bypass.
+    /// </summary>
+    private static string? GovernedCeilingKey(ThresholdType type) => type switch
+    {
+        ThresholdType.MaxParallelDegree => "Security:MaxParallelDegree",
+        ThresholdType.MaxFileOperations => "Security:MaxFileOperationsPerScript",
+        ThresholdType.MaxRecursiveDepth => "Security:MaxRecursiveNestingDepth",
+        ThresholdType.MaxSmtpEmailsPerScript => "Security:MaxSmtpEmailsPerScript",
+        ThresholdType.MaxStringResultSize => "Security:MaxStringResultSize",
+        _ => null
+    };
+
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var s = (SetThresholdStatement)statement;
         var val = await context.EvaluateValue(s.Value, new Row());
 
         if (val == null) return;
+
+        if (GovernedCeilingKey(s.Type) is { } governedKey)
+            OperationPolicyBoundary.EnforceCeiling(context, governedKey,
+                Convert.ToInt64(val), $"SET {s.Type}");
 
         context.SecurityService.ValidateThresholdOverride(s.Type, val, context);
 

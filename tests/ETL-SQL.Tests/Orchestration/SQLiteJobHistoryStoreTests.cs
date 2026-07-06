@@ -42,6 +42,145 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task PruneHistoryAsync_RemovesOldCompletedRows_KeepsRunningAndRecent()
+        {
+            await _store.InitializeAsync();
+
+            // A completed row and an in-flight RUNNING row (no LogJobEnd).
+            var completed = await _store.LogJobStartAsync("JobA");
+            await _store.LogJobEndAsync(completed, "Completed", rowsProcessed: 5);
+            await _store.LogJobStartAsync("JobB");
+
+            // Retention far in the past prunes nothing — both rows are recent.
+            Assert.Equal(0, await _store.PruneHistoryAsync(TimeSpan.FromDays(30)));
+
+            // Cutoff = now removes the completed row but preserves the in-flight RUNNING one.
+            Assert.Equal(1, await _store.PruneHistoryAsync(TimeSpan.Zero));
+
+            var remaining = (await _store.GetHistoryAsync(limit: 100)).ToList();
+            Assert.Single(remaining);
+            Assert.Equal("JobB", remaining[0].JobName);
+        }
+
+        [Fact]
+        public async Task ReconcileStaleRunning_MarksOldRunningInterrupted_KeepsRecentAndTerminal()
+        {
+            await _store.InitializeAsync();
+
+            // An in-flight RUNNING row (just started) and a completed row.
+            await _store.LogJobStartAsync("RecentRunning");
+            var done = await _store.LogJobStartAsync("Finished");
+            await _store.LogJobEndAsync(done, "SUCCESS");
+
+            // maxRuntime far in the future prunes nothing (the RUNNING row is recent).
+            Assert.Equal(0, await _store.ReconcileStaleRunningAsync(TimeSpan.FromDays(1)));
+
+            // maxRuntime of zero treats every RUNNING row as overdue → the recent one is marked
+            // INTERRUPTED, while the already-terminal SUCCESS row is untouched.
+            Assert.Equal(1, await _store.ReconcileStaleRunningAsync(TimeSpan.Zero));
+
+            var rows = (await _store.GetHistoryAsync(limit: 100)).ToList();
+            Assert.Equal("INTERRUPTED", rows.Single(r => r.JobName == "RecentRunning").Status);
+            Assert.Equal("SUCCESS", rows.Single(r => r.JobName == "Finished").Status);
+        }
+
+        [Fact]
+        public async Task ReconcileStaleRunning_IsOverwrittenByLateCompletion()
+        {
+            await _store.InitializeAsync();
+
+            // A job whose RUNNING row is reconciled to INTERRUPTED while it was actually still running.
+            var id = await _store.LogJobStartAsync("SlowJob");
+            Assert.Equal(1, await _store.ReconcileStaleRunningAsync(TimeSpan.Zero));
+
+            // The eventual completion write overwrites INTERRUPTED with the real terminal status.
+            await _store.LogJobEndAsync(id, "SUCCESS", rowsProcessed: 3);
+            var row = (await _store.GetHistoryAsync("SlowJob")).Single();
+            Assert.Equal("SUCCESS", row.Status);
+        }
+
+        [Fact]
+        public async Task HostMetrics_Append_Get_Prune_RoundTrips()
+        {
+            await _store.InitializeAsync();
+            var now = DateTime.UtcNow;
+
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-a", now, 42.5, 10.0, HostCpuPercent: null, StateDiskFreeBytes: 1000, SpillDiskFreeBytes: 2000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-a", now.AddDays(-10), 30.0, 5.0, HostCpuPercent: 88.0, StateDiskFreeBytes: 500, SpillDiskFreeBytes: 600));
+            await _store.AppendHostMetricAsync(new HostMetricSample("node-b", now, 55.0, 20.0, HostCpuPercent: 77.0, StateDiskFreeBytes: 3000, SpillDiskFreeBytes: 4000));
+
+            // 'since' filter: only samples from the last hour, for node-a.
+            var recentA = await _store.GetHostMetricsAsync("node-a", now.AddHours(-1));
+            Assert.Single(recentA);
+            Assert.Equal(42.5, recentA[0].MemoryLoadPercent);
+            Assert.Null(recentA[0].HostCpuPercent);
+            Assert.Equal(1000, recentA[0].StateDiskFreeBytes);
+
+            // Non-null HostCpuPercent round-trips.
+            var recentB = await _store.GetHostMetricsAsync("node-b", now.AddHours(-1));
+            Assert.Equal(77.0, recentB[0].HostCpuPercent);
+
+            // Null nodeId returns every node; wide window returns the old row too.
+            Assert.Equal(3, (await _store.GetHostMetricsAsync(null, now.AddDays(-30))).Count);
+
+            // Prune older than 1 day removes only the 10-day-old row.
+            Assert.Equal(1, await _store.PruneHostMetricsAsync(TimeSpan.FromDays(1)));
+            Assert.Equal(2, (await _store.GetHostMetricsAsync(null, now.AddDays(-30))).Count);
+        }
+
+        [Fact]
+        public async Task RollUp_AggregatesJobAndHostByDay_IsIdempotent_AndPrunable()
+        {
+            await _store.InitializeAsync();
+
+            // Job history: 2 runs of one job (1 failure), rows 5+3, peak mem 100/200.
+            var f = await _store.LogJobStartAsync("RJob");
+            await _store.LogJobEndAsync(f, "FAILURE", "boom", rowsProcessed: 5, peakMemoryBytes: 100);
+            var s = await _store.LogJobStartAsync("RJob");
+            await _store.LogJobEndAsync(s, "SUCCESS", rowsProcessed: 3, peakMemoryBytes: 200);
+
+            // Host metrics: 3 samples for one node. The first predates the whole-host CPU probe
+            // (HostCpuPercent null) — AVG/MAX must aggregate over the two non-null samples only.
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 40, 10, null, 1000, 5000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 60, 30, 20.0, 500, 4000));
+            await _store.AppendHostMetricAsync(new HostMetricSample("n1", DateTime.UtcNow, 50, 20, 80.0, 800, 4500));
+
+            // A second node with no whole-host CPU at all rolls up to null, not 0.
+            await _store.AppendHostMetricAsync(new HostMetricSample("n2", DateTime.UtcNow, 30, 5, null, 2000, 6000));
+
+            await _store.RollUpJobHistoryAsync();
+            await _store.RollUpHostMetricsAsync();
+
+            var job = Assert.Single(await _store.GetJobHistoryDailyAsync("RJob", DateTime.Now.AddDays(-1)));
+            Assert.Equal(2, job.RunCount);
+            Assert.Equal(1, job.FailureCount);
+            Assert.Equal(8, job.TotalRows);
+            Assert.Equal(200, job.MaxPeakMemoryBytes);
+
+            var host = Assert.Single(await _store.GetHostMetricsDailyAsync("n1", DateTime.UtcNow.AddDays(-1)));
+            Assert.Equal(50.0, host.AvgMemoryLoadPercent, 1);
+            Assert.Equal(60.0, host.MaxMemoryLoadPercent, 1);
+            Assert.Equal(500, host.MinStateDiskFreeBytes);
+            Assert.NotNull(host.AvgHostCpuPercent);
+            Assert.Equal(50.0, host.AvgHostCpuPercent!.Value, 1); // AVG(20, 80) — null sample excluded
+            Assert.Equal(80.0, host.MaxHostCpuPercent!.Value, 1);
+
+            var host2 = Assert.Single(await _store.GetHostMetricsDailyAsync("n2", DateTime.UtcNow.AddDays(-1)));
+            Assert.Null(host2.AvgHostCpuPercent);
+            Assert.Null(host2.MaxHostCpuPercent);
+
+            // Idempotent: re-running does not duplicate rows.
+            await _store.RollUpJobHistoryAsync();
+            await _store.RollUpHostMetricsAsync();
+            Assert.Single(await _store.GetJobHistoryDailyAsync("RJob", DateTime.Now.AddDays(-1)));
+            Assert.Single(await _store.GetHostMetricsDailyAsync("n1", DateTime.UtcNow.AddDays(-1)));
+
+            // Daily pruning (negative maxAge → cutoff in the future → today's rows are older) removes them.
+            Assert.Equal(1, await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(-1)));
+            Assert.Equal(2, await _store.PruneHostMetricsDailyAsync(TimeSpan.FromDays(-1))); // n1 + n2
+        }
+
+        [Fact]
         public async Task PublishBundle_UnchangedContent_ReusesLatestVersion()
         {
             await _store.InitializeAsync();

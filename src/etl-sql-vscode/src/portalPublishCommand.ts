@@ -57,7 +57,7 @@ async function ensureAuthenticated(context: vscode.ExtensionContext, portalUrl: 
     const tokenKey  = `portalToken_${portalUrl}`;
     const expiryKey = `portalTokenExpiry_${portalUrl}`;
 
-    const token  = context.globalState.get<string>(tokenKey);
+    const token  = await context.secrets.get(tokenKey);
     const expiry = context.globalState.get<number>(expiryKey, 0);
 
     if (token && Date.now() < expiry) {
@@ -86,7 +86,7 @@ async function ensureAuthenticated(context: vscode.ExtensionContext, portalUrl: 
             return null;
         }
         const accessToken = resData.token as string;
-        await context.globalState.update(tokenKey,  accessToken);
+        await context.secrets.store(tokenKey, accessToken);
         await context.globalState.update(expiryKey, Date.now() + 55 * 60 * 1000);
         return accessToken;
     } catch (e: unknown) {

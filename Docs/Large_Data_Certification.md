@@ -8,12 +8,13 @@ Current status: the implemented lane is a **Smoke-tier certification harness**. 
 
 ## Certification Tiers
 
-| Tier | Row Count | Purpose | How to Run |
-| :--- | :--- | :--- | :--- |
-| **Smoke** | 50k–100k rows | PR/local validation — fast, spill forced by threshold override | `dotnet test --filter "Category=ScaleCertification&Tier=Smoke"` |
-| **Standard** | 1M+ rows | Release validation — real memory pressure using the smoke scenario set at higher row scale | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` |
-| **Stress** | 10M+ rows | Nightly / manual only — OOM risk on small machines | `.\scripts\Test-ScaleCertification.ps1 -Tier Stress` |
-| **Provider** | 50k+ rows | Real local connector validation for providers available without external services | `.\scripts\Test-ScaleCertification.ps1 -Tier Provider` |
+| Tier | Row Count | Memory Ceiling | Purpose | How to Run |
+| :--- | :--- | :--- | :--- | :--- |
+| **Smoke** | 50k–100k rows | 1 GB | PR/local validation — fast, spill forced by threshold override | `dotnet test --filter "Category=ScaleCertification&Tier=Smoke"` |
+| **Standard** | 500k–1M rows | 4 GB | Release validation — real memory pressure using standard scaling | `.\scripts\Test-ScaleCertification.ps1 -Tier Standard` |
+| **Stress** | 5M–10M rows | 8 GB | Nightly / manual only — validates deeper resource usage | `.\scripts\Test-ScaleCertification.ps1 -Tier Stress` |
+| **Huge** | 25M–50M rows | 16 GB | Maximum load capacity planning / release gate validation | `.\scripts\Test-ScaleCertification.ps1 -Tier Huge` |
+| **Provider** | 50k+ rows | 1 GB | Real local connector validation for providers available without external services | `.\scripts\Test-ScaleCertification.ps1 -Tier Provider` |
 
 Run the full certification lane and produce a report with:
 
@@ -110,13 +111,14 @@ The test suite reads `CERT_ROW_SCALE` directly for Smoke tests. The Standard, St
 
 Every certification scenario asserts that managed memory remains below a documented tier bound. The emitted `CERT_METRIC` JSON and generated Markdown report include both observed managed memory and the enforced bound.
 
-Default bounds are intentionally machine-profile oriented:
+Default bounds are now fixed ceilings to enforce machine-independent memory constraints:
 
 | Row Scale | Effective Memory Tier | Default Bound |
 | :--- | :--- | :--- |
-| `<= 1` | Smoke | `max(512 MB, rowCount * 0.02 MB)` |
-| `> 1` and `<= 10` | Standard | `max(2048 MB, rowCount * 0.012 MB)` |
-| `> 10` | Stress | `max(8192 MB, rowCount * 0.008 MB)` |
+| `<= 1` | Smoke | 1 GB (1,024 MB) |
+| `> 1` and `<= 10` | Standard | 4 GB (4,096 MB) |
+| `> 10` and `<= 100` | Stress | 8 GB (8,192 MB) |
+| `> 100` | Huge | 16 GB (16,384 MB) |
 
 Set `CERT_MEMORY_BOUND_MB` to override the default when certifying on a constrained or intentionally oversized validation agent. The override is treated as the hard assertion limit for every scenario in that run.
 

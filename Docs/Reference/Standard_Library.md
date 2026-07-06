@@ -221,6 +221,9 @@ FROM #comments;
 
 ## 4. Date & Time Functions
 
+See [Dates, Times, and Time Zones](Dates_and_Times.md) for the engine temporal model, timezone and
+DST rules, connector normalization matrix, precision, and invariant formatting guidance.
+
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
 | `GETDATE` / `NOW` / `SYSDATE` | `GETDATE()`, `NOW()`, `SYSDATE()` | Current system date and time (bare identifiers or function calls) |
@@ -239,7 +242,7 @@ FROM #comments;
 | `DATETIMEOFFSETSFROMPARTS` | `DATETIMEOFFSETSFROMPARTS(y, m, d, h, mi, s, frac, h_off, m_off, prec)` | Constructs `DATETIMEOFFSET` from components |
 | `TIMEFROMPARTS` | `TIMEFROMPARTS(h, mi, s, frac, prec)` | Constructs `TIME` from parts |
 | `TRUNC` | `TRUNC(datetime)` | Truncates the time portion; returns date |
-| `TO_DATE` | `TO_DATE(string [, format])` | Converts string representation of date/time to a `DATETIME` |
+| `TO_DATE` | `TO_DATE(string [, format])` | Converts an ISO-compatible string to `DATETIME`; the optional format argument is reserved and not currently applied |
 | `RELDATE` | `RELDATE(expression)` | Resolves a relative date expression string (e.g. `'D-1'`, `'M-1'`) |
 | `DATE_TRUNC` | `DATE_TRUNC(part, date)` | Truncates date to specified boundary (Postgres-compatible parameter order) |
 | `TO_TIMESTAMP` | `TO_TIMESTAMP(seconds)` | Converts Unix epoch seconds (with fractional seconds) to a `DATETIME` |
@@ -386,7 +389,7 @@ FROM #products;
 | `NULLIF` | `NULLIF(v1, v2)` | `NULL` if `v1 = v2`, else `v1` |
 | `IS_NULL` | `IS_NULL(expr)` | `TRUE` if expression is null |
 | `IS_NOT_NULL` | `IS_NOT_NULL(expr)` | `TRUE` if expression is not null |
-| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional return |
+| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional — compiles to `CASE WHEN` (short-circuits, pushes down as CASE) |
 | `DECODE` | `DECODE(val, s1, r1, ..., default)` | Oracle-style `CASE` shorthand |
 | `CASE...WHEN...END` | — | Sequential conditional evaluation |
 
@@ -458,8 +461,45 @@ DECLARE @max_id INT = (SELECT MAX(order_id) FROM #staging);
 
 IF @max_id IS NOT NULL
 BEGIN
-    SET_JOB_STATE('last_loaded_id', CAST(@max_id AS VARCHAR));
+    SELECT SET_JOB_STATE('last_loaded_id', CAST(@max_id AS VARCHAR));
 END
+```
+
+### Row-Level Security & Identity Functions
+
+#### `HAS_GROUP`
+- **Signature:** `HAS_GROUP(groupName)`
+- **Return Type:** `BOOLEAN`
+- **Example:**
+```sql
+SELECT * FROM #data WHERE Region = 'US' AND HAS_GROUP('US_Sales') = TRUE;
+```
+
+#### `HAS_ROLE`
+- **Signature:** `HAS_ROLE(roleName)`
+- **Return Type:** `BOOLEAN`
+- **Example:**
+```sql
+IF HAS_ROLE('Admin') = TRUE
+BEGIN
+    PRINT 'User is an administrator';
+END
+```
+
+#### `USER_GROUPS`
+- **Signature:** `USER_GROUPS()`
+- **Return Type:** `TABLE (GroupName STRING)`
+- **Example:**
+```sql
+SELECT * FROM #regions WHERE RegionCode IN (SELECT GroupName FROM USER_GROUPS());
+```
+
+#### `USER_ROLES`
+- **Signature:** `USER_ROLES()`
+- **Return Type:** `TABLE (RoleName STRING)`
+- **Example:**
+```sql
+SELECT * FROM #roles WHERE RoleCode IN (SELECT RoleName FROM USER_ROLES());
 ```
 
 ---
@@ -523,6 +563,8 @@ END
 | :--- | :--- | :--- |
 | `JSON_VALUE` / `JSON_EXTRACT` | `JSON_VALUE(json, path)` | Scalar extracted value (alias: `JSON_EXTRACT`) |
 | `JSON_QUERY` | `JSON_QUERY(json, path)` | JSON object/array fragment |
+| `JSON_GET` | `JSON_GET(json, key_or_index)` — or `json -> key` | One access step as JSON (chainable); the `->` operator |
+| `JSON_GET_TEXT` | `JSON_GET_TEXT(json, key_or_index)` — or `json ->> key` | One access step as text (strings unquoted); the `->>` operator |
 | `JSON_MODIFY` | `JSON_MODIFY(json, path, val)` | Updated JSON string |
 | `ISJSON` | `ISJSON(str)` | `1` if valid JSON |
 | `JSON_EXISTS` | `JSON_EXISTS(json, path)` | `1` if path exists |

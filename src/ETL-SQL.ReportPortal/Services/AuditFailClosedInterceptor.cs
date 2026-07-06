@@ -40,7 +40,9 @@ public sealed class AuditFailClosedInterceptor(PortalConfig config, TimeProvider
     private bool TryGetAuditedContext(DbContextEventData eventData, out PortalDbContext db)
     {
         db = null!;
-        if (!config.Audit.RequireRemoteDelivery || eventData.Context is not PortalDbContext context)
+        var required = config.Audit.ResolveRequireRemoteDelivery(
+            ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current.IsEnrolled);
+        if (!required || eventData.Context is not PortalDbContext context)
             return false;
 
         var stagingAudit = context.ChangeTracker

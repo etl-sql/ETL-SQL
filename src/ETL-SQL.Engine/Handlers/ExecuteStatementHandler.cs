@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -48,7 +49,9 @@ public class ExecuteStatementHandler : IStatementHandler
 
     private async Task ExecuteScript(ExecuteStatement stmt, IExecutionContext context)
     {
-        var scriptPath = context.ResolvePath(stmt.ProcedureName);
+        var scriptPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(stmt.ProcedureName), FileSystemAccessKind.Read, validateFileType: false)
+            .CanonicalPath;
 
         _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
 

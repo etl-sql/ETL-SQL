@@ -59,6 +59,12 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("Action", "Timestamp");
+
+                    b.HasIndex("ResourceType", "ResourceId");
+
                     b.ToTable("AuditLogs");
                 });
 
@@ -363,6 +369,115 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Groups");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PolicyMachineEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ClientCertificateThumbprint")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EnrollmentId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastSeenAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MachineId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("RegisteredAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Revoked")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RevokedReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tenant")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MachineId")
+                        .IsUnique();
+
+                    b.HasIndex("Tenant", "Environment");
+
+                    b.ToTable("PolicyMachines");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PolicyVersionEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Author")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("IssuedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PublishedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reviewer")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RolloutState")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SignedEnvelopeJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SupersededVersion")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tenant")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Tenant", "Environment", "PolicyVersion")
+                        .IsUnique();
+
+                    b.HasIndex("Tenant", "Environment", "RolloutState");
+
+                    b.ToTable("PolicyVersions");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalExecutionJob", b =>

@@ -265,7 +265,7 @@ In `LanguageMetadata` or the suggestion providers, add the standard tag names as
 
 ### Optional: TAG SCHEMA Validation (Stretch Goal for Phase 3)
 
-```sql
+```text
 -- Define validation rules for the session
 SET TAG VALIDATION ON;   -- enable; off by default for backward compatibility
 

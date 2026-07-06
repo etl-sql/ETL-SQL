@@ -41,11 +41,6 @@ namespace ETL_SQL.Connectors.Json
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
 
             _options = options;
             if (options != null)
@@ -66,31 +61,30 @@ namespace ETL_SQL.Connectors.Json
             }
 
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = PrepareReadPath(tempFiles, ".json");
-
-            try
+            using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
+            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
-                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
-                {
-                    yield return batch;
-                }
-            }
-            finally
-            {
-                DeleteTempFiles(tempFiles);
+                yield return batch;
             }
         }
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             var allRows = new List<IDictionary<string, object?>>();
             bool alreadyJson = false;
             string? singleJson = null;
@@ -125,19 +119,35 @@ namespace ETL_SQL.Connectors.Json
                     await System.IO.File.WriteAllTextAsync(tempFile, JsonSerializer.Serialize(allRows, options));
                 }
 
+                string fileToEncrypt = tempFile;
+                string? zippedTemp = null;
+
+                if (_compress)
+                {
+                    zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
+                    using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
+                    {
+                        string entryName = System.IO.Path.GetFileName(_filePath);
+                        if (entryName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        else if (entryName.EndsWith(".pgp", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        
+                        zip.CreateEntryFromFile(tempFile, entryName);
+                    }
+                    fileToEncrypt = zippedTemp;
+                }
+
                 if (_encryption.Enabled)
                 {
-                    _encryption.EncryptFile(tempFile, _filePath);
+                    _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
                 {
-                    string zipPath = _filePath;
-                    if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
-                    if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
-                    using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
-                    {
-                        zip.CreateEntryFromFile(tempFile, System.IO.Path.GetFileName(_filePath));
-                    }
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
+                    System.IO.File.Move(fileToEncrypt, _filePath, true);
                 }
                 else
                 {
@@ -145,6 +155,11 @@ namespace ETL_SQL.Connectors.Json
                     if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
                     System.IO.File.Move(tempFile, _filePath);
+                }
+
+                if (zippedTemp != null && System.IO.File.Exists(zippedTemp))
+                {
+                    try { System.IO.File.Delete(zippedTemp); } catch { /* best effort */ }
                 }
             }
             finally
@@ -157,21 +172,12 @@ namespace ETL_SQL.Connectors.Json
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
 
-            var tempFiles = new List<string>();
-            string effectivePath;
-            try { effectivePath = PrepareReadPath(tempFiles, ".json"); }
-            catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to prepare '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-
             try
             {
-                using var stream = System.IO.File.OpenRead(effectivePath);
+                using var stream = FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".json");
                 return await JsonExtractor.GetColumnsAsync(stream, _rootPath);
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
-            finally
-            {
-                DeleteTempFiles(tempFiles);
-            }
         }
 
         private string PrepareReadPath(List<string> tempFiles, string extension)

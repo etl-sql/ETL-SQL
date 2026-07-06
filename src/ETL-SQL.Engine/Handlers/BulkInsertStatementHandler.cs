@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -96,6 +97,11 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
             throw new ExecutionException("FLATFILE connector not found.");
 
         string resolvedPath = context.ResolvePath(stmt.FilePath);
+        // Flat-file connectors perform their own file-type validation; the authorizer adds
+        // enterprise-root and policy-freshness enforcement at this operation boundary.
+        resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, resolvedPath, FileSystemAccessKind.Read, validateFileType: false)
+            .CanonicalPath;
         var source = connector.CreateDataSource(context, resolvedPath, ffOptions);
 
         try

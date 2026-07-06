@@ -78,6 +78,7 @@ RENAME FILE 'C:\Incoming\latest.csv' TO 'processing.csv';
 DELETE FILE 'C:\Incoming\processing.csv';
 
 -- Compress and encrypt a finished payload using PGP
+-- ⚠ Always compress BEFORE encrypting (see note below)
 COMPRESS FILE 'C:\Outbound\payload.xml' TO 'C:\Outbound\payload.zip';
 ENCRYPT FILE  'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.pgp' PGP_KEY 'C:\Keys\partner_public.asc';
 
@@ -89,6 +90,13 @@ DECRYPT FILE 'C:\Incoming\secrets.enc' TO 'C:\Staging\secrets.csv'
 CREATE DIRECTORY 'C:\AppTemp\PipelineA';
 DELETE DIRECTORY_CONTENTS 'C:\AppTemp\PipelineA' WITH(RECURSIVE=ON);
 ```
+
+> [!IMPORTANT]
+> **Always compress before encrypting.** Encryption maximises data entropy (randomness), which eliminates the redundancy that compression algorithms rely on. Compressing already-encrypted data produces a file that is the same size or larger than the input. This ordering rule applies to:
+>
+> - **Standalone file operations**: `COMPRESS FILE` must precede `ENCRYPT FILE` on the same target. The linter enforces this with the `CompressAfterEncrypt` rule (code `PERF-COMPRESS-AFTER-ENCRYPT`).
+> - **File connector `WITH()` options**: When both `COMPRESS=ON` and `ENCRYPT=ON` are specified, the engine automatically applies compression first, regardless of the order the options are written in the `WITH()` clause.
+
 
 ### 1.6 Path Resolution & Directory Connections
 

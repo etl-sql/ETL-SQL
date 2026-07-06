@@ -7,7 +7,9 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,16 +21,22 @@ namespace ETL_SQL.Engine.Engines;
 /// </summary>
 public class ExternalWindowEngine
 {
+    private const int MaxFanOutSampleRows = 4096;
+    private const long MaxFanOutSampleBytes = 16L * 1024 * 1024;
+
     private readonly IExecutionContext _context;
     private readonly WindowEngine _inMemoryEngine;
     private readonly ExternalSortEngine _sortEngine;
     private readonly ILogger _logger;
     private readonly IBufferManager? _bufferManager;
-    public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
+    private int _partitionCount;
+    public int PartitionCount => _partitionCount;
+    internal long ColumnarWindowScanRows { get; private set; }
 
     public ExternalWindowEngine(IExecutionContext context, WindowEngine inMemoryEngine, ILogger logger)
     {
         _context = context;
+        _partitionCount = Math.Max(1, context.ExternalHashPartitions);
         _inMemoryEngine = inMemoryEngine;
         _sortEngine = new ExternalSortEngine(context, logger);
         _logger = logger;
@@ -68,7 +76,7 @@ public class ExternalWindowEngine
         public WindowGroup(WindowSignature sig) => Signature = sig;
     }
 
-    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
+    public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt, long? knownRowCount = null, long? knownInputBytes = null)
     {
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var allWindowCalls = stmt.Columns
@@ -109,7 +117,10 @@ public class ExternalWindowEngine
                 var group = groups[i];
                 bool isLastGroup = (i == groups.Count - 1);
 
-                currentStream = ProcessWindowGroup(currentStream, group, stmt);
+                currentStream = ProcessWindowGroup(
+                    currentStream, group, stmt,
+                    knownRowCount: i == 0 ? knownRowCount : null,
+                    knownInputBytes: i == 0 ? knownInputBytes : null);
 
                 if (!isLastGroup)
                 {
@@ -142,11 +153,17 @@ public class ExternalWindowEngine
         }
     }
 
-    private async IAsyncEnumerable<Row> ProcessWindowGroup(IAsyncEnumerable<Row> stream, WindowGroup group, SelectStatement stmt)
+    private async IAsyncEnumerable<Row> ProcessWindowGroup(
+        IAsyncEnumerable<Row> stream,
+        WindowGroup group,
+        SelectStatement stmt,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
         _logger.WriteLine($"[blue]   - Group: {group.Columns.Count} cols, PARTITION BY ({(group.Signature.PartitionBy?.Count ?? 0)} expressions)[/]");
 
-        var partitionInfos = await PartitionStream(stream, group.Signature.PartitionBy);
+        var partitionInfos = await PartitionStream(
+            stream, group.Signature.PartitionBy, knownRowCount, knownInputBytes);
         try
         {
             foreach (var info in partitionInfos)
@@ -398,6 +415,88 @@ public class ExternalWindowEngine
 
     private async IAsyncEnumerable<Row> ProcessBucketPartitionReplaySpill(string name, WindowGroup group)
     {
+        var results = await TryScanPartitionReplayBatches(name, group);
+        if (results == null)
+            results = await ScanPartitionReplayRows(name, group);
+
+        await foreach (var row in ReadPartitionStream(name))
+        {
+            foreach (var (key, value) in results)
+                row[key] = value;
+            yield return row;
+        }
+    }
+
+    private async Task<Dictionary<string, object?>?> TryScanPartitionReplayBatches(
+        string name,
+        WindowGroup group)
+    {
+        var functions = group.Columns.Select(column => (FunctionCallExpression)column.Expression).ToList();
+        if (functions.Any(function => function.Filter != null || !TryGetBatchArgument(function, out _)))
+            return null;
+        var accumulators = group.Columns
+            .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
+            .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
+            .ToList();
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        long scannedRows = 0;
+        await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+        if (reader is not IColumnarSpillReader columnarReader) return null;
+        await foreach (var batch in columnarReader.AsColumnBatchesAsync())
+        {
+            using (batch)
+            {
+                int? Ordinal(FunctionCallExpression function)
+                {
+                    if (!TryGetBatchArgument(function, out var argument) || argument == null) return null;
+                    return batch.Schema.GetOrdinal(argument);
+                }
+                var aggregateOrdinals = accumulators.Select(item => Ordinal(item.Function)).ToArray();
+                var valueFunctions = functions
+                    .Where(function => function.FunctionName.Equals("FIRST_VALUE", StringComparison.OrdinalIgnoreCase)
+                        || function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase))
+                    .Select(function => (Function: function, Ordinal: Ordinal(function)!.Value))
+                    .ToArray();
+                for (var rowIndex = 0; rowIndex < batch.RowCount; rowIndex++)
+                {
+                    for (var i = 0; i < accumulators.Count; i++)
+                    {
+                        var (function, accumulator) = accumulators[i];
+                        var value = aggregateOrdinals[i] is { } ordinal
+                            ? RowPacker.ReadBatchValue(batch, ordinal, rowIndex)
+                            : null;
+                        accumulator.Add(function.FunctionName, value, _context, IsCountStar(function));
+                    }
+                    foreach (var (function, ordinal) in valueFunctions)
+                    {
+                        var key = $"WINDOW_{function.ToSql().ToUpperInvariant()}";
+                        var value = RowPacker.ReadBatchValue(batch, ordinal, rowIndex);
+                        if (function.FunctionName.Equals("LAST_VALUE", StringComparison.OrdinalIgnoreCase)
+                            || !values.ContainsKey(key))
+                            values[key] = value;
+                    }
+                }
+                scannedRows += batch.RowCount;
+            }
+        }
+        foreach (var (function, accumulator) in accumulators)
+            values[$"WINDOW_{function.ToSql().ToUpperInvariant()}"] = accumulator.GetValue(function.FunctionName);
+        ColumnarWindowScanRows += scannedRows;
+        return values;
+    }
+
+    private static bool TryGetBatchArgument(FunctionCallExpression function, out string? argument)
+    {
+        argument = null;
+        if (IsCountStar(function)) return true;
+        if (function.Arguments.Count != 1 || function.Arguments[0] is not IdentifierExpression identifier)
+            return false;
+        argument = identifier.Name.Split('.').Last();
+        return argument != "*";
+    }
+
+    private async Task<Dictionary<string, object?>> ScanPartitionReplayRows(string name, WindowGroup group)
+    {
         var accumulators = group.Columns
             .Where(c => IsPartitionAggregate((FunctionCallExpression)c.Expression))
             .Select(c => (Function: (FunctionCallExpression)c.Expression, Accumulator: new StreamingWindowAggregate()))
@@ -442,12 +541,7 @@ public class ExternalWindowEngine
             }
         }
 
-        await foreach (var row in ReadPartitionStream(name))
-        {
-            foreach (var (key, value) in results)
-                row[key] = value;
-            yield return row;
-        }
+        return results;
     }
 
     private static bool IsPartitionAggregate(FunctionCallExpression f)
@@ -1122,8 +1216,25 @@ public class ExternalWindowEngine
         return true;
     }
 
-    private async Task<PartitionInfo[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)
+    private async Task<PartitionInfo[]> PartitionStream(
+        IAsyncEnumerable<Row> stream,
+        List<Expression>? partitionBy,
+        long? knownRowCount,
+        long? knownInputBytes)
     {
+        await using var enumerator = stream.GetAsyncEnumerator(_context.CancellationToken);
+        var sample = new List<Row>(MaxFanOutSampleRows);
+        long sampledBytes = 0;
+        while (sample.Count < MaxFanOutSampleRows
+            && sampledBytes < MaxFanOutSampleBytes
+            && await enumerator.MoveNextAsync())
+        {
+            var row = enumerator.Current;
+            sample.Add(row);
+            sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
+        }
+        await ConfigurePartitionCount(sample, partitionBy, knownRowCount, knownInputBytes);
+
         var names = new string[PartitionCount];
         var counts = new long[PartitionCount];
         var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
@@ -1136,7 +1247,7 @@ public class ExternalWindowEngine
 
         try
         {
-            await foreach (var row in stream)
+            await foreach (var row in ReplaySample(sample, enumerator))
             {
                 int pIdx = 0;
                 if (partitionBy != null && partitionBy.Count > 0)
@@ -1166,9 +1277,63 @@ public class ExternalWindowEngine
                 }
             }
             _context.Telemetry.PartitionsCount += usedCount;
+            _context.Telemetry.PartitionPassCount++;
         }
 
         return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
+    }
+
+    private async Task ConfigurePartitionCount(
+        IReadOnlyList<Row> sample,
+        List<Expression>? partitionBy,
+        long? knownRowCount,
+        long? knownInputBytes)
+    {
+        if (sample.Count == 0 || partitionBy == null || partitionBy.Count == 0) return;
+        long inputBytes = 0;
+        long keyBytes = 0;
+        var frequencies = new Dictionary<CompoundKey, int>();
+        foreach (var row in sample)
+        {
+            inputBytes = checked(inputBytes + row.EstimateHeapBytes());
+            var values = new object?[partitionBy.Count];
+            for (var i = 0; i < partitionBy.Count; i++)
+                values[i] = CompoundKey.NormalizeValue(await _context.EvaluateValue(partitionBy[i], row));
+            var key = new CompoundKey(values);
+            keyBytes = checked(keyBytes + RowMemory.EstimateKeyBytes(key));
+            frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
+        }
+
+        var budget = MemoryGovernor.Ceiling(_context);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        var hotFraction = frequencies.Values.Max() / (double)sample.Count;
+        var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
+        var plannedRows = hasExactTotal ? knownRowCount!.Value : sample.Count;
+        var plannedBytes = hasExactTotal ? knownInputBytes!.Value : inputBytes;
+        var estimatedDistinct = hasExactTotal
+            ? Math.Min(plannedRows, (long)Math.Ceiling(frequencies.Count * (plannedRows / (double)sample.Count)))
+            : frequencies.Count;
+        var plan = HashPartitionSizing.Calculate(
+            plannedBytes,
+            plannedRows,
+            (int)Math.Min(int.MaxValue, keyBytes / sample.Count),
+            budget,
+            estimatedDistinctKeys: (int)Math.Min(int.MaxValue, estimatedDistinct),
+            largestKeyFraction: hotFraction,
+            minimumPartitions: hasExactTotal ? 1 : _partitionCount,
+            maximumPartitions: Math.Max(1024, _partitionCount));
+        _partitionCount = hasExactTotal ? plan.PartitionCount : Math.Max(_partitionCount, plan.PartitionCount);
+        _logger.Debug(
+            "External window sampled {SampleRows} rows ({SampleBytes} bytes) and selected fan-out {FanOut}; estimated passes={Passes}, hotKey={HotKey}.",
+            sample.Count, inputBytes, _partitionCount, plan.EstimatedPartitionPasses, plan.HasUnsplittableHotKey);
+    }
+
+    private static async IAsyncEnumerable<Row> ReplaySample(
+        IReadOnlyList<Row> sample,
+        IAsyncEnumerator<Row> remainder)
+    {
+        foreach (var row in sample) yield return row;
+        while (await remainder.MoveNextAsync()) yield return remainder.Current;
     }
 
     private async Task SpillStreamToDisk(IAsyncEnumerable<Row> stream, string name)

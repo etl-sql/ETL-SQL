@@ -66,6 +66,12 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("Action", "Timestamp");
+
+                    b.HasIndex("ResourceType", "ResourceId");
+
                     b.ToTable("AuditLogs");
                 });
 
@@ -384,6 +390,119 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsUnique();
 
                     b.ToTable("Groups");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PolicyMachineEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ClientCertificateThumbprint")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EnrollmentId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("LastSeenAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("MachineId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("RegisteredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Revoked")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("RevokedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RevokedReason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tenant")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MachineId")
+                        .IsUnique();
+
+                    b.HasIndex("Tenant", "Environment");
+
+                    b.ToTable("PolicyMachines");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PolicyVersionEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Author")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PolicyVersion")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("PublishedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Reviewer")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RolloutState")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SignedEnvelopeJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SupersededVersion")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Tenant")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Tenant", "Environment", "PolicyVersion")
+                        .IsUnique();
+
+                    b.HasIndex("Tenant", "Environment", "RolloutState");
+
+                    b.ToTable("PolicyVersions");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalExecutionJob", b =>

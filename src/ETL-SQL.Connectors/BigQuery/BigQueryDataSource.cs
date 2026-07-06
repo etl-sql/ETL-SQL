@@ -56,7 +56,7 @@ namespace ETL_SQL.Connectors.BigQuery
 
             _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 1800;
 
-            context.SecurityService.ValidateHost("bigquery.googleapis.com");
+            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, "bigquery.googleapis.com");
         }
 
         public string ConnectionString => _connectionString;
@@ -268,7 +268,8 @@ namespace ETL_SQL.Connectors.BigQuery
                 ?? throw new ExecutionException("BigQuery: DATASET required for column introspection.");
 
             var client = await CreateClientAsync();
-            var sql = $"SELECT column_name FROM `{projectId}.{datasetId}.INFORMATION_SCHEMA.COLUMNS` " +
+            var sql = $"SELECT column_name FROM `{ValidateIdentifierPart(projectId, "project")}." +
+                      $"{ValidateIdentifierPart(datasetId, "dataset")}.INFORMATION_SCHEMA.COLUMNS` " +
                       "WHERE table_name = @tableName ORDER BY ordinal_position";
             try
             {
@@ -391,12 +392,33 @@ namespace ETL_SQL.Connectors.BigQuery
             };
         }
 
+        /// <summary>
+        /// Guards project/dataset IDs interpolated inside a backtick-quoted path. Unlike
+        /// <see cref="QuoteIdentifier"/> these parts cannot be individually re-quoted (the
+        /// whole path shares one backtick pair), so restrict them to BigQuery's legal
+        /// identifier characters instead.
+        /// </summary>
+        private static string ValidateIdentifierPart(string value, string kind)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !value.All(c =>
+                    char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or ':'))
+                throw new ExecutionException($"BigQuery: invalid {kind} identifier.");
+            return value;
+        }
+
         private static string QuoteIdentifier(string name)
         {
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
-                p.StartsWith('`') ? p : $"`{p.Replace("`", "\\`")}`"));
+            {
+                if (p.StartsWith('`') && p.EndsWith('`') && p.Length >= 2)
+                {
+                    var unquoted = p.Substring(1, p.Length - 2).Replace("`", "\\`");
+                    return $"`{unquoted}`";
+                }
+                return $"`{p.Replace("`", "\\`")}`";
+            }));
         }
     }
 }

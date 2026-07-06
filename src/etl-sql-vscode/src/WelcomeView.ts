@@ -5,6 +5,7 @@ import { resolveProductUri } from './pathResolver';
 
 export class WelcomeView {
     public static currentPanel: WelcomeView | undefined;
+    private static _htmlCache?: string;
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
@@ -98,12 +99,15 @@ export class WelcomeView {
         }
     }
 
-    private _update() {
-        this._panel.webview.html = this._getHtmlForWebview();
-    }
-
-    private _getHtmlForWebview() {
-        const htmlPath = path.join(this._extensionUri.fsPath, 'media', 'welcome.html');
-        return fs.readFileSync(htmlPath, 'utf8');
+    private async _update() {
+        try {
+            if (!WelcomeView._htmlCache) {
+                const htmlPath = path.join(this._extensionUri.fsPath, 'media', 'welcome.html');
+                WelcomeView._htmlCache = await fs.promises.readFile(htmlPath, 'utf8');
+            }
+            this._panel.webview.html = WelcomeView._htmlCache;
+        } catch (err: any) {
+            this._panel.webview.html = `<!DOCTYPE html><html><body>Error loading Welcome View: ${err.message}</body></html>`;
+        }
     }
 }

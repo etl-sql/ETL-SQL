@@ -17,7 +17,10 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("NULLIF", (args, ctx) => EvaluationUtils.IsSoftEqual(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1)) ? null : args.ElementAtOrDefault(0), "NULLIF(v1, v2): Returns NULL if v1 equals v2, else v1.");
             registry.RegisterWithHelp("IS_NULL", (args, ctx) => args[0].IsNull(), "IS_NULL(expr): Returns TRUE if the expression is null.");
             registry.RegisterWithHelp("IS_NOT_NULL", (args, ctx) => !args[0].IsNull(), "IS_NOT_NULL(expr): Returns TRUE if the expression is NOT null.");
-            registry.RegisterWithHelp("IIF", (args, ctx) => args.Count >= 3 ? (Convert.ToBoolean(args[0]) ? args[1] : args[2]) : args.FirstOrDefault(), "IIF(cond, true_val, false_val): Returns one of two values depending on a condition.");
+            // IIF(a, b, c) is lowered to CASE WHEN a THEN b ELSE c END by the parser (T-SQL semantics:
+            // short-circuit, pushes down as CASE). This registration remains only as a fallback for
+            // non-standard arities that the parser deliberately does not lower.
+            registry.RegisterWithHelp("IIF", (args, ctx) => args.Count >= 3 ? (Convert.ToBoolean(args[0]) ? args[1] : args[2]) : args.FirstOrDefault(), "IIF(cond, true_val, false_val): Shorthand for CASE WHEN cond THEN true_val ELSE false_val END — compiled to CASE at parse time, so the untaken branch is never evaluated and it pushes down to any connector.");
             registry.RegisterWithHelp("IFNULL", IsNull, "IFNULL(v1, v2): Alias for ISNULL.");
             registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => !a.IsNull()).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
             registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => !a.IsNull()).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");

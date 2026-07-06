@@ -7,6 +7,7 @@ using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Oracle.ManagedDataAccess.Client;
+using Oracle.ManagedDataAccess.Types;
 
 namespace ETL_SQL.Connectors.Oracle
 {
@@ -41,7 +42,7 @@ namespace ETL_SQL.Connectors.Oracle
 
             // Security Hardening: egress control
             var host = OracleConnector.GetHostStatic(connectionString, options);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
         }
 
         public IDataSource WithTable(string tableName) => new OracleDataSource(_context!, _connectionString, tableName, _options);
@@ -105,7 +106,7 @@ namespace ETL_SQL.Connectors.Oracle
                 var row = new Row();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    row[columns[i]] = reader.IsDBNull(i) ? null : MapOracleValue(reader.GetValue(i));
                 }
                 await currentBatch.AddRowAsync(row);
 
@@ -191,7 +192,14 @@ namespace ETL_SQL.Connectors.Oracle
                 using var cmd = CreateCommand(stmtSql, conn);
                 int paramCount = 0;
                 foreach (var param in paramList)
-                    cmd.Parameters.Add(new OracleParameter($"p{paramCount++}", param ?? DBNull.Value));
+                {
+                    var p = new OracleParameter($"p{paramCount++}", param ?? DBNull.Value);
+                    if (param is DateTimeOffset)
+                    {
+                        p.OracleDbType = OracleDbType.TimeStampTZ;
+                    }
+                    cmd.Parameters.Add(p);
+                }
                 if (paramCount > 0)
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
 
@@ -206,7 +214,7 @@ namespace ETL_SQL.Connectors.Oracle
                 {
                     var row = new Row();
                     for (int i = 0; i < reader.FieldCount; i++)
-                        row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        row[columns[i]] = reader.IsDBNull(i) ? null : MapOracleValue(reader.GetValue(i));
                     await resultBatch.AddRowAsync(row);
                 }
                 resultBatch.RowsAffected = (int)reader.RecordsAffected;
@@ -341,6 +349,32 @@ namespace ETL_SQL.Connectors.Oracle
             cmd.BindByName = true;
             cmd.CommandTimeout = _commandTimeout;
             return cmd;
+        }
+
+        private static object? MapOracleValue(object value)
+        {
+            if (value == null || value == DBNull.Value) return null;
+            
+            if (value is OracleTimeStampTZ timestampTz)
+                return new DateTimeOffset(
+                    DateTime.SpecifyKind(timestampTz.Value, DateTimeKind.Unspecified),
+                    timestampTz.GetTimeZoneOffset());
+            if (value is OracleTimeStampLTZ timestampLtz)
+                return new DateTimeOffset(
+                    DateTime.SpecifyKind(timestampLtz.Value, DateTimeKind.Unspecified),
+                    OracleTimeStampLTZ.GetLocalTimeZoneOffset());
+            if (value is OracleTimeStamp timestamp) return timestamp.Value;
+            if (value is OracleDate date) return date.Value;
+            var typeName = value.GetType().FullName;
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleDecimal")
+            {
+                return (decimal)(dynamic)value;
+            }
+            if (typeName == "Oracle.ManagedDataAccess.Types.OracleIntervalDS")
+            {
+                return (TimeSpan)(dynamic)value;
+            }
+            return value;
         }
 
         private static bool ShouldWrapProviderException(Exception ex) =>

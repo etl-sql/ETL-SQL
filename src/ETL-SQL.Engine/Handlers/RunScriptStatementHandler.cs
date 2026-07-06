@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,7 +71,9 @@ public class RunScriptStatementHandler : IStatementHandler
             }
             else
             {
-                scriptPath = context.ResolvePath(scriptPath);
+                scriptPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                    .Authorize(context, context.ResolvePath(scriptPath), FileSystemAccessKind.Read, validateFileType: false)
+                    .CanonicalPath;
 
                 _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
 

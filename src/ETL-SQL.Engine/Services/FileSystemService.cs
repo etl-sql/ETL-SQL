@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Services;
 /// <summary>
@@ -16,6 +17,11 @@ public class FileSystemService(ILogger logger)
 
     public async Task CopyDirectory(string sourceDir, string destinationDir, bool overwrite, IExecutionContext context)
     {
+        var authorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        sourceDir = authorizer.Authorize(context, sourceDir, FileSystemAccessKind.Enumerate,
+            validateFileType: false).CanonicalPath;
+        destinationDir = authorizer.Authorize(context, destinationDir, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
         context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
         var dir = new DirectoryInfo(sourceDir);
         if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
@@ -25,9 +31,13 @@ public class FileSystemService(ILogger logger)
         foreach (FileInfo file in dir.GetFiles())
         {
             context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
-            string targetFilePath = Path.Combine(destinationDir, file.Name);
-            await using (var sourceStream = File.OpenRead(file.FullName))
-            await using (var destStream = new FileStream(targetFilePath, overwrite ? FileMode.Create : FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, useAsync: true))
+            var sourceFile = authorizer.Authorize(context, file.FullName,
+                FileSystemAccessKind.Read);
+            var targetFile = authorizer.Authorize(context,
+                Path.Combine(destinationDir, file.Name), FileSystemAccessKind.Write);
+            await using (var sourceStream = authorizer.OpenValidatedRead(context, sourceFile))
+            await using (var destStream = authorizer.OpenValidatedWrite(context, targetFile,
+                truncate: true, failIfExists: !overwrite))
             {
                 await sourceStream.CopyToAsync(destStream);
             }
@@ -45,6 +55,9 @@ public class FileSystemService(ILogger logger)
 
     public async Task DeleteDirectoryContents(string path, bool recursive, IExecutionContext context)
     {
+        var authorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        path = authorizer.Authorize(context, path, FileSystemAccessKind.Enumerate,
+            validateFileType: false).CanonicalPath;
         context.IncrementOperationCount(OperationType.FileSystem, path);
         var dir = new DirectoryInfo(path);
         if (!dir.Exists) return;
@@ -52,7 +65,9 @@ public class FileSystemService(ILogger logger)
         foreach (FileInfo file in dir.GetFiles())
         {
             context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
-            await Task.Run(() => file.Delete());
+            var authorized = authorizer.Authorize(context, file.FullName,
+                FileSystemAccessKind.Delete).CanonicalPath;
+            await Task.Run(() => File.Delete(authorized));
         }
 
         foreach (DirectoryInfo subDir in dir.GetDirectories())
@@ -65,19 +80,29 @@ public class FileSystemService(ILogger logger)
                 }
             }
             context.IncrementOperationCount(OperationType.FileSystem, subDir.FullName);
-            await Task.Run(() => subDir.Delete(recursive));
+            var authorized = authorizer.Authorize(context, subDir.FullName,
+                FileSystemAccessKind.Delete, validateFileType: false).CanonicalPath;
+            await Task.Run(() => Directory.Delete(authorized, recursive));
         }
     }
 
     public async Task EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
     {
+        var authorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        sourceDir = authorizer.Authorize(context, sourceDir, FileSystemAccessKind.Enumerate,
+            validateFileType: false).CanonicalPath;
+        destDir = authorizer.Authorize(context, destDir, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
         context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
         if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
         foreach (string file in Directory.GetFiles(sourceDir))
         {
             context.IncrementOperationCount(OperationType.FileSystem, file);
-            string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
-            await Task.Run(() => CryptoUtils.EncryptFile(file, destFile, password, overwrite));
+            var sourceFile = authorizer.Authorize(context, file, FileSystemAccessKind.Read).CanonicalPath;
+            string destFile = authorizer.Authorize(context,
+                Path.Combine(destDir, Path.GetFileName(file) + ".enc"),
+                FileSystemAccessKind.Write).CanonicalPath;
+            await Task.Run(() => CryptoUtils.EncryptFile(sourceFile, destFile, password, overwrite));
         }
         foreach (string subDir in Directory.GetDirectories(sourceDir))
         {
@@ -90,14 +115,22 @@ public class FileSystemService(ILogger logger)
 
     public async Task DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
     {
+        var authorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        sourceDir = authorizer.Authorize(context, sourceDir, FileSystemAccessKind.Enumerate,
+            validateFileType: false).CanonicalPath;
+        destDir = authorizer.Authorize(context, destDir, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
         context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
         if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
         foreach (string file in Directory.GetFiles(sourceDir))
         {
             if (!file.EndsWith(".enc")) continue;
             context.IncrementOperationCount(OperationType.FileSystem, file);
-            string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
-            await Task.Run(() => CryptoUtils.DecryptFile(file, destFile, password, overwrite));
+            var sourceFile = authorizer.Authorize(context, file, FileSystemAccessKind.Read).CanonicalPath;
+            string destFile = authorizer.Authorize(context,
+                Path.Combine(destDir, Path.GetFileNameWithoutExtension(file)),
+                FileSystemAccessKind.Write).CanonicalPath;
+            await Task.Run(() => CryptoUtils.DecryptFile(sourceFile, destFile, password, overwrite));
         }
         foreach (string subDir in Directory.GetDirectories(sourceDir))
         {

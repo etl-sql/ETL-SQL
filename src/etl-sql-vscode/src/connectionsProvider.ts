@@ -65,7 +65,13 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     getConnections(): Connection[] {
-        return [];
+        const unique = new Map<string, Connection>();
+        for (const conns of this.scriptConnectionsByUri.values()) {
+            for (const c of conns) {
+                unique.set(c.name, c);
+            }
+        }
+        return Array.from(unique.values());
     }
 
     getTreeItem(element: TreeItem): vscode.TreeItem {

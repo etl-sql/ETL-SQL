@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -87,6 +88,9 @@ public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHand
         if (destination == null)
             throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
         _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
+
+        if (destination is AppendOnlyColumnDataSource && stmt.IsReplace && !context.IsWhatIf)
+            destination = await TempTableStorageRouter.EnsureMutableAsync(context, connName, destination, "INSERT OR REPLACE");
 
         if (destination is InMemoryDataSource memSource)
         {

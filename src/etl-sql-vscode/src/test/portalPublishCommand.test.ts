@@ -28,11 +28,23 @@ describe('portalPublishCommand', () => {
         requestsMade = [];
         mockGlobalState = new Map();
 
+        const mockSecrets = new Map<string, string>();
         mockContext = {
             globalState: {
                 get: vi.fn().mockImplementation((key) => mockGlobalState.get(key)),
                 update: vi.fn().mockImplementation((key, val) => {
                     mockGlobalState.set(key, val);
+                    return Promise.resolve();
+                })
+            },
+            secrets: {
+                get: vi.fn().mockImplementation((key) => Promise.resolve(mockSecrets.get(key))),
+                store: vi.fn().mockImplementation((key, val) => {
+                    mockSecrets.set(key, val);
+                    return Promise.resolve();
+                }),
+                delete: vi.fn().mockImplementation((key) => {
+                    mockSecrets.delete(key);
                     return Promise.resolve();
                 })
             }

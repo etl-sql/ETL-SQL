@@ -56,7 +56,7 @@ namespace ETL_SQL.TUI.UI
 
         public LanguageServiceBridgeProvider(IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
         {
-            _service = new LanguageService(metadata, helpRegistry);
+            _service = new ETL_SQL.Analysis.Services.GrammarLanguageService(metadata, helpRegistry);
         }
 
         public async Task<IEnumerable<Suggestion>> GetSuggestionsAsync(SuggestionContext context)

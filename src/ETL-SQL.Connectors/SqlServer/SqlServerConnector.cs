@@ -81,7 +81,7 @@ namespace ETL_SQL.Connectors.SqlServer
         {
             // Security constraint: validate host before connecting
             var host = GetHost(connectionString);
-            if (host != null) context.SecurityService.ValidateHost(host);
+            if (host != null) ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, host);
 
             await using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();

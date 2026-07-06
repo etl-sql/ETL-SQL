@@ -29,6 +29,14 @@ public record ExecutionJob(
     string? CorrelationId = null)
 {
     public JobStatus Status { get; set; } = JobStatus.Pending;
+
+    /// <summary>
+    /// When set, the report runs under this target user's row-level-security identity while
+    /// <see cref="UserId"/> remains the real actor (an administrator). Impersonated runs are always
+    /// executed per-request and never persist a shared snapshot. See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    public int? ImpersonatedUserId { get; init; }
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
@@ -205,13 +213,16 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         Dictionary<string, string>? parameters = null,
         bool isAdministrator = false,
         string actorType = "User", string? actorId = null, string? effectiveScopes = null,
-        string? correlationId = null)
+        string? correlationId = null, int? impersonatedUserId = null)
     {
         EvictExpiredJobs();
         var jobId = Guid.NewGuid().ToString("N");
         var job = new ExecutionJob(jobId, reportId, userId, IsAdministrator: isAdministrator,
             ActorType: actorType, ActorId: actorId, EffectiveScopes: effectiveScopes,
-            CorrelationId: correlationId);
+            CorrelationId: correlationId)
+        {
+            ImpersonatedUserId = impersonatedUserId
+        };
         _jobs[jobId] = job;
         await PersistNewJobAsync(job, "Execution");
 
@@ -233,6 +244,20 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         string? correlationId = null)
     {
         EvictExpiredJobs();
+
+        // A scheduled/background refresh exists to update the shared snapshot. An identity-sensitive
+        // report has no shared snapshot (it runs per viewer and is never cached), so a trusted
+        // scheduled refresh would run under a non-interactive identity and produce nothing shareable.
+        // Skip it rather than burn an execution slot. Interactive user refreshes still run under the
+        // caller's own identity. See Docs/Design/RowLevelSecurity.md.
+        if (trustedDatasetExecution && await ScriptReferencesIdentityAsync(scriptPath, CancellationToken.None))
+        {
+            _log.LogInformation(
+                "Report {ReportId} is identity-sensitive; skipping scheduled refresh (no shared snapshot to update).",
+                reportId);
+            return string.Empty;
+        }
+
         var existingPersisted = await GetActiveRefreshJobIdAsync(reportId);
         if (existingPersisted is not null)
             return existingPersisted;
@@ -421,13 +446,15 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                 // Interactive execution and user-triggered refresh retain the caller identity.
                 // Only the orchestrator poller explicitly creates trusted scheduled refreshes.
                 var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
+                var executionIdentity = await BuildExecutionIdentityAsync(job, cts.Token);
                 await using var svc = new ETL_SQL.ReportHosting.DashboardService(
                     scriptPath,
                     _scopeFactory,
                     dashboardTimeout,
                     job.DatasetCallerContext,
                     job.ReportId,
-                    _config.Dataset.AtRestKey);
+                    _config.Dataset.AtRestKey,
+                    executionIdentity);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
@@ -456,19 +483,36 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
                         job.ReportId, report.PublishedScriptHash, runTimeHash);
             }
 
-            db.ReportSnapshots.Add(new ReportSnapshot
+            // Row-level security: an identity-sensitive report must never persist a shared snapshot,
+            // because the view path serves the latest snapshot to any viewer regardless of who built
+            // it — which would leak one user's row-filtered result to another. The executor still gets
+            // their own result via the per-job manifest artifact. See Docs/Design/RowLevelSecurity.md.
+            // Impersonated runs are always per-request previews under a substituted identity and must
+            // never become a shared snapshot, regardless of whether the script references identity.
+            var identitySensitive = job.ImpersonatedUserId is not null
+                || await ScriptReferencesIdentityAsync(scriptPath, cts.Token);
+            if (identitySensitive)
             {
-                ReportId = job.ReportId,
-                ManifestPath = manifestPath,
-                BuiltAt = DateTime.UtcNow,
-                BuiltBy = job.UserId,
-                ParametersJson = parameters is { Count: > 0 }
-                    ? System.Text.Json.JsonSerializer.Serialize(
-                        parameters.ToDictionary(kv => kv.Key, kv => SecretRedactor.MaskIfSensitive(kv.Key, kv.Value)))
-                    : null,
-                ScriptHashAtRunTime = runTimeHash,
-                HashMatched = hashMatched
-            });
+                _log.LogInformation(
+                    "Report {ReportId} is identity-sensitive; skipping shared snapshot (per-viewer execution only).",
+                    job.ReportId);
+            }
+            else
+            {
+                db.ReportSnapshots.Add(new ReportSnapshot
+                {
+                    ReportId = job.ReportId,
+                    ManifestPath = manifestPath,
+                    BuiltAt = DateTime.UtcNow,
+                    BuiltBy = job.UserId,
+                    ParametersJson = parameters is { Count: > 0 }
+                        ? System.Text.Json.JsonSerializer.Serialize(
+                            parameters.ToDictionary(kv => kv.Key, kv => SecretRedactor.MaskIfSensitive(kv.Key, kv.Value)))
+                        : null,
+                    ScriptHashAtRunTime = runTimeHash,
+                    HashMatched = hashMatched
+                });
+            }
 
             // Update ScriptLastModified on the report
             if (report is not null && System.IO.File.Exists(scriptPath))
@@ -911,6 +955,89 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
     private Task SaveSnapshotManifestAsync(ReportManifest manifest, string manifestKey, CancellationToken ct)
     {
         return _snapshotPackages.SaveAsync(manifest, manifestKey, ct);
+    }
+
+    /// <summary>
+    /// Does the script reference any row-level-security identity variable/function? Reads the file and
+    /// applies the shared conservative scan; on read failure fails safe (treat as identity-sensitive,
+    /// so no shared snapshot is produced).
+    /// </summary>
+    private static async Task<bool> ScriptReferencesIdentityAsync(string scriptPath, CancellationToken ct)
+    {
+        try
+        {
+            return ETL_SQL.Core.Governance.RowLevelSecurityScan.ReferencesIdentity(
+                await File.ReadAllTextAsync(scriptPath, ct));
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Builds the row-level-security identity for an execution from the job's user (username, roles,
+    /// and groups from the portal database). Returns null when the user cannot be resolved, so
+    /// identity-sensitive reports fail closed. See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    private async Task<ETL_SQL.Core.Governance.ExecutionIdentity?> BuildExecutionIdentityAsync(
+        ExecutionJob job, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+            // Under impersonation the effective identity (whose rows are shown) is the target user;
+            // the real actor stays the administrator. Row-level predicates and the admin bypass key
+            // off the *effective* (target) identity, so impersonating a non-admin shows that user's
+            // restricted view. Permission to run the report was already gated on the real admin.
+            var effectiveUserId = job.ImpersonatedUserId ?? job.UserId;
+
+            var effective = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == effectiveUserId, ct);
+            if (effective is null) return null;
+
+            var roles = await (from ur in db.UserRoles
+                               join r in db.Roles on ur.RoleId equals r.Id
+                               where ur.UserId == effectiveUserId && r.Name != null
+                               select r.Name!).ToListAsync(ct);
+            var groups = await (from ug in db.UserGroups
+                                join g in db.Groups on ug.GroupId equals g.Id
+                                where ug.UserId == effectiveUserId
+                                select g.Name).ToListAsync(ct);
+
+            var effectiveName = effective.UserName ?? effectiveUserId.ToString();
+            var realName = effectiveName;
+            if (job.ImpersonatedUserId is not null)
+            {
+                var actor = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == job.UserId, ct);
+                realName = actor?.UserName ?? job.UserId.ToString();
+            }
+
+            // IsAdmin reflects the effective identity, not the real actor, so an admin impersonating a
+            // normal user does not carry admin bypass into the target's view.
+            var effectiveIsAdmin = job.ImpersonatedUserId is null
+                ? job.IsAdministrator
+                : roles.Contains("Admin", StringComparer.OrdinalIgnoreCase);
+
+            return new ETL_SQL.Core.Governance.ExecutionIdentity
+            {
+                EffectiveUser = effectiveName,
+                EffectiveUserId = effectiveUserId,
+                RealUser = realName,
+                IsAdmin = effectiveIsAdmin,
+                AdminBypassesRowLevelSecurity = _config.Security.AdminBypassRowLevelSecurity,
+                Groups = groups,
+                Roles = roles
+            };
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex,
+                "Failed to build execution identity for user {UserId}; identity-sensitive reports will fail closed.",
+                job.UserId);
+            return null;
+        }
     }
 
     private static IArtifactStorage CreateDefaultArtifactStorage(PortalConfig config) =>

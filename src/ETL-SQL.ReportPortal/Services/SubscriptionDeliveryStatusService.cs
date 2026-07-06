@@ -11,6 +11,7 @@ public class SubscriptionDeliveryStatusService(
 {
     public async Task<IReadOnlyList<JobHistoryEntry>> SynchronizeAsync(Subscription subscription, int limit = 100)
     {
+        if (limit <= 0) return [];
         var orchDbPath = dbLocator.Resolve();
         if (orchestratorStoreFactory.Provider == DatabaseProvider.Sqlite
             && (orchDbPath is null || !File.Exists(orchDbPath)))
@@ -24,7 +25,7 @@ public class SubscriptionDeliveryStatusService(
             var store = orchestratorStoreFactory.Create(orchDbPath);
             await store.InitializeAsync();
             var jobName = SubscriptionOrchestration.JobName(subscription.Id, subscription.Report?.Name);
-            history = (await store.GetHistoryAsync(jobName, int.MaxValue)).ToList();
+            history = (await store.GetHistoryAsync(jobName, Math.Clamp(limit, 1, 1000))).ToList();
         }
         catch (Exception ex)
         {

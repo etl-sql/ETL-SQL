@@ -58,6 +58,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         private DateTime _lastMetricsLog = DateTime.MinValue;
         private DateTime _lastSessionReap = DateTime.MinValue;
+        private DateTime _lastHistoryPrune = DateTime.MinValue;
         private Task? _runTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
@@ -66,6 +67,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _cts = new CancellationTokenSource();
             _lastMetricsLog = DateTime.Now;
             _lastSessionReap = DateTime.Now;
+            _lastHistoryPrune = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
@@ -126,6 +128,24 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 return;
             }
 
+            // Startup recovery: a previous crash may have left RUNNING rows with no completion write.
+            // Reconcile any older than the max job runtime to INTERRUPTED so they are not stuck RUNNING
+            // forever (unprunable and invisible to failure reporting). Self-healing per the store contract.
+            try
+            {
+                int maxRuntimeHours = _configuration.GetValue<int>("Orchestrator:MaxJobRuntimeHours", 24);
+                if (maxRuntimeHours > 0)
+                {
+                    int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
+                    if (reconciled > 0)
+                        _logger.LogWarning("Marked {Count} orphaned RUNNING job-history row(s) as INTERRUPTED on startup.", reconciled);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Startup reconciliation of orphaned RUNNING job-history rows failed.");
+            }
+
             while (!ct.IsCancellationRequested)
             {
                 try
@@ -178,6 +198,57 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _lastSessionReap = now;
                     }
 
+                    // Periodic job-history pruning: bound unbounded JobHistory growth. Retention 0
+                    // (or negative) disables pruning — history is kept indefinitely.
+                    int historyPruneIntervalMinutes = _configuration.GetValue<int>("Scheduler:HistoryPruneIntervalMinutes", 360);
+                    int historyRetentionDays = _configuration.GetValue<int>("Orchestrator:JobHistoryRetentionDays", 30);
+                    if (historyRetentionDays > 0 && now - _lastHistoryPrune >= TimeSpan.FromMinutes(historyPruneIntervalMinutes))
+                    {
+                        // Reconcile orphaned/hung RUNNING rows first so they become prunable and visible
+                        // to failure reporting, then prune old terminal rows.
+                        int maxRuntimeHours = _configuration.GetValue<int>("Orchestrator:MaxJobRuntimeHours", 24);
+                        try
+                        {
+                            if (maxRuntimeHours > 0)
+                            {
+                                int reconciled = await _store.ReconcileStaleRunningAsync(TimeSpan.FromHours(maxRuntimeHours));
+                                if (reconciled > 0)
+                                    _logger.LogWarning("Marked {Count} RUNNING job-history row(s) exceeding the max runtime ({Hours}h) as INTERRUPTED.", reconciled, maxRuntimeHours);
+                            }
+
+                            // Roll up BEFORE pruning raw rows, so daily trend captures rows about to
+                            // age out. Daily summaries are retained far longer than raw history/samples.
+                            var metricsStore = _store as IHostMetricsStore;
+                            int rollupRetentionDays = _configuration.GetValue<int>("Orchestrator:HistoryRollupRetentionDays", 400);
+                            await _store.RollUpJobHistoryAsync();
+                            if (metricsStore != null) await metricsStore.RollUpHostMetricsAsync();
+                            if (rollupRetentionDays > 0)
+                            {
+                                await _store.PruneJobHistoryDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
+                                if (metricsStore != null) await metricsStore.PruneHostMetricsDailyAsync(TimeSpan.FromDays(rollupRetentionDays));
+                            }
+
+                            int pruned = await _store.PruneHistoryAsync(TimeSpan.FromDays(historyRetentionDays));
+                            if (pruned > 0)
+                                _logger.LogInformation("Orchestrator: pruned {Count} job-history row(s) older than {Days} day(s).", pruned, historyRetentionDays);
+
+                            // Host-metrics samples are dense; retain them shorter than job history and
+                            // rely on the roll-up for long-term trend. Same store implements both.
+                            int hostMetricsRetentionDays = _configuration.GetValue<int>("Orchestrator:HostMetricsRetentionDays", 14);
+                            if (hostMetricsRetentionDays > 0 && metricsStore != null)
+                            {
+                                int prunedMetrics = await metricsStore.PruneHostMetricsAsync(TimeSpan.FromDays(hostMetricsRetentionDays));
+                                if (prunedMetrics > 0)
+                                    _logger.LogInformation("Orchestrator: pruned {Count} host-metrics sample(s) older than {Days} day(s).", prunedMetrics, hostMetricsRetentionDays);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Job-history maintenance failed; will retry next cycle.");
+                        }
+                        _lastHistoryPrune = now;
+                    }
+
                     await Task.Delay(TimeSpan.FromSeconds(sleepIntervalSeconds), ct);
                 }
                 catch (TaskCanceledException)
@@ -197,10 +268,30 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
         public async Task<bool> TriggerJobAsync(string jobName)
         {
-            var jobs = await _store.GetAllJobsAsync();
-            var job = jobs.FirstOrDefault(j => j.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase));
+            var job = await _store.GetJobAsync(jobName);
             if (job == null) return false;
-            _ = Task.Run(() => ExecuteJobAsync(job));
+
+            // Same start guard as the scheduling loop: one execution of a job at a time. A
+            // trigger racing an in-flight run coalesces with it instead of starting a duplicate.
+            if (!_scheduledJobStarts.TryAdd(job.Name, 0))
+            {
+                _logger.LogInformation(
+                    "Job {JobName}: manual trigger coalesced with an execution already in progress.",
+                    job.Name);
+                return true;
+            }
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await ExecuteJobAsync(job);
+                }
+                finally
+                {
+                    _scheduledJobStarts.TryRemove(job.Name, out _);
+                }
+            }, CancellationToken.None);
             return true;
         }
 
@@ -501,6 +592,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
             }, CancellationToken.None);
         }
 
+        // Scheduling is deliberately local wall-clock: AtTime means "at HH:mm on this machine"
+        // and stored LastRun/NextRun values are local. Because the next run is always computed
+        // forward from 'now' after a fire, a DST fall-back hour cannot double-run a job; a
+        // spring-forward NextRun inside the skipped hour fires when the clock jumps past it.
+        // Do not switch this to UTC piecemeal — persisted rows would be reinterpreted at upgrade.
         private DateTime CalculateNextRun(JobDefinition job)
         {
             var now = DateTime.Now;

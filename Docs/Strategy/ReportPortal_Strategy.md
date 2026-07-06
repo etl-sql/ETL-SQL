@@ -1,4 +1,4 @@
-﻿# ETL-SQL Report Portal — Development Strategy
+# ETL-SQL Report Portal — Development Strategy
 
 > [!IMPORTANT]
 > **Historical roadmap.** The Report Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `Docs/ReportPortal_User_Guide.md`, `Docs/ReportPortal_Administrators_Guide.md`, and `Docs/Architecture/ReportPortal.md`.
@@ -367,7 +367,7 @@ EXECUTE portal BEGIN
     CREATE ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales'
         WHEN VISUAL 'Revenue' >= 100000
         DELIVER TO 'finance-ops@example.com'
-        AT corporate-smtp;
+        AT corporate_smtp;
     SHOW ALERTS FOR REPORT 'Monthly Sales' INTO #alerts;
     DROP ALERT 'Revenue Floor' FOR REPORT 'Monthly Sales';
 
@@ -376,7 +376,7 @@ EXECUTE portal BEGIN
     REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';
 
     -- SMTP connections
-    CREATE CONNECTION corporate-smtp AS SMTP(
+    CREATE CONNECTION corporate_smtp AS SMTP(
         HOST = 'mail.company.com', PORT = 587,
         USER = 'reports@company.com', PASSWORD = ENC:...,
         USE_SSL = true, DEFAULT_FROM = 'reports@company.com'
@@ -387,18 +387,17 @@ EXECUTE portal BEGIN
         DELIVER TO 'john.doe'
         SCHEDULE '0 8 * * MON'
         FORMAT PDF
-        AT corporate-smtp;
+        AT corporate_smtp;
 
     CREATE SUBSCRIPTION FOR REPORT '/Finance/MonthlySales'
         DELIVER TO GROUP 'Finance'
         ON REFRESH
         FORMAT BOTH
-        AT corporate-smtp;
+        AT corporate_smtp;
 
     ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 9 * * MON';
     ALTER SUBSCRIPTION 5 SET ENABLE;
     DROP SUBSCRIPTION 5;
-
     -- Session management
     DISCONNECT USER 'john.doe';
     REVOKE TOKENS FOR USER 'john.doe';

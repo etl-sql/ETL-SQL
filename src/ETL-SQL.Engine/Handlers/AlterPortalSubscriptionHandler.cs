@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -86,11 +87,11 @@ public class AlterPortalSubscriptionHandler(IJobHistoryStore store, ILogger logg
 
     private static string ResolveSubscriptionScriptPath(string scriptPath, IExecutionContext context, bool requireWrite)
     {
-        var resolved = context.ResolvePath(scriptPath);
-        context.SecurityService.ValidatePath(resolved);
-        if (requireWrite)
-            context.SecurityService.ValidateWriteAccess(resolved);
-        return resolved;
+        return new FileSystemPolicyAuthorizer(context.SecurityService)
+            .Authorize(context, context.ResolvePath(scriptPath),
+                requireWrite ? FileSystemAccessKind.Write : FileSystemAccessKind.Read,
+                validateFileType: false)
+            .CanonicalPath;
     }
 
     private static async Task<IReadOnlyList<SubscriptionParameter>> ExtractParametersFromScriptAsync(string scriptPath, System.Threading.CancellationToken cancellationToken)

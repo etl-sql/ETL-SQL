@@ -6,6 +6,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Engine.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -275,21 +276,31 @@ namespace ETL_SQL.Tests.Hardening
         public async Task ExternalJoinEngine_RecursivelyPartitionsOversizedPartitions()
         {
             var e = NewEvaluator(externalPartitions: 4);
-            e.JoinSpillThreshold = 2;
-            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
-            var schema = new TableSchema(new[] { "Id", "Val" });
+            e.JoinSpillThreshold = 10_000_000;
+            e.MemoryGovernorPolicy = MemoryGovernorPolicy.SpillOnly;
+            var saved = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 256;
+            try
+            {
+                var engine = new ExternalJoinEngine(e, NullLogger.Instance);
+                var schema = new TableSchema(new[] { "Id", "Val" });
 
-            var result = await engine.ApplyHashJoinExternal(
-                Stream(schema, 0, 32),
-                Stream(schema, 0, 32),
-                CreateJoin("INNER"),
-                new List<string> { "Id" },
-                new List<string> { "Id" }).ToListAsync();
+                var result = await engine.ApplyHashJoinExternal(
+                    Stream(schema, 0, 32),
+                    Stream(schema, 0, 32),
+                    CreateJoin("INNER"),
+                    new List<string> { "Id" },
+                    new List<string> { "Id" }).ToListAsync();
 
-            Assert.Equal(32, result.Count);
-            Assert.True(
-                e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
-                "Expected recursive partitioning to create additional spill partitions beyond the initial left/right pass.");
+                Assert.Equal(32, result.Count);
+                Assert.True(
+                    e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
+                    "Expected byte-governed recursive partitioning beyond the initial left/right pass.");
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = saved;
+            }
         }
 
         [Fact]
@@ -366,6 +377,7 @@ namespace ETL_SQL.Tests.Hardening
             var result = await externalWindowEngine.ApplyWindowFunctionsExternal(Rows(), stmt).ToListAsync();
 
             Assert.Equal(10, result.Count);
+            Assert.Equal(10, externalWindowEngine.ColumnarWindowScanRows);
             Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-REPLAY-SPILL", StringComparison.OrdinalIgnoreCase));
 
             var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";
@@ -379,6 +391,98 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.Equal(1m, Convert.ToDecimal(row[firstKey]));
                 Assert.Equal(10m, Convert.ToDecimal(row[lastKey]));
             });
+        }
+
+        [Fact]
+        public async Task ExternalWindowEngine_PartitionSampleIncreasesFanOutWithoutLosingRows()
+        {
+            var e = NewEvaluator(externalPartitions: 2);
+            e.OperatorMemoryGrantMB = 1;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause>());
+            var count = new FunctionCallExpression("COUNT", new List<Expression>
+            {
+                new IdentifierExpression("*")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(count, "Rows")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+            var savedBudget = MemoryGrantArbiter.Shared.TotalBudgetBytes;
+            MemoryGrantArbiter.Shared.TotalBudgetBytes = 0;
+            try
+            {
+                var payload = new string('x', 1024);
+                var rows = Enumerable.Range(0, 4096)
+                    .Select(id => new Row
+                    {
+                        ["Grp"] = "g" + id,
+                        ["Val"] = payload + id
+                    })
+                    .ToAsyncEnumerable();
+
+                var result = await externalWindowEngine
+                    .ApplyWindowFunctionsExternal(rows, stmt).ToListAsync();
+
+                Assert.Equal(4096, result.Count);
+                Assert.True(externalWindowEngine.PartitionCount > 2);
+                var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";
+                Assert.All(result, row => Assert.Equal(1m, row[countKey]));
+            }
+            finally
+            {
+                MemoryGrantArbiter.Shared.TotalBudgetBytes = savedBudget;
+            }
+        }
+
+        [Fact]
+        public async Task ExternalWindowEngine_ExactInputEstimateReducesOversizedBaseline()
+        {
+            var e = NewEvaluator(externalPartitions: 64);
+            e.OperatorMemoryGrantMB = 1;
+            var logger = new CapturingLogger();
+            var aggregateEngine = new AggregateEngine(e, logger);
+            var windowEngine = new WindowEngine(e, aggregateEngine, logger);
+            var externalWindowEngine = new ExternalWindowEngine(e, windowEngine, logger);
+            var window = new WindowClause(
+                new List<Expression> { new IdentifierExpression("Grp") },
+                new List<OrderByClause>());
+            var count = new FunctionCallExpression("COUNT", new List<Expression>
+            {
+                new IdentifierExpression("*")
+            }) { Window = window };
+            var stmt = new SelectStatement(
+                new List<SelectColumn>
+                {
+                    new(new IdentifierExpression("Grp"), "Grp"),
+                    new(count, "Rows")
+                },
+                null,
+                new TableReference("#input"),
+                new List<JoinClause>(),
+                null);
+            var rows = Enumerable.Range(0, 16)
+                .Select(id => new Row { ["Grp"] = "g" + id, ["Val"] = id })
+                .ToList();
+
+            var result = await externalWindowEngine.ApplyWindowFunctionsExternal(
+                rows.ToAsyncEnumerable(), stmt,
+                knownRowCount: rows.Count,
+                knownInputBytes: RowWidthEstimator.EstimateTotalBytes(rows)).ToListAsync();
+
+            Assert.Equal(16, result.Count);
+            Assert.True(externalWindowEngine.PartitionCount < 64);
         }
 
         [Fact]

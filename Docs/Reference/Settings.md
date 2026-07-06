@@ -65,7 +65,8 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:ExternalSortChunkSize` | integer | `10000` | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | Run size in rows for sorting buffers spilled to disk. |
 | `Engine:WindowSpillThreshold` | integer | `10000` | `SET WINDOW_SPILL_THRESHOLD = n` | Rows in a partition before window functions spill to disk. |
 | `Engine:OperatorMemoryGrantMB` | integer | `256` | `SET OPERATOR_MEMORY_GRANT = n` | RAM granted per execution operator in MB. |
-| `Engine:TotalMemoryGrantMB` | integer | `4096` | — | RAM ceiling allocated to the engine execution process (4GB). |
+| `Engine:TotalMemoryGrantMB` | integer | `-1` (auto) | — | RAM-governor ceiling for the engine's in-memory operator state; spilling/repartitioning keeps the process under it. `-1` (or unset) = auto: ~80% of physical RAM (honors container limits), floored at 512 MB. A value `> 0` sets an explicit ceiling in MB. `0` disables the governor (unbounded — can consume all RAM). |
+| `Engine:MemoryGovernorPolicy` | string | `SpillOrFail` | — | Behaviour when an operator hits the ceiling and cannot reduce further: `SpillOrFail` aborts with a clear error; `SpillOnly` churns to completion (slower, higher RAM). |
 | `Engine:TempTableSpillThresholdRows` | integer | `1000000` | `SET TEMP_TABLE_SPILL_THRESHOLD = n` | Rows stored in `#temp` tables before shifting from memory to disk. |
 | `Engine:SubqueryCacheSize` | integer | `5000` | — | Number of unique subquery results stored in the evaluator cache. |
 | `Engine:MaxLastResultRows` | integer | `5000` | `SET MAX_LAST_RESULT_ROWS = n` | Cap on visual rows kept in memory for client preview fetches. |
@@ -73,6 +74,10 @@ Controls parsing, query optimization, memory allocations, caching thresholds, an
 | `Engine:ForeachPageSize` | integer | `10000` | `SET FOREACH_PAGE_SIZE = n` | Number of iterations per segment processed during parallel `FOREACH` loops. |
 | `Engine:MaxMessages` | integer | `1000` | `SET MAX_MESSAGES = n` | Max console print lines or warning messages buffered for a script. |
 | `Engine:MaxInternalOperations` | integer | `100000` | — | Limit on internal loop execution steps. |
+| `Engine:MaxConnectionsPerScript` | integer | `100` | — | Maximum live non-temporary connections in one script. `0` disables the ceiling. Prefer staging and connection reuse well below this limit. |
+| `Engine:MaxTempTablesPerScript` | integer | `100` | — | Maximum live `#temp` tables in one script. Dropping a table releases capacity; `0` disables the ceiling. |
+| `Engine:MaxVariablesPerScript` | integer | `100` | — | Maximum variables in the active script scope. Redeclaration does not consume additional capacity; `0` disables the ceiling. |
+| `Engine:MaxVisualsPerScript` | integer | `100` | — | Maximum live visual definitions in one report script. Replacing a visual does not consume additional capacity; `0` disables the ceiling. |
 | `Engine:TelemetryEnabled` | boolean | `true` | `SET TELEMETRY = ON\|OFF` | Transmits anonymous execution metrics to help refine optimization. |
 | `Engine:LineageEnabled` | boolean | `true` | `SET LINEAGE = ON\|OFF` | Automatically parses sources/targets to construct lineage maps. |
 | `Engine:AuditAdHocRuns` | boolean | `false` | — | When true, every script launched via local CLI is sent to the audit server. |

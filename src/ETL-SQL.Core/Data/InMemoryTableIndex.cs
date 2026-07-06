@@ -13,29 +13,58 @@ public class InMemoryTableIndex
     private readonly Dictionary<string, Dictionary<object, List<Row>>> _indexes = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, List<string>> _indexColumnMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _uniqueColumns = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<object>> _uniqueKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, long> _uniqueKeyBytes = new(StringComparer.OrdinalIgnoreCase);
 
-    public int Count => _indexes.Count;
-    public IEnumerable<string> Keys => _indexes.Keys;
+    public int Count => _indexColumnMap.Count;
+    public int UniqueIndexCount => _uniqueColumns.Count;
+    public int NonUniqueIndexCount => Count - UniqueIndexCount;
+    public long EstimatedUniqueKeyBytes => _uniqueKeyBytes.Values.Sum();
+    public IEnumerable<string> Keys => _indexColumnMap.Keys;
 
     public void Clear()
     {
         _indexes.Clear();
         _indexColumnMap.Clear();
         _uniqueColumns.Clear();
+        _uniqueKeys.Clear();
+        _uniqueKeyBytes.Clear();
+    }
+
+    /// <summary>Clears indexed data while retaining index definitions.</summary>
+    public void ClearData(bool preserveUniqueKeys = false)
+    {
+        _indexes.Clear();
+        foreach (var indexKey in _indexColumnMap.Keys)
+            if (!_uniqueColumns.Contains(indexKey))
+                _indexes[indexKey] = new Dictionary<object, List<Row>>();
+        if (!preserveUniqueKeys)
+        {
+            foreach (var keys in _uniqueKeys.Values) keys.Clear();
+            foreach (var indexKey in _uniqueKeyBytes.Keys.ToList()) _uniqueKeyBytes[indexKey] = 0;
+        }
     }
 
     public void Remove(string indexKey)
     {
         _indexes.Remove(indexKey);
         _uniqueColumns.Remove(indexKey);
+        _uniqueKeys.Remove(indexKey);
+        _uniqueKeyBytes.Remove(indexKey);
+        _indexColumnMap.Remove(indexKey);
     }
 
-    public bool HasIndex(string indexKey) => _indexes.ContainsKey(indexKey);
+    public bool HasIndex(string indexKey) => _indexColumnMap.ContainsKey(indexKey);
 
     public void AddIndexDefinition(string indexKey, List<string> columns, bool isUnique)
     {
         _indexColumnMap[indexKey] = columns;
-        if (isUnique) _uniqueColumns.Add(indexKey);
+        if (isUnique)
+        {
+            _uniqueColumns.Add(indexKey);
+            _uniqueKeys.TryAdd(indexKey, new HashSet<object>());
+            _uniqueKeyBytes.TryAdd(indexKey, 0);
+        }
     }
 
     public void SetIndex(string indexKey, Dictionary<object, List<Row>> index, List<string> columns)
@@ -67,6 +96,12 @@ public class InMemoryTableIndex
         return null;
     }
 
+    public bool ContainsKey(string indexKey, object key)
+    {
+        if (_uniqueKeys.TryGetValue(indexKey, out var unique)) return unique.Contains(key);
+        return _indexes.TryGetValue(indexKey, out var index) && index.ContainsKey(key);
+    }
+
     public string GetIndexKey(IEnumerable<string> columns) => string.Join(",", columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase));
 
     public object? GetRowKey(IEnumerable<string> columns, Row row)
@@ -87,16 +122,30 @@ public class InMemoryTableIndex
     {
         var cols = columns.ToList();
         var indexKey = GetIndexKey(cols);
-        if (!_indexes.TryGetValue(indexKey, out var index)) return;
         var isUnique = _uniqueColumns.Contains(indexKey);
+
+        if (isUnique)
+        {
+            var keys = _uniqueKeys[indexKey];
+            foreach (var row in batch.Rows)
+            {
+                var value = GetRowKey(cols, row);
+                if (value != null)
+                {
+                    if (!keys.Add(value))
+                        throw new ExecutionException($"Unique index violation on columns ({string.Join(",", cols)}) for value {value}");
+                    _uniqueKeyBytes[indexKey] += EstimateKeyBytes(value);
+                }
+            }
+            return;
+        }
+
+        if (!_indexes.TryGetValue(indexKey, out var index)) return;
 
         foreach (var row in batch.Rows)
         {
             var val = GetRowKey(cols, row);
             if (val == null) continue;
-
-            if (isUnique && index.ContainsKey(val))
-                throw new ExecutionException($"Unique index violation on columns ({string.Join(",", cols)}) for value {val}");
 
             if (!index.TryGetValue(val, out var rows))
             {
@@ -106,13 +155,30 @@ public class InMemoryTableIndex
             rows.Add(row);
         }
     }
+
+    public void RemoveUniqueKeysForBatch(DataTable batch)
+    {
+        foreach (var indexKey in _uniqueColumns)
+        {
+            if (!_indexColumnMap.TryGetValue(indexKey, out var columns) ||
+                !_uniqueKeys.TryGetValue(indexKey, out var keys)) continue;
+            foreach (var row in batch.Rows)
+            {
+                var value = GetRowKey(columns, row);
+                if (value != null && keys.Remove(value))
+                    _uniqueKeyBytes[indexKey] -= EstimateKeyBytes(value);
+            }
+        }
+    }
     public bool IsDuplicate(IEnumerable<string> columns, Row row, IEnumerable<DataTable> batches)
     {
         var cols = columns.ToList();
         var indexKey = GetIndexKey(cols);
+        var val = GetRowKey(cols, row);
+        if (val != null && _uniqueKeys.TryGetValue(indexKey, out var uniqueKeys))
+            return uniqueKeys.Contains(val);
         if (_indexes.TryGetValue(indexKey, out var index))
         {
-            var val = GetRowKey(cols, row);
             if (val != null) return index.ContainsKey(val);
         }
 
@@ -135,9 +201,14 @@ public class InMemoryTableIndex
     {
         var cols = columns.ToList();
         var indexKey = GetIndexKey(cols);
-        var index = new Dictionary<object, List<Row>>();
-        _indexes[indexKey] = index;
         _indexColumnMap[indexKey] = cols;
+        if (_uniqueColumns.Contains(indexKey))
+        {
+            _uniqueKeys[indexKey] = new HashSet<object>();
+            _uniqueKeyBytes[indexKey] = 0;
+        }
+        else
+            _indexes[indexKey] = new Dictionary<object, List<Row>>();
         foreach (var batch in batches)
         {
             UpdateIndexWithBatch(cols, batch);
@@ -160,5 +231,21 @@ public class InMemoryTableIndex
             _uniqueColumns.Remove(oldName);
             _uniqueColumns.Add(newName);
         }
+        if (_uniqueKeys.TryGetValue(oldName, out var keys))
+        {
+            _uniqueKeys.Remove(oldName);
+            _uniqueKeys[newName] = keys;
+        }
+        if (_uniqueKeyBytes.TryGetValue(oldName, out var keyBytes))
+        {
+            _uniqueKeyBytes.Remove(oldName);
+            _uniqueKeyBytes[newName] = keyBytes;
+        }
     }
+
+    private static long EstimateKeyBytes(object key) => key switch
+    {
+        CompositeKey composite => 32L + composite.EstimateHeapBytes(),
+        _ => 32L + Row.EstimateValueBytes(key)
+    };
 }

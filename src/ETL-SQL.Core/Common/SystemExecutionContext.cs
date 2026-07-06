@@ -20,6 +20,8 @@ namespace ETL_SQL.Core.Common;
 /// </summary>
 public class SystemExecutionContext : IExecutionContext, IVariableContext, IReportContext, ITelemetryContext
 {
+    public Governance.ExecutionPolicySnapshot? ExecutionPolicy { get; set; }
+    public Governance.ExecutionIdentity? ExecutionIdentity { get; set; }
     public IVariableContext VarContext => this;
     public IReportContext ReportContext => this;
     public ITelemetryContext Telemetry => this;
@@ -78,9 +80,12 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long RowsProcessed { get; set; }
     public long LastStatementRowsProcessed { get; set; }
     public long TotalSpilledBytes { get; set; }
+    public long SpillReadBytes { get; set; }
+    public int SpillExtentCount { get; set; }
     public string? LastIndexUsedName { get; set; }
     public bool TelemetryEnabled { get; set; } = true;
     public int PartitionsCount { get; set; }
+    public int PartitionPassCount { get; set; }
     public long AggregateGroupsCount { get; set; }
     public double AggregateExpansionRatio { get; set; }
     public long LastExecutionTimeMs { get; set; }
@@ -185,6 +190,10 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
             throw new ETL_SQL.Services.SecurityException($"SMTP send limit exceeded: this script attempted to send {SmtpEmailsSentThisScript} emails, but MAX_SMTP_EMAILS_PER_SCRIPT is {MaxSmtpEmailsPerScript}.");
     }
     public int MaxInternalOperations { get => SecurityService.MaxInternalOperations; set => SecurityService.MaxInternalOperations = value; }
+    public int MaxConnectionsPerScript { get; set; } = 100;
+    public int MaxTempTablesPerScript { get; set; } = 100;
+    public int MaxVariablesPerScript { get; set; } = 100;
+    public int MaxVisualsPerScript { get; set; } = 100;
 
     public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
     public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();

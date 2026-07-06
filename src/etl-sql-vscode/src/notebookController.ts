@@ -3,6 +3,7 @@ import { ReplManager, EngineMessage } from './ReplManager';
 import * as path from 'path';
 import * as cp from 'child_process';
 import * as fs from 'fs';
+import { getExecutablePath } from './extension';
 
 export class ETLNotebookController {
     readonly controllerId = 'etl-sql-notebook-controller-id';
@@ -50,7 +51,7 @@ export class ETLNotebookController {
             
             // Get current configuration
             const config = vscode.workspace.getConfiguration('etlsql');
-            const exePath = await this._getExecutablePath(config);
+            const exePath = await getExecutablePath(this.context, config);
             const sessionId = this._getSessionId(cell.notebook);
             const args = ['--verbose', '--perf', '--json', '--session', sessionId];
             
@@ -120,88 +121,6 @@ export class ETLNotebookController {
         return html;
     }
 
-    private _ensureExecutable(filePath: string): void {
-        if (process.platform !== 'win32' && fs.existsSync(filePath)) {
-            try {
-                const stats = fs.statSync(filePath);
-                if ((stats.mode & fs.constants.S_IXUSR) === 0) {
-                    fs.chmodSync(filePath, stats.mode | fs.constants.S_IXUSR | fs.constants.S_IXGRP | fs.constants.S_IXOTH);
-                }
-            } catch {
-                // ignore
-            }
-        }
-    }
-
-    private async _getExecutablePath(config: vscode.WorkspaceConfiguration): Promise<string> {
-        const exePath = (config.get<string>('executable.path') || '').trim();
-        if (exePath) {
-            return exePath;
-        }
-
-        // 1. Try System PATH first
-        const inPath = await this._findInPath('ETL-SQL');
-        if (inPath) {
-            return inPath;
-        }
-
-        // 2. Try bundled path
-        const bundledPath = path.join(this.context.extensionPath, 'bin', process.platform === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
-        if (await this._fileExists(bundledPath)) {
-            this._ensureExecutable(bundledPath);
-            return bundledPath;
-        }
-
-        // 3. Search in common build folders
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (workspaceFolder) {
-            const projectRoot = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin');
-            for (const configuration of ['Debug', 'Release']) {
-                const configRoot = path.join(projectRoot, configuration);
-                let frameworks: string[];
-                try {
-                    frameworks = (await fs.promises.readdir(configRoot, { withFileTypes: true }))
-                        .filter(entry => entry.isDirectory() && /^net\d/.test(entry.name))
-                        .map(entry => entry.name)
-                        .sort()
-                        .reverse();
-                } catch {
-                    continue;
-                }
-
-                for (const framework of frameworks) {
-                    const candidate = path.join(configRoot, framework, 'ETL-SQL.exe');
-                    if (await this._fileExists(candidate)) {
-                        return candidate;
-                    }
-                }
-            }
-        }
-
-        return 'ETL-SQL.exe';
-    }
-
-    private async _findInPath(command: string): Promise<string | undefined> {
-        const tool = process.platform === 'win32' ? 'where' : 'which';
-        return new Promise(resolve => {
-            cp.execFile(tool, [command], { windowsHide: true }, (err, stdout) => {
-                if (err) {
-                    resolve(undefined);
-                    return;
-                }
-                resolve(stdout.split(/\r?\n/).map(line => line.trim()).find(Boolean));
-            });
-        });
-    }
-
-    private async _fileExists(filePath: string): Promise<boolean> {
-        try {
-            await fs.promises.access(filePath, fs.constants.F_OK);
-            return true;
-        } catch {
-            return false;
-        }
-    }
 
     private _getSessionId(notebook: vscode.NotebookDocument): string {
         // Unique session per notebook file

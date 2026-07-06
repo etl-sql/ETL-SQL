@@ -395,7 +395,35 @@ ORDER BY StartTime DESC;
 
 **Result columns:** `Id`, `JobName`, `StartTime`, `EndTime`, `Status`, `ErrorMessage`, `RowsProcessed`
 
-**Status values:** `RUNNING`, `SUCCESS`, `FAILURE`
+**Status values:** `RUNNING` (in-flight), `SUCCESS`, `FAILURE`, `BLOCKED` (script-hash mismatch),
+`QUARANTINED`, and `INTERRUPTED` (a job whose completion was never recorded — the orchestrator
+restarted or the job was killed; reconciled from a stale `RUNNING` row). A failure digest should treat
+everything except `SUCCESS` and `RUNNING` as a problem.
+
+### 3.5 `SHOW HOST METRICS` — Host Utilization (Capacity Planning)
+
+Returns the host-utilization time series — per node, the last 24 hours of memory-load %, CPU %, and
+free disk on the state and spill volumes. This is the signal for *"am I outgrowing this server"*,
+distinct from the per-job cost in `SHOW JOB HISTORY`. Samples are recorded on the node heartbeat and
+pruned per `Orchestrator:HostMetricsRetentionDays` (default 14).
+
+```sql
+-- All nodes, or filter to one node id
+SHOW HOST METRICS;
+SHOW HOST METRICS 'app-server-01:1234:ab...';
+
+-- Capacity check: lowest free disk and peak memory per node in the last 24h
+SHOW HOST METRICS INTO #hm;
+SELECT NodeId,
+       MIN(StateDiskFreeMB) AS MinStateFreeMB,
+       MIN(SpillDiskFreeMB) AS MinSpillFreeMB,
+       MAX(MemoryLoadPercent) AS PeakMemPct
+FROM #hm
+GROUP BY NodeId;
+```
+
+**Result columns:** `NodeId`, `CapturedAt`, `MemoryLoadPercent`, `ProcessCpuPercent`, `HostCpuPercent`
+(null until a whole-host CPU probe is enabled), `StateDiskFreeMB`, `SpillDiskFreeMB`
 
 ### 3.4 `DROP JOB` — Unschedule a Job
 
@@ -426,6 +454,22 @@ curl -X DELETE http://localhost:5001/jobs/{id} \
 ```
 
 From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).
+
+### 3.6 Paging Scheduled Jobs and History
+
+The management APIs bound catalog responses so large installations do not materialize every job or
+history row in one request. Job pages are ordered by name and accept `limit` (1–1,000, default 100)
+and `offset`. History endpoints accept `limit` (1–1,000).
+
+```text
+GET /api/scheduled-jobs?limit=100&offset=200
+GET /api/scheduled-jobs/NightlyArchive/history?limit=100
+GET /api/history?jobName=NightlyArchive&limit=100
+```
+
+Scheduler due-job reads are not paged because every due job must be considered in a scheduling pass;
+they use the `(IsEnabled, NextRun)` index. Portal completion polling uses bounded 1,000-row,
+completion-time pages internally.
 
 ---
 

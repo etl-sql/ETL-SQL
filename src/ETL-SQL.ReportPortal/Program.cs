@@ -173,8 +173,12 @@ builder.Services.AddAuthentication(opt =>
 {
     opt.TokenValidationParameters = new TokenValidationParameters
     {
-        ValidateIssuer = false,
-        ValidateAudience = false,
+        // COMPAT_BREAK: 0.14 — tokens minted before iss/aud were stamped are rejected,
+        // forcing one re-login (user tokens) or re-mint (short-lived service tokens).
+        ValidateIssuer = true,
+        ValidIssuer = TokenService.TokenIssuer,
+        ValidateAudience = true,
+        ValidAudience = TokenService.TokenAudience,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
         IssuerSigningKeys = validationKeys,
@@ -309,6 +313,17 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTranspor
 });
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
+// Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
+// (no exportable private key persisted); when unset the authority reports "not configured".
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =>
+{
+    var thumbprint = builder.Configuration["Portal:PolicyAuthority:SigningCertThumbprint"];
+    return string.IsNullOrWhiteSpace(thumbprint)
+        ? new ETL_SQL.Core.Governance.DisabledPolicyEnvelopeSigner()
+        : new ETL_SQL.Core.Governance.CertificatePolicyEnvelopeSigner(thumbprint);
+});
+builder.Services.AddScoped<ETL_SQL.Core.Governance.IPolicyAuthorityStore, ETL_SQL.ReportPortal.Data.DbPolicyAuthorityStore>();
+builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 // Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time
 // reauthorization; persisted job scripts are credential-free triggers.
@@ -382,6 +397,10 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionSe
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>());
 
+// Optional scheduled operational-metrics digest email (Portal:OperationalDigest; disabled by default).
+// HA-safe: a cluster lock ensures exactly one node sends per interval.
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OperationalMetricsDigestService>();
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
@@ -411,7 +430,9 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.SnapshotMigratio
 builder.Services.AddHealthChecks()
     .AddCheck<PortalDbHealthCheck>("db", HealthStatus.Unhealthy, ["ready"])
     .AddCheck<OrchestratorHealthCheck>("orchestrator", HealthStatus.Degraded, ["live"])
-    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"]);
+    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"])
+    .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.PolicyAuthorityHealthCheck>(
+        "policy-authority", HealthStatus.Degraded, ["live"]);
 
 builder.Services.AddControllers();
 

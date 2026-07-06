@@ -49,7 +49,7 @@ namespace ETL_SQL.Connectors.Snowflake
                 var validationHost = SnowflakeConnector.IsLocalOrExplicitEndpoint(host) || HasEmulatorEndpointOptions(connectionString, options)
                     ? host
                     : host.Contains('.') ? host : host + ".snowflakecomputing.com";
-                context.SecurityService.ValidateHost(validationHost);
+                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, validationHost);
             }
 
             // Zero-Trust Path Resolution for PRIVATE_KEY_FILE
@@ -429,7 +429,14 @@ namespace ETL_SQL.Connectors.Snowflake
             if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
             return string.Join(".", parts.Select(p =>
-                p.StartsWith('"') ? p : $"\"{p.Replace("\"", "\"\"")}\""));
+            {
+                if (p.StartsWith('"') && p.EndsWith('"') && p.Length >= 2)
+                {
+                    var unquoted = p.Substring(1, p.Length - 2).Replace("\"", "\"\"");
+                    return $"\"{unquoted}\"";
+                }
+                return $"\"{p.Replace("\"", "\"\"")}\"";
+            }));
         }
 
         private static bool HasEmulatorEndpointOptions(string connectionString, Dictionary<string, string>? options)

@@ -1,0 +1,219 @@
+using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace ETL_SQL.Tests.Core;
+
+/// <summary>
+/// End-to-end proof that script statements and functions routed through
+/// <see cref="FileSystemPolicyAuthorizer"/> enforce enterprise approved filesystem roots,
+/// and that unenrolled (standalone) execution is unrestricted by organization policy.
+/// </summary>
+public sealed class FileSystemPolicyEnforcementTests : IDisposable
+{
+    private readonly string _root;
+    private readonly string _outside;
+
+    public FileSystemPolicyEnforcementTests()
+    {
+        // CWD-relative so local safe-zone guardrails treat both alike; only the enterprise
+        // policy distinguishes them (ApprovedRoots = [_root]).
+        _root = Path.GetFullPath($"policy_enf_root_{Guid.NewGuid():N}");
+        _outside = Path.GetFullPath($"policy_enf_outside_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_root);
+        Directory.CreateDirectory(_outside);
+    }
+
+    public void Dispose()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        try { Directory.Delete(_root, recursive: true); } catch { }
+        try { Directory.Delete(_outside, recursive: true); } catch { }
+    }
+
+    [Fact]
+    public async Task MergeFiles_EnterpriseRootsDenyOutsideDestination_AllowInside()
+    {
+        var src1 = Path.Combine(_root, "merge_a.csv");
+        var src2 = Path.Combine(_root, "merge_b.csv");
+        await File.WriteAllTextAsync(src1, "h\n1\n");
+        await File.WriteAllTextAsync(src2, "h\n2\n");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var deniedDest = Path.Combine(_outside, "merged.csv");
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"MERGE FILES '{Path.Combine(_root, "merge_*.csv")}' TO '{deniedDest}' WITH (HEADER = ON, OVERWRITE = ON);"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(deniedDest));
+
+        var allowedDest = Path.Combine(_root, "merged.csv");
+        await ExecuteAsync(
+            $"MERGE FILES '{Path.Combine(_root, "merge_*.csv")}' TO '{allowedDest}' WITH (HEADER = ON, OVERWRITE = ON);");
+        Assert.True(File.Exists(allowedDest));
+    }
+
+    [Fact]
+    public async Task SplitFile_EnterpriseRootsDenyOutsideDestinationDirectory()
+    {
+        var src = Path.Combine(_root, "split_src.txt");
+        await File.WriteAllLinesAsync(src, ["line1", "line2"]);
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var deniedDir = Path.Combine(_outside, "chunks");
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"SPLIT FILE '{src}' TO '{deniedDir}' WITH (LIMIT_TYPE = 'ROWS', LIMIT_VALUE = 1, PREFIX = 'chunk_', OVERWRITE = ON);"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(Directory.Exists(deniedDir));
+    }
+
+    [Fact]
+    public async Task VerifyFileIntegrity_EnterpriseRootsDenyOutsideSource()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"VERIFY FILE INTEGRITY '{Path.Combine(_outside, "probe.txt")}' WITH (EXPECTED_HASH = 'abc', ALGORITHM = 'SHA256');"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task FileExistsFunction_EnterpriseRootsDenyOutsideProbe_AllowInside()
+    {
+        await File.WriteAllTextAsync(Path.Combine(_root, "present.txt"), "x");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"DECLARE @probe BIT; SET @probe = FILE_EXISTS('{Path.Combine(_outside, "probe.txt")}');"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        // Inside the approved root the probe executes normally.
+        await ExecuteAsync(
+            $"DECLARE @ok BIT; SET @ok = FILE_EXISTS('{Path.Combine(_root, "present.txt")}');");
+    }
+
+    [Fact]
+    public async Task CreateConnection_EnterpriseRootsDenyFileRootOutside_AllowInside()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"CREATE CONNECTION policy_enf_bad AS DIRECTORY('{_outside}');"));
+        Assert.Contains("approved filesystem roots", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+
+        await ExecuteAsync($"CREATE CONNECTION policy_enf_ok AS DIRECTORY('{_root}');");
+    }
+
+    [Fact]
+    public async Task FileOperationCount_EnterpriseCeilingDeniesBeyondLimit()
+    {
+        var src = Path.Combine(_root, "op_src.txt");
+        await File.WriteAllTextAsync(src, "x");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxFileOps: 2));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c1.txt")}' WITH(OVERWRITE=ON);\n" +
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c2.txt")}' WITH(OVERWRITE=ON);\n" +
+            $"COPY FILE '{src}' TO '{Path.Combine(_root, "op_c3.txt")}' WITH(OVERWRITE=ON);"));
+        Assert.Contains("MaxFileOperationsPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        // Operations within the ceiling completed; the one beyond it was denied before executing.
+        Assert.True(File.Exists(Path.Combine(_root, "op_c2.txt")));
+        Assert.False(File.Exists(Path.Combine(_root, "op_c3.txt")));
+    }
+
+    [Fact]
+    public async Task DirectoryRecursionDepth_EnterpriseCeilingDenies()
+    {
+        var srcRoot = Path.Combine(_root, "deep_src");
+        Directory.CreateDirectory(Path.Combine(srcRoot, "a", "b", "c"));
+        await File.WriteAllTextAsync(Path.Combine(srcRoot, "a", "b", "c", "leaf.txt"), "x");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxRecursiveDepth: 1));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"COPY DIRECTORY '{srcRoot}' TO '{Path.Combine(_root, "deep_dst")}';"));
+        Assert.Contains("MaxRecursiveNestingDepth", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WriteExtensionAllowlist_EnterprisePolicyDeniesDisallowedExtension()
+    {
+        var src = Path.Combine(_root, "ext_src.csv");
+        await File.WriteAllTextAsync(src, "h\n1\n");
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, allowedWriteExtensions: ["csv"]));
+
+        // Writing a .csv is permitted; writing a .txt is denied by the allowlist.
+        await ExecuteAsync(
+            $"MERGE FILES '{src}' TO '{Path.Combine(_root, "ext_ok.csv")}' WITH (HEADER = OFF, OVERWRITE = ON);");
+        Assert.True(File.Exists(Path.Combine(_root, "ext_ok.csv")));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            $"MERGE FILES '{src}' TO '{Path.Combine(_root, "ext_bad.txt")}' WITH (HEADER = OFF, OVERWRITE = ON);"));
+        Assert.Contains("write extensions", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(File.Exists(Path.Combine(_root, "ext_bad.txt")));
+    }
+
+    [Fact]
+    public async Task SpillCeiling_EnterprisePolicyDeniesBeyondLimit()
+    {
+        // A 4 KB ceiling is exceeded quickly by a forced-spill temp table, which fails the script.
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(_root, maxSpillBytes: 4096));
+
+        var denied = await Assert.ThrowsAnyAsync<Exception>(() => ExecuteAsync(
+            "SET TEMP_TABLE_SPILL_THRESHOLD = 10;\n" +
+            "CREATE TABLE #big (id INT, payload VARCHAR);\n" +
+            "DECLARE @i INT = 0;\n" +
+            "WHILE @i < 2000 BEGIN\n" +
+            "  INSERT INTO #big VALUES (@i, 'padding-value-to-grow-spill-bytes');\n" +
+            "  SET @i = @i + 1;\n" +
+            "END"));
+        Assert.Contains("MaxSpillBytesPerScript", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Standalone_Unenrolled_RemainsUnrestrictedByOrganizationPolicy()
+    {
+        var src = Path.Combine(_root, "merge_standalone.csv");
+        await File.WriteAllTextAsync(src, "h\n1\n");
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+        var dest = Path.Combine(_outside, "merged_standalone.csv");
+        await ExecuteAsync(
+            $"MERGE FILES '{src}' TO '{dest}' WITH (HEADER = ON, OVERWRITE = ON);");
+        Assert.True(File.Exists(dest));
+    }
+
+    private static async Task ExecuteAsync(string sql)
+    {
+        var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+        await evaluator.Evaluate(script);
+    }
+
+    private static EffectiveEnterprisePolicy EnrolledPolicy(
+        string root,
+        int? maxFileOps = null,
+        int? maxRecursiveDepth = null,
+        long? maxSpillBytes = null,
+        string[]? allowedWriteExtensions = null)
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            Filesystem = new FilesystemPolicySection
+            {
+                ApprovedRoots = [root],
+                AllowedWriteExtensions = allowedWriteExtensions ?? []
+            },
+            Execution = new ExecutionPolicySection
+            {
+                MaxFileOperationsPerScript = maxFileOps,
+                MaxRecursiveNestingDepth = maxRecursiveDepth,
+                MaxSpillBytesPerScript = maxSpillBytes
+            }
+        };
+        return new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
+            DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
+            DateTimeOffset.UtcNow, document,
+            EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues()));
+    }
+}

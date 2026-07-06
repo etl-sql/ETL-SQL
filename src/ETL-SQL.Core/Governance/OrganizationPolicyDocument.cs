@@ -26,7 +26,9 @@ public sealed record OrganizationPolicyDocument
     public string SchemaVersion { get; init; } = CurrentSchemaVersion;
     public ConnectorPolicySection Connectors { get; init; } = new();
     public FilesystemPolicySection Filesystem { get; init; } = new();
+    public NetworkPolicySection Network { get; init; } = new();
     public ExecutionPolicySection Execution { get; init; } = new();
+    public ProcessPolicySection Process { get; init; } = new();
     public RemoteExecutionPolicySection RemoteExecution { get; init; } = new();
     public MutationGuardrailPolicySection MutationGuardrails { get; init; } = new();
 
@@ -38,12 +40,26 @@ public sealed record OrganizationPolicyDocument
             values["Connectors:AllowedTypes"] = Connectors.AllowedTypes;
         if (Filesystem.ApprovedRoots.Count > 0)
             values["Security:ApprovedSafeZones"] = Filesystem.ApprovedRoots;
+        if (Filesystem.AllowedWriteExtensions.Count > 0)
+            values["Security:AllowedWriteExtensions"] = Filesystem.AllowedWriteExtensions;
+        if (Network.AllowedSchemes.Count > 0)
+            values["Security:AllowedSchemes"] = Network.AllowedSchemes;
+        if (Network.AllowedPorts.Count > 0)
+            values["Security:AllowedPorts"] = Network.AllowedPorts.Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture)).ToArray();
         if (Execution.MaxParallelDegree.HasValue)
             values["Security:MaxParallelDegree"] = Execution.MaxParallelDegree.Value;
         if (Execution.MaxFileOperationsPerScript.HasValue)
             values["Security:MaxFileOperationsPerScript"] = Execution.MaxFileOperationsPerScript.Value;
         if (Execution.MaxRecursiveNestingDepth.HasValue)
             values["Security:MaxRecursiveNestingDepth"] = Execution.MaxRecursiveNestingDepth.Value;
+        if (Execution.MaxSpillBytesPerScript.HasValue)
+            values["Security:MaxSpillBytesPerScript"] = Execution.MaxSpillBytesPerScript.Value;
+        if (Execution.MaxSmtpEmailsPerScript.HasValue)
+            values["Security:MaxSmtpEmailsPerScript"] = Execution.MaxSmtpEmailsPerScript.Value;
+        if (Execution.MaxStringResultSize.HasValue)
+            values["Security:MaxStringResultSize"] = Execution.MaxStringResultSize.Value;
+        if (Process.AllowedDockerImages.Count > 0)
+            values["Security:AllowedDockerImages"] = Process.AllowedDockerImages;
         values["Security:AllowedExecutionModes"] = Execution.AllowedModes.Select(value => value.ToString()).ToArray();
         values["Security:RemoteExecutionMode"] = RemoteExecution.Mode.ToString();
         if (RemoteExecution.AllowedHosts.Count > 0)
@@ -64,6 +80,31 @@ public sealed record ConnectorPolicySection
 public sealed record FilesystemPolicySection
 {
     public IReadOnlyList<string> ApprovedRoots { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// File extensions (with or without a leading dot) that script-driven writes may target.
+    /// Empty means the authoritative organization policy does not constrain write extensions
+    /// beyond the local <see cref="Services.SecurityService"/> file-type rules.
+    /// </summary>
+    public IReadOnlyList<string> AllowedWriteExtensions { get; init; } = Array.Empty<string>();
+}
+
+public sealed record NetworkPolicySection
+{
+    /// <summary>
+    /// URL schemes a connector destination may use (case-insensitive, e.g. <c>https</c>, <c>sftp</c>).
+    /// Empty means the authoritative organization policy does not constrain schemes beyond the local
+    /// egress guardrails. Enforced only for destinations that carry a scheme (URL-shaped targets and
+    /// per-request REST URLs); it does not apply to ADO connection strings that name no scheme.
+    /// </summary>
+    public IReadOnlyList<string> AllowedSchemes { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Destination ports a connector may reach. Empty means the authoritative organization policy
+    /// does not constrain ports. Enforced only when the destination carries an explicit or
+    /// scheme-implied port; a target with no discernible port is not blocked by this rule.
+    /// </summary>
+    public IReadOnlyList<int> AllowedPorts { get; init; } = Array.Empty<int>();
 }
 
 public sealed record ExecutionPolicySection
@@ -79,6 +120,34 @@ public sealed record ExecutionPolicySection
     public int? MaxParallelDegree { get; init; }
     public int? MaxFileOperationsPerScript { get; init; }
     public int? MaxRecursiveNestingDepth { get; init; }
+
+    /// <summary>
+    /// Maximum total bytes a single script may spill to engine-owned temp/cache storage.
+    /// Null means the authoritative organization policy does not bound spill volume.
+    /// </summary>
+    public long? MaxSpillBytesPerScript { get; init; }
+
+    /// <summary>
+    /// Maximum SMTP messages one script may send. Null means the authoritative organization policy
+    /// does not bound outbound email.
+    /// </summary>
+    public int? MaxSmtpEmailsPerScript { get; init; }
+
+    /// <summary>
+    /// Maximum bytes a single string result may materialize. Null leaves the local safety limit in
+    /// force without imposing an additional organization ceiling.
+    /// </summary>
+    public long? MaxStringResultSize { get; init; }
+}
+
+public sealed record ProcessPolicySection
+{
+    /// <summary>
+    /// Docker image references a script may run via <c>USE DOCKER(...)</c>. An entry may be an exact
+    /// <c>repo:tag</c>, a tagless <c>repo</c> (matches any tag), or a <c>prefix/*</c> registry/namespace
+    /// wildcard. Empty means the authoritative organization policy does not constrain Docker images.
+    /// </summary>
+    public IReadOnlyList<string> AllowedDockerImages { get; init; } = Array.Empty<string>();
 }
 
 public sealed record RemoteExecutionPolicySection
@@ -113,6 +182,14 @@ public static class OrganizationPolicySchema
     public static IReadOnlyCollection<string> SupportedSchemaVersions =>
         new ReadOnlyCollection<string>(SupportedVersions.OrderBy(v => v, StringComparer.OrdinalIgnoreCase).ToArray());
 
+    /// <summary>Serializes a document with the same options the client parser uses, so a published
+    /// envelope round-trips through <see cref="ParseAndValidateJson"/>.</summary>
+    public static string Serialize(OrganizationPolicyDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return JsonSerializer.Serialize(document, JsonOptions);
+    }
+
     public static OrganizationPolicyDocument ParseJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -132,6 +209,9 @@ public static class OrganizationPolicySchema
 
         ValidateConnectorTypes(document.Connectors.AllowedTypes, errors);
         ValidateAbsoluteRoots(document.Filesystem.ApprovedRoots, errors);
+        ValidateWriteExtensions(document.Filesystem.AllowedWriteExtensions, errors);
+        ValidateNetwork(document.Network, errors);
+        ValidateDockerImages(document.Process.AllowedDockerImages, errors);
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
 
@@ -185,6 +265,66 @@ public static class OrganizationPolicySchema
         }
     }
 
+    private static void ValidateWriteExtensions(IReadOnlyList<string> extensions, List<string> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var extension in extensions)
+        {
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                errors.Add("Filesystem allowed write extensions cannot contain blank entries.");
+                continue;
+            }
+
+            var normalized = extension.Trim().TrimStart('.');
+            if (normalized.Length == 0 || normalized.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                errors.Add($"Filesystem allowed write extension '{extension}' is not a valid extension.");
+            else if (!seen.Add(normalized))
+                errors.Add($"Filesystem allowed write extension '{extension}' is duplicated.");
+        }
+    }
+
+    private static void ValidateDockerImages(IReadOnlyList<string> images, List<string> errors)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var image in images)
+        {
+            if (string.IsNullOrWhiteSpace(image))
+                errors.Add("Process allowed Docker images cannot contain blank entries.");
+            else if (!seen.Add(image.Trim()))
+                errors.Add($"Process allowed Docker image '{image}' is duplicated.");
+        }
+    }
+
+    private static void ValidateNetwork(NetworkPolicySection network, List<string> errors)
+    {
+        var seenSchemes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var scheme in network.AllowedSchemes)
+        {
+            if (string.IsNullOrWhiteSpace(scheme))
+            {
+                errors.Add("Network allowed schemes cannot contain blank entries.");
+                continue;
+            }
+
+            var trimmed = scheme.Trim();
+            // A URI scheme is letters/digits/+/-/. starting with a letter (RFC 3986).
+            if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, "^[a-zA-Z][a-zA-Z0-9+.\\-]*$"))
+                errors.Add($"Network allowed scheme '{scheme}' is not a valid URI scheme.");
+            else if (!seenSchemes.Add(trimmed))
+                errors.Add($"Network allowed scheme '{scheme}' is duplicated.");
+        }
+
+        var seenPorts = new HashSet<int>();
+        foreach (var port in network.AllowedPorts)
+        {
+            if (port is < 1 or > 65535)
+                errors.Add($"Network allowed port '{port}' must be between 1 and 65535.");
+            else if (!seenPorts.Add(port))
+                errors.Add($"Network allowed port '{port}' is duplicated.");
+        }
+    }
+
     private static void ValidateExecution(ExecutionPolicySection execution, List<string> errors)
     {
         if (execution.AllowedModes.Count == 0)
@@ -195,6 +335,12 @@ public static class OrganizationPolicySchema
             errors.Add("Execution max file operations per script must be zero or greater.");
         if (execution.MaxRecursiveNestingDepth.HasValue && execution.MaxRecursiveNestingDepth.Value < 0)
             errors.Add("Execution max recursive nesting depth must be zero or greater.");
+        if (execution.MaxSpillBytesPerScript.HasValue && execution.MaxSpillBytesPerScript.Value < 0)
+            errors.Add("Execution max spill bytes per script must be zero or greater.");
+        if (execution.MaxSmtpEmailsPerScript.HasValue && execution.MaxSmtpEmailsPerScript.Value < 0)
+            errors.Add("Execution max SMTP emails per script must be zero or greater.");
+        if (execution.MaxStringResultSize.HasValue && execution.MaxStringResultSize.Value < 0)
+            errors.Add("Execution max string result size must be zero or greater.");
     }
 
     private static void ValidateRemoteExecution(RemoteExecutionPolicySection remote, List<string> errors)

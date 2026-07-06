@@ -38,15 +38,17 @@ namespace ETL_SQL.Connectors.Parquet
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
 
             _options = options;
             _compression = options != null && options.TryGetValue("COMPRESSION", out var c) ? c.ToUpperInvariant() : "SNAPPY";
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, false);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>
@@ -54,6 +56,7 @@ namespace ETL_SQL.Connectors.Parquet
 
         private async IAsyncEnumerable<DataTable> ReadBatchesCore(int batchSize)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             string effectivePath = _filePath;
@@ -122,6 +125,7 @@ namespace ETL_SQL.Connectors.Parquet
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             var enumerator = batches.GetAsyncEnumerator();
             if (!await enumerator.MoveNextAsync())
             {

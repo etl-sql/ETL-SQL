@@ -1,0 +1,478 @@
+using System;
+using System.Buffers;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+
+namespace ETL_SQL.Core.Data;
+
+public enum ColumnarJoinKind
+{
+    Inner,
+    LeftOuter,
+    LeftSemi,
+    LeftAnti
+}
+
+/// <summary>Pooled packed left/right row ordinals produced by a native join.</summary>
+public sealed class NativeJoinPairs : IDisposable
+{
+    private int[]? _leftRows;
+    private int[]? _rightRows;
+    private IMemoryGrantLease? _lease;
+
+    internal NativeJoinPairs(int[] leftRows, int[] rightRows, int count, IMemoryGrantLease lease, long reservedBytes)
+    {
+        _leftRows = leftRows;
+        _rightRows = rightRows;
+        _lease = lease;
+        Count = count;
+        ReservedBytes = reservedBytes;
+    }
+
+    public int Count { get; }
+    public long ReservedBytes { get; }
+    public ReadOnlyMemory<int> LeftRows
+        => (_leftRows ?? throw new ObjectDisposedException(nameof(NativeJoinPairs))).AsMemory(0, Count);
+    public ReadOnlyMemory<int> RightRows
+        => (_rightRows ?? throw new ObjectDisposedException(nameof(NativeJoinPairs))).AsMemory(0, Count);
+
+    public void Dispose()
+    {
+        var left = Interlocked.Exchange(ref _leftRows, null);
+        var right = Interlocked.Exchange(ref _rightRows, null);
+        if (left != null) ArrayPool<int>.Shared.Return(left, clearArray: false);
+        if (right != null) ArrayPool<int>.Shared.Return(right, clearArray: false);
+        Interlocked.Exchange(ref _lease, null)?.Dispose();
+    }
+}
+
+public static class ColumnBatchJoinKernels
+{
+    public static NativeJoinPairs CreateOrdinalPairs(
+        ReadOnlySpan<int> leftRows,
+        ReadOnlySpan<int> rightRows,
+        IMemoryGrantArbiter? memoryArbiter = null)
+    {
+        if (leftRows.Length != rightRows.Length)
+            throw new ArgumentException("Left and right ordinal counts must match.");
+        var arbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
+        var lease = arbiter.AcquireLease();
+        int[]? left = null;
+        int[]? right = null;
+        try
+        {
+            left = ArrayPool<int>.Shared.Rent(Math.Max(1, leftRows.Length));
+            right = ArrayPool<int>.Shared.Rent(Math.Max(1, rightRows.Length));
+            var reservedBytes = (long)(left.Length + right.Length) * sizeof(int);
+            if (lease.RegisterAndCheckSpill(reservedBytes))
+                throw new ExecutionException("Native join ordinal output could not acquire its result-lifetime memory grant.");
+            leftRows.CopyTo(left);
+            rightRows.CopyTo(right);
+            var result = new NativeJoinPairs(left, right, leftRows.Length, lease, reservedBytes);
+            left = null;
+            right = null;
+            return result;
+        }
+        catch
+        {
+            if (left != null) ArrayPool<int>.Shared.Return(left, clearArray: false);
+            if (right != null) ArrayPool<int>.Shared.Return(right, clearArray: false);
+            lease.Dispose();
+            throw;
+        }
+    }
+
+    public static NativeJoinPairs JoinAuto(
+        ColumnBatch left,
+        IReadOnlyList<string> leftKeyColumns,
+        ColumnBatch right,
+        IReadOnlyList<string> rightKeyColumns,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftKeyColumns);
+        ArgumentNullException.ThrowIfNull(rightKeyColumns);
+        if (leftKeyColumns.Count != rightKeyColumns.Count || leftKeyColumns.Count == 0)
+            throw new ArgumentException("Join key lists must be equal and non-empty.");
+        if (leftKeyColumns.Count > 1)
+            return JoinComposite(left, leftKeyColumns, right, rightKeyColumns, joinKind,
+                memoryArbiter, leftSelection, rightSelection, cancellationToken);
+
+        var leftColumn = left.GetColumn(leftKeyColumns[0]);
+        var rightColumn = right.GetColumn(rightKeyColumns[0]);
+        if (leftColumn.ElementType != rightColumn.ElementType)
+            throw new NotSupportedException("Native join key physical types must match.");
+        if (leftColumn.ElementType == typeof(string))
+            return JoinUtf8(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind,
+                memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(byte)) return Join<byte>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(short)) return Join<short>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(int)) return Join<int>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(long)) return Join<long>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(double)) return Join<double>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(decimal)) return Join<decimal>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(DateTime)) return Join<DateTime>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(DateTimeOffset)) return Join<DateTimeOffset>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(TimeSpan)) return Join<TimeSpan>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        if (leftColumn.ElementType == typeof(Guid)) return Join<Guid>(left, leftKeyColumns[0], right, rightKeyColumns[0], joinKind, memoryArbiter, leftSelection, rightSelection, cancellationToken);
+        throw new NotSupportedException($"Physical join key type '{leftColumn.ElementType.Name}' is not supported.");
+    }
+
+    public static ColumnBatch ProjectPayloads(
+        ColumnBatch left,
+        ColumnBatch right,
+        NativeJoinPairs pairs,
+        IReadOnlyList<string> leftColumns,
+        IReadOnlyList<string> rightColumns,
+        IReadOnlyList<string>? outputColumns = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftColumns);
+        ArgumentNullException.ThrowIfNull(rightColumns);
+        var columnCount = leftColumns.Count + rightColumns.Count;
+        if (columnCount == 0) throw new ArgumentException("At least one payload column is required.");
+        if (outputColumns != null && outputColumns.Count != columnCount)
+            throw new ArgumentException("Output column count must match payload column count.", nameof(outputColumns));
+
+        var buffers = new List<IColumnBuffer>(columnCount);
+        var fields = new List<ColumnBatchField>(columnCount);
+        try
+        {
+            Append(left, leftColumns, pairs.LeftRows, nullable: false);
+            Append(right, rightColumns, pairs.RightRows, nullable: true);
+            return new ColumnBatch(new ColumnBatchSchema(fields), buffers, pairs.Count);
+        }
+        catch
+        {
+            foreach (var buffer in buffers) buffer.Dispose();
+            throw;
+        }
+
+        void Append(ColumnBatch source, IReadOnlyList<string> columns, ReadOnlyMemory<int> rows, bool nullable)
+        {
+            foreach (var name in columns)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var ordinal = source.Schema.GetOrdinal(name);
+                var field = source.Schema.Fields[ordinal];
+                var outputName = outputColumns?[fields.Count] ?? field.Name;
+                buffers.Add(ColumnBatchAdapter.GatherColumn(
+                    source.Columns[ordinal], source.RowCount, rows, cancellationToken));
+                fields.Add(field with { Name = outputName, IsNullable = field.IsNullable || nullable });
+            }
+        }
+    }
+
+    public static NativeJoinPairs InnerJoin<T>(
+        ColumnBatch left,
+        string leftKeyColumn,
+        ColumnBatch right,
+        string rightKeyColumn,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default) where T : unmanaged
+        => Join<T>(left, leftKeyColumn, right, rightKeyColumn, ColumnarJoinKind.Inner,
+            memoryArbiter, leftSelection, rightSelection, cancellationToken);
+
+    public static NativeJoinPairs Join<T>(
+        ColumnBatch left,
+        string leftKeyColumn,
+        ColumnBatch right,
+        string rightKeyColumn,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default) where T : unmanaged
+    {
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
+        var leftKeys = left.GetColumn<T>(leftKeyColumn);
+        var rightKeys = right.GetColumn<T>(rightKeyColumn);
+        return JoinCore(
+            left.RowCount,
+            right.RowCount,
+            leftKeys.IsNull,
+            rightKeys.IsNull,
+            row => leftKeys.Values.Span[row],
+            row => rightKeys.Values.Span[row],
+            _ => Unsafe.SizeOf<T>(),
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+    }
+
+    public static NativeJoinPairs JoinUtf8(
+        ColumnBatch left,
+        string leftKeyColumn,
+        ColumnBatch right,
+        string rightKeyColumn,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
+        var leftKeys = left.GetUtf8Column(leftKeyColumn);
+        var rightKeys = right.GetUtf8Column(rightKeyColumn);
+        return JoinCore<object>(
+            left.RowCount,
+            right.RowCount,
+            leftKeys.IsNull,
+            rightKeys.IsNull,
+            row => Normalize(leftKeys, row),
+            row => Normalize(rightKeys, row),
+            row => rightKeys.GetUtf8Bytes(row).Length,
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+
+        static object Normalize(Utf8ColumnBuffer keys, int row)
+            => CompoundKey.NormalizeValue(Encoding.UTF8.GetString(keys.GetUtf8Bytes(row)))!;
+    }
+
+    public static NativeJoinPairs JoinComposite(
+        ColumnBatch left,
+        IReadOnlyList<string> leftKeyColumns,
+        ColumnBatch right,
+        IReadOnlyList<string> rightKeyColumns,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter = null,
+        SelectionVector? leftSelection = null,
+        SelectionVector? rightSelection = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(leftKeyColumns);
+        ArgumentNullException.ThrowIfNull(rightKeyColumns);
+        if (leftKeyColumns.Count == 0 || leftKeyColumns.Count != rightKeyColumns.Count)
+            throw new ArgumentException("Composite joins require equal, non-empty key-column lists.");
+        if (!Enum.IsDefined(joinKind)) throw new ArgumentOutOfRangeException(nameof(joinKind));
+
+        var leftKeys = leftKeyColumns.Select(left.GetColumn).ToArray();
+        var rightKeys = rightKeyColumns.Select(right.GetColumn).ToArray();
+        return JoinCore(
+            left.RowCount,
+            right.RowCount,
+            row => HasNull(leftKeys, row),
+            row => HasNull(rightKeys, row),
+            row => CreateKey(leftKeys, row),
+            row => CreateKey(rightKeys, row),
+            row => EstimateKeyBytes(rightKeys, row),
+            joinKind,
+            memoryArbiter,
+            leftSelection,
+            rightSelection,
+            cancellationToken);
+
+        static bool HasNull(IReadOnlyList<IColumnBuffer> columns, int row)
+        {
+            for (var i = 0; i < columns.Count; i++)
+                if (columns[i].IsNull(row)) return true;
+            return false;
+        }
+
+        static CompoundKey CreateKey(IReadOnlyList<IColumnBuffer> columns, int row)
+            => columns.Count switch
+            {
+                1 => new CompoundKey(columns[0].GetBoxedValue(row)),
+                2 => new CompoundKey(columns[0].GetBoxedValue(row), columns[1].GetBoxedValue(row)),
+                3 => new CompoundKey(columns[0].GetBoxedValue(row), columns[1].GetBoxedValue(row),
+                    columns[2].GetBoxedValue(row)),
+                _ => new CompoundKey(columns.Select(column => column.GetBoxedValue(row)).ToArray())
+            };
+
+        static int EstimateKeyBytes(IReadOnlyList<IColumnBuffer> columns, int row)
+        {
+            var bytes = 0;
+            for (var i = 0; i < columns.Count; i++)
+            {
+                bytes = checked(bytes + (columns[i] is Utf8ColumnBuffer utf8
+                    ? utf8.GetUtf8Bytes(row).Length
+                    : 16));
+            }
+            return bytes;
+        }
+    }
+
+    private static NativeJoinPairs JoinCore<TKey>(
+        int leftRowCount,
+        int rightRowCount,
+        Func<int, bool> leftIsNull,
+        Func<int, bool> rightIsNull,
+        Func<int, TKey> getLeftKey,
+        Func<int, TKey> getRightKey,
+        Func<int, int> getRightKeySize,
+        ColumnarJoinKind joinKind,
+        IMemoryGrantArbiter? memoryArbiter,
+        SelectionVector? leftSelection,
+        SelectionVector? rightSelection,
+        CancellationToken cancellationToken) where TKey : notnull
+    {
+        var build = new Dictionary<TKey, List<int>>();
+        var arbiter = memoryArbiter ?? UnlimitedMemoryGrantArbiter.Instance;
+        var lease = arbiter.AcquireLease();
+        int[]? leftRows = null;
+        int[]? rightRows = null;
+        var count = 0;
+        long reservedBytes = 0;
+
+        try
+        {
+            VisitOrdinals(rightRowCount, rightSelection, cancellationToken, row =>
+            {
+                if (rightIsNull(row)) return;
+                var key = getRightKey(row);
+                if (!build.TryGetValue(key, out var rows))
+                {
+                    Reserve(lease, ref reservedBytes, 48L + getRightKeySize(row));
+                    rows = new List<int>();
+                    build.Add(key, rows);
+                }
+                Reserve(lease, ref reservedBytes, sizeof(int) + 4L);
+                rows.Add(row);
+            });
+
+            VisitOrdinals(leftRowCount, leftSelection, cancellationToken, leftRow =>
+            {
+                List<int>? matches = null;
+                var matched = !leftIsNull(leftRow)
+                    && build.TryGetValue(getLeftKey(leftRow), out matches);
+                if (matched)
+                {
+                    if (joinKind == ColumnarJoinKind.LeftAnti) return;
+                    if (joinKind == ColumnarJoinKind.LeftSemi)
+                    {
+                        Append(leftRow, matches![0]);
+                        return;
+                    }
+                    foreach (var rightRow in matches!) Append(leftRow, rightRow);
+                    return;
+                }
+
+                if (joinKind is ColumnarJoinKind.LeftOuter or ColumnarJoinKind.LeftAnti)
+                    Append(leftRow, -1);
+            });
+
+            EnsureOutputCapacity(ref leftRows, ref rightRows, 1, lease, ref reservedBytes);
+            foreach (var rows in build.Values) rows.Clear();
+            build.Clear();
+            lease.Dispose();
+            lease = arbiter.AcquireLease();
+            reservedBytes = (long)(leftRows!.Length + rightRows!.Length) * sizeof(int);
+            if (lease.RegisterAndCheckSpill(reservedBytes))
+                throw new ExecutionException("Native join output could not reacquire its result-lifetime memory grant.");
+            var result = new NativeJoinPairs(leftRows!, rightRows!, count, lease, reservedBytes);
+            leftRows = null;
+            rightRows = null;
+            return result;
+
+            void Append(int leftRow, int rightRow)
+            {
+                EnsureOutputCapacity(ref leftRows, ref rightRows, count + 1, lease, ref reservedBytes);
+                leftRows![count] = leftRow;
+                rightRows![count] = rightRow;
+                count++;
+            }
+        }
+        catch
+        {
+            if (leftRows != null) ArrayPool<int>.Shared.Return(leftRows, clearArray: false);
+            if (rightRows != null) ArrayPool<int>.Shared.Return(rightRows, clearArray: false);
+            lease.Dispose();
+            throw;
+        }
+        finally
+        {
+            foreach (var rows in build.Values) rows.Clear();
+            build.Clear();
+        }
+    }
+
+    private static void EnsureOutputCapacity(
+        ref int[]? leftRows,
+        ref int[]? rightRows,
+        int required,
+        IMemoryGrantLease lease,
+        ref long reservedBytes)
+    {
+        if (leftRows != null && required <= leftRows.Length) return;
+        var requested = leftRows == null ? 16 : checked(leftRows.Length * 2);
+        while (requested < required) requested = checked(requested * 2);
+        int[]? newLeft = null;
+        int[]? newRight = null;
+        try
+        {
+            newLeft = ArrayPool<int>.Shared.Rent(requested);
+            newRight = ArrayPool<int>.Shared.Rent(requested);
+            var previousBytes = leftRows == null ? 0L : (long)(leftRows.Length + rightRows!.Length) * sizeof(int);
+            var nextBytes = (long)(newLeft.Length + newRight.Length) * sizeof(int);
+            Reserve(lease, ref reservedBytes, nextBytes - previousBytes);
+            if (leftRows != null)
+            {
+                leftRows.CopyTo(newLeft, 0);
+                rightRows!.CopyTo(newRight, 0);
+                ArrayPool<int>.Shared.Return(leftRows, clearArray: false);
+                ArrayPool<int>.Shared.Return(rightRows, clearArray: false);
+            }
+            leftRows = newLeft;
+            rightRows = newRight;
+            newLeft = null;
+            newRight = null;
+        }
+        finally
+        {
+            if (newLeft != null) ArrayPool<int>.Shared.Return(newLeft, clearArray: false);
+            if (newRight != null) ArrayPool<int>.Shared.Return(newRight, clearArray: false);
+        }
+    }
+
+    private static void Reserve(IMemoryGrantLease lease, ref long reservedBytes, long additionalBytes)
+    {
+        var prospective = checked(reservedBytes + additionalBytes);
+        if (lease.RegisterAndCheckSpill(prospective))
+            throw new ExecutionException(
+                $"Native hash join requires more than {reservedBytes:N0} bytes. " +
+                "Increase Engine:TotalMemoryGrantMB or use spill-partitioned join execution.");
+        reservedBytes = prospective;
+    }
+
+    private static void VisitOrdinals(
+        int rowCount,
+        SelectionVector? selection,
+        CancellationToken cancellationToken,
+        Action<int> visit)
+    {
+        if (selection == null)
+        {
+            for (var row = 0; row < rowCount; row++)
+            {
+                if ((row & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+                visit(row);
+            }
+            return;
+        }
+
+        var ordinals = selection.Indices.Span;
+        for (var position = 0; position < ordinals.Length; position++)
+        {
+            if ((position & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var row = ordinals[position];
+            if ((uint)row >= (uint)rowCount)
+                throw new ArgumentOutOfRangeException(nameof(selection), "Selection vector contains an invalid row ordinal.");
+            visit(row);
+        }
+    }
+}

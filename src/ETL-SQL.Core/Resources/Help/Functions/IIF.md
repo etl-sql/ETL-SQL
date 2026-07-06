@@ -19,8 +19,12 @@ IIF(condition, true_value, false_value)
 Same type as `true_value` / `false_value` — the appropriate branch value.
 
 ## Remarks
-- Equivalent to `CASE WHEN condition THEN true_value ELSE false_value END`.
-- Both branches are evaluated regardless of the condition result. For lazy evaluation, use `CASE...WHEN`.
+- Compiled at parse time to `CASE WHEN condition THEN true_value ELSE false_value END` — IIF *is*
+  CASE, exactly as in T-SQL.
+- Because it is CASE, evaluation **short-circuits**: the untaken branch is never evaluated, so
+  `IIF(x = 0, 0, 1/x)` is safe when `x` is 0.
+- Pushes down to any connector as universal `CASE`, not as a T-SQL-only function.
+- A `NULL`/UNKNOWN condition selects `false_value` (standard CASE behavior).
 
 ## Example
 ```sql

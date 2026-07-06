@@ -787,10 +787,20 @@ function getSessionId(document: vscode.TextDocument): string {
 function forceKillProcesses() {
     try {
         if (os.platform() === 'win32') {
-            cp.execSync('taskkill /F /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe', { stdio: 'ignore' });
+            const username = process.env.USERNAME;
+            const cmd = username 
+                ? `taskkill /F /FI "USERNAME eq ${username}" /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe`
+                : 'taskkill /F /IM ETL-SQL.exe /IM ETL-SQL-LSP.exe /IM ETL-SQL-Report.exe /IM ETL-SQL-Player.exe';
+            cp.execSync(cmd, { stdio: 'ignore' });
         } else {
-            cp.execSync('pkill -9 -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true', { stdio: 'ignore' });
-            cp.execSync('pkill -9 -x "ETL-SQL" || true', { stdio: 'ignore' });
+            const user = process.env.USER || process.env.LOGNAME;
+            if (user) {
+                cp.execSync(`pkill -9 -u "${user}" -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true`, { stdio: 'ignore' });
+                cp.execSync(`pkill -9 -u "${user}" -x "ETL-SQL" || true`, { stdio: 'ignore' });
+            } else {
+                cp.execSync('pkill -9 -f "ETL-SQL-LSP|ETL-SQL-Report|ETL-SQL-Player" || true', { stdio: 'ignore' });
+                cp.execSync('pkill -9 -x "ETL-SQL" || true', { stdio: 'ignore' });
+            }
         }
     } catch {
         // Ignore errors (e.g. if processes are not running)

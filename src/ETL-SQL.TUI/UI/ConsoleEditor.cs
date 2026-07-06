@@ -178,6 +178,12 @@ namespace ETL_SQL.TUI.UI
         {
             await LoadFile(_filePath);
             _renderer._sidebarPanel.Initialize(_filePath);
+            try
+            {
+                _prevWidth = Console.WindowWidth;
+                _prevHeight = Console.WindowHeight;
+            }
+            catch { }
         }
 
         /// <summary>Loads a script file into the editor buffer.</summary>
@@ -828,12 +834,33 @@ namespace ETL_SQL.TUI.UI
                 return await ReadInputWindows();
             }
 
-            // Heartbeat while a run or a live-analysis pass is in flight so the loop repaints
-            // updates without blocking on input.
-            if (_renderer.ExecutionRunning || _renderer.LiveAnalysisPending)
+            // On Unix/fallback, poll Console.KeyAvailable to allow detecting window resize events immediately
+            if (!OperatingSystem.IsWindows() || !_consoleModeModified)
             {
-                try { if (!Console.KeyAvailable) { await Task.Delay(80); return null; } }
-                catch (InvalidOperationException) { await Task.Delay(80); return null; }
+                int count = 0;
+                try
+                {
+                    while (!Console.KeyAvailable)
+                    {
+                        if (_prevWidth != Console.WindowWidth || _prevHeight != Console.WindowHeight)
+                        {
+                            _prevWidth = Console.WindowWidth;
+                            _prevHeight = Console.WindowHeight;
+                            return null; // Trigger repaint on resize
+                        }
+                        await Task.Delay(50);
+                        if (_renderer.ExecutionRunning || _renderer.LiveAnalysisPending)
+                        {
+                            count++;
+                            if (count >= 2) return null; // Repaint status updates every 100ms
+                        }
+                    }
+                }
+                catch (InvalidOperationException)
+                {
+                    await Task.Delay(80);
+                    return null;
+                }
             }
 
             ConsoleKeyInfo key;
@@ -928,6 +955,8 @@ namespace ETL_SQL.TUI.UI
         private bool _mouseDragging = false;
         private int _dragAnchorLine = 0;
         private int _dragAnchorCol = 0;
+        private int _prevWidth = 80;
+        private int _prevHeight = 24;
 
         private async Task<ConsoleKeyInfo?> ReadInputWindows()
         {
@@ -957,6 +986,17 @@ namespace ETL_SQL.TUI.UI
                 }
 
                 var record = _inputRecordBuffer[0];
+
+                if (record.EventType == WINDOW_BUFFER_SIZE_EVENT)
+                {
+                    try
+                    {
+                        _prevWidth = Console.WindowWidth;
+                        _prevHeight = Console.WindowHeight;
+                    }
+                    catch { }
+                    return null; // Trigger repaint on Windows resize
+                }
 
                 if (record.EventType == KEY_EVENT)
                 {

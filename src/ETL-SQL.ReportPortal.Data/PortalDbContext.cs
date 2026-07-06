@@ -31,6 +31,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<SavedReportView> SavedReportViews => Set<SavedReportView>();
     public DbSet<ReportAlert> ReportAlerts => Set<ReportAlert>();
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
+    public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
+    public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -171,9 +173,30 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        builder.Entity<PolicyVersionEntity>(e =>
+        {
+            // A version string is unique within a tenant/environment; the active-lookup index keeps
+            // retrieval and supersession bounded on the append-only table.
+            e.HasIndex(x => new { x.Tenant, x.Environment, x.PolicyVersion }).IsUnique();
+            e.HasIndex(x => new { x.Tenant, x.Environment, x.RolloutState });
+        });
+
+        builder.Entity<PolicyMachineEntity>(e =>
+        {
+            e.HasIndex(x => x.MachineId).IsUnique();
+            e.HasIndex(x => new { x.Tenant, x.Environment });
+        });
+
         builder.Entity<AuditLog>(e =>
         {
             e.Property(x => x.ActorType).HasDefaultValue("User");
+            // Read paths that previously full-scanned this (append-heavy) table: the admin audit
+            // viewer (optional action filter, newest-first, paged), usage metrics (action + time
+            // window), per-report change history (resource lookup), and retention purge (time range).
+            // Narrow, non-unique secondary indexes keep insert cost bounded.
+            e.HasIndex(x => x.Timestamp);
+            e.HasIndex(x => new { x.Action, x.Timestamp });
+            e.HasIndex(x => new { x.ResourceType, x.ResourceId });
         });
 
         builder.Entity<Group>(e =>

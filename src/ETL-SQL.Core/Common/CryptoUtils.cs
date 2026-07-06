@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using PgpCore;
 
@@ -223,12 +224,97 @@ public static class CryptoUtils
         }
     }
 
-    private static bool TryReadFileMagicV2(FileStream fs)
+    private static bool TryReadFileMagicV2(Stream fs)
     {
         if (fs.Length < FileMagicV2.Length) return false;
         Span<byte> magic = stackalloc byte[FileMagicV2.Length];
         fs.ReadExactly(magic);
         return magic.SequenceEqual(FileMagicV2);
+    }
+
+    public static Stream DecryptStream(Stream fsIn, string password, HashAlgorithmName? algo = null)
+    {
+        if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
+
+        var hashAlgo = algo ?? HashAlgorithmName.SHA256;
+        if (TryReadFileMagicV2(fsIn))
+        {
+            byte[] salt = new byte[SaltSize];
+            byte[] iv = new byte[IvSize];
+            fsIn.ReadExactly(salt, 0, SaltSize);
+            fsIn.ReadExactly(iv, 0, IvSize);
+            var cipherStart = fsIn.Position;
+            var cipherLength = fsIn.Length - cipherStart - FileTagSize;
+            if (cipherLength < 0)
+                throw new ExecutionException("Invalid encrypted file format.");
+
+            var (encryptionKey, hmacKey) = DeriveFileKeys(password, salt, hashAlgo);
+            var limited = new LimitedReadStream(fsIn, cipherLength);
+            var aes = Aes.Create();
+            aes.Key = encryptionKey;
+            aes.IV = iv;
+            var decryptor = aes.CreateDecryptor(aes.Key, aes.IV);
+            return new ChainedStream(new CryptoStream(limited, decryptor, CryptoStreamMode.Read), aes);
+        }
+
+        fsIn.Position = 0;
+        byte[] saltV1 = new byte[SaltSize];
+        byte[] ivV1 = new byte[IvSize];
+        fsIn.ReadExactly(saltV1, 0, SaltSize);
+        fsIn.ReadExactly(ivV1, 0, IvSize);
+
+        byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, saltV1, Iterations, hashAlgo, KeySize / 8);
+        var aesV1 = Aes.Create();
+        var decryptorV1 = aesV1.CreateDecryptor(key, ivV1);
+        return new ChainedStream(new CryptoStream(fsIn, decryptorV1, CryptoStreamMode.Read), aesV1);
+    }
+
+    public static Stream DecryptStreamWithSsh(Stream fsIn, string keyFile, string? passphrase = null)
+    {
+        string pem = File.ReadAllText(keyFile);
+        var rsa = RSA.Create();
+        if (string.IsNullOrEmpty(passphrase)) rsa.ImportFromPem(pem);
+        else rsa.ImportFromEncryptedPem(pem, passphrase);
+
+        if (TryReadMagic(fsIn, SshFileMagicV2))
+        {
+            byte[] lenBytes = new byte[4];
+            fsIn.ReadExactly(lenBytes, 0, 4);
+            int keyLen = BitConverter.ToInt32(lenBytes, 0);
+            if (keyLen <= 0)
+                throw new ExecutionException("Invalid SSH encrypted file format.");
+
+            byte[] encryptedKey = new byte[keyLen];
+            fsIn.ReadExactly(encryptedKey, 0, keyLen);
+
+            byte[] iv = new byte[IvSize];
+            fsIn.ReadExactly(iv, 0, IvSize);
+
+            byte[] keyMaterial = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
+            if (keyMaterial.Length < 64)
+                throw new ExecutionException("Invalid SSH encrypted file key material.");
+
+            byte[] aesKey = keyMaterial.AsSpan(0, 32).ToArray();
+            var cipherStart = fsIn.Position;
+            var cipherLength = fsIn.Length - cipherStart - FileTagSize;
+            if (cipherLength < 0)
+                throw new ExecutionException("Invalid SSH encrypted file format.");
+
+            var limitedCipher = new LimitedReadStream(fsIn, cipherLength);
+            var aes = Aes.Create();
+            var decryptor = aes.CreateDecryptor(aesKey, iv);
+            return new ChainedStream(new CryptoStream(limitedCipher, decryptor, CryptoStreamMode.Read), aes, rsa);
+        }
+
+        throw new ExecutionException("SSH stream decryption is not in a recognized format.");
+    }
+
+    private static bool TryReadMagic(Stream fs, byte[] expectedMagic)
+    {
+        if (fs.Length < expectedMagic.Length) return false;
+        Span<byte> magic = stackalloc byte[expectedMagic.Length];
+        fs.ReadExactly(magic);
+        return magic.SequenceEqual(expectedMagic);
     }
 
     private static (byte[] EncryptionKey, byte[] HmacKey) DeriveFileKeys(string password, byte[] salt, HashAlgorithmName hashAlgo)

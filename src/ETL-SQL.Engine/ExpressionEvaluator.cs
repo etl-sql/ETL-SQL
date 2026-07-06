@@ -680,24 +680,56 @@ public class ExpressionEvaluator
         });
     }
 
-    /// <summary>Evaluates the AT TIME ZONE expression.</summary>
     private async ValueTask<object?> EvaluateAtTimeZone(AtTimeZoneExpression atTz, Row context, bool decryptSensitive = false)
     {
         var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
         var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
         if (val == null || zone == null) return val;
 
-        DateTime dt = DateTime.Parse(val.ToString() ?? "");
-        if (dt.Kind == DateTimeKind.Unspecified) dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        DateTimeOffset dto;
+        if (val is DateTimeOffset valDto)
+        {
+            dto = valDto;
+        }
+        else if (val is DateTime valDt)
+        {
+            var dt = valDt;
+            if (dt.Kind == DateTimeKind.Unspecified)
+            {
+                dt = DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+            }
+            dto = new DateTimeOffset(dt);
+        }
+        else if (val is string text && DateTime.TryParse(
+                     text,
+                     System.Globalization.CultureInfo.InvariantCulture,
+                     System.Globalization.DateTimeStyles.AssumeUniversal
+                     | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                     out var parsedUtc))
+        {
+            dto = new DateTimeOffset(DateTime.SpecifyKind(parsedUtc, DateTimeKind.Utc));
+        }
+        else if (EvaluationUtils.TryToDateTimeOffset(val, out var parsedDto))
+        {
+            dto = parsedDto;
+        }
+        else
+        {
+            return val;
+        }
 
         try
         {
-            var tzInfo = TimeZoneInfo.FindSystemTimeZoneById(zone.ToString() ?? "UTC");
-            return TimeZoneInfo.ConvertTime(dt, tzInfo);
+            var tzInfo = RelDateResolver.FindTimeZone(zone.ToString() ?? "UTC");
+            return TimeZoneInfo.ConvertTime(dto, tzInfo);
         }
-        catch
+        catch (TimeZoneNotFoundException ex)
         {
-            return dt;
+            throw new ExecutionException($"Unknown time zone '{zone}'.", ex);
+        }
+        catch (InvalidTimeZoneException ex)
+        {
+            throw new ExecutionException($"Invalid time zone configuration for '{zone}'.", ex);
         }
     }
 
@@ -967,7 +999,12 @@ public class ExpressionEvaluator
         if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.Telemetry.SortSpillCount;
         if (v.Name.Equals("@@FETCH_STATUS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.FetchStatus;
 
-
+        // Identity variables (row-level security). Null when no identity is injected — a valid
+        // fail-closed value, so these must resolve here and never fall through to "Undeclared".
+        if (v.Name.Equals("@@CURRENT_USER", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.EffectiveUser;
+        if (v.Name.Equals("@@CURRENT_USER_ID", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.EffectiveUserId;
+        if (v.Name.Equals("@@REAL_USER", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.RealUser;
+        if (v.Name.Equals("@@IS_ADMIN", StringComparison.OrdinalIgnoreCase)) return _context.ExecutionIdentity?.IsAdmin ?? false;
 
         if (!_context.VarContext.ContainsVariable(v.Name))
             throw new ExecutionException($"Undeclared: {v.Name}");
@@ -978,7 +1015,7 @@ public class ExpressionEvaluator
             _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
             "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
         {
-            return RelDateResolver.Resolve(reldateExpr, _context.WeekStartDay);
+            return RelDateResolver.ResolveValue(reldateExpr, _context.WeekStartDay);
         }
 
         if (decryptSensitive && val is string s && s.StartsWith("ENC:"))

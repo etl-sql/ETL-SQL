@@ -15,6 +15,11 @@ promise are defined in
 in v0.13.0. Standalone installations must remain unenrolled, unrestricted by organization policy, and
 independent of network services.*
 
+> **Status:** Phase 3 and the v0.14.0 release gates are active in [`TODO.md`](TODO.md). Residual Phase 3
+> hardening plus Phases 4–5 are deferred to v0.15.0 and remain here as the source plan. **Phase 6
+> (Operations Control Plane) remains
+> candidate scope**; promote roadmap work into `TODO.md` only when its target release begins.
+
 ### Shipped foundation
 
 - Machine-level enrollment, protected bootstrap, trust key, machine identity, and enroll/status/unenroll CLI (`4850f3c0`).
@@ -69,7 +74,20 @@ independent of network services.*
 - [ ] Bypass suites cover Windows and Linux paths, links, DNS/redirect behavior, connector aliases, child processes, Docker mounts, script overrides, and concurrent policy refresh.
 - [ ] Existing standalone tests prove no enterprise endpoint, certificate, cache, or organization restriction is required when unenrolled.
 
-### Phase 4: Central Security Events
+### v0.15.0 Deferred Phase 3 hardening
+
+- [ ] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on
+  supported platforms; add link/junction substitution tests at each mutation boundary.
+- [ ] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the
+  REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report
+  Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
+- [ ] Add a Portal administrator UI for policy validation, version history, staged publication,
+  activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.
+- [ ] Run and retain the deferred performance lane plus Windows and Linux enterprise certification
+  evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone
+  behavior.
+
+### v0.15.0 Phase 4: Central Security Events
 
 #### Event contract and emission
 
@@ -93,7 +111,7 @@ independent of network services.*
 - [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
 - [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
 
-### Phase 5: Certification & Operations
+### v0.15.0 Phase 5: Certification & Operations
 
 #### Certification lanes
 
@@ -178,8 +196,88 @@ requirements; unfinished items may move to the next release without weakening th
 #### v0.14.0 release gates
 
 - [ ] Complete threat-model and senior security review with all high-severity findings resolved.
-- [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
+- [ ] Pass full functional, performance, migration, recovery, v0.14.0-scoped enterprise certification, and standalone regression suites.
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
+
+---
+
+## v0.15.0 Adaptive Execution & Extended Large-Data Certification
+
+The v0.14.0 billion-row program established a credible but deliberately narrow certification for
+streaming scan, filter, projection, low-cardinality aggregation, and spill-backed `#temp` staging.
+v0.15.0 should improve efficiency and concurrency without weakening bounded-memory behavior or
+turning that result into an unsupported blanket billion-row claim.
+
+### Phase 1: Spill allocation and GC efficiency
+
+- [ ] Profile the Gate F `#temp` round trip by allocation type and call site; publish retained bytes,
+  cumulative allocation, allocation rate, GC counts/pause, CPU time, and physical I/O before changing
+  the implementation.
+- [ ] Remove avoidable row, batch, Arrow-builder, and serialization object churn through pooled or
+  reusable buffers with explicit ownership and deterministic release.
+- [ ] Add allocation and GC regression budgets at 10M/50M plus the operator-run 1B certification;
+  throughput improvements do not pass if peak memory containment or correctness regresses.
+
+### Phase 2: Adaptive resource utilization
+
+- [ ] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
+  spill concurrency, and operator grant requests from measured CPU, memory pressure, queue depth, and
+  storage latency.
+- [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
+  configuration overrides; adaptation must not oscillate or exceed governance policy.
+- [ ] Preserve deterministic single-worker execution for debugging/certification and prove that
+  adaptive mode scales down under pressure as well as up when capacity is idle.
+
+### Phase 3: Performance regression quality
+
+- [ ] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
+  bands derived from checked-in baselines, while retaining a portable absolute safety floor for
+  slower supported hardware.
+- [ ] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
+  statistically meaningful regressions rather than relying on one unusually fast or slow run.
+- [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
+  publishing performance claims or closing a release candidate that changes certified paths.
+
+### Phase 4: Extend operator-specific billion-row coverage
+
+- [ ] Define separate admission and success criteria for external equi-join and sort at 1B, including
+  skew, partition passes, extent counts, spill bytes, useful throughput, and required free disk.
+- [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
+  holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
+  spill-to-completion certification.
+- [ ] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
+  and row-engine fallbacks explicit. Do not introduce a blanket “all SQL at 1B” claim.
+
+### Phase 5: Fallback coverage and execution transparency
+
+- [ ] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
+  unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
+- [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
+  measurements justify them; retain the row engine as the correctness fallback.
+- [ ] Add differential correctness and crossover benchmarks for every new native path so small and
+  medium workloads do not regress for the large-tier headline.
+
+### Phase 6: Concurrent, PostgreSQL, and failure soak certification
+
+- [ ] Run sustained PostgreSQL-backed Portal/Orchestrator load at representative report/job/history
+  counts and concurrent execution levels; measure pool saturation, query latency, scheduler fairness,
+  lease behavior, and database growth rather than inferring HA performance from SQLite tests.
+- [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
+  under shared memory and disk budgets, including cancellation at each spill phase.
+- [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
+  orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
+  extents, or silently duplicated/lost mutations.
+
+### v0.15.0 completion gates
+
+- [ ] Publish before/after Gate F allocation, GC, CPU, memory, I/O, and throughput results on the same
+  hardware and workload; explain any tradeoff rather than selecting only favorable metrics.
+- [ ] Adaptive execution demonstrates higher utilization when resources are idle and safe throttling
+  under contention, with fairness and governance ceilings proven by automated tests.
+- [ ] Every newly advertised 1B operator has an isolated, resumable certification scenario and an
+  explicit non-goal list; operators that miss their criteria remain unadvertised.
+- [ ] PostgreSQL sustained-load and concurrent failure-soak suites pass with documented capacity and
+  recovery limits, and the normal small/medium regression lanes remain green.
 
 ---
 

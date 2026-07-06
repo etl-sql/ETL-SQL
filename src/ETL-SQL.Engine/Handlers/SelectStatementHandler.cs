@@ -66,6 +66,17 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             var destination = await context.ResolveDataSourceAsync(intoTable);
             await destination.TruncateAsync();
 
+            // Import DB catalog metadata first so source comments inherit onto derived columns.
+            await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
+            new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
+
+            if (statement is SelectStatement nativeSelect
+                && await TryNativeSelectInto(nativeSelect, destination, context) is { } nativeRowCount)
+            {
+                RecordSelectIntoCompletion(intoTable, context, nativeRowCount);
+                return;
+            }
+
             IAsyncEnumerable<DataTable> batches;
             if (statement is SelectStatement selectQuery &&
                 _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
@@ -81,11 +92,6 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             if (targetCols.Count > 0) batches = context.AlignColumns(batches, targetCols);
             if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
 
-            // Record Lineage (importing DB catalog metadata first, when enabled,
-            // so source column comments inherit onto the derived columns).
-            await context.EnsureCatalogMetadataImportedAsync(statement.GetSourceTables());
-            new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
-
             var boundBatches = context.InterceptProgress(batches);
             long totalRows = 0;
             async IAsyncEnumerable<DataTable> CountBatches(IAsyncEnumerable<DataTable> source)
@@ -97,16 +103,11 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 }
             }
 
-            await destination.WriteBatches(CountBatches(boundBatches), append: true);
-
-            context.Variables["@@ROWCOUNT"] = totalRows;
-            context.Logger.Info($"{totalRows} rows affected.");
-
-            if (context.InteractiveMode)
-            {
-                // Emit a friendly message for notebooks
-                context.OnMessage?.Invoke(new Diagnostic($"{totalRows} rows affected (INTO {intoTable.TableName})", 0, 0, DiagnosticSeverity.Info));
-            }
+            if (destination is InMemoryDataSource rowStore)
+                await rowStore.WriteOwnedBatches(CountBatches(boundBatches), append: true);
+            else
+                await destination.WriteBatches(CountBatches(boundBatches), append: true);
+            RecordSelectIntoCompletion(intoTable, context, totalRows);
         }
         // 3. Handle Standard SELECT (Extract -> Display)
         else
@@ -156,6 +157,289 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             yield break;
         }
 
+        if (ColumnarJoinSelectPlan.TryCreate(stmt, out var nativeJoinPlan)
+            && await nativeJoinPlan!.TryOpenAsync(context) is { } nativeJoinExecution)
+        {
+            await using (nativeJoinExecution)
+            await foreach (var batch in nativeJoinExecution.ExecuteAsync()) yield return batch;
+            yield break;
+        }
+
+        if (ColumnarSortSelectPlan.TryCreate(stmt, out var nativeSortPlan)
+            && await nativeSortPlan!.TryOpenAsync(context) is { } nativeSortExecution)
+        {
+            await using (nativeSortExecution)
+            await foreach (var batch in nativeSortExecution.ExecuteAsync()) yield return batch;
+            yield break;
+        }
+
+        IColumnarGroupedAggregatePlan? groupedPlan = null;
+        if (ColumnarGroupedAggregatePlan.TryCreate(context, stmt, out var singleGroupedPlan))
+            groupedPlan = singleGroupedPlan;
+        else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(context, stmt, out var compositeGroupedPlan))
+            groupedPlan = compositeGroupedPlan;
+        if (groupedPlan != null)
+        {
+            using (groupedPlan)
+            {
+                var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+                if (source is IColumnarDataSource columnarSource)
+                {
+                    var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                    var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                        .GetAsyncEnumerator(context.CancellationToken);
+                    ColumnBatch? firstNative = null;
+                    try
+                    {
+                        if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
+                        if (firstNative == null)
+                        {
+                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
+                            yield break;
+                        }
+
+                        SelectionVector? firstSelection = null;
+                        var supported = groupedPlan.CanApply(firstNative)
+                            && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
+                                firstNative, stmt.WhereClause, out firstSelection,
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison));
+                        if (supported)
+                        {
+                            using (firstNative)
+                            using (firstSelection)
+                                groupedPlan.Accumulate(firstNative, firstSelection);
+                            firstNative = null;
+                            while (await nativeEnumerator.MoveNextAsync())
+                            {
+                                using var nativeBatch = nativeEnumerator.Current;
+                                if (!groupedPlan.CanApply(nativeBatch))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible schema during grouped aggregation.");
+                                SelectionVector? selection = null;
+                                if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                                    nativeBatch, stmt.WhereClause, out selection,
+                                    cancellationToken: context.CancellationToken,
+                                    caseSensitiveComparison: context.CaseSensitiveComparison))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during grouped aggregation.");
+                                using (selection) groupedPlan.Accumulate(nativeBatch, selection);
+                            }
+                            yield return await groupedPlan.FinalizeResultAsync(groupedNames);
+                            yield break;
+                        }
+
+                        firstSelection?.Dispose();
+                        var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                        firstNative = null;
+                        var executionEngine = new SelectExecutionEngine(context, _logger);
+                        await foreach (var batch in executionEngine.ExecuteHeavyPipeline(
+                            stmt, rowBatches, groupedColumns, groupedNames))
+                            yield return batch;
+                        yield break;
+                    }
+                    finally
+                    {
+                        firstNative?.Dispose();
+                        await nativeEnumerator.DisposeAsync();
+                    }
+                }
+            }
+        }
+
+        if (IsValidatedCountCandidate(stmt))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            if (source is IValidatedRowCountDataSource validatedCountSource)
+            {
+                var count = await validatedCountSource.CountRowsValidatedAsync(context.CancellationToken);
+                var result = new DataTable();
+                var outputName = stmt.Columns[0].Alias ?? "COUNT(*)";
+                result.SetColumns(new[] { outputName });
+                var row = new Row();
+                // AggregateEngine exposes COUNT using the engine's numeric aggregate type.
+                row[outputName] = (decimal)count;
+                await result.AddRowAsync(row);
+                yield return result;
+                yield break;
+            }
+        }
+
+        if (IsGlobalColumnarAggregateCandidate(stmt)
+            && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            if (source is IColumnarDataSource columnarSource)
+            {
+                var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                var (aggregateColumns, aggregateNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
+                var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                    .GetAsyncEnumerator(context.CancellationToken);
+                ColumnBatch? firstNative = null;
+                try
+                {
+                    if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
+                    if (firstNative == null)
+                    {
+                        yield return aggregatePlan!.FinalizeResult(aggregateNames);
+                        yield break;
+                    }
+
+                    SelectionVector? firstSelection = null;
+                    var supported = aggregatePlan!.CanApply(firstNative)
+                        && (stmt.WhereClause == null || ColumnarPredicateCompiler.TrySelect(
+                            firstNative, stmt.WhereClause, out firstSelection,
+                            cancellationToken: context.CancellationToken,
+                            caseSensitiveComparison: context.CaseSensitiveComparison));
+                    if (supported)
+                    {
+                        using (firstNative)
+                        using (firstSelection)
+                            aggregatePlan.Accumulate(firstNative, firstSelection);
+                        firstNative = null;
+
+                        while (await nativeEnumerator.MoveNextAsync())
+                        {
+                            using var nativeBatch = nativeEnumerator.Current;
+                            if (!aggregatePlan.CanApply(nativeBatch))
+                                throw new InvalidOperationException("Columnar source changed to an incompatible schema during aggregation.");
+                            SelectionVector? selection = null;
+                            if (stmt.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                                nativeBatch, stmt.WhereClause, out selection,
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison))
+                                throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during aggregation.");
+                            using (selection) aggregatePlan.Accumulate(nativeBatch, selection);
+                        }
+                        yield return aggregatePlan.FinalizeResult(aggregateNames);
+                        yield break;
+                    }
+
+                    var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                    firstNative = null;
+                    var executionEngine = new SelectExecutionEngine(context, _logger);
+                    await foreach (var batch in executionEngine.ExecuteHeavyPipeline(
+                        stmt, rowBatches, aggregateColumns, aggregateNames))
+                        yield return batch;
+                    yield break;
+                }
+                finally
+                {
+                    firstNative?.Dispose();
+                    await nativeEnumerator.DisposeAsync();
+                }
+            }
+        }
+
+        // Native island for the narrow read-only shape that can preserve semantics today. Complex
+        // expressions and unsupported physical types replay through the existing row streaming path.
+        if (IsSimpleColumnarCandidate(stmt))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            if (source is IColumnarDataSource columnarSource)
+            {
+                var sourceColumns = (await source.GetColumnsAsync()).ToList();
+                var (nativeColumns, nativeNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
+                // Open the native source once. Unsupported projection shapes replay the already-read
+                // batch through the established row evaluator without restarting the source.
+                {
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                        .GetAsyncEnumerator(context.CancellationToken);
+                    ColumnBatch? firstNative = null;
+                    try
+                    {
+                        if (await nativeEnumerator.MoveNextAsync()) firstNative = nativeEnumerator.Current;
+                        if (firstNative == null)
+                        {
+                            var empty = new DataTable();
+                            empty.SetColumns(nativeNames);
+                            yield return empty;
+                            yield break;
+                        }
+
+                        if (!ColumnarProjectionCompiler.CanProject(firstNative, nativeColumns))
+                        {
+                            var projectionFallbackBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                            firstNative = null;
+                            await foreach (var batch in streamingEngine.ExecuteStreamingSelect(
+                                stmt, projectionFallbackBatches, nativeColumns, nativeNames))
+                                yield return batch;
+                            yield break;
+                        }
+
+                        SelectionVector? firstSelection = null;
+                        var predicateSupported = stmt.WhereClause == null
+                            || ColumnarPredicateCompiler.TrySelect(
+                                firstNative, stmt.WhereClause, out firstSelection,
+                                cancellationToken: context.CancellationToken,
+                                caseSensitiveComparison: context.CaseSensitiveComparison);
+                        if (predicateSupported)
+                        {
+                            var yieldedRows = false;
+                            using (firstNative)
+                            using (firstSelection)
+                            {
+                                var firstResult = ColumnarProjectionCompiler.ProjectToDataTable(
+                                    firstNative, nativeColumns, nativeNames, firstSelection,
+                                    context.CancellationToken);
+                                if (firstResult.Rows.Count > 0)
+                                {
+                                    yieldedRows = true;
+                                    yield return firstResult;
+                                }
+                            }
+                            firstNative = null;
+
+                            while (await nativeEnumerator.MoveNextAsync())
+                            {
+                                using var nativeBatch = nativeEnumerator.Current;
+                                if (!ColumnarProjectionCompiler.CanProject(nativeBatch, nativeColumns))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible projection schema during a query.");
+                                SelectionVector? selection = null;
+                                if (stmt.WhereClause != null
+                                    && !ColumnarPredicateCompiler.TrySelect(
+                                        nativeBatch, stmt.WhereClause, out selection,
+                                        cancellationToken: context.CancellationToken,
+                                        caseSensitiveComparison: context.CaseSensitiveComparison))
+                                    throw new InvalidOperationException("Columnar source changed to an incompatible schema during a query.");
+                                using (selection)
+                                {
+                                    var result = ColumnarProjectionCompiler.ProjectToDataTable(
+                                        nativeBatch, nativeColumns, nativeNames, selection,
+                                        context.CancellationToken);
+                                    if (result.Rows.Count > 0)
+                                    {
+                                        yieldedRows = true;
+                                        yield return result;
+                                    }
+                                }
+                            }
+                            if (!yieldedRows)
+                            {
+                                var empty = new DataTable();
+                                empty.SetColumns(nativeNames);
+                                yield return empty;
+                            }
+                            yield break;
+                        }
+
+                        // The expression shape or physical type is unsupported. Replay the already-read
+                        // native batch through the established row evaluator; do not restart the source.
+                        var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
+                        firstNative = null;
+                        await foreach (var batch in streamingEngine.ExecuteStreamingSelect(
+                            stmt, rowBatches, nativeColumns, nativeNames))
+                            yield return batch;
+                        yield break;
+                    }
+                    finally
+                    {
+                        firstNative?.Dispose();
+                        await nativeEnumerator.DisposeAsync();
+                    }
+                }
+            }
+        }
+
         // 2. Resolve Source
         _logger.Debug("[SELECT] Evaluating local engine for {TableName}", stmt.FromTable.TableName);
         var batches = context.ResolveAndApplyOperators(stmt.FromTable);
@@ -194,7 +478,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         // 4. Strategy Selection
         bool hasAgg = finalColumns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
         bool hasWindow = finalColumns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-        bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct || stmt.QualifyClause != null;
+        bool hasOnlyStreamingRowNumber = hasWindow
+            && finalColumns.Where(column => windowEngine.IsWindowFunction(column.Expression))
+                .All(column => StreamingQueryEngine.IsStreamingRowNumber(column.Expression));
+        bool isComplex = hasAgg || hasWindow && !hasOnlyStreamingRowNumber
+            || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null
+            || !hasOnlyStreamingRowNumber && (stmt.Offset != null || stmt.LimitCount != null)
+            || stmt.IsDistinct || stmt.QualifyClause != null;
 
         IAsyncEnumerable<DataTable> output;
         if (!isComplex)
@@ -211,6 +501,235 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
         if (stmt.Sample != null) output = ApplySample(output, stmt.Sample);
         await foreach (var batch in output) yield return batch;
+    }
+
+    private static async Task<long?> TryNativeSelectInto(
+        SelectStatement statement,
+        IDataSource destination,
+        IExecutionContext context)
+    {
+        if (destination is not IColumnarDataSink sink
+            || !IsSimpleColumnarCandidate(statement)
+            || statement.Columns.Count == 0)
+            return null;
+
+        var source = await context.ResolveDataSourceAsync(statement.FromTable);
+        if (ReferenceEquals(source, destination) || source is not IColumnarDataSource columnarSource)
+            return null;
+
+        var sourceColumns = (await source.GetColumnsAsync()).ToArray();
+        var targetColumns = (await destination.GetColumnsAsync()).ToArray();
+        string[] projectedColumns = Array.Empty<string>();
+        string[] outputColumns;
+        IReadOnlyList<ColumnBatchField>? expressionOutputFields = null;
+        if (statement.Columns.Count == 1 && statement.Columns[0].Alias == null
+            && statement.Columns[0].Expression is StarExpression star
+            && star.Qualifier == null && star.Pattern == null
+            && star.Exclude.Count == 0 && star.Replace.Count == 0 && star.Rename.Count == 0)
+        {
+            projectedColumns = sourceColumns;
+            outputColumns = sourceColumns;
+        }
+        else if (statement.Columns.All(column => column.Expression is IdentifierExpression))
+        {
+            projectedColumns = statement.Columns
+                .Select(column => ((IdentifierExpression)column.Expression).Name.Split('.').Last())
+                .ToArray();
+            if (projectedColumns.Any(column => !sourceColumns.Contains(column, StringComparer.OrdinalIgnoreCase)))
+                return null;
+            outputColumns = statement.Columns
+                .Select((column, index) => column.Alias ?? projectedColumns[index])
+                .ToArray();
+        }
+        else if (destination is AppendOnlyColumnDataSource appendStore
+            && statement.Columns.All(column => column.Expression is IdentifierExpression || column.Alias != null))
+        {
+            outputColumns = statement.Columns.Select(column => column.Alias
+                ?? ((IdentifierExpression)column.Expression).Name.Split('.').Last()).ToArray();
+            if (outputColumns.Any(name => !appendStore.LogicalSchema.ContainsKey(name))) return null;
+            expressionOutputFields = outputColumns.Select(name =>
+            {
+                var definition = appendStore.LogicalSchema[name];
+                return new ColumnBatchField(
+                    name,
+                    ColumnBatchAdapter.GetPhysicalType(definition.DataType),
+                    definition.DataType,
+                    definition.IsNullable);
+            }).ToArray();
+        }
+        else
+        {
+            return null;
+        }
+
+        if (!outputColumns.SequenceEqual(targetColumns, StringComparer.OrdinalIgnoreCase))
+            return null;
+        var transfersWholeBatch = statement.WhereClause == null
+            && projectedColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase)
+            && outputColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase);
+
+        var enumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+            .GetAsyncEnumerator(context.CancellationToken);
+        if (!await enumerator.MoveNextAsync())
+        {
+            await enumerator.DisposeAsync();
+            return 0;
+        }
+
+        var first = enumerator.Current;
+        if (expressionOutputFields != null
+            && !ColumnarProjectionCompiler.CanProjectToSchema(first, statement.Columns, expressionOutputFields))
+        {
+            first.Dispose();
+            await enumerator.DisposeAsync();
+            return null;
+        }
+        SelectionVector? firstSelection = null;
+        if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+            first, statement.WhereClause, out firstSelection,
+            cancellationToken: context.CancellationToken,
+            caseSensitiveComparison: context.CaseSensitiveComparison))
+        {
+            first.Dispose();
+            await enumerator.DisposeAsync();
+            return null;
+        }
+
+        long rowCount = 0;
+        var firstPending = true;
+        async IAsyncEnumerable<ColumnBatch> CountAndTransfer()
+        {
+            firstPending = false;
+            var input = first;
+            var selection = firstSelection;
+            while (true)
+            {
+                ColumnBatch? output = null;
+                var ownershipTransferred = false;
+                try
+                {
+                    if (transfersWholeBatch)
+                    {
+                        output = input;
+                        input = null!;
+                    }
+                    else if (expressionOutputFields != null)
+                    {
+                        using (selection)
+                            output = ColumnarProjectionCompiler.ProjectToColumnBatch(
+                                input, statement.Columns, expressionOutputFields, selection,
+                                context.CancellationToken);
+                        selection = null;
+                        input.Dispose();
+                        input = null!;
+                    }
+                    else
+                    {
+                        using (selection)
+                            output = ColumnBatchAdapter.Compact(
+                                input, projectedColumns, selection, context.CancellationToken, outputColumns);
+                        selection = null;
+                        input.Dispose();
+                        input = null!;
+                    }
+
+                    rowCount += output.RowCount;
+                    context.Telemetry.RowsProcessed += output.RowCount;
+                    if (context is Evaluator evaluator) evaluator.OnBatchProcessed?.Invoke(output.RowCount);
+                    yield return output;
+                    ownershipTransferred = true;
+                }
+                finally
+                {
+                    if (!ownershipTransferred) output?.Dispose();
+                    input?.Dispose();
+                    selection?.Dispose();
+                }
+
+                if (!await enumerator.MoveNextAsync()) yield break;
+                input = enumerator.Current;
+                if (expressionOutputFields != null
+                    && !ColumnarProjectionCompiler.CanProjectToSchema(input, statement.Columns, expressionOutputFields))
+                {
+                    input.Dispose();
+                    throw new InvalidOperationException("Columnar source changed to an incompatible projection schema during SELECT INTO.");
+                }
+                if (statement.WhereClause != null && !ColumnarPredicateCompiler.TrySelect(
+                    input, statement.WhereClause, out selection,
+                    cancellationToken: context.CancellationToken,
+                    caseSensitiveComparison: context.CaseSensitiveComparison))
+                {
+                    input.Dispose();
+                    throw new InvalidOperationException("Columnar source changed to an incompatible predicate type during SELECT INTO.");
+                }
+            }
+        }
+
+        try
+        {
+            await sink.WriteColumnBatches(CountAndTransfer(), append: true, context.CancellationToken);
+            return rowCount;
+        }
+        finally
+        {
+            if (firstPending) first.Dispose();
+            await enumerator.DisposeAsync();
+        }
+    }
+
+    private static void RecordSelectIntoCompletion(
+        TableReference intoTable,
+        IExecutionContext context,
+        long totalRows)
+    {
+        context.Variables["@@ROWCOUNT"] = totalRows;
+        context.Logger.Info($"{totalRows} rows affected.");
+
+        if (context.InteractiveMode)
+            context.OnMessage?.Invoke(new Diagnostic(
+                $"{totalRows} rows affected (INTO {intoTable.TableName})",
+                0, 0, DiagnosticSeverity.Info));
+    }
+
+    private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
+        => stmt.FromTable.TableOperators.Count == 0
+            && (stmt.Joins == null || stmt.Joins.Count == 0)
+            && stmt.GroupBy == null && stmt.GroupingSet == null
+            && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
+            && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll
+            && !HasLateralColumnAlias(stmt.Columns);
+
+    private static bool IsGlobalColumnarAggregateCandidate(SelectStatement stmt)
+        => stmt.FromTable.TableOperators.Count == 0
+            && (stmt.Joins == null || stmt.Joins.Count == 0)
+            && stmt.GroupBy == null && stmt.GroupingSet == null && stmt.HavingClause == null
+            && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
+            && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool IsValidatedCountCandidate(SelectStatement stmt)
+        => IsGlobalColumnarAggregateCandidate(stmt)
+            && stmt.WhereClause == null
+            && stmt.Columns.Count == 1
+            && stmt.Columns[0].Expression is FunctionCallExpression function
+            && function.FunctionName.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
+            && !function.IsDistinct && function.Window == null && function.Filter == null
+            && (function.Arguments.Count == 0
+                || function.Arguments.Count == 1 && function.Arguments[0] is StarExpression
+                || function.Arguments.Count == 1 && function.Arguments[0] is IdentifierExpression identifier
+                    && identifier.Name == "*");
+
+    private static async IAsyncEnumerable<DataTable> ReplayNativeAsRows(
+        ColumnBatch first,
+        IAsyncEnumerator<ColumnBatch> enumerator)
+    {
+        using (first) yield return ColumnBatchAdapter.ToDataTable(first);
+        while (await enumerator.MoveNextAsync())
+        {
+            using var batch = enumerator.Current;
+            yield return ColumnBatchAdapter.ToDataTable(batch);
+        }
     }
 
     /// <summary>Applies a <c>USING SAMPLE</c> clause: Bernoulli per-row sampling for PERCENT,

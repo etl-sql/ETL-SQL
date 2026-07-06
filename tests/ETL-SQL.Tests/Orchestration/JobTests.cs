@@ -34,6 +34,9 @@ namespace ETL_SQL.Tests.Orchestration
             services.AddSingleton<IJobHistoryStore>(store);
             services.AddSingleton<IBundleStore>(store);
             services.AddSingleton<ILineageCatalogStore>(store);
+            // The relational store also backs the host-metrics time series; register it so the
+            // auto-scanned ShowHostMetricsStatementHandler can be constructed (mirrors production DI).
+            services.AddSingleton<IHostMetricsStore>(store);
             services.AddSingleton<SchedulerService>();
 
             var registry = new FunctionRegistry();

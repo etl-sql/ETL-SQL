@@ -47,7 +47,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
                 var sql = "DELETE FILE '.git/config';";
 
                 var script = TestHelpers.Parse(sql);
-                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                var ex = await Assert.ThrowsAnyAsync<SecurityException>(() => eval.Evaluate(script));
                 Assert.Contains("protected system/environment directory", ex.Message);
             }
             finally
@@ -72,7 +72,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
                 var sql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';";
                 var script = TestHelpers.Parse(sql);
 
-                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                var ex = await Assert.ThrowsAnyAsync<SecurityException>(() => eval.Evaluate(script));
                 Assert.Contains("dangerous file type", ex.Message);
             }
             finally

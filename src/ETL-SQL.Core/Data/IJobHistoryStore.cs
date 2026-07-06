@@ -79,6 +79,15 @@ public record JobHistoryEntry(
     bool? HashMatched = null
 );
 
+/// <summary>Daily-aggregated job execution for one job, retained far longer than raw history.</summary>
+public sealed record JobHistoryDailySummary(
+    string Day,
+    string JobName,
+    int RunCount,
+    int FailureCount,
+    long TotalRows,
+    long MaxPeakMemoryBytes);
+
 public interface IJobHistoryStore
 {
     Task InitializeAsync();
@@ -89,6 +98,8 @@ public interface IJobHistoryStore
     Task<JobDefinition?> GetJobAsync(string name);
     Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
     Task<IEnumerable<JobDefinition>> GetAllJobsAsync();
+    /// <summary>Returns a stable name-ordered page of saved jobs for management APIs.</summary>
+    Task<IEnumerable<JobDefinition>> GetJobsPageAsync(int limit = 100, int offset = 0);
     Task DeleteJobAsync(string name);
     Task<bool> TryDeleteJobAsync(string name, long expectedVersion);
     Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
@@ -114,11 +125,53 @@ public interface IJobHistoryStore
     Task<long> LogJobStartAsync(string jobName);
     Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
+    /// <summary>Returns a completion-time page for bounded incremental pollers.</summary>
+    Task<IEnumerable<JobHistoryEntry>> GetCompletedHistoryAsync(
+        DateTime completedAfter, DateTime completedThrough, int limit = 1000, int offset = 0);
+
+    /// <summary>
+    /// Deletes completed job-history rows older than <paramref name="maxAge"/> (in-flight RUNNING rows
+    /// are never pruned), bounding unbounded table growth. Returns the number of rows removed.
+    /// </summary>
+    Task<int> PruneHistoryAsync(TimeSpan maxAge);
+
+    /// <summary>
+    /// Marks orphaned RUNNING rows — jobs whose <c>StartTime</c> is older than
+    /// <paramref name="maxRuntime"/> with no completion recorded — as INTERRUPTED, so a crash that
+    /// prevented the completion write does not leave a row RUNNING forever (unprunable and invisible to
+    /// failure reporting). Self-healing: if such a job is in fact still running, its eventual
+    /// completion write overwrites INTERRUPTED with the real terminal status. Returns rows updated.
+    /// </summary>
+    Task<int> ReconcileStaleRunningAsync(TimeSpan maxRuntime);
+
+    /// <summary>
+    /// Recomputes the daily job-history roll-up for every day still present in the raw table
+    /// (idempotent) so trend survives raw-history pruning. Run before <see cref="PruneHistoryAsync"/>.
+    /// Returns the number of (day, job) summary rows written.
+    /// </summary>
+    Task<int> RollUpJobHistoryAsync();
+
+    /// <summary>Returns daily job summaries on/after <paramref name="sinceDay"/>, newest first.</summary>
+    Task<IReadOnlyList<JobHistoryDailySummary>> GetJobHistoryDailyAsync(string? jobName, DateTime sinceDay, int limit = 1000);
+
+    /// <summary>Deletes daily job summaries older than <paramref name="maxAge"/>; returns rows removed.</summary>
+    Task<int> PruneJobHistoryDailyAsync(TimeSpan maxAge);
 
     // State Management
     Task<string?> GetJobStateAsync(string jobName, string key);
     Task SetJobStateAsync(string jobName, string key, string? value);
+
+    /// <summary>
+    /// Enumerates saved job-state entries (watermarks, markers), optionally for a single job —
+    /// the read surface behind <c>SHOW JOB STATE</c>. Unlike <see cref="GetJobStateAsync"/>, which is
+    /// scoped to one known key, this lets an administrator inspect any job's state without knowing
+    /// its keys in advance. Ordered by job then key; capped by <paramref name="limit"/>.
+    /// </summary>
+    Task<IReadOnlyList<JobStateEntry>> GetJobStatesAsync(string? jobName = null, int limit = 1000);
 }
+
+/// <summary>One saved job-state key/value pair (see SET_JOB_STATE / GET_JOB_STATE).</summary>
+public sealed record JobStateEntry(string JobName, string StateKey, string? StateValue, DateTime UpdatedAt);
 
 public interface IJobScheduleQueryStore
 {

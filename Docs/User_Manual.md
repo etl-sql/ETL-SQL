@@ -1726,30 +1726,40 @@ See [Architecture/VSCodeExtension.md](Architecture/VSCodeExtension.md) for imple
 
 The ETL-SQL formatter (used in VS Code and the TUI editor) can be customized using a `.etlsqlformat.json` file. Place this file in the root of your workspace or project directory, and the formatter will automatically discover and apply it.
 
-Example `.etlsqlformat.json`:
+The formatter searches from the formatted script's directory upward and uses the first
+`.etlsqlformat.json` it finds. The following file shows the actual built-in defaults:
+
 ```json
 {
   "keywordCasing": "upper",
   "indentSize": 4,
-  "indentJoins": false,
-  "onClauseOnNewLine": true,
-  "caseWhenThenNewLine": false,
+  "lineWidth": 100,
+  "indentJoins": true,
+  "onClauseOnNewLine": false,
+  "caseWhenThenNewLine": true,
   "breakoutWindowFunctions": true,
-  "commaPlacement": "trailing",
+  "commaPlacement": "leading",
+  "rightAlignKeywords": false,
   "formatMetadataTags": true
 }
 ```
 
-#### Supported Configuration Options:
+#### Supported configuration options
 
-- **`keywordCasing`** (`string`) — Case style for SQL keywords. Options: `"upper"`, `"lower"`, `"pascal"`, `"preserve"`. (Default: `"upper"`).
-- **`indentSize`** (`integer`) — Number of spaces per indentation level. (Default: `4`).
-- **`indentJoins`** (`boolean`) — If `true`, indents JOIN keywords by one level from the parent `FROM` clause. (Default: `false`).
-- **`onClauseOnNewLine`** (`boolean`) — If `true`, places the `ON` clause of joins on a new indented line. (Default: `true`).
-- **`caseWhenThenNewLine`** (`boolean`) — If `true`, breaks `THEN` statements to a new indented line below their matching `WHEN` clauses. (Default: `false`).
-- **`breakoutWindowFunctions`** (`boolean`) — If `true`, breaks long `OVER (PARTITION BY ... ORDER BY ...)` clauses into multiple indented lines. (Default: `true`).
-- **`commaPlacement`** (`string`) — Specifies where to place separating commas. Options: `"trailing"` (standard trailing commas) or `"leading"` (leading commas on newlines). (Default: `"trailing"`).
-- **`formatMetadataTags`** (`boolean`) — If `true`, formats data governance/lineage tag block comments (like `/* @d: description; @pii; */`) to place each tag on its own indented line inside the block comment. (Default: `true`).
+| Option | Type and values | Default | Effect |
+| :--- | :--- | :--- | :--- |
+| `keywordCasing` | `"upper"`, `"lower"`, `"pascal"`, `"preserve"` | `"upper"` | Controls recognized SQL keyword casing. |
+| `indentSize` | Integer | `4` | Spaces per indentation level. |
+| `lineWidth` | Integer | `100` | Length threshold used when deciding whether parenthesized content should break across lines. |
+| `indentJoins` | Boolean | `true` | Indents `JOIN` clauses one level relative to `FROM`. |
+| `onClauseOnNewLine` | Boolean | `false` | Places a join's `ON` clause on its own indented line. |
+| `caseWhenThenNewLine` | Boolean | `true` | Places `THEN` below its corresponding `WHEN`. |
+| `breakoutWindowFunctions` | Boolean | `true` | Breaks window `PARTITION BY` and `ORDER BY` content onto indented lines. |
+| `commaPlacement` | `"leading"` or `"trailing"` | `"leading"` | Controls list-comma placement. |
+| `rightAlignKeywords` | Boolean | `false` | Uses the formatter's right-aligned clause-keyword layout. |
+| `formatMetadataTags` | Boolean | `true` | Formats governance/lineage metadata tags inside block comments onto separate indented lines. |
+
+Property names are case-insensitive. Unknown properties are ignored.
 
 ---
 

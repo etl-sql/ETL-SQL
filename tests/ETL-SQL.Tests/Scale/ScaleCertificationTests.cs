@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime;
 using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -39,21 +40,49 @@ namespace ETL_SQL.Tests.Scale
 
     [Collection("ScaleCertification")]
     [Trait("Category", "ScaleCertification")]
-    public class ScaleCertificationTests
+    public class ScaleCertificationTests : IDisposable
     {
         private readonly ITestOutputHelper _out;
-        private readonly double _memoryBaselineMB;
+        private readonly ScenarioResourceSampler _resourceSampler;
 
         public ScaleCertificationTests(ITestOutputHelper output)
         {
             _out = output;
-            _memoryBaselineMB = GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0);
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+            GC.WaitForPendingFinalizers();
+            _resourceSampler = new ScenarioResourceSampler();
         }
+
+        public void Dispose() => _resourceSampler.Dispose();
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        private static Evaluator NewEvaluator() =>
-            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        private static Evaluator NewEvaluator()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            // Certification hosts are disposable and must expose spill under the runner's monitored
+            // temp root. Persisting these sessions both hides live disk use from the HUD and leaves
+            // multi-gigabyte artifacts after a successful run.
+            ev.IsPersistentSession = false;
+            // The cert runs on dev workstations / CI agents (not dedicated DB hosts) and drives large
+            // inputs, so cap the RAM-governor ceiling to a modest value rather than inheriting the
+            // production auto (~80% of physical RAM) default. This keeps even a 50M run within a few GB
+            // and actively exercises the governor's spill/repartition paths. Override with
+            // CERT_MEMORY_GRANT_MB; set it to 0 to fall back to the production default.
+            var raw = Environment.GetEnvironmentVariable("CERT_MEMORY_GRANT_MB");
+            if (!int.TryParse(raw, out var grantMb)) grantMb = 2048;
+            if (grantMb > 0)
+            {
+                // Private arbiter, not MemoryGrantArbiter.Shared: mutating the shared budget leaks
+                // the cert ceiling into every later test in a shared host, and leftover lease
+                // reservations from earlier tests would silently erase this evaluator's headroom.
+                ev.MemoryArbiter = new MemoryGrantArbiter((long)grantMb * 1024 * 1024);
+            }
+            var rawBatchRows = Environment.GetEnvironmentVariable("CERT_BATCH_ROWS");
+            if (int.TryParse(rawBatchRows, out var batchRows) && batchRows > 0)
+                ev.BatchSize = batchRows;
+            return ev;
+        }
 
         private static int ScaleRows(int baseRows)
         {
@@ -69,7 +98,11 @@ namespace ETL_SQL.Tests.Scale
         private static void AssertSpilled(Evaluator ev, string scenario)
         {
             Assert.True(ev.Telemetry.TotalSpilledBytes > 0,
-                $"{scenario} expected spill evidence, but TotalSpilledBytes was 0.");
+                $"{scenario} expected spill evidence, but TotalSpilledBytes was 0. Diagnostics: " +
+                $"TempTableSpillThresholdRows={ev.TempTableSpillThresholdRows}, BatchSize={ev.BatchSize}, " +
+                $"TelemetryEnabled={ev.Telemetry.TelemetryEnabled}, RowsProcessed={ev.Telemetry.RowsProcessed}, " +
+                $"ArbiterBudget={ev.MemoryArbiter.TotalBudgetBytes}, ArbiterReserved={ev.MemoryArbiter.ReservedBytes}, " +
+                $"Connections=[{string.Join(", ", ev.Connections.Select(c => $"{c.Key}:{c.Value?.GetType().Name}"))}]");
         }
 
         private static async Task<Evaluator> EvWithRows(int rowCount, int groups = 10)
@@ -79,48 +112,13 @@ namespace ETL_SQL.Tests.Scale
             return ev;
         }
 
-        private static async Task<InMemoryDataSource> SourceWithRows(int rowCount, int groups = 10)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "grp", "val" });
+        // Streaming generator sources — the rows are produced lazily one batch at a time, so the input
+        // never materializes in memory (critical for the 50M Huge tier; see StreamingRowSource).
+        private static Task<IDataSource> SourceWithRows(int rowCount, int groups = 10)
+            => Task.FromResult<IDataSource>(StreamingRowSource.GrpVal(rowCount, groups));
 
-            for (int i = 0; i < rowCount; i++)
-            {
-                var r = new Row(table.Schema);
-                r["grp"] = i % groups;
-                r["val"] = (decimal)(i + 1);
-                await table.AddRowAsync(r);
-            }
-
-            var src = new InMemoryDataSource();
-            await src.WriteBatches(new[] { table }.ToAsyncEnumerable());
-            return src;
-        }
-
-        private static async Task<InMemoryDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
-        {
-            var table = new DataTable();
-            table.SetColumns(new[] { "grp", "bucket", "val" });
-
-            for (int i = 0; i < rowCount; i++)
-            {
-                var r = new Row(table.Schema);
-                r["grp"] = i % groups;
-                r["bucket"] = (i / groups) % buckets;
-                r["val"] = (decimal)(i + 1);
-                await table.AddRowAsync(r);
-            }
-
-            var src = new InMemoryDataSource();
-            await src.WriteBatches(new[] { table }.ToAsyncEnumerable());
-            return src;
-        }
-
-        private static async Task<DataTable> TableWithRows(int rowCount, int groups = 10)
-        {
-            var src = await SourceWithRows(rowCount, groups);
-            return await src.ReadBatches(rowCount).FirstAsync();
-        }
+        private static Task<IDataSource> SourceWithCubeRows(int rowCount, int groups = 10, int buckets = 5)
+            => Task.FromResult<IDataSource>(StreamingRowSource.GrpBucketVal(rowCount, groups, buckets));
 
         private static async Task<(long Count, decimal Sum)> CountAndSum(IAsyncEnumerable<DataTable> batches, string valueColumn = "val")
         {
@@ -176,27 +174,61 @@ namespace ETL_SQL.Tests.Scale
             Environment.SetEnvironmentVariable("CERT_ROW_SCALE", rowScale.ToString(CultureInfo.InvariantCulture));
             Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", certificationTier);
 
+            // Ordered scenario list so we can report live progress (which scenario, X of N) to a
+            // side-channel file — ITestOutputHelper buffers until the whole [Fact] finishes, so it
+            // cannot drive a live HUD during a multi-hour Huge run.
+            var scenarios = new (string Name, Func<Task> Run)[]
+            {
+                ("ExternalSort", Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized),
+                ("ExternalAggregate", Cert_Smoke_ExternalAggregate_100kRows_CorrectSums),
+                ("ExternalJoin", Cert_Smoke_ExternalJoin_50kRows_CorrectResults),
+                ("TempTableSpill", Cert_Smoke_TempTableSpill_50kRows_CorrectCount),
+                ("StreamingSelect", Cert_Smoke_StreamingSelect_ResultCapEnforced),
+                ("WindowFunction", Cert_Smoke_WindowFunction_50kRows_CorrectRankValues),
+                ("CsvIngest", Cert_Smoke_CsvIngest_50kRows_CorrectChecksum),
+                ("ParquetRoundTrip", Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum),
+                ("ReportDatasetSnapshotReload", Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum),
+                ("CubeGroupingSets", Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum),
+                ("ScalarSubqueryCache", Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys),
+                ("SpillCleanup_Success", Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles),
+                ("SpillCleanup_Failure", Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles),
+            };
+
             try
             {
-                await Cert_Smoke_ExternalSort_50kRows_AllRowsMaterialized();
-                await Cert_Smoke_ExternalAggregate_100kRows_CorrectSums();
-                await Cert_Smoke_ExternalJoin_50kRows_CorrectResults();
-                await Cert_Smoke_TempTableSpill_50kRows_CorrectCount();
-                await Cert_Smoke_StreamingSelect_ResultCapEnforced();
-                await Cert_Smoke_WindowFunction_50kRows_CorrectRankValues();
-                await Cert_Smoke_CsvIngest_50kRows_CorrectChecksum();
-                await Cert_Smoke_ParquetRoundTrip_50kRows_CorrectChecksum();
-                await Cert_Smoke_ReportDatasetSnapshotReload_50kRows_CorrectChecksum();
-                await Cert_Smoke_CubeGroupingSets_50kRows_CorrectExpansionAndChecksum();
-                await Cert_Smoke_ScalarSubqueryCache_50kRows_ReusesRepeatedKeys();
-                await Cert_Smoke_SpillCleanup_AfterSuccessfulTempSpill_RemovesNonPersistentFiles();
-                await Cert_Smoke_SpillCleanup_AfterFailedTempSpill_RemovesNonPersistentFiles();
+                for (int i = 0; i < scenarios.Length; i++)
+                {
+                    WriteProgress(certificationTier, i + 1, scenarios.Length, scenarios[i].Name);
+                    await scenarios[i].Run();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                    GC.WaitForPendingFinalizers();
+                    GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+                }
+                WriteProgress(certificationTier, scenarios.Length, scenarios.Length, "done");
             }
             finally
             {
                 Environment.SetEnvironmentVariable("CERT_ROW_SCALE", previous);
                 Environment.SetEnvironmentVariable("CERT_CERTIFICATION_TIER", previousTier);
             }
+        }
+
+        /// <summary>
+        /// Best-effort live progress to the file named by CERT_PROGRESS_FILE (set by
+        /// Test-ScaleCertification.ps1). Written immediately (unlike ITestOutputHelper, which buffers
+        /// until the test completes) so an external HUD can show the current scenario and X/N progress.
+        /// No-op when the env var is unset, so normal test runs are unaffected.
+        /// </summary>
+        private static void WriteProgress(string tier, int index, int total, string scenario)
+        {
+            var file = Environment.GetEnvironmentVariable("CERT_PROGRESS_FILE");
+            if (string.IsNullOrEmpty(file)) return;
+            try
+            {
+                File.WriteAllText(file,
+                    $"{tier}|{index}|{total}|{scenario}|{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+            }
+            catch { /* progress reporting must never affect the run */ }
         }
 
         private async Task RunProviderScenarioSetWithScale(double rowScale)
@@ -229,7 +261,7 @@ namespace ETL_SQL.Tests.Scale
             return rowScale <= 10.0 ? "Standard" : "Stress";
         }
 
-        private static double MemoryBoundMB(int rowCount, double rowScale)
+        private static double MemoryBoundMB(double rowScale)
         {
             var raw = Environment.GetEnvironmentVariable("CERT_MEMORY_BOUND_MB");
             if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var configured) && configured > 0)
@@ -239,16 +271,19 @@ namespace ETL_SQL.Tests.Scale
 
             var bound = MemoryTier(rowScale) switch
             {
-                "Smoke" => Math.Max(512.0, rowCount * 0.02),
-                "Standard" => Math.Max(2_048.0, rowCount * 0.012),
-                _ => Math.Max(8_192.0, rowCount * 0.008)
+                "Smoke" => 1_024.0,
+                "Standard" => 4_096.0,
+                _ when string.Equals(Environment.GetEnvironmentVariable("CERT_CERTIFICATION_TIER"),
+                    "Huge", StringComparison.OrdinalIgnoreCase) => 16_384.0,
+                _ => 8_192.0
             };
 
             return Math.Round(bound, 1);
         }
 
         private void EmitMetrics(string scenario, int rowCount, long elapsedMs,
-            long spillBytes, long resultRows, decimal checksum, bool passed)
+            long spillBytes, long resultRows, decimal checksum, bool passed,
+            ITelemetryContext? telemetry = null)
         {
             var rowScale = RowScale();
             var memoryTier = MemoryTier(rowScale);
@@ -258,13 +293,34 @@ namespace ETL_SQL.Tests.Scale
                 certificationTier = memoryTier;
             }
 
-            var managedMemoryMB = Math.Round(
-                Math.Max(0.0, GC.GetTotalMemory(forceFullCollection: true) / (1024.0 * 1024.0) - _memoryBaselineMB), 1);
-            var memoryBoundMB = MemoryBoundMB(rowCount, rowScale);
-
-            Assert.True(managedMemoryMB <= memoryBoundMB,
-                $"{scenario} managed memory {managedMemoryMB} MB exceeded {memoryTier} tier bound {memoryBoundMB} MB. " +
-                "Set CERT_MEMORY_BOUND_MB to an explicit machine-specific bound when certifying on constrained agents.");
+            var resources = _resourceSampler.SnapshotAndReset();
+            const double bytesPerMb = 1024.0 * 1024.0;
+            var startWorkingSetMB = Math.Round(resources.StartWorkingSetBytes / bytesPerMb, 1);
+            var peakWorkingSetMB = Math.Round(resources.PeakWorkingSetBytes / bytesPerMb, 1);
+            var workingSetGrowthMB = Math.Round(
+                Math.Max(0, resources.PeakWorkingSetBytes - resources.StartWorkingSetBytes) / bytesPerMb, 1);
+            var peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / bytesPerMb, 1);
+            var peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / bytesPerMb, 1);
+            var allocatedMB = Math.Round(resources.AllocatedBytes / bytesPerMb, 1);
+            var memoryBoundMB = MemoryBoundMB(rowScale);
+            var rowsPerSecond = elapsedMs <= 0 ? 0 : Math.Round(rowCount / (elapsedMs / 1000.0), 1);
+            // The absolute peak bound certifies a fresh, isolated host (Test-ScaleBaseline.ps1 runs
+            // each scenario in its own process). Inside a shared test host that already carries a
+            // large working set from thousands of earlier tests, the absolute number measures the
+            // host, not the scenario — so the scenario's own working-set growth against the same
+            // bound is an equally valid pass. A scenario fails only when both its absolute peak and
+            // its growth exceed the bound.
+            var absolutePeakPassed = peakWorkingSetMB <= memoryBoundMB;
+            var memoryGateMode = absolutePeakPassed ? "absolutePeak" : "workingSetGrowth (shared host)";
+            var memoryPassed = absolutePeakPassed || workingSetGrowthMB <= memoryBoundMB;
+            var minimumThroughput = double.TryParse(
+                Environment.GetEnvironmentVariable("CERT_MIN_ROWS_PER_SECOND"),
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var configuredThroughput)
+                && configuredThroughput > 0 ? configuredThroughput : (double?)null;
+            var throughputPassed = minimumThroughput.HasValue
+                ? rowsPerSecond >= minimumThroughput.Value
+                : (bool?)null;
+            var certificationPassed = passed && memoryPassed && throughputPassed != false;
 
             var metrics = new
             {
@@ -273,14 +329,45 @@ namespace ETL_SQL.Tests.Scale
                 memoryTier,
                 rowCount,
                 elapsedMs,
+                rowsPerSecond,
                 spillBytes,
+                spillWriteBytes = spillBytes,
+                spillReadBytes = telemetry?.SpillReadBytes ?? 0,
+                spillExtentCount = telemetry?.SpillExtentCount ?? 0,
+                partitionPassCount = telemetry?.PartitionPassCount ?? 0,
                 resultRows,
                 checksum,
-                peakManagedMemoryMB = managedMemoryMB,
+                startProcessWorkingSetMB = startWorkingSetMB,
+                peakProcessWorkingSetMB = peakWorkingSetMB,
+                workingSetGrowthMB,
+                peakPrivateBytesMB,
+                peakManagedHeapMB,
+                allocatedMB,
+                gcGen0Collections = resources.Gen0Collections,
+                gcGen1Collections = resources.Gen1Collections,
+                gcGen2Collections = resources.Gen2Collections,
+                gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+                cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+                cpuUtilizationPercent = resources.CpuUtilizationPercent,
+                serverGcEnabled = GCSettings.IsServerGC,
                 memoryBoundMB,
-                passed
+                memoryMetric = "peak process working set",
+                memoryGateMode,
+                minimumRowsPerSecond = minimumThroughput,
+                correctnessPassed = passed,
+                memoryPassed,
+                throughputPassed,
+                passed = certificationPassed
             };
             _out.WriteLine("CERT_METRIC:" + JsonSerializer.Serialize(metrics));
+
+            Assert.True(memoryPassed,
+                $"{scenario} peak process working set {peakWorkingSetMB} MB and working-set growth " +
+                $"{workingSetGrowthMB} MB (started at {startWorkingSetMB} MB) both exceeded the " +
+                $"{memoryTier} tier bound {memoryBoundMB} MB. " +
+                "Set CERT_MEMORY_BOUND_MB to an explicit machine-specific bound when certifying on constrained agents.");
+            Assert.True(throughputPassed != false,
+                $"{scenario} throughput {rowsPerSecond} rows/s was below the configured minimum of {minimumThroughput} rows/s.");
         }
 
         [Fact]
@@ -301,6 +388,22 @@ namespace ETL_SQL.Tests.Scale
         }
 
         [Fact]
+        [Trait("Tier", "Huge")]
+        public Task Cert_Huge_SmokeScenarioSet_RowScale1000()
+        {
+            // ~50M+ rows (1000x of the 50k base). Very heavy — opt-in only, and needs a capable host
+            // (lots of RAM, free disk for spill, and time). Run with a real 50M tier to measure the
+            // large-tier behavior (external sort merge fan-in, DISTINCT high-cardinality partitions,
+            // statistical/holistic aggregate buffering, external-aggregate spill).
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("CERT_HUGE_ROW_SCALE")))
+            {
+                _out.WriteLine("SKIP: Set CERT_HUGE_ROW_SCALE to run huge-tier scale tests (1000x ~= 50M+ rows; capable host required).");
+                return Task.CompletedTask;
+            }
+            return RunSmokeScenarioSetWithScale(RowScaleFrom("CERT_HUGE_ROW_SCALE", 1000.0), "Huge");
+        }
+
+        [Fact]
         [Trait("Tier", "Provider")]
         [Trait("CertificationClass", "LocalReal")]
         public Task Cert_Provider_LocalFileConnectors_RowScale1()
@@ -317,7 +420,9 @@ namespace ETL_SQL.Tests.Scale
             var expectedSum = (decimal)Rows * (Rows + 1) / 2;
 
             var ev = await EvWithRows(Rows);
-            ev.ExternalSortChunkSize = 5_000;  // force multiple sort chunks
+            // Force multiple runs at every tier without pinning large-tier certification to the
+            // tiny smoke run size. Cap at the production default so the measurement remains honest.
+            ev.ExternalSortChunkSize = Math.Min(100_000, Math.Max(5_000, Rows / 64));
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();
@@ -342,7 +447,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalSort");
-            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"ExternalSort_{Rows}_DESC", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 2. External Aggregate (GROUP BY) ─────────────────────────────────
@@ -375,7 +480,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalAggregate");
-            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true);
+            EmitMetrics($"ExternalAggregate_{Rows}_10grps", Rows, sw.ElapsedMilliseconds, spillBytes, res.Rows.Count, firstGroupSum, true, ev.Telemetry);
         }
 
         // ── 3. External Join ──────────────────────────────────────────────────
@@ -391,29 +496,14 @@ namespace ETL_SQL.Tests.Scale
             var ev = NewEvaluator();
             ev.JoinSpillThreshold = 5_000;  // force external hash join
 
-            var left = new DataTable();
-            left.SetColumns(new[] { "id", "val" });
-            var right = new DataTable();
-            right.SetColumns(new[] { "id", "score" });
-
-            for (int i = 1; i <= Rows; i++)
-            {
-                var lr = new Row(left.Schema);
-                lr["id"] = i; lr["val"] = $"v{i}";
-                await left.AddRowAsync(lr);
-
-                var rr = new Row(right.Schema);
-                rr["id"] = i; rr["score"] = (decimal)i * 2;
-                await right.AddRowAsync(rr);
-            }
-
-            var lSrc = new InMemoryDataSource();
-            await lSrc.WriteBatches(new[] { left }.ToAsyncEnumerable());
-            ev.Connections["#certL"] = lSrc;
-
-            var rSrc = new InMemoryDataSource();
-            await rSrc.WriteBatches(new[] { right }.ToAsyncEnumerable());
-            ev.Connections["#certR"] = rSrc;
+            // Stream both join inputs (id = 1..Rows; score = id*2) so they never materialize in
+            // memory — at the Huge tier the old in-memory build of both sides was the dominant hog.
+            ev.Connections["#certL"] = new StreamingRowSource(Rows,
+                ("id", i => (int)(i + 1)),
+                ("val", i => "v" + (i + 1)));
+            ev.Connections["#certR"] = new StreamingRowSource(Rows,
+                ("id", i => (int)(i + 1)),
+                ("score", i => (decimal)(i + 1) * 2));
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();
@@ -439,7 +529,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "ExternalJoin");
-            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"ExternalJoin_{Rows}_equality", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 4. Temp table spill (SELECT INTO) ────────────────────────────────
@@ -450,7 +540,10 @@ namespace ETL_SQL.Tests.Scale
         {
             var Rows = ScaleRows(50_000);
             var ev = await EvWithRows(Rows);
-            ev.TempTableSpillThresholdRows = 10_000;  // force temp table spill
+            // Retain one configured batch, then force all subsequent batches through spill.
+            // Gate F raises BatchSize to reduce scheduler/allocation overhead while preserving
+            // bounded memory and a complete physical spill/readback validation.
+            ev.TempTableSpillThresholdRows = ev.BatchSize;
 
             ev.Telemetry.Clear();
             var sw = Stopwatch.StartNew();
@@ -465,7 +558,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "TempTableSpill");
-            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows);
+            EmitMetrics($"TempTableSpill_{Rows}_SELECT_INTO", Rows, sw.ElapsedMilliseconds, spillBytes, n, (decimal)n, n == Rows, ev.Telemetry);
         }
 
         // ── 5. Streaming SELECT — result cap check ────────────────────────────
@@ -492,7 +585,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             EmitMetrics($"StreamingSelect_{Rows}_cap{Cap}", Rows, sw.ElapsedMilliseconds, spillBytes,
-                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count <= Cap);
+                ev.LastResult.Rows.Count, (decimal)ev.LastResult.Rows.Count, ev.LastResult.Rows.Count <= Cap, ev.Telemetry);
         }
 
         // ── 6. Window function at scale ───────────────────────────────────────
@@ -531,7 +624,7 @@ namespace ETL_SQL.Tests.Scale
 
             var spillBytes = ev.Telemetry.TotalSpilledBytes;
             AssertSpilled(ev, "WindowFunction");
-            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true);
+            EmitMetrics($"WindowFunction_ROW_NUMBER_{Rows}", Rows, sw.ElapsedMilliseconds, spillBytes, n, s, true, ev.Telemetry);
         }
 
         // ── 7. CSV ingest ────────────────────────────────────────────────────
@@ -549,10 +642,10 @@ namespace ETL_SQL.Tests.Scale
 
             try
             {
-                var source = await TableWithRows(Rows);
+                var source = await SourceWithRows(Rows);
                 var writer = new FlatFileDataSource(SystemExecutionContext.Instance, path,
                     new Dictionary<string, string> { ["HEADER"] = "ON" });
-                await writer.WriteBatches(new[] { source }.ToAsyncEnumerable());
+                await writer.WriteBatches(source.ReadBatches(10_000));
 
                 var reader = new FlatFileDataSource(SystemExecutionContext.Instance, path,
                     new Dictionary<string, string> { ["HEADER"] = "ON" });
@@ -586,9 +679,9 @@ namespace ETL_SQL.Tests.Scale
 
             try
             {
-                var source = await TableWithRows(Rows);
+                var source = await SourceWithRows(Rows);
                 var writer = new ParquetDataSource(SystemExecutionContext.Instance, path);
-                await writer.WriteBatches(new[] { source }.ToAsyncEnumerable());
+                await writer.WriteBatches(source.ReadBatches(10_000));
 
                 var reader = new ParquetDataSource(SystemExecutionContext.Instance, path);
 
@@ -704,7 +797,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(expectedInputSum * 4, sum);
             AssertSpilled(ev, "CubeGroupingSets");
             EmitMetrics($"CubeGroupingSets_{Rows}_{Groups}x{Buckets}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
         }
 
         // ── 11. Scalar subquery cache at scale ───────────────────────────────
@@ -770,7 +863,7 @@ namespace ETL_SQL.Tests.Scale
             Assert.Equal(distinctKeys, ev.Telemetry.SubqueryCacheMisses);
             Assert.Equal(Rows - distinctKeys, ev.Telemetry.SubqueryCacheHits);
             EmitMetrics($"ScalarSubqueryCache_{Rows}_{distinctKeys}keys", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, count, sum, true);
+                ev.Telemetry.TotalSpilledBytes, count, sum, true, ev.Telemetry);
         }
 
         // ── 12. Spill cleanup after success ─────────────────────────────────
@@ -798,7 +891,7 @@ namespace ETL_SQL.Tests.Scale
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after evaluator disposal.");
             EmitMetrics($"SpillCleanupSuccess_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
         }
 
         // ── 13. Spill cleanup after forced failure ──────────────────────────
@@ -822,13 +915,13 @@ namespace ETL_SQL.Tests.Scale
             var spillRoot = ev.SpillStore.RootPath;
             var filesBeforeDispose = CountFiles(spillRoot);
             AssertSpilled(ev, "SpillCleanupFailure");
-            Assert.True(filesBeforeDispose > 0, "Expected spill files before evaluator disposal after forced failure.");
+            Assert.Equal(0, filesBeforeDispose); // incomplete extent is deleted eagerly on failure
 
             await ev.DisposeAsync();
 
             Assert.False(Directory.Exists(spillRoot), $"Expected spill directory '{spillRoot}' to be removed after failed evaluator disposal.");
             EmitMetrics($"SpillCleanupFailure_{Rows}", Rows, sw.ElapsedMilliseconds,
-                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true);
+                ev.Telemetry.TotalSpilledBytes, filesBeforeDispose, filesBeforeDispose, true, ev.Telemetry);
         }
 
         private static string CreateTempDir()

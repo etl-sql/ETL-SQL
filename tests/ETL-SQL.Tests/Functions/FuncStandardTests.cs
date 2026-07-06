@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
@@ -152,6 +153,13 @@ namespace ETL_SQL.Tests.Functions
 
             var resDesc = await ev.EvaluateSelect((SelectStatement)Parse("SELECT STRING_AGG(Val, ',') WITHIN GROUP (ORDER BY Val DESC) AS Res FROM #T;").Statements[0]).FirstAsync();
             Assert.True(resDesc.Rows[0]["Res"]?.ToString() == "C,B,A", $"Ordered DESC failed: {resDesc.Rows[0]["Res"]}");
+
+            await ev.Evaluate(Parse("CREATE TABLE #T2 (Val STRING, SortKey INT); " +
+                "INSERT INTO #T2 VALUES ('first', 2), ('second', 1);"));
+            var byDifferentKey = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT STRING_AGG(Val, '|') WITHIN GROUP (ORDER BY SortKey) AS Res FROM #T2;")
+                .Statements[0]).FirstAsync();
+            Assert.Equal("second|first", byDifferentKey.Rows[0]["Res"]);
         }
 
         [Fact]
@@ -201,8 +209,12 @@ namespace ETL_SQL.Tests.Functions
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             // Use a standard zone name (Windows uses different names than IANA, but 'UTC' is universal)
             var res = await EvaluateExpression(evaluator, "'2024-03-24 12:00:00' AT TIME ZONE 'UTC'");
-            Assert.True(res is DateTime, "AT TIME ZONE should return DateTime");
-            Assert.Equal(12, ((DateTime)res).Hour);
+            var offset = Assert.IsType<DateTimeOffset>(res);
+            Assert.Equal(12, offset.Hour);
+            Assert.Equal(TimeSpan.Zero, offset.Offset);
+
+            await Assert.ThrowsAsync<ExecutionException>(() =>
+                EvaluateExpression(evaluator, "'2024-03-24 12:00:00' AT TIME ZONE 'Not/A_Real_Zone'"));
         }
 
         [Fact]

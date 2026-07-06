@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -159,6 +160,50 @@ namespace ETL_SQL.Tests.Statements
             await _evaluator.Evaluate(new Lexer("SELECT * FROM #Final;").TokenizeToScript());
             Assert.Single(_evaluator.LastResult.Rows);
             Assert.Equal("New", _evaluator.LastResult.Rows[0]["V"]);
+        }
+
+        [Fact]
+        public async Task Merge_FailsBeforeExceedingOperatorMemoryGrant()
+        {
+            _evaluator.OperatorMemoryGrantMB = 1;
+            await using var target = new InMemoryDataSource();
+            await using var source = new InMemoryDataSource();
+            var schema = new[]
+            {
+                new ColumnDefinition("ID", "INT", false),
+                new ColumnDefinition("Payload", "STRING", false)
+            };
+            target.SetSchema(schema);
+            source.SetSchema(schema);
+            await target.WriteBatches(new[] { Rows(100) }.ToAsyncEnumerable());
+            await source.WriteBatches(new[] { Rows(100) }.ToAsyncEnumerable());
+            _evaluator.Connections["#bounded_target"] = target;
+            _evaluator.Connections["#bounded_source"] = source;
+            var merge = new Lexer(@"
+                MERGE #bounded_target AS T
+                USING #bounded_source AS S
+                ON T.ID = S.ID
+                WHEN MATCHED THEN UPDATE SET Payload = S.Payload;
+            ").TokenizeToScript();
+
+            var error = await Assert.ThrowsAsync<ExecutionException>(() => _evaluator.Evaluate(merge));
+
+            Assert.Contains("bounded memory grant", error.Message, StringComparison.OrdinalIgnoreCase);
+
+            static DataTable Rows(int count)
+            {
+                var table = new DataTable();
+                table.SetColumns(new[] { "ID", "Payload" });
+                var payload = new string('x', 4096);
+                for (var id = 0; id < count; id++)
+                {
+                    var row = table.NewRow();
+                    row["ID"] = id;
+                    row["Payload"] = payload;
+                    table.Rows.Add(row);
+                }
+                return table;
+            }
         }
     }
 }

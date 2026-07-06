@@ -1,5 +1,5 @@
 ================================================================================
-  ETL-SQL v0.13.0 Quickstart Guide
+  ETL-SQL v0.14.0 Quickstart Guide
 ================================================================================
 
 Welcome to ETL-SQL, the script-first data orchestration engine for SQL, APIs,
@@ -65,10 +65,10 @@ REPORT PORTAL QUICKSTART:
 5. CONNECTORS
 --------------------------------------------------------------------------------
 ETL-SQL supports:
-  - SQL: MSSQL, Postgres, Oracle, ODBC
+  - SQL: MSSQL, Postgres, MySQL, Oracle, SQLite, ODBC, Snowflake, BigQuery
   - Files: CSV, JSON, XML, Parquet, Avro, Excel
-  - REST: Native HTTP/API connector
-  - Transfers: SFTP, FTP, Azure Blob
+  - REST/API: Native HTTP/API connector, MongoDB, Kafka, Active Directory
+  - Transfers: SFTP, FTP, Azure Blob, S3, SharePoint
 
 6. DOCUMENTATION
 --------------------------------------------------------------------------------

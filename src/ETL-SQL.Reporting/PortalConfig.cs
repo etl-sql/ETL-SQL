@@ -24,6 +24,45 @@ public class PortalConfig
     public AuditConfig Audit { get; set; } = new();
     public PortalStorageConfig Storage { get; set; } = new();
     public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
+    public OperationalDigestConfig OperationalDigest { get; set; } = new();
+}
+
+/// <summary>
+/// A scheduled email digest of the portal's operational metrics (active/queued executions, 24h failure
+/// rates, storage usage, migration status) for administrators. Disabled by default — opt in per
+/// deployment. In a multi-node HA cluster a leader lock ensures exactly one node sends each interval.
+/// </summary>
+public class OperationalDigestConfig
+{
+    /// <summary>Enables the digest. Default false; requires <see cref="Recipients"/> and <see cref="SmtpAlias"/>.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Hours between digests. Minimum effective value is 1; default 24.</summary>
+    public int IntervalHours { get; set; } = 24;
+
+    /// <summary>Semicolon/comma-separated administrator recipients.</summary>
+    public string Recipients { get; set; } = string.Empty;
+
+    /// <summary>Alias of a configured SMTP connection used to send the digest.</summary>
+    public string SmtpAlias { get; set; } = string.Empty;
+
+    /// <summary>From address; when empty the SMTP connection's own from/username is used.</summary>
+    public string Sender { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, send only when at least one alert condition is met (failure rate, pending migrations,
+    /// queue backlog) — a quieter "alert me when something is wrong" mode. Default false (always send).
+    /// </summary>
+    public bool AlertOnly { get; set; }
+
+    /// <summary>Execution-failure rate (percent, over the 24h window) at or above which an alert is raised.</summary>
+    public int FailureRatePercentThreshold { get; set; } = 25;
+
+    /// <summary>Queued-execution count at or above which a backlog alert is raised.</summary>
+    public int QueueDepthAlertThreshold { get; set; } = 20;
+
+    /// <summary>Raise an alert when the catalog has unapplied EF migrations. Default true.</summary>
+    public bool AlertOnPendingMigrations { get; set; } = true;
 }
 
 public class PortalLoadBalancerConfig
@@ -111,10 +150,22 @@ public class AuditConfig
     /// delivery is judged unavailable: any delivery has terminally failed, the pending backlog
     /// exceeds <see cref="FailClosedMaxPendingBacklog"/>, the oldest pending event is older than
     /// <see cref="FailClosedMaxBacklogSeconds"/>, or the queued payload exceeds
-    /// <see cref="OutboxMaxBytes"/>. Defaults to false (local zero-trust default); set true only
-    /// when an HTTPS collector is configured and remote audit delivery is mandatory.
+    /// <see cref="OutboxMaxBytes"/>.
+    ///
+    /// <para><b>Unset (null) is the safe default</b> and resolves per <see cref="ResolveRequireRemoteDelivery"/>:
+    /// on for an <b>enrolled</b> deployment that has configured a collector (<see cref="TransportEndpoint"/>),
+    /// off otherwise. Standalone/unenrolled deployments therefore stay local-only, and a deployment
+    /// with no collector configured is never blocked. An explicit <c>true</c>/<c>false</c> always wins.</para>
     /// </summary>
-    public bool RequireRemoteDelivery { get; set; }
+    public bool? RequireRemoteDelivery { get; set; }
+
+    /// <summary>
+    /// Resolves the effective fail-closed policy. An explicit configured value is honoured; when unset,
+    /// fail-closed is on only for an enrolled deployment that has a collector configured — so it is a
+    /// no-op for standalone deployments and for enrolled deployments without remote audit set up.
+    /// </summary>
+    public bool ResolveRequireRemoteDelivery(bool isEnrolled) =>
+        RequireRemoteDelivery ?? (isEnrolled && !string.IsNullOrWhiteSpace(TransportEndpoint));
 
     /// <summary>Fail-closed once this many undelivered (Pending) outbox rows accumulate. 0 disables this check.</summary>
     public int FailClosedMaxPendingBacklog { get; set; } = 1000;
@@ -154,6 +205,13 @@ public class PortalSecurityConfig
     /// Wildcards are intentionally unsupported so embedding remains an explicit deployment decision.
     /// </summary>
     public string[] FrameAncestors { get; set; } = [];
+
+    /// <summary>
+    /// Whether administrators bypass row-level security (HAS_GROUP/HAS_ROLE short-circuit to true).
+    /// Default on. Turn off to filter admins by the same predicates as other users.
+    /// See Docs/Design/RowLevelSecurity.md.
+    /// </summary>
+    public bool AdminBypassRowLevelSecurity { get; set; } = true;
 }
 
 public class DatasetConfig

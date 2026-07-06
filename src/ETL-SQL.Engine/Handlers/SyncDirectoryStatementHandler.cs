@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
 
@@ -25,6 +26,11 @@ public class SyncDirectoryStatementHandler : IStatementHandler
 
         string source = context.ResolvePath(srcVal);
         string dest = context.ResolvePath(destVal);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Enumerate,
+            validateFileType: false).CanonicalPath;
+        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write,
+            validateFileType: false).CanonicalPath;
 
         // Security checks
         context.SecurityService.ValidatePath(source);
@@ -83,7 +89,7 @@ public class SyncDirectoryStatementHandler : IStatementHandler
             context.Log($"[SyncDirectory] Syncing '{source}' -> '{dest}' (Recursive: {recursive}, Overwrite: {overwrite}, DeleteExtra: {deleteExtra})");
 
         var searchOption = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var destFileMap = EnumerateFiles(context, dest, recursive, searchOption).ToDictionary(
+        var destFileMap = EnumerateFiles(context, pathAuthorizer, dest, recursive, searchOption).ToDictionary(
             f => Path.GetRelativePath(dest, f),
             f => f,
             StringComparer.OrdinalIgnoreCase
@@ -91,12 +97,13 @@ public class SyncDirectoryStatementHandler : IStatementHandler
         var sourceSeen = deleteExtra ? new HashSet<string>(StringComparer.OrdinalIgnoreCase) : null;
 
         // 1. Copy new or modified files
-        foreach (var sourceFile in EnumerateFiles(context, source, recursive, searchOption))
+        foreach (var sourceFile in EnumerateFiles(context, pathAuthorizer, source, recursive, searchOption))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             string relativePath = Path.GetRelativePath(source, sourceFile);
             sourceSeen?.Add(relativePath);
-            string targetFile = Path.Combine(dest, relativePath);
+            string targetFile = pathAuthorizer.Authorize(context, Path.Combine(dest, relativePath),
+                FileSystemAccessKind.Write).CanonicalPath;
 
             bool needsCopy = false;
             if (!destFileMap.TryGetValue(relativePath, out var existingDestFile))
@@ -123,6 +130,8 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 context.SecurityService.ValidateFileType(targetFile);
 
                 context.IncrementOperationCount(OperationType.FileSystem, sourceFile, 1);
+                targetFile = pathAuthorizer.Authorize(context, targetFile,
+                    FileSystemAccessKind.Write).CanonicalPath;
                 File.Copy(sourceFile, targetFile, true);
 
                 if (context.IsVerbose)
@@ -141,6 +150,8 @@ public class SyncDirectoryStatementHandler : IStatementHandler
 
                 if (sourceSeen == null || !sourceSeen.Contains(relativePath))
                 {
+                    destFile = pathAuthorizer.Authorize(context, destFile,
+                        FileSystemAccessKind.Delete).CanonicalPath;
                     context.SecurityService.ValidateWriteAccess(destFile);
                     context.SecurityService.ValidateFileType(destFile);
                     context.IncrementOperationCount(OperationType.FileSystem, destFile, 1);
@@ -153,18 +164,19 @@ public class SyncDirectoryStatementHandler : IStatementHandler
 
             if (recursive)
             {
-                DeleteEmptySubdirectories(context, dest);
+                DeleteEmptySubdirectories(context, pathAuthorizer, dest);
             }
         }
     }
 
-    private static IEnumerable<string> EnumerateFiles(IExecutionContext context, string root, bool recursive, SearchOption searchOption)
+    private static IEnumerable<string> EnumerateFiles(IExecutionContext context,
+        FileSystemPolicyAuthorizer authorizer, string root, bool recursive, SearchOption searchOption)
     {
         foreach (var file in Directory.EnumerateFiles(root, "*", searchOption))
         {
             context.CancellationToken.ThrowIfCancellationRequested();
             if (recursive) ValidateRecursiveDepth(context, root, file);
-            yield return file;
+            yield return authorizer.Authorize(context, file, FileSystemAccessKind.Read).CanonicalPath;
         }
     }
 
@@ -176,16 +188,22 @@ public class SyncDirectoryStatementHandler : IStatementHandler
             throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {context.MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
     }
 
-    private static void DeleteEmptySubdirectories(IExecutionContext context, string directory)
+    private static void DeleteEmptySubdirectories(IExecutionContext context,
+        FileSystemPolicyAuthorizer authorizer, string directory)
     {
         foreach (var d in Directory.GetDirectories(directory))
         {
-            DeleteEmptySubdirectories(context, d);
-            if (Directory.GetFiles(d).Length == 0 && Directory.GetDirectories(d).Length == 0)
+            var authorizedDirectory = authorizer.Authorize(context, d, FileSystemAccessKind.Enumerate,
+                validateFileType: false).CanonicalPath;
+            DeleteEmptySubdirectories(context, authorizer, authorizedDirectory);
+            if (Directory.GetFiles(authorizedDirectory).Length == 0
+                && Directory.GetDirectories(authorizedDirectory).Length == 0)
             {
-                context.SecurityService.ValidateWriteAccess(d);
-                context.IncrementOperationCount(OperationType.FileSystem, d, 1);
-                Directory.Delete(d, false);
+                var deleteTarget = authorizer.Authorize(context, authorizedDirectory,
+                    FileSystemAccessKind.Delete, validateFileType: false).CanonicalPath;
+                context.SecurityService.ValidateWriteAccess(deleteTarget);
+                context.IncrementOperationCount(OperationType.FileSystem, deleteTarget, 1);
+                Directory.Delete(deleteTarget, false);
             }
         }
     }

@@ -1,6 +1,6 @@
 #!/bin/bash
 # test-scale-certification.sh - Run the ETL-SQL scale certification suite and produce reports.
-# Usage: ./scripts/test-scale-certification.sh [--tier Smoke|Standard|Stress|Provider|All]
+# Usage: ./scripts/test-scale-certification.sh [--tier Smoke|Standard|Stress|Huge|Provider|All]
 #                                               [--out-dir <dir>] [--row-count-scale <multiplier>]
 
 set -e
@@ -19,8 +19,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "$TIER" in
-    Smoke|Standard|Stress|Provider|All) ;;
-    *) echo "ERROR: --tier must be one of: Smoke Standard Stress Provider All"; exit 1 ;;
+    Smoke|Standard|Stress|Huge|Provider|All) ;;
+    *) echo "ERROR: --tier must be one of: Smoke Standard Stress Huge Provider All"; exit 1 ;;
 esac
 
 # Default row count scale per tier
@@ -28,6 +28,7 @@ if [[ -z "$ROW_COUNT_SCALE" ]]; then
     case "$TIER" in
         Standard) ROW_COUNT_SCALE="10.0" ;;
         Stress)   ROW_COUNT_SCALE="100.0" ;;
+        Huge)     ROW_COUNT_SCALE="1000.0" ;;
         *)        ROW_COUNT_SCALE="1.0" ;;
     esac
     SCALE_SPECIFIED=false
@@ -46,17 +47,20 @@ echo ""
 
 # 1. Build
 echo "Building solution..."
-dotnet build "$REPO_ROOT/ETL-SQL.slnx" -c Debug --no-restore -v quiet
+dotnet build "$REPO_ROOT/ETL-SQL.slnx" -c Release --no-restore -v quiet
 echo ""
 
 # 2. Set environment variables
 export CERT_ROW_SCALE="$ROW_COUNT_SCALE"
 export CERT_CERTIFICATION_TIER="$( [[ "$TIER" == "All" ]] && echo "" || echo "$TIER" )"
+export DOTNET_gcServer=1
 
 if [[ "$TIER" == "Standard" ]]; then
     export CERT_STANDARD_ROW_SCALE="$ROW_COUNT_SCALE"
 elif [[ "$TIER" == "Stress" ]]; then
     export CERT_STRESS_ROW_SCALE="$ROW_COUNT_SCALE"
+elif [[ "$TIER" == "Huge" ]]; then
+    export CERT_HUGE_ROW_SCALE="$ROW_COUNT_SCALE"
 elif [[ "$TIER" == "Provider" ]]; then
     export CERT_PROVIDER_ROW_SCALE="$ROW_COUNT_SCALE"
 elif [[ "$TIER" == "All" ]]; then
@@ -74,6 +78,7 @@ echo "Running certification tests (filter: $FILTER)..."
 dotnet test "$REPO_ROOT/ETL-SQL.slnx" \
     --filter "$FILTER" \
     --logger "console;verbosity=detailed" \
+    -c Release \
     --no-build \
     2>&1 | tee "$RAW_LOG"
 TEST_EXIT=$?
@@ -84,12 +89,30 @@ grep -oP 'CERT_METRIC:\K.+' "$RAW_LOG" > "$METRICS_FILE" 2>/dev/null || true
 
 # 5. Write JSON report (array of metric objects)
 JSON_PATH="$OUT_DIR/cert-report.json"
+CPU_MODEL=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^[[:space:]]*//' || true)
+TOTAL_RAM_BYTES=$(awk '/MemTotal/ { print $2 * 1024 }' /proc/meminfo 2>/dev/null || echo 0)
+RUNTIME_VERSION=$(dotnet --version)
+DISK_MODEL=$(lsblk -ndo MODEL "$(df --output=source "$REPO_ROOT" | tail -1)" 2>/dev/null | head -1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+WORKSPACE_FREE_BYTES=$(df -B1 --output=avail "$REPO_ROOT" | tail -1 | tr -d ' ')
 {
     echo "{"
     echo "  \"generatedAt\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\","
     echo "  \"tier\": \"$TIER\","
     echo "  \"rowCountScale\": $ROW_COUNT_SCALE,"
     echo "  \"testsPassed\": $( [[ $TEST_EXIT -eq 0 ]] && echo "true" || echo "false" ),"
+    echo "  \"hardware\": {"
+    echo "    \"machineName\": \"$(hostname)\","
+    echo "    \"operatingSystem\": \"$(uname -s)\","
+    echo "    \"osVersion\": \"$(uname -r)\","
+    echo "    \"processor\": \"$CPU_MODEL\","
+    echo "    \"logicalCores\": $(getconf _NPROCESSORS_ONLN),"
+    echo "    \"physicalMemoryBytes\": ${TOTAL_RAM_BYTES%.*},"
+    echo "    \"diskModel\": \"$DISK_MODEL\","
+    echo "    \"workspaceFreeBytes\": ${WORKSPACE_FREE_BYTES:-0},"
+    echo "    \"runtimeVersion\": \".NET $RUNTIME_VERSION\","
+    echo "    \"buildConfiguration\": \"Release\","
+    echo "    \"serverGcRequested\": true"
+    echo "  },"
     echo "  \"scenarios\": ["
     FIRST=true
     while IFS= read -r LINE; do
@@ -112,8 +135,8 @@ MD_PATH="$OUT_DIR/cert-report.md"
     echo ""
     echo "## Results"
     echo ""
-    echo "| Scenario | Rows | Elapsed (ms) | Spill (bytes) | Result Rows | Memory (MB) | Memory Bound (MB) | Pass |"
-    echo "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
+    echo "| Scenario | Rows | Rows/s | Elapsed (ms) | Spill Write | Peak WS (MB) | Private (MB) | Heap (MB) | Allocated (MB) | CPU % | GC Pause (ms) | Bound (MB) | Pass |"
+    echo "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
 
     METRIC_COUNT=0
     while IFS= read -r LINE; do
@@ -124,25 +147,39 @@ MD_PATH="$OUT_DIR/cert-report.md"
         SCENARIO=$(get_field scenario)
         ROWS=$(get_field rowCount)
         ELAPSED=$(get_field elapsedMs)
-        SPILL=$(get_field spillBytes)
-        RESULT_ROWS=$(get_field resultRows)
-        MEMORY=$(get_field peakManagedMemoryMB)
+        ROWS_PER_SECOND=$(get_field rowsPerSecond)
+        SPILL=$(get_field spillWriteBytes)
+        PEAK_WS=$(get_field peakProcessWorkingSetMB)
+        PRIVATE_MB=$(get_field peakPrivateBytesMB)
+        HEAP_MB=$(get_field peakManagedHeapMB)
+        ALLOCATED_MB=$(get_field allocatedMB)
+        CPU_PERCENT=$(get_field cpuUtilizationPercent)
+        GC_PAUSE=$(get_field gcPauseMs)
         BOUND=$(get_field memoryBoundMB)
         PASSED_VAL=$(get_field passed)
         PASS_LABEL="$( [[ "$PASSED_VAL" == "true" ]] && echo "OK" || echo "FAIL" )"
-        echo "| $SCENARIO | $ROWS | $ELAPSED | $SPILL | $RESULT_ROWS | $MEMORY | $BOUND | $PASS_LABEL |"
+        echo "| $SCENARIO | $ROWS | $ROWS_PER_SECOND | $ELAPSED | $SPILL | $PEAK_WS | $PRIVATE_MB | $HEAP_MB | $ALLOCATED_MB | $CPU_PERCENT | $GC_PAUSE | $BOUND | $PASS_LABEL |"
     done < "$METRICS_FILE"
 
     if [[ "$METRIC_COUNT" -eq 0 ]]; then
-        echo "| _No metrics collected — check test output_ | | | | | | | |"
+        echo "| _No metrics collected — check test output_ | | | | | | | | | | | | |"
     fi
+
+    echo ""
+    echo "## Environment"
+    echo ""
+    echo "- OS: $(uname -s) $(uname -r)"
+    echo "- CPU: $CPU_MODEL ($(getconf _NPROCESSORS_ONLN) logical cores)"
+    echo "- RAM: $(( ${TOTAL_RAM_BYTES%.*} / 1024 / 1024 / 1024 )) GB"
+    echo "- Disk: $DISK_MODEL; workspace free $(( ${WORKSPACE_FREE_BYTES:-0} / 1024 / 1024 / 1024 )) GB"
+    echo "- Runtime: .NET $RUNTIME_VERSION, Release, server GC requested"
 
     echo ""
     echo "## Operator Status"
     echo ""
     echo "| Operator | Execution Mode | Scale Tested | Notes |"
     echo "| :--- | :--- | :--- | :--- |"
-    echo "| ORDER BY | External Sort (multi-chunk) | 50k rows | ExternalSortChunkSize forced to 5k |"
+    echo "| ORDER BY | External Sort (multi-chunk) | 50k rows | Run size scales from 5K to the production 100K cap while preserving multiple runs |"
     echo "| GROUP BY | External Aggregate | 100k rows | OperatorMemoryGrantMB forced to 1 MB |"
     echo "| JOIN (equality) | External Hash Join | 50k rows | JoinSpillThreshold forced to 5k |"
     echo "| SELECT INTO #temp | Temp Table Spill | 50k rows | TempTableSpillThresholdRows forced to 10k |"

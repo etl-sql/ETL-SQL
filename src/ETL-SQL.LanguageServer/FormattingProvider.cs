@@ -74,16 +74,6 @@ namespace ETL_SQL.LSP
                         var breakoutWindowFunctions = formatSection.GetValue<bool?>("breakoutWindowFunctions");
                         if (breakoutWindowFunctions.HasValue) options.BreakoutWindowFunctions = breakoutWindowFunctions.Value;
 
-                        // Sync legacy / composite settings
-                        if (options.KeywordCasing.Equals("upper", StringComparison.OrdinalIgnoreCase))
-                            options.UpperCaseKeywords = true;
-                        else if (options.KeywordCasing.Equals("lower", StringComparison.OrdinalIgnoreCase) || options.KeywordCasing.Equals("pascal", StringComparison.OrdinalIgnoreCase))
-                            options.UpperCaseKeywords = false;
-
-                        if (options.CommaPlacement.Equals("leading", StringComparison.OrdinalIgnoreCase))
-                            options.LeadingCommas = true;
-                        else if (options.CommaPlacement.Equals("trailing", StringComparison.OrdinalIgnoreCase))
-                            options.LeadingCommas = false;
                     }
                     else
                     {

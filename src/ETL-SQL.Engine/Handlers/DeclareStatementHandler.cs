@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -23,6 +24,14 @@ public class DeclareStatementHandler : IStatementHandler
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (DeclareStatement)statement;
+
+        // System (@@) variables are reserved and read-only; a script cannot declare one and thereby
+        // shadow an identity variable used for row-level security. See Docs/Design/RowLevelSecurity.md.
+        if (SystemVariableProvider.IsSystemVariable(stmt.VariableName))
+            throw new ExecutionException($"System variable {stmt.VariableName} is reserved and cannot be declared.");
+
+        if (!context.VarContext.ContainsVariableInCurrentScope(stmt.VariableName))
+            LiveObjectLimits.EnsureVariableCapacity(context);
 
         _logger.Debug("Declaring variable {VariableName} as {DataType}", stmt.VariableName, stmt.DataType);
 

@@ -10,7 +10,7 @@ ETL-SQL can be deployed as workstation tooling, server services, or both.
 
 | Component | Purpose | Typical host |
 | :--- | :--- | :--- |
-| Workstation SDK | `ETL-SQL` CLI, terminal IDE, language server, and report tooling for script authors | Developer workstations, CI runners |
+| Workstation | `ETL-SQL` CLI, terminal IDE, language server, and report tooling for script authors | Developer workstations, CI runners |
 | Orchestrator Service | Background scheduler and job execution service | Application server |
 | Report Portal | Web application for report catalog, snapshots, subscriptions, and administration | Application server |
 
@@ -27,7 +27,7 @@ shared or split the services.
 
 ### Windows
 
-1. Run the `ETL-SQL-Enterprise-v0.13.0.msi` installer.
+1. Run the `ETL-SQL-Enterprise-v0.14.0.msi` installer.
 2. Select the workstation and server features required for the host.
 3. The installer registers these Windows services when the server features are selected:
    - `ETL-SQL-Orchestrator`
@@ -39,7 +39,7 @@ shared or split the services.
 Install the package for your distribution, then enable the services you intend to run:
 
 ```bash
-sudo dpkg -i etl-sql_0.13.0_amd64.deb
+sudo dpkg -i etl-sql_0.14.0_amd64.deb
 sudo systemctl enable etl-sql-orchestrator
 sudo systemctl start etl-sql-orchestrator
 sudo systemctl enable etl-sql-portal
@@ -108,10 +108,12 @@ Portal__ScriptRootPath=C:\ETL-SQL\scripts
 Portal__SnapshotDirectory=C:\ETL-SQL\snapshots
 Portal__Orchestrator__ApiUrl=https://orchestrator.example.com:5003
 Portal__Orchestrator__ApiKey=your-shared-secret
+Portal__Orchestrator__DatabasePath=C:\ETL-SQL\data\etlsql.db
 Portal__Storage__Provider=Local
 Portal__Storage__KeyRingPath=C:\ETL-SQL\data\.portal-keys
 Orchestrator__ApiKey=your-shared-secret
 Orchestrator__Database__Provider=Sqlite
+Orchestrator__DatabasePath=C:\ETL-SQL\data\etlsql.db
 Orchestrator__ScriptRoot=C:\ETL-SQL\scripts
 Jobs__UseProcessSpawning=true
 Jobs__ExecutablePath=C:\Program Files\ETL-SQL\bin\ETL-SQL.exe
@@ -184,7 +186,7 @@ old key after every caller has moved. The service compares fixed-length key dige
 
 Governance Core centralizes three production controls:
 
-- **Typed policy enforcement** — policy violations are attached to lint diagnostics and enforced again at execution boundaries.
+- **Plaintext secrets policy enforcement** — the central linter detects and blocks plaintext secret persistence when forbidden by policy.
 - **Named secret references** — connector passwords and sensitive connection-string fields can use `SECRET:name` instead of raw secret values.
 - **Durable audit forwarding** — Portal security and mutation audit rows are staged in a transactional outbox and can be forwarded to an HTTPS collector, with optional fail-closed behavior.
 
@@ -304,7 +306,32 @@ or running unrelated software. Environments requiring mandatory enforcement must
 launch through Windows Defender Application Control/AppLocker, managed software deployment, container
 admission policy, or equivalent operating-system controls.
 
+Filesystem approved-root enforcement canonicalizes paths and resolves symbolic links and junctions,
+but a path cannot reliably identify every hard-link alias to the same underlying file. Treat hard-link
+creation as an operating-system privilege boundary: deny it to ETL-SQL service accounts and protect
+approved roots with ACLs or equivalent mount permissions. ETL-SQL does not claim hard-link containment
+against a local administrator.
+
 #### Authoritative organization policy
+
+The Portal policy authority signs published envelopes with an RSA certificate whose private key remains
+in the operating-system certificate store. Configure only its thumbprint; never export the private key
+into Portal JSON, environment variables, backups, configuration exports, logs, or support bundles:
+
+```json
+{
+  "Portal": {
+    "PolicyAuthority": {
+      "SigningCertThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"
+    }
+  }
+}
+```
+
+Install the certificate in `LocalMachine/My` where possible; `CurrentUser/My` is the fallback. Grant the
+Portal service identity permission to use its private key. An unset thumbprint disables publication with
+a deterministic configuration error. Install and grant a replacement certificate before changing the
+thumbprint, and retain the former public key until enrolled clients trust the replacement.
 
 On every normal process startup, an enrolled installation requests a signed policy envelope from the configured
 HTTPS endpoint. The request carries `X-ETL-SQL-Tenant`, `X-ETL-SQL-Enrollment`, and `X-ETL-SQL-Machine` headers
@@ -347,40 +374,26 @@ policy reloads the enterprise configuration overlay. If live retrieval and verif
 under fail-closed enrollment, the host logs a critical error and stops rather than continuing beyond policy
 freshness. Supervise these processes with Windows Services, systemd, Kubernetes, or an equivalent service manager
 so an unhealthy policy dependency is visible and restart behavior follows organizational policy.
-
-Governance policy documents inside `policyPayload` use schema version `1.0`:
+Governance policy documents inside `policyPayload` use schema version `1.0`. Execution limits include
+parallelism, file/recursion operations, spill volume, SMTP sends, and maximum materialized string bytes:
 
 ```json
 {
   "schemaVersion": "1.0",
-  "connectors": {
-    "allowedTypes": [ "MSSQL", "POSTGRES", "FLATFILE", "SFTP" ]
-  },
-  "filesystem": {
-    "approvedRoots": [ "C:\\ETL-SQL\\scripts", "C:\\ETL-SQL\\data" ]
-  },
   "execution": {
-    "allowedModes": [ "Interactive", "Batch", "Scheduled" ],
-    "maxParallelDegree": 4,
-    "maxFileOperationsPerScript": 100,
-    "maxRecursiveNestingDepth": 50
-  },
-  "remoteExecution": {
-    "mode": "TrustedOrchestrator",
-    "allowedHosts": []
+    "maxStringResultSize": 104857600
   },
   "mutationGuardrails": {
-    "requireWhatIfForDestructiveStatements": true,
-    "requireTransactionForMutations": true,
     "requireRemoteAuditForMutations": true
   }
 }
 ```
 
-Verified policy values are added after JSON, environment variables, command-line configuration, and test/deployment
-overrides, giving the enterprise policy final configuration precedence. Lower-authority sources can no longer
-replace those effective values. Operation-boundary enforcement of every governed setting is delivered separately;
-administrators should not treat configuration precedence alone as complete filesystem or connector containment.
+Verified policy values are added after JSON, environment variables, command-line configuration, and
+test/deployment overrides, giving the authoritative enterprise policy final configuration precedence.
+Operation-boundary checks additionally prevent scripts from weakening governed ceilings. Portal report
+execution timeouts and paged result limits remain host availability controls rather than organization-policy
+keys: scripts cannot raise them, and each host enforces its configured timeout or page limit independently.
 
 Run `etl-sql enterprise status` to retrieve and verify policy and report `Live`, `Cached`, or `Unavailable`, the
 policy version, source, issuance, expiry, governed key names, and any live-retrieval warning. Trust keys,
@@ -419,7 +432,12 @@ because a row may be resent after a crash or lost delivery acknowledgement. Any 
 delivered. Non-2xx responses retry with exponential backoff until `TransportMaxAttempts`, then the row is marked
 `Failed`.
 
-`RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. When it is
+`RequireRemoteDelivery` changes the Portal from best-effort forwarding to fail-closed mutation behavior. **Leaving it
+unset is the recommended default**: fail-closed then turns on automatically for an **enrolled** deployment that has a
+collector configured (`TransportEndpoint`), and stays off for standalone/unenrolled deployments and for any deployment
+with no collector — so a compliance deployment gets fail-closed audit without having to remember to flip a switch,
+while nothing is ever blocked where remote audit was not set up. Set an explicit `true`/`false` to override; an
+explicit value always wins. When it is
 enabled, security-sensitive mutations are blocked with HTTP 503 once remote audit delivery is judged unavailable:
 any terminally failed outbox row, pending backlog over `FailClosedMaxPendingBacklog`, oldest pending row older than
 `FailClosedMaxBacklogSeconds`, or queued payload over `OutboxMaxBytes`. Leave it disabled unless an HTTPS collector
@@ -437,6 +455,56 @@ Operational checks:
 3. Temporarily stop the collector and confirm pending outbox rows accumulate.
 4. If `RequireRemoteDelivery` is enabled, confirm mutations fail with HTTP 503 after the configured backlog, age, or size threshold.
 5. Restart the collector and confirm pending rows drain and mutations resume.
+
+### 4.x Row-Level Security (report data filtering)
+
+Folder and dataset permissions control **which reports a user can open** — the coarse-grained gate.
+Row-level security (RLS) is the finer layer: it lets a report author filter the *rows* a viewer sees
+based on the viewer's identity, so one report can serve every user their own slice of the data.
+
+**How authors write it.** The engine exposes the authenticated viewer's identity to report SQL as
+read-only system variables and predicate functions, populated by the Portal from the signed-in user:
+
+| Primitive | Meaning |
+| :--- | :--- |
+| `@@CURRENT_USER` / `@@CURRENT_USER_ID` | The viewer's username / id. |
+| `@@REAL_USER` | The actual actor — differs from `@@CURRENT_USER` only under admin impersonation. |
+| `@@IS_ADMIN` | Whether the effective viewer is an administrator. |
+| `HAS_GROUP('name')` | TRUE if the viewer belongs to the group (case-insensitive). |
+| `HAS_ROLE('name')` | TRUE if the viewer holds the Portal role. |
+
+Groups come from Portal group membership **and OIDC group claims** (synced at login). A typical
+row-filtered report:
+
+```sql
+SELECT r.* FROM sales r
+WHERE HAS_GROUP('Region:' + r.RegionCode);   -- membership test, not a substring match
+```
+
+**Security properties administrators should know:**
+
+- **The identity is not forgeable.** These variables are injected by the Portal from the authenticated
+  principal; a script cannot assign them (`SET @@CURRENT_USER = …` is rejected) and report parameters
+  cannot populate them.
+- **Admins bypass RLS by default.** `HAS_GROUP` / `HAS_ROLE` return TRUE for administrators so they see
+  all rows. Set `Portal:Security:AdminBypassRowLevelSecurity` to `false` to filter admins by the same
+  predicates as everyone else.
+- **Fail-closed.** If no identity is present (e.g. a non-interactive run), `HAS_GROUP` returns FALSE and
+  `@@CURRENT_USER` is null, so a well-formed predicate returns **no rows** rather than leaking all rows.
+- **No shared snapshot.** A report that references any identity primitive is automatically treated as
+  identity-sensitive: it is executed per viewer and its result is **never** cached as a shared snapshot,
+  so one user's filtered rows can never be served to another. These reports run fresh on each view
+  rather than from the snapshot cache.
+- **Predicate integrity depends on report change control.** RLS lives in the report's SQL, so the
+  existing publish-permission and published-hash checks are what prevent an author from removing the
+  filter. Treat edit/publish rights on RLS reports accordingly.
+
+**Admin impersonation.** An administrator can reproduce what a specific user sees via
+`POST /api/reports/{id}/execute-as/{targetUserId}`. The run filters rows as the target user (including
+the target's — not the admin's — bypass status), while the audit log records the real admin acting as
+the target (`EXECUTE_REPORT_AS`). Impersonated runs are never cached.
+
+> Full design and threat model: `Docs/Design/RowLevelSecurity.md`.
 
 ---
 
@@ -507,6 +575,7 @@ The Report Portal constrains filesystem access to configured roots. Set these to
 | Setting | Purpose | Default in code |
 | :--- | :--- | :--- |
 | `Portal:DatabasePath` | Portal SQLite database | `./portal.db` |
+| `Portal:Orchestrator:DatabasePath` | Location of Orchestrator's SQLite DB from Portal context | `../Orchestrator/etlsql.db` (relative to Portal database directory) |
 | `Portal:Database:Provider` | Portal state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Portal:Database:ConnectionString` | Portal PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 | `Portal:ScriptRootPath` | Report and job script browser root | `./Reports` |
@@ -515,6 +584,7 @@ The Report Portal constrains filesystem access to configured roots. Set these to
 | `Portal:MapRootPath` | Map assets used by reports | `./data/maps` |
 | `Portal:Storage:Provider` | Artifact provider: `Local` or `Smb`/`Unc` | `Local` |
 | `Portal:Storage:KeyRingPath` | ASP.NET Data Protection key ring and Keys artifact root | `.portal-keys` beside the portal DB |
+| `Orchestrator:DatabasePath` | Orchestrator SQLite database | `%LocalAppData%/ETL-SQL/etlsql.db` |
 | `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
 
@@ -757,9 +827,27 @@ User snippets with the same trigger as a built-in override the built-in. The dir
 | Database | Typical path | Backup guidance |
 | :--- | :--- | :--- |
 | Portal SQLite DB | `Portal:DatabasePath` | Stop the portal or use SQLite online backup / `VACUUM INTO`. |
-| Orchestrator SQLite DB | Orchestrator data directory | Stop the orchestrator or use SQLite online backup / `VACUUM INTO`. |
+| Orchestrator SQLite DB | `Orchestrator:DatabasePath` | Stop the orchestrator or use SQLite online backup / `VACUUM INTO`. |
 
 Back up the portal sidecar files, script roots, snapshots, datasets, map roots, and service configuration alongside the databases. A portal restore without the script root or snapshot directory is incomplete.
+
+For PostgreSQL (HA) deployments, database backup is the responsibility of your PostgreSQL tooling
+(`pg_dump` / continuous archiving / managed snapshots) — back up PostgreSQL and the shared artifact
+roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for you.
+
+### Scheduling backups and restore drills
+
+`etl-sql admin backup` (§11.3) is a one-shot command, not a scheduled service — **you schedule it**:
+
+- **Schedule it externally** with the OS scheduler (Windows Task Scheduler / cron), not as an internal
+  job, so a backup still runs when the orchestrator itself is down. Capture the command's exit code and
+  alert on non-zero (wire it into the job-failure alerting in §9.1).
+- **Test the restore.** An unverified backup is a hope, not a recovery plan. Periodically restore into a
+  scratch directory with `etl-sql admin restore` (it validates integrity, key versions, and version
+  compatibility with `--validate` before writing anything — see §11.3) and confirm the Portal starts
+  and a report renders. Schedule this drill on a cadence that matches your recovery objectives.
+- Restored clones must not silently reuse machine identity or credentials in another environment —
+  re-enroll and rotate as covered in §11.3.
 
 ### Logs
 
@@ -807,6 +895,52 @@ After installation or upgrade:
 6. Confirm logs, backup jobs, and monitoring checks are collecting the expected files.
 
 For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [ReportPortal_Administrators_Guide.md](ReportPortal_Administrators_Guide.md).
+
+### 9.1 External monitoring and alerting
+
+ETL-SQL exposes health and history for you to monitor, but **it does not page you** — wire the signals
+into your own monitoring stack.
+
+**Liveness (dead-man's-switch).** Point an out-of-process monitor (your uptime service, Nagios/Zabbix,
+a cloud health check, or a small cron script on a *different* host) at `GET /healthz` on each Portal
+node and at the Orchestrator. Alert when the probe fails or stops responding. This must run outside the
+Portal/Orchestrator process: a job *inside* the orchestrator cannot report that its own host is down,
+so an internal check alone has a blind spot exactly when it matters most.
+
+**Job-failure alerting.** Job outcomes are recorded in job history (queryable with `SHOW JOB HISTORY`,
+or via the Orchestrator `GET /api/history` endpoint). Two complementary patterns:
+
+- **Per-job immediate email** — the job author adds a failure branch that sends `SEND EMAIL` on error.
+  Use this for **SLA-bearing jobs** (e.g. the outbound vendor SFTP deliveries) where a next-morning
+  digest is already too late. This is the most reliable signal because it fires from the job itself.
+- **Daily failure digest** — a scheduled job that reads the prior day's history and emails any failures
+  as a safety net beneath the per-job emails. A ready-to-adapt template ships at
+  `samples/admin_operations/daily_failure_digest.etlsql` (set the SMTP connection, recipient, and
+  lookback, then schedule it daily). Because this digest runs inside the orchestrator, it cannot report
+  its own host being down — so pair it with the external `/healthz` dead-man's-switch above and alert
+  if the expected digest does not arrive.
+- **Backup outcome + alert** — `samples/admin_operations/backup_and_report.etlsql` records the outcome
+  of your external `etl-sql admin backup` run (durable `SET_JOB_STATE` markers) and emails ops on
+  failure. The OS scheduler runs the backup, then runs this script with the exit code:
+  `etl-sql run backup_and_report.etlsql --var backup_exit_code=$LASTEXITCODE --var backup_target=nightly`.
+  It never runs a backup itself. Inspect the markers from any session with
+  `SHOW JOB STATE '<job>' [INTO #t]` — the cross-job read surface over everything `SET_JOB_STATE` saved.
+- **Portal operational digest** — the Portal can email administrators a scheduled digest of its own
+  operational metrics (active/queued executions, 24h execution and delivery failure rates, storage
+  usage, and migration status), with threshold alerts. Enable it under `Portal:OperationalDigest`
+  (`Enabled`, `IntervalHours`, `Recipients`, `SmtpAlias`; set `AlertOnly` to send only when a threshold
+  such as `FailureRatePercentThreshold`, `QueueDepthAlertThreshold`, or a pending migration is breached).
+  In an HA cluster a leader lock ensures exactly one node sends per interval.
+
+**Capacity and saturation.** Job history records each job's own `RowsProcessed`, `PeakMemoryBytes`, and
+`CpuTimeSeconds`, and the Portal exposes point-in-time operational metrics (active/queued executions,
+24h failure rates, hourly load, storage bytes). These describe *workload*. To answer "am I outgrowing
+this server," the orchestrator now also captures **host** metrics — memory load, whole-host and per-process
+CPU %, and free disk on the state and spill volumes — sampled every node heartbeat into a `HostMetrics`
+time series (retained per `Orchestrator:HostMetricsRetentionDays`, rolled up daily for long-term trend).
+Read the recent window with `SHOW HOST METRICS [nodeId] [INTO #t]`, and use
+`samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. OS-level
+monitoring remains a good independent cross-check.
 
 ---
 

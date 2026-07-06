@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -23,7 +24,9 @@ public class VerifyFileIntegrityStatementHandler : IStatementHandler
         string source = context.ResolvePath(srcVal);
 
         // Security check
-        context.SecurityService.ValidatePath(source);
+        var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
+        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Read,
+            validateFileType: false).CanonicalPath;
 
         if (!File.Exists(source))
             throw new ExecutionException($"Source file not found for integrity verification: {source}", null, stmt.Line, stmt.Column);
@@ -46,7 +49,8 @@ public class VerifyFileIntegrityStatementHandler : IStatementHandler
             var hfVal = (await context.EvaluateValue(stmt.HashFile, new Row()))?.ToString() ?? "";
             string hashFile = context.ResolvePath(hfVal);
 
-            context.SecurityService.ValidatePath(hashFile);
+            hashFile = pathAuthorizer.Authorize(context, hashFile, FileSystemAccessKind.Read,
+                validateFileType: false).CanonicalPath;
             if (!File.Exists(hashFile))
                 throw new ExecutionException($"Hash file not found: {hashFile}", null, stmt.Line, stmt.Column);
 

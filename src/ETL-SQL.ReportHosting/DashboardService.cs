@@ -50,7 +50,7 @@ namespace ETL_SQL.ReportHosting
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
-        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null, string? datasetCallerContext = null, int? datasetOwningReportId = null, string? datasetAtRestKey = null, ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
@@ -58,7 +58,10 @@ namespace ETL_SQL.ReportHosting
             _datasetCallerContext = datasetCallerContext;
             _datasetOwningReportId = datasetOwningReportId;
             _datasetAtRestKey = datasetAtRestKey;
+            _executionIdentity = executionIdentity;
         }
+
+        private readonly ETL_SQL.Core.Governance.ExecutionIdentity? _executionIdentity;
 
         public async ValueTask DisposeAsync()
         {
@@ -250,6 +253,7 @@ namespace ETL_SQL.ReportHosting
                     ownsEvaluator = true;
                     tempScope = _scopeFactory.CreateScope();
                     evaluator = tempScope.ServiceProvider.GetRequiredService<Evaluator>();
+                    evaluator.ExecutionIdentity = _executionIdentity;
                 }
 
                 try
@@ -365,6 +369,7 @@ namespace ETL_SQL.ReportHosting
 
                 _currentScope = _scopeFactory.CreateScope();
                 var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
+                evaluator.ExecutionIdentity = _executionIdentity;
                 var registry = _currentScope.ServiceProvider.GetService<IDatasetRegistry>();
                 if (registry != null)
                 {

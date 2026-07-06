@@ -1,8 +1,65 @@
 # Changelog
 
-All notable changes to ETL-SQL are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions. Version numbers follow [Semantic Versioning](https://semver.org/).
+All notable changes to ETL-SQL are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions.
+
+## Versioning Policy
+
+Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
+- **Pre-1.0.0 (`0.y.z`):** The engine runtime is in active development. Minor version increments (e.g., `v0.13.0` to `v0.14.0`) may introduce breaking changes or syntax deprecations, which are formally cataloged in [BREAKING_CHANGES.md](BREAKING_CHANGES.md). Patch version increments (e.g., `v0.14.1`) are strictly reserved for backwards-compatible bug fixes.
+- **Production (`1.0.0` and beyond):** Upon reaching `1.0.0`, the public API, syntax grammar, and execution behaviors are considered stable. Breaking changes will only occur on major version increments (e.g., `v2.0.0`).
+
+---
 
 ## [Unreleased]
+
+## [0.14.0] — 2026-07-03
+
+### Added
+
+**Billion-Row Columnar Execution Foundations**
+- Designed and implemented a native, high-performance, append-only segmented `#temp` storage engine with `ColumnBatch` buffers to bypass row-at-a-time (`Row`/`DataTable`) overhead.
+- Built a process-wide memory-grant arbiter (RAM governor) backing external sort, join, distinct, aggregates, and window query operations, dynamically controlling memory ceilings and triggering partition spilling.
+- Optimized spilling to use large sequential spill extents (128 MB target) to reduce file metadata and reader/writer overhead.
+- Integrated bounded double-buffered pipelining to overlap extent writing with chunk production.
+- Optimized projection, UTF-8 selection slicing, and key-only/numeric aggregations directly on native buffers (columnar islands).
+- Added adaptive hash partition sizing, window/join fan-out scaling, and sort run extraction without boxing.
+- Integrated scale certification tiers: Smoke (1 GB), Standard (4 GB, 10M rows), Stress (8 GB, 5M rows), and Huge (16 GB, 50M rows).
+
+**Row-Level Security (RLS) & Impersonation (Phase 1 & 2)**
+- Added identity system variables (`@@CURRENT_USER`, `@@CURRENT_USER_ID`, `@@REAL_USER`, `@@IS_ADMIN`) and functions/predicates `HAS_GROUP('name')` / `HAS_ROLE('name')` with default-on admin bypass.
+- Added table-valued `USER_GROUPS()` and `USER_ROLES()` to query active groups/roles in joins.
+- Implemented secure preview-as/impersonation for folder editors and administrators, never-cached sensitive reports, and recipient-level execution identity resolution for subscription emails.
+
+**File Connectors & Excel Write Support**
+- Added write and append support for Excel (.xlsx) files via MiniExcel.
+- Enforced stream-on-the-fly decryption and decompression for FlatFile, JSON, XML, and Excel connectors.
+- Added support for `.etlds` extension for exported dataset files and `.etlsnap` for Apache Arrow snapshots.
+
+**Host Metrics & Operational Alerting**
+- Added persistent host metrics tracking disk/memory/CPU capacity, a new `SHOW HOST METRICS` statement, and daily rollups.
+- Added automatic reconciliation of stale RUNNING jobs as `INTERRUPTED` on startup.
+- Shipped Portal operational metrics digest email.
+
+**SFTP Connector Hardening**
+- Host-key verification using `HOST_KEY_FINGERPRINT` for MITM protection.
+- Opt-in atomic upload (`ATOMIC_UPLOAD = true`) uploading to temporary files before renaming.
+
+### Changed
+
+- **Octocolee Product Naming:** Introduced Octocolee as the product name (ETL-SQL remains the engine name).
+- **Default Columnar Temp Storage:** Configured columnar temp storage by default.
+- **Release Infrastructure:** Added lightweight secret scan, SBOM generation, and pre-release gates.
+
+### Fixed
+
+- **Parser and Security Fixes:** Sanitized `QuoteIdentifier` routines to prevent SQL injection.
+- **VS Code Extension & TUI Fixes:** Fixed VS Code extension vulnerabilities, terminal command builder escape bugs, and resolved window resize lag/input blocking on Unix in the TUI.
+
+### Security
+
+- **Execution Policy Enforcement Boundary:** Added execution policy snapshot context (`ExecutionPolicySnapshot`) and dynamic policy validation.
+- **Filesystem Policy Boundary:** Restricted local paths in remote file transfers, directory synchronization, and recursive file/directory operations.
+- **Allowed Extension Tightening:** Removed generic `.tmp` from whitelisted user file extensions to prevent insecure temp file usage.
 
 ## [0.13.0] — 2026-06-28
 
@@ -495,3 +552,113 @@ Hardening from the v0.10.0 release-readiness security review:
 - **Sample Reorganization**: Expanded the curated `samples/` library and redirected generated sample outputs under `samples/output/` patterns for repository cleanliness.
 - **Visibility Syntax**: Standardized report visibility on the unified `VISIBLE` property.
 - **Directory Connections**: Statements like `COPY DIRECTORY` and `FILE_LIST` now natively accept `DIRECTORY` connection aliases as path arguments.
+
+## [Unofficial 0.6.0] — 2026-05-11
+
+### Added
+
+- **Hierarchical Drill-Down and Drill-Through:** Implemented `DRILL_IN` and `DRILL_DOWN` (supporting multi-key drill parameters) for interactive, in-place dashboard exploration.
+- **Power BI-style Cross-Visual Highlights:** Added cross-visual highlight filtering with dual-direction updates and dimming/ghosting effects for chart visuals (Line, Scatter, Pie, Donut).
+- **Shared Dataset Management:** Built dataset explorer features including persistence, cross-report consumption, access control, LS dataset awareness, and portal-triggered refreshes with async execution.
+- **Advanced Parameter & Execution Controls:** Added textbox, numberbox, checkbox scalar inputs, and deferred execution support (RUN button) with staged parameter batching.
+- **New Visual Enhancements:** Added collapsible containers, standard `VISIBLE = ON|OFF` syntax (replacing legacy `HIDDEN`), and support for custom GeoJSON maps (`MAP_FILE`) with build-time validation.
+- **Interactive Tooling:** Added `serve` command and dynamic `ReportPlayer` lifecycle management for live report previews in-browser.
+- **OpenLineage Integration:** Added OpenLineage export support and database catalog metadata imports.
+
+### Changed
+
+- **Sample Reorganization:** Cleaned up and renamed all sample scripts, redirecting outputs to standard `samples/output/` patterns.
+
+### Fixed
+
+- **Portal Reactivity:** Stabilized slicer reactivity, multiselect visual components, and cross-filesystem path handling during portal publishing.
+
+## [Unofficial 0.5.0] — 2026-05-04
+
+### Added
+
+- **Report Portal Subsystem (Phases 1–6):** Introduced the `ETL-SQL.ReportPortal` web application. Features include JWT authentication, role-based access control (RBAC), folder structure organization, report publishing, execution/snapshot tracking, and web-based ECharts/Markdown rendering.
+- **Automated Report Subscriptions:** Shipped report subscriptions allowing scheduled report exports via `EXPORT REPORT` sent as Link or Markdown emails, complete with SMTP connection management.
+- **Portal Observability & Administration:** Added a `/health` endpoint with JSON diagnostics of database and orchestrator status, audit logs CSV exports, and administrative endpoints.
+- **Portal Security Hardening:** Implemented JWT secret validation on startup via hosted service, a path traversal guard, and HSTS security configurations.
+- **Apache Arrow Spill Format & Decryption:** Integrated Apache Arrow IPC spill format for high-speed serialized temp table caching, and implemented client-side credential auto-decryption.
+- **Unified IntelliSense Engine:** Built a priority-based suggestion ranking, dot-notation autocomplete prefix filtering, dynamic option discovery, and member-access resolution.
+- **Data Lake Connectors:** Native support for **Snowflake** and **BigQuery** databases.
+- **Security & Encryption:** Added `GENERATE JWT_SECRET` for secure Report Portal communications.
+- **Language Syntax Additions:** Implemented `QUALIFY` clause filtering, window function `FILTER (WHERE ...)` support, cursor status checks (`@@FETCH_STATUS`), and `FOR` loop syntax support for implicit start values.
+- **TUI IDE Completion:** Overhauled TUI console with path completion, Smart Copy, screen stability, Compare Mode, SHOW commands, and a two-line status bar.
+- **Installer & Packaging Release Pipelines:** Integrated MSI, Linux `.deb`, and macOS DMG installer packages with install bootstrap configurations.
+
+### Changed
+
+- **Security Auditing:** Standardized security overrides by migrating legacy comments to formal `SET ALLOW_... ON/OFF` statements.
+
+### Fixed
+
+- **TUI & Telemetry bugs:** Resolved rendering artifacts, status bar layout errors, and stabilized TUI telemetry.
+- **LSP Cleanup:** Purged experimental unstable features (Quick Fixes, Smart Rename) for stability.
+
+## [Unofficial 0.4.0] — 2026-04-20
+
+### Added
+
+- **Report-SQL Scripting and `CREATE VISUAL` Support (Phases 9A–9D):** Introduced native support for Report-SQL scripts (`.rptsql`) with `CREATE VISUAL`, `CREATE PAGE`, and `CREATE DATASET` statements. Added full grammar for visual types (BAR, LINE, PIE, SCATTER, TABLE, CARD, SLICER), axes, column mappings, and page slot layout definitions.
+- **ReportBuilder Library and CLI Tooling:** Created `ETL-SQL.ReportBuilder` for Chart.js rendering, GFM markdown generation, and snapshot serialization. Shipped the report builder command-line utility with build, refresh, and serve commands.
+- **VS Code Extension Preview Integration:** Added a WebviewPanel to the VS Code extension for live report previews, displaying rendered Chart.js charts, tables, cards, and interactive slicers.
+- **ReportPlayer Web Dashboard:** Shipped a Kestrel-hosted local dashboard server (`ReportPlayer`) supporting live parameter injection, interactive updates, and auto-refresh endpoints.
+- **Orchestration & Scale Hardening:** Implemented job retry logic with exponential backoff and session persistence in the Orchestrator, alongside `#temp` table spill-to-disk and result capping logic.
+- **Hyper-scale Window Spilling:** Added deep-spilling mechanism for window query execution to partition results under high-volume workloads.
+- **ANSI SQL Functions & Statistical Aggregates:** Implemented standard ANSI string functions (`SUBSTRING`, `POSITION`, `OVERLAY`, `TRIM`, `EXTRACT`), date arithmetic enhancements, and statistical aggregate calculations.
+- **Script Assertions:** Added the `ASSERT` statement to natively validate data qualities and script outcomes.
+- **JSON & XML Security Hardening:** Replaced bare catch blocks with explicit system exception filters and added security sandbox protections for remote file transfers.
+- **LSP & UI Enhancements:** Modernized results panel, TUI performance dashboard, and stabilized telemetry pipelines.
+- **PIVOT & UNPIVOT Validation:** Added linter validation for PIVOT columns, quarter-based `DATEPART` support, and query metadata derivations.
+
+### Fixed
+
+- **SMTP Attachment Leak:** Fixed a handle leak for SMTP attachments.
+- **3VL Null Handling:** Implemented three-valued logic (3VL) null propagation and fixed substring start index boundary behaviors.
+
+## [Unofficial 0.3.0] — 2026-04-06
+
+### Added
+
+- **VS Code Extension v0.1 Alpha:** Integrated LSP parser with formatting, lineage hover, and smart CLI execution.
+- **Security & Encryption Utilities:** Added SSH key pairing (`GENERATE SSH_KEY_PAIR`), connection altering (`ALTER CONNECTION`), and file encryption/decryption (`ENCRYPT FILE`, `DECRYPT FILE`).
+- **Serilog Logging Infrastructure:** Integrated Serilog for application-wide logging and consolidated logs to the `logs/` directory.
+- **Join Optimization:** Implemented `CompoundKey` to optimize hash joins and handle mixed-type comparisons (string/numeric/date) across diverse sources.
+- **Bulk Insert Lineage:** Added explicit column mapping support and column-level lineage tracking.
+- **SQL Pushdown:** Enabled SQL pushdown execution and support for standalone `EXECUTE INTO #temp`.
+- **Syntax Enhancements:** Supported `LIKE ESCAPE` and grouping sets (`ROLLUP` / `CUBE`).
+
+### Changed
+
+- **Syntax Standardization:** Migrated `ON FILE` to `ON FLATFILE` for file connections.
+
+### Fixed
+
+- **Thread Safety:** Eliminated deadlocks and silent exception swallowing under concurrent execution contexts.
+
+## [Unofficial 0.2.0] — 2026-03-23
+
+### Added
+
+- **Core Query Dialect & Standard Library:** Support for `DISTINCT`, `TOP`, `LIMIT`, `MERGE`, `OFFSET`, `NTILE`, `STRING_AGG`, and transactional statements (`COMMIT`, `ROLLBACK`, `THROW`).
+- **Database Connectors:** Added initial support for MSSQL, Postgres, and Oracle database engines.
+- **File Connectors:** Read/write capabilities for XML and JSON files.
+- **Temp Tables & Indexes:** Support for `#temp` tables with query plan indexes (`CREATE INDEX`) and query plan tracing via `EXPLAIN`.
+- **Control Flow & Parallel Execution:** Parallel execution pipelines (`PARALLEL`), cross-script execution (`RUN SCRIPT`), and directory synchronization tasks.
+- **Notifications & Transfer Connectors:** Added `SEND EMAIL` and file transfer connectors (SFTP/SSH, FTP, Azure Blob).
+- **Linter & UI Foundations:** Added a command-line script editor, local test harness (`--test`), and baseline security linter.
+
+
+## [Unofficial 0.1.0] — 2026-03-13
+
+### Added
+
+- **Proof of Concept Completed:** Successfully loaded flat files (CSV) and joined them into in-memory `#temp` tables.
+- **Abstract Syntax Tree (AST) Parser:** Implemented the initial AST parser to parse SQL statements and evaluate expression trees.
+- **Core SQL Execution Engine:** Developed the core engine to execute queries, process DML scripts, and return formatted results.
+- **Terminal IDE (TUI) Foundations:** Added a basic console editor interface to write scripts and display execution output.
+- **Git Repository Initialized:** Initialized the git repository and established the project structure.
+- **Development Kickoff:** Work began on March 6, 2026, to design and prototype the initial engine proof of concept.

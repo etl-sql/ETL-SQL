@@ -1,0 +1,35 @@
+-- Connect to SQLite Data Sources (using both standard configurations)
+-- 1. In-Memory SQLite database (great for staging or temp lookups)
+CREATE CONNECTION sqlite_mem AS SQLITE(DATABASE = ':memory:');
+
+-- 2. File-Based SQLite database
+CREATE CONNECTION sqlite_db AS SQLITE(DATABASE = 'samples/output/local_store.db');
+
+-- Create a table in the file-based SQLite database
+EXECUTE sqlite_db BEGIN
+    CREATE TABLE IF NOT EXISTS inventory (
+        item_id INTEGER PRIMARY KEY,
+        item_name TEXT NOT NULL,
+        stock_count INTEGER,
+        price REAL
+    );
+END;
+
+-- Stage data in the engine
+SELECT 101 AS item_id, 'Steel Gear' AS item_name, 50 AS stock_count, 12.99 AS price INTO #stage;
+SELECT 102 AS item_id, 'Bronze Shaft' AS item_name, 35 AS stock_count, 24.50 AS price INTO #stage;
+SELECT 103 AS item_id, 'Copper Bushing' AS item_name, 120 AS stock_count, 3.75 AS price INTO #stage;
+
+-- Load data from engine staging table into SQLite database
+INSERT INTO sqlite_db.inventory (item_id, item_name, stock_count, price)
+SELECT item_id, item_name, stock_count, price FROM #stage;
+
+-- Query SQLite database table and pull back to check
+SELECT item_name, price, (stock_count * price) AS inventory_value
+INTO #report
+FROM sqlite_db.inventory
+WHERE stock_count > 40;
+
+-- Output results
+PRINT 'Staged items with stock > 40:';
+SELECT * FROM #report;

@@ -24,14 +24,16 @@ public sealed record SubscriptionDeliveryResult(SubscriptionDeliveryOutcome Outc
 /// </summary>
 public interface ISubscriptionScriptRunner
 {
-    Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct);
+    Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
+        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null);
 }
 
 public sealed class EngineSubscriptionScriptRunner(IScriptExecutor executor) : ISubscriptionScriptRunner
 {
-    public async Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct)
+    public async Task<(bool Success, string? Error)> RunAsync(string scriptText, string sessionId, CancellationToken ct,
+        ETL_SQL.Core.Governance.ExecutionIdentity? executionIdentity = null)
     {
-        var result = await executor.ExecuteTextAsync(scriptText, sessionId, ct);
+        var result = await executor.ExecuteTextAsync(scriptText, sessionId, ct, executionIdentity: executionIdentity);
         return (result.Success, result.Success ? null : result.ErrorMessage);
     }
 }
@@ -195,6 +197,29 @@ public class SubscriptionDeliveryService(
             return await RecordFailureAsync(
                 sub, recipient, "Report script file no longer exists.", correlationId, ct);
 
+        // Row-level security: an identity-sensitive report filters rows per viewer, so it must run
+        // under *this recipient's* identity to produce their filtered view. Resolve the recipient
+        // email to a portal user; if they are not a known user we cannot filter for them, so fail with
+        // a clear reason rather than deliver an empty (fail-closed) report. See Docs/Design/RowLevelSecurity.md.
+        ETL_SQL.Core.Governance.ExecutionIdentity? recipientIdentity = null;
+        try
+        {
+            if (ETL_SQL.Core.Governance.RowLevelSecurityScan.ReferencesIdentity(
+                    await File.ReadAllTextAsync(reportScriptPath, ct)))
+            {
+                recipientIdentity = await BuildRecipientIdentityAsync(recipient, ct);
+                if (recipientIdentity is null)
+                    return await RecordFailureAsync(sub, recipient,
+                        "Report uses row-level security; recipient is not a known portal user, so their filtered view cannot be produced.",
+                        correlationId, ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return await RecordFailureAsync(sub, recipient,
+                "Report script could not be read for row-level-security evaluation.", correlationId, ct);
+        }
+
         SmtpConnection? smtp = null;
         if (!string.IsNullOrEmpty(sub.SmtpAlias))
         {
@@ -233,7 +258,7 @@ public class SubscriptionDeliveryService(
             try
             {
                 (success, error) = await runner.RunAsync(
-                    script, $"sub-delivery-{sub.Id}-{RecipientKey(recipient)[..12]}", cts.Token);
+                    script, $"sub-delivery-{sub.Id}-{RecipientKey(recipient)[..12]}", cts.Token, recipientIdentity);
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
@@ -268,6 +293,51 @@ public class SubscriptionDeliveryService(
                 catch { /* best effort */ }
             }
         }
+    }
+
+    /// <summary>
+    /// Resolves a subscription recipient email to the portal user's row-level-security identity so an
+    /// identity-sensitive report can be delivered as that recipient's own filtered view. Returns null
+    /// when the email is not a known portal user (an external recipient we cannot filter for).
+    /// </summary>
+    private async Task<ETL_SQL.Core.Governance.ExecutionIdentity?> BuildRecipientIdentityAsync(
+        string recipientEmail, CancellationToken ct)
+    {
+        var target = recipientEmail.Trim();
+
+        // Email is stored PII-encrypted (non-deterministic), so it cannot be queried by value.
+        // Materialize active users and compare the decrypted email in memory. This is O(users) per
+        // resolution — acceptable for low-frequency subscription delivery; a deterministic email-hash
+        // index would be the optimization if that ever changes.
+        var candidates = await db.Users.AsNoTracking()
+            .Where(u => u.IsActive)
+            .Select(u => new { u.Id, u.UserName, u.Email })
+            .ToListAsync(ct);
+        var match = candidates.FirstOrDefault(u =>
+            !string.IsNullOrEmpty(u.Email)
+            && string.Equals(u.Email, target, StringComparison.OrdinalIgnoreCase));
+        if (match is null) return null;
+
+        var roles = await (from ur in db.UserRoles
+                           join r in db.Roles on ur.RoleId equals r.Id
+                           where ur.UserId == match.Id && r.Name != null
+                           select r.Name!).ToListAsync(ct);
+        var groups = await (from ug in db.UserGroups
+                            join g in db.Groups on ug.GroupId equals g.Id
+                            where ug.UserId == match.Id
+                            select g.Name).ToListAsync(ct);
+
+        var name = match.UserName ?? match.Id.ToString();
+        return new ETL_SQL.Core.Governance.ExecutionIdentity
+        {
+            EffectiveUser = name,
+            EffectiveUserId = match.Id,
+            RealUser = name,
+            IsAdmin = roles.Contains("Admin", StringComparer.OrdinalIgnoreCase),
+            AdminBypassesRowLevelSecurity = config.Security.AdminBypassRowLevelSecurity,
+            Groups = groups,
+            Roles = roles
+        };
     }
 
     // ── Delivery-time authorization (P0.2) ────────────────────────────────────
@@ -474,5 +544,8 @@ public class SubscriptionDeliveryService(
         catch { return null; }
     }
 
-    private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "\\'");
+    // The ETL-SQL lexer escapes a quote inside a string literal by doubling it ('' -> '), not with a
+    // backslash. A backslash-escaped quote would terminate the string early, so a value containing a
+    // single quote (e.g. an SMTP username or report name) must be doubled.
+    private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "''");
 }

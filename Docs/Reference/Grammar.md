@@ -299,6 +299,10 @@ Read-only variables that track session state and performance. These are automati
 | `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache. | `PRINT 'Cache Hits: ' + @@SUBQUERY_CACHE_HITS;` |
 | `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution. | `PRINT 'Cache Misses: ' + @@SUBQUERY_CACHE_MISSES;` |
 | `@@SORT_SPILLS` | External sort runs that spilled to disk this session. | `PRINT 'Sort Spills: ' + @@SORT_SPILLS;` |
+| `@@CURRENT_USER` | The effective username running the current session (impersonation-aware). | `WHERE Owner = @@CURRENT_USER` |
+| `@@CURRENT_USER_ID` | The effective numeric user identifier for the current session. | `WHERE UserId = @@CURRENT_USER_ID` |
+| `@@REAL_USER` | The actual actor running the session (unchanged by impersonation). | `INSERT INTO Audit Logs (Actor) VALUES (@@REAL_USER);` |
+| `@@IS_ADMIN` | Boolean indicating if the effective identity has administrator privileges. | `IF @@IS_ADMIN = TRUE PRINT 'Running in admin mode';` |
 
 **Example: Flow control based on row count**
 ```sql
@@ -2060,6 +2064,54 @@ ROLLBACK;            -- or ROLLBACK TRAN
 ### 14.3 Comparison Operators
 `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`
 
+### 14.4 Null-Coalescing Shorthand `??`
+`a ?? b [?? c ...]` is ETL-SQL dialect shorthand that compiles to `COALESCE(a, b, c)` at parse time —
+the engine, lineage tracking, and SQL pushdown all see a plain `COALESCE`, so scripts using `??` push
+down to every connector unchanged. `CASE`/`COALESCE` remain the portable standard to teach; `??` is a
+convenience.
+
+Precedence: binds tighter than comparisons and looser than arithmetic —
+`amount ?? 0 > 5` means `(amount ?? 0) > 5`, and `a + b ?? 0` means `(a + b) ?? 0`.
+
+```sql
+SELECT amount ?? 0 AS amount FROM #orders;
+SELECT nickname ?? legal_name ?? '(unknown)' AS display_name FROM #people;
+```
+
+### 14.5 Arrow Conditional `=>`
+`cond => value : else` is ETL-SQL dialect shorthand that compiles to
+`CASE WHEN cond THEN value ELSE else END` at parse time. Chains flatten into **one** CASE with
+multiple WHEN arms — evaluated top to bottom, exactly like CASE (short-circuit; universal SQL on
+pushdown):
+
+```sql
+-- CASE WHEN score >= 90 THEN 'A' WHEN score >= 80 THEN 'B' ELSE 'F' END
+SELECT score >= 90 => 'A' : score >= 80 => 'B' : 'F' AS grade FROM #tests;
+```
+
+Rules:
+- The final `: else` branch is **required** — a dangling `cond => value` is a syntax error, never an
+  implicit NULL.
+- Lowest precedence (below `OR`): `a OR b => x : y` means `(a OR b) => x : y`.
+- A `NULL`/UNKNOWN condition falls through to the next arm/else (standard CASE behavior).
+- `CASE` remains the documented portable standard; `=>` is a convenience.
+
+### 14.6 JSON Access Operators `->` / `->>`
+PostgreSQL/MySQL/SQLite-style JSON access, compiled at parse time to the `JSON_GET` /
+`JSON_GET_TEXT` functions:
+- `json -> key` — object field (string key) or array element (integer index; negative counts from
+  the end) **as JSON** — strings keep their quotes, so steps chain.
+- `json ->> key` — the same access **as text** — strings unquoted; objects/arrays as raw JSON text.
+
+Left-associative and binding tighter than arithmetic. Null-propagating: a missing key, out-of-range
+index, or invalid JSON yields `NULL`, never an error.
+
+```sql
+SELECT doc -> 'customer' -> 'address' ->> 'city' AS city FROM #orders;
+SELECT doc ->> 'qty' ?? '0' AS qty FROM #orders;   -- combines with ??
+SELECT '[10,20,30]' ->> -1;                        -- '30' (negative index from the end)
+```
+
 #### `BETWEEN`
 Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).
 
@@ -2091,10 +2143,14 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 | `1` | `NULL` | `TRUE` | `FALSE` |
 | `NULL` | `NULL` | `FALSE` | `TRUE` |
 
-### 14.4 Temporal Expressions
+### 14.7 Temporal Expressions
 
 #### `AT TIME ZONE`
 Converts a `DATETIME` or `DATETIMEOFFSET` expression to the target timezone. If the input has no offset, it is assumed to be **UTC**.
+
+IANA and Windows timezone IDs are supported. Unknown IDs raise an execution error. See
+[Dates, Times, and Time Zones](Dates_and_Times.md) for cross-platform aliases, DST behavior, and
+connector storage rules.
 
 ```sql
 SELECT OrderDate AT TIME ZONE 'Pacific Standard Time' AS local_time FROM #orders;
@@ -2223,9 +2279,19 @@ SHOW JOBS;
 SHOW JOB HISTORY;
 SHOW JOB HISTORY NightlyArchive;
 
+-- Saved job-state key/value pairs (SET_JOB_STATE watermarks/markers): all jobs or one
+SHOW JOB STATE;
+SHOW JOB STATE 'NightlyArchive';
+
+-- Host-utilization time series (capacity planning): all nodes or one node id
+SHOW HOST METRICS;
+SHOW HOST METRICS 'app-server-01:1234:ab...';
+
 -- Direct output to a temporary table
 SHOW JOBS INTO #jobs;
 SHOW JOB HISTORY INTO #history;
+SHOW JOB STATE INTO #job_state;
+SHOW HOST METRICS INTO #host_metrics;
 ```
 
 ## 16. File Operations
@@ -2492,6 +2558,7 @@ CREATE TAG FOR TABLE <table> [COLUMN <col>] (<tag> = <expr> [, <tag> = <expr> ..
 SHOW JOBS          [INTO #temp];
 SHOW ACTIVE JOBS   [INTO #temp];
 SHOW JOB HISTORY [<jobName>]  [INTO #temp];
+SHOW JOB STATE   [<jobName>]  [INTO #temp];
 KILL JOB <HistoryId>;
 ```
 

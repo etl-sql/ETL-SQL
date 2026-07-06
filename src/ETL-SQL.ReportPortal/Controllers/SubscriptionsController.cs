@@ -41,17 +41,18 @@ public class SubscriptionsController(
             return BadRequest(new { error = "ReportName, Schedule, and OrchestratorAlias are required." });
         }
 
-        var target = req.ReportName.Trim();
+        var target = req.ReportName.Trim().ToLower();
         var reports = await db.Reports
+            .AsNoTracking()
             .Include(r => r.Folder)
-            .Where(r => !r.IsDeleted)
+            .Where(r => !r.IsDeleted && (
+                r.Name.ToLower() == target
+                || (r.Folder.Path + "/" + r.Name).ToLower() == target
+            ))
             .ToListAsync();
-        var matches = reports.Where(r =>
-            r.Name.Equals(target, StringComparison.OrdinalIgnoreCase)
-            || $"{r.Folder.Path}/{r.Name}".Equals(target, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        if (matches.Count == 0) return NotFound(new { error = $"Report '{target}' not found." });
-        if (matches.Count > 1) return Conflict(new { error = $"Report '{target}' is ambiguous." });
+        var matches = reports;
+        if (matches.Count == 0) return NotFound(new { error = $"Report '{req.ReportName}' not found." });
+        if (matches.Count > 1) return Conflict(new { error = $"Report '{req.ReportName}' is ambiguous." });
 
         var report = matches[0];
         var alias = req.OrchestratorAlias.Trim();
@@ -72,6 +73,7 @@ public class SubscriptionsController(
     {
         var userId = CurrentUserId;
         var subs = await db.Subscriptions
+            .AsNoTracking()
             .Include(s => s.Report)
             .Where(s => IsAdmin || s.UserId == userId)
             .ToListAsync();
@@ -124,7 +126,7 @@ public class SubscriptionsController(
     [HttpGet("api/subscriptions/{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
-        var sub = await db.Subscriptions.Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
+        var sub = await db.Subscriptions.AsNoTracking().Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
         OptimisticConcurrency.SetETag(Response, sub.Version);

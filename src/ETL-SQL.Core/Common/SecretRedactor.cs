@@ -19,6 +19,12 @@ public static partial class SecretRedactor
     [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9._~+/=\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex BearerPattern();
 
+    // URI userinfo credentials (bolt://user:pass@host, postgres://user:pass@host/db, ...).
+    // RFC 3986 forbids raw '/', '@', and whitespace in userinfo, so the password segment
+    // stops at those; masks the password and keeps the username for diagnostics.
+    [GeneratedRegex(@"(://[^/\s:@""']+:)[^@\s/""']+@", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex UrlCredentialPattern();
+
     [GeneratedRegex(@"\bsas_[A-Za-z0-9_-]{40,}", RegexOptions.CultureInvariant, 1000)]
     private static partial Regex ServiceAccountSecretPattern();
 
@@ -67,6 +73,7 @@ public static partial class SecretRedactor
         });
         redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
         redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
+        redacted = UrlCredentialPattern().Replace(redacted, $"$1{Mask}@");
         redacted = ServiceAccountSecretPattern().Replace(redacted, $"sas_{Mask}");
         redacted = JsonSecretPattern().Replace(redacted, match =>
         {

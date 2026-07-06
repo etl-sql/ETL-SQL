@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -28,9 +30,16 @@ namespace ETL_SQL.Tests.Orchestration
             var mockConfig = new Mock<IConfiguration>();
             var mockSessionManager = new Mock<ISessionStateManager>();
 
-            // Setup JobThrottle with 1 slot
+            // Setup JobThrottle with 1 slot. Point it at a private temp SQLite DB rather than the
+            // shared local orchestrator DB (JobThrottle's 2-arg ctor default) so this test never
+            // contends with — or hangs behind — a leftover ThrottleSlots row from another process
+            // whose PID has since been reused (PurgeStaleSlots keeps PID-alive rows).
             var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 1 });
-            var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object);
+            var throttleDbPath = Path.Combine(Path.GetTempPath(), $"etlsql_throttle_test_{Guid.NewGuid():N}.db");
+            var throttleConfig = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["Orchestrator:DatabasePath"] = throttleDbPath })
+                .Build();
+            var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object, throttleConfig);
 
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
             mockStore.Setup(s => s.TryAcquireJobLeaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<TimeSpan>())).ReturnsAsync(true);
@@ -57,8 +66,8 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Fail first 2 times, succeed on 3rd
             int attempts = 0;
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()))
-                .ReturnsAsync((string s, string sid, CancellationToken ct, string jn, long qw) =>
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()))
+                .ReturnsAsync((string s, string sid, CancellationToken ct, string jn, long qw, ETL_SQL.Core.Governance.ExecutionIdentity? id) =>
                 {
                     attempts++;
                     if (attempts < 3)
@@ -78,13 +87,16 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(3, attempts);
 
             // Verify session ID was passed back in subsequent calls (attempts 2 and 3)
-            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, null, It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>()), Times.Once());
-            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>()), Times.Exactly(2));
+            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, null, It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Once());
+            mockExecutor.Verify(e => e.ExecuteTextAsync(job.Script, "sess_123", It.IsAny<CancellationToken>(), job.Name, It.IsAny<long>(), It.IsAny<ETL_SQL.Core.Governance.ExecutionIdentity?>()), Times.Exactly(2));
 
             // Verify history was logged for each attempt
             mockStore.Verify(s => s.LogJobStartAsync(job.Name), Times.Exactly(3));
             mockStore.Verify(s => s.LogJobEndAsync(It.IsAny<long>(), "FAILURE", "Fake Failure", 0, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.Exactly(2));
             mockStore.Verify(s => s.LogJobEndAsync(It.IsAny<long>(), "SUCCESS", null, 10, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.Once());
+
+            throttle.Dispose();
+            try { if (File.Exists(throttleDbPath)) File.Delete(throttleDbPath); } catch { /* best-effort temp cleanup */ }
         }
     }
 }

@@ -22,6 +22,9 @@ public class ExternalSortEngine
     private readonly ILogger _logger;
     private readonly IBufferManager? _bufferManager;
     public int ChunkSize => _context.ExternalSortChunkSize;
+    public int MaxConcurrentMergeReaders { get; private set; }
+    public int MergePassCount { get; private set; }
+    public int IntermediateMergeRunCount { get; private set; }
 
     // Column-name prefix for individual sort-key columns written to spill chunks.
     // Using one column per key avoids JSON array serialization and lets Arrow store
@@ -29,6 +32,14 @@ public class ExternalSortEngine
     // Timestamp, or String), which eliminates millions of JsonElement allocations
     // and string deserialization cycles on medium/large sort workloads.
     private const string SortKeyPrefix = "_SYS_SK_";
+
+    // Maximum number of spill chunks merged simultaneously in a single pass. Caps the
+    // number of concurrently open spill readers / file handles regardless of total chunk
+    // count: with a 10k chunk size, 50M rows produces ~5,000 chunks, which would otherwise
+    // open ~5,000 readers at once at merge time. When the chunk count exceeds this cap the
+    // merge runs in multiple passes (merge groups of N into intermediate runs, then merge
+    // those), keeping open handles bounded at the cost of extra sequential I/O.
+    private const int MaxMergeFanIn = 64;
 
     public ExternalSortEngine(IExecutionContext context, ILogger logger)
     {
@@ -65,6 +76,10 @@ public class ExternalSortEngine
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var chunkPaths = new List<string>();
 
+        // Every spill file ever created (initial chunks + intermediate merge runs) so the
+        // outer finally can guarantee cleanup even across multi-pass merges.
+        var cleanup = new HashSet<string>();
+
         // Pre-build the column name array once — avoids per-row string allocation.
         var keyColumnNames = BuildKeyColumnNames(orderBy.Count);
 
@@ -81,9 +96,13 @@ public class ExternalSortEngine
                 return 0;
             }
 
-            // 2. Consume stream and spill chunks
+            // 2. Consume stream and spill chunks. The memory guard flushes the current chunk early
+            // when the accumulated chunk footprint (precise byte accounting) crosses the governor
+            // ceiling, so a chunk of very wide rows can't exceed the budget even if its row count is
+            // under ChunkSize.
             var currentChunk = new List<(Row Row, object?[] Keys)>();
             int chunkCounter = 0;
+            var memGuard = new MemoryBudgetGuard(MemoryGovernor.Ceiling(_context));
             await foreach (var row in inputStream)
             {
                 var keys = new object?[orderBy.Count];
@@ -94,16 +113,19 @@ public class ExternalSortEngine
                 }
 
                 currentChunk.Add((row, keys));
+                memGuard.Add(row.EstimateHeapBytes() + RowMemory.EstimateValuesBytes(keys));
 
-                if (currentChunk.Count >= ChunkSize)
+                if (currentChunk.Count >= ChunkSize || (currentChunk.Count > 0 && memGuard.Exceeded()))
                 {
                     currentChunk.Sort(Compare);
                     var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
                     chunkPaths.Add(chunkName);
+                    cleanup.Add(chunkName);
                     await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
                     _context.Telemetry.SortSpillCount++;
                     _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
+                    memGuard.Reset();
                 }
             }
 
@@ -121,55 +143,58 @@ public class ExternalSortEngine
                 var prefix = Guid.NewGuid().ToString("N");
                 var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
                 chunkPaths.Add(chunkName);
+                cleanup.Add(chunkName);
                 await SpillChunkAsync(chunkName, currentChunk, keyColumnNames);
                 _context.Telemetry.SortSpillCount++;
                 _context.Telemetry.PartitionsCount++;
             }
 
-            // 3. K-way Merge and yield
+            // 3. Bounded multi-pass k-way merge.
             if (chunkPaths.Count == 0) yield break;
 
-            var readers = new List<ISpillReader>();
-            try
+            // Reduction passes: while more chunks remain than we are willing to open at once,
+            // merge groups of MaxMergeFanIn into intermediate runs. Consumed inputs are deleted
+            // immediately so disk usage stays bounded to roughly one extra level of spill.
+            int passNo = 0;
+            while (chunkPaths.Count > MaxMergeFanIn)
             {
-                foreach (var path in chunkPaths)
-                    readers.Add(await _context.SpillStore.CreateReaderAsync(path));
-
-                var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(Compare));
-
-                for (int i = 0; i < readers.Count; i++)
+                MergePassCount++;
+                var nextLevel = new List<string>();
+                for (int i = 0; i < chunkPaths.Count; i += MaxMergeFanIn)
                 {
-                    var row = await readers[i].ReadRowAsync();
-                    if (row != null)
+                    var group = chunkPaths.GetRange(i, Math.Min(MaxMergeFanIn, chunkPaths.Count - i));
+                    if (group.Count == 1)
                     {
-                        var keys = ExtractAndStripKeys(row, keyColumnNames);
-                        heap.Enqueue(i, (row, keys));
+                        // A lone trailing chunk just carries forward to the next level untouched.
+                        nextLevel.Add(group[0]);
+                        continue;
+                    }
+
+                    var merged = $"sort_merge_p{passNo}_{Guid.NewGuid():N}_{nextLevel.Count}.tmp";
+                    cleanup.Add(merged);
+                    await MergeChunksToFileAsync(merged, group, keyColumnNames, Compare);
+                    nextLevel.Add(merged);
+                    _context.Telemetry.SortSpillCount++;
+                    IntermediateMergeRunCount++;
+
+                    foreach (var consumed in group)
+                    {
+                        try { _context.SpillStore.DeleteChunk(consumed); cleanup.Remove(consumed); }
+                        catch (Exception ex) { _logger.Warning($"Error cleaning up external sort run {consumed}: {ex.Message}"); }
                     }
                 }
-
-                while (heap.Count > 0)
-                {
-                    if (heap.TryDequeue(out int chunkIdx, out var first))
-                    {
-                        yield return first.Row;
-
-                        var nextRow = await readers[chunkIdx].ReadRowAsync();
-                        if (nextRow != null)
-                        {
-                            var keys = ExtractAndStripKeys(nextRow, keyColumnNames);
-                            heap.Enqueue(chunkIdx, (nextRow, keys));
-                        }
-                    }
-                }
+                chunkPaths = nextLevel;
+                passNo++;
             }
-            finally
-            {
-                foreach (var rd in readers) await rd.DisposeAsync();
-            }
+
+            // Final pass: merge the remaining (<= MaxMergeFanIn) chunks and stream rows out.
+            MergePassCount++;
+            await foreach (var entry in MergeChunksAsync(chunkPaths, keyColumnNames, Compare))
+                yield return entry.Row;
         }
         finally
         {
-            foreach (var path in chunkPaths)
+            foreach (var path in cleanup)
             {
                 try
                 {
@@ -180,6 +205,79 @@ public class ExternalSortEngine
                     _logger.Warning($"Error cleaning up external sort chunk {path}: {ex.Message}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// k-way merges the given spilled chunks via a min-heap, yielding rows (with their
+    /// extracted sort keys) in fully sorted order. Opens one reader per input chunk — callers
+    /// must keep the input count bounded (see <see cref="MaxMergeFanIn"/>).
+    /// </summary>
+    private async IAsyncEnumerable<(Row Row, object?[] Keys)> MergeChunksAsync(
+        List<string> inputChunks,
+        string[] keyColumnNames,
+        Comparison<(Row Row, object?[] Keys)> compare)
+    {
+        var readers = new List<ISpillReader>();
+        try
+        {
+            foreach (var path in inputChunks)
+                readers.Add(await _context.SpillStore.CreateReaderAsync(path));
+            MaxConcurrentMergeReaders = Math.Max(MaxConcurrentMergeReaders, readers.Count);
+
+            var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row Row, object?[] Keys)>.Create(compare));
+
+            for (int i = 0; i < readers.Count; i++)
+            {
+                var row = await readers[i].ReadRowAsync();
+                if (row != null)
+                {
+                    var keys = ExtractAndStripKeys(row, keyColumnNames);
+                    heap.Enqueue(i, (row, keys));
+                }
+            }
+
+            while (heap.Count > 0)
+            {
+                if (heap.TryDequeue(out int chunkIdx, out var first))
+                {
+                    yield return first;
+
+                    var nextRow = await readers[chunkIdx].ReadRowAsync();
+                    if (nextRow != null)
+                    {
+                        var keys = ExtractAndStripKeys(nextRow, keyColumnNames);
+                        heap.Enqueue(chunkIdx, (nextRow, keys));
+                    }
+                }
+            }
+        }
+        finally
+        {
+            foreach (var rd in readers) await rd.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Merges a bounded group of spilled chunks into a single new intermediate run, re-stamping
+    /// the sort keys into their sentinel columns so the next merge pass can read them back.
+    /// </summary>
+    private async Task MergeChunksToFileAsync(
+        string outName,
+        List<string> inputChunks,
+        string[] keyColumnNames,
+        Comparison<(Row Row, object?[] Keys)> compare)
+    {
+        await using var writer = await _context.SpillStore.CreateWriterAsync(outName);
+        await foreach (var entry in MergeChunksAsync(inputChunks, keyColumnNames, compare))
+        {
+            for (int k = 0; k < keyColumnNames.Length; k++)
+                entry.Row[keyColumnNames[k]] = entry.Keys[k];
+
+            await writer.WriteRowAsync(entry.Row);
+
+            for (int k = 0; k < keyColumnNames.Length; k++)
+                entry.Row.RemoveColumn(keyColumnNames[k]);
         }
     }
 

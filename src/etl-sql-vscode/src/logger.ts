@@ -17,11 +17,11 @@ export function redactSecrets(text: string): string {
 export function log(message: string, level: 'info' | 'warn' | 'error' = 'info') {
     const prefix = `[${level.toUpperCase()}]`;
     const formatted = `${prefix} ${message}`;
+    const redacted = redactSecrets(formatted);
     if (channel) {
-        channel.appendLine(formatted);
+        channel.appendLine(redacted);
     }
     const timestamp = new Date().toISOString().split('T')[1].slice(0, 8);
-    const redacted = redactSecrets(formatted);
     logBuffer.push(`[${timestamp}] ${redacted}`);
     if (logBuffer.length > MAX_LOGS) {
         logBuffer.shift();

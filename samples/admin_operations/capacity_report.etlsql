@@ -1,0 +1,63 @@
+-- =============================================================================
+--  Capacity Report  (administrator template — run as-is or adapt)
+-- =============================================================================
+--  Summarizes the last 24 hours of host utilization and job activity so you can
+--  see whether you are outgrowing a server BEFORE it fills up or falls over:
+--    * per node: lowest free disk (state + spill volumes) and peak memory/CPU;
+--    * overall: how many jobs ran and how many did not succeed.
+--
+--  Schedule this daily (or weekly). Host samples come from the node heartbeat
+--  and are retained per Orchestrator:HostMetricsRetentionDays; for longer trend
+--  than the raw window, use the daily roll-up once it ships.
+--
+--  ADAPT: set the SMTP connection and recipient below.
+-- =============================================================================
+
+CREATE CONNECTION Mailer AS SMTP(
+    HOST     = 'smtp.example.com',
+    PORT     = 587,
+    USER     = 'etl-alerts@example.com',
+    PASSWORD = 'ENC:REPLACE_WITH_ENCRYPTED_PASSWORD'
+);
+
+DECLARE @recipient STRING = 'ops-team@example.com';
+DECLARE @sender    STRING = 'etl-alerts@example.com';
+
+-- 1. Host utilization: aggregate the time series to the worst point per node.
+SHOW HOST METRICS INTO #hm;
+
+SELECT NodeId,
+       MIN(StateDiskFreeMB) AS MinStateFreeMB,
+       MIN(SpillDiskFreeMB) AS MinSpillFreeMB,
+       MAX(MemoryLoadPercent) AS PeakMemPct,
+       MAX(ProcessCpuPercent) AS PeakCpuPct
+INTO #hostsum
+FROM #hm
+GROUP BY NodeId;
+
+DECLARE @hostLines STRING = (
+    SELECT STRING_AGG(
+        CONCAT(NodeId, ': state ', CAST(MinStateFreeMB AS INT), ' MB free, spill ',
+               CAST(MinSpillFreeMB AS INT), ' MB free, peak mem ', CAST(PeakMemPct AS INT),
+               '%, peak cpu ', CAST(PeakCpuPct AS INT), '%'),
+        CHAR(10))
+    FROM #hostsum);
+
+-- 2. Job activity over the same window.
+SHOW JOB HISTORY INTO #jh;
+DECLARE @runs     INT = (SELECT COUNT(*) FROM #jh);
+DECLARE @failures INT = (SELECT COUNT(*) FROM #jh WHERE Status NOT IN ('SUCCESS', 'RUNNING'));
+
+-- 3. Email the summary.
+SEND EMAIL
+    TO @recipient
+    FROM @sender
+    SUBJECT '[ETL-SQL] Daily capacity report'
+    BODY CONCAT(
+        'Host utilization (last 24h, worst point per node):', CHAR(10),
+        ISNULL(@hostLines, '(no host samples recorded)'), CHAR(10), CHAR(10),
+        'Job activity (last 24h): ', @runs, ' run(s), ', @failures, ' did not succeed.', CHAR(10), CHAR(10),
+        'Watch nodes whose free disk trends toward zero or whose peak memory approaches 100%.')
+    AT Mailer;
+
+PRINT 'Capacity report sent.';

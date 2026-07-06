@@ -8,6 +8,7 @@ using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Lineage;
 
@@ -33,7 +34,9 @@ public class LineageStatementHandler : IStatementHandler
         // OpenLineage export mode
         if (stmt.ExportAsOpenLineage && !string.IsNullOrEmpty(stmt.ExportPath))
         {
-            var fullPath = context.ResolvePath(stmt.ExportPath);
+            var fullPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(stmt.ExportPath), FileSystemAccessKind.Write, validateFileType: false)
+                .CanonicalPath;
             var scriptName = context.LineageTracker.GlobalMetadata.TryGetValue("author", out var a) ? a : null;
             var jobNamespace = context.LineageNamespace ?? "etl-sql";
 
@@ -95,7 +98,9 @@ public class LineageStatementHandler : IStatementHandler
         // Handle Export
         if (!string.IsNullOrEmpty(stmt.ExportPath))
         {
-            var fullPath = context.ResolvePath(stmt.ExportPath);
+            var fullPath = new FileSystemPolicyAuthorizer(context.SecurityService)
+                .Authorize(context, context.ResolvePath(stmt.ExportPath), FileSystemAccessKind.Write, validateFileType: false)
+                .CanonicalPath;
             var sb = new StringBuilder();
             sb.AppendLine($"# Data Lineage Report: {targetName}");
             if (stmt.ColumnName != null) sb.AppendLine($"## Column: {stmt.ColumnName}");

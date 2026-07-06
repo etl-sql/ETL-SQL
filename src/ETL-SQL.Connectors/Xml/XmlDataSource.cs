@@ -40,11 +40,6 @@ namespace ETL_SQL.Connectors.Xml
         {
             _context = context;
             _logger = context.Logger;
-            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
-
-            // Security Hardening: Defense in depth
-            context.SecurityService.ValidatePath(_filePath);
-            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
 
             _options = options;
             if (options != null)
@@ -65,19 +60,26 @@ namespace ETL_SQL.Connectors.Xml
             }
 
             _encryption = new EncryptionOptions(options);
+
+            var resolvedPath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            _filePath = FileConnectorPathHelper.CoerceFilePathExtension(resolvedPath, _encryption.Enabled, _compress);
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
         }
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeRead(_context, _filePath);
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            var tempFiles = new List<string>();
-            string effectivePath = GetEffectivePath(tempFiles);
+            Func<Stream> opener = () => FileConnectorPathHelper.OpenReadStream(_filePath, _encryption, _compress, ".xml");
 
             try
             {
                 // Pass 1 — stream through once to discover column names (no data retained)
-                var columnNames = await DiscoverColumnsAsync(effectivePath);
+                var columnNames = await DiscoverColumnsAsync(opener);
                 if (columnNames.Count == 0) yield break;
 
                 var schema = new TableSchema();
@@ -88,7 +90,7 @@ namespace ETL_SQL.Connectors.Xml
                 currentBatch.SetColumns(schema.ColumnNames);
                 var activeSchema = currentBatch.Schema;
 
-                await foreach (var record in StreamRecordsAsync(effectivePath))
+                await foreach (var record in StreamRecordsAsync(opener))
                 {
                     var row = currentBatch.NewRow();
                     foreach (var (name, value) in record.Attributes)
@@ -116,7 +118,6 @@ namespace ETL_SQL.Connectors.Xml
             }
             finally
             {
-                DeleteTempFiles(tempFiles);
             }
         }
 
@@ -126,10 +127,10 @@ namespace ETL_SQL.Connectors.Xml
             List<(string Name, string Value)> Attributes,
             List<(string Name, string Value)> Children);
 
-        private async Task<List<string>> DiscoverColumnsAsync(string path)
+        private async Task<List<string>> DiscoverColumnsAsync(Func<Stream> streamOpener)
         {
             var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await foreach (var record in StreamRecordsAsync(path))
+            await foreach (var record in StreamRecordsAsync(streamOpener))
             {
                 foreach (var (name, _) in record.Attributes) columns.Add(name);
                 foreach (var (name, _) in record.Children) columns.Add(name);
@@ -143,10 +144,10 @@ namespace ETL_SQL.Connectors.Xml
         /// text values are captured; nested elements are skipped (same behaviour as
         /// the previous XDocument implementation).
         /// </summary>
-        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(string path)
+        private async IAsyncEnumerable<XmlRecord> StreamRecordsAsync(Func<Stream> streamOpener)
         {
             var settings = new XmlReaderSettings { Async = true };
-            using var fileStream = File.OpenRead(path);
+            using var fileStream = streamOpener();
             using var textReader = new StreamReader(fileStream, _encoding);
             using var reader = XmlReader.Create(textReader, settings);
 
@@ -303,6 +304,7 @@ namespace ETL_SQL.Connectors.Xml
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            ETL_SQL.Core.Common.FileConnectorPathHelper.AuthorizeWrite(_context, _filePath);
             bool alreadyXml = false;
             string? singleXml = null;
 
@@ -382,19 +384,35 @@ namespace ETL_SQL.Connectors.Xml
                     await System.IO.File.WriteAllTextAsync(tempFile, root.ToString());
                 }
 
+                string fileToEncrypt = tempFile;
+                string? zippedTemp = null;
+
+                if (_compress)
+                {
+                    zippedTemp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".zip");
+                    using (var zip = System.IO.Compression.ZipFile.Open(zippedTemp, System.IO.Compression.ZipArchiveMode.Create))
+                    {
+                        string entryName = System.IO.Path.GetFileName(_filePath);
+                        if (entryName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        else if (entryName.EndsWith(".pgp", StringComparison.OrdinalIgnoreCase))
+                            entryName = entryName.Substring(0, entryName.Length - 4);
+                        
+                        zip.CreateEntryFromFile(tempFile, entryName);
+                    }
+                    fileToEncrypt = zippedTemp;
+                }
+
                 if (_encryption.Enabled)
                 {
-                    _encryption.EncryptFile(tempFile, _filePath);
+                    _encryption.EncryptFile(fileToEncrypt, _filePath);
                 }
                 else if (_compress)
                 {
-                    string zipPath = _filePath;
-                    if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
-                    if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
-                    using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
-                    {
-                        zip.CreateEntryFromFile(tempFile, System.IO.Path.GetFileName(_filePath));
-                    }
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
+                    System.IO.File.Move(fileToEncrypt, _filePath, true);
                 }
                 else
                 {
@@ -402,6 +420,11 @@ namespace ETL_SQL.Connectors.Xml
                     if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
                     System.IO.File.Move(tempFile, _filePath);
+                }
+
+                if (zippedTemp != null && System.IO.File.Exists(zippedTemp))
+                {
+                    try { System.IO.File.Delete(zippedTemp); } catch { /* best effort */ }
                 }
             }
             finally
