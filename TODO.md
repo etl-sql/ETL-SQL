@@ -48,8 +48,16 @@ that result into an unsupported blanket billion-row claim.
   identical; full standard suite green. Remaining top allocations are the row representation
   itself (Object[]/Row/boxed values) — native-path scope (Phase 5), not avoidable churn; one
   residual ~5% closure (DisplayClass57_0) documented in the profile reports.)*
-- [ ] Add allocation and GC regression budgets at 10M/50M plus the operator-run 1B certification;
+- [x] Add allocation and GC regression budgets at 10M/50M plus the operator-run 1B certification;
   throughput improvements do not pass if peak memory containment or correctness regresses.
+  *(feat/alloc-regression-budgets: `Compare-AllocBudget.ps1` fails on bytes/row (+10%), GC gen2
+  (+30%/+5), GC pause (+35%/+500 ms), and peak-working-set containment (+15%) vs blessed,
+  machine-pinned budgets in `certification-results/spill-alloc-budgets/` (10M: 638 B/row, gen2 81,
+  peak 238 MB; 50M captured alongside). `Test-SpillAllocProfile.ps1` auto-compares every run
+  (`-UpdateBudget` blesses); Gate F gains a resumable `AllocProfile` scenario so the operator-run
+  1B cert checks a 1B budget; `Test-PreRelease` enforces the 10M budget under
+  `-IncludeStandardScale`. Verified green path, tamper-fail (all three inflated metrics reported,
+  exit 1), and gate-plan inclusion.)*
 
 ### Phase 2: Adaptive resource utilization
 
