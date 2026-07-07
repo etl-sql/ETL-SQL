@@ -322,7 +322,9 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
 
     private async Task ValidateRowCore(Row row, IEnumerable<DataTable> activeBatches)
     {
-        var errors = new List<string>();
+        // Lazy: this runs once per ingested row and almost always finds nothing — an eager list was
+        // ~0.4 GB per 10M rows in the Gate F round-trip profile.
+        List<string>? errors = null;
 
         foreach (var kv in Schema)
         {
@@ -344,7 +346,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Column '{col.ColumnName}' (value '{val}') cannot be converted to target type {col.DataType}. Detail: {ex.Message}");
+                        (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' (value '{val}') cannot be converted to target type {col.DataType}. Detail: {ex.Message}");
                     }
                 }
             }
@@ -361,7 +363,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Column '{col.ColumnName}' is trying to insert a string with length {strVal.Length} into a {maxLen.Value} character column (Value: '{strVal}')");
+                        (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' is trying to insert a string with length {strVal.Length} into a {maxLen.Value} character column (Value: '{strVal}')");
                     }
                 }
             }
@@ -375,7 +377,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                 }
                 else
                 {
-                    errors.Add($"Column '{col.ColumnName}' does not allow nulls.");
+                    (errors ??= new List<string>()).Add($"Column '{col.ColumnName}' does not allow nulls.");
                 }
             }
 
@@ -390,7 +392,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Check constraint violation on column {col.ColumnName}");
+                        (errors ??= new List<string>()).Add($"Check constraint violation on column {col.ColumnName}");
                     }
                 }
             }
@@ -406,7 +408,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Foreign key violation on column {col.ColumnName} (value: {val})");
+                        (errors ??= new List<string>()).Add($"Foreign key violation on column {col.ColumnName} (value: {val})");
                     }
                 }
             }
@@ -422,7 +424,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                        (errors ??= new List<string>()).Add($"Unique constraint violation on column {col.ColumnName} (value: {val})");
                     }
                 }
             }
@@ -441,7 +443,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        (errors ??= new List<string>()).Add($"Check constraint violation: {tc.ConstraintName ?? "unnamed"}");
                     }
                 }
             }
@@ -456,7 +458,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
+                        (errors ??= new List<string>()).Add($"Foreign key violation: {tc.ConstraintName ?? "unnamed"} (values: {vals})");
                     }
                 }
             }
@@ -475,7 +477,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                         }
                         else
                         {
-                            errors.Add($"Primary key column {colName} cannot be null.");
+                            (errors ??= new List<string>()).Add($"Primary key column {colName} cannot be null.");
                         }
                     }
                 }
@@ -487,7 +489,7 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
+                        (errors ??= new List<string>()).Add($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
                     }
                 }
             }
@@ -501,13 +503,13 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     }
                     else
                     {
-                        errors.Add($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
+                        (errors ??= new List<string>()).Add($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
                     }
                 }
             }
         }
 
-        if (errors.Count > 0)
+        if (errors is { Count: > 0 })
         {
             throw new ExecutionException(string.Join(Environment.NewLine, errors));
         }
@@ -878,12 +880,17 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                     var processedBatch = new DataTable();
                     processedBatch.SetColumns(_columnOrder);
 
+                    // Loop-invariant and lazy: hoisted so the wrapper array + Concat iterator are not
+                    // allocated per row (~880 MB per 10M rows in the Gate F round-trip profile). The
+                    // deferred sequence still observes rows added to processedBatch when a constraint
+                    // check actually enumerates it.
+                    var activeBatches = _batches.Concat(new[] { processedBatch });
                     foreach (var row in b.Rows)
                     {
                         try
                         {
                             var rowClone = takeOwnership ? row : row.Clone();
-                            await ValidateRow(rowClone, _batches.Concat(new[] { processedBatch }));
+                            await ValidateRow(rowClone, activeBatches);
                             await processedBatch.AddRowAsync(rowClone);
                         }
                         catch (RowSkipException)
