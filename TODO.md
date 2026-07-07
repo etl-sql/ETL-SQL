@@ -35,8 +35,19 @@ that result into an unsupported blanket billion-row claim.
   Row (~50% is row-shape overhead), plus per-row `Func<TableConstraintInfo,bool>` +
   DisplayClass closures from `DataTable.AddRowAsync` (`DataModel.cs:516`) — the target list for
   the pooled-buffer item below.)*
-- [ ] Remove avoidable row, batch, Arrow-builder, and serialization object churn through pooled or
-  reusable buffers with explicit ownership and deterministic release.
+- [x] Remove avoidable row, batch, Arrow-builder, and serialization object churn through pooled or
+  reusable buffers with explicit ownership and deterministic release. *(feat/spill-churn-reduction,
+  three slices, each traced to a line of the published baseline profile: schema-backed Arrow spill
+  rehydration + snapshot plans (was per-row dynamic dictionaries + metadata-string interpolation),
+  shared expanded qualification schema in StreamingQueryEngine (was per-row Clone + Columns dict +
+  interpolated "from.col" dynamic entries — the single largest line at ~40%), allocation-free
+  per-row constraint checks (delegate/enumerator, entry-allocated error closure, occurrence
+  dictionary in SetSchema via same-layout fast path), hoisted per-row Concat wrapper, and lazy
+  validation-error list. 10M-row result vs baseline: 495.5k→863.2k rows/s (+74%), 16.3→6.1 GB
+  allocated (1,708→638 B/row, −63%), GC pause 7.4→3.7 s (−50%), CPU −39%; correctness/spill/I-O
+  identical; full standard suite green. Remaining top allocations are the row representation
+  itself (Object[]/Row/boxed values) — native-path scope (Phase 5), not avoidable churn; one
+  residual ~5% closure (DisplayClass57_0) documented in the profile reports.)*
 - [ ] Add allocation and GC regression budgets at 10M/50M plus the operator-run 1B certification;
   throughput improvements do not pass if peak memory containment or correctness regresses.
 
