@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -93,7 +93,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -205,6 +205,32 @@ try {
         }
     }
 
+    if ($Scenario -eq 'All' -or $Scenario -eq 'AllocProfile') {
+        # v0.15.0 Phase 1: the 1B certification also captures the allocation/GC profile of the
+        # #temp round trip and compares it against the checked-in budget for this row count
+        # (certification-results/spill-alloc-budgets). Missing budget warns without failing;
+        # establish one with Test-SpillAllocProfile.ps1 -Rows <n> -UpdateBudget.
+        $allocOut = Join-Path $outRoot 'alloc-profile'
+        $result = Join-Path $allocOut ("profile-{0}rows-{1}.json" -f $Rows, (git -C $repoRoot rev-parse --short HEAD).Trim())
+        $resultKey = Join-Path $outRoot 'alloc-profile.key'
+        $runKey = "$commit|$Rows|$MemoryGrantMB|$TempBatchRows|alloc"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $pwsh = (Get-Process -Id $PID).Path
+            Invoke-LoggedProcess 'AllocProfile' $pwsh @(
+                '-NoProfile', '-File', (Join-Path $PSScriptRoot 'Test-SpillAllocProfile.ps1'),
+                '-Rows', $Rows.ToString([Globalization.CultureInfo]::InvariantCulture),
+                '-MemoryGrantMB', $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture),
+                '-BatchRows', $TempBatchRows.ToString([Globalization.CultureInfo]::InvariantCulture),
+                '-OutDir', $allocOut, '-SkipBuild'
+            ) (Join-Path $outRoot 'alloc-profile.log') (Join-Path $outRoot 'alloc-profile.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'AllocProfile' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
         generatedAt = (Get-Date).ToString('o')
         commit = $commit
@@ -217,6 +243,11 @@ try {
         tempTableRoundTrip = if (Test-Path (Join-Path $outRoot 'temp-table-round-trip\cert-report.json')) {
             (Get-Content (Join-Path $outRoot 'temp-table-round-trip\cert-report.json') -Raw | ConvertFrom-Json).scenarios[0]
         } else { $null }
+        allocProfile = & {
+            $allocReport = Get-ChildItem (Join-Path $outRoot 'alloc-profile') -Filter 'profile-*.json' -ErrorAction SilentlyContinue |
+                Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($allocReport) { Get-Content $allocReport.FullName -Raw | ConvertFrom-Json } else { $null }
+        }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
