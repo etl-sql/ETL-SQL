@@ -13,8 +13,9 @@
         dotnet-trace collect -p <pid> --profile gc-verbose
 
 .EXAMPLE
-    .\scripts\Test-SpillAllocProfile.ps1                    # 10M-row baseline
-    .\scripts\Test-SpillAllocProfile.ps1 -Rows 50000000     # 50M
+    .\scripts\Test-SpillAllocProfile.ps1                    # 10M-row profile + budget check
+    .\scripts\Test-SpillAllocProfile.ps1 -Rows 50000000     # 50M profile + budget check
+    .\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -UpdateBudget   # bless the run as budget
 #>
 param(
     [ValidateRange(50000, 1000000000)]
@@ -23,7 +24,11 @@ param(
     [ValidateRange(1000, 1000000)]
     [int]$BatchRows = 25000,
     [string]$OutDir = '.\certification-results\spill-alloc-profile',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    # Bless this run's report as the checked-in budget for this row count (after a verified
+    # improvement or on a new certification workstation). Skips the regression comparison.
+    [switch]$UpdateBudget,
+    [switch]$SkipBudgetCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -67,3 +72,15 @@ $report.topAllocations | Select-Object -First 10 | ForEach-Object {
     Write-Host ("    {0,6:N1}%  {1,12:N0} B  {2}" -f $_.sharePercent, $_.sampledBytes, $_.type)
 }
 Write-Host "`nReport: $result" -ForegroundColor Green
+
+# ── Regression budget (v0.15.0 Phase 1) ─────────────────────────────────────
+$budgetPath = Join-Path $repoRoot ("certification-results\spill-alloc-budgets\budget-{0}rows.json" -f $Rows)
+if ($UpdateBudget) {
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $budgetPath) | Out-Null
+    Copy-Item $result $budgetPath -Force
+    Write-Host "Budget blessed: $budgetPath" -ForegroundColor Cyan
+}
+elseif (-not $SkipBudgetCheck) {
+    & (Join-Path $PSScriptRoot 'Compare-AllocBudget.ps1') -Report $result -Budget $budgetPath
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}

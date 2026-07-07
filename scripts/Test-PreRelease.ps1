@@ -125,6 +125,7 @@ function Get-PlannedPreReleasePhases {
     if ($EffectiveIncludeStandardScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline." })
         $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1"; Reason = "Standard certification metrics have not regressed." })
+        $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
     }
 
     if ($EffectiveBuildInstallers) {
@@ -751,6 +752,12 @@ try {
         Invoke-LoggedPhase "Cert baseline regression check (standard)" `
             ".\scripts\Compare-CertBaseline.ps1" `
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" } `
+            $previousPhaseMap $fingerprint $results
+
+        # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.
+        Invoke-LoggedPhase "Spill allocation budget (10M)" `
+            ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-SpillAllocProfile.ps1" "-Rows" "10000000" "-SkipBuild" } `
             $previousPhaseMap $fingerprint $results
     }
 
