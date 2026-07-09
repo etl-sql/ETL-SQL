@@ -23,8 +23,10 @@ without ever changing results.
 
 - **No new ceilings and no raising of existing ones.** The controller only moves *within*
   `[floor, configured/governed value]`. Governance (`Security:MaxParallelDegree`,
-  `Engine:TotalMemoryGrantMB`, `Security:MaxSpillBytesPerScript`) is the hard upper boundary;
-  the enterprise snapshot clamp from Phase 3 (v0.14.0) already binds those at execution start.
+  `Security:MaxSpillBytesPerScript`) is the hard upper boundary where a governed key exists.
+  `Engine:TotalMemoryGrantMB` remains the configured process-wide memory ceiling exposed through
+  `MemoryGrantArbiter.Shared.TotalBudgetBytes`; if it later becomes a governed key, the controller
+  must consume the snapshot-clamped value rather than bypassing it.
 - **No cross-process coordination.** The Orchestrator's `JobThrottle` remains the machine-level
   job-admission control; this controller shapes work *inside* one engine process. (The shared
   `MemoryGrantArbiter` already coordinates memory across jobs in one process.)
@@ -42,14 +44,14 @@ without ever changing results.
 
 | Mechanism | Where | Role in this design |
 | :--- | :--- | :--- |
-| `MemoryGrantArbiter` (+ `Shared`) | `ETL-SQL.Core/MemoryGrantArbiter.cs` | Source of truth for grant headroom (`ReservedBytes` / `TotalBudgetBytes`); its lease count approximates active memory-consuming jobs for fairness. |
+| `MemoryGrantArbiter` (+ `Shared`) | `ETL-SQL.Core/MemoryGrantArbiter.cs` | Source of truth for grant headroom (`ReservedBytes` / `TotalBudgetBytes`). It does not currently expose an active-lease count; fairness uses registered advisors/jobs unless an explicit `ActiveLeaseCount` metric is added. |
 | `MemoryGovernorPolicy` (SpillOrFail/SpillOnly) | same | Enforcement backstop; unchanged. |
 | Per-operator grant (`OperatorMemoryGrantMB`) | `EvaluatorOptions` | Becomes an adaptable setpoint (request sizing), never above the configured value. |
 | Batch size (`Engine:BatchSize`, `Evaluator.BatchSize`) | `EvaluatorOptions`, streaming engines | Primary adaptable setpoint. |
-| `MaxParallelDegree` (governed) | `ParallelStatementHandler`, external engines | Upper bound for the worker-degree setpoint. |
+| `MaxParallelDegree` (governed) | `ParallelStatementHandler`, `ParallelForStatementHandler`, reporting fan-out | Upper bound for the worker-degree setpoint. |
 | 1-deep spill write pipeline (`pendingSpillWrite`) | `InMemoryDataSource.WriteBatchesCore` | Prefetch/pipeline-depth setpoint (0–2). |
 | `ScenarioResourceSampler` (tests) | `tests/Scale` | Pattern for cheap CPU/GC sampling; production sampler is a slimmed sibling. |
-| Spill telemetry (`TotalSpilledBytes`, extent writes) | `SpillStore`, telemetry | Storage-latency signal source (EWMA of ms/MB per extent write/read). |
+| Spill telemetry (`TotalSpilledBytes`, `SpillReadBytes`, `SpillExtentCount`) | `SpillStore`, `ExecutionTelemetryManager` | Existing byte/count counters; storage-latency EWMA requires new elapsed-time instrumentation around spill writer/reader flushes. |
 | Phase 1 budgets (`Compare-AllocBudget.ps1`) | `scripts/` | Regression harness reused to prove adaptive-off parity and adaptive-on containment. |
 
 ---
@@ -64,10 +66,10 @@ lesson: the observer must not become the churn).
 | :--- | :--- | :--- |
 | `CpuUtilization` (0–1) | Δ`Process.TotalProcessorTime` / wall / `ProcessorCount` | EWMA α=0.3. |
 | `MemoryLoad` (0–1) | `GC.GetGCMemoryInfo().MemoryLoadBytes / HighMemoryLoadThresholdBytes` | Container-aware, same API the GC uses for its own pressure decisions. |
-| `GrantPressure` (0–1) | `arbiter.ReservedBytes / TotalBudgetBytes` (0 when unbounded) | Direct headroom of the governed pool. |
+| `GrantPressure` (0–1) | `arbiter.ReservedBytes / TotalBudgetBytes` (0 when unbounded) | Direct headroom of the configured process grant pool. |
 | `Gen2Rate` | Δ`GC.CollectionCount(2)` per interval, EWMA | Sustained gen2 churn = memory thrash even when load % looks fine. |
-| `SpillWriteLatency` | EWMA of ms/MB reported by `ISpillWriter` extent flushes | Storage saturation; reported via a static, lock-free accumulator. |
-| `QueueDepth` | Per-pipeline: pending batches in the producer/consumer seam (e.g. spill pipeline depth, PARALLEL semaphore wait count) | Registered by participating pipelines; absent registrations contribute nothing. |
+| `SpillWriteLatency` | EWMA of ms/MB reported by `ISpillWriter` extent flushes | Storage saturation; reported via controller-owned or telemetry-owned lock-free counters, not a free-floating global. |
+| `QueueDepth` | Per-pipeline: pending batches in the producer/consumer boundary (e.g. spill pipeline depth, PARALLEL semaphore wait count) | Registered by participating pipelines; absent registrations contribute nothing. |
 
 A composite **pressure state** is derived per dimension with two watermarks (defaults;
 configurable): `High` (e.g. CPU > 0.90, MemoryLoad > 0.80, GrantPressure > 0.85) and `Low`
@@ -83,6 +85,10 @@ One process-wide `AdaptiveExecutionController` owns the loop; each job/evaluator
 fan-out, operator admission). **Pull model:** pipelines *ask* for current setpoints when they can
 apply them; the controller never interrupts work in flight.
 
+The controller is a DI-managed service with explicit start/stop disposal. Its sampling loop must
+honor cancellation, surface failures through injected logging, and never leave an unobserved
+background task running after the host or test service provider is disposed.
+
 ### Setpoints (all clamped to `[floor, configured value]`)
 
 | Setpoint | Floor | Ceiling (never exceeded) | Applied at |
@@ -93,11 +99,13 @@ apply them; the controller never interrupts work in flight.
 | `SpillWriteConcurrency` | 1 | 2 | `ArrowSpillWriter` flush scheduling |
 | `OperatorGrantRequestMB` | 64 | configured `OperatorMemoryGrantMB` | external engine admission |
 
-Note the asymmetry with today: ceilings are the *configured* values, so with adaptation disabled
-(or in the deadband at startup) behavior is **byte-identical to current defaults**. "Higher
-utilization when idle" comes from operators being able to configure *higher* ceilings than they
-dare run statically (e.g. `BatchSize 100k`), knowing the controller will retreat under pressure —
-not from the controller inventing headroom above configuration.
+Note the asymmetry with today: ceilings are the *configured* values. With adaptation disabled,
+behavior is **byte-identical to current static execution**. With adaptation enabled, effective
+setpoints start at the lower of the configured ceiling and the legacy default for that lever, then
+move inside the configured bounds. That makes "idle ramp" observable when an operator sets higher
+ceilings than the legacy defaults (for example `BatchSize 100k`) while still guaranteeing the
+controller never invents headroom above configuration. If a configured ceiling is below the legacy
+default, startup begins at that ceiling.
 
 ### Control law: AIMD with hysteresis and cooldown
 
@@ -119,7 +127,8 @@ provable anti-oscillation combination; the unit suite (§8) asserts it on synthe
 
 ### 4b. Fairness across concurrent jobs
 
-Fairness rides the shared arbiter, not a new mechanism:
+Fairness uses the shared arbiter for memory-pressure truth and the controller's active advisor
+registry for job accounting:
 
 - The controller tracks active advisors (jobs). Each job's **share** = `1 / activeJobs` of the
   grant budget and of `ProcessorCount`.
@@ -129,6 +138,9 @@ Fairness rides the shared arbiter, not a new mechanism:
   share rather than starving.
 - No preemption: incumbents shrink at scale-down speed, newcomers start at floor and ramp up.
 - Single-job case degrades to the plain ceilings (share = 1) — no behavior change.
+- Forked execution contexts created by `PARALLEL` statements must remain under the parent job's
+  advisor. They are not separate jobs for fairness accounting; otherwise one script could gain a
+  larger global share by forking.
 
 ---
 
@@ -152,6 +164,9 @@ Fairness rides the shared arbiter, not a new mechanism:
   performance-shape switch, not a resource grant, so it needs no governance ceiling — but if an
   enterprise later wants to force it off, the existing governed-key pattern
   (`Security:…` + `OperationPolicyBoundary`) fits without design change.
+- Adding the `SET` form is implementation scope, not just documentation: add the token/parser AST,
+  handler path, formatter serialization, help text, snippets if appropriate, and
+  `Docs/Reference/Settings.md` coverage in the same slice that exposes it.
 - **Governance interaction is one-way:** the controller reads the execution snapshot's governed
   ceilings as immovable maxima. It never writes to `EvaluatorOptions` configured values, so
   `SET`/policy checks observe unchanged configuration; adaptation lives in the advisor's
@@ -206,15 +221,20 @@ Each slice merges independently green; adaptation stays default-off through all 
 
 ---
 
-## 9. Open questions (for review before Slice A)
+## 9. Resolved decisions (2026-07-07 review)
 
-1. **Default-on timing:** proposal is OFF for all of v0.15.0, revisit with Phase 6 soak evidence.
-   Agree, or should idle-ramp-only (scale-up without scale-down risk) default on earlier?
-2. **`SpillWriteConcurrency` max = 2:** the Phase 1 profile shows the single-writer pipeline is
-   not the bottleneck at 10M on NVMe; is a second concurrent extent writer worth its complexity
-   in Slice B, or defer to measurements from Slice A's observe mode?
-3. **QueueDepth registration surface:** start with just the spill pipeline + PARALLEL semaphore,
-   or also instrument connector read-ahead in Slice A?
-4. **Scope of external-engine fan-out adaptation (Slice C):** partition-count changes mid-operator
-   are not safe; adaptation applies only at operator admission. Confirm that's acceptable
-   (an admitted long-running operator keeps its degree).
+1. **Default-on timing — OFF for all of v0.15.0.** Opt-in via `Engine:Adaptive:Enabled`; the
+   default flips only after Phase 6 soak certification. Even the low-risk idle-ramp half stays
+   off by default: the machine-pinned budgets and cert baselines were captured under static
+   settings, and a mid-release default change would invalidate them.
+2. **`SpillWriteConcurrency` — deferred; decide from Slice A observe data.** The Phase 1 profile
+   shows the single-writer pipeline is not the bottleneck at 10M on NVMe. The setpoint stays in
+   the design with max 2, but Slice B implements it only if observe-mode spill-latency data shows
+   writer saturation ("add paths only where measurements justify them" — same rule as Phase 5).
+3. **QueueDepth surface — minimal: spill pipeline + PARALLEL semaphore.** These cover the
+   certified hot paths. Connector read-ahead instrumentation is additive later if observe data
+   shows a blind spot; it is not worth touching every connector on speculation.
+4. **Degree changes are admission-only.** Setpoints are read when an operator is admitted and
+   held for its lifetime (the SQL Server memory-grant model). Mid-operator repartitioning is
+   unsafe for correctness; a long-running operator keeping its admitted degree is an accepted,
+   bounded cost.

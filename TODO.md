@@ -55,21 +55,37 @@ that result into an unsupported blanket billion-row claim.
   machine-pinned budgets in `certification-results/spill-alloc-budgets/` (10M: 638 B/row, gen2 81,
   peak 238 MB; 50M captured alongside). `Test-SpillAllocProfile.ps1` auto-compares every run
   (`-UpdateBudget` blesses); Gate F gains a resumable `AllocProfile` scenario so the operator-run
-  1B cert checks a 1B budget; `Test-PreRelease` enforces the 10M budget under
+  1B cert captures the allocation profile, while the budget comparator warns and skips if the
+  checked-in 1B budget has not been established yet; `Test-PreRelease` enforces the 10M budget under
   `-IncludeStandardScale`. Verified green path, tamper-fail (all three inflated metrics reported,
   exit 1), and gate-plan inclusion.)*
+- [x] Follow-up: close the 1B allocation-budget evidence gap by revising the Phase 1 completion note
+  to state the current behavior truthfully. The checked-in budgets cover 10M and 50M rows; a real
+  `certification-results/spill-alloc-budgets/budget-1000000000rows.json` should only be added after
+  a known-good 1B `AllocProfile` certification run is actually captured and blessed.
+- [x] Follow-up: clarify or fix `scripts/Compare-AllocBudget.ps1` PowerShell compatibility. The
+  comparator was made Windows PowerShell-safe by replacing Unicode dash text and isolating the
+  re-blessing hint string instead of relying on one long interpolated message.
 
 ### Phase 2: Adaptive resource utilization
 
 - [ ] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
   spill concurrency, and operator grant requests from measured CPU, memory pressure, queue depth, and
   storage latency.
+  *(Slice A progress: observe-mode Core implementation added with `AdaptiveExecutionController`,
+  per-job `AdaptiveAdvisor`, `ResourceSignalSampler`, bounded setpoints, decision log, cooldown,
+  and active-advisor fairness. No execution path consumes the advice yet; pipeline/worker/grant
+  wiring remains Slice B/C scope.)*
 - [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
+  *(Slice A progress: pure unit coverage proves high-pressure scale-down, idle slow-ramp,
+  deadband, cooldown, floors/ceilings, and two-advisor worker/grant fairness.)*
 - [ ] Preserve deterministic single-worker execution for debugging/certification and prove that
   adaptive mode scales down under pressure as well as up when capacity is idle.
 
 ### Phase 3: Performance regression quality
+
+Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuality.md)
 
 - [ ] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
   bands derived from checked-in baselines, while retaining a portable absolute safety floor for
@@ -81,6 +97,8 @@ that result into an unsupported blanket billion-row claim.
 
 ### Phase 4: Extend operator-specific billion-row coverage
 
+Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCertification.md)
+
 - [ ] Define separate admission and success criteria for external equi-join and sort at 1B, including
   skew, partition passes, extent counts, spill bytes, useful throughput, and required free disk.
 - [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
@@ -91,6 +109,8 @@ that result into an unsupported blanket billion-row claim.
 
 ### Phase 5: Fallback coverage and execution transparency
 
+Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparencyAndFallbacks.md)
+
 - [ ] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
   unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
@@ -100,6 +120,8 @@ that result into an unsupported blanket billion-row claim.
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 
+Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailureSoak.md)
+
 - [ ] Run sustained PostgreSQL-backed Portal/Orchestrator load at representative report/job/history
   counts and concurrent execution levels; measure pool saturation, query latency, scheduler fairness,
   lease behavior, and database growth rather than inferring HA performance from SQLite tests.
@@ -108,6 +130,27 @@ that result into an unsupported blanket billion-row claim.
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
+
+### Phase 7: SME Secret Management & Administration Hardening
+
+- [ ] Design and implement the administrative "middle ground" for connection secret management,
+  supporting SMEs without external vaults while maintaining Zero-Trust boundaries. The built-in
+  `OsSecretStore`, environment-provider, and Portal-managed encrypted store are the supported
+  low-dependency paths; HTTPS vault integration remains optional for organizations that already
+  operate one.
+- [ ] Add an administrative CLI command (`etl-sql admin set-secret --name <name> --value <value>`)
+  to securely encrypt and write secrets to the local OS Secret Store (`OsSecretStore`) under the
+  machine/root context, ensuring the Portal process remains restricted to read-only.
+- [ ] Implement a Portal-managed, database-backed encrypted secret store where credentials can be
+  entered via Web UI and are stored encrypted at rest using the portal's cluster-wide keys, solving
+  the multi-node sync problem for simple HA environments without requiring a separate vault product.
+- [ ] Add named-secret syntax parity and tests so `SECRET:name` can be used consistently wherever
+  `ENC:...` credential values are accepted, or document quoted `'SECRET:name'` and quoted
+  `'ENC:...'` as the canonical forms if unquoted secret-reference literals are not added.
+- [ ] Extend named-secret resolution and redaction beyond password-like fields through connector
+  metadata or governance policy. Organizations must be able to mark `HOST`, `SERVER`, `DATABASE`,
+  `PATH`, `ROOT_PATH`, bucket/container names, endpoints, and similar connection metadata as
+  sensitive without making those fields globally secret for every deployment.
 
 ### v0.15.0 completion gates
 
