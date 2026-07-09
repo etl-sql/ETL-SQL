@@ -165,6 +165,7 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
     public bool AdaptiveExecutionEnabled { get; set; }
     public AdaptiveAdvisor? AdaptiveAdvisor { get; set; }
+    public AdaptiveRuntimeMetrics AdaptiveMetrics { get; } = new();
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public string? CurrentScriptPath { get; set; }

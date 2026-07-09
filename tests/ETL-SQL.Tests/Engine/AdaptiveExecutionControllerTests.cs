@@ -1,5 +1,7 @@
+using ETL_SQL.App;
 using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Common;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ETL_SQL.Tests.Engine;
@@ -194,5 +196,81 @@ public class AdaptiveExecutionControllerTests
         Assert.Equal(10000, context.EffectiveBatchSize);
         Assert.Equal(4, context.EffectiveMaxParallelDegree);
         Assert.Equal(256, context.EffectiveOperatorMemoryGrantMB);
+    }
+
+    [Fact]
+    public void EvaluatorAdaptiveConfiguration_CreatesAdvisorAndKeepsStaticCeilings()
+    {
+        var services = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+        {
+            ["Engine:Adaptive:Enabled"] = "true",
+            ["Engine:BatchSize"] = "40000",
+            ["Engine:OperatorMemoryGrantMB"] = "1024",
+            ["Engine:TotalMemoryGrantMB"] = "2048",
+            ["Engine:Adaptive:MinBatchRows"] = "2000",
+            ["Engine:Adaptive:MinOperatorGrantRequestMB"] = "128",
+            ["Engine:Adaptive:MaxPipelineDepth"] = "3"
+        });
+
+        var evaluator = services.GetRequiredService<Evaluator>();
+        IExecutionContext context = evaluator;
+
+        Assert.True(evaluator.AdaptiveExecutionEnabled);
+        Assert.NotNull(evaluator.AdaptiveAdvisor);
+        Assert.Equal(40000, evaluator.BatchSize);
+        Assert.Equal(1024, evaluator.OperatorMemoryGrantMB);
+        Assert.Equal(10000, context.EffectiveBatchSize);
+        Assert.Equal(256, context.EffectiveOperatorMemoryGrantMB);
+        Assert.Equal(1, context.EffectivePipelineDepth);
+        Assert.Equal(1, context.EffectiveSpillWriteConcurrency);
+    }
+
+    [Fact]
+    public void SpillLatencyPressure_ScalesDownAfterConsecutiveSamples()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+
+        controller.Observe(new ResourceSignals(
+            CpuUtilization: 0.2,
+            MemoryLoad: 0.2,
+            GrantPressure: 0.2,
+            SpillWriteLatencyMsPerMB: 300));
+        var decision = controller.Observe(new ResourceSignals(
+            CpuUtilization: 0.2,
+            MemoryLoad: 0.2,
+            GrantPressure: 0.2,
+            SpillWriteLatencyMsPerMB: 300));
+
+        Assert.Equal(AdaptiveDecisionKind.ScaleDown, decision.Kind);
+        Assert.Equal("spill-latency-high", decision.Reason);
+        Assert.Equal(0, advisor.Snapshot().PipelineDepth);
+        Assert.Equal(1, advisor.Snapshot().SpillWriteConcurrency);
+    }
+
+    [Fact]
+    public void SingleWorkerCeiling_RemainsDeterministicWhenCapacityIsIdle()
+    {
+        var controller = new AdaptiveExecutionController(Options(), processorCount: 8);
+        using var advisor = controller.CreateAdvisor(Ceilings() with { WorkerDegree = 1 });
+
+        for (var i = 0; i < 32; i++)
+            controller.Observe(ResourceSignals.Idle);
+
+        Assert.Equal(1, advisor.Snapshot().WorkerDegree);
+    }
+
+    [Fact]
+    public void ResourceSignalSampler_IncludesRuntimeQueueAndSpillLatency()
+    {
+        var metrics = new AdaptiveRuntimeMetrics();
+        metrics.ReportQueueDepth(3);
+        metrics.ReportSpillWrite(bytesWritten: 1024 * 1024, elapsed: TimeSpan.FromMilliseconds(250));
+        var sampler = new ResourceSignalSampler(runtimeMetrics: metrics);
+
+        var sample = sampler.Sample();
+
+        Assert.Equal(3, sample.QueueDepth);
+        Assert.Equal(250, sample.SpillWriteLatencyMsPerMB);
     }
 }

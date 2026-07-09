@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -46,6 +47,7 @@ public partial class SpillStore : ISpillStore
     private readonly IExecutionContext _context;
     private bool _disposed;
     private int _activeSpillWrites;
+    private int _waitingSpillWrites;
 
     public bool IsPersistent { get; set; }
 
@@ -174,20 +176,48 @@ public partial class SpillStore : ISpillStore
 
     private async Task<IDisposable> AcquireWriteSlotAsync(CancellationToken cancellationToken)
     {
-        while (true)
+        var queued = false;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            lock (_spillWriteGate)
+            while (true)
             {
-                var limit = Math.Max(1, _context.EffectiveSpillWriteConcurrency);
-                if (_activeSpillWrites < limit)
+                cancellationToken.ThrowIfCancellationRequested();
+                lock (_spillWriteGate)
                 {
-                    _activeSpillWrites++;
-                    return new SpillWriteSlot(this);
+                    var limit = Math.Max(1, _context.EffectiveSpillWriteConcurrency);
+                    if (_activeSpillWrites < limit)
+                    {
+                        _activeSpillWrites++;
+                        if (queued)
+                        {
+                            _waitingSpillWrites--;
+                            _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+                        }
+                        return new SpillWriteSlot(this);
+                    }
+
+                    if (!queued)
+                    {
+                        queued = true;
+                        _waitingSpillWrites++;
+                        _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+                    }
+                }
+
+                await Task.Delay(10, cancellationToken);
+            }
+        }
+        catch
+        {
+            if (queued)
+            {
+                lock (_spillWriteGate)
+                {
+                    _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
+                    _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
                 }
             }
-
-            await Task.Delay(10, cancellationToken);
+            throw;
         }
     }
 
@@ -235,13 +265,21 @@ public partial class SpillStore : ISpillStore
         public async Task WriteRowAsync(Row row)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            var before = Inner.BytesWritten;
+            var elapsed = Stopwatch.StartNew();
             await Inner.WriteRowAsync(row);
+            elapsed.Stop();
+            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            var before = Inner.BytesWritten;
+            var elapsed = Stopwatch.StartNew();
             await Inner.WriteRowsAsync(rows);
+            elapsed.Stop();
+            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
 
         public ValueTask DisposeAsync() => Inner.DisposeAsync();
@@ -260,7 +298,11 @@ public partial class SpillStore : ISpillStore
                 throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
 
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            var before = Inner.BytesWritten;
+            var elapsed = Stopwatch.StartNew();
             await columnar.WriteBatchAsync(batch);
+            elapsed.Stop();
+            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
     }
 

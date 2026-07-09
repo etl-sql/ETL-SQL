@@ -410,6 +410,8 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     bool AdaptiveExecutionEnabled { get => false; set { } }
     /// <summary>Per-job adaptive advisor. Null means static configured setpoints are in use.</summary>
     AdaptiveAdvisor? AdaptiveAdvisor => null;
+    /// <summary>Live execution metrics sampled by the adaptive controller.</summary>
+    AdaptiveRuntimeMetrics AdaptiveMetrics => AdaptiveRuntimeMetricsShared.Empty;
     /// <summary>Effective batch size, including adaptive advice when enabled.</summary>
     int EffectiveBatchSize => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
         ? AdaptiveAdvisor.Snapshot().BatchRows

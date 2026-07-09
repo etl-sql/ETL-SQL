@@ -69,7 +69,7 @@ that result into an unsupported blanket billion-row claim.
 
 ### Phase 2: Adaptive resource utilization
 
-- [ ] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
+- [x] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
   spill concurrency, and operator grant requests from measured CPU, memory pressure, queue depth, and
   storage latency.
   *(Slice A progress: observe-mode Core implementation added with `AdaptiveExecutionController`,
@@ -82,13 +82,17 @@ that result into an unsupported blanket billion-row claim.
   effective spill-write concurrency setpoint without changing writer lifetime or format capability.
   Temp-table spill pipeline depth now supports the bounded `0`/`1` behavior: `0` forces synchronous
   spill writes, `1` preserves the existing one-write overlap. Deeper multi-write pipelining remains
-  Slice C scope because it requires independent extent ownership per in-flight write.)*
-- [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
+  Slice C scope because it requires independent extent ownership per in-flight write. Runtime sampling
+  now feeds CPU, memory, grant pressure, spill-write queue depth, and measured spill-write latency.)*
+- [x] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
   *(Slice A progress: pure unit coverage proves high-pressure scale-down, idle slow-ramp,
-  deadband, cooldown, floors/ceilings, and two-advisor worker/grant fairness.)*
-- [ ] Preserve deterministic single-worker execution for debugging/certification and prove that
+  deadband, cooldown, floors/ceilings, and two-advisor worker/grant fairness. Slice B coverage proves
+  evaluator config enables bounded effective setpoints while static `SET` ceilings remain intact.)*
+- [x] Preserve deterministic single-worker execution for debugging/certification and prove that
   adaptive mode scales down under pressure as well as up when capacity is idle.
+  *(Coverage proves idle scale-up, high CPU scale-down, spill-latency scale-down, and a worker ceiling
+  of one remains one even under idle-capacity samples.)*
 
 ### Phase 3: Performance regression quality
 

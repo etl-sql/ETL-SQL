@@ -95,6 +95,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private AdaptiveExecutionController? _adaptiveController;
     private AdaptiveAdvisor? _adaptiveAdvisor;
     private bool _ownsAdaptiveAdvisor;
+    private readonly AdaptiveRuntimeMetrics _adaptiveMetrics = new();
     private ResourceSignalSampler? _adaptiveSampler;
     private CancellationTokenSource? _adaptiveSamplerCts;
     private Task? _adaptiveSamplerTask;
@@ -325,6 +326,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
     }
     public AdaptiveAdvisor? AdaptiveAdvisor => _adaptiveAdvisor;
+    public AdaptiveRuntimeMetrics AdaptiveMetrics => _adaptiveMetrics;
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
@@ -639,7 +641,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         if (!AdaptiveExecutionEnabled || _adaptiveAdvisor == null || _adaptiveSamplerTask != null)
             return;
 
-        _adaptiveSampler ??= new ResourceSignalSampler(MemoryArbiter);
+        _adaptiveSampler ??= new ResourceSignalSampler(MemoryArbiter, runtimeMetrics: AdaptiveMetrics);
         _adaptiveSamplerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _adaptiveSamplerTask = RunAdaptiveSamplerAsync(_adaptiveSamplerCts.Token);
     }
