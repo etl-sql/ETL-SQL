@@ -131,7 +131,7 @@ show_pre_release_plan() {
 
     if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         print_plan_phase "$i" "Scale certification smoke" "./scripts/test-scale-certification.sh --tier Smoke" "Small certification workload still meets baseline."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 (via pwsh)" "Smoke certification metrics have not regressed."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (smoke)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-smoke.md (via pwsh)" "Smoke certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
@@ -140,7 +140,7 @@ show_pre_release_plan() {
 
     if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         print_plan_phase "$i" "Scale certification standard" "./scripts/test-scale-certification.sh --tier Standard" "Release-size certification workload still meets baseline."; i=$((i + 1))
-        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 (via pwsh)" "Standard certification metrics have not regressed."; i=$((i + 1))
+        print_plan_phase "$i" "Cert baseline regression check (standard)" "./scripts/Compare-CertBaseline.ps1 -MarkdownReport <run>/cert-baseline-standard.md (via pwsh)" "Standard certification metrics have not regressed; warning evidence is preserved in validation artifacts."; i=$((i + 1))
     fi
 
     if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
@@ -342,8 +342,13 @@ nuget_dependency_audit_phase() {
 }
 
 cert_baseline_phase() {
+    local report_path="${1:-}"
     local pwsh; pwsh="$(resolve_pwsh)" || return 1
-    "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
+    if [[ -n "$report_path" ]]; then
+        "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1 -MarkdownReport "$report_path"
+    else
+        "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -685,8 +690,8 @@ if [[ "$EFFECTIVE_SKIP_SCALE" != true ]]; then
         bash "./scripts/test-scale-certification.sh" "--tier" "Smoke"
 
     run_phase "Cert baseline regression check (smoke)" \
-        "./scripts/Compare-CertBaseline.ps1 (via pwsh)" \
-        cert_baseline_phase
+        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-smoke.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/cert-baseline-smoke.md"
 fi
 
 if [[ "$EFFECTIVE_INCLUDE_DOCKER" == true ]]; then
@@ -701,8 +706,8 @@ if [[ "$EFFECTIVE_INCLUDE_STANDARD_SCALE" == true ]]; then
         bash "./scripts/test-scale-certification.sh" "--tier" "Standard"
 
     run_phase "Cert baseline regression check (standard)" \
-        "./scripts/Compare-CertBaseline.ps1 (via pwsh)" \
-        cert_baseline_phase
+        "./scripts/Compare-CertBaseline.ps1 -MarkdownReport $RUN_DIR/cert-baseline-standard.md (via pwsh)" \
+        cert_baseline_phase "$RUN_DIR/cert-baseline-standard.md"
 fi
 
 if [[ "$EFFECTIVE_BUILD_INSTALLERS" == true ]]; then
