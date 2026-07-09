@@ -75,8 +75,8 @@ that result into an unsupported blanket billion-row claim.
   *(Slice A progress: observe-mode Core implementation added with `AdaptiveExecutionController`,
   per-job `AdaptiveAdvisor`, `ResourceSignalSampler`, bounded setpoints, decision log, cooldown,
   and active-advisor fairness. Slice B progress: execution contexts now expose effective adaptive
-  setpoints and `PARALLEL` admission consumes the advised worker ceiling when adaptive mode is
-  explicitly enabled. Batch/pipeline/spill/grant consumers and sampler-loop integration remain
+  setpoints and `PARALLEL`/`PARALLEL FOR` admission consumes the advised worker ceiling when adaptive
+  mode is explicitly enabled. Batch/pipeline/spill/grant consumers and sampler-loop integration remain
   Slice B/C scope.)*
 - [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
