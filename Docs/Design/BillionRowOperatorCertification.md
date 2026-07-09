@@ -1,6 +1,6 @@
 # Billion-Row Operator Certification (v0.15.0 Phase 4) — Design
 
-**Status:** DRAFT for review — no implementation yet.
+**Status:** Implementation in progress; Slice A scenario manifest and report schema are implemented.
 **TODO items covered:** v0.15.0 Phase 4 (operator-specific 1B criteria for join/sort first,
 then high-cardinality grouping, eligible windows, holistic aggregates, and heterogeneous `MERGE`).
 **Completion gate:** every advertised 1B operator has an isolated, resumable certification scenario
@@ -192,7 +192,10 @@ not a v0.15.0 goal.
 ## 7. Delivery Plan
 
 1. **Slice A — scenario manifest and report schema.** Add scenario metadata, admission results,
-   and non-goals to Gate F reports.
+   and non-goals to Gate F reports. *(Implemented: the checked-in scenario manifest lives at
+   `certification-results/billion-row-operator-scenarios.json`, manifest validation tests guard
+   external sort/join admission and success criteria, and future Gate F reports emit
+   `scenarioManifests` plus `admission` sections.)*
 2. **Slice B — external sort 1B candidate.** Build generator, streaming order validator, resume
    points, and admission preflight.
 3. **Slice C — external equi-join 1B candidate.** Build two-source generator, result-count oracle,

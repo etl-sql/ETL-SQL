@@ -1,0 +1,384 @@
+{
+  "schemaVersion": 1,
+  "matrixStatus": "phase4-candidate-manifest",
+  "rows": 1000000000,
+  "machineClassRequired": true,
+  "scenarios": [
+    {
+      "scenarioId": "GateF_NativeScanFilterProjectionAggregate_1B",
+      "operator": "ColumnarScanFilterProjectionAggregate",
+      "state": "Certified",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id INT",
+          "GroupId INT",
+          "Amount BIGINT"
+        ],
+        "filter": "Id > rows / 2",
+        "groups": 100,
+        "randomSeed": null,
+        "skew": "none"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 0,
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": null,
+        "spillPath": "none",
+        "adaptiveExecution": "off",
+        "nativePathRequired": true,
+        "releaseBuildRequired": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "generated formula for selected rows, grouped count, Id sum, and Amount sum",
+        "requiredTelemetry": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs"
+        ],
+        "minimumRowsPerSecond": 50000,
+        "maxPeakWorkingSetMB": 16384
+      },
+      "nonGoals": [
+        "row-engine fallback",
+        "high-cardinality grouping",
+        "arbitrary expressions",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "memoryBoundMB",
+        "minimumRowsPerSecond",
+        "batchRows"
+      ],
+      "artifact": "certification-results/gate-f-1b/gate-f-report.json#columnarCore"
+    },
+    {
+      "scenarioId": "GateF_TempTableRoundTrip_1B",
+      "operator": "TempTableSpillRoundTrip",
+      "state": "Certified",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "grp INT",
+          "val BIGINT"
+        ],
+        "spillThresholdRows": 10000,
+        "randomSeed": null,
+        "skew": "none"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25,
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "exact row count and checksum after SELECT INTO temp-table round trip",
+        "requiredTelemetry": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "spillBytes",
+          "spillWriteBytes",
+          "spillReadBytes",
+          "spillExtentCount",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs"
+        ],
+        "minimumRowsPerSecond": 50000,
+        "maxPeakWorkingSetMB": 16384
+      },
+      "nonGoals": [
+        "secondary operators downstream of the temp table",
+        "persistent temp-table retention",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "memoryBoundMB",
+        "memoryGrantMB",
+        "tempBatchRows",
+        "minimumRowsPerSecond"
+      ],
+      "artifact": "certification-results/gate-f-1b/gate-f-report.json#tempTableRoundTrip"
+    },
+    {
+      "scenarioId": "ExternalSort_MultiKey_1B",
+      "operator": "ExternalSort",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id BIGINT",
+          "SortKey INT",
+          "TieBreaker BIGINT",
+          "Payload BIGINT"
+        ],
+        "sortKeys": [
+          "SortKey ASC",
+          "TieBreaker DESC"
+        ],
+        "randomSeed": 15041,
+        "skew": "bounded duplicate sort keys"
+      },
+      "admission": {
+        "minimumFreeDiskFormula": "estimatedSpillBytes * 1.5 + 25GB",
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "streaming ordered-output validator with row count, first/last key, checksum, and sampled tie checks",
+        "requiredTelemetry": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "sortRunCount",
+          "mergePassCount",
+          "spillBytes",
+          "spillExtentCount",
+          "peakProcessWorkingSetMB",
+          "cpuTimeMs"
+        ],
+        "minimumRowsPerSecond": null,
+        "maxPeakWorkingSetMB": 16384
+      },
+      "nonGoals": [
+        "Top-N optimized plans",
+        "locale-specific collation",
+        "arbitrary expression sort keys",
+        "downstream operator certification"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "sortKeys",
+        "memoryBoundMB",
+        "operatorMemoryGrantMB",
+        "randomSeed"
+      ],
+      "artifact": null
+    },
+    {
+      "scenarioId": "ExternalEquiJoin_ControlledSkew_1B",
+      "operator": "ExternalEquiJoin",
+      "state": "Candidate",
+      "rows": {
+        "left": 1000000000,
+        "right": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id BIGINT",
+          "JoinKey INT",
+          "Payload BIGINT"
+        ],
+        "joinType": "INNER",
+        "keyOverlap": "50 percent",
+        "duplicateFactor": "bounded",
+        "randomSeed": 24017,
+        "skew": "controlled hot-key distribution, no adversarial single-key collapse"
+      },
+      "admission": {
+        "minimumFreeDiskFormula": "estimatedLeftSpillBytes + estimatedRightSpillBytes, multiplied by 1.5, plus 25GB",
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "mathematical result-count formula plus checksum over matched generated keys",
+        "requiredTelemetry": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "partitionCount",
+          "repartitionPassCount",
+          "maxPartitionRows",
+          "skewFactor",
+          "spillBytes",
+          "spillExtentCount",
+          "peakProcessWorkingSetMB",
+          "cpuTimeMs"
+        ],
+        "minimumRowsPerSecond": null,
+        "maxPeakWorkingSetMB": 16384
+      },
+      "nonGoals": [
+        "non-equi joins",
+        "outer joins with high null expansion",
+        "adversarial single-key skew",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "joinType",
+        "keyOverlap",
+        "duplicateFactor",
+        "memoryBoundMB",
+        "operatorMemoryGrantMB",
+        "randomSeed"
+      ],
+      "artifact": null
+    },
+    {
+      "scenarioId": "HighCardinalityGrouping_1B",
+      "operator": "ExternalAggregate",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "groups": "high enough to force partition pressure",
+        "aggregates": [
+          "COUNT",
+          "SUM",
+          "MIN",
+          "MAX"
+        ]
+      },
+      "admission": {
+        "requiresLowerTierDifferentialCoverage": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "generated-key formulas and sampled group checks",
+        "requiredTelemetry": [
+          "partitionCount",
+          "repartitionPassCount",
+          "spillBytes",
+          "peakProcessWorkingSetMB"
+        ]
+      },
+      "nonGoals": [
+        "median",
+        "percentile",
+        "GROUPING SETS",
+        "ROLLUP",
+        "CUBE"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "groupCount"
+      ],
+      "artifact": null
+    },
+    {
+      "scenarioId": "EligibleWindowRowNumber_1B",
+      "operator": "ExternalWindow",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "functions": [
+          "ROW_NUMBER"
+        ],
+        "partitioning": "deterministic bounded partitions",
+        "ordering": "deterministic generated order key"
+      },
+      "admission": {
+        "requiresLowerTierDifferentialCoverage": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "per-partition min/max row numbers and sampled order checks",
+        "requiredTelemetry": [
+          "partitionCount",
+          "maxPartitionRows",
+          "spillBytes",
+          "peakProcessWorkingSetMB"
+        ]
+      },
+      "nonGoals": [
+        "unbounded frames requiring full partition materialization",
+        "RANGE date/interval offsets",
+        "non-deterministic ordering"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "partitionCount",
+        "windowFunction"
+      ],
+      "artifact": null
+    },
+    {
+      "scenarioId": "HolisticAggregates_1B",
+      "operator": "HolisticAggregate",
+      "state": "Not certified",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "aggregates": [
+          "MEDIAN",
+          "PERCENTILE"
+        ]
+      },
+      "admission": {
+        "requiresBoundedExactOrApproximateDesign": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "not defined",
+        "requiredTelemetry": []
+      },
+      "nonGoals": [
+        "1B holistic aggregate claims"
+      ],
+      "resumeKeyFields": [],
+      "artifact": null
+    },
+    {
+      "scenarioId": "HeterogeneousMerge_1B",
+      "operator": "Merge",
+      "state": "Not certified",
+      "rows": {
+        "source": 1000000000,
+        "target": 1000000000
+      },
+      "shape": {
+        "source": "generated separate connector/storage context",
+        "target": "isolated generated target"
+      },
+      "admission": {
+        "requiresBoundedSourceAndTargetStagingPath": true,
+        "requiresWhatIfOrRollback": true
+      },
+      "successCriteria": {
+        "correctnessOracle": "predicted match/update/insert counts",
+        "requiredTelemetry": [
+          "matchedRows",
+          "updatedRows",
+          "insertedRows",
+          "peakProcessWorkingSetMB"
+        ]
+      },
+      "nonGoals": [
+        "production mutation claims",
+        "provider-specific bulk-update performance"
+      ],
+      "resumeKeyFields": [],
+      "artifact": null
+    }
+  ]
+}

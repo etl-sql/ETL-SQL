@@ -126,8 +126,13 @@ Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuali
 
 Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCertification.md)
 
-- [ ] Define separate admission and success criteria for external equi-join and sort at 1B, including
+- [x] Define separate admission and success criteria for external equi-join and sort at 1B, including
   skew, partition passes, extent counts, spill bytes, useful throughput, and required free disk.
+  *(Slice A complete: `certification-results/billion-row-operator-scenarios.json` defines the
+  operator matrix and per-scenario contracts, including external sort and external equi-join
+  admission, telemetry, success criteria, resume keys, and non-goals. `Test-GateF.ps1` now emits
+  `scenarioManifests` and `admission` sections in future Gate F reports, and
+  `BillionRowOperatorManifestTests` validates the manifest contract.)*
 - [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.

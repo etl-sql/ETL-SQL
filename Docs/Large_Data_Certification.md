@@ -26,6 +26,30 @@ Reports are written to `./certification-results/`.
 
 ---
 
+## Billion-Row Operator Matrix
+
+The billion-row claim is operator-specific. The checked-in manifest at
+`certification-results/billion-row-operator-scenarios.json` is the source of truth for each
+scenario's state, admission criteria, success criteria, telemetry contract, resume key, artifact,
+and non-goals.
+
+| Scenario | Operator | State | Artifact |
+| :--- | :--- | :--- | :--- |
+| `GateF_NativeScanFilterProjectionAggregate_1B` | Columnar scan/filter/projection/low-cardinality aggregate | Certified | `certification-results/gate-f-1b/gate-f-report.json#columnarCore` |
+| `GateF_TempTableRoundTrip_1B` | Temp-table spill round trip | Certified | `certification-results/gate-f-1b/gate-f-report.json#tempTableRoundTrip` |
+| `ExternalSort_MultiKey_1B` | External sort | Candidate | Pending operator-run artifact |
+| `ExternalEquiJoin_ControlledSkew_1B` | External equi-join | Candidate | Pending operator-run artifact |
+| `HighCardinalityGrouping_1B` | External aggregate | Candidate | Pending lower-tier differential evidence and operator-run artifact |
+| `EligibleWindowRowNumber_1B` | External window | Candidate | Pending lower-tier differential evidence and operator-run artifact |
+| `HolisticAggregates_1B` | Holistic aggregates | Not certified | No 1B claim |
+| `HeterogeneousMerge_1B` | Heterogeneous `MERGE` | Not certified | No 1B claim |
+
+Candidate rows are not product claims. They define the admission and telemetry contract that must be
+satisfied before an operator can move to certified. Release notes must cite a certified scenario,
+machine class, artifact, and non-goal list rather than saying "1B SQL support."
+
+---
+
 ## Certified Scenarios (Smoke Tier)
 
 | Scenario | Rows | Operator | Spill Path | Assertions |

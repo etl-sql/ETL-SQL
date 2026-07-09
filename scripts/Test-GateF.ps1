@@ -75,6 +75,124 @@ function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [str
     Move-Item -LiteralPath $temp -Destination $statusPath -Force
 }
 
+function Get-GateFScenarioManifests {
+    $commonTelemetry = @(
+        'elapsedMs',
+        'rowsPerSecond',
+        'peakProcessWorkingSetMB',
+        'allocatedMB',
+        'gcPauseMs',
+        'cpuTimeMs'
+    )
+
+    return [ordered]@{
+        columnarCore = [ordered]@{
+            scenarioId = 'GateF_NativeScanFilterProjectionAggregate_1B'
+            operator = 'ColumnarScanFilterProjectionAggregate'
+            state = 'Certified'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('Id INT', 'GroupId INT', 'Amount BIGINT')
+                filter = 'Id > rows / 2'
+                groups = 100
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = 0
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $null
+                spillPath = 'none'
+                adaptiveExecution = 'off'
+                nativePathRequired = $true
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'generated formula for selected rows, grouped count, Id sum, and Amount sum'
+            telemetryContract = $commonTelemetry
+            nonGoals = @('row-engine fallback', 'high-cardinality grouping', 'arbitrary expressions', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryBoundMB', 'minimumRowsPerSecond', 'batchRows')
+        }
+        tempTableRoundTrip = [ordered]@{
+            scenarioId = 'GateF_TempTableRoundTrip_1B'
+            operator = 'TempTableSpillRoundTrip'
+            state = 'Certified'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('grp INT', 'val BIGINT')
+                spillThresholdRows = 10000
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'exact row count and checksum after SELECT INTO temp-table round trip'
+            telemetryContract = @($commonTelemetry + @('spillBytes', 'spillWriteBytes', 'spillReadBytes', 'spillExtentCount'))
+            nonGoals = @('secondary operators downstream of the temp table', 'persistent temp-table retention', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryBoundMB', 'memoryGrantMB', 'tempBatchRows', 'minimumRowsPerSecond')
+        }
+        allocProfile = [ordered]@{
+            scenarioId = 'GateF_TempTableAllocProfile_1B'
+            operator = 'TempTableSpillAllocationProfile'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('grp INT', 'val BIGINT')
+                profile = 'allocation, GC, process memory, CPU, and I/O for temp-table round trip'
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'profile run must complete the same temp-table row count and checksum contract'
+            telemetryContract = @($commonTelemetry + @('bytesAllocatedPerRow', 'gcGen2Collections', 'physicalReadBytes', 'physicalWriteBytes'))
+            nonGoals = @('new operator certification', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryGrantMB', 'tempBatchRows')
+        }
+    }
+}
+
+function Get-GateFAdmissionResults {
+    param(
+        [object]$Manifests,
+        [double]$FreeDiskGB,
+        [string]$SpillDriveRoot
+    )
+
+    $results = [ordered]@{}
+    foreach ($property in $Manifests.GetEnumerator()) {
+        $manifest = $property.Value
+        $requiredDisk = 0.0
+        if ($null -ne $manifest.admission.minimumFreeDiskGB) {
+            $requiredDisk = [double]$manifest.admission.minimumFreeDiskGB
+        }
+        $requiresDisk = $requiredDisk -gt 0
+        $admitted = (-not $requiresDisk) -or ($FreeDiskGB -ge $requiredDisk)
+        $results[$property.Key] = [ordered]@{
+            scenarioId = $manifest.scenarioId
+            admitted = $admitted
+            reason = if ($admitted) { 'admitted' } else { 'insufficient spill disk' }
+            requiredFreeDiskGB = $requiredDisk
+            actualFreeDiskGB = [math]::Round($FreeDiskGB, 3)
+            spillDrive = $SpillDriveRoot
+            memoryBoundMB = $MemoryBoundMB
+            operatorMemoryGrantMB = $manifest.admission.operatorMemoryGrantMB
+            adaptiveExecution = $manifest.admission.adaptiveExecution
+        }
+    }
+    return $results
+}
+
 function Invoke-LoggedProcess(
     [string]$name,
     [string]$filePath,
@@ -160,6 +278,8 @@ try {
             [long][GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
         } else { 0 }
     }
+    $scenarioManifests = Get-GateFScenarioManifests
+    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDrive.Root
 
     $runManifest = [ordered]@{
         schemaVersion = 2
@@ -179,8 +299,10 @@ try {
         spillDrive = $tempDrive.Root
         spillDriveFreeBytesAtStart = [long]$tempDrive.Free
         host = $hostProfile
+        scenarioManifests = $scenarioManifests
+        admission = $admissionResults
     }
-    $runManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
+    $runManifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
 
     if (-not $SkipBuild) {
         & dotnet build (Join-Path $repoRoot 'ETL-SQL.slnx') -c Release --no-restore -v quiet *>&1 |
@@ -280,6 +402,8 @@ try {
         config = $config
         host = $hostProfile
         run = $runManifest
+        scenarioManifests = $scenarioManifests
+        admission = $admissionResults
         columnarCore = if (Test-Path (Join-Path $outRoot 'columnar-core.json')) {
             Get-Content (Join-Path $outRoot 'columnar-core.json') -Raw | ConvertFrom-Json
         } else { $null }
