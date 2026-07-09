@@ -51,6 +51,59 @@ $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RepoRoot = Join-Path $PSScriptRoot '..'
 $rowCountScaleWasSpecified = $RowCountScale -gt 0
 
+function Invoke-GitText {
+    param([string[]]$Arguments)
+
+    try {
+        $output = & git -C $RepoRoot @Arguments 2>$null
+        if ($LASTEXITCODE -ne 0) { return $null }
+        return (($output | Out-String).Trim())
+    } catch {
+        return $null
+    }
+}
+
+function Get-SourceMetadata {
+    param([object]$Config)
+
+    $sha = Invoke-GitText @('rev-parse', 'HEAD')
+    $branch = Invoke-GitText @('rev-parse', '--abbrev-ref', 'HEAD')
+    $status = Invoke-GitText @('status', '--porcelain')
+    $dirty = -not [string]::IsNullOrWhiteSpace($status)
+
+    $configJson = $Config | ConvertTo-Json -Depth 10 -Compress
+    $commitText = if ($sha) { $sha } else { 'unknown-commit' }
+    $dirtyText = if ($dirty) { $status } else { 'clean' }
+    $fingerprintInput = @(
+        $commitText,
+        $dirtyText,
+        $configJson
+    ) -join "`n"
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($fingerprintInput)
+        $hash = $sha256.ComputeHash($bytes)
+        $fingerprint = ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+
+        $configBytes = [System.Text.Encoding]::UTF8.GetBytes($configJson)
+        $configHash = $sha256.ComputeHash($configBytes)
+        $configFingerprint = ([System.BitConverter]::ToString($configHash)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha256.Dispose()
+    }
+
+    return [ordered]@{
+        commit = [ordered]@{
+            sha = $sha
+            branch = $branch
+            isDirty = $dirty
+        }
+        sourceFingerprint = $fingerprint
+        configFingerprint = $configFingerprint
+    }
+}
+
 if ($RowCountScale -le 0) {
     $RowCountScale = switch ($Tier) {
         'Standard' { 10.0 }
@@ -121,6 +174,20 @@ $filterExpr = if ($Scenario) {
 } else {
     "Category=ScaleCertification&Tier=$Tier"
 }
+
+$config = [ordered]@{
+    tier = $Tier
+    rowCountScale = $RowCountScale
+    rowCountScaleExplicit = $rowCountScaleWasSpecified
+    scenario = if ($Scenario) { $Scenario } else { $null }
+    filter = $filterExpr
+    buildConfiguration = 'Release'
+    serverGcRequested = $true
+    memoryGrantMB = if ($env:CERT_MEMORY_GRANT_MB) { [int]$env:CERT_MEMORY_GRANT_MB } else { 2048 }
+    memoryBoundMB = if ($env:CERT_MEMORY_BOUND_MB) { [double]$env:CERT_MEMORY_BOUND_MB } else { $null }
+    adaptiveEnabled = (($env:ETLSQL_ADAPTIVE_EXECUTION -eq '1') -or ($env:ETLSQL_ADAPTIVE_EXECUTION -eq 'true'))
+}
+$sourceMetadata = Get-SourceMetadata $config
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $rawLog = Join-Path $OutDir 'raw-output.txt'
@@ -259,8 +326,8 @@ $hardware = [ordered]@{
     processArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     buildConfiguration = 'Release'
     serverGcRequested = $true
-    memoryGrantMB = if ($env:CERT_MEMORY_GRANT_MB) { [int]$env:CERT_MEMORY_GRANT_MB } else { 2048 }
-    memoryBoundMB = if ($env:CERT_MEMORY_BOUND_MB) { [double]$env:CERT_MEMORY_BOUND_MB } else { $null }
+    memoryGrantMB = $config.memoryGrantMB
+    memoryBoundMB = $config.memoryBoundMB
 }
 
 # ── 3. Parse CERT_METRIC lines ────────────────────────────────────────────────
@@ -276,13 +343,20 @@ $hardware.serverGcEnabled = if ($metrics.Count -gt 0) { [bool]$metrics[0].server
 
 # ── 4. Write JSON report ──────────────────────────────────────────────────────
 $report = [ordered]@{
-    generatedAt   = (Get-Date -Format 'o')
-    tier          = $Tier
+    schemaVersion = 2
+    generatedAt = (Get-Date -Format 'o')
+    capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+    tier = $Tier
     rowCountScale = $RowCountScale
-    scenario      = if ($Scenario) { $Scenario } else { $null }
-    testsPassed   = ($testExitCode -eq 0)
-    hardware      = $hardware
-    scenarios     = @($metrics)
+    scenario = if ($Scenario) { $Scenario } else { $null }
+    testsPassed = ($testExitCode -eq 0)
+    commit = $sourceMetadata.commit
+    sourceFingerprint = $sourceMetadata.sourceFingerprint
+    configFingerprint = $sourceMetadata.configFingerprint
+    host = $hardware
+    hardware = $hardware
+    config = $config
+    scenarios = @($metrics)
 }
 
 $jsonPath = Join-Path $OutDir 'cert-report.json'
@@ -319,6 +393,9 @@ $mdLines += "- RAM: $([math]::Round($hardware.physicalMemoryBytes / 1GB, 1)) GB"
 $mdLines += "- Disk: $($hardware.diskModel), $([math]::Round($hardware.diskSizeBytes / 1GB, 1)) GB; workspace free $([math]::Round($hardware.workspaceFreeBytes / 1GB, 1)) GB"
 $mdLines += "- Runtime: $($hardware.runtimeVersion), $($hardware.processArchitecture), Release, server GC enabled: $($hardware.serverGcEnabled)"
 $mdLines += "- Engine memory grant: $($hardware.memoryGrantMB) MB"
+$mdLines += "- Commit: $($sourceMetadata.commit.sha) ($($sourceMetadata.commit.branch)); dirty: $($sourceMetadata.commit.isDirty)"
+$mdLines += "- Source fingerprint: $($sourceMetadata.sourceFingerprint)"
+$mdLines += "- Config fingerprint: $($sourceMetadata.configFingerprint)"
 
 $mdLines += ""
 $mdLines += "## Operator Status"

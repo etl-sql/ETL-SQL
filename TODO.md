@@ -108,6 +108,10 @@ Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuali
   Gate F/operator baselines and current-commit enforcement.)*
 - [ ] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
   statistically meaningful regressions rather than relying on one unusually fast or slow run.
+  *(Slice A progress: `Test-ScaleCertification.ps1` and `Test-ScaleBaseline.ps1` now emit
+  schema-versioned reports with commit metadata, source fingerprint, config fingerprint, `host`
+  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Remaining scope:
+  `-Samples` aggregation, variance fields, and median/max comparison enforcement.)*
 - [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
   publishing performance claims or closing a release candidate that changes certified paths.
 

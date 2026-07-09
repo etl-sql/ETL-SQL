@@ -1,6 +1,6 @@
 # Performance Regression Quality (v0.15.0 Phase 3) — Design
 
-**Status:** DRAFT for review — no implementation yet.
+**Status:** Implementation in progress; Slice A/B foundations are partially implemented.
 **TODO items covered:** v0.15.0 Phase 3 (scenario-specific warning/failure bands;
 runtime/hardware/config/commit metadata; current-commit performance evidence before publishing).
 **Completion gate:** performance regressions are detected by scenario-specific, statistically
@@ -164,9 +164,11 @@ may still produce reports, but pre-release failure gates require a class.
 
 1. **Slice A — metadata and schema v2.** Extend scale reports with schema version, commit/source
    fingerprint, host profile, and config fingerprint. Preserve compatibility with schema v1
-   baselines.
+   baselines. *(Partial: report-level metadata is emitted; repeated-sample scenario distributions
+   remain Slice C.)*
 2. **Slice B — comparator bands.** Extend `Compare-CertBaseline.ps1` with scenario families,
    warning/failure bands, and Markdown output. Keep missing-baseline behavior as warning-only.
+   *(Implemented for schema v1 flat metrics and schema v2 metric objects.)*
 3. **Slice C — repeated samples.** Add `-Samples` to `Test-ScaleCertification.ps1` and teach the
    parser to aggregate samples by scenario.
 4. **Slice D — pre-release integration.** Update `Test-PreRelease.ps1` so smoke/standard lanes

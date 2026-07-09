@@ -23,6 +23,59 @@ $RepoRoot = Join-Path $PSScriptRoot '..'
 $runner = Join-Path $PSScriptRoot 'Test-ScaleCertification.ps1'
 $pwsh = (Get-Process -Id $PID).Path
 
+function Invoke-GitText {
+    param([string[]]$Arguments)
+
+    try {
+        $output = & git -C $RepoRoot @Arguments 2>$null
+        if ($LASTEXITCODE -ne 0) { return $null }
+        return (($output | Out-String).Trim())
+    } catch {
+        return $null
+    }
+}
+
+function Get-SourceMetadata {
+    param([object]$Config)
+
+    $sha = Invoke-GitText @('rev-parse', 'HEAD')
+    $branch = Invoke-GitText @('rev-parse', '--abbrev-ref', 'HEAD')
+    $status = Invoke-GitText @('status', '--porcelain')
+    $dirty = -not [string]::IsNullOrWhiteSpace($status)
+
+    $configJson = $Config | ConvertTo-Json -Depth 10 -Compress
+    $commitText = if ($sha) { $sha } else { 'unknown-commit' }
+    $dirtyText = if ($dirty) { $status } else { 'clean' }
+    $fingerprintInput = @(
+        $commitText,
+        $dirtyText,
+        $configJson
+    ) -join "`n"
+
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($fingerprintInput)
+        $hash = $sha256.ComputeHash($bytes)
+        $fingerprint = ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+
+        $configBytes = [System.Text.Encoding]::UTF8.GetBytes($configJson)
+        $configHash = $sha256.ComputeHash($configBytes)
+        $configFingerprint = ([System.BitConverter]::ToString($configHash)).Replace('-', '').ToLowerInvariant()
+    } finally {
+        $sha256.Dispose()
+    }
+
+    return [ordered]@{
+        commit = [ordered]@{
+            sha = $sha
+            branch = $branch
+            isDirty = $dirty
+        }
+        sourceFingerprint = $fingerprint
+        configFingerprint = $configFingerprint
+    }
+}
+
 $baseRows = [ordered]@{
     TempTableSpill = 50000
     StreamingSelect = 100000
@@ -56,6 +109,9 @@ if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
 
 $allMetrics = @()
 $hardware = $null
+$commit = $null
+$sourceFingerprint = $null
+$configFingerprint = $null
 $startedAt = Get-Date
 foreach ($scenario in $scenarioNames) {
     $scale = $Rows / [double]$baseRows[$scenario]
@@ -69,6 +125,9 @@ foreach ($scenario in $scenarioNames) {
                 [long]$existingMetrics[0].rowCount -eq $Rows) {
                 Write-Host "[$scenario] Reusing completed isolated result." -ForegroundColor DarkGray
                 if ($null -eq $hardware) { $hardware = $existing.hardware }
+                if ($null -eq $commit) { $commit = $existing.commit }
+                if ($null -eq $sourceFingerprint) { $sourceFingerprint = $existing.sourceFingerprint }
+                if ($null -eq $configFingerprint) { $configFingerprint = $existing.configFingerprint }
                 $allMetrics += $existingMetrics
                 continue
             }
@@ -89,6 +148,9 @@ foreach ($scenario in $scenarioNames) {
 
     $child = Get-Content (Join-Path $scenarioOut 'cert-report.json') -Raw | ConvertFrom-Json
     if ($null -eq $hardware) { $hardware = $child.hardware }
+    if ($null -eq $commit) { $commit = $child.commit }
+    if ($null -eq $sourceFingerprint) { $sourceFingerprint = $child.sourceFingerprint }
+    if ($null -eq $configFingerprint) { $configFingerprint = $child.configFingerprint }
     $allMetrics += @($child.scenarios)
 }
 
@@ -104,15 +166,37 @@ try {
     $hardware.processor = $cpu.Name.Trim()
 } catch { }
 
+$config = [ordered]@{
+    tier = "Baseline$($label.ToUpperInvariant())"
+    targetRowsPerScenario = $Rows
+    matrix = $Matrix
+    processIsolation = 'one Release test host per scenario'
+    scenarios = @($scenarioNames)
+}
+
+if ($null -eq $commit -or $null -eq $sourceFingerprint -or $null -eq $configFingerprint) {
+    $sourceMetadata = Get-SourceMetadata $config
+    if ($null -eq $commit) { $commit = $sourceMetadata.commit }
+    if ($null -eq $sourceFingerprint) { $sourceFingerprint = $sourceMetadata.sourceFingerprint }
+    if ($null -eq $configFingerprint) { $configFingerprint = $sourceMetadata.configFingerprint }
+}
+
 $report = [ordered]@{
+    schemaVersion = 2
     generatedAt = (Get-Date -Format 'o')
+    capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     tier = "Baseline$($label.ToUpperInvariant())"
     targetRowsPerScenario = $Rows
     matrix = $Matrix
     processIsolation = 'one Release test host per scenario'
     elapsedMs = [long]((Get-Date) - $startedAt).TotalMilliseconds
     testsPassed = (@($allMetrics | Where-Object { -not $_.passed }).Count -eq 0)
+    commit = $commit
+    sourceFingerprint = $sourceFingerprint
+    configFingerprint = $configFingerprint
+    host = $hardware
     hardware = $hardware
+    config = $config
     scenarios = @($allMetrics)
 }
 
@@ -123,6 +207,10 @@ $md = @(
     "# ETL-SQL Isolated $($label.ToUpperInvariant()) Baseline",
     "",
     "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Matrix: **$Matrix** | Process isolation: **one Release test host per scenario**",
+    "",
+    "Commit: ``$($commit.sha)`` ($($commit.branch)); dirty: **$($commit.isDirty)**  ",
+    "Source fingerprint: ``$sourceFingerprint``  ",
+    "Config fingerprint: ``$configFingerprint``",
     "",
     "| Scenario | Rows | Rows/s | Elapsed | Peak WS MB | Private MB | Heap MB | Allocated MB | GC Pause ms | Spill Write | Pass |",
     "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"

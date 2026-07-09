@@ -303,6 +303,27 @@ function Test-HardwareMismatch {
     return $mismatch
 }
 
+function Test-ReportMetadata {
+    param(
+        [object]$BaselineReport,
+        [object]$NewReport
+    )
+
+    $baselineConfigFingerprint = Get-PropValue $BaselineReport @('configFingerprint')
+    $newConfigFingerprint = Get-PropValue $NewReport @('configFingerprint')
+    if ($baselineConfigFingerprint -and $newConfigFingerprint -and ([string]$baselineConfigFingerprint) -ne ([string]$newConfigFingerprint)) {
+        Add-Issue 'WARN' '_report' 'CONFIG_FINGERPRINT' $baselineConfigFingerprint $newConfigFingerprint $null 'Performance config differs from the checked-in baseline.'
+    } elseif (-not $baselineConfigFingerprint -or -not $newConfigFingerprint) {
+        Add-Issue 'WARN' '_report' 'CONFIG_FINGERPRINT' 'present' 'missing' $null 'Cannot verify performance config compatibility.'
+    }
+
+    $baselineCommit = Get-PropValue (Get-PropValue $BaselineReport @('commit')) @('sha')
+    $newCommit = Get-PropValue (Get-PropValue $NewReport @('commit')) @('sha')
+    if (-not $baselineCommit -or -not $newCommit) {
+        Add-Issue 'WARN' '_report' 'COMMIT_METADATA' 'present' 'missing' $null 'Cannot identify the exact source commit for this comparison.'
+    }
+}
+
 function Write-MarkdownReport {
     param(
         [string]$Path,
@@ -363,6 +384,7 @@ if ((Get-PropValue $base @('tier')) -ne $tier) {
 
 $issues = @()
 $hardwareMismatch = Test-HardwareMismatch $base $new
+Test-ReportMetadata $base $new
 $suppressPerformanceFailures = $hardwareMismatch -and -not $AllowHardwareMismatch
 
 $baseMap = @{}
