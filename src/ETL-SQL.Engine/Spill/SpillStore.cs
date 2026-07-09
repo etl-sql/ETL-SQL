@@ -464,7 +464,7 @@ public partial class SpillStore : ISpillStore
             _chunkName = chunkName;
             _context = context;
             _filePath = path;
-            _flushBatchSize = Math.Max(1, context.BatchSize);
+            _flushBatchSize = Math.Max(1, context.EffectiveBatchSize);
             _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
 
             try

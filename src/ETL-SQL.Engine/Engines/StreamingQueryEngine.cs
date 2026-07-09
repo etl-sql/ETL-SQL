@@ -147,7 +147,7 @@ public class StreamingQueryEngine(IExecutionContext context, ILogger logger)
                 await resultBatch.AddRowAsync(resRow);
                 rowsYielded++;
 
-                if (resultBatch.Rows.Count >= _context.BatchSize)
+                if (resultBatch.Rows.Count >= _context.EffectiveBatchSize)
                 {
                     yield return resultBatch;
                     yielded = true;

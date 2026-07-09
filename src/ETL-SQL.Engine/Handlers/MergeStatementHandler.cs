@@ -123,7 +123,7 @@ public class MergeStatementHandler : IStatementHandler
     private async Task PerformInMemoryMerge(MergeStatement stmt, IDataSource target, IDataSource source, IExecutionContext context)
     {
         using var mergeLease = context.MemoryArbiter.AcquireLease();
-        var operatorBudget = (long)context.OperatorMemoryGrantMB * 1024 * 1024;
+        var operatorBudget = (long)context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         long retainedBytes = 0;
         var sourceRows = await ReadBoundedRows(source, "source");
         var targetRows = await ReadBoundedRows(target, "target");
@@ -261,7 +261,7 @@ public class MergeStatementHandler : IStatementHandler
         async Task<List<Row>> ReadBoundedRows(IDataSource dataSource, string side)
         {
             var rows = new List<Row>();
-            await foreach (var batch in dataSource.ReadBatches(context.BatchSize))
+            await foreach (var batch in dataSource.ReadBatches(context.EffectiveBatchSize))
             {
                 foreach (var row in batch.Rows)
                 {

@@ -108,7 +108,7 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
         {
             _logger.Debug("Bulk loading from {FilePath} into {TableName}", stmt.FilePath, stmt.TargetTable.TableName);
 
-            int batchSize = context.BatchSize;
+            int batchSize = context.EffectiveBatchSize;
             if (options.TryGetValue("BATCHSIZE", out var bs) && int.TryParse(bs, out var bsv))
                 batchSize = bsv;
 

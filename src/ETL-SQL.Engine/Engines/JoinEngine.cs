@@ -124,7 +124,7 @@ public class JoinEngine
                 bool hasEquality = TryExtractEqualityKeys(effectiveJoin.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight, leftColSet, rightColSet);
 
                 // HYPER-SCALE: Check for disk-spilling threshold (row-count backstop + byte-based grant).
-                long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                 long joinBufferBytes = RowWidthEstimator.EstimateTotalBytes(allBufferedRows) + RowWidthEstimator.EstimateTotalBytes(joinRows);
                 bool joinExceedsRowLimit = allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold;
                 bool joinExceedsByteGrant = joinBufferBytes > grantBytes;

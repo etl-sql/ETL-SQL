@@ -187,7 +187,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 {
                     var sourceColumns = (await source.GetColumnsAsync()).ToList();
                     var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
                     ColumnBatch? firstNative = null;
                     try
@@ -272,7 +272,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 var sourceColumns = (await source.GetColumnsAsync()).ToList();
                 var (aggregateColumns, aggregateNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                     .GetAsyncEnumerator(context.CancellationToken);
                 ColumnBatch? firstNative = null;
                 try
@@ -342,7 +342,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 // Open the native source once. Unsupported projection shapes replay the already-read
                 // batch through the established row evaluator without restarting the source.
                 {
-                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
                     ColumnBatch? firstNative = null;
                     try
@@ -568,7 +568,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && projectedColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase)
             && outputColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase);
 
-        var enumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+        var enumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
             .GetAsyncEnumerator(context.CancellationToken);
         if (!await enumerator.MoveNextAsync())
         {

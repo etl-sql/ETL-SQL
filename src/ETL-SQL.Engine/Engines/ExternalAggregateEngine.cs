@@ -539,7 +539,7 @@ public class ExternalAggregateEngine
         }
 
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)sample.Count;
         var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
         var plannedRows = hasExactTotal ? knownRowCount!.Value : sample.Count;
@@ -686,7 +686,7 @@ public class ExternalAggregateEngine
         }
 
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)expandedRows;
         var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
         var plannedRows = hasExactTotal ? checked(knownRowCount!.Value * sets.Count) : expandedRows;

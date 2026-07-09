@@ -25,7 +25,7 @@ internal static class TempTableStorageRouter
 
         try
         {
-            await rowStore.WriteBatches(columnar.ReadBatches(context.BatchSize));
+            await rowStore.WriteBatches(columnar.ReadBatches(context.EffectiveBatchSize));
             if (!context.Connections.TryGetValue(connectionName, out var current) || !ReferenceEquals(current, source))
                 throw new ExecutionException($"Temporary table {connectionName} changed while its storage was being downgraded.");
         }

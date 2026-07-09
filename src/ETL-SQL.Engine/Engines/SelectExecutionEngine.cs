@@ -170,7 +170,7 @@ public class SelectExecutionEngine
                 bool joinEnumeratorHandedOff = false;
                 try
                 {
-                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                     while (bufferedJoinRows.Count < _context.JoinSpillThreshold && await joinEnumerator.MoveNextAsync())
                     {
                         bufferedJoinRows.Add(joinEnumerator.Current);
@@ -212,7 +212,7 @@ public class SelectExecutionEngine
                 bool joinEnumeratorHandedOff = false;
                 try
                 {
-                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                     while (bufferedJoinRows.Count < _context.WindowSpillThreshold && await joinEnumerator.MoveNextAsync())
                     {
                         bufferedJoinRows.Add(joinEnumerator.Current);
@@ -267,7 +267,7 @@ public class SelectExecutionEngine
             try
             {
                 int count = 0;
-                long aggGrantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                long aggGrantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                 while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
                 {
                     bufferedForSpill.Add(enumerator.Current);
@@ -284,7 +284,7 @@ public class SelectExecutionEngine
                     || _memLease.RegisterAndCheckSpill(aggBufferedBytes);
                 if (aggNeedsSpill)
                 {
-                    _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.OperatorMemoryGrantMB);
+                    _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.EffectiveOperatorMemoryGrantMB);
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
                     var combinedStream = PrependRows(bufferedForSpill, ContinueStreamAndDispose(enumerator));
                     enumeratorHandedOff = true;
@@ -643,7 +643,7 @@ public class SelectExecutionEngine
         await foreach (var row in projectedRows)
         {
             await batch.AddRowAsync(row);
-            if (batch.Rows.Count >= _context.BatchSize)
+            if (batch.Rows.Count >= _context.EffectiveBatchSize)
             {
                 yield return batch;
                 yielded = true;
@@ -1019,7 +1019,7 @@ public class SelectExecutionEngine
     private bool ShouldSpill(IReadOnlyList<Row> rows)
     {
         if (rows.Count > _context.JoinSpillThreshold) return true;
-        long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+        long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
         if (bytes > grantBytes) return true;
         // Global pressure: spill if holding this buffer would breach the process-wide pool.
@@ -1029,7 +1029,7 @@ public class SelectExecutionEngine
     private bool ShouldSpillWindow(IReadOnlyList<Row> rows)
     {
         if (rows.Count >= _context.WindowSpillThreshold) return true;
-        long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+        long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
         if (bytes > grantBytes) return true;
         return _memLease.RegisterAndCheckSpill(bytes);

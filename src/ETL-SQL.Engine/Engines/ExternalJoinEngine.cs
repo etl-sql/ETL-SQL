@@ -117,7 +117,7 @@ public class ExternalJoinEngine
             frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
         }
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Count == 0 ? 0 : frequencies.Values.Max() / (double)sample.Count;
         var hasPlannedTotal = knownBuildRowCount >= 0;
         var plannedRows = hasPlannedTotal ? knownBuildRowCount!.Value : sample.Count;

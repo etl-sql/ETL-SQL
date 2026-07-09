@@ -85,7 +85,7 @@ public class DeleteStatementHandler(ILogger logger) : IStatementHandler
 
             // 1. Read existing and filter
             int deletedCount = 0;
-            var batches = connection.ReadBatches(context.BatchSize);
+            var batches = connection.ReadBatches(context.EffectiveBatchSize);
             var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
 
             async IAsyncEnumerable<DataTable> FilterBatches()

@@ -99,7 +99,7 @@ public class GenerateStatementHandler(ILogger logger) : IStatementHandler
             currentBatchCount++;
             totalWritten++;
 
-            if (currentBatchCount >= context.BatchSize)
+            if (currentBatchCount >= context.EffectiveBatchSize)
             {
                 await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
                 batch = new DataTable();
