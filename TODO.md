@@ -101,6 +101,11 @@ Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuali
 - [ ] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
   bands derived from checked-in baselines, while retaining a portable absolute safety floor for
   slower supported hardware.
+  *(Slice B progress: `Compare-CertBaseline.ps1` now supports scenario-family and per-baseline
+  warn/fail bands, schema v1 flat metrics and schema v2 metric objects, separate warning/failure
+  reporting, Markdown output, missing-baseline warnings, hardware-mismatch suppression of
+  performance failures, and explicit `-RegressionPct` legacy override. Remaining scope: checked-in
+  Gate F/operator baselines and current-commit enforcement.)*
 - [ ] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
   statistically meaningful regressions rather than relying on one unusually fast or slow run.
 - [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
