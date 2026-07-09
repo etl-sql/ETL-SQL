@@ -110,8 +110,11 @@ Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuali
   statistically meaningful regressions rather than relying on one unusually fast or slow run.
   *(Slice A progress: `Test-ScaleCertification.ps1` and `Test-ScaleBaseline.ps1` now emit
   schema-versioned reports with commit metadata, source fingerprint, config fingerprint, `host`
-  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Remaining scope:
-  `-Samples` aggregation, variance fields, and median/max comparison enforcement.)*
+  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Slice C progress:
+  scale certification now supports repeated `-Samples`, aggregates scenario medians/maxima with
+  distribution fields and raw sample metrics, baseline capture defaults to five samples, and the
+  comparator warns when a run has fewer samples than baseline policy requests. Remaining scope:
+  current-commit Gate F/pre-release enforcement.)*
 - [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
   publishing performance claims or closing a release candidate that changes certified paths.
 
