@@ -1,6 +1,6 @@
 # Performance Regression Quality (v0.15.0 Phase 3) — Design
 
-**Status:** Implementation in progress; Slice A/B foundations are partially implemented.
+**Status:** Implemented for v0.15.0 Phase 3.
 **TODO items covered:** v0.15.0 Phase 3 (scenario-specific warning/failure bands;
 runtime/hardware/config/commit metadata; current-commit performance evidence before publishing).
 **Completion gate:** performance regressions are detected by scenario-specific, statistically

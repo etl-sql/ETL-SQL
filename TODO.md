@@ -98,25 +98,29 @@ that result into an unsupported blanket billion-row claim.
 
 Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuality.md)
 
-- [ ] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
+- [x] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
   bands derived from checked-in baselines, while retaining a portable absolute safety floor for
   slower supported hardware.
-  *(Slice B progress: `Compare-CertBaseline.ps1` now supports scenario-family and per-baseline
+  *(Complete: `Compare-CertBaseline.ps1` supports scenario-family and per-baseline
   warn/fail bands, schema v1 flat metrics and schema v2 metric objects, separate warning/failure
   reporting, Markdown output, missing-baseline warnings, hardware-mismatch suppression of
-  performance failures, and explicit `-RegressionPct` legacy override. Remaining scope: checked-in
-  Gate F/operator baselines and current-commit enforcement.)*
-- [ ] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
+  performance failures, and explicit `-RegressionPct` legacy override. Checked-in smoke/standard
+  baselines now carry per-scenario bands and sample policies; Gate F evidence validation can compare
+  operator-run reports against a supplied baseline.)*
+- [x] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
   statistically meaningful regressions rather than relying on one unusually fast or slow run.
-  *(Slice A progress: `Test-ScaleCertification.ps1` and `Test-ScaleBaseline.ps1` now emit
+  *(Complete: `Test-ScaleCertification.ps1` and `Test-ScaleBaseline.ps1` emit
   schema-versioned reports with commit metadata, source fingerprint, config fingerprint, `host`
-  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Slice C progress:
-  scale certification now supports repeated `-Samples`, aggregates scenario medians/maxima with
-  distribution fields and raw sample metrics, baseline capture defaults to five samples, and the
-  comparator warns when a run has fewer samples than baseline policy requests. Remaining scope:
-  current-commit Gate F/pre-release enforcement.)*
-- [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
+  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Scale certification
+  supports repeated `-Samples`, aggregates scenario medians/maxima with distribution fields and raw
+  sample metrics, baseline capture defaults to five samples, and the comparator warns when a run has
+  fewer samples than baseline policy requests.)*
+- [x] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
   publishing performance claims or closing a release candidate that changes certified paths.
+  *(Complete: `Test-GateFEvidence.ps1` enforces that captured Gate F evidence passed, contains the
+  required scenario set, reports source/config metadata warnings, and belongs to the current commit
+  or explicit `-RequiredCommit`; pre-release lanes record smoke/standard comparator Markdown
+  artifacts while Gate F remains an operator-run claim gate.)*
 
 ### Phase 4: Extend operator-specific billion-row coverage
 
@@ -199,6 +203,10 @@ Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretMan
 
 - [ ] Publish before/after Gate F allocation, GC, CPU, memory, I/O, and throughput results on the same
   hardware and workload; explain any tradeoff rather than selecting only favorable metrics.
+  *(Current caveat: the checked-in `certification-results/gate-f-1b/gate-f-report.json` predates the
+  `AllocProfile` scenario and schema v2 source/config fingerprints. Before publishing Gate F
+  performance claims or closing a release candidate that changes certified paths, rerun Gate F for
+  the current commit and validate it with `Test-GateFEvidence.ps1 -RequiredScenario All`.)*
 - [ ] Adaptive execution demonstrates higher utilization when resources are idle and safe throttling
   under contention, with fairness and governance ceilings proven by automated tests.
 - [ ] Every newly advertised 1B operator has an isolated, resumable certification scenario and an
