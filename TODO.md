@@ -80,7 +80,9 @@ that result into an unsupported blanket billion-row claim.
   effective setpoints while the `SET` statements remain static ceilings; root evaluators now run a
   bounded resource sampler loop while adaptive mode is enabled; spill writer calls are gated by the
   effective spill-write concurrency setpoint without changing writer lifetime or format capability.
-  Pipeline depth remains Slice B/C scope.)*
+  Temp-table spill pipeline depth now supports the bounded `0`/`1` behavior: `0` forces synchronous
+  spill writes, `1` preserves the existing one-write overlap. Deeper multi-write pipelining remains
+  Slice C scope because it requires independent extent ownership per in-flight write.)*
 - [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
   *(Slice A progress: pure unit coverage proves high-pressure scale-down, idle slow-ramp,
