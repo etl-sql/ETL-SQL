@@ -56,7 +56,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 5
+      }
     },
     {
       "scenario": "StreamingSelect_10000000_cap50000",
@@ -89,7 +94,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 8,
+        "failPct": 15,
+        "minSamples": 5
+      }
     },
     {
       "scenario": "ExternalAggregate_10000000_10grps",
@@ -122,7 +132,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 5
+      }
     },
     {
       "scenario": "ExternalJoin_10000000_equality",
@@ -155,7 +170,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 5
+      }
     },
     {
       "scenario": "ExternalSort_10000000_DESC",
@@ -188,7 +208,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 5
+      }
     }
   ]
 }

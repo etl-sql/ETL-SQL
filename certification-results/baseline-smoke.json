@@ -57,7 +57,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "SpillCleanupFailure_50000",
@@ -93,7 +98,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "CubeGroupingSets_50000_10x5",
@@ -129,7 +139,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "WindowFunction_ROW_NUMBER_50000",
@@ -165,7 +180,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ExternalJoin_50000_equality",
@@ -201,7 +221,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "StreamingSelect_100000_cap50000",
@@ -237,7 +262,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 8,
+        "failPct": 15,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ExternalAggregate_100000_10grps",
@@ -273,7 +303,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ParquetRoundTrip_50000",
@@ -309,7 +344,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ScalarSubqueryCache_50000_1000keys",
@@ -345,7 +385,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ExternalSort_50000_DESC",
@@ -381,7 +426,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "SpillCleanupSuccess_50000",
@@ -417,7 +467,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "CsvIngest_50000",
@@ -453,7 +508,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 1
+      }
     },
     {
       "scenario": "ReportDatasetSnapshotReload_50000",
@@ -489,7 +549,12 @@
       "correctnessPassed": true,
       "memoryPassed": true,
       "throughputPassed": null,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 1
+      }
     }
   ]
 }
