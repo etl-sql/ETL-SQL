@@ -43,6 +43,19 @@ $activeScenario = ''
 $commit = ''
 $runKey = ''
 
+function New-Sha256 {
+    param([string]$Text)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+        $hash = $sha.ComputeHash($bytes)
+        return -join ($hash | ForEach-Object { $_.ToString('x2') })
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [string]$detail = '') {
     $status = [ordered]@{
         state = $state
@@ -124,9 +137,7 @@ try {
     ) | Add-Content -LiteralPath $runLog -Encoding UTF8
     Write-Status 'preparing' '' 0 "commit $commit"
 
-    $runManifest = [ordered]@{
-        startedAt = $startedAt.ToString('o')
-        commit = $commit
+    $config = [ordered]@{
         rows = $Rows
         requestedScenario = $Scenario
         memoryBoundMB = $MemoryBoundMB
@@ -134,9 +145,11 @@ try {
         tempBatchRows = $TempBatchRows
         minimumRowsPerSecond = $MinimumRowsPerSecond
         minimumFreeDiskGB = $MinimumFreeDiskGB
-        spillRoot = $tempRoot
-        spillDrive = $tempDrive.Root
-        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+    }
+    $configJson = $config | ConvertTo-Json -Depth 10 -Compress
+    $configFingerprint = New-Sha256 $configJson
+    $sourceFingerprint = New-Sha256 "$commit`nclean`n$configJson"
+    $hostProfile = [ordered]@{
         machineName = [Environment]::MachineName
         operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
         processArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
@@ -146,6 +159,26 @@ try {
         gcAvailableMemoryBytes = if ([GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes -gt 0) {
             [long][GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
         } else { 0 }
+    }
+
+    $runManifest = [ordered]@{
+        schemaVersion = 2
+        startedAt = $startedAt.ToString('o')
+        capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+        commit = [ordered]@{
+            sha = $commit
+            isDirty = $false
+        }
+        commitSha = $commit
+        sourceFingerprint = $sourceFingerprint
+        configFingerprint = $configFingerprint
+        config = $config
+        rows = $Rows
+        requestedScenario = $Scenario
+        spillRoot = $tempRoot
+        spillDrive = $tempDrive.Root
+        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+        host = $hostProfile
     }
     $runManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
 
@@ -232,10 +265,20 @@ try {
     }
 
     $report = [ordered]@{
+        schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
-        commit = $commit
+        capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+        commit = [ordered]@{
+            sha = $commit
+            isDirty = $false
+        }
+        commitSha = $commit
+        sourceFingerprint = $sourceFingerprint
+        configFingerprint = $configFingerprint
         rows = $Rows
         testsPassed = $true
+        config = $config
+        host = $hostProfile
         run = $runManifest
         columnarCore = if (Test-Path (Join-Path $outRoot 'columnar-core.json')) {
             Get-Content (Join-Path $outRoot 'columnar-core.json') -Raw | ConvertFrom-Json

@@ -174,8 +174,9 @@ may still produce reports, but pre-release failure gates require a class.
    summary fields, distribution fields, raw sample metrics, and sample-count comparator warnings.)*
 4. **Slice D — pre-release integration.** Update `Test-PreRelease.ps1` so smoke/standard lanes
    enforce the new policy and record warnings in `release-validation/latest/state.json`.
-   *(Partial: smoke/standard comparator phases now write Markdown artifacts and attach them to the
-   pre-release state/report. Current-commit Gate F evidence remains operator-run scope.)*
+   *(Implemented for smoke/standard comparator artifacts and operator-run Gate F evidence: the
+   pre-release state/report links comparator Markdown, and `Test-GateFEvidence.ps1` validates that
+   captured Gate F evidence belongs to the current commit before performance claims or RC closure.)*
 
 ---
 

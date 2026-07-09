@@ -203,3 +203,11 @@ Run certification locally:
 ```
 
 Committed baseline results live in `certification-results/`. Compare a new run's JSON output against the baseline before tagging a release.
+
+Gate F remains operator-run. After `.\scripts\Test-GateF.ps1` completes, validate that the captured
+`certification-results/gate-f-1b/gate-f-report.json` belongs to the current commit before citing
+Gate F performance results:
+
+```powershell
+.\scripts\Test-GateFEvidence.ps1
+```
