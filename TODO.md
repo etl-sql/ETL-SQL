@@ -109,6 +109,47 @@ that result into an unsupported blanket billion-row claim.
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
 
+### Phase 7: SME Secret Management & Administration Hardening
+
+Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretManagementAdministrationHardening.md)
+
+- [ ] Design and implement the administrative "middle ground" for connection secret management,
+  supporting SMEs without external vaults while maintaining Zero-Trust boundaries. The built-in
+  `OsSecretStore`, environment-provider, and Portal-managed encrypted store are the supported
+  low-dependency paths; HTTPS vault integration remains optional for organizations that already
+  operate one.
+- [ ] Add an administrative CLI command (`etl-sql admin set-secret --name <name> --value <value>`)
+  to securely encrypt and write secrets to the local OS Secret Store (`OsSecretStore`) under the
+  machine/root context, ensuring the Portal process remains restricted to read-only.
+- [ ] Implement a Portal-managed, database-backed encrypted secret store where credentials can be
+  entered via Web UI and are stored encrypted at rest using the portal's cluster-wide keys, solving
+  the multi-node sync problem for simple HA environments without requiring a separate vault product.
+- [ ] Add named-secret syntax parity and tests so `SECRET:name` can be used consistently wherever
+  `ENC:...` credential values are accepted, or document quoted `'SECRET:name'` and quoted
+  `'ENC:...'` as the canonical forms if unquoted secret-reference literals are not added.
+- [ ] Extend named-secret resolution and redaction beyond password-like fields through connector
+  metadata or governance policy. Organizations must be able to mark `HOST`, `SERVER`, `DATABASE`,
+  `PATH`, `ROOT_PATH`, bucket/container names, endpoints, and similar connection metadata as
+  sensitive without making those fields globally secret for every deployment.
+- [ ] Design a Portal Connection Catalog to store connection metadata (`HOST`, `PORT`, `DATABASE`,
+  `USER`, default options) centrally using `SECRET:name` credential references. Developers should
+  be able to query approved pre-configured connections without re-declaring endpoints or exposing
+  credentials in scripts.
+- [ ] Add catalog governance for pre-configured connections: ownership, environment/tenant scope,
+  per-connection RBAC, approval/audit on create/update/delete, last-used/impact inventory, masked
+  preview/test-connection diagnostics, and runtime expansion that never persists resolved secrets
+  or sensitive metadata back into scripts, logs, reports, lineage, or cached execution state.
+- [ ] Add secret and connection lifecycle operations for SME deployments: rotate, disable, delete,
+  verify, rebind, export/import metadata without secret material, backup/restore validation, HA key
+  compatibility checks, and clear behavior when the OS store, Portal store, or configured provider
+  is unavailable.
+- [ ] Move administrative operations (capacity reporting, failure digests, and backup reporting
+  currently in `samples/admin_operations`) into first-class background services managed natively in
+  Portal/Orchestrator configuration, removing the need for user-maintained scheduler scripts.
+- [ ] Give native admin background services production controls: enable/disable, schedule, HA
+  singleton lease, retry/backoff, retention, audit trail, notification targets through configured
+  SMTP/Portal channels, and safe migration from the current sample scripts.
+
 ### v0.15.0 completion gates
 
 - [ ] Publish before/after Gate F allocation, GC, CPU, memory, I/O, and throughput results on the same
