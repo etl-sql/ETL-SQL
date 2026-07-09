@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Apache.Arrow;
 using Apache.Arrow.Ipc;
@@ -41,8 +42,10 @@ public partial class SpillStore : ISpillStore
     private string? _cachedSessionId;
     private bool _usingTemporaryFallback;
     private readonly object _initLock = new();
+    private readonly object _spillWriteGate = new();
     private readonly IExecutionContext _context;
     private bool _disposed;
+    private int _activeSpillWrites;
 
     public bool IsPersistent { get; set; }
 
@@ -163,7 +166,102 @@ public partial class SpillStore : ISpillStore
             lock (telemetry)
                 telemetry.SpillExtentCount++;
         }
+        writer = writer is IColumnarSpillWriter
+            ? new GatedColumnarSpillWriter(writer, this, _context)
+            : new GatedSpillWriter(writer, this, _context);
         return await Task.FromResult(writer);
+    }
+
+    private async Task<IDisposable> AcquireWriteSlotAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_spillWriteGate)
+            {
+                var limit = Math.Max(1, _context.EffectiveSpillWriteConcurrency);
+                if (_activeSpillWrites < limit)
+                {
+                    _activeSpillWrites++;
+                    return new SpillWriteSlot(this);
+                }
+            }
+
+            await Task.Delay(10, cancellationToken);
+        }
+    }
+
+    private void ReleaseWriteSlot()
+    {
+        lock (_spillWriteGate)
+        {
+            if (_activeSpillWrites > 0)
+                _activeSpillWrites--;
+        }
+    }
+
+    private sealed class SpillWriteSlot : IDisposable
+    {
+        private SpillStore? _owner;
+
+        public SpillWriteSlot(SpillStore owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            owner?.ReleaseWriteSlot();
+        }
+    }
+
+    private class GatedSpillWriter : ISpillWriter
+    {
+        protected readonly ISpillWriter Inner;
+        protected readonly SpillStore Store;
+        protected readonly IExecutionContext Context;
+
+        public GatedSpillWriter(ISpillWriter inner, SpillStore store, IExecutionContext context)
+        {
+            Inner = inner;
+            Store = store;
+            Context = context;
+        }
+
+        public string ChunkName => Inner.ChunkName;
+        public long BytesWritten => Inner.BytesWritten;
+
+        public async Task WriteRowAsync(Row row)
+        {
+            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            await Inner.WriteRowAsync(row);
+        }
+
+        public async Task WriteRowsAsync(IEnumerable<Row> rows)
+        {
+            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            await Inner.WriteRowsAsync(rows);
+        }
+
+        public ValueTask DisposeAsync() => Inner.DisposeAsync();
+    }
+
+    private sealed class GatedColumnarSpillWriter : GatedSpillWriter, IColumnarSpillWriter
+    {
+        public GatedColumnarSpillWriter(ISpillWriter inner, SpillStore store, IExecutionContext context)
+            : base(inner, store, context)
+        {
+        }
+
+        public async Task WriteBatchAsync(ColumnBatch batch)
+        {
+            if (Inner is not IColumnarSpillWriter columnar)
+                throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
+
+            using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
+            await columnar.WriteBatchAsync(batch);
+        }
     }
 
     public async Task<ISpillReader> CreateReaderAsync(string chunkName)
