@@ -210,4 +210,8 @@ Gate F performance results:
 
 ```powershell
 .\scripts\Test-GateFEvidence.ps1
+
+# Compare an operator-run report saved outside the checked-in baseline folder
+.\scripts\Test-GateFEvidence.ps1 -Report .\certification-results\gate-f-candidate\gate-f-report.json `
+  -Baseline .\certification-results\gate-f-1b\gate-f-report.json
 ```

@@ -26,7 +26,8 @@ Start it with `./scripts/Test-GateF.ps1`; inspect progress from another shell wi
 `Get-Content ./certification-results/gate-f-1b/status.json`. Re-running the same command skips
 completed scenario artifacts; use `-Force` only when intentionally replacing prior results.
 Before publishing Gate F performance claims or closing a release candidate that changes certified
-paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`.
+paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`; pass
+`-Baseline` when comparing an operator-run report against the checked-in Gate F baseline.
 | **[`test-service-capacity.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |
 | **[`test-capacity-workload-configs.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |
 | **[`compare-capacity-results.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/compare-capacity-results.mjs)** | Node.js | Cross-platform | Compares two service-capacity reports for p95 latency, throughput, and error-rate regressions. |
