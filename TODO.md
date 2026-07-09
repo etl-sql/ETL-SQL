@@ -77,8 +77,9 @@ that result into an unsupported blanket billion-row claim.
   and active-advisor fairness. Slice B progress: execution contexts now expose effective adaptive
   setpoints and `PARALLEL`/`PARALLEL FOR` admission consumes the advised worker ceiling when adaptive
   mode is explicitly enabled; batch-size consumers and operator memory-grant consumers now read
-  effective setpoints while the `SET` statements remain static ceilings. Pipeline/spill concurrency
-  consumers and sampler-loop integration remain Slice B/C scope.)*
+  effective setpoints while the `SET` statements remain static ceilings; root evaluators now run a
+  bounded resource sampler loop while adaptive mode is enabled. Pipeline/spill concurrency consumers
+  remain Slice B/C scope.)*
 - [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
   *(Slice A progress: pure unit coverage proves high-pressure scale-down, idle slow-ramp,

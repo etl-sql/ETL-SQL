@@ -95,6 +95,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private AdaptiveExecutionController? _adaptiveController;
     private AdaptiveAdvisor? _adaptiveAdvisor;
     private bool _ownsAdaptiveAdvisor;
+    private ResourceSignalSampler? _adaptiveSampler;
+    private CancellationTokenSource? _adaptiveSamplerCts;
+    private Task? _adaptiveSamplerTask;
     private Action<string, string?, ConsoleColor>? _onMessageHandler;
 
     public ISpillStore SpillStore => _spillStore;
@@ -631,6 +634,57 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         _ownsAdaptiveAdvisor = true;
     }
 
+    private void StartAdaptiveSampler(CancellationToken cancellationToken)
+    {
+        if (!AdaptiveExecutionEnabled || _adaptiveAdvisor == null || _adaptiveSamplerTask != null)
+            return;
+
+        _adaptiveSampler ??= new ResourceSignalSampler(MemoryArbiter);
+        _adaptiveSamplerCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _adaptiveSamplerTask = RunAdaptiveSamplerAsync(_adaptiveSamplerCts.Token);
+    }
+
+    private async Task RunAdaptiveSamplerAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Math.Max(50, _options.AdaptiveExecutionOptions.SampleMs)));
+            while (await timer.WaitForNextTickAsync(cancellationToken))
+            {
+                _adaptiveController?.Observe(_adaptiveSampler?.Sample() ?? new ResourceSignals(0, 0, 0, 0, 0, 0));
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Adaptive resource sampler stopped: " + ex.Message);
+        }
+    }
+
+    private async Task StopAdaptiveSamplerAsync()
+    {
+        var cts = _adaptiveSamplerCts;
+        var task = _adaptiveSamplerTask;
+        _adaptiveSamplerCts = null;
+        _adaptiveSamplerTask = null;
+        if (cts == null || task == null) return;
+
+        try
+        {
+            cts.Cancel();
+            await task;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            cts.Dispose();
+        }
+    }
+
     private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
     {
         var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
@@ -939,6 +993,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             }
 
             CancellationToken = cancellationToken;
+            if (CurrentRecursiveDepth == 0)
+                StartAdaptiveSampler(cancellationToken);
 
             if (IsResuming && VarContext.ContainsVariable("@_LAST_CHECKPOINT_LABEL"))
             {
@@ -1059,6 +1115,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         {
             if (CurrentRecursiveDepth == 0)
             {
+                await StopAdaptiveSamplerAsync();
                 _subqueryCache.Clear();
             }
             _variableScopeManager.PurgeSecretVariables();
@@ -1424,6 +1481,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
 
         if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
+        await StopAdaptiveSamplerAsync();
 
         // Reclaim any 'Zombie' resource reservations (Reference Counting protection)
         if (!string.IsNullOrEmpty(SessionId))
