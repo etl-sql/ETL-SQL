@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
@@ -162,6 +163,8 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
     public long TempTableSpillThresholdRows { get; set; } = LanguageMetadata.DefaultTempTableSpillThresholdRows;
     public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
+    public bool AdaptiveExecutionEnabled { get; set; }
+    public AdaptiveAdvisor? AdaptiveAdvisor { get; set; }
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public string? CurrentScriptPath { get; set; }

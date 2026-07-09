@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
@@ -91,6 +92,9 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     private readonly Dictionary<NodeReuseKey, ExecutionNode> _nodeReuseMap = new();
     private readonly TransactionManager _transactionManager = new();
     private readonly ISpillStore _spillStore;
+    private AdaptiveExecutionController? _adaptiveController;
+    private AdaptiveAdvisor? _adaptiveAdvisor;
+    private bool _ownsAdaptiveAdvisor;
     private Action<string, string?, ConsoleColor>? _onMessageHandler;
 
     public ISpillStore SpillStore => _spillStore;
@@ -301,6 +305,23 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
     public int WindowSpillThreshold { get => _options.WindowSpillThreshold; set => _options.WindowSpillThreshold = value; }
     public int OperatorMemoryGrantMB { get => _options.OperatorMemoryGrantMB; set => _options.OperatorMemoryGrantMB = value; }
     public MemoryGovernorPolicy MemoryGovernorPolicy { get => _options.MemoryGovernorPolicy; set => _options.MemoryGovernorPolicy = value; }
+    public bool AdaptiveExecutionEnabled
+    {
+        get => _options.AdaptiveExecutionEnabled;
+        set
+        {
+            _options.AdaptiveExecutionEnabled = value;
+            if (value) EnsureAdaptiveAdvisor();
+            else
+            {
+                if (_ownsAdaptiveAdvisor)
+                    _adaptiveAdvisor?.Dispose();
+                _adaptiveAdvisor = null;
+                _ownsAdaptiveAdvisor = false;
+            }
+        }
+    }
+    public AdaptiveAdvisor? AdaptiveAdvisor => _adaptiveAdvisor;
     public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
     public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
     public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
@@ -536,6 +557,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         // Configure the process-wide grant pool (shared across concurrent jobs). 0 = unbounded.
         MemoryGrantArbiter.Shared.TotalBudgetBytes = (long)DefaultThresholds.TotalMemoryGrantMB(config) * 1024 * 1024;
         MemoryGovernorPolicy = DefaultThresholds.MemoryGovernorPolicy(config);
+        _options.AdaptiveExecutionOptions = LoadAdaptiveOptions(config);
         TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
 
         _options.BatchSize = BatchSize;
@@ -564,6 +586,49 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         NoSaveSensitive = DefaultThresholds.NoSaveSensitive(config);
         NoSaveConnection = DefaultThresholds.NoSaveConnection(config);
         ConnectionEncryption = DefaultThresholds.ConnectionEncryption(config);
+        AdaptiveExecutionEnabled = _options.AdaptiveExecutionOptions.Enabled;
+    }
+
+    private static AdaptiveExecutionOptions LoadAdaptiveOptions(Microsoft.Extensions.Configuration.IConfiguration? config)
+    {
+        var options = new AdaptiveExecutionOptions();
+        if (config == null) return options;
+
+        var section = config.GetSection("Engine:Adaptive");
+        if (!section.Exists()) return options;
+
+        return options with
+        {
+            Enabled = section.GetValue("Enabled", options.Enabled),
+            SampleMs = section.GetValue("SampleMs", options.SampleMs),
+            CpuHigh = section.GetValue("CpuHigh", options.CpuHigh),
+            CpuLow = section.GetValue("CpuLow", options.CpuLow),
+            MemoryHigh = section.GetValue("MemoryHigh", options.MemoryHigh),
+            MemoryLow = section.GetValue("MemoryLow", options.MemoryLow),
+            GrantHigh = section.GetValue("GrantHigh", options.GrantHigh),
+            GrantLow = section.GetValue("GrantLow", options.GrantLow),
+            MinBatchRows = section.GetValue("MinBatchRows", options.MinBatchRows),
+            MaxPipelineDepth = section.GetValue("MaxPipelineDepth", options.MaxPipelineDepth),
+            MinOperatorGrantRequestMB = section.GetValue("MinOperatorGrantRequestMB", options.MinOperatorGrantRequestMB)
+        };
+    }
+
+    private void EnsureAdaptiveAdvisor()
+    {
+        if (_adaptiveAdvisor != null) return;
+
+        _adaptiveController ??= new AdaptiveExecutionController(
+            _options.AdaptiveExecutionOptions,
+            MemoryArbiter.TotalBudgetBytes,
+            Environment.ProcessorCount);
+
+        _adaptiveAdvisor = _adaptiveController.CreateAdvisor(new AdaptiveExecutionCeilings(
+            BatchRows: BatchSize,
+            WorkerDegree: MaxParallelDegree,
+            PipelineDepth: _options.AdaptiveExecutionOptions.MaxPipelineDepth,
+            SpillWriteConcurrency: 1,
+            OperatorGrantRequestMB: OperatorMemoryGrantMB));
+        _ownsAdaptiveAdvisor = true;
     }
 
     private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
@@ -1373,6 +1438,10 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         foreach (var src in _localSources.Values)
             try { await src.DisposeAsync(); } catch { }
         _localSources.Clear();
+        if (_ownsAdaptiveAdvisor)
+            _adaptiveAdvisor?.Dispose();
+        _adaptiveAdvisor = null;
+        _ownsAdaptiveAdvisor = false;
     }
 
 
@@ -1399,8 +1468,13 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             MaxGroupingSets = MaxGroupingSets,
             ExecutionPolicy = ExecutionPolicy,
             ExecutionIdentity = ExecutionIdentity,
-            MemoryArbiter = MemoryArbiter
+            MemoryArbiter = MemoryArbiter,
+            _adaptiveController = _adaptiveController,
+            _adaptiveAdvisor = _adaptiveAdvisor,
+            _ownsAdaptiveAdvisor = false
         };
+        fork._options.AdaptiveExecutionEnabled = AdaptiveExecutionEnabled;
+        fork._options.AdaptiveExecutionOptions = _options.AdaptiveExecutionOptions;
 
         fork.Telemetry.IsProfiling = Telemetry.IsProfiling;
 

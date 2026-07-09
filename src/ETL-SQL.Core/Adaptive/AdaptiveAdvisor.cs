@@ -26,7 +26,7 @@ public sealed class AdaptiveAdvisor : IDisposable
     public AdaptiveExecutionCeilings ConfiguredCeilings { get; }
     public AdaptiveSetpoints Current { get; private set; }
 
-    internal AdaptiveSetpoints Snapshot()
+    public AdaptiveSetpoints Snapshot()
     {
         lock (_gate)
             return Current;

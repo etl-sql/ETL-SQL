@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Adaptive;
+using ETL_SQL.Core.Common;
 using Xunit;
 
 namespace ETL_SQL.Tests.Engine;
@@ -158,5 +159,40 @@ public class AdaptiveExecutionControllerTests
 
         Assert.True(first.Snapshot().WorkerDegree > 4);
         Assert.Equal(1, controller.ActiveAdvisorCount);
+    }
+
+    [Fact]
+    public void ExecutionContextEffectiveSetpoints_DefaultToStaticValuesWhenDisabled()
+    {
+        IExecutionContext context = new SystemExecutionContext
+        {
+            BatchSize = 40000,
+            MaxParallelDegree = 8,
+            OperatorMemoryGrantMB = 1024,
+            AdaptiveExecutionEnabled = false
+        };
+
+        Assert.Equal(40000, context.EffectiveBatchSize);
+        Assert.Equal(8, context.EffectiveMaxParallelDegree);
+        Assert.Equal(1024, context.EffectiveOperatorMemoryGrantMB);
+    }
+
+    [Fact]
+    public void ExecutionContextEffectiveSetpoints_UseAdvisorWhenEnabled()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+        IExecutionContext context = new SystemExecutionContext
+        {
+            BatchSize = 40000,
+            MaxParallelDegree = 8,
+            OperatorMemoryGrantMB = 1024,
+            AdaptiveExecutionEnabled = true,
+            AdaptiveAdvisor = advisor
+        };
+
+        Assert.Equal(10000, context.EffectiveBatchSize);
+        Assert.Equal(4, context.EffectiveMaxParallelDegree);
+        Assert.Equal(256, context.EffectiveOperatorMemoryGrantMB);
     }
 }
