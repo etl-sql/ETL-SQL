@@ -170,7 +170,8 @@ may still produce reports, but pre-release failure gates require a class.
    warning/failure bands, and Markdown output. Keep missing-baseline behavior as warning-only.
    *(Implemented for schema v1 flat metrics and schema v2 metric objects.)*
 3. **Slice C — repeated samples.** Add `-Samples` to `Test-ScaleCertification.ps1` and teach the
-   parser to aggregate samples by scenario.
+   parser to aggregate samples by scenario. *(Implemented: runner-level repeated samples, median/max
+   summary fields, distribution fields, raw sample metrics, and sample-count comparator warnings.)*
 4. **Slice D — pre-release integration.** Update `Test-PreRelease.ps1` so smoke/standard lanes
    enforce the new policy and record warnings in `release-validation/latest/state.json`.
 

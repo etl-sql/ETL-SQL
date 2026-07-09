@@ -14,7 +14,10 @@ param(
     [string]$OutDir = './certification-results',
 
     [ValidateSet('Core', 'All')]
-    [string]$Matrix = 'Core'
+    [string]$Matrix = 'Core',
+
+    [ValidateRange(1, 20)]
+    [int]$Samples = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,8 +124,10 @@ foreach ($scenario in $scenarioNames) {
         try {
             $existing = Get-Content $existingReport -Raw | ConvertFrom-Json
             $existingMetrics = @($existing.scenarios)
+            $existingSamples = if ($existingMetrics.Count -eq 1 -and $existingMetrics[0].samples) { [int]$existingMetrics[0].samples } else { 1 }
             if ($existing.testsPassed -and $existingMetrics.Count -eq 1 -and
-                [long]$existingMetrics[0].rowCount -eq $Rows) {
+                [long]$existingMetrics[0].rowCount -eq $Rows -and
+                $existingSamples -ge $Samples) {
                 Write-Host "[$scenario] Reusing completed isolated result." -ForegroundColor DarkGray
                 if ($null -eq $hardware) { $hardware = $existing.hardware }
                 if ($null -eq $commit) { $commit = $existing.commit }
@@ -141,6 +146,7 @@ foreach ($scenario in $scenarioNames) {
         '-Scenario', $scenario,
         '-RowCountScale', $scale.ToString([Globalization.CultureInfo]::InvariantCulture),
         '-OutDir', $scenarioOut,
+        '-Samples', $Samples,
         '-SkipBuild'
     )
     $process = Start-Process -FilePath $pwsh -ArgumentList $arguments -Wait -PassThru -NoNewWindow
@@ -170,6 +176,7 @@ $config = [ordered]@{
     tier = "Baseline$($label.ToUpperInvariant())"
     targetRowsPerScenario = $Rows
     matrix = $Matrix
+    samples = $Samples
     processIsolation = 'one Release test host per scenario'
     scenarios = @($scenarioNames)
 }
@@ -188,6 +195,7 @@ $report = [ordered]@{
     tier = "Baseline$($label.ToUpperInvariant())"
     targetRowsPerScenario = $Rows
     matrix = $Matrix
+    samples = $Samples
     processIsolation = 'one Release test host per scenario'
     elapsedMs = [long]((Get-Date) - $startedAt).TotalMilliseconds
     testsPassed = (@($allMetrics | Where-Object { -not $_.passed }).Count -eq 0)
@@ -206,18 +214,18 @@ $report | ConvertTo-Json -Depth 10 | Set-Content $jsonPath -Encoding UTF8
 $md = @(
     "# ETL-SQL Isolated $($label.ToUpperInvariant()) Baseline",
     "",
-    "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Matrix: **$Matrix** | Process isolation: **one Release test host per scenario**",
+    "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') | Matrix: **$Matrix** | Samples: **$Samples** | Process isolation: **one Release test host per scenario**",
     "",
     "Commit: ``$($commit.sha)`` ($($commit.branch)); dirty: **$($commit.isDirty)**  ",
     "Source fingerprint: ``$sourceFingerprint``  ",
     "Config fingerprint: ``$configFingerprint``",
     "",
-    "| Scenario | Rows | Rows/s | Elapsed | Peak WS MB | Private MB | Heap MB | Allocated MB | GC Pause ms | Spill Write | Pass |",
-    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
+    "| Scenario | Samples | Rows | Rows/s | Elapsed | Peak WS MB | Private MB | Heap MB | Allocated MB | GC Pause ms | Spill Write | Pass |",
+    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
 )
 foreach ($metric in $allMetrics) {
     $pass = if ($metric.passed) { 'OK' } else { 'FAIL' }
-    $md += "| $($metric.scenario) | $($metric.rowCount) | $($metric.rowsPerSecond) | $($metric.elapsedMs) | $($metric.peakProcessWorkingSetMB) | $($metric.peakPrivateBytesMB) | $($metric.peakManagedHeapMB) | $($metric.allocatedMB) | $($metric.gcPauseMs) | $($metric.spillWriteBytes) | $pass |"
+    $md += "| $($metric.scenario) | $($metric.samples) | $($metric.rowCount) | $($metric.rowsPerSecond) | $($metric.elapsedMs) | $($metric.peakProcessWorkingSetMB) | $($metric.peakPrivateBytesMB) | $($metric.peakManagedHeapMB) | $($metric.allocatedMB) | $($metric.gcPauseMs) | $($metric.spillWriteBytes) | $pass |"
 }
 $mdPath = Join-Path $OutDir "baseline-$label.md"
 $md | Set-Content $mdPath -Encoding UTF8

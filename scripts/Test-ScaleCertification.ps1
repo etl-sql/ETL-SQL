@@ -25,6 +25,10 @@
 .PARAMETER Scenario
     Optional named scenario to run in isolation. Intended for reproducible baseline capture.
 
+.PARAMETER Samples
+    Number of repeated samples to capture. When omitted, Smoke and operator-style lanes use one
+    sample; Standard uses three samples.
+
 .EXAMPLE
     .\scripts\Test-ScaleCertification.ps1
     .\scripts\Test-ScaleCertification.ps1 -Tier All -RowCountScale 10
@@ -42,6 +46,9 @@ param(
         'ReportDatasetSnapshotReload', 'CubeGroupingSets', 'ScalarSubqueryCache',
         'SpillCleanupSuccess', 'SpillCleanupFailure')]
     [string]$Scenario = '',
+
+    [ValidateRange(0, 20)]
+    [int]$Samples = 0,
 
     [switch]$SkipBuild
 )
@@ -104,6 +111,141 @@ function Get-SourceMetadata {
     }
 }
 
+function Get-Median {
+    param([double[]]$Values)
+
+    $sorted = @($Values | Sort-Object)
+    if ($sorted.Count -eq 0) { return $null }
+    $middle = [int][math]::Floor($sorted.Count / 2)
+    if (($sorted.Count % 2) -eq 1) { return $sorted[$middle] }
+    return ($sorted[$middle - 1] + $sorted[$middle]) / 2.0
+}
+
+function Get-Percentile {
+    param(
+        [double[]]$Values,
+        [double]$Percentile
+    )
+
+    $sorted = @($Values | Sort-Object)
+    if ($sorted.Count -eq 0) { return $null }
+    if ($sorted.Count -eq 1) { return $sorted[0] }
+
+    $rank = ($Percentile / 100.0) * ($sorted.Count - 1)
+    $lower = [int][math]::Floor($rank)
+    $upper = [int][math]::Ceiling($rank)
+    if ($lower -eq $upper) { return $sorted[$lower] }
+
+    $weight = $rank - $lower
+    return ($sorted[$lower] * (1.0 - $weight)) + ($sorted[$upper] * $weight)
+}
+
+function Get-NumericMetric {
+    param(
+        [object]$Metric,
+        [string]$Name
+    )
+
+    $property = $Metric.PSObject.Properties[$Name]
+    if ($null -eq $property -or $null -eq $property.Value) { return $null }
+
+    try {
+        return [double]::Parse($property.Value.ToString(), [Globalization.CultureInfo]::InvariantCulture)
+    } catch {
+        return $null
+    }
+}
+
+function Get-Distribution {
+    param([double[]]$Values)
+
+    $items = @($Values)
+    if ($items.Count -eq 0) { return $null }
+
+    return [ordered]@{
+        samples = $items.Count
+        median = [math]::Round((Get-Median $items), 3)
+        p05 = [math]::Round((Get-Percentile $items 5), 3)
+        p95 = [math]::Round((Get-Percentile $items 95), 3)
+        min = [math]::Round(($items | Measure-Object -Minimum).Minimum, 3)
+        max = [math]::Round(($items | Measure-Object -Maximum).Maximum, 3)
+    }
+}
+
+function Set-AggregatedMetric {
+    param(
+        [System.Collections.IDictionary]$Target,
+        [object[]]$SampleMetrics,
+        [string]$Name,
+        [ValidateSet('Median', 'Max')]
+        [string]$Summary = 'Median'
+    )
+
+    $values = @($SampleMetrics | ForEach-Object { Get-NumericMetric $_ $Name } | Where-Object { $null -ne $_ })
+    if ($values.Count -eq 0) { return }
+
+    $distribution = Get-Distribution $values
+    if ($Summary -eq 'Max') {
+        $Target[$Name] = $distribution.max
+    } else {
+        $Target[$Name] = $distribution.median
+    }
+    $Target["${Name}Distribution"] = $distribution
+}
+
+function Get-CertMetricKey {
+    param([object]$Metric)
+
+    return "{0}|{1}" -f $Metric.scenario, $Metric.rowCount
+}
+
+function Merge-CertSamples {
+    param([object[]]$SampleMetrics)
+
+    $groups = @{}
+    foreach ($metric in @($SampleMetrics)) {
+        $key = Get-CertMetricKey $metric
+        if (-not $groups.ContainsKey($key)) { $groups[$key] = @() }
+        $groups[$key] += $metric
+    }
+
+    $merged = @()
+    foreach ($key in @($groups.Keys | Sort-Object)) {
+        $items = @($groups[$key])
+        $first = $items[0]
+        $metric = [ordered]@{}
+        foreach ($property in $first.PSObject.Properties) {
+            $metric[$property.Name] = $property.Value
+        }
+
+        $metric['samples'] = $items.Count
+        $metric['sampleMetrics'] = @($items)
+        $metric['passed'] = (@($items | Where-Object { -not $_.passed }).Count -eq 0)
+
+        $resultRows = @($items | ForEach-Object { $_.resultRows } | Where-Object { $null -ne $_ } | Select-Object -Unique)
+        if ($resultRows.Count -eq 1) { $metric['resultRows'] = $resultRows[0] }
+        if ($resultRows.Count -gt 1) { $metric['resultRows'] = $resultRows -join ','; $metric['passed'] = $false }
+
+        $checksums = @($items | ForEach-Object { $_.checksum } | Where-Object { $null -ne $_ } | Select-Object -Unique)
+        if ($checksums.Count -eq 1) { $metric['checksum'] = $checksums[0] }
+        if ($checksums.Count -gt 1) { $metric['checksum'] = $checksums -join ','; $metric['passed'] = $false }
+
+        Set-AggregatedMetric $metric $items 'elapsedMs' 'Median'
+        Set-AggregatedMetric $metric $items 'rowsPerSecond' 'Median'
+        Set-AggregatedMetric $metric $items 'spillWriteBytes' 'Median'
+        Set-AggregatedMetric $metric $items 'peakProcessWorkingSetMB' 'Max'
+        Set-AggregatedMetric $metric $items 'peakPrivateBytesMB' 'Max'
+        Set-AggregatedMetric $metric $items 'peakManagedHeapMB' 'Max'
+        Set-AggregatedMetric $metric $items 'allocatedMB' 'Median'
+        Set-AggregatedMetric $metric $items 'cpuUtilizationPercent' 'Median'
+        Set-AggregatedMetric $metric $items 'gcPauseMs' 'Median'
+
+        $merged += [pscustomobject]$metric
+    }
+
+    return @($merged)
+}
+
 if ($RowCountScale -le 0) {
     $RowCountScale = switch ($Tier) {
         'Standard' { 10.0 }
@@ -113,9 +255,13 @@ if ($RowCountScale -le 0) {
     }
 }
 
+if ($Samples -le 0) {
+    $Samples = if ($Tier -eq 'Standard' -and -not $Scenario) { 3 } else { 1 }
+}
+
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL Scale Certification Runner" -ForegroundColor Cyan
-Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x  |  Scenario: $(if ($Scenario) { $Scenario } else { 'all' })" -ForegroundColor Gray
+Write-Host " Tier: $Tier  |  Row scale: ${RowCountScale}x  |  Samples: $Samples  |  Scenario: $(if ($Scenario) { $Scenario } else { 'all' })" -ForegroundColor Gray
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -179,6 +325,7 @@ $config = [ordered]@{
     tier = $Tier
     rowCountScale = $RowCountScale
     rowCountScaleExplicit = $rowCountScaleWasSpecified
+    samples = $Samples
     scenario = if ($Scenario) { $Scenario } else { $null }
     filter = $filterExpr
     buildConfiguration = 'Release'
@@ -191,6 +338,7 @@ $sourceMetadata = Get-SourceMetadata $config
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $rawLog = Join-Path $OutDir 'raw-output.txt'
+Remove-Item $rawLog -ErrorAction SilentlyContinue
 
 Write-Host "Running certification tests (filter: $filterExpr)..." -ForegroundColor Yellow
 $env:CERT_ROW_SCALE = $RowCountScale
@@ -211,99 +359,136 @@ if ($Tier -eq 'Standard') {
     $env:CERT_PROVIDER_ROW_SCALE = if ($rowCountScaleWasSpecified) { $RowCountScale } else { 1.0 }
 }
 
-# Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
-# inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
 $spillRoot = Join-Path ([System.IO.Path]::GetTempPath()) 'ETL-SQL-Spill'
-if (Test-Path $spillRoot) {
-    try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
-}
-
-# Live progress side-channel (the test writes the current scenario here immediately, since
-# ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
-# host runs with a different working directory than this script.
-$progressFile = [System.IO.Path]::GetFullPath((Join-Path $OutDir 'progress.txt'))
-Remove-Item $progressFile -ErrorAction SilentlyContinue
-$env:CERT_PROGRESS_FILE = $progressFile
-
-$errLog = "$rawLog.err"
 $testProject = Join-Path $RepoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
 $dotnetArgs = @('test', $testProject, '--filter', $filterExpr,
     '--logger', 'console;verbosity=detailed', '--no-build', '-c', 'Release')
 
-Write-Host "Live status (full output -> $rawLog):" -ForegroundColor Gray
-$proc = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
-    -RedirectStandardOutput $rawLog -RedirectStandardError $errLog -NoNewWindow -PassThru
-$runStart = Get-Date
+$allSampleMetrics = @()
+$sampleReports = @()
+$testExitCode = 0
 
-while (-not $proc.HasExited) {
-    Start-Sleep -Seconds 4
+for ($sampleIndex = 1; $sampleIndex -le $Samples; $sampleIndex++) {
+    $sampleRawLog = if ($Samples -eq 1) { $rawLog } else { Join-Path $OutDir ("raw-output-sample{0}.txt" -f $sampleIndex) }
+    $errLog = "$sampleRawLog.err"
+    Remove-Item $sampleRawLog -ErrorAction SilentlyContinue
+    Remove-Item $errLog -ErrorAction SilentlyContinue
 
-    try {
-        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-        $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-    } catch {
-        $freeGB = $null
-    }
-
-    $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
-        Sort-Object WorkingSet64 -Descending | Select-Object -First 1
-    $procGB = if ($tp) { [math]::Round($tp.WorkingSet64 / 1GB, 2) } else { 0 }
-
-    $spillGB = 0
+    # Clean orphaned non-persistent spill from any prior killed run so it doesn't bloat disk or
+    # inflate the live spill gauge. (Killed runs don't clean their own %TEMP%\ETL-SQL-Spill\<guid>.)
     if (Test-Path $spillRoot) {
-        $spillGB = [math]::Round((((Get-ChildItem $spillRoot -Recurse -File -ErrorAction SilentlyContinue) |
-            Measure-Object Length -Sum).Sum / 1GB), 2)
+        try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
     }
 
-    $idx = 0; $tot = 0; $scn = ''
-    if (Test-Path $progressFile) {
-        $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
-        if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
-    }
+    # Live progress side-channel (the test writes the current scenario here immediately, since
+    # ITestOutputHelper buffers until the whole [Fact] finishes). Must be an ABSOLUTE path — the test
+    # host runs with a different working directory than this script.
+    $progressFile = [System.IO.Path]::GetFullPath((Join-Path $OutDir ("progress-sample{0}.txt" -f $sampleIndex)))
+    Remove-Item $progressFile -ErrorAction SilentlyContinue
+    $env:CERT_PROGRESS_FILE = $progressFile
 
-    # Live engine/test activity: the side-channel only updates at scenario boundaries, so within a
-    # long-running scenario (e.g. 50M data generation or a spilling operator) this tail shows what's
-    # actually happening — and keeps the HUD informative even if the side-channel never updates.
-    $act = ''
-    if (Test-Path $rawLog) {
-        $last = Get-Content $rawLog -Tail 6 -ErrorAction SilentlyContinue |
-            Where-Object { $_ -match '\S' } | Select-Object -Last 1
-        if ($last) {
-            # Strip ANSI escape sequences, Spectre.Console markup tags, and non-printable bytes that
-            # leak into the redirected (non-TTY) output, then collapse whitespace and truncate.
-            $act = ($last -replace '\x1b\[[0-9;]*[A-Za-z]', '' `
-                          -replace '\[[a-zA-Z/][a-zA-Z0-9 ]*\]', '' `
-                          -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ').Trim()
-            if ($act.Length -gt 46) { $act = $act.Substring(0, 46) }
+    Write-Host "Live status sample $sampleIndex/$Samples (full output -> $sampleRawLog):" -ForegroundColor Gray
+    $proc = Start-Process -FilePath 'dotnet' -ArgumentList $dotnetArgs `
+        -RedirectStandardOutput $sampleRawLog -RedirectStandardError $errLog -NoNewWindow -PassThru
+    $runStart = Get-Date
+
+    while (-not $proc.HasExited) {
+        Start-Sleep -Seconds 4
+
+        try {
+            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+            $freeGB = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
+        } catch {
+            $freeGB = $null
         }
+
+        $tp = Get-Process -Name testhost -ErrorAction SilentlyContinue |
+            Sort-Object WorkingSet64 -Descending | Select-Object -First 1
+        $procGB = if ($tp) { [math]::Round($tp.WorkingSet64 / 1GB, 2) } else { 0 }
+
+        $spillGB = 0
+        if (Test-Path $spillRoot) {
+            $spillGB = [math]::Round((((Get-ChildItem $spillRoot -Recurse -File -ErrorAction SilentlyContinue) |
+                Measure-Object Length -Sum).Sum / 1GB), 2)
+        }
+
+        $idx = 0; $tot = 0; $scn = ''
+        if (Test-Path $progressFile) {
+            $parts = ((Get-Content $progressFile -Raw -ErrorAction SilentlyContinue) -split '\|')
+            if ($parts.Count -ge 4) { $idx = [int]$parts[1]; $tot = [int]$parts[2]; $scn = $parts[3] }
+        }
+
+        # Live engine/test activity: the side-channel only updates at scenario boundaries, so within a
+        # long-running scenario (e.g. 50M data generation or a spilling operator) this tail shows what's
+        # actually happening — and keeps the HUD informative even if the side-channel never updates.
+        $act = ''
+        if (Test-Path $sampleRawLog) {
+            $last = Get-Content $sampleRawLog -Tail 6 -ErrorAction SilentlyContinue |
+                Where-Object { $_ -match '\S' } | Select-Object -Last 1
+            if ($last) {
+                # Strip ANSI escape sequences, Spectre.Console markup tags, and non-printable bytes that
+                # leak into the redirected (non-TTY) output, then collapse whitespace and truncate.
+                $act = ($last -replace '\x1b\[[0-9;]*[A-Za-z]', '' `
+                              -replace '\[[a-zA-Z/][a-zA-Z0-9 ]*\]', '' `
+                              -replace '[^\x20-\x7E]', ' ' -replace '\s+', ' ').Trim()
+                if ($act.Length -gt 46) { $act = $act.Substring(0, 46) }
+            }
+        }
+
+        $elapsed = (Get-Date) - $runStart
+        $eta = '~--'
+        if ($idx -gt 1 -and $tot -gt 0) {
+            $perScn = $elapsed.TotalSeconds / ($idx - 1)
+            $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
+        }
+
+        # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
+        # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
+        $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
+        $freeDisplay = if ($null -eq $freeGB) { 'n/a' } else { "$freeGB" }
+        $warn = if ($null -ne $freeGB -and $freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
+        $line = ('[{0:hh\:mm\:ss}] sample {1}/{2} {3,-26} | RAM {4}GB free {5}GB | spill {6}GB | ETA {7} | {8}{9}' `
+            -f $elapsed, $sampleIndex, $Samples, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
+        Write-Host ("`r" + $line.PadRight(170)) -NoNewline
+    }
+    $proc.WaitForExit()
+    Write-Host ""  # finish the in-place status line
+    if (Test-Path $errLog) { Get-Content $errLog | Add-Content $sampleRawLog }
+
+    if ($Samples -gt 1) {
+        "===== SAMPLE $sampleIndex/$Samples =====" | Add-Content $rawLog
+        Get-Content $sampleRawLog | Add-Content $rawLog
     }
 
-    $elapsed = (Get-Date) - $runStart
-    $eta = '~--'
-    if ($idx -gt 1 -and $tot -gt 0) {
-        $perScn = $elapsed.TotalSeconds / ($idx - 1)
-        $eta = '~' + ('{0:hh\:mm\:ss}' -f [TimeSpan]::FromSeconds($perScn * ($tot - ($idx - 1))))
+    if ($proc.ExitCode -ne 0 -and $testExitCode -eq 0) { $testExitCode = $proc.ExitCode }
+
+    $sampleMetrics = Get-Content $sampleRawLog |
+        Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
+        ForEach-Object {
+            $json = ($_ -replace '^.*CERT_METRIC:', '').Trim()
+            try {
+                $metric = $json | ConvertFrom-Json
+                $metric | Add-Member -NotePropertyName sampleIndex -NotePropertyValue $sampleIndex -Force
+                $metric
+            } catch {
+                $null
+            }
+        } |
+        Where-Object { $_ -ne $null }
+
+    $allSampleMetrics += @($sampleMetrics)
+    $sampleReports += [ordered]@{
+        sample = $sampleIndex
+        exitCode = $proc.ExitCode
+        rawLog = $sampleRawLog
+        metrics = @($sampleMetrics)
     }
 
-    # Show the scenario X/N once the side-channel reports it; until then show "init" (build/discovery
-    # or first-scenario data generation) so a slow start never reads as a stuck "0/0".
-    $phase = if ($idx -gt 0) { '{0}/{1} {2}' -f $idx, $tot, $scn } else { 'init' }
-    $freeDisplay = if ($null -eq $freeGB) { 'n/a' } else { "$freeGB" }
-    $warn = if ($null -ne $freeGB -and $freeGB -lt 1.0) { ' !!LOW-RAM' } else { '' }
-    $line = ('[{0:hh\:mm\:ss}] {1,-26} | RAM {2}GB free {3}GB | spill {4}GB | ETA {5} | {6}{7}' `
-        -f $elapsed, $phase, $procGB, $freeDisplay, $spillGB, $eta, $act, $warn)
-    Write-Host ("`r" + $line.PadRight(150)) -NoNewline
-}
-$proc.WaitForExit()
-Write-Host ""  # finish the in-place status line
-if (Test-Path $errLog) { Get-Content $errLog | Add-Content $rawLog }
-
-$testExitCode = $proc.ExitCode
-
-# The certification evaluator is explicitly non-persistent. A force-killed test host cannot run its
-# disposer, so the runner owns final cleanup after the child exits as a second line of defense.
-if (Test-Path $spillRoot) {
-    try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+    # The certification evaluator is explicitly non-persistent. A force-killed test host cannot run its
+    # disposer, so the runner owns final cleanup after the child exits as a second line of defense.
+    if (Test-Path $spillRoot) {
+        try { Remove-Item $spillRoot -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+    }
 }
 
 try { $computer = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop } catch { $computer = $null }
@@ -330,14 +515,8 @@ $hardware = [ordered]@{
     memoryBoundMB = $config.memoryBoundMB
 }
 
-# ── 3. Parse CERT_METRIC lines ────────────────────────────────────────────────
-$metrics = Get-Content $rawLog |
-    Where-Object { $_ -match 'CERT_METRIC:(.+)$' } |
-    ForEach-Object {
-        $json = ($_ -replace '^.*CERT_METRIC:', '').Trim()
-        try { $json | ConvertFrom-Json } catch { $null }
-    } |
-    Where-Object { $_ -ne $null }
+# ── 3. Aggregate CERT_METRIC samples ──────────────────────────────────────────
+$metrics = Merge-CertSamples @($allSampleMetrics)
 
 $hardware.serverGcEnabled = if ($metrics.Count -gt 0) { [bool]$metrics[0].serverGcEnabled } else { $null }
 
@@ -348,6 +527,7 @@ $report = [ordered]@{
     capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     tier = $Tier
     rowCountScale = $RowCountScale
+    samples = $Samples
     scenario = if ($Scenario) { $Scenario } else { $null }
     testsPassed = ($testExitCode -eq 0)
     commit = $sourceMetadata.commit
@@ -356,6 +536,7 @@ $report = [ordered]@{
     host = $hardware
     hardware = $hardware
     config = $config
+    sampleReports = @($sampleReports)
     scenarios = @($metrics)
 }
 
@@ -367,21 +548,21 @@ Write-Host "`nJSON report: $jsonPath" -ForegroundColor Green
 $mdLines = @(
     "# ETL-SQL Scale Certification Report",
     "",
-    "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  |  Tier: **$Tier**  |  Row scale: **${RowCountScale}x**",
+    "Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  |  Tier: **$Tier**  |  Row scale: **${RowCountScale}x**  |  Samples: **$Samples**",
     "",
     "## Results",
     "",
-    "| Scenario | Rows | Rows/s | Elapsed (ms) | Spill Write | Peak WS (MB) | Private (MB) | Heap (MB) | Allocated (MB) | CPU % | GC Pause (ms) | Bound (MB) | Pass |",
-    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
+    "| Scenario | Samples | Rows | Rows/s | Elapsed (ms) | Spill Write | Peak WS (MB) | Private (MB) | Heap (MB) | Allocated (MB) | CPU % | GC Pause (ms) | Bound (MB) | Pass |",
+    "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |"
 )
 
 foreach ($m in $metrics) {
     $pass = if ($m.passed) { 'OK' } else { 'FAIL' }
-    $mdLines += "| $($m.scenario) | $($m.rowCount) | $($m.rowsPerSecond) | $($m.elapsedMs) | $($m.spillWriteBytes) | $($m.peakProcessWorkingSetMB) | $($m.peakPrivateBytesMB) | $($m.peakManagedHeapMB) | $($m.allocatedMB) | $($m.cpuUtilizationPercent) | $($m.gcPauseMs) | $($m.memoryBoundMB) | $pass |"
+    $mdLines += "| $($m.scenario) | $($m.samples) | $($m.rowCount) | $($m.rowsPerSecond) | $($m.elapsedMs) | $($m.spillWriteBytes) | $($m.peakProcessWorkingSetMB) | $($m.peakPrivateBytesMB) | $($m.peakManagedHeapMB) | $($m.allocatedMB) | $($m.cpuUtilizationPercent) | $($m.gcPauseMs) | $($m.memoryBoundMB) | $pass |"
 }
 
 if ($metrics.Count -eq 0) {
-    $mdLines += "| _No metrics collected — check test output_ | | | | | | | | | | | | |"
+    $mdLines += "| _No metrics collected — check test output_ | | | | | | | | | | | | | |"
 }
 
 $mdLines += ""

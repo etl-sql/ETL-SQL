@@ -189,6 +189,19 @@ function Get-ScenarioBands {
     }
 }
 
+function Get-MinSamples {
+    param([object]$BaselineScenario)
+
+    $bands = Get-PropValue $BaselineScenario @('bands')
+    $minSamples = Convert-ToDoubleOrNull (Get-PropValue $bands @('minSamples'))
+    if ($null -ne $minSamples) { return [int]$minSamples }
+
+    $scenarioMinSamples = Convert-ToDoubleOrNull (Get-PropValue $BaselineScenario @('minSamples'))
+    if ($null -ne $scenarioMinSamples) { return [int]$scenarioMinSamples }
+
+    return $null
+}
+
 function Add-Issue {
     param(
         [string]$Level,
@@ -434,6 +447,12 @@ foreach ($scenario in @($new.scenarios)) {
     }
 
     $bands = Get-ScenarioBands $baselineScenario $name
+    $minSamples = Get-MinSamples $baselineScenario
+    $currentSamples = Convert-ToDoubleOrNull (Get-PropValue $scenario @('samples'))
+    if ($null -ne $minSamples -and ($null -eq $currentSamples -or [int]$currentSamples -lt $minSamples)) {
+        $currentSampleText = if ($null -eq $currentSamples) { 'missing' } else { [string][int]$currentSamples }
+        Add-Issue 'WARN' $name 'SAMPLE_COUNT' $minSamples $currentSampleText $null 'Current run has fewer samples than the baseline policy requests.'
+    }
 
     $baselineElapsed = Get-MetricValue $baselineScenario @('elapsedMs') @('median', 'p50', 'value')
     $currentElapsed = Get-MetricValue $scenario @('elapsedMs') @('median', 'p50', 'value')
