@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Analysis.Explain;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -27,6 +28,9 @@ public class ExplainStatementHandler : IStatementHandler
             columns.Add("Actual Time (ms)");
             columns.Add("Spill Bytes");
             columns.Add("Spill Count");
+            columns.Add("Plan Decisions");
+            columns.Add("Plan Fallbacks");
+            columns.Add("Plan Decision Summary");
         }
         plan.SetColumns(columns.ToArray());
 
@@ -79,6 +83,9 @@ public class ExplainStatementHandler : IStatementHandler
                 planRow["Actual Time (ms)"] = "--";
                 planRow["Spill Bytes"] = 0L;
                 planRow["Spill Count"] = 0;
+                planRow["Plan Decisions"] = "--";
+                planRow["Plan Fallbacks"] = "--";
+                planRow["Plan Decision Summary"] = "--";
             }
 
             // Assign total elapsed time and row count to the last plan row.
@@ -87,6 +94,10 @@ public class ExplainStatementHandler : IStatementHandler
             {
                 lastRow["Actual Rows"] = actualRows;
                 lastRow["Actual Time (ms)"] = actualTime;
+                var planDecisions = context.Telemetry.PlanDecisions;
+                lastRow["Plan Decisions"] = planDecisions.Count;
+                lastRow["Plan Fallbacks"] = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+                lastRow["Plan Decision Summary"] = PlanDecisionSummary.FormatFallbackSummary(planDecisions);
             }
 
             // Assign spill stats to the Sort row; fall back to last row if no Sort present.

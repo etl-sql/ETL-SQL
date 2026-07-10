@@ -57,7 +57,7 @@ public class ShowProfileStatementHandler : IStatementHandler
         var planFallbacks = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
         var planRejected = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
         var planDegraded = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
-        var planFallbackSummary = BuildFallbackSummary(planDecisions);
+        var planFallbackSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions);
 
         foreach (var m in context.Telemetry.ProfileMetrics)
         {
@@ -100,17 +100,5 @@ public class ShowProfileStatementHandler : IStatementHandler
         }
 
         await Task.CompletedTask;
-    }
-
-    private static string BuildFallbackSummary(System.Collections.Generic.IReadOnlyList<PlanDecision> decisions)
-    {
-        var summary = decisions
-            .Where(d => d.Outcome is PlanDecisionOutcome.Fallback or PlanDecisionOutcome.Rejected or PlanDecisionOutcome.Degraded)
-            .GroupBy(d => $"{d.CandidatePath}:{d.ReasonCode}")
-            .OrderByDescending(group => group.Count())
-            .ThenBy(group => group.Key, StringComparer.Ordinal)
-            .Select(group => $"{group.Key}={group.Count()}");
-        var text = string.Join("; ", summary);
-        return string.IsNullOrEmpty(text) ? "--" : text;
     }
 }

@@ -150,7 +150,8 @@ the correctness baseline and the recovery path for unsupported shapes.
    streaming vs blocking, spill admission, and memory rejection.
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
    *(In progress: `SHOW PROFILE` includes plan-decision totals and grouped fallback summaries.
-   `EXPLAIN`, `EXPLAIN ANALYZE`, and certification reports remain open.)*
+   `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary columns after executing the
+   query. Static `EXPLAIN` and certification reports remain open.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
    frequency/cost across representative workloads.
 
