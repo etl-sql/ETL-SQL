@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -159,6 +159,31 @@ function Get-GateFScenarioManifests {
             nonGoals = @('new operator certification', 'provider-backed sources')
             resumeKeyFields = @('commit', 'rows', 'memoryGrantMB', 'tempBatchRows')
         }
+        externalSort = [ordered]@{
+            scenarioId = 'ExternalSort_MultiKey_1B'
+            operator = 'ExternalSort'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('Id BIGINT', 'SortKey INT', 'TieBreaker BIGINT', 'Payload BIGINT')
+                sortKeys = @('SortKey ASC', 'TieBreaker DESC')
+                randomSeed = 15041
+                skew = 'bounded duplicate sort keys'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'streaming ordered-output validator with row count, first/last key, checksum, and tie-breaker checks'
+            telemetryContract = @($commonTelemetry + @('sortRunCount', 'mergePassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('Top-N optimized plans', 'locale-specific collation', 'arbitrary expression sort keys', 'downstream operator certification')
+            resumeKeyFields = @('commit', 'rows', 'sortKeys', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
+        }
     }
 }
 
@@ -224,7 +249,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -386,6 +411,34 @@ try {
         }
     }
 
+    if ($Scenario -eq 'ExternalSort') {
+        # v0.15.0 Phase 4 candidate: external sort is intentionally opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'external-sort.json'
+        $resultKey = Join-Path $outRoot 'external-sort.key'
+        $sortChunkRows = 100000
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$sortChunkRows|$MinimumRowsPerSecond|ExternalSort"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_SORT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_SORT_CHUNK_ROWS = $sortChunkRows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_SORT_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'ExternalSort' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalSortMultiKeyCandidateStreamsAndValidatesOrder'
+            ) (Join-Path $outRoot 'external-sort.log') (Join-Path $outRoot 'external-sort.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'ExternalSort' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
         schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
@@ -415,6 +468,9 @@ try {
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($allocReport) { Get-Content $allocReport.FullName -Raw | ConvertFrom-Json } else { $null }
         }
+        externalSort = if (Test-Path (Join-Path $outRoot 'external-sort.json')) {
+            Get-Content (Join-Path $outRoot 'external-sort.json') -Raw | ConvertFrom-Json
+        } else { $null }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
@@ -429,5 +485,7 @@ finally {
     Remove-Item Env:GATE_F_CERTIFICATION,Env:GATE_F_ROWS,Env:GATE_F_BATCH_ROWS,Env:GATE_F_MEMORY_BOUND_MB,Env:GATE_F_MIN_ROWS_PER_SECOND,Env:GATE_F_OUTPUT `
         -ErrorAction SilentlyContinue
     Remove-Item Env:CERT_MEMORY_BOUND_MB,Env:CERT_MEMORY_GRANT_MB,Env:CERT_MIN_ROWS_PER_SECOND `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_EXTERNAL_SORT_ROWS,Env:GATE_F_SORT_CHUNK_ROWS,Env:GATE_F_EXTERNAL_SORT_OUTPUT `
         -ErrorAction SilentlyContinue
 }

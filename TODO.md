@@ -132,7 +132,10 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
   operator matrix and per-scenario contracts, including external sort and external equi-join
   admission, telemetry, success criteria, resume keys, and non-goals. `Test-GateF.ps1` now emits
   `scenarioManifests` and `admission` sections in future Gate F reports, and
-  `BillionRowOperatorManifestTests` validates the manifest contract.)*
+  `BillionRowOperatorManifestTests` validates the manifest contract. Slice B progress:
+  `Test-GateF.ps1 -Scenario ExternalSort` runs the explicit external-sort candidate with generated
+  rows, multi-key streaming order validation, resume/reuse keys, disk admission, and report output;
+  the matrix stays Candidate until a real 1B operator-run artifact passes.)*
 - [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.

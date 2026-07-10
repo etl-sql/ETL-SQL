@@ -197,7 +197,10 @@ not a v0.15.0 goal.
    external sort/join admission and success criteria, and future Gate F reports emit
    `scenarioManifests` plus `admission` sections.)*
 2. **Slice B — external sort 1B candidate.** Build generator, streaming order validator, resume
-   points, and admission preflight.
+   points, and admission preflight. *(In progress: `Test-GateF.ps1 -Scenario ExternalSort`
+   now runs an explicit candidate path with deterministic generated rows, multi-key sort,
+   streaming order validation, resume key, disk admission, and report evidence. It remains
+   Candidate until an operator-run artifact passes at 1B and the public matrix is updated.)*
 3. **Slice C — external equi-join 1B candidate.** Build two-source generator, result-count oracle,
    skew telemetry, and repartition metrics.
 4. **Slice D — publish matrix update.** Update `Docs/Large_Data_Certification.md` to advertise

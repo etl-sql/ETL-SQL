@@ -6,6 +6,7 @@ using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
@@ -108,6 +109,120 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
     }
 
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task ExternalSortMultiKeyCandidateStreamsAndValidatesOrder()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_EXTERNAL_SORT_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_EXTERNAL_SORT_ROWS or GATE_F_ROWS must be explicitly set for external sort certification.");
+
+        var chunkRows = ReadPositiveInt("GATE_F_SORT_CHUNK_ROWS", 100_000);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.ExternalSortChunkSize = chunkRows;
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalSortEngine(evaluator, logger);
+        var orderBy = new List<OrderByClause>
+        {
+            new(new IdentifierExpression("SortKey"), false),
+            new(new IdentifierExpression("TieBreaker"), true)
+        };
+
+        var stopwatch = Stopwatch.StartNew();
+        long count = 0;
+        long checksum = 0;
+        int? previousSortKey = null;
+        long? previousTieBreaker = null;
+        int firstSortKey = 0;
+        int lastSortKey = 0;
+
+        await foreach (var row in engine.SortStreamAsync(GenerateExternalSortRows(rowCount), orderBy))
+        {
+            var sortKey = Convert.ToInt32(row["SortKey"], CultureInfo.InvariantCulture);
+            var tieBreaker = Convert.ToInt64(row["TieBreaker"], CultureInfo.InvariantCulture);
+            var id = Convert.ToInt64(row["Id"], CultureInfo.InvariantCulture);
+
+            if (previousSortKey.HasValue)
+            {
+                Assert.True(previousSortKey.Value <= sortKey,
+                    $"External sort order regressed at row {count}: {previousSortKey.Value} > {sortKey}.");
+                if (previousSortKey.Value == sortKey)
+                {
+                    Assert.True(previousTieBreaker!.Value >= tieBreaker,
+                        $"External sort tie-breaker regressed at row {count}: {previousTieBreaker.Value} < {tieBreaker}.");
+                }
+            }
+            else
+            {
+                firstSortKey = sortKey;
+            }
+
+            previousSortKey = sortKey;
+            previousTieBreaker = tieBreaker;
+            lastSortKey = sortKey;
+            checksum = checked(checksum + id);
+            count++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(rowCount, count);
+        Assert.Equal(SumRange(1, rowCount), checksum);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "External sort candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.SortSpillCount > 0, "External sort candidate expected sort spill count evidence.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+
+        var metric = new
+        {
+            scenario = "ExternalSort_MultiKey_1B",
+            rowCount,
+            chunkRows,
+            sortKeys = new[] { "SortKey ASC", "TieBreaker DESC" },
+            checksum,
+            firstSortKey,
+            lastSortKey,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            sortRunCount = evaluator.Telemetry.SortSpillCount,
+            mergePassCount = engine.MergePassCount,
+            intermediateMergeRunCount = engine.IntermediateMergeRunCount,
+            maxConcurrentMergeReaders = engine.MaxConcurrentMergeReaders,
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_EXTERNAL_SORT_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_EXTERNAL_SORT_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
 
@@ -120,6 +235,23 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         var fullCycles = value / modulus;
         var remainder = value % modulus;
         return checked(fullCycles * modulus * (modulus - 1L) / 2 + remainder * (remainder + 1) / 2);
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateExternalSortRows(long rowCount)
+    {
+        await Task.Yield();
+        var stride = Math.Max(1, rowCount - 1);
+        for (long ordinal = 0; ordinal < rowCount; ordinal++)
+        {
+            var id = checked((ordinal * stride) % rowCount + 1);
+            yield return new Row
+            {
+                ["Id"] = id,
+                ["SortKey"] = (int)(id % 100_000),
+                ["TieBreaker"] = id,
+                ["Payload"] = id * 3
+            };
+        }
     }
 
     private static long ReadPositiveLong(string name, long fallback)

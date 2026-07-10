@@ -28,6 +28,10 @@ completed scenario artifacts; use `-Force` only when intentionally replacing pri
 Before publishing Gate F performance claims or closing a release candidate that changes certified
 paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`; pass
 `-Baseline` when comparing an operator-run report against the checked-in Gate F baseline.
+Phase 4 operator candidates are explicit. For example, `./scripts/Test-GateF.ps1 -Scenario ExternalSort`
+runs the external-sort 1B candidate, and `./scripts/Test-GateFEvidence.ps1 -RequiredScenario ExternalSort`
+validates the resulting artifact. Candidate artifacts are not product claims until the public
+certification matrix marks them certified.
 | **[`test-service-capacity.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |
 | **[`test-capacity-workload-configs.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |
 | **[`compare-capacity-results.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/compare-capacity-results.mjs)** | Node.js | Cross-platform | Compares two service-capacity reports for p95 latency, throughput, and error-rate regressions. |
