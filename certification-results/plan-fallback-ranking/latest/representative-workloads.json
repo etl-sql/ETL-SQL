@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "capturedAt": "2026-07-10",
+  "description": "Representative Phase 5 fallback-ranking fixture covering columnar, SQL pushdown, row-pipeline, and external-operator decisions with per-entry cost context.",
+  "workloads": [
+    {
+      "name": "reporting-projection-shapes",
+      "planFallbacks": [
+        {
+          "candidatePath": "ColumnarProjection",
+          "reasonCode": "UnsupportedExpression",
+          "outcome": "Fallback",
+          "count": 3,
+          "elapsedMs": 84.5,
+          "rowCount": 120000,
+          "spillBytes": 0,
+          "peakWorkingSetMB": 142.2
+        },
+        {
+          "candidatePath": "ColumnarAggregate",
+          "reasonCode": "UnsupportedType",
+          "outcome": "Fallback",
+          "count": 2,
+          "elapsedMs": 119.75,
+          "rowCount": 85000,
+          "spillBytes": 0,
+          "peakWorkingSetMB": 155.8
+        }
+      ]
+    },
+    {
+      "name": "cross-source-ingestion",
+      "planFallbacks": [
+        {
+          "candidatePath": "SqlPushdown",
+          "reasonCode": "ConnectorCapabilityMissing",
+          "outcome": "Fallback",
+          "count": 2,
+          "elapsedMs": 44.25,
+          "rowCount": 45000,
+          "spillBytes": 0,
+          "peakWorkingSetMB": 118.4
+        },
+        {
+          "candidatePath": "RowPipeline",
+          "reasonCode": "SemanticGuard",
+          "outcome": "Degraded",
+          "count": 1,
+          "elapsedMs": 230.5,
+          "rowCount": 300000,
+          "spillBytes": 125829120,
+          "peakWorkingSetMB": 248.9
+        }
+      ]
+    },
+    {
+      "name": "external-join-pressure",
+      "planFallbacks": [
+        {
+          "candidatePath": "ExternalJoin",
+          "reasonCode": "MemoryAdmissionRejected",
+          "outcome": "Degraded",
+          "count": 1,
+          "elapsedMs": 410.0,
+          "rowCount": 500000,
+          "spillBytes": 268435456,
+          "peakWorkingSetMB": 252.0
+        }
+      ]
+    }
+  ]
+}

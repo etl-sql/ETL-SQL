@@ -189,14 +189,17 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   runtime gates that decide acceptance. Scale-certification metrics and Gate F operator metrics now
   include plan-decision counts plus fallback/degraded/rejected summaries so ranking can consume
   checked-in or operator-run evidence JSON directly.)*
-- [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
+- [x] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
-  *(Slice E progress: `scripts/Summarize-PlanFallbacks.ps1` aggregates fallback summaries from JSON
-  evidence/profile artifacts, ranks them by `CandidatePath`/`ReasonCode` frequency, carries
-  same-object elapsed/spill/row/peak-memory cost context when present, and can emit JSON plus
-  Markdown reports. Scale-certification and Gate F metric JSON now emit those summary fields for
-  representative evidence capture. Checked-in representative workload captures and per-operator
-  cost attribution remain open before approving any new native-path expansion.)*
+  *(Slice E complete: `scripts/Summarize-PlanFallbacks.ps1` aggregates legacy fallback summaries
+  and structured per-operator fallback entries from JSON evidence/profile artifacts, ranks them by
+  `CandidatePath`/`ReasonCode` frequency, carries elapsed/spill/row/peak-memory cost context, and
+  emits JSON plus Markdown reports. Scale-certification and Gate F metric JSON emit the summary
+  fields for operator-run evidence, while
+  `certification-results/plan-fallback-ranking/latest/` provides a checked-in representative
+  ranking fixture/output. `scripts/Test-PlanFallbackRanking.ps1` covers structured and legacy input.
+  The ranking plus crossover evidence does not justify new native-path expansion yet, so the row
+  engine remains the correctness fallback.)*
 - [x] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
   *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus

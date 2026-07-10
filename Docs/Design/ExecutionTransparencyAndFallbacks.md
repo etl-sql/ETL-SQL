@@ -1,7 +1,7 @@
 # Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design
 
-**Status:** Implementation in progress; Slice A telemetry contract is implemented, with Slice B
-columnar instrumentation and Slice C SQL pushdown instrumentation partially implemented.
+**Status:** Implementation in progress; telemetry, surfaces, ranking, and native admission harnesses
+are implemented, with the final planner-instrumentation status pass still open.
 **TODO items covered:** v0.15.0 Phase 5 (fallback reason telemetry, fallback frequency/cost
 ranking, differential correctness and crossover benchmarks for new native paths).
 **Completion gate:** users and maintainers can see why a query left a native/columnar path, how
@@ -165,12 +165,15 @@ the correctness baseline and the recovery path for unsupported shapes.
    and fails validation on unexpected fallback. Scale-certification metrics and Gate F operator
    metrics emit plan-decision counts plus fallback/degraded/rejected summaries for ranking input.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
-   frequency/cost across representative workloads. *(In progress:
-   `scripts/Summarize-PlanFallbacks.ps1` aggregates existing JSON evidence/profile fallback
-   summaries by candidate path and reason code, carries same-object elapsed/spill/row/peak-memory
-   cost context when present, then emits ranked JSON/Markdown outputs. Scale-certification and
-   Gate F metric JSON now provide those summary fields for evidence capture. Checked-in
-   representative workload captures and per-operator cost attribution remain open.)*
+   frequency/cost across representative workloads. *(Implemented:
+   `scripts/Summarize-PlanFallbacks.ps1` aggregates legacy fallback-summary strings and structured
+   per-operator fallback entries by candidate path and reason code, carries elapsed/spill/row/
+   peak-memory cost context, then emits ranked JSON/Markdown outputs. Scale-certification and Gate F
+   metric JSON provide summary fields for operator-run evidence. The checked-in representative
+   ranking fixture and generated outputs live under
+   `certification-results/plan-fallback-ranking/latest/`; `scripts/Test-PlanFallbackRanking.ps1`
+   protects structured and legacy parsing. The current ranking evidence does not approve any new
+   native-path expansion.)*
 6. **Slice F — native admission harness.** Add differential correctness requirements and crossover
    benchmarks for candidate native paths. *(Implemented: `ColumnarCrossoverBenchmarks` compares
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,
