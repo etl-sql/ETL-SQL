@@ -187,6 +187,12 @@ requirements; unfinished items may move to the next release without weakening th
 - [ ] Produce a machine-readable recovery report with achieved RPO/RTO, missing dependencies, data loss window, and operator actions.
 - [ ] Document regional/site failure, split custody, backup retention, immutable/offline backup, and emergency access procedures.
 
+#### 6.8 Searchable Portal Documentation Hub
+
+- [ ] Compile the repository's markdown document library (cookbooks, reference guides, manuals) into a unified, searchable static website using a static site generator (e.g., MkDocs or Docusaurus).
+- [ ] Host the compiled documentation site natively inside the Report Portal (e.g. under a `/docs` route) to allow administrators, analysts, and business users to search and navigate documentation in their web browser.
+- [ ] Reconcile the static site's theme and search indices with the Portal's user interface, ensuring sensitive configurations remain excluded from the compiled index.
+
 #### Phase 6 prioritization gates
 
 - [ ] Rank each workstream using measured administrative pain, customer deployment scale, security impact, and dependency on external infrastructure.
