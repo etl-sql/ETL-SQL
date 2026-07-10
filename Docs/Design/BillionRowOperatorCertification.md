@@ -1,6 +1,7 @@
 # Billion-Row Operator Certification (v0.15.0 Phase 4) — Design
 
-**Status:** Implementation in progress; Slice A scenario manifest and report schema are implemented.
+**Status:** Candidate implementation complete for the v0.15.0 Phase 4 scope; 1B operator-run
+artifacts remain pending for candidate rows.
 **TODO items covered:** v0.15.0 Phase 4 (operator-specific 1B criteria for join/sort first,
 then high-cardinality grouping, eligible windows, holistic aggregates, and heterogeneous `MERGE`).
 **Completion gate:** every advertised 1B operator has an isolated, resumable certification scenario
@@ -197,12 +198,12 @@ not a v0.15.0 goal.
    external sort/join admission and success criteria, and future Gate F reports emit
    `scenarioManifests` plus `admission` sections.)*
 2. **Slice B — external sort 1B candidate.** Build generator, streaming order validator, resume
-   points, and admission preflight. *(In progress: `Test-GateF.ps1 -Scenario ExternalSort`
+   points, and admission preflight. *(Implemented: `Test-GateF.ps1 -Scenario ExternalSort`
    now runs an explicit candidate path with deterministic generated rows, multi-key sort,
    streaming order validation, resume key, disk admission, and report evidence. It remains
    Candidate until an operator-run artifact passes at 1B and the public matrix is updated.)*
 3. **Slice C — external equi-join 1B candidate.** Build two-source generator, result-count oracle,
-   skew telemetry, and repartition metrics. *(In progress: `Test-GateF.ps1 -Scenario ExternalJoin`
+   skew telemetry, and repartition metrics. *(Implemented: `Test-GateF.ps1 -Scenario ExternalJoin`
    now runs an explicit candidate path with generated left/right streams, controlled key overlap,
    mathematical result-count/checksum validation, partition-pass telemetry, resume key, disk
    admission, and report evidence. It remains Candidate until an operator-run artifact passes at
@@ -213,14 +214,16 @@ not a v0.15.0 goal.
    `BillionRowOperatorManifestTests` verifies that states match, non-certified rows stay explicit,
    and blanket 1B SQL wording does not appear.)*
 5. **Slice E — later operators.** Add grouping/window/MERGE candidates only after lower-tier
-   differential tests pass. *(In progress: `Test-GateF.ps1 -Scenario HighCardinalityGrouping`
+   differential tests pass. *(Implemented for the admitted v0.15.0 scope:
+   `Test-GateF.ps1 -Scenario HighCardinalityGrouping`
    runs the high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/
    `MIN`/`MAX`, formula-based validation, spill/partition telemetry, resume key, disk admission,
    and report evidence. `Test-GateF.ps1 -Scenario EligibleWindowRowNumber` runs the bounded
    `ROW_NUMBER` external-window candidate with deterministic partitions, per-partition sequence
-   validation, spill/partition telemetry, resume key, disk admission, and report evidence. `MERGE`
-   remains manifest-only pending a bounded source/target staging design; holistic aggregates remain
-   not certified.)*
+   validation, spill/partition telemetry, resume key, disk admission, and report evidence.
+   Heterogeneous `MERGE` remains manifest-only and Not certified pending a bounded source/target
+   staging design; holistic aggregates remain Not certified pending a bounded exact or approximate
+   design.)*
 
 ---
 

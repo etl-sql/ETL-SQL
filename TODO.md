@@ -139,17 +139,18 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
   generated left/right streams, controlled overlap, mathematical result-count/checksum validation,
   partition-pass telemetry, resume/reuse keys, disk admission, and report output. The matrix stays
   Candidate until real 1B operator-run artifacts pass.)*
-- [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
+- [x] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.
-  *(Slice E progress: `Test-GateF.ps1 -Scenario HighCardinalityGrouping` runs an explicit
+  *(Complete for v0.15.0 Phase 4 scope: `Test-GateF.ps1 -Scenario HighCardinalityGrouping` runs an explicit
   high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/`MIN`/`MAX`,
   formula-based validation, spill/partition telemetry, resume/reuse keys, disk admission, and report
   output. `Test-GateF.ps1 -Scenario EligibleWindowRowNumber` runs an explicit bounded
   `ROW_NUMBER` external-window candidate with deterministic partitions, per-partition sequence
   validation, spill/partition telemetry, resume/reuse keys, disk admission, and report output.
-  Heterogeneous `MERGE` remains manifest-only pending bounded source/target staging evidence;
-  holistic aggregates remain Not certified.)*
+  Heterogeneous `MERGE` remains manifest-only and Not certified pending bounded source/target
+  staging evidence; holistic aggregates remain Not certified pending a bounded exact or approximate
+  design. These non-certified states are deliberate matrix outcomes, not 1B claims.)*
 - [x] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
   and row-engine fallbacks explicit. Do not introduce a blanket “all SQL at 1B” claim.
   *(Complete: `Docs/Large_Data_Certification.md` publishes the manifest-backed billion-row operator
