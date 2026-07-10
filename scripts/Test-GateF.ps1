@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -184,6 +184,33 @@ function Get-GateFScenarioManifests {
             nonGoals = @('Top-N optimized plans', 'locale-specific collation', 'arbitrary expression sort keys', 'downstream operator certification')
             resumeKeyFields = @('commit', 'rows', 'sortKeys', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
         }
+        externalJoin = [ordered]@{
+            scenarioId = 'ExternalEquiJoin_ControlledSkew_1B'
+            operator = 'ExternalEquiJoin'
+            state = 'Candidate'
+            rows = [ordered]@{ left = $Rows; right = $Rows }
+            shape = [ordered]@{
+                columns = @('Id BIGINT', 'JoinKey INT', 'Payload BIGINT')
+                joinType = 'INNER'
+                keyOverlap = '50 percent'
+                duplicateFactor = 'bounded by generated key space'
+                randomSeed = 24017
+                skew = 'controlled hot-key distribution, no adversarial single-key collapse'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'mathematical result-count formula plus checksum over matched generated keys'
+            telemetryContract = @($commonTelemetry + @('partitionCount', 'partitionPassCount', 'repartitionPassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('non-equi joins', 'outer joins with high null expansion', 'adversarial single-key skew', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'joinType', 'keyOverlap', 'duplicateFactor', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
+        }
     }
 }
 
@@ -249,7 +276,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -439,6 +466,35 @@ try {
         }
     }
 
+    if ($Scenario -eq 'ExternalJoin') {
+        # v0.15.0 Phase 4 candidate: external equi-join is opt-in until an operator-run artifact
+        # passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'external-join.json'
+        $resultKey = Join-Path $outRoot 'external-join.key'
+        $joinPartitions = 32
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$joinPartitions|$MinimumRowsPerSecond|ExternalJoin"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_JOIN_PARTITIONS = $joinPartitions.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'ExternalJoin' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap'
+            ) (Join-Path $outRoot 'external-join.log') (Join-Path $outRoot 'external-join.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'ExternalJoin' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
         schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
@@ -471,6 +527,9 @@ try {
         externalSort = if (Test-Path (Join-Path $outRoot 'external-sort.json')) {
             Get-Content (Join-Path $outRoot 'external-sort.json') -Raw | ConvertFrom-Json
         } else { $null }
+        externalJoin = if (Test-Path (Join-Path $outRoot 'external-join.json')) {
+            Get-Content (Join-Path $outRoot 'external-join.json') -Raw | ConvertFrom-Json
+        } else { $null }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
@@ -487,5 +546,7 @@ finally {
     Remove-Item Env:CERT_MEMORY_BOUND_MB,Env:CERT_MEMORY_GRANT_MB,Env:CERT_MIN_ROWS_PER_SECOND `
         -ErrorAction SilentlyContinue
     Remove-Item Env:GATE_F_EXTERNAL_SORT_ROWS,Env:GATE_F_SORT_CHUNK_ROWS,Env:GATE_F_EXTERNAL_SORT_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS,Env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS,Env:GATE_F_JOIN_PARTITIONS,Env:GATE_F_EXTERNAL_JOIN_OUTPUT `
         -ErrorAction SilentlyContinue
 }

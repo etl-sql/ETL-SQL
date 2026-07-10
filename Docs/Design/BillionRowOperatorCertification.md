@@ -202,7 +202,11 @@ not a v0.15.0 goal.
    streaming order validation, resume key, disk admission, and report evidence. It remains
    Candidate until an operator-run artifact passes at 1B and the public matrix is updated.)*
 3. **Slice C — external equi-join 1B candidate.** Build two-source generator, result-count oracle,
-   skew telemetry, and repartition metrics.
+   skew telemetry, and repartition metrics. *(In progress: `Test-GateF.ps1 -Scenario ExternalJoin`
+   now runs an explicit candidate path with generated left/right streams, controlled key overlap,
+   mathematical result-count/checksum validation, partition-pass telemetry, resume key, disk
+   admission, and report evidence. It remains Candidate until an operator-run artifact passes at
+   1B and the public matrix is updated.)*
 4. **Slice D — publish matrix update.** Update `Docs/Large_Data_Certification.md` to advertise
    only scenarios that passed.
 5. **Slice E — later operators.** Add grouping/window/MERGE candidates only after lower-tier

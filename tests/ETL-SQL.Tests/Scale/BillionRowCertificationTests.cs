@@ -223,6 +223,107 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
     }
 
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap()
+    {
+        var leftRows = ReadPositiveLong("GATE_F_EXTERNAL_JOIN_LEFT_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        var rightRows = ReadPositiveLong("GATE_F_EXTERNAL_JOIN_RIGHT_ROWS", leftRows);
+        if (leftRows <= 0 || rightRows <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_EXTERNAL_JOIN_LEFT_ROWS/right rows or GATE_F_ROWS must be explicitly set for external join certification.");
+
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+        var partitions = ReadPositiveInt("GATE_F_JOIN_PARTITIONS", 32);
+        var keySpace = Math.Max(leftRows, rightRows);
+        var overlapOffset = keySpace / 2;
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.ExternalHashPartitions = partitions;
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalJoinEngine(evaluator, logger);
+        var join = new JoinClause(
+            "INNER",
+            new TableReference("right"),
+            new BinaryExpression(new IdentifierExpression("JoinKey"), TokenType.EQUALS, new IdentifierExpression("JoinKey")));
+
+        var stopwatch = Stopwatch.StartNew();
+        long count = 0;
+        long checksum = 0;
+        await foreach (var row in engine.ApplyHashJoinExternal(
+            GenerateExternalJoinRows(leftRows, "L", payloadMultiplier: 3, keyOffset: 0),
+            GenerateExternalJoinRows(rightRows, "R", payloadMultiplier: 5, keyOffset: overlapOffset),
+            join,
+            new List<string> { "JoinKey" },
+            new List<string> { "JoinKey" },
+            knownBuildRowCount: rightRows,
+            knownBuildBytes: rightRows * 128))
+        {
+            var leftId = Convert.ToInt64(row["LId"], CultureInfo.InvariantCulture);
+            var rightId = Convert.ToInt64(row["RId"], CultureInfo.InvariantCulture);
+            checksum = checked(checksum + leftId + rightId);
+            count++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var expectedCount = ExpectedExternalJoinMatches(leftRows, rightRows, overlapOffset);
+        var expectedChecksum = ExpectedExternalJoinChecksum(leftRows, rightRows, overlapOffset);
+        var rowsPerSecond = (leftRows + rightRows) / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(expectedCount, count);
+        Assert.Equal(expectedChecksum, checksum);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "External join candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "External join candidate expected partition telemetry.");
+        Assert.True(evaluator.Telemetry.PartitionPassCount >= 2, "External join candidate expected left/right partition passes.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} source rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+
+        var metric = new
+        {
+            scenario = "ExternalEquiJoin_ControlledSkew_1B",
+            leftRows,
+            rightRows,
+            keySpace,
+            overlapKeys = expectedCount,
+            joinType = "INNER",
+            resultRows = count,
+            checksum,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            partitionCount = engine.PartitionCount,
+            partitionPassCount = evaluator.Telemetry.PartitionPassCount,
+            repartitionPassCount = Math.Max(0, evaluator.Telemetry.PartitionPassCount - 2),
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_EXTERNAL_JOIN_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_EXTERNAL_JOIN_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
 
@@ -252,6 +353,38 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
                 ["Payload"] = id * 3
             };
         }
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateExternalJoinRows(
+        long rowCount,
+        string prefix,
+        long payloadMultiplier,
+        long keyOffset)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                [$"{prefix}Id"] = id,
+                ["JoinKey"] = (int)(id - 1 + keyOffset),
+                [$"{prefix}Payload"] = id * payloadMultiplier
+            };
+        }
+    }
+
+    private static long ExpectedExternalJoinMatches(long leftRows, long rightRows, long overlapOffset)
+        => Math.Max(0, Math.Min(leftRows - 1, overlapOffset + rightRows - 1) - overlapOffset + 1);
+
+    private static long ExpectedExternalJoinChecksum(long leftRows, long rightRows, long overlapOffset)
+    {
+        var matches = ExpectedExternalJoinMatches(leftRows, rightRows, overlapOffset);
+        if (matches == 0) return 0;
+        var firstLeftId = overlapOffset + 1;
+        var lastLeftId = overlapOffset + matches;
+        var firstRightId = 1L;
+        var lastRightId = matches;
+        return checked(SumRange(firstLeftId, lastLeftId) + SumRange(firstRightId, lastRightId));
     }
 
     private static long ReadPositiveLong(string name, long fallback)

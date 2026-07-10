@@ -32,7 +32,7 @@
 param(
     [string]$Report = '.\certification-results\gate-f-1b\gate-f-report.json',
 
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin')]
     [string]$RequiredScenario = 'All',
 
     [string]$Baseline = '',
@@ -102,6 +102,7 @@ function Test-ScenarioPresent {
         'TempTableRoundTrip' { return $null -ne (Get-PropValue $GateFReport @('tempTableRoundTrip')) }
         'AllocProfile' { return $null -ne (Get-PropValue $GateFReport @('allocProfile')) }
         'ExternalSort' { return $null -ne (Get-PropValue $GateFReport @('externalSort')) }
+        'ExternalJoin' { return $null -ne (Get-PropValue $GateFReport @('externalJoin')) }
         default { return $false }
     }
 }
@@ -117,6 +118,7 @@ function Get-ScenarioEvidence {
         'TempTableRoundTrip' { return Get-PropValue $GateFReport @('tempTableRoundTrip') }
         'AllocProfile' { return Get-PropValue $GateFReport @('allocProfile') }
         'ExternalSort' { return Get-PropValue $GateFReport @('externalSort') }
+        'ExternalJoin' { return Get-PropValue $GateFReport @('externalJoin') }
         default { return $null }
     }
 }

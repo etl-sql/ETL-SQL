@@ -135,7 +135,10 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
   `BillionRowOperatorManifestTests` validates the manifest contract. Slice B progress:
   `Test-GateF.ps1 -Scenario ExternalSort` runs the explicit external-sort candidate with generated
   rows, multi-key streaming order validation, resume/reuse keys, disk admission, and report output;
-  the matrix stays Candidate until a real 1B operator-run artifact passes.)*
+  `Test-GateF.ps1 -Scenario ExternalJoin` runs the explicit external equi-join candidate with
+  generated left/right streams, controlled overlap, mathematical result-count/checksum validation,
+  partition-pass telemetry, resume/reuse keys, disk admission, and report output. The matrix stays
+  Candidate until real 1B operator-run artifacts pass.)*
 - [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.
