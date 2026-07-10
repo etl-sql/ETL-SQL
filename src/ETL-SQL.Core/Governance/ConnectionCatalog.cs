@@ -155,6 +155,43 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
     private string GetRoot() => Path.GetFullPath(rootDirectory);
 }
 
+/// <summary>
+/// Shared write-side validation for catalog entries: the catalog stores SECRET:/ENC: references,
+/// never credential values. Used by the admin CLI and the Portal catalog API so both reject the
+/// same shapes.
+/// </summary>
+public static class SharedConnectionValidator
+{
+    /// <summary>Returns the first credential field carrying a raw value instead of a SECRET:/ENC: reference, or null.</summary>
+    public static string? FindRawCredential(IReadOnlyDictionary<string, string> options, string? target)
+    {
+        foreach (var (key, value) in options)
+        {
+            if (SecretResolvableFields.IsResolvable(key) && !IsReference(value))
+                return key;
+        }
+
+        if (!string.IsNullOrEmpty(target))
+        {
+            foreach (var segment in target.Split(';'))
+            {
+                var parts = segment.Split('=', 2);
+                if (parts.Length == 2 && SecretResolvableFields.IsResolvable(parts[0].Trim()) && !IsReference(parts[1]))
+                    return parts[0].Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsReference(string value)
+    {
+        var trimmed = value.Trim().Trim('\'', '"');
+        return trimmed.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public sealed class ConnectionCatalogOptions
 {
     public string? Provider { get; set; }

@@ -273,6 +273,16 @@ the configured secret provider, and script-local options may add to but never ov
 credential fields. An unknown alias, a disabled entry, a connector type mismatch, or an
 unconfigured catalog fails connection creation with a clear error.
 
+For multi-node deployments, set `Governance:ConnectionCatalog:Provider=Portal` on the Portal so
+entries live in the Portal database (endpoints and options are additionally encrypted at rest with
+the cluster keys) and are managed through the audited `api/admin/connections` API: list, masked
+detail, set (raw credential values rejected), verify (proves the entry and its `SECRET:`
+references resolve, and stamps last-verified), disable, delete, and metadata-only export/import
+for promoting entries between environments. Entries record owner, environment scope, and
+last-used/last-verified timestamps for governance review. Pair it with
+`Governance:Secrets:Provider=PortalStore` so both the catalog and the secrets it references are
+cluster-wide.
+
 Use named references in connector definitions:
 
 ```sql

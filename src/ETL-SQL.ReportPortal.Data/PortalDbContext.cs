@@ -34,6 +34,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
     public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
+    public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -159,6 +160,17 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => x.Name).IsUnique();
             e.Property(x => x.Name).HasMaxLength(200);
+        });
+
+        builder.Entity<PortalSharedConnection>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => x.Alias).IsUnique();
+            e.Property(x => x.Alias).HasMaxLength(200);
+            e.Property(x => x.ConnectorType).HasMaxLength(100);
+            e.Property(x => x.EnvironmentScope).HasMaxLength(100);
+            e.Property(x => x.Target).HasConversion(piiNullableConverter);
+            e.Property(x => x.OptionsJson).HasConversion(piiConverter);
         });
 
         builder.Entity<SubscriptionDelivery>(e =>

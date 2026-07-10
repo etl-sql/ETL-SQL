@@ -139,7 +139,7 @@ namespace ETL_SQL.App
                 options[parts[0].Trim()] = parts[1];
             }
 
-            var rawCredential = FindRawCredential(options, ctx.ConnectionTarget);
+            var rawCredential = SharedConnectionValidator.FindRawCredential(options, ctx.ConnectionTarget);
             if (rawCredential != null)
             {
                 logger.WriteLine(
@@ -209,35 +209,6 @@ namespace ETL_SQL.App
             await operation(writable, alias.Trim(), ct);
             logger.WriteLine(successMessage(alias.Trim()), ConsoleColor.Green);
             return 0;
-        }
-
-        /// <summary>Returns the first credential field carrying a raw value instead of a SECRET:/ENC: reference.</summary>
-        private static string? FindRawCredential(Dictionary<string, string> options, string? target)
-        {
-            foreach (var (key, value) in options)
-            {
-                if (SecretResolvableFields.IsResolvable(key) && !IsReference(value))
-                    return key;
-            }
-
-            if (!string.IsNullOrEmpty(target))
-            {
-                foreach (var segment in target.Split(';'))
-                {
-                    var parts = segment.Split('=', 2);
-                    if (parts.Length == 2 && SecretResolvableFields.IsResolvable(parts[0].Trim()) && !IsReference(parts[1]))
-                        return parts[0].Trim();
-                }
-            }
-
-            return null;
-        }
-
-        private static bool IsReference(string value)
-        {
-            var trimmed = value.Trim().Trim('\'', '"');
-            return trimmed.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
-                || trimmed.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
         }
 
         private static int MissingArgument(string option, ILogger logger)

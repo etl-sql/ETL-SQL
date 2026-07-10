@@ -77,6 +77,20 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.ISecretProvider>(sp =>
 
     return new ETL_SQL.Core.Governance.SecretProviderFactory(new HttpClient()).Create(options);
 });
+
+// Same resolve-time dispatch for the connection catalog: the Portal-backed catalog only exists
+// inside this host, and test hosts layer configuration in after Program.cs runs.
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = ETL_SQL.Orchestrator.DependencyInjectionExtensions.BuildConnectionCatalogOptions(config);
+    if (string.Equals(options.Provider, "Portal", StringComparison.OrdinalIgnoreCase))
+        return new ETL_SQL.ReportPortal.Services.PortalCatalogConnectionProvider(
+            sp.GetRequiredService<IServiceScopeFactory>());
+
+    return ETL_SQL.Core.Governance.ConnectionCatalogProviderFactory.Create(options)
+        ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.ReportPortal.Services.UnconfiguredConnectionCatalogProvider.Instance;
+});
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
     ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
 
@@ -348,6 +362,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
