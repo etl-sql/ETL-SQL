@@ -208,7 +208,10 @@ not a v0.15.0 goal.
    admission, and report evidence. It remains Candidate until an operator-run artifact passes at
    1B and the public matrix is updated.)*
 4. **Slice D — publish matrix update.** Update `Docs/Large_Data_Certification.md` to advertise
-   only scenarios that passed.
+   only scenarios that passed. *(Implemented: the public matrix is tied to
+   `certification-results/billion-row-operator-scenarios.json`, and
+   `BillionRowOperatorManifestTests` verifies that states match, non-certified rows stay explicit,
+   and blanket 1B SQL wording does not appear.)*
 5. **Slice E — later operators.** Add grouping/window/MERGE candidates only after lower-tier
    differential tests pass.
 

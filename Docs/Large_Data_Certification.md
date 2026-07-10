@@ -46,7 +46,7 @@ and non-goals.
 
 Candidate rows are not product claims. They define the admission and telemetry contract that must be
 satisfied before an operator can move to certified. Release notes must cite a certified scenario,
-machine class, artifact, and non-goal list rather than saying "1B SQL support."
+machine class, artifact, and non-goal list rather than making a broad billion-row SQL claim.
 
 ---
 

@@ -142,8 +142,13 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
 - [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.
-- [ ] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
+- [x] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
   and row-engine fallbacks explicit. Do not introduce a blanket “all SQL at 1B” claim.
+  *(Complete: `Docs/Large_Data_Certification.md` publishes the manifest-backed billion-row operator
+  matrix with Certified/Candidate/Not certified states, pending artifacts, and non-claim language.
+  `BillionRowOperatorManifestTests` now verifies the public matrix matches
+  `certification-results/billion-row-operator-scenarios.json` and rejects broad "1B SQL support"
+  wording.)*
 
 ### Phase 5: Fallback coverage and execution transparency
 
