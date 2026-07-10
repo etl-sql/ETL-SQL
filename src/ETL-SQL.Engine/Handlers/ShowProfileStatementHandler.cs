@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -43,6 +44,20 @@ public class ShowProfileStatementHandler : IStatementHandler
         dataTable.AddColumn("Partitions");
         dataTable.AddColumn("QueueWaitMs");
         dataTable.AddColumn("LockWaitMs");
+        dataTable.AddColumn("PlanDecisions");
+        dataTable.AddColumn("PlanAccepted");
+        dataTable.AddColumn("PlanFallbacks");
+        dataTable.AddColumn("PlanRejected");
+        dataTable.AddColumn("PlanDegraded");
+        dataTable.AddColumn("PlanFallbackSummary");
+
+        var planDecisions = context.Telemetry.PlanDecisions;
+        var planDecisionCount = planDecisions.Count;
+        var planAccepted = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Accepted);
+        var planFallbacks = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+        var planRejected = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
+        var planDegraded = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
+        var planFallbackSummary = BuildFallbackSummary(planDecisions);
 
         foreach (var m in context.Telemetry.ProfileMetrics)
         {
@@ -60,6 +75,12 @@ public class ShowProfileStatementHandler : IStatementHandler
             row["Partitions"] = m.PartitionsCount;
             row["QueueWaitMs"] = m.QueueWaitMs;
             row["LockWaitMs"] = m.LockWaitMs;
+            row["PlanDecisions"] = planDecisionCount;
+            row["PlanAccepted"] = planAccepted;
+            row["PlanFallbacks"] = planFallbacks;
+            row["PlanRejected"] = planRejected;
+            row["PlanDegraded"] = planDegraded;
+            row["PlanFallbackSummary"] = planFallbackSummary;
             await dataTable.AddRowAsync(row);
         }
 
@@ -79,5 +100,17 @@ public class ShowProfileStatementHandler : IStatementHandler
         }
 
         await Task.CompletedTask;
+    }
+
+    private static string BuildFallbackSummary(System.Collections.Generic.IReadOnlyList<PlanDecision> decisions)
+    {
+        var summary = decisions
+            .Where(d => d.Outcome is PlanDecisionOutcome.Fallback or PlanDecisionOutcome.Rejected or PlanDecisionOutcome.Degraded)
+            .GroupBy(d => $"{d.CandidatePath}:{d.ReasonCode}")
+            .OrderByDescending(group => group.Count())
+            .ThenBy(group => group.Key, StringComparer.Ordinal)
+            .Select(group => $"{group.Key}={group.Count()}");
+        var text = string.Join("; ", summary);
+        return string.IsNullOrEmpty(text) ? "--" : text;
     }
 }

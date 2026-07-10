@@ -170,7 +170,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   instrumentation for native columnar rejection/acceptance points remains next. Slice B progress:
   `SelectStatementHandler` now records accepted/fallback decisions for native columnar join, sort,
   grouped aggregate, global aggregate, projection/filter, and columnar `SELECT INTO` routes, with
-  focused routing tests covering accepted aggregate/projection paths and expression fallback.)*
+  focused routing tests covering accepted aggregate/projection paths and expression fallback.
+  Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
+  `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and
