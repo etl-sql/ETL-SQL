@@ -22,7 +22,8 @@ The target is:
 - a first-class administrative workflow for creating, rotating, verifying, and disabling named
   secrets;
 - a Portal-managed encrypted secret store for HA deployments that cannot operate an external vault;
-- a governed Portal Connection Catalog so approved endpoints do not need to be repeated in scripts;
+- a governed Connection Catalog (local CLI-managed or Portal-managed) so approved shared
+  connections can be used via `SHARED:name` without repeating endpoints or exposing credentials;
 - consistent secret-reference syntax and redaction for passwords and sensitive connection metadata;
 - native Portal/Orchestrator background services for admin digests and capacity reporting that are
   currently shipped as sample scripts.
@@ -168,10 +169,23 @@ Rules:
 
 ---
 
-## 7. Portal Connection Catalog
+## 7. Connection Catalog (Shared Connections)
 
 The Connection Catalog stores approved connection definitions centrally so developers can reference
-known endpoints without repeating host/user/database details in scripts.
+known endpoints without repeating host/user/database details in scripts — the SSRS shared data
+source / Power BI gateway model: an administrator defines the connection once, users consume it
+without ever seeing the credentials.
+
+The catalog is provider-selectable, mirroring `ISecretProvider`, so a portal is not required:
+
+| Provider | Deployment fit | Storage authority |
+| :--- | :--- | :--- |
+| Local catalog | single-node SME install, no Portal | machine-scoped entries on disk beside the OS secret store, managed by `etl-sql admin set-connection` / `list-connections` / `verify-connection` / `disable-connection` / `delete-connection` (same lifecycle verbs and masked-input rules as the secret CLI) |
+| Portal catalog | Portal/Orchestrator deployments | Portal database with RBAC, environment/tenant scope, approval, audit, and Admin UI/API |
+
+Entries store credentials as `SECRET:name` references, never resolved values, so the secret store
+and the catalog stay composable: rotating a secret never touches catalog entries, and an SME can
+graduate from the local catalog to the Portal catalog without editing scripts.
 
 Catalog record shape:
 
@@ -193,14 +207,65 @@ Execution behavior:
 - expansion happens at execution time under the caller/service identity;
 - policy checks run after expansion and before connector creation;
 - audit records include alias, connector type, decision, and masked metadata, not secrets;
-- failed secret resolution fails the connection creation before query execution.
+- failed secret resolution fails the connection creation before query execution;
+- resolved values never round-trip anywhere the user can read: `SHOW CONNECTION` masks credentials,
+  `CONNECTION_PROPERTY()` refuses sensitive properties, and lineage/report manifests record the
+  alias, not the expansion.
 
-Open syntax decision:
+**Decision (2026-07-10): `SHARED:name` inside the typed target.**
 
-- reuse `CREATE CONNECTION alias AS CATALOG('name')`;
-- or allow catalog aliases to be pre-bound by Portal/Orchestrator execution context.
+```sql
+CREATE CONNECTION m AS MSSQL('SHARED:my_sql_server');
+```
 
-The implementation should prefer the least surprising form after parser review.
+Chosen over `CREATE CONNECTION alias AS CATALOG('name')` because:
+
+- the connector type stays in the script, so the linter, dialect-aware checks, and LSP completions
+  keep working without catalog access, and the runtime gets a free integrity check — a catalog
+  entry whose connector type does not match the declared type fails with a clear error;
+- it needs zero parser work: an ordinary quoted target string with a scheme prefix, the same
+  lexical family users already know (`ENC:` script-password encrypted, `SECRET:` one named value,
+  `SHARED:` a whole cataloged connection), and the quoted-canonical-form decision from Section 5
+  applies unchanged;
+- redaction masks `SHARED:` payloads with the same prefix-preserving pattern as `ENC:`/`SECRET:`.
+
+Whitespace after the colon is trimmed, matching `SECRET:` handling.
+
+Provider shape (resolution is engine-side; storage is provider-side):
+
+```csharp
+namespace ETL_SQL.Core.Governance;
+
+/// <summary>A catalog entry: connector type, non-secret options, and SECRET: references.</summary>
+public sealed record SharedConnectionDefinition(
+    string Alias,
+    string ConnectorType,
+    string? Target,                              // optional connection-string form
+    IReadOnlyDictionary<string, string> Options, // values may be SECRET:name references
+    bool Disabled);
+
+public interface IConnectionCatalogProvider
+{
+    string ProviderName { get; }
+    Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default);
+}
+
+public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
+{
+    Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default);
+    Task DisableAsync(string alias, CancellationToken cancellationToken = default);
+    Task DeleteAsync(string alias, CancellationToken cancellationToken = default);
+}
+```
+
+`CreateConnectionStatementHandler` resolves `SHARED:` before secret resolution: look up the
+definition, verify the declared connector type matches, merge options (script-local options may
+not override cataloged credential fields), then hand the merged result through the existing
+`ConnectionSecretResolver` so `SECRET:` references inside the definition resolve under the same
+rules and redaction as everywhere else. A `SHARED:` reference with no catalog provider configured,
+an unknown alias, a disabled entry, or a type mismatch fails connection creation with a clear
+error — never a silent fallback.
 
 ---
 
@@ -255,8 +320,10 @@ configuration.
    parser/linter/help where needed, and extend redaction tests across metadata surfaces.
 3. **Slice C - Portal encrypted store.** Add database schema, encryption/decryption service, Admin UI/API,
    audit, HA key checks, and backup/restore validation.
-4. **Slice D - Connection Catalog.** Add catalog schema, RBAC, execution-time expansion, masked
-   diagnostics, import/export metadata, and impact inventory.
+4. **Slice D - Connection Catalog.** Add `IConnectionCatalogProvider` with the local (CLI-managed,
+   machine-scoped) provider and `SHARED:name` execution-time expansion first; then the Portal
+   provider with catalog schema, RBAC, masked diagnostics, import/export metadata, and impact
+   inventory.
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
    Portal/Orchestrator background services with leases and operational history.
 
