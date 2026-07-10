@@ -244,6 +244,35 @@ the CLI warns when it is used. Values are encrypted machine-scoped before they r
 these commands on the machine that will resolve the secrets. `set-secret` on a disabled secret
 re-enables it. Secret values are never echoed, logged, or included in error messages.
 
+#### Shared connections (connection catalog)
+
+An administrator can catalog a connection once — the SSRS shared data source model — so users
+reference it without knowing the credentials. Configure the catalog with
+`Governance:ConnectionCatalog:Provider=Local` and `Governance:ConnectionCatalog:LocalRoot=<dir>`
+(machine-encrypted entries, same trust boundary as the OS secret store — restrict the directory
+with filesystem ACLs), then manage entries from the CLI:
+
+```powershell
+etl-sql admin set-connection --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
+etl-sql admin list-connections                       # aliases and Active/Disabled status
+etl-sql admin verify-connection --alias sales_dw     # proves the entry and its SECRET: references resolve
+etl-sql admin disable-connection --alias sales_dw
+etl-sql admin delete-connection --alias sales_dw
+```
+
+Catalog entries hold `SECRET:name` references, never credential values — `set-connection` rejects
+raw credentials and points at `set-secret`. Scripts use the entry through the declared connector
+type, which must match the catalog entry:
+
+```sql
+CREATE CONNECTION dw AS MSSQL('SHARED:sales_dw');
+```
+
+At execution the alias expands to the cataloged definition, `SECRET:` references resolve through
+the configured secret provider, and script-local options may add to but never override cataloged
+credential fields. An unknown alias, a disabled entry, a connector type mismatch, or an
+unconfigured catalog fails connection creation with a clear error.
+
 Use named references in connector definitions:
 
 ```sql

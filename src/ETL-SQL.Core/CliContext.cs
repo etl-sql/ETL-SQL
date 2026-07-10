@@ -80,6 +80,12 @@ public class CliContext
     public string? SecretName { get; set; }
     public string? SecretValue { get; set; }
 
+    // admin connection catalog commands
+    public string? ConnectionAlias { get; set; }
+    public string? ConnectionType { get; set; }
+    public string? ConnectionTarget { get; set; }
+    public string[]? ConnectionOptions { get; set; }
+
     // enterprise enrollment commands
     public string? EnterpriseTenant { get; set; }
     public string? EnterprisePolicyEndpoint { get; set; }

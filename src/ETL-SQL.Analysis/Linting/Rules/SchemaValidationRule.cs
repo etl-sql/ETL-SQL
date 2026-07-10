@@ -360,7 +360,8 @@ public class SchemaValidationRule : ILintRule
 
         if (IsFileConnector(connType))
         {
-            if (connStmt != null && connStmt.TargetExpression is LiteralExpression targetLit && targetLit.Value is string targetPath)
+            if (connStmt != null && connStmt.TargetExpression is LiteralExpression targetLit && targetLit.Value is string targetPath
+                && !targetPath.StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase))
             {
                 if (!isInsert)
                 {

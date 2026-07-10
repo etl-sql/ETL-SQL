@@ -328,7 +328,12 @@ configuration.
 4. **Slice D - Connection Catalog.** Add `IConnectionCatalogProvider` with the local (CLI-managed,
    machine-scoped) provider and `SHARED:name` execution-time expansion first; then the Portal
    provider with catalog schema, RBAC, masked diagnostics, import/export metadata, and impact
-   inventory.
+   inventory. *(Local half shipped: contracts + `LocalConnectionCatalogProvider` (machine-encrypted
+   entries, disable marker), `SHARED:alias` expansion in CREATE CONNECTION (type check,
+   credential-override rejection, SECRET: resolution downstream), the
+   set/list/verify/disable/delete-connection admin CLI with raw-credential rejection, SHARED:
+   redaction, and path-lint suppression for reference prefixes. Remaining: the Portal catalog
+   provider with RBAC/audit/import-export/impact inventory.)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
    Portal/Orchestrator background services with leases and operational history.
 

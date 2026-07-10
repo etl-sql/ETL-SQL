@@ -89,9 +89,12 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
             return Task.FromResult<IReadOnlyList<string>>([]);
 
         var aliases = Directory.EnumerateFiles(GetRoot(), "*.connection")
+            .Concat(Directory.EnumerateFiles(GetRoot(), "*.connection.disabled")
+                .Select(path => path[..^".disabled".Length]))
             .Select(Path.GetFileNameWithoutExtension)
             .Where(alias => !string.IsNullOrEmpty(alias))
             .Select(alias => alias!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToList();
         return Task.FromResult<IReadOnlyList<string>>(aliases);
