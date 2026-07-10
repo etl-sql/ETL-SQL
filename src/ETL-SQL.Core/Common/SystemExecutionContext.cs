@@ -9,6 +9,7 @@ using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
@@ -135,6 +136,9 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public IServiceProvider ServiceProvider => null!;
     public List<ExecutionMetrics> ProfileMetrics { get; } = new();
     public ExecutionTree ExecutionTree => new ExecutionTree();
+    public IReadOnlyList<PlanDecision> PlanDecisions { get; } = Array.Empty<PlanDecision>();
+    public int MaxPlanDecisions { get; set; } = 0;
+    public void RecordPlanDecision(PlanDecision decision) { }
     public void Clear() { }
     /// <summary>No-op for stateless context.</summary>
     void IReportContext.Clear() { }

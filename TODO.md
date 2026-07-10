@@ -165,6 +165,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
 
 - [ ] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
   unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
+  *(Slice A progress: added the immutable `PlanDecision` contract, stable reason-code taxonomy,
+  bounded sanitized storage on `ITelemetryContext`, clear/cap behavior, and focused tests. Planner
+  instrumentation for native columnar rejection/acceptance points remains next.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and

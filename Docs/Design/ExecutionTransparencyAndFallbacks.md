@@ -1,6 +1,6 @@
 # Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design
 
-**Status:** DRAFT for review — no implementation yet.
+**Status:** Implementation in progress; Slice A telemetry contract is implemented.
 **TODO items covered:** v0.15.0 Phase 5 (fallback reason telemetry, fallback frequency/cost
 ranking, differential correctness and crossover benchmarks for new native paths).
 **Completion gate:** users and maintainers can see why a query left a native/columnar path, how
@@ -138,7 +138,9 @@ the correctness baseline and the recovery path for unsupported shapes.
 ## 7. Delivery Plan
 
 1. **Slice A — telemetry contract.** Add `PlanDecision` storage, reason taxonomy, cap/clear
-   behavior, and unit tests.
+   behavior, and unit tests. *(Implemented: `PlanDecision`, `PlanDecisionOutcome`, stable
+   `PlanDecisionReasonCodes`, bounded sanitized storage on `ITelemetryContext`, and
+   `PlanDecisionTelemetryTests`.)*
 2. **Slice B — columnar planner instrumentation.** Instrument aggregate, join, sort, and projection
    native planners with accepted/rejected decisions.
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,

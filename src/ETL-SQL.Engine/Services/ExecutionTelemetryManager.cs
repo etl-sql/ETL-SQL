@@ -1,11 +1,16 @@
 using System.Collections.Generic;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Planning;
 
 namespace ETL_SQL.Engine.Services;
 
 public class ExecutionTelemetryManager : ITelemetryContext
 {
+    private readonly object _planDecisionLock = new();
+    private readonly List<PlanDecision> _planDecisions = new();
+
     private long _rowsProcessed = 0;
     public long RowsProcessed
     {
@@ -91,6 +96,30 @@ public class ExecutionTelemetryManager : ITelemetryContext
 
     public ETL_SQL.Core.Common.ExecutionTree ExecutionTree { get; } = new();
 
+    public int MaxPlanDecisions { get; set; } = 1024;
+
+    public IReadOnlyList<PlanDecision> PlanDecisions
+    {
+        get
+        {
+            lock (_planDecisionLock)
+                return _planDecisions.ToArray();
+        }
+    }
+
+    public void RecordPlanDecision(PlanDecision decision)
+    {
+        if (!TelemetryEnabled || MaxPlanDecisions <= 0) return;
+
+        var sanitized = SanitizeDecision(decision);
+        lock (_planDecisionLock)
+        {
+            while (_planDecisions.Count >= MaxPlanDecisions)
+                _planDecisions.RemoveAt(0);
+            _planDecisions.Add(sanitized);
+        }
+    }
+
     public void Clear()
     {
         RowsProcessed = 0;
@@ -113,5 +142,31 @@ public class ExecutionTelemetryManager : ITelemetryContext
         LockWaitMs = 0;
         ProfileMetrics.Clear();
         ExecutionTree.Clear();
+        lock (_planDecisionLock)
+            _planDecisions.Clear();
     }
+
+    private static PlanDecision SanitizeDecision(PlanDecision decision)
+    {
+        var attributes = new Dictionary<string, string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in decision.Attributes)
+        {
+            attributes[Normalize(key)] = SecretRedactor.MaskIfSensitive(key, Normalize(value));
+        }
+
+        return decision with
+        {
+            QueryId = Normalize(decision.QueryId),
+            OperatorId = Normalize(decision.OperatorId),
+            CandidatePath = Normalize(decision.CandidatePath),
+            ReasonCode = Normalize(decision.ReasonCode),
+            Message = SecretRedactor.Redact(Normalize(decision.Message)) ?? string.Empty,
+            Attributes = attributes
+        };
+    }
+
+    private static string Normalize(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Replace('\r', ' ').Replace('\n', ' ').Trim();
 }

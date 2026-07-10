@@ -6,6 +6,7 @@ using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
@@ -159,6 +160,9 @@ public interface ITelemetryContext
     long LockWaitMs { get; set; }
     List<ExecutionMetrics> ProfileMetrics { get; }
     Common.ExecutionTree ExecutionTree { get; }
+    IReadOnlyList<PlanDecision> PlanDecisions { get; }
+    int MaxPlanDecisions { get; set; }
+    void RecordPlanDecision(PlanDecision decision);
     void Clear();
 }
 
