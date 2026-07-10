@@ -228,4 +228,7 @@ operator candidates explicitly on a suitable machine:
 
 .\scripts\Test-GateF.ps1 -Scenario HighCardinalityGrouping
 .\scripts\Test-GateFEvidence.ps1 -RequiredScenario HighCardinalityGrouping
+
+.\scripts\Test-GateF.ps1 -Scenario EligibleWindowRowNumber
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario EligibleWindowRowNumber
 ```

@@ -145,8 +145,11 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
   *(Slice E progress: `Test-GateF.ps1 -Scenario HighCardinalityGrouping` runs an explicit
   high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/`MIN`/`MAX`,
   formula-based validation, spill/partition telemetry, resume/reuse keys, disk admission, and report
-  output. Eligible window and heterogeneous `MERGE` remain manifest-only candidates pending stronger
-  lower-tier boundedness evidence; holistic aggregates remain Not certified.)*
+  output. `Test-GateF.ps1 -Scenario EligibleWindowRowNumber` runs an explicit bounded
+  `ROW_NUMBER` external-window candidate with deterministic partitions, per-partition sequence
+  validation, spill/partition telemetry, resume/reuse keys, disk admission, and report output.
+  Heterogeneous `MERGE` remains manifest-only pending bounded source/target staging evidence;
+  holistic aggregates remain Not certified.)*
 - [x] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
   and row-engine fallbacks explicit. Do not introduce a blanket “all SQL at 1B” claim.
   *(Complete: `Docs/Large_Data_Certification.md` publishes the manifest-backed billion-row operator

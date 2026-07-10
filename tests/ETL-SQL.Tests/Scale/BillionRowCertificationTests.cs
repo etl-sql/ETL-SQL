@@ -445,6 +445,127 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
     }
 
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_ELIGIBLE_WINDOW_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_ELIGIBLE_WINDOW_ROWS or GATE_F_ROWS must be explicitly set for eligible window certification.");
+
+        var configuredPartitions = ReadPositiveLong("GATE_F_ELIGIBLE_WINDOW_PARTITIONS", Math.Min(1_000, rowCount));
+        var partitionCount = Math.Min(rowCount, configuredPartitions);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.WindowSpillThreshold = ReadPositiveInt("GATE_F_WINDOW_SPILL_THRESHOLD", 100_000);
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var aggregateEngine = new AggregateEngine(evaluator, logger);
+        var windowEngine = new WindowEngine(evaluator, aggregateEngine, logger);
+        var externalWindowEngine = new ExternalWindowEngine(evaluator, windowEngine, logger);
+
+        var window = new WindowClause(
+            new List<Expression> { new IdentifierExpression("PartitionId") },
+            new List<OrderByClause> { new(new IdentifierExpression("OrderId"), false) });
+        var rowNumber = new FunctionCallExpression("ROW_NUMBER", new List<Expression>()) { Window = window };
+        var rowNumberKey = $"WINDOW_{rowNumber.ToSql().ToUpperInvariant()}";
+        var stmt = new SelectStatement(
+            new List<SelectColumn>
+            {
+                new(new IdentifierExpression("PartitionId"), "PartitionId"),
+                new(new IdentifierExpression("OrderId"), "OrderId"),
+                new(rowNumber, "RowNumber")
+            },
+            null,
+            new TableReference("#input"),
+            new List<JoinClause>(),
+            null);
+
+        var stopwatch = Stopwatch.StartNew();
+        var counts = new Dictionary<long, long>();
+        var rnSums = new Dictionary<long, decimal>();
+        long emittedRows = 0;
+        decimal rnTotal = 0;
+
+        await foreach (var row in externalWindowEngine.ApplyWindowFunctionsExternal(
+            GenerateEligibleWindowRows(rowCount, partitionCount),
+            stmt,
+            knownRowCount: rowCount,
+            knownInputBytes: rowCount * 64))
+        {
+            var partition = Convert.ToInt64(row["PartitionId"], CultureInfo.InvariantCulture);
+            var rn = Convert.ToDecimal(row[rowNumberKey], CultureInfo.InvariantCulture);
+            Assert.True(rn >= 1, $"Partition {partition} emitted invalid row number {rn}.");
+            counts[partition] = counts.TryGetValue(partition, out var count) ? count + 1 : 1;
+            rnSums[partition] = rnSums.TryGetValue(partition, out var sum) ? sum + rn : rn;
+            rnTotal += rn;
+            emittedRows++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        Assert.Equal(rowCount, emittedRows);
+        Assert.Equal(partitionCount, counts.Count);
+        foreach (var (partition, count) in counts)
+        {
+            var expectedCount = CountForModuloPartition(rowCount, partitionCount, partition);
+            Assert.Equal(expectedCount, count);
+            Assert.Equal((decimal)SumRange(1, expectedCount), rnSums[partition]);
+        }
+
+        var expectedRnTotal = 0m;
+        for (long partition = 0; partition < partitionCount; partition++)
+            expectedRnTotal += SumRange(1, CountForModuloPartition(rowCount, partitionCount, partition));
+        Assert.Equal(expectedRnTotal, rnTotal);
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "Eligible window candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "Eligible window candidate expected partition telemetry.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+
+        var metric = new
+        {
+            scenario = "EligibleWindowRowNumber_1B",
+            rowCount,
+            partitionCount,
+            maxPartitionRows = counts.Values.Max(),
+            emittedRows,
+            rnTotal,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            enginePartitionCount = externalWindowEngine.PartitionCount,
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_ELIGIBLE_WINDOW_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_ELIGIBLE_WINDOW_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
 
@@ -506,6 +627,23 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             };
         }
     }
+
+    private static async IAsyncEnumerable<Row> GenerateEligibleWindowRows(long rowCount, long partitionCount)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                ["PartitionId"] = (int)((id - 1) % partitionCount),
+                ["OrderId"] = id,
+                ["Value"] = id * 7
+            };
+        }
+    }
+
+    private static long CountForModuloPartition(long rowCount, long partitionCount, long partition)
+        => partition >= rowCount ? 0 : ((rowCount - 1 - partition) / partitionCount) + 1;
 
     private static long ExpectedExternalJoinMatches(long leftRows, long rightRows, long overlapOffset)
         => Math.Max(0, Math.Min(leftRows - 1, overlapOffset + rightRows - 1) - overlapOffset + 1);

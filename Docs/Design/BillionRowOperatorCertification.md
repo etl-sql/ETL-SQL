@@ -214,11 +214,13 @@ not a v0.15.0 goal.
    and blanket 1B SQL wording does not appear.)*
 5. **Slice E — later operators.** Add grouping/window/MERGE candidates only after lower-tier
    differential tests pass. *(In progress: `Test-GateF.ps1 -Scenario HighCardinalityGrouping`
-   now runs the high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/
+   runs the high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/
    `MIN`/`MAX`, formula-based validation, spill/partition telemetry, resume key, disk admission,
-   and report evidence. Window and `MERGE` remain manifest-only candidates until their bounded
-   lower-tier evidence is strong enough for an operator-run path; holistic aggregates remain not
-   certified.)*
+   and report evidence. `Test-GateF.ps1 -Scenario EligibleWindowRowNumber` runs the bounded
+   `ROW_NUMBER` external-window candidate with deterministic partitions, per-partition sequence
+   validation, spill/partition telemetry, resume key, disk admission, and report evidence. `MERGE`
+   remains manifest-only pending a bounded source/target staging design; holistic aggregates remain
+   not certified.)*
 
 ---
 

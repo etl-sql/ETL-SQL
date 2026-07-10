@@ -29,7 +29,7 @@ Before publishing Gate F performance claims or closing a release candidate that 
 paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`; pass
 `-Baseline` when comparing an operator-run report against the checked-in Gate F baseline.
 Phase 4 operator candidates are explicit. For example, `./scripts/Test-GateF.ps1 -Scenario ExternalSort`,
-`-Scenario ExternalJoin`, or `-Scenario HighCardinalityGrouping` runs an operator candidate, and
+`-Scenario ExternalJoin`, `-Scenario HighCardinalityGrouping`, or `-Scenario EligibleWindowRowNumber` runs an operator candidate, and
 `./scripts/Test-GateFEvidence.ps1 -RequiredScenario <scenario>` validates the resulting artifact.
 Candidate artifacts are not product claims until the public certification matrix marks them certified.
 | **[`test-service-capacity.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |

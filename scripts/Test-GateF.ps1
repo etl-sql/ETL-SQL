@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping', 'EligibleWindowRowNumber')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -235,6 +235,31 @@ function Get-GateFScenarioManifests {
             nonGoals = @('median', 'percentile', 'GROUPING SETS', 'ROLLUP', 'CUBE', 'adversarial single-key skew')
             resumeKeyFields = @('commit', 'rows', 'groupCount', 'memoryBoundMB', 'memoryGrantMB')
         }
+        eligibleWindowRowNumber = [ordered]@{
+            scenarioId = 'EligibleWindowRowNumber_1B'
+            operator = 'ExternalWindow'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                functions = @('ROW_NUMBER')
+                partitioning = 'deterministic modulo partitions'
+                ordering = 'OrderId ASC'
+                skew = 'uniform generated partition distribution'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'per-partition row counts and sum of ROW_NUMBER sequence values'
+            telemetryContract = @($commonTelemetry + @('partitionCount', 'maxPartitionRows', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('unbounded frames requiring full partition materialization', 'RANGE date/interval offsets', 'non-deterministic ordering')
+            resumeKeyFields = @('commit', 'rows', 'partitionCount', 'windowFunction', 'memoryBoundMB', 'memoryGrantMB')
+        }
     }
 }
 
@@ -300,7 +325,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping' -or $Scenario -eq 'EligibleWindowRowNumber') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -548,6 +573,36 @@ try {
         }
     }
 
+    if ($Scenario -eq 'EligibleWindowRowNumber') {
+        # v0.15.0 Phase 4 candidate: ROW_NUMBER window is opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'eligible-window-row-number.json'
+        $resultKey = Join-Path $outRoot 'eligible-window-row-number.key'
+        $partitionCount = [math]::Min(1000L, [math]::Max(1L, $Rows))
+        $windowSpillThreshold = 100000
+        $runKey = "$commit|$Rows|$partitionCount|$windowSpillThreshold|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond|EligibleWindowRowNumber"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_PARTITIONS = $partitionCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_WINDOW_SPILL_THRESHOLD = $windowSpillThreshold.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'EligibleWindowRowNumber' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions'
+            ) (Join-Path $outRoot 'eligible-window-row-number.log') (Join-Path $outRoot 'eligible-window-row-number.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'EligibleWindowRowNumber' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
         schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
@@ -586,6 +641,9 @@ try {
         highCardinalityGrouping = if (Test-Path (Join-Path $outRoot 'high-cardinality-grouping.json')) {
             Get-Content (Join-Path $outRoot 'high-cardinality-grouping.json') -Raw | ConvertFrom-Json
         } else { $null }
+        eligibleWindowRowNumber = if (Test-Path (Join-Path $outRoot 'eligible-window-row-number.json')) {
+            Get-Content (Join-Path $outRoot 'eligible-window-row-number.json') -Raw | ConvertFrom-Json
+        } else { $null }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
@@ -606,5 +664,7 @@ finally {
     Remove-Item Env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS,Env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS,Env:GATE_F_JOIN_PARTITIONS,Env:GATE_F_EXTERNAL_JOIN_OUTPUT `
         -ErrorAction SilentlyContinue
     Remove-Item Env:GATE_F_HIGH_CARD_GROUP_ROWS,Env:GATE_F_HIGH_CARD_GROUP_COUNT,Env:GATE_F_OPERATOR_MEMORY_GRANT_MB,Env:GATE_F_HIGH_CARD_GROUP_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_ELIGIBLE_WINDOW_ROWS,Env:GATE_F_ELIGIBLE_WINDOW_PARTITIONS,Env:GATE_F_WINDOW_SPILL_THRESHOLD,Env:GATE_F_ELIGIBLE_WINDOW_OUTPUT `
         -ErrorAction SilentlyContinue
 }

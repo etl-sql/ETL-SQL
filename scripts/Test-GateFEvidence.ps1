@@ -32,7 +32,7 @@
 param(
     [string]$Report = '.\certification-results\gate-f-1b\gate-f-report.json',
 
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping', 'EligibleWindowRowNumber')]
     [string]$RequiredScenario = 'All',
 
     [string]$Baseline = '',
@@ -104,6 +104,7 @@ function Test-ScenarioPresent {
         'ExternalSort' { return $null -ne (Get-PropValue $GateFReport @('externalSort')) }
         'ExternalJoin' { return $null -ne (Get-PropValue $GateFReport @('externalJoin')) }
         'HighCardinalityGrouping' { return $null -ne (Get-PropValue $GateFReport @('highCardinalityGrouping')) }
+        'EligibleWindowRowNumber' { return $null -ne (Get-PropValue $GateFReport @('eligibleWindowRowNumber')) }
         default { return $false }
     }
 }
@@ -121,6 +122,7 @@ function Get-ScenarioEvidence {
         'ExternalSort' { return Get-PropValue $GateFReport @('externalSort') }
         'ExternalJoin' { return Get-PropValue $GateFReport @('externalJoin') }
         'HighCardinalityGrouping' { return Get-PropValue $GateFReport @('highCardinalityGrouping') }
+        'EligibleWindowRowNumber' { return Get-PropValue $GateFReport @('eligibleWindowRowNumber') }
         default { return $null }
     }
 }
