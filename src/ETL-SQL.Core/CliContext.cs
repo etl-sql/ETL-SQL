@@ -76,6 +76,10 @@ public class CliContext
     public string? MigrateTo { get; set; }
     public bool MigrateDryRun { get; set; }
 
+    // admin secret lifecycle commands
+    public string? SecretName { get; set; }
+    public string? SecretValue { get; set; }
+
     // enterprise enrollment commands
     public string? EnterpriseTenant { get; set; }
     public string? EnterprisePolicyEndpoint { get; set; }

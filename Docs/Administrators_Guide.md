@@ -223,6 +223,26 @@ Governance__Secrets__VaultEndpoint=https://vault.example.com/etl-sql/secrets
 Governance__Secrets__VaultBearerToken=ENC:ENCRYPTED_TOKEN
 ```
 
+#### Managing OS secret store secrets from the CLI
+
+With `Governance:Secrets:Provider=OsSecretStore` configured, administrators manage named secrets
+without touching secret files directly:
+
+```powershell
+etl-sql admin set-secret --name sales_db_password      # prompts (masked) and confirms
+etl-sql admin verify-secret --name sales_db_password   # proves the secret resolves; never prints it
+etl-sql admin rotate-secret --name sales_db_password   # replaces the value; fails if it does not exist
+etl-sql admin disable-secret --name sales_db_password  # resolution fails until a new value is stored
+etl-sql admin delete-secret --name sales_db_password   # permanently removes the secret
+```
+
+`set-secret` and `rotate-secret` read the value from a masked interactive prompt (with
+confirmation), or from stdin when input is piped (`Get-Content value.txt | etl-sql admin
+set-secret --name x`). `--value` is supported for automation but can persist in shell history —
+the CLI warns when it is used. Values are encrypted machine-scoped before they reach disk, so run
+these commands on the machine that will resolve the secrets. `set-secret` on a disabled secret
+re-enables it. Secret values are never echoed, logged, or included in error messages.
+
 Use named references in connector definitions:
 
 ```sql
