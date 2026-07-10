@@ -157,8 +157,9 @@ the correctness baseline and the recovery path for unsupported shapes.
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
    frequency/cost across representative workloads. *(In progress:
    `scripts/Summarize-PlanFallbacks.ps1` aggregates existing JSON evidence/profile fallback
-   summaries by candidate path and reason code, then emits ranked JSON/Markdown outputs.
-   Representative workload capture and elapsed/spill/memory cost attribution remain open.)*
+   summaries by candidate path and reason code, carries same-object elapsed/spill/row/peak-memory
+   cost context when present, then emits ranked JSON/Markdown outputs. Representative workload
+   capture and per-operator cost attribution remain open.)*
 6. **Slice F — native admission harness.** Add differential correctness requirements and crossover
    benchmarks for candidate native paths. *(In progress: `ColumnarCrossoverBenchmarks` compares
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,

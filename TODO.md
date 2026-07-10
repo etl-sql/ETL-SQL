@@ -182,9 +182,10 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
   *(Slice E progress: `scripts/Summarize-PlanFallbacks.ps1` aggregates fallback summaries from JSON
-  evidence/profile artifacts, ranks them by `CandidatePath`/`ReasonCode` frequency, and can emit
-  JSON plus Markdown reports. Representative workload captures and elapsed/spill/memory cost
-  attribution remain open before approving any new native-path expansion.)*
+  evidence/profile artifacts, ranks them by `CandidatePath`/`ReasonCode` frequency, carries
+  same-object elapsed/spill/row/peak-memory cost context when present, and can emit JSON plus
+  Markdown reports. Representative workload captures and per-operator cost attribution remain open
+  before approving any new native-path expansion.)*
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
   *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus

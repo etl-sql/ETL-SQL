@@ -5,7 +5,9 @@
 .DESCRIPTION
     Reads one or more JSON files containing plan-decision summary fields emitted by SHOW PROFILE,
     EXPLAIN ANALYZE, Gate F evidence, or derived workload exports. Summary values use the format
-    CandidatePath:ReasonCode=count; multiple entries are separated by semicolons.
+    CandidatePath:ReasonCode=count; multiple entries are separated by semicolons. When the same
+    JSON object also contains elapsed, spill, row-count, or peak-memory fields, the script carries
+    those coarse cost signals into the ranking output.
 
     This script is intentionally evidence-driven: it ranks observed fallback frequency before any
     new native path work is approved.
@@ -26,7 +28,8 @@ function Add-FallbackSummary {
     param(
         [hashtable]$Totals,
         [string]$Summary,
-        [string]$Source
+        [string]$Source,
+        [hashtable]$Cost
     )
 
     if ([string]::IsNullOrWhiteSpace($Summary) -or $Summary.Trim() -eq '--') { return }
@@ -48,12 +51,66 @@ function Add-FallbackSummary {
                 candidatePath = $candidate
                 reasonCode = $reason
                 count = [int64]0
+                observedElapsedMs = [decimal]0
+                observedSpillBytes = [decimal]0
+                observedRowsAffected = [decimal]0
+                observedPeakWorkingSetMB = [decimal]0
                 sources = New-Object 'System.Collections.Generic.HashSet[string]'
             }
         }
 
         $Totals[$key].count += $count
+        if ($null -ne $Cost.elapsedMs) { $Totals[$key].observedElapsedMs += [decimal]$Cost.elapsedMs }
+        if ($null -ne $Cost.spillBytes) { $Totals[$key].observedSpillBytes += [decimal]$Cost.spillBytes }
+        if ($null -ne $Cost.rowsAffected) { $Totals[$key].observedRowsAffected += [decimal]$Cost.rowsAffected }
+        if ($null -ne $Cost.peakWorkingSetMB) {
+            $Totals[$key].observedPeakWorkingSetMB = [Math]::Max(
+                [decimal]$Totals[$key].observedPeakWorkingSetMB,
+                [decimal]$Cost.peakWorkingSetMB)
+        }
         [void]$Totals[$key].sources.Add($Source)
+    }
+}
+
+function Convert-ToDecimalOrNull {
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [string] -and [string]::IsNullOrWhiteSpace($Value)) { return $null }
+    if ($Value -is [string] -and $Value.Trim() -eq '--') { return $null }
+
+    try {
+        return [decimal]$Value
+    } catch {
+        return $null
+    }
+}
+
+function Get-FirstNumericProperty {
+    param(
+        [object]$Node,
+        [string[]]$Names
+    )
+
+    foreach ($name in $Names) {
+        $property = $Node.PSObject.Properties[$name]
+        if ($null -eq $property) { continue }
+
+        $value = Convert-ToDecimalOrNull $property.Value
+        if ($null -ne $value) { return $value }
+    }
+
+    return $null
+}
+
+function Get-CostContext {
+    param([object]$Node)
+
+    return @{
+        elapsedMs = Get-FirstNumericProperty $Node @('elapsedMs', 'actualTimeMs', 'Actual Time (ms)', 'durationMs')
+        spillBytes = Get-FirstNumericProperty $Node @('spillBytes', 'spilledBytes', 'totalSpilledBytes', 'Spill Bytes')
+        rowsAffected = Get-FirstNumericProperty $Node @('rowCount', 'rowsAffected', 'actualRows', 'Actual Rows', 'selectedRows')
+        peakWorkingSetMB = Get-FirstNumericProperty $Node @('peakWorkingSetMB', 'peakProcessWorkingSetMB')
     }
 }
 
@@ -74,10 +131,14 @@ function Visit-Json {
     $properties = $Node.PSObject.Properties
     if ($null -eq $properties) { return }
 
+    $summaryProperty = @($properties | Where-Object {
+        $_.Name -in @('planDecisionSummary', 'planFallbackSummary', 'PlanFallbackSummary', 'Plan Decision Summary')
+    } | Select-Object -First 1)
+    if ($summaryProperty.Count -gt 0) {
+        Add-FallbackSummary $Totals ([string]$summaryProperty[0].Value) $Source (Get-CostContext $Node)
+    }
+
     foreach ($property in $properties) {
-        if ($property.Name -in @('planDecisionSummary', 'planFallbackSummary', 'PlanFallbackSummary', 'Plan Decision Summary')) {
-            Add-FallbackSummary $Totals ([string]$property.Value) $Source
-        }
         Visit-Json $property.Value $Totals $Source
     }
 }
@@ -98,6 +159,10 @@ $rows = @(
             CandidatePath = $entry.candidatePath
             ReasonCode = $entry.reasonCode
             Count = [int64]$entry.count
+            ObservedElapsedMs = [decimal]$entry.observedElapsedMs
+            ObservedSpillBytes = [decimal]$entry.observedSpillBytes
+            ObservedRowsAffected = [decimal]$entry.observedRowsAffected
+            ObservedPeakWorkingSetMB = [decimal]$entry.observedPeakWorkingSetMB
             SourceCount = [int]$entry.sources.Count
             Sources = ($entry.sources | Sort-Object) -join '; '
         }
@@ -116,14 +181,14 @@ if ($MarkdownReport) {
     $lines = @(
         '# Plan Fallback Ranking',
         '',
-        '| CandidatePath | ReasonCode | Count | SourceCount |',
-        '| :--- | :--- | ---: | ---: |'
+        '| CandidatePath | ReasonCode | Count | ObservedElapsedMs | ObservedSpillBytes | ObservedRowsAffected | ObservedPeakWorkingSetMB | SourceCount |',
+        '| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |'
     )
     if ($rows.Count -eq 0) {
-        $lines += '| -- | -- | 0 | 0 |'
+        $lines += '| -- | -- | 0 | 0 | 0 | 0 | 0 | 0 |'
     } else {
         foreach ($row in $rows) {
-            $lines += "| $($row.CandidatePath) | $($row.ReasonCode) | $($row.Count) | $($row.SourceCount) |"
+            $lines += "| $($row.CandidatePath) | $($row.ReasonCode) | $($row.Count) | $($row.ObservedElapsedMs) | $($row.ObservedSpillBytes) | $($row.ObservedRowsAffected) | $($row.ObservedPeakWorkingSetMB) | $($row.SourceCount) |"
         }
     }
     $lines | Set-Content -LiteralPath $MarkdownReport -Encoding UTF8
