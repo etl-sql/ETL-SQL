@@ -283,6 +283,50 @@ last-used/last-verified timestamps for governance review. Pair it with
 `Governance:Secrets:Provider=PortalStore` so both the catalog and the secrets it references are
 cluster-wide.
 
+### Native admin services
+
+The `samples/admin_operations` scheduler scripts have managed, first-class replacements: three
+Portal background services configured under `Portal:AdminServices`, all disabled by default. Each
+runs on its own interval with an HA cluster lease (exactly one node runs per interval; restarts do
+not re-send), retries delivery up to `MaxAttempts` per run, records every run — sent, skipped, or
+failed — in a durable history (pruned per `RunHistoryRetentionDays`, default 90), and audits each
+run as `ADMIN_SERVICE_RUN`.
+
+```json
+{
+  "Portal": {
+    "AdminServices": {
+      "FailureDigest": {
+        "Enabled": true, "IntervalHours": 24, "LookbackHours": 25,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer", "AlertOnly": true
+      },
+      "BackupReport": {
+        "Enabled": true, "IntervalHours": 24, "MaxBackupAgeHours": 26,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer", "AlertOnly": true
+      },
+      "CapacityReport": {
+        "Enabled": true, "IntervalHours": 24, "LookbackHours": 24,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer"
+      }
+    }
+  }
+}
+```
+
+Migration from the sample scripts:
+
+| Sample script | Native replacement |
+| :--- | :--- |
+| `daily_failure_digest.etlsql` | `FailureDigest` — failed scheduled jobs (including `INTERRUPTED`), failed/cancelled portal executions, and failed/denied subscription deliveries in the lookback window. |
+| `backup_and_report.etlsql` | `BackupReport` — `etl-sql admin backup` now records its outcome automatically (job-state `admin-backup`); the service alerts when the last backup failed, was never recorded, or is older than `MaxBackupAgeHours`. The two-step scheduler wiring is no longer needed. |
+| `capacity_report.etlsql` | `CapacityReport` — worst-point per-node disk/memory/CPU from host metrics plus job run/failure counts; always sends when enabled. |
+
+Notifications go through a stored SMTP connection selected by `SmtpAlias` (the credential is
+decrypted per send and never leaves the portal). `GET api/admin/services` shows each service's
+configuration and last run; `GET api/admin/services/{name}/history` returns the run ledger. The
+sample scripts remain as examples for custom workflows, but the supported production path is this
+configuration.
+
 Use named references in connector definitions:
 
 ```sql

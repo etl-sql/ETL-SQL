@@ -99,6 +99,13 @@ Portal encrypted store workflow:
 - support backup/restore validation that proves encrypted values are decryptable by the restored
   environment without printing them.
 
+**Admin UI requirement (applies to the secret store AND the Connection Catalog UI):** the pages
+are built as extracted portal UI modules hosted in the `tools/ui-sandbox` stories harness — a
+story per surface with fixture data and the injectable mock fetch (`mockApi.js`) stubbing the
+`api/admin/secrets` / `api/admin/connections` endpoints — so the UI is viewable and debuggable
+without running the portal. Sandbox story first, then portal page integration; the story stays as
+the development-troubleshooting surface afterward.
+
 ---
 
 ## 5. Syntax and Resolution
@@ -339,7 +346,15 @@ configuration.
    flow into the expansion path — pair with a dedicated RBAC pass) and deep impact inventory
    (which reports/jobs reference an alias — pair with script inspection).)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
-   Portal/Orchestrator background services with leases and operational history.
+   Portal/Orchestrator background services with leases and operational history. *(Shipped:
+   `Portal:AdminServices` config (per-service enable/interval/recipients/SMTP alias/retries),
+   `FailureDigest`/`BackupReport`/`CapacityReport` services on the cluster-lock interval-TTL
+   cadence, `AdminServiceRun` history with retention, `ADMIN_SERVICE_RUN` audit,
+   `api/admin/services` status/history API, delivery through the shared
+   `IAdminNotificationSender` (also adopted by the operational-metrics digest), and
+   `etl-sql admin backup` now records its outcome (job-state `admin-backup`) so the backup report
+   needs no scheduler wiring. Samples remain as examples with a README pointing at the native
+   path.)*
 
 ---
 

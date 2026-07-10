@@ -393,6 +393,23 @@ public class PortalSharedConnection : IVersionedEntity
     public long Version { get; set; } = 1;
 }
 
+/// <summary>
+/// One run of a native admin background service (failure digest, backup report, capacity report):
+/// the durable per-run ledger behind retention, the admin status API, and operational review.
+/// </summary>
+public class AdminServiceRun
+{
+    public int Id { get; set; }
+    public string ServiceName { get; set; } = "";
+    /// <summary>Sent | Skipped | Failed.</summary>
+    public string Outcome { get; set; } = "";
+    public string? Detail { get; set; }
+    public DateTime StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public string? NodeName { get; set; }
+    public int Attempts { get; set; }
+}
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
 public class AuditLog

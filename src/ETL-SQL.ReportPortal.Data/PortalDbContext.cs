@@ -35,6 +35,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
     public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
     public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
+    public DbSet<AdminServiceRun> AdminServiceRuns => Set<AdminServiceRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -171,6 +172,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.EnvironmentScope).HasMaxLength(100);
             e.Property(x => x.Target).HasConversion(piiNullableConverter);
             e.Property(x => x.OptionsJson).HasConversion(piiConverter);
+        });
+
+        builder.Entity<AdminServiceRun>(e =>
+        {
+            e.HasIndex(x => new { x.ServiceName, x.StartedAtUtc });
+            e.Property(x => x.ServiceName).HasMaxLength(100);
+            e.Property(x => x.Outcome).HasMaxLength(20);
         });
 
         builder.Entity<SubscriptionDelivery>(e =>
