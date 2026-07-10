@@ -129,8 +129,11 @@ fields take literal values only.
 are the canonical, documented forms (the second option below). Unquoted secret-reference literals
 are not added: `SECRET` is already a keyword token (`GENERATE JWT SECRET`), quoted references are
 what the resolver, redactor, and every shipped example already use, and unquoted forms would touch
-lexer, formatter, linter, and highlighting for no capability gain. Remaining Slice B work is
-lint/help diagnostics for unquoted forms and an example/docs consistency sweep.
+lexer, formatter, linter, and highlighting for no capability gain. Shipped with the decision:
+the parser reports a targeted "must be quoted" diagnostic when an unquoted `SECRET:`/`ENC:`/
+`DPAPI:` value appears in a CREATE/ALTER CONNECTION option, the `SecretReferenceUsage` lint rule
+flags references on non-resolvable fields, and the shipped examples were swept for consistency
+(all use quoted references on credential fields only).
 
 - Accept unquoted `SECRET:name` anywhere `ENC:...` is accepted today, then normalize formatting to
   quoted canonical output when serializing scripts. **Rejected — see decision above.**

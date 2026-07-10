@@ -51,6 +51,35 @@ namespace ETL_SQL.Tests.Core
             Assert.NotNull(select.LimitCount);
         }
 
+        [Theory]
+        [InlineData("CREATE CONNECTION db AS MSSQL(SERVER='sql01', PASSWORD=SECRET:db_password);", "SECRET:")]
+        [InlineData("CREATE CONNECTION db AS MSSQL(SERVER='sql01', PASSWORD=ENC:AbCd12==);", "ENC:")]
+        [InlineData("ALTER CONNECTION db WITH(PASSWORD=SECRET:db_password);", "SECRET:")]
+        public void TestUnquotedSecretReference_ProducesQuotedFormDiagnostic(string source, string prefix)
+        {
+            var lexer = new Lexer(source);
+            var parser = new Parser(lexer.Tokenize());
+            var script = parser.Parse();
+
+            var diagnostic = Assert.Single(script.Diagnostics);
+            Assert.Contains("must be quoted", diagnostic.Message);
+            Assert.Contains(prefix, diagnostic.Message);
+        }
+
+        [Fact]
+        public void TestQuotedSecretReference_ParsesCleanly()
+        {
+            var source = "CREATE CONNECTION db AS MSSQL(SERVER='sql01', PASSWORD='SECRET:db_password');";
+            var lexer = new Lexer(source);
+            var parser = new Parser(lexer.Tokenize());
+            var script = parser.Parse();
+
+            Assert.Empty(script.Diagnostics);
+            var cc = Assert.IsType<CreateConnectionStatement>(Assert.Single(script.Statements));
+            var pw = Assert.IsType<LiteralExpression>(cc.Options?["PASSWORD"]);
+            Assert.Equal("SECRET:db_password", pw.Value);
+        }
+
         [Fact]
         public void TestParseCreateConnection()
         {
