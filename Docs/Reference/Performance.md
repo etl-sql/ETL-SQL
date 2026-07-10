@@ -216,8 +216,7 @@ Gate F performance results:
   -Baseline .\certification-results\gate-f-1b\gate-f-report.json
 ```
 
-External sort is a Phase 4 candidate, not an advertised certified 1B operator yet. To run the
-operator candidates explicitly on a suitable machine:
+To run the operator scenarios explicitly on a suitable machine:
 
 ```powershell
 .\scripts\Test-GateF.ps1 -Scenario ExternalSort

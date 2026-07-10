@@ -217,6 +217,7 @@ namespace ETL_SQL.Tests.Engine
             context.SetupGet(c => c.SpillStore).Returns(spillStore.Object);
             context.SetupGet(c => c.Telemetry).Returns(telemetry.Object);
             context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
+            context.SetupGet(c => c.EffectivePipelineDepth).Returns(1);
             var arbiter = new MemoryGrantArbiter(1_000_000);
             context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
 
@@ -274,6 +275,7 @@ namespace ETL_SQL.Tests.Engine
             context.SetupGet(c => c.SpillStore).Returns(spillStore.Object);
             context.SetupGet(c => c.Telemetry).Returns(new Mock<ITelemetryContext>().Object);
             context.SetupGet(c => c.TempTableSpillThresholdRows).Returns(0);
+            context.SetupGet(c => c.EffectivePipelineDepth).Returns(1);
             context.SetupGet(c => c.MemoryArbiter).Returns(arbiter);
 
             var secondYielded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
