@@ -1,0 +1,94 @@
+{
+  "environment": {
+    "deploymentMode": "Phase 6 PostgreSQL HA topology",
+    "databaseLocation": "PostgreSQL container from deploy/docker/docker-compose.ha.yml",
+    "diskType": "record host disk type",
+    "dotnetVersion": "record runtime from container image",
+    "notes": "Template for sustained PostgreSQL-backed Portal/Orchestrator load. Materialize with scripts/New-Phase6CapacityWorkload.ps1 so URLs and API key come from a generated Phase 6 topology run."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 5000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "reportId": "1",
+    "folderId": "1",
+    "datasetId": "1",
+    "jobName": "phase6-sustained-noop"
+  },
+  "portal": {
+    "baseUrl": "http://localhost:5600",
+    "roles": {
+      "admin": { "username": "admin", "password": "CHANGE_ME" }
+    },
+    "warmupIterations": 2,
+    "metricsPath": "/health",
+    "metricSampleIntervalMs": 1000,
+    "thinkTimeMs": 100,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 10, "durationSeconds": 300 },
+      { "concurrency": 25, "durationSeconds": 300 }
+    ],
+    "workload": [
+      { "name": "healthz", "method": "GET", "path": "/healthz", "weight": 8 },
+      { "name": "health", "method": "GET", "path": "/health", "weight": 6 },
+      { "name": "folders", "method": "GET", "path": "/api/folders", "role": "admin", "weight": 12 },
+      { "name": "folder-reports", "method": "GET", "path": "/api/folders/{{folderId}}/reports", "role": "admin", "weight": 8 },
+      { "name": "catalog-search", "method": "GET", "path": "/api/catalog/search?q=phase6", "role": "admin", "weight": 8 },
+      { "name": "datasets", "method": "GET", "path": "/api/datasets", "role": "admin", "weight": 8 },
+      { "name": "dataset-detail", "method": "GET", "path": "/api/datasets/{{datasetId}}", "role": "admin", "weight": 4 },
+      { "name": "snapshot", "method": "GET", "path": "/api/reports/{{reportId}}/snapshot", "role": "admin", "weight": 8 },
+      { "name": "refresh", "method": "POST", "path": "/api/reports/{{reportId}}/refresh", "role": "admin", "weight": 2, "thinkTimeMs": 3000 },
+      { "name": "admin-usage", "method": "GET", "path": "/api/admin/metrics/usage", "role": "admin", "weight": 4 },
+      { "name": "admin-audit", "method": "GET", "path": "/api/admin/audit?pageSize=50", "role": "admin", "weight": 4 }
+    ]
+  },
+  "orchestrator": {
+    "baseUrl": "http://localhost:5601",
+    "apiKey": "CHANGE_ME",
+    "metricsPath": "/metrics",
+    "metricSampleIntervalMs": 1000,
+    "thinkTimeMs": 250,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 10, "durationSeconds": 300 },
+      { "concurrency": 25, "durationSeconds": 300 }
+    ],
+    "workload": [
+      { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 8 },
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 8 },
+      { "name": "list-jobs", "method": "GET", "path": "/api/scheduled-jobs", "service": "orchestrator", "useApiKey": true, "weight": 6 },
+      { "name": "trigger-phase6", "method": "POST", "path": "/api/scheduled-jobs/{{jobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "history-phase6", "method": "GET", "path": "/api/scheduled-jobs/{{jobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 }
+    ]
+  },
+  "setupRequests": [
+    {
+      "name": "create-phase6-noop",
+      "baseUrl": "http://localhost:5601",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{jobName}}",
+        "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'phase6' AS workload INTO #phase6_sustained;",
+        "interval": 1,
+        "unit": "MINUTE",
+        "maxRetries": 0
+      }
+    }
+  ],
+  "cleanupRequests": [
+    {
+      "name": "delete-phase6-noop",
+      "baseUrl": "http://localhost:5601",
+      "method": "DELETE",
+      "path": "/api/scheduled-jobs/{{jobName}}",
+      "useApiKey": true,
+      "required": false
+    }
+  ]
+}

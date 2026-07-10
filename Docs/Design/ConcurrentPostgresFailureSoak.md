@@ -145,7 +145,12 @@ each fault, not just that an exception was thrown.
    `scripts/Test-Phase6Topology.ps1` covers template validation, generated configuration, metadata,
    and secret omission.)*
 2. **Slice B — sustained load.** Implement report/job/history workload drivers and capacity report
-   output.
+   output. *(In progress: `capacity-results/workloads/phase6-postgres-ha-sustained.workload.json`
+   defines the PostgreSQL-backed HA Portal/Orchestrator sustained-load profile, and
+   `scripts/New-Phase6CapacityWorkload.ps1` materializes a local runnable copy from a generated
+   topology run without committing generated API keys. `scripts/Test-Phase6CapacityWorkload.ps1`
+   validates materialization and the existing service-capacity harness schema. Real measured
+   capacity reports and PostgreSQL-specific metrics remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
    cleanup checks.
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and

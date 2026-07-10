@@ -227,8 +227,12 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   topology runs from the existing Docker Compose HA template, creates isolated shared artifact roots,
   writes local generated env files with disposable credentials, and emits non-secret
   `topology-metadata.json` for capacity/soak evidence. `scripts/Test-Phase6Topology.ps1` validates
-  the topology template and generated metadata. Sustained load drivers, PostgreSQL metrics capture,
-  and checked-in capacity reports remain open.)*
+  the topology template and generated metadata.
+  `capacity-results/workloads/phase6-postgres-ha-sustained.workload.json` now defines the sustained
+  Portal/Orchestrator HA workload, and `scripts/New-Phase6CapacityWorkload.ps1` materializes a local
+  runnable copy from generated topology metadata/env files. `scripts/Test-Phase6CapacityWorkload.ps1`
+  validates the materialized workload through the existing capacity harness. PostgreSQL metrics
+  capture and checked-in measured capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,

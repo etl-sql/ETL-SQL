@@ -6,7 +6,8 @@ Do not treat `workload.example.json` as a baseline. Copy it, replace credentials
 record the reference environment, and run the harness against an isolated non-production deployment.
 The workload templates under [`workloads/`](workloads/) cover cache-cold Portal execution and
 exports, representative Orchestrator row-volume jobs, retry/failure jobs, mocked I/O, `PARALLEL`,
-schedule density, and process-spawning comparisons.
+schedule density, process-spawning comparisons, and the Phase 6 PostgreSQL HA sustained-load
+profile.
 
 ```powershell
 node .\scripts\test-service-capacity.mjs --config .\capacity-results\workload.local.json
@@ -14,6 +15,15 @@ node .\scripts\test-capacity-workload-configs.mjs
 node .\scripts\compare-capacity-results.mjs `
   .\capacity-results\baseline\capacity-report.json `
   .\capacity-results\current\capacity-report.json
+```
+
+For Phase 6 HA runs, first generate a local topology, then materialize the sustained workload from
+that run so generated API keys stay outside source control:
+
+```powershell
+.\scripts\New-Phase6Topology.ps1 -RunId phase6-local -Start
+.\scripts\New-Phase6CapacityWorkload.ps1 -TopologyRunRoot .\.phase6-runs\phase6-local -AdminPassword <portal-admin-password>
+node .\scripts\test-service-capacity.mjs --config .\.phase6-runs\phase6-local\phase6-sustained.workload.local.json --out-dir .\certification-results\phase6-postgres-ha\phase6-local
 ```
 
 Checked-in baselines should include the JSON report, Markdown report, workload configuration with
