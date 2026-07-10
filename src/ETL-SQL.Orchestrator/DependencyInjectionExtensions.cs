@@ -62,6 +62,13 @@ namespace ETL_SQL.Orchestrator
                 ?? configuration["Secrets:VaultBearerToken"]
         };
 
+        /// <summary>Maps the Governance:ConnectionCatalog configuration section to catalog options.</summary>
+        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) => new()
+        {
+            Provider = configuration["Governance:ConnectionCatalog:Provider"],
+            LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
+        };
+
         public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
         {
             // 1. Core Services
@@ -72,6 +79,10 @@ namespace ETL_SQL.Orchestrator
             services.AddHostedService<EnterprisePolicyRefreshService>();
             services.AddSingleton<ISecretProvider>(_ =>
                 new SecretProviderFactory(new HttpClient()).Create(BuildSecretProviderOptions(configuration)));
+
+            var connectionCatalog = ConnectionCatalogProviderFactory.Create(BuildConnectionCatalogOptions(configuration));
+            if (connectionCatalog != null)
+                services.AddSingleton(connectionCatalog);
 
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);

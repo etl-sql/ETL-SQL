@@ -16,6 +16,9 @@ public static partial class SecretRedactor
     [GeneratedRegex(@"\bSECRET:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex SecretReferencePattern();
 
+    [GeneratedRegex(@"\bSHARED:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex SharedReferencePattern();
+
     [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9._~+/=\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex BearerPattern();
 
@@ -76,6 +79,7 @@ public static partial class SecretRedactor
             return $"{prefix}:{Mask}";
         });
         redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
+        redacted = SharedReferencePattern().Replace(redacted, $"SHARED:{Mask}");
         redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
         redacted = UrlCredentialPattern().Replace(redacted, $"$1{Mask}@");
         redacted = ServiceAccountSecretPattern().Replace(redacted, $"sas_{Mask}");

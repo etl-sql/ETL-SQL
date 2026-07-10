@@ -20,12 +20,14 @@ public class CreateConnectionStatementHandler(
     IConnectorRegistry connectorRegistry,
     ILogger logger,
     IConfiguration? config = null,
-    ISecretProvider? secretProvider = null) : IStatementHandler
+    ISecretProvider? secretProvider = null,
+    IConnectionCatalogProvider? connectionCatalog = null) : IStatementHandler
 {
     private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
     private readonly ILogger _logger = logger;
     private readonly IConfiguration? _config = config;
     private readonly ConnectionSecretResolver _secretResolver = new(secretProvider);
+    private readonly SharedConnectionExpander _sharedExpander = new(connectionCatalog);
 
 
     public Type SupportedStatementType => typeof(CreateConnectionStatement);
@@ -98,6 +100,12 @@ public class CreateConnectionStatementHandler(
             target = context.DecryptValue(target);
         }
         target = Interpolate(target ?? "");
+        if (SharedConnectionExpander.IsSharedReference(target))
+        {
+            var expanded = await _sharedExpander.ExpandAsync(connectionType, target, options, context.CancellationToken);
+            target = expanded.Target;
+            options = expanded.Options;
+        }
         target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
         if (options != null)
             options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
