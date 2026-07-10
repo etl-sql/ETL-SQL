@@ -197,7 +197,7 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   Markdown reports. Scale-certification and Gate F metric JSON now emit those summary fields for
   representative evidence capture. Checked-in representative workload captures and per-operator
   cost attribution remain open before approving any new native-path expansion.)*
-- [ ] Add differential correctness and crossover benchmarks for every new native path so small and
+- [x] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
   *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus
   native columnar comparisons for filter/projection, grouped aggregate, sort, and inner join at
@@ -207,7 +207,10 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   slowdown, no medium-workload slowdown, no medium-workload allocation increase, and at least five
   samples. Per-new-path differential requirements are checked in as
   `certification-results/native-path-differential-requirements.json` and validated by
-  `NativePathDifferentialRequirementsTests`. Checked-in benchmark result captures remain open.)*
+  `NativePathDifferentialRequirementsTests`. The 2026-07-10 checked-in crossover capture under
+  `certification-results/columnar-crossover-benchmarks/latest/` currently fails admission for every
+  candidate because the native paths are slower than the row-reference paths at both row counts; no
+  new native-path expansion is approved by this evidence.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 

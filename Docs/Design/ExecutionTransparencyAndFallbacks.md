@@ -172,13 +172,15 @@ the correctness baseline and the recovery path for unsupported shapes.
    Gate F metric JSON now provide those summary fields for evidence capture. Checked-in
    representative workload captures and per-operator cost attribution remain open.)*
 6. **Slice F — native admission harness.** Add differential correctness requirements and crossover
-   benchmarks for candidate native paths. *(In progress: `ColumnarCrossoverBenchmarks` compares
+   benchmarks for candidate native paths. *(Implemented: `ColumnarCrossoverBenchmarks` compares
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,
    and inner join at small/medium sizes. `columnar-crossover-admission.json` defines the
    admission thresholds and `ColumnarCrossoverAdmissionTests` protects the contract. Published
    per-path differential requirements are tracked in `native-path-differential-requirements.json`
-   and validated by `NativePathDifferentialRequirementsTests`. Published benchmark captures remain
-   open.)*
+   and validated by `NativePathDifferentialRequirementsTests`. The 2026-07-10 checked-in benchmark
+   capture is intentionally recorded as `latestAdmissionPassed=false` because every current native
+   candidate is slower than its row-reference path at the checked row counts; no native-path
+   expansion is approved by this evidence.)*
 
 ---
 

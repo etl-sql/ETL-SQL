@@ -45,12 +45,25 @@ public sealed class ColumnarCrossoverAdmissionTests
         }
 
         var status = root.GetProperty("resultStatus");
-        Assert.False(status.GetProperty("checkedInResults").GetBoolean());
+        Assert.True(status.GetProperty("checkedInResults").GetBoolean());
+        Assert.False(status.GetProperty("latestAdmissionPassed").GetBoolean());
+        AssertResultPathExists(status.GetProperty("latestResultPath").GetString());
+        AssertResultPathExists(status.GetProperty("latestSummaryPath").GetString());
+        AssertResultPathExists(status.GetProperty("latestCsvPath").GetString());
+        Assert.Contains("No new native path", status.GetProperty("notes").GetString(), StringComparison.OrdinalIgnoreCase);
     }
 
     private static string PolicyPath()
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
         return Path.Combine(root, "certification-results", "columnar-crossover-admission.json");
+    }
+
+    private static void AssertResultPathExists(string? relativePath)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(relativePath));
+        var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+        var fullPath = Path.Combine(repoRoot, relativePath!.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(File.Exists(fullPath), $"Expected checked-in benchmark result file to exist: {relativePath}");
     }
 }

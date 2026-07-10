@@ -42,7 +42,12 @@
     }
   ],
   "resultStatus": {
-    "checkedInResults": false,
-    "notes": "Thresholds are defined for Phase 5 admission. Checked-in benchmark result captures remain required before enabling any new native path by default."
+    "checkedInResults": true,
+    "latestCaptureDate": "2026-07-10",
+    "latestResultPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report-full-compressed.json",
+    "latestSummaryPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report-github.md",
+    "latestCsvPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report.csv",
+    "latestAdmissionPassed": false,
+    "notes": "The 2026-07-10 benchmark capture shows the current native columnar candidates are slower than the row-reference paths at both checked row counts. No new native path is approved by this capture."
   }
 }
