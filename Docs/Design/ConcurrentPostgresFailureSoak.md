@@ -158,7 +158,10 @@ each fault, not just that an exception was thrown.
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required
    telemetry, cleanup invariants, fairness expectation, and cancellation points for scan,
    spill-write, spill-read, and repartition. `HaLargeJobSoakManifestTests` validates the
-   contract. Runner implementation and measured soak artifacts remain open.)*
+   contract. `scripts/New-HaLargeJobSoakPlan.ps1` binds the manifest to a generated topology run
+   and emits non-secret JSON/Markdown run plans for CI-smoke or manual-certification modes, with
+   validation coverage in `scripts/Test-HaLargeJobSoakPlan.ps1`. Runner execution and measured
+   soak artifacts remain open.)*
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and
    cancellation tests with deterministic cleanup verification. *(Contract progress:
    `certification-results/ha-fault-injection-matrix.json` defines the deterministic fault

@@ -112,8 +112,10 @@ $plan = [ordered]@{
             input = Get-RelativeLabel $soakManifestPath
             expectedOutputDirectory = $soakOutDir
             scenarioCount = $soakScenarioCount
-            command = 'Runner implementation pending; use manifest to drive mixed workload and cancellation artifacts.'
+            command = "Run scripts/New-HaLargeJobSoakPlan.ps1 -TopologyRunRoot $runLabel -Mode CiSmoke before executing the large-job soak runner."
             requiredEvidence = @(
+                'ha-large-job-soak-plan.json',
+                'ha-large-job-soak-plan.md',
                 'soak-report.json',
                 'soak-report.md',
                 'cleanup-invariant results',

@@ -240,8 +240,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the
   mixed concurrent workload, shared memory/disk budgets, cleanup invariants, fairness requirement,
   required telemetry, and cancellation points for scan, spill-write, spill-read, and repartition.
-  `HaLargeJobSoakManifestTests` validates the manifest. Runner implementation and measured
-  soak artifacts remain open.)*
+  `HaLargeJobSoakManifestTests` validates the manifest. `scripts/New-HaLargeJobSoakPlan.ps1`
+  now binds the manifest to a generated topology run and emits non-secret JSON/Markdown run plans
+  for CI-smoke or manual-certification modes; `scripts/Test-HaLargeJobSoakPlan.ps1` validates
+  the plan contract. Runner execution and measured soak artifacts remain open.)*
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
