@@ -233,6 +233,9 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
                 ParseVaultEndpoint(options.VaultEndpoint),
                 httpClient,
                 options.VaultBearerToken),
+            "PORTALSTORE" => throw new InvalidOperationException(
+                "The PortalStore secret provider is only available inside the Report Portal host. " +
+                "Standalone and CLI deployments should use OsSecretStore, Environment, or HttpsVault."),
             _ => throw new InvalidOperationException($"Secret provider '{options.Provider}' is not supported.")
         };
     }
@@ -247,7 +250,7 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
     }
 }
 
-internal static partial class SecretNameValidator
+public static partial class SecretNameValidator
 {
     public static void Validate(string name)
     {

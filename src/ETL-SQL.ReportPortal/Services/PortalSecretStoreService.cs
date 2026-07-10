@@ -1,6 +1,7 @@
+using ETL_SQL.Core.Governance;
+using ETL_SQL.ReportPortal.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using ETL_SQL.ReportPortal.Data;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -12,6 +13,13 @@ public sealed record PortalSecretSummary(
     int? CreatedByUserId,
     int? UpdatedByUserId,
     long Version);
+
+/// <summary>Result of a decrypt-probe over every stored secret; values are never surfaced.</summary>
+public sealed record SecretKeyRingCheckResult(
+    int SecretCount,
+    int FailedCount,
+    string? FirstFailedName,
+    string? FirstFailureReason);
 
 /// <summary>
 /// Portal-managed encrypted secret store for SME/HA deployments that do not operate an external vault.
@@ -120,6 +128,56 @@ public sealed class PortalSecretStoreService
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default)
+    {
+        name = NormalizeName(name);
+        var disabled = await db.PortalSecrets
+            .AsNoTracking()
+            .Where(item => item.Name == name)
+            .Select(item => (bool?)item.Disabled)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return disabled switch
+        {
+            null => SecretLifecycleStatus.NotFound,
+            true => SecretLifecycleStatus.Disabled,
+            false => SecretLifecycleStatus.Active
+        };
+    }
+
+    /// <summary>
+    /// Proves every stored secret (including disabled ones) is decryptable with this node's key
+    /// ring, without surfacing any value. Used by the key-ring health check on HA nodes and by
+    /// verify-all after a backup/restore.
+    /// </summary>
+    public async Task<SecretKeyRingCheckResult> CheckKeyRingAsync(CancellationToken cancellationToken = default)
+    {
+        var secrets = await db.PortalSecrets
+            .AsNoTracking()
+            .OrderBy(secret => secret.Name)
+            .Select(secret => new { secret.Name, secret.EncryptedValue })
+            .ToListAsync(cancellationToken);
+
+        var failed = 0;
+        string? firstFailedName = null;
+        string? firstFailureReason = null;
+        foreach (var secret in secrets)
+        {
+            try
+            {
+                _ = Unprotect(secret.EncryptedValue);
+            }
+            catch (InvalidOperationException ex)
+            {
+                failed++;
+                firstFailedName ??= secret.Name;
+                firstFailureReason ??= ex.Message;
+            }
+        }
+
+        return new SecretKeyRingCheckResult(secrets.Count, failed, firstFailedName, firstFailureReason);
+    }
+
     public async Task<IReadOnlyList<PortalSecretSummary>> ListAsync(CancellationToken cancellationToken = default)
         => await db.PortalSecrets
             .AsNoTracking()
@@ -156,6 +214,8 @@ public sealed class PortalSecretStoreService
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Secret name is required.", nameof(name));
 
-        return name.Trim();
+        name = name.Trim();
+        SecretNameValidator.Validate(name);
+        return name;
     }
 }

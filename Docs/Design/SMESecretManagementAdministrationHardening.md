@@ -319,9 +319,12 @@ configuration.
 2. **Slice B - syntax parity and redaction.** Decide quoted/unquoted canonical behavior, update docs,
    parser/linter/help where needed, and extend redaction tests across metadata surfaces.
 3. **Slice C - Portal encrypted store.** Add database schema, encryption/decryption service, Admin UI/API,
-   audit, HA key checks, and backup/restore validation. *(In progress: `PortalSecrets` schema,
-   `PortalSecretStoreService`, DI registration, and focused encrypted-store lifecycle tests are in
-   place. Admin UI/API, audit events, HA key checks, and backup/restore validation remain open.)*
+   audit, HA key checks, and backup/restore validation. *(Shipped: `PortalSecrets` schema (both
+   providers), `PortalSecretStoreService`, the `api/admin/secrets` admin API (set/list/verify/
+   verify-all/disable/delete; values never returned) with audited mutations, the `PortalStore`
+   `ISecretProvider` for Portal-hosted execution, the `secret-store-keyring` health check that
+   decrypt-probes every stored secret on each node, and `verify-all` as the backup/restore
+   validation surface. Remaining: an Admin UI page over the API.)*
 4. **Slice D - Connection Catalog.** Add `IConnectionCatalogProvider` with the local (CLI-managed,
    machine-scoped) provider and `SHARED:name` execution-time expansion first; then the Portal
    provider with catalog schema, RBAC, masked diagnostics, import/export metadata, and impact

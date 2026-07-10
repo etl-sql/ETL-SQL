@@ -63,6 +63,20 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
 builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
+
+// The database-backed secret store only exists inside the Portal host, so this overrides the
+// factory-based ISecretProvider from AddEtlSqlEngine (last registration wins). The provider kind
+// is read at resolve time because test hosts layer configuration in after Program.cs runs.
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.ISecretProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = ETL_SQL.Orchestrator.DependencyInjectionExtensions.BuildSecretProviderOptions(config);
+    if (string.Equals(options.Provider, "PortalStore", StringComparison.OrdinalIgnoreCase))
+        return new ETL_SQL.ReportPortal.Services.PortalStoreSecretProvider(
+            sp.GetRequiredService<IServiceScopeFactory>());
+
+    return new ETL_SQL.Core.Governance.SecretProviderFactory(new HttpClient()).Create(options);
+});
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
     ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
 
@@ -433,7 +447,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<OrchestratorHealthCheck>("orchestrator", HealthStatus.Degraded, ["live"])
     .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"])
     .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.PolicyAuthorityHealthCheck>(
-        "policy-authority", HealthStatus.Degraded, ["live"]);
+        "policy-authority", HealthStatus.Degraded, ["live"])
+    .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.SecretStoreKeyRingHealthCheck>(
+        "secret-store-keyring", HealthStatus.Unhealthy, ["ready"]);
 
 builder.Services.AddControllers();
 
