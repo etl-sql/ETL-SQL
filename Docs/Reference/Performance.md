@@ -225,4 +225,7 @@ operator candidates explicitly on a suitable machine:
 
 .\scripts\Test-GateF.ps1 -Scenario ExternalJoin
 .\scripts\Test-GateFEvidence.ps1 -RequiredScenario ExternalJoin
+
+.\scripts\Test-GateF.ps1 -Scenario HighCardinalityGrouping
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario HighCardinalityGrouping
 ```

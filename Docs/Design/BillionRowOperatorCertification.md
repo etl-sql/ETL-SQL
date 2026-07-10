@@ -213,7 +213,12 @@ not a v0.15.0 goal.
    `BillionRowOperatorManifestTests` verifies that states match, non-certified rows stay explicit,
    and blanket 1B SQL wording does not appear.)*
 5. **Slice E — later operators.** Add grouping/window/MERGE candidates only after lower-tier
-   differential tests pass.
+   differential tests pass. *(In progress: `Test-GateF.ps1 -Scenario HighCardinalityGrouping`
+   now runs the high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/
+   `MIN`/`MAX`, formula-based validation, spill/partition telemetry, resume key, disk admission,
+   and report evidence. Window and `MERGE` remain manifest-only candidates until their bounded
+   lower-tier evidence is strong enough for an operator-run path; holistic aggregates remain not
+   certified.)*
 
 ---
 

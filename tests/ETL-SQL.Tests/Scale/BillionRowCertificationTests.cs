@@ -324,6 +324,127 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
     }
 
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_HIGH_CARD_GROUP_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_HIGH_CARD_GROUP_ROWS or GATE_F_ROWS must be explicitly set for high-cardinality grouping certification.");
+
+        var configuredGroups = ReadPositiveLong("GATE_F_HIGH_CARD_GROUP_COUNT", Math.Min(1_000_000, Math.Max(1, rowCount / 10)));
+        var groupCount = Math.Min(rowCount, configuredGroups);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.OperatorMemoryGrantMB = ReadPositiveInt("GATE_F_OPERATOR_MEMORY_GRANT_MB", 8192);
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalAggregateEngine(evaluator, logger);
+
+        var groupBy = new List<Expression> { new IdentifierExpression("GroupId") };
+        var finalColumns = new List<SelectColumn>
+        {
+            new(new IdentifierExpression("GroupId"), "GroupId"),
+            new(new FunctionCallExpression("COUNT", new List<Expression> { new IdentifierExpression("Value") }), "N"),
+            new(new FunctionCallExpression("SUM", new List<Expression> { new IdentifierExpression("Value") }), "ValueSum"),
+            new(new FunctionCallExpression("MIN", new List<Expression> { new IdentifierExpression("Value") }), "MinValue"),
+            new(new FunctionCallExpression("MAX", new List<Expression> { new IdentifierExpression("Value") }), "MaxValue")
+        };
+        var colNames = new List<string> { "GroupId", "N", "ValueSum", "MinValue", "MaxValue" };
+
+        var stopwatch = Stopwatch.StartNew();
+        long resultGroups = 0;
+        long totalCount = 0;
+        long groupIdChecksum = 0;
+        decimal totalSum = 0;
+        decimal minOfMins = decimal.MaxValue;
+        decimal maxOfMaxes = decimal.MinValue;
+
+        await foreach (var row in engine.ApplyAggregationExternal(
+            GenerateHighCardinalityGroupRows(rowCount, groupCount),
+            groupBy,
+            finalColumns,
+            colNames,
+            knownRowCount: rowCount,
+            knownInputBytes: rowCount * 64))
+        {
+            var groupId = Convert.ToInt64(row["GroupId"], CultureInfo.InvariantCulture);
+            var count = Convert.ToInt64(row["N"], CultureInfo.InvariantCulture);
+            var sum = Convert.ToDecimal(row["ValueSum"], CultureInfo.InvariantCulture);
+            var min = Convert.ToDecimal(row["MinValue"], CultureInfo.InvariantCulture);
+            var max = Convert.ToDecimal(row["MaxValue"], CultureInfo.InvariantCulture);
+
+            Assert.True(count > 0, $"Group {groupId} emitted an empty aggregate.");
+            Assert.True(min <= max, $"Group {groupId} has min {min} greater than max {max}.");
+
+            resultGroups++;
+            totalCount = checked(totalCount + count);
+            groupIdChecksum = checked(groupIdChecksum + groupId);
+            totalSum += sum;
+            minOfMins = Math.Min(minOfMins, min);
+            maxOfMaxes = Math.Max(maxOfMaxes, max);
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(groupCount, resultGroups);
+        Assert.Equal(rowCount, totalCount);
+        Assert.Equal(SumRange(0, groupCount - 1), groupIdChecksum);
+        Assert.Equal((decimal)SumRange(1, rowCount), totalSum);
+        Assert.Equal(1m, minOfMins);
+        Assert.Equal((decimal)rowCount, maxOfMaxes);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "High-cardinality grouping expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "High-cardinality grouping expected partition telemetry.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+
+        var metric = new
+        {
+            scenario = "HighCardinalityGrouping_1B",
+            rowCount,
+            groupCount,
+            resultGroups,
+            totalCount,
+            groupIdChecksum,
+            totalSum,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            partitionCount = engine.PartitionCount,
+            partitionPassCount = evaluator.Telemetry.PartitionPassCount,
+            repartitionPassCount = Math.Max(0, evaluator.Telemetry.PartitionPassCount - 1),
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_HIGH_CARD_GROUP_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_HIGH_CARD_GROUP_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
 
@@ -369,6 +490,19 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
                 [$"{prefix}Id"] = id,
                 ["JoinKey"] = (int)(id - 1 + keyOffset),
                 [$"{prefix}Payload"] = id * payloadMultiplier
+            };
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateHighCardinalityGroupRows(long rowCount, long groupCount)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                ["GroupId"] = (int)((id - 1) % groupCount),
+                ["Value"] = id
             };
         }
     }

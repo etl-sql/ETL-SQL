@@ -32,7 +32,7 @@
 param(
     [string]$Report = '.\certification-results\gate-f-1b\gate-f-report.json',
 
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping')]
     [string]$RequiredScenario = 'All',
 
     [string]$Baseline = '',
@@ -103,6 +103,7 @@ function Test-ScenarioPresent {
         'AllocProfile' { return $null -ne (Get-PropValue $GateFReport @('allocProfile')) }
         'ExternalSort' { return $null -ne (Get-PropValue $GateFReport @('externalSort')) }
         'ExternalJoin' { return $null -ne (Get-PropValue $GateFReport @('externalJoin')) }
+        'HighCardinalityGrouping' { return $null -ne (Get-PropValue $GateFReport @('highCardinalityGrouping')) }
         default { return $false }
     }
 }
@@ -119,6 +120,7 @@ function Get-ScenarioEvidence {
         'AllocProfile' { return Get-PropValue $GateFReport @('allocProfile') }
         'ExternalSort' { return Get-PropValue $GateFReport @('externalSort') }
         'ExternalJoin' { return Get-PropValue $GateFReport @('externalJoin') }
+        'HighCardinalityGrouping' { return Get-PropValue $GateFReport @('highCardinalityGrouping') }
         default { return $null }
     }
 }

@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -211,6 +211,30 @@ function Get-GateFScenarioManifests {
             nonGoals = @('non-equi joins', 'outer joins with high null expansion', 'adversarial single-key skew', 'provider-backed sources')
             resumeKeyFields = @('commit', 'rows', 'joinType', 'keyOverlap', 'duplicateFactor', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
         }
+        highCardinalityGrouping = [ordered]@{
+            scenarioId = 'HighCardinalityGrouping_1B'
+            operator = 'ExternalAggregate'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                groups = 'min(rows / 10, 1,000,000)'
+                aggregates = @('COUNT', 'SUM', 'MIN', 'MAX')
+                skew = 'uniform generated key distribution'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'generated formulas for group count, total rows, group-id checksum, total sum, global min, and global max'
+            telemetryContract = @($commonTelemetry + @('groupCount', 'partitionCount', 'partitionPassCount', 'repartitionPassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('median', 'percentile', 'GROUPING SETS', 'ROLLUP', 'CUBE', 'adversarial single-key skew')
+            resumeKeyFields = @('commit', 'rows', 'groupCount', 'memoryBoundMB', 'memoryGrantMB')
+        }
     }
 }
 
@@ -276,7 +300,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -495,6 +519,35 @@ try {
         }
     }
 
+    if ($Scenario -eq 'HighCardinalityGrouping') {
+        # v0.15.0 Phase 4 candidate: high-cardinality grouping is opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'high-cardinality-grouping.json'
+        $resultKey = Join-Path $outRoot 'high-cardinality-grouping.key'
+        $groupCount = [math]::Min(1000000L, [math]::Max(1L, [long]($Rows / 10)))
+        $runKey = "$commit|$Rows|$groupCount|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond|HighCardinalityGrouping"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_COUNT = $groupCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_OPERATOR_MEMORY_GRANT_MB = $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'HighCardinalityGrouping' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals'
+            ) (Join-Path $outRoot 'high-cardinality-grouping.log') (Join-Path $outRoot 'high-cardinality-grouping.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'HighCardinalityGrouping' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
         schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
@@ -530,6 +583,9 @@ try {
         externalJoin = if (Test-Path (Join-Path $outRoot 'external-join.json')) {
             Get-Content (Join-Path $outRoot 'external-join.json') -Raw | ConvertFrom-Json
         } else { $null }
+        highCardinalityGrouping = if (Test-Path (Join-Path $outRoot 'high-cardinality-grouping.json')) {
+            Get-Content (Join-Path $outRoot 'high-cardinality-grouping.json') -Raw | ConvertFrom-Json
+        } else { $null }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
@@ -548,5 +604,7 @@ finally {
     Remove-Item Env:GATE_F_EXTERNAL_SORT_ROWS,Env:GATE_F_SORT_CHUNK_ROWS,Env:GATE_F_EXTERNAL_SORT_OUTPUT `
         -ErrorAction SilentlyContinue
     Remove-Item Env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS,Env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS,Env:GATE_F_JOIN_PARTITIONS,Env:GATE_F_EXTERNAL_JOIN_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_HIGH_CARD_GROUP_ROWS,Env:GATE_F_HIGH_CARD_GROUP_COUNT,Env:GATE_F_OPERATOR_MEMORY_GRANT_MB,Env:GATE_F_HIGH_CARD_GROUP_OUTPUT `
         -ErrorAction SilentlyContinue
 }
