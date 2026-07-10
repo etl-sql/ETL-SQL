@@ -69,6 +69,8 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
         var planDecisions = evaluator.Telemetry.PlanDecisions;
         var planFallbackCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+        var planRejectedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
+        var planDegradedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
 
         Assert.Equal(0, source.RowReadAttempts);
         Assert.Equal(0, planFallbackCount);
@@ -107,6 +109,8 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             minimumRowsPerSecond,
             planDecisionCount = planDecisions.Count,
             planFallbackCount,
+            planRejectedCount,
+            planDegradedCount,
             planDecisionSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions),
             passed = true
         };
@@ -192,6 +196,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (minimumRowsPerSecond.HasValue)
             Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
                 $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
 
         var metric = new
         {
@@ -222,6 +227,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);
@@ -293,6 +303,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (minimumRowsPerSecond.HasValue)
             Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
                 $"Throughput {rowsPerSecond:N0} source rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
 
         var metric = new
         {
@@ -323,6 +334,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);
@@ -415,6 +431,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (minimumRowsPerSecond.HasValue)
             Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
                 $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
 
         var metric = new
         {
@@ -444,6 +461,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);
@@ -539,6 +561,7 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (minimumRowsPerSecond.HasValue)
             Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
                 $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
 
         var metric = new
         {
@@ -565,6 +588,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);
@@ -575,6 +603,17 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
 
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
+
+    private static (int Count, int FallbackCount, int RejectedCount, int DegradedCount, string Summary) PlanDecisionMetrics(Evaluator evaluator)
+    {
+        var decisions = evaluator.Telemetry.PlanDecisions;
+        return (
+            decisions.Count,
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback),
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected),
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded),
+            PlanDecisionSummary.FormatFallbackSummary(decisions));
+    }
 
     private static long SumModuloRange(long first, long last, int modulus)
         => checked(SumModuloTo(last, modulus) - SumModuloTo(first - 1, modulus));

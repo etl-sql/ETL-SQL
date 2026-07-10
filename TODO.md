@@ -186,14 +186,17 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   plan-decision counts and fails on fallback, and `Test-GateFEvidence.ps1` fails current evidence
   when native-required scenarios report fallback decisions. Static `EXPLAIN` now includes
   `Plan Candidates` and `Plan Notes` columns that identify obvious native-path candidates and the
-  runtime gates that decide acceptance.)*
+  runtime gates that decide acceptance. Scale-certification metrics and Gate F operator metrics now
+  include plan-decision counts plus fallback/degraded/rejected summaries so ranking can consume
+  checked-in or operator-run evidence JSON directly.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
   *(Slice E progress: `scripts/Summarize-PlanFallbacks.ps1` aggregates fallback summaries from JSON
   evidence/profile artifacts, ranks them by `CandidatePath`/`ReasonCode` frequency, carries
   same-object elapsed/spill/row/peak-memory cost context when present, and can emit JSON plus
-  Markdown reports. Representative workload captures and per-operator cost attribution remain open
-  before approving any new native-path expansion.)*
+  Markdown reports. Scale-certification and Gate F metric JSON now emit those summary fields for
+  representative evidence capture. Checked-in representative workload captures and per-operator
+  cost attribution remain open before approving any new native-path expansion.)*
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
   *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus

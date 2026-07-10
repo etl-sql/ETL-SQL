@@ -162,13 +162,15 @@ the correctness baseline and the recovery path for unsupported shapes.
    native-path candidates and runtime gates. `SHOW PROFILE` includes plan-decision totals and
    grouped fallback summaries. `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary
    columns after executing the query. Gate F native-required evidence records plan-decision counts
-   and fails validation on unexpected fallback.)*
+   and fails validation on unexpected fallback. Scale-certification metrics and Gate F operator
+   metrics emit plan-decision counts plus fallback/degraded/rejected summaries for ranking input.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
    frequency/cost across representative workloads. *(In progress:
    `scripts/Summarize-PlanFallbacks.ps1` aggregates existing JSON evidence/profile fallback
    summaries by candidate path and reason code, carries same-object elapsed/spill/row/peak-memory
-   cost context when present, then emits ranked JSON/Markdown outputs. Representative workload
-   capture and per-operator cost attribution remain open.)*
+   cost context when present, then emits ranked JSON/Markdown outputs. Scale-certification and
+   Gate F metric JSON now provide those summary fields for evidence capture. Checked-in
+   representative workload captures and per-operator cost attribution remain open.)*
 6. **Slice F — native admission harness.** Add differential correctness requirements and crossover
    benchmarks for candidate native paths. *(In progress: `ColumnarCrossoverBenchmarks` compares
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,
