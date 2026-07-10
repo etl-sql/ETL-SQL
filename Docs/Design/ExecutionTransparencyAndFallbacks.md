@@ -154,7 +154,10 @@ the correctness baseline and the recovery path for unsupported shapes.
    query. Gate F native-required evidence records plan-decision counts and fails validation on
    unexpected fallback. Static `EXPLAIN` remains open.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
-   frequency/cost across representative workloads.
+   frequency/cost across representative workloads. *(In progress:
+   `scripts/Summarize-PlanFallbacks.ps1` aggregates existing JSON evidence/profile fallback
+   summaries by candidate path and reason code, then emits ranked JSON/Markdown outputs.
+   Representative workload capture and elapsed/spill/memory cost attribution remain open.)*
 
 ---
 
