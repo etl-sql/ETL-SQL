@@ -1,6 +1,6 @@
 # Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design
 
-**Status:** DRAFT for review — no implementation yet.
+**Status:** Implementation in progress; Slice A topology harness is implemented.
 **TODO items covered:** v0.15.0 Phase 6 (PostgreSQL-backed Portal/Orchestrator sustained load,
 multi-hour concurrent large-job soaks, disk/corruption/crash/cancellation recovery).
 **Completion gate:** PostgreSQL sustained-load and concurrent failure-soak suites pass with
@@ -138,7 +138,12 @@ each fault, not just that an exception was thrown.
 ## 7. Delivery Plan
 
 1. **Slice A — topology harness.** Add scripts/config templates to bring up disposable
-   PostgreSQL-backed Portal/Orchestrator test topologies and write run metadata.
+   PostgreSQL-backed Portal/Orchestrator test topologies and write run metadata. *(Implemented:
+   `scripts/New-Phase6Topology.ps1` validates the existing HA Docker Compose topology, generates
+   isolated local env/data-root configuration with disposable credentials, emits non-secret
+   `topology-metadata.json`, and optionally starts Docker only when `-Start` is passed.
+   `scripts/Test-Phase6Topology.ps1` covers template validation, generated configuration, metadata,
+   and secret omission.)*
 2. **Slice B — sustained load.** Implement report/job/history workload drivers and capacity report
    output.
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and

@@ -22,6 +22,8 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Test-GateFEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateFEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run Gate F report passed, contains required scenario evidence, and belongs to the current commit before citing Gate F performance claims. |
 | **[`Summarize-PlanFallbacks.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Summarize-PlanFallbacks.ps1)** | PowerShell | Cross-platform | Ranks Phase 5 plan fallback summaries and structured fallback entries by candidate path, reason, frequency, and coarse cost context. |
 | **[`Test-PlanFallbackRanking.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PlanFallbackRanking.ps1)** | PowerShell | Cross-platform | Self-test for the plan fallback ranking script, covering structured per-operator entries and legacy summary strings. |
+| **[`New-Phase6Topology.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-Phase6Topology.ps1)** | PowerShell | Cross-platform | Generates an isolated Phase 6 PostgreSQL HA topology env/data root and non-secret metadata, with Docker startup opt-in via `-Start`. |
+| **[`Test-Phase6Topology.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-Phase6Topology.ps1)** | PowerShell | Cross-platform | Self-test for the Phase 6 topology harness and metadata contract. |
 
 Gate F is intentionally operator-run because the spill-backed billion-row scenario can take hours.
 Start it with `./scripts/Test-GateF.ps1`; inspect progress from another shell with

@@ -149,6 +149,7 @@ etlsql.db
 .etlsql_temp/
 /scratch/
 /tmp/
+.phase6-runs/
 
 # More general scratch/diagnostic captures
 *.txt
