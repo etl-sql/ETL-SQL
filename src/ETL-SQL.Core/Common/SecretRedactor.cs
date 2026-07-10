@@ -10,11 +10,14 @@ public static partial class SecretRedactor
 {
     public const string Mask = "********";
 
-    [GeneratedRegex(@"\b(ENC|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    [GeneratedRegex(@"\b(ENC|DPAPI-M|DPAPI|MACHINE):[A-Za-z0-9+/=_:.\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex ProtectedValuePattern();
 
     [GeneratedRegex(@"\bSECRET:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex SecretReferencePattern();
+
+    [GeneratedRegex(@"\bSHARED:[A-Za-z0-9_.:/@\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex SharedReferencePattern();
 
     [GeneratedRegex(@"\bBearer\s+[A-Za-z0-9._~+/=\-]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex BearerPattern();
@@ -28,10 +31,10 @@ public static partial class SecretRedactor
     [GeneratedRegex(@"\bsas_[A-Za-z0-9_-]{40,}", RegexOptions.CultureInvariant, 1000)]
     private static partial Regex ServiceAccountSecretPattern();
 
-    [GeneratedRegex(@"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    [GeneratedRegex(@"([""']?)(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCESS_KEY|ACCESSKEY|ACCOUNT_KEY|ACCOUNTKEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)(\1)\s*:\s*([""']?)[^,""'}\]\s;]+(\4)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex JsonSecretPattern();
 
-    [GeneratedRegex(@"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCOUNT_KEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    [GeneratedRegex(@"\b(PASSWORD|PWD|SECRET|SECRET_KEY|SECRETKEY|APIKEY|API_KEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|CREDENTIAL|PRIVATEKEY|PRIVATE_KEY|ACCESS_KEY|ACCESSKEY|ACCOUNT_KEY|ACCOUNTKEY|SAS_TOKEN|PASSPHRASE|SASL_PASSWORD|SASL_JAAS_CONFIG|AUTHORIZATION)\s*=\s*(['""]?)[^'""\s,;)]*(\2)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex AssignmentSecretPattern();
 
     public static bool IsSensitiveKey(string? key)
@@ -46,7 +49,10 @@ public static partial class SecretRedactor
             || key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase)
             || key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase)
             || key.Contains("PRIVATE_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("ACCESS_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("ACCESSKEY", StringComparison.OrdinalIgnoreCase)
             || key.Contains("ACCOUNT_KEY", StringComparison.OrdinalIgnoreCase)
+            || key.Contains("ACCOUNTKEY", StringComparison.OrdinalIgnoreCase)
             || key.Contains("SASL_JAAS_CONFIG", StringComparison.OrdinalIgnoreCase)
             || key.Contains("PASSPHRASE", StringComparison.OrdinalIgnoreCase)
             || key.Equals("AUTHORIZATION", StringComparison.OrdinalIgnoreCase);
@@ -57,6 +63,7 @@ public static partial class SecretRedactor
         if (string.IsNullOrEmpty(value)) return false;
         return value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("DPAPI:", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("DPAPI-M:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("MACHINE:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase);
@@ -72,6 +79,7 @@ public static partial class SecretRedactor
             return $"{prefix}:{Mask}";
         });
         redacted = SecretReferencePattern().Replace(redacted, $"SECRET:{Mask}");
+        redacted = SharedReferencePattern().Replace(redacted, $"SHARED:{Mask}");
         redacted = BearerPattern().Replace(redacted, $"Bearer {Mask}");
         redacted = UrlCredentialPattern().Replace(redacted, $"$1{Mask}@");
         redacted = ServiceAccountSecretPattern().Replace(redacted, $"sas_{Mask}");

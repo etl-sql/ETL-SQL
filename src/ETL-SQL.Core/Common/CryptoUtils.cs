@@ -648,12 +648,40 @@ public static class CryptoUtils
     }
 
     /// <summary>
-    /// Decrypts data that was protected using <see cref="Protect"/>.
-    /// Throws if attempted on a different machine or by a different OS user.
+    /// Machine-scoped variant of <see cref="Protect"/>: any account on this machine can decrypt
+    /// (DPAPI LocalMachine on Windows, machine-id-derived AES-256-GCM elsewhere). Use when an
+    /// administrator writes data that a differently privileged service account must read back,
+    /// e.g. the OS secret store. Pair with restrictive filesystem ACLs.
+    /// </summary>
+    public static string ProtectMachine(string plainText, string? optionalEntropy = null)
+    {
+        if (string.IsNullOrEmpty(plainText)) return plainText;
+        byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return "DPAPI-M:" + Convert.ToBase64String(ProtectWindowsMachine(plainBytes, optionalEntropy));
+        }
+
+        return "MACHINE:" + Convert.ToBase64String(ProtectGeneric(plainBytes, optionalEntropy));
+    }
+
+    /// <summary>
+    /// Decrypts data that was protected using <see cref="Protect"/> or <see cref="ProtectMachine"/>.
+    /// Throws if attempted on a different machine, or for user-scoped payloads by a different OS user.
     /// </summary>
     public static string Unprotect(string cipherText, string? optionalEntropy = null)
     {
         if (string.IsNullOrEmpty(cipherText)) return cipherText;
+
+        if (cipherText.StartsWith("DPAPI-M:"))
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                throw new ExecutionException("DPAPI encrypted data can only be decrypted on Windows.");
+
+            byte[] cipherBytes = Convert.FromBase64String(cipherText.Substring(8));
+            return Encoding.UTF8.GetString(UnprotectWindowsMachine(cipherBytes, optionalEntropy));
+        }
 
         if (cipherText.StartsWith("DPAPI:"))
         {
@@ -685,6 +713,20 @@ public static class CryptoUtils
     {
         byte[]? entropyBytes = entropy != null ? Encoding.UTF8.GetBytes(entropy) : null;
         return ProtectedData.Unprotect(cipherBytes, entropyBytes, DataProtectionScope.CurrentUser);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static byte[] ProtectWindowsMachine(byte[] plainBytes, string? entropy)
+    {
+        byte[]? entropyBytes = entropy != null ? Encoding.UTF8.GetBytes(entropy) : null;
+        return ProtectedData.Protect(plainBytes, entropyBytes, DataProtectionScope.LocalMachine);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static byte[] UnprotectWindowsMachine(byte[] cipherBytes, string? entropy)
+    {
+        byte[]? entropyBytes = entropy != null ? Encoding.UTF8.GetBytes(entropy) : null;
+        return ProtectedData.Unprotect(cipherBytes, entropyBytes, DataProtectionScope.LocalMachine);
     }
 
     // Authenticated (encrypt-then-MAC) machine-bound payload format:

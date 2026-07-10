@@ -349,6 +349,50 @@ public class SubscriptionDelivery
     public DateTime? CompletedAt { get; set; }
 }
 
+// ── Portal-managed encrypted secret store ─────────────────────────────────────
+
+/// <summary>
+/// A named secret stored encrypted at rest with the portal's cluster-wide Data Protection keys.
+/// Administrators write values through the admin API; script execution resolves them as
+/// SECRET:name. The plaintext is never returned by any API after write.
+/// </summary>
+public class PortalSecret : IVersionedEntity
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string EncryptedValue { get; set; } = "";
+    public bool Disabled { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? CreatedByUserId { get; set; }
+    public int? UpdatedByUserId { get; set; }
+    public long Version { get; set; } = 1;
+}
+
+/// <summary>
+/// A governed shared connection (SHARED:alias) in the Portal catalog. Credential fields hold
+/// SECRET: references, never values (enforced on write); Target and OptionsJson are additionally
+/// encrypted at rest via the PII converter because they can carry sensitive endpoints.
+/// </summary>
+public class PortalSharedConnection : IVersionedEntity
+{
+    public int Id { get; set; }
+    public string Alias { get; set; } = "";
+    public string ConnectorType { get; set; } = "";
+    public string? Target { get; set; }
+    public string OptionsJson { get; set; } = "{}";
+    public bool Disabled { get; set; }
+    public string? EnvironmentScope { get; set; }
+    public int? OwnerUserId { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? CreatedByUserId { get; set; }
+    public int? UpdatedByUserId { get; set; }
+    public DateTime? LastUsedAtUtc { get; set; }
+    public DateTime? LastVerifiedAtUtc { get; set; }
+    public long Version { get; set; } = 1;
+}
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
 public class AuditLog

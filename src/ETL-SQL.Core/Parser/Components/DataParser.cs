@@ -777,7 +777,7 @@ public class DataParser : ParserComponent
                     {
                         string key = Advance().Value;
                         Consume(TokenType.EQUALS, "Expected '=' after option name in ALTER CONNECTION");
-                        options[key] = ParseExpression();
+                        options[key] = ParseConnectionOptionValue();
                         if (!Match(TokenType.COMMA)) break;
                     }
                 }
@@ -791,7 +791,7 @@ public class DataParser : ParserComponent
                         {
                             string key = Advance().Value;
                             Consume(TokenType.EQUALS, "Expected '=' after option name in ALTER CONNECTION");
-                            options[key] = ParseExpression();
+                            options[key] = ParseConnectionOptionValue();
                             if (!Match(TokenType.COMMA)) break;
                         }
                     }
@@ -809,7 +809,7 @@ public class DataParser : ParserComponent
             {
                 string key = Advance().Value;
                 Consume(TokenType.EQUALS, "Expected '=' after option key");
-                options[key] = ParseExpression();
+                options[key] = ParseConnectionOptionValue();
                 if (!Match(TokenType.COMMA)) break;
             }
             Consume(TokenType.RPAREN, "Expected ')' at end of WITH options");
@@ -972,7 +972,7 @@ public class DataParser : ParserComponent
                     {
                         string key = Advance().Value;
                         Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION");
-                        options[key] = ParseExpression();
+                        options[key] = ParseConnectionOptionValue();
                         if (!Match(TokenType.COMMA)) break;
                     }
                 }
@@ -986,7 +986,7 @@ public class DataParser : ParserComponent
                 {
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '=' after option name in CREATE CONNECTION");
-                    options[key] = ParseExpression();
+                    options[key] = ParseConnectionOptionValue();
                     if (!Match(TokenType.COMMA)) break;
                 }
             }
@@ -995,6 +995,24 @@ public class DataParser : ParserComponent
         Consume(TokenType.RPAREN, "Expected ')' to close CREATE CONNECTION");
         Consume(TokenType.SEMICOLON, "Expected ';' at the end of CREATE CONNECTION");
         return new CreateConnectionStatement(name, connectionType, target, options, mode) { Line = startToken.Line, Column = startToken.Column };
+    }
+
+    // Unquoted SECRET:name / ENC:... would otherwise surface as an unrelated syntax error;
+    // quoted 'SECRET:name' is the canonical form (see SMESecretManagementAdministrationHardening.md §5).
+    private Expression ParseConnectionOptionValue()
+    {
+        if (_parser.Peek.Type == TokenType.COLON
+            && (_parser.Current.Type == TokenType.SECRET
+                || _parser.Current.Value.Equals("ENC", StringComparison.OrdinalIgnoreCase)
+                || _parser.Current.Value.Equals("DPAPI", StringComparison.OrdinalIgnoreCase)))
+        {
+            var prefix = _parser.Current.Value.ToUpperInvariant();
+            throw new SyntaxException(
+                $"{prefix}: references must be quoted strings — write '{prefix}:...' (single quotes) as the option value.",
+                _parser.Current.Line, _parser.Current.Column);
+        }
+
+        return ParseExpression();
     }
 
     /// <summary>

@@ -63,6 +63,34 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
 builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
+
+// The database-backed secret store only exists inside the Portal host, so this overrides the
+// factory-based ISecretProvider from AddEtlSqlEngine (last registration wins). The provider kind
+// is read at resolve time because test hosts layer configuration in after Program.cs runs.
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.ISecretProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = ETL_SQL.Orchestrator.DependencyInjectionExtensions.BuildSecretProviderOptions(config);
+    if (string.Equals(options.Provider, "PortalStore", StringComparison.OrdinalIgnoreCase))
+        return new ETL_SQL.ReportPortal.Services.PortalStoreSecretProvider(
+            sp.GetRequiredService<IServiceScopeFactory>());
+
+    return new ETL_SQL.Core.Governance.SecretProviderFactory(new HttpClient()).Create(options);
+});
+
+// Same resolve-time dispatch for the connection catalog: the Portal-backed catalog only exists
+// inside this host, and test hosts layer configuration in after Program.cs runs.
+builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var options = ETL_SQL.Orchestrator.DependencyInjectionExtensions.BuildConnectionCatalogOptions(config);
+    if (string.Equals(options.Provider, "Portal", StringComparison.OrdinalIgnoreCase))
+        return new ETL_SQL.ReportPortal.Services.PortalCatalogConnectionProvider(
+            sp.GetRequiredService<IServiceScopeFactory>());
+
+    return ETL_SQL.Core.Governance.ConnectionCatalogProviderFactory.Create(options)
+        ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.ReportPortal.Services.UnconfiguredConnectionCatalogProvider.Instance;
+});
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
     ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
 
@@ -333,6 +361,8 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliverySer
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
@@ -432,7 +462,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<OrchestratorHealthCheck>("orchestrator", HealthStatus.Degraded, ["live"])
     .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded, ["live"])
     .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.PolicyAuthorityHealthCheck>(
-        "policy-authority", HealthStatus.Degraded, ["live"]);
+        "policy-authority", HealthStatus.Degraded, ["live"])
+    .AddCheck<ETL_SQL.ReportPortal.Services.HealthChecks.SecretStoreKeyRingHealthCheck>(
+        "secret-store-keyring", HealthStatus.Unhealthy, ["ready"]);
 
 builder.Services.AddControllers();
 

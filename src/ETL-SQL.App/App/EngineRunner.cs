@@ -137,6 +137,17 @@ namespace ETL_SQL.App
                 return await DatabaseMigrationService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal) && ctx.Command.EndsWith("-secret", StringComparison.Ordinal))
+            {
+                return await SecretAdminService.RunAsync(ctx, logger);
+            }
+
+            if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal)
+                && (ctx.Command.EndsWith("-connection", StringComparison.Ordinal) || ctx.Command.EndsWith("-connections", StringComparison.Ordinal)))
+            {
+                return await ConnectionAdminService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command.StartsWith("enterprise-", StringComparison.Ordinal))
             {
                 return await EnterpriseEnrollmentManager.RunAsync(ctx, logger);

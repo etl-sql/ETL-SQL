@@ -22,6 +22,20 @@ public interface IWritableSecretProvider : ISecretProvider
     Task StoreAsync(string name, string value, CancellationToken cancellationToken = default);
 }
 
+public enum SecretLifecycleStatus
+{
+    NotFound,
+    Active,
+    Disabled
+}
+
+public interface ISecretLifecycleProvider : IWritableSecretProvider
+{
+    Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default);
+    Task DisableAsync(string name, CancellationToken cancellationToken = default);
+    Task DeleteAsync(string name, CancellationToken cancellationToken = default);
+}
+
 public sealed class EnvironmentSecretProvider(
     string? prefix = null,
     Func<string, string?>? getEnvironmentVariable = null) : ISecretProvider
@@ -49,7 +63,7 @@ public sealed class EnvironmentSecretProvider(
     }
 }
 
-public sealed class OsSecretStoreProvider(string rootDirectory) : IWritableSecretProvider
+public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecycleProvider
 {
     public string ProviderName => "OsSecretStore";
 
@@ -57,9 +71,19 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : IWritableSecre
     {
         var path = GetSecretPath(name);
         if (!File.Exists(path))
+        {
+            if (File.Exists(GetDisabledPath(name)))
+                throw new InvalidOperationException(
+                    $"Secret '{name}' is disabled. Re-enable it by storing a value with set-secret or rotate-secret.");
+
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
+        }
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        if (!HasRecognizedProtectionPrefix(protectedValue))
+            throw new InvalidOperationException(
+                $"Secret '{name}' in the OS secret store is not in a recognized protected format; the store never reads plaintext values.");
+
         return new SecretResolutionResult(name, CryptoUtils.Unprotect(protectedValue, name), ProviderName);
     }
 
@@ -70,11 +94,57 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : IWritableSecre
 
         var path = GetSecretPath(name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var protectedValue = CryptoUtils.Protect(value, name);
+        var protectedValue = CryptoUtils.ProtectMachine(value, name);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        // Storing a value re-enables a previously disabled secret.
+        var disabledPath = GetDisabledPath(name);
+        if (File.Exists(disabledPath))
+            File.Delete(disabledPath);
     }
+
+    public Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default)
+    {
+        if (File.Exists(GetSecretPath(name)))
+            return Task.FromResult(SecretLifecycleStatus.Active);
+        if (File.Exists(GetDisabledPath(name)))
+            return Task.FromResult(SecretLifecycleStatus.Disabled);
+        return Task.FromResult(SecretLifecycleStatus.NotFound);
+    }
+
+    public Task DisableAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var path = GetSecretPath(name);
+        if (!File.Exists(path))
+            throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
+
+        File.Move(path, GetDisabledPath(name), overwrite: true);
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var path = GetSecretPath(name);
+        var disabledPath = GetDisabledPath(name);
+        if (!File.Exists(path) && !File.Exists(disabledPath))
+            throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
+
+        if (File.Exists(path)) File.Delete(path);
+        if (File.Exists(disabledPath)) File.Delete(disabledPath);
+        return Task.CompletedTask;
+    }
+
+    private string GetDisabledPath(string name) => GetSecretPath(name) + ".disabled";
+
+    // Machine scope lets an admin-written secret be read by a differently privileged service
+    // account. "DPAPI:" payloads predate machine scoping and stay readable by the account
+    // that wrote them; rotating the secret upgrades it to machine scope.
+    private static bool HasRecognizedProtectionPrefix(string value) =>
+        value.StartsWith("DPAPI-M:", StringComparison.Ordinal)
+        || value.StartsWith("DPAPI:", StringComparison.Ordinal)
+        || value.StartsWith("MACHINE:", StringComparison.Ordinal);
 
     private string GetSecretPath(string name)
     {
@@ -163,6 +233,9 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
                 ParseVaultEndpoint(options.VaultEndpoint),
                 httpClient,
                 options.VaultBearerToken),
+            "PORTALSTORE" => throw new InvalidOperationException(
+                "The PortalStore secret provider is only available inside the Report Portal host. " +
+                "Standalone and CLI deployments should use OsSecretStore, Environment, or HttpsVault."),
             _ => throw new InvalidOperationException($"Secret provider '{options.Provider}' is not supported.")
         };
     }
@@ -177,7 +250,7 @@ public sealed class SecretProviderFactory(HttpClient httpClient)
     }
 }
 
-internal static partial class SecretNameValidator
+public static partial class SecretNameValidator
 {
     public static void Validate(string name)
     {

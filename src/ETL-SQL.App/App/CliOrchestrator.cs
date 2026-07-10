@@ -196,6 +196,38 @@ namespace ETL_SQL.App
         {
             Description = "Verify catalog and key versions and archive integrity without writing any files."
         };
+        private static readonly Option<string?> SecretNameOption = new("--name", new[] { "-n" })
+        {
+            Description = "Name of the secret (letters, numbers, period, underscore, hyphen).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> SecretValueOption = new("--value", Array.Empty<string>())
+        {
+            Description = "Secret value. Omit to enter it at a masked prompt or pipe it via stdin; --value can persist in shell history.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> ConnectionAliasOption = new("--alias", new[] { "-a" })
+        {
+            Description = "Catalog alias scripts reference as SHARED:alias (letters, numbers, period, underscore, hyphen).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> ConnectionTypeOption = new("--type", new[] { "-t" })
+        {
+            Description = "Connector type of the shared connection (MSSQL, POSTGRES, S3, ...).",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> ConnectionTargetOption = new("--target", Array.Empty<string>())
+        {
+            Description = "Optional connection-string target. Credential fields must reference SECRET:name, never raw values.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string[]> ConnectionOptionOption = new("--option", Array.Empty<string>())
+        {
+            Description = "Connection option as KEY=VALUE (repeatable). Credential fields must reference SECRET:name.",
+            AllowMultipleArgumentsPerToken = true
+        };
         private static readonly Option<string?> MigrateFromOption = new("--from", Array.Empty<string>())
         {
             Description = "Source database provider (only 'sqlite' is supported).",
@@ -411,6 +443,78 @@ namespace ETL_SQL.App
             migrateDbCommand.SetAction(context => Dispatch(context, "admin-migrate-database", handler));
             adminCommand.Add(migrateDbCommand);
 
+            var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
+            {
+                SecretNameOption,
+                SecretValueOption,
+            };
+            setSecretCommand.SetAction(context => Dispatch(context, "admin-set-secret", handler));
+            adminCommand.Add(setSecretCommand);
+
+            var verifySecretCommand = new Command("verify-secret", "Resolve a named secret to prove it is readable, without printing the value")
+            {
+                SecretNameOption,
+            };
+            verifySecretCommand.SetAction(context => Dispatch(context, "admin-verify-secret", handler));
+            adminCommand.Add(verifySecretCommand);
+
+            var rotateSecretCommand = new Command("rotate-secret", "Replace the value of an existing named secret")
+            {
+                SecretNameOption,
+                SecretValueOption,
+            };
+            rotateSecretCommand.SetAction(context => Dispatch(context, "admin-rotate-secret", handler));
+            adminCommand.Add(rotateSecretCommand);
+
+            var disableSecretCommand = new Command("disable-secret", "Disable a named secret so resolution fails until a new value is stored")
+            {
+                SecretNameOption,
+            };
+            disableSecretCommand.SetAction(context => Dispatch(context, "admin-disable-secret", handler));
+            adminCommand.Add(disableSecretCommand);
+
+            var deleteSecretCommand = new Command("delete-secret", "Permanently remove a named secret from the secret store")
+            {
+                SecretNameOption,
+            };
+            deleteSecretCommand.SetAction(context => Dispatch(context, "admin-delete-secret", handler));
+            adminCommand.Add(deleteSecretCommand);
+
+            var setConnectionCommand = new Command("set-connection", "Store a shared connection in the catalog for scripts to use as SHARED:alias")
+            {
+                ConnectionAliasOption,
+                ConnectionTypeOption,
+                ConnectionTargetOption,
+                ConnectionOptionOption,
+            };
+            setConnectionCommand.SetAction(context => Dispatch(context, "admin-set-connection", handler));
+            adminCommand.Add(setConnectionCommand);
+
+            var listConnectionsCommand = new Command("list-connections", "List shared connection catalog entries and their status");
+            listConnectionsCommand.SetAction(context => Dispatch(context, "admin-list-connections", handler));
+            adminCommand.Add(listConnectionsCommand);
+
+            var verifyConnectionCommand = new Command("verify-connection", "Prove a shared connection's definition and secret references resolve, without printing values")
+            {
+                ConnectionAliasOption,
+            };
+            verifyConnectionCommand.SetAction(context => Dispatch(context, "admin-verify-connection", handler));
+            adminCommand.Add(verifyConnectionCommand);
+
+            var disableConnectionCommand = new Command("disable-connection", "Disable a shared connection so SHARED:alias fails until it is stored again")
+            {
+                ConnectionAliasOption,
+            };
+            disableConnectionCommand.SetAction(context => Dispatch(context, "admin-disable-connection", handler));
+            adminCommand.Add(disableConnectionCommand);
+
+            var deleteConnectionCommand = new Command("delete-connection", "Permanently remove a shared connection from the catalog")
+            {
+                ConnectionAliasOption,
+            };
+            deleteConnectionCommand.SetAction(context => Dispatch(context, "admin-delete-connection", handler));
+            adminCommand.Add(deleteConnectionCommand);
+
             var enterpriseCommand = new Command("enterprise", "Manage machine-level enterprise policy enrollment");
             var enterpriseEnrollCommand = new Command("enroll", "Enroll this machine in authoritative enterprise policy")
             {
@@ -578,6 +682,26 @@ namespace ETL_SQL.App
                 cliContext.MigrateFrom = res.GetValue(MigrateFromOption);
                 cliContext.MigrateTo = res.GetValue(MigrateToOption);
                 cliContext.MigrateDryRun = res.GetValue(MigrateDryRunOption);
+            }
+            else if (commandName is "admin-set-secret" or "admin-rotate-secret")
+            {
+                cliContext.SecretName = res.GetValue(SecretNameOption);
+                cliContext.SecretValue = res.GetValue(SecretValueOption);
+            }
+            else if (commandName is "admin-verify-secret" or "admin-disable-secret" or "admin-delete-secret")
+            {
+                cliContext.SecretName = res.GetValue(SecretNameOption);
+            }
+            else if (commandName == "admin-set-connection")
+            {
+                cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
+                cliContext.ConnectionType = res.GetValue(ConnectionTypeOption);
+                cliContext.ConnectionTarget = res.GetValue(ConnectionTargetOption);
+                cliContext.ConnectionOptions = res.GetValue(ConnectionOptionOption);
+            }
+            else if (commandName is "admin-verify-connection" or "admin-disable-connection" or "admin-delete-connection")
+            {
+                cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
             }
             else if (commandName == "enterprise-enroll")
             {

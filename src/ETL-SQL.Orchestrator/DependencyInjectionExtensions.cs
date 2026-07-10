@@ -42,6 +42,33 @@ namespace ETL_SQL.Orchestrator
 {
     public static class DependencyInjectionExtensions
     {
+        /// <summary>
+        /// Maps the Governance:Secrets (fallback Secrets) configuration section to secret provider
+        /// options. Shared with hosts (e.g. the Report Portal) that override the provider at
+        /// resolve time but fall back to the factory-based default for non-host-specific kinds.
+        /// </summary>
+        public static SecretProviderOptions BuildSecretProviderOptions(IConfiguration configuration) => new()
+        {
+            Provider = configuration["Governance:Secrets:Provider"]
+                ?? configuration["Secrets:Provider"]
+                ?? "Environment",
+            EnvironmentPrefix = configuration["Governance:Secrets:EnvironmentPrefix"]
+                ?? configuration["Secrets:EnvironmentPrefix"],
+            OsStoreRoot = configuration["Governance:Secrets:OsStoreRoot"]
+                ?? configuration["Secrets:OsStoreRoot"],
+            VaultEndpoint = configuration["Governance:Secrets:VaultEndpoint"]
+                ?? configuration["Secrets:VaultEndpoint"],
+            VaultBearerToken = configuration["Governance:Secrets:VaultBearerToken"]
+                ?? configuration["Secrets:VaultBearerToken"]
+        };
+
+        /// <summary>Maps the Governance:ConnectionCatalog configuration section to catalog options.</summary>
+        public static ConnectionCatalogOptions BuildConnectionCatalogOptions(IConfiguration configuration) => new()
+        {
+            Provider = configuration["Governance:ConnectionCatalog:Provider"],
+            LocalRoot = configuration["Governance:ConnectionCatalog:LocalRoot"]
+        };
+
         public static IServiceCollection AddEtlSqlEngine(this IServiceCollection services, IConfiguration configuration)
         {
             // 1. Core Services
@@ -51,23 +78,11 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IGovernancePolicyRegistry>(_ => GovernancePolicyRegistry.CreateDefault());
             services.AddHostedService<EnterprisePolicyRefreshService>();
             services.AddSingleton<ISecretProvider>(_ =>
-            {
-                var options = new SecretProviderOptions
-                {
-                    Provider = configuration["Governance:Secrets:Provider"]
-                        ?? configuration["Secrets:Provider"]
-                        ?? "Environment",
-                    EnvironmentPrefix = configuration["Governance:Secrets:EnvironmentPrefix"]
-                        ?? configuration["Secrets:EnvironmentPrefix"],
-                    OsStoreRoot = configuration["Governance:Secrets:OsStoreRoot"]
-                        ?? configuration["Secrets:OsStoreRoot"],
-                    VaultEndpoint = configuration["Governance:Secrets:VaultEndpoint"]
-                        ?? configuration["Secrets:VaultEndpoint"],
-                    VaultBearerToken = configuration["Governance:Secrets:VaultBearerToken"]
-                        ?? configuration["Secrets:VaultBearerToken"]
-                };
-                return new SecretProviderFactory(new HttpClient()).Create(options);
-            });
+                new SecretProviderFactory(new HttpClient()).Create(BuildSecretProviderOptions(configuration)));
+
+            var connectionCatalog = ConnectionCatalogProviderFactory.Create(BuildConnectionCatalogOptions(configuration));
+            if (connectionCatalog != null)
+                services.AddSingleton(connectionCatalog);
 
             var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);

@@ -28,6 +28,22 @@ public sealed class SecretRedactorTests
         Assert.Contains("SECRET:********", redacted);
     }
 
+    [Fact]
+    public void Redact_MasksProtectedValuePrefixes()
+    {
+        var text = "a=DPAPI:AbCd12== b=DPAPI-M:EfGh34== c=MACHINE:IjKl56== d=ACCESS_KEY=AKIA1234567890";
+
+        var redacted = SecretRedactor.Redact(text)!;
+
+        Assert.Contains("DPAPI:********", redacted);
+        Assert.Contains("DPAPI-M:********", redacted);
+        Assert.Contains("MACHINE:********", redacted);
+        Assert.DoesNotContain("AbCd12", redacted);
+        Assert.DoesNotContain("EfGh34", redacted);
+        Assert.DoesNotContain("IjKl56", redacted);
+        Assert.DoesNotContain("AKIA1234567890", redacted);
+    }
+
     [Theory]
     [InlineData("bolt://neo4j:s3cret@db.example.com:7687", "bolt://neo4j:********@db.example.com:7687")]
     [InlineData("postgres://etl:p4ss.w0rd@10.0.0.5/analytics", "postgres://etl:********@10.0.0.5/analytics")]

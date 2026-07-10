@@ -3,6 +3,7 @@ using System;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
 {
     [DbContext(typeof(PortalDbContext))]
-    partial class PortalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260710121131_AddPortalSecrets")]
+    partial class AddPortalSecrets
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -645,71 +648,6 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsUnique();
 
                     b.ToTable("PortalSecrets");
-                });
-
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalSharedConnection", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Alias")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("ConnectorType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("CreatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("Disabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("EnvironmentScope")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<DateTime?>("LastUsedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("LastVerifiedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("OptionsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int?>("OwnerUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Target")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("UpdatedByUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Alias")
-                        .IsUnique();
-
-                    b.ToTable("PortalSharedConnections");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>
