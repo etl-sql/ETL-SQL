@@ -139,8 +139,10 @@ $plan = [ordered]@{
             input = Get-RelativeLabel $faultMatrixPath
             expectedOutputDirectory = $faultOutDir
             faultCount = $faultCount
-            command = 'Runner implementation pending; use matrix to drive deterministic fault artifacts.'
+            command = "Run scripts/New-HaFaultInjectionPlan.ps1 -TopologyRunRoot $runLabel -Mode CiSmoke before executing the fault-injection runner."
             requiredEvidence = @(
+                'ha-fault-injection-plan.json',
+                'ha-fault-injection-plan.md',
                 'fault-report.json',
                 'fault-report.md',
                 'per-fault cleanup invariant results',

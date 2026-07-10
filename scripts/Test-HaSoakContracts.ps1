@@ -47,6 +47,10 @@ try {
         & (Join-Path $ScriptRoot 'Test-HaLargeJobSoakPlan.ps1')
     }
 
+    Invoke-Step 'HA fault-injection plan generator' {
+        & (Join-Path $ScriptRoot 'Test-HaFaultInjectionPlan.ps1')
+    }
+
     Invoke-Step 'Capacity workload schemas' {
         & node (Join-Path $ScriptRoot 'test-capacity-workload-configs.mjs')
     }

@@ -256,8 +256,11 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   Portal/Orchestrator node loss, PostgreSQL outage, and temp-root exhaustion.
   `HaFaultInjectionManifestTests` validates the matrix. `scripts/New-HaSoakEvidencePlan.ps1`
   now produces a non-secret per-run evidence checklist that ties together topology metadata,
-  sustained workload input, large-job soak contract, and fault matrix. Fault runners and measured
-  artifacts remain open.)*
+  sustained workload input, large-job soak contract, and fault matrix.
+  `scripts/New-HaFaultInjectionPlan.ps1` now binds the matrix to a generated topology run and emits
+  non-secret JSON/Markdown run plans with safety constraints, expected artifacts, and diagnostics
+  command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract. Fault
+  runners and measured artifacts remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 

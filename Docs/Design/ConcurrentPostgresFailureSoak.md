@@ -172,8 +172,11 @@ each fault, not just that an exception was thrown.
    for disk pressure, slow disk, corrupt/incomplete extents, worker crash, Portal/Orchestrator node
    loss, PostgreSQL outage, and temp-root exhaustion. `HaFaultInjectionManifestTests` validates
    the matrix. `scripts/New-HaSoakEvidencePlan.ps1` ties a generated topology, sustained workload,
-   soak manifest, and fault matrix into a non-secret per-run evidence checklist. Fault runners and
-   measured artifacts remain open.)*
+   soak manifest, and fault matrix into a non-secret per-run evidence checklist.
+   `scripts/New-HaFaultInjectionPlan.ps1` binds the matrix to a generated topology run and emits
+   non-secret JSON/Markdown run plans with safety constraints, expected artifacts, and diagnostics
+   command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract. Fault
+   runners and measured artifacts remain open.)*
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.
 
 ---

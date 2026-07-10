@@ -34,6 +34,8 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Test-HaSoakEvidencePlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakEvidencePlan.ps1)** | PowerShell | Cross-platform | Self-test for HA soak evidence-plan generation and secret omission. |
 | **[`New-HaLargeJobSoakPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run large-job soak plan from the manifest and generated topology metadata. |
 | **[`Test-HaLargeJobSoakPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Self-test for large-job soak plan generation, scenario binding, and secret omission. |
+| **[`New-HaFaultInjectionPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaFaultInjectionPlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run fault-injection plan from the matrix and generated topology metadata. |
+| **[`Test-HaFaultInjectionPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaFaultInjectionPlan.ps1)** | PowerShell | Cross-platform | Self-test for fault-injection plan generation, safety constraints, and secret omission. |
 | **[`Test-HaSoakContracts.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakContracts.ps1)** | PowerShell | Cross-platform | Runs the local HA soak contract suite: topology, workload materialization, evidence plan, capacity-workload schema validation, and manifest tests. |
 
 Gate F is intentionally operator-run because the spill-backed billion-row scenario can take hours.
