@@ -124,6 +124,11 @@ Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretMan
 - [ ] Implement a Portal-managed, database-backed encrypted secret store where credentials can be
   entered via Web UI and are stored encrypted at rest using the portal's cluster-wide keys, solving
   the multi-node sync problem for simple HA environments without requiring a separate vault product.
+  *(Slice C progress: added the `PortalSecrets` schema for SQLite/Postgres, `PortalSecretStoreService`
+  with Data Protection encryption, resolve/list/verify/disable/delete lifecycle behavior, DI
+  registration, and focused tests proving encrypted-at-rest storage, list redaction, rotate/reenable,
+  disabled fail-closed behavior, unencrypted payload rejection, and wrong-key-ring failure. Admin
+  UI/API, audit events, HA key checks, and backup/restore validation remain open.)*
 - [ ] Add named-secret syntax parity and tests so `SECRET:name` can be used consistently wherever
   `ENC:...` credential values are accepted, or document quoted `'SECRET:name'` and quoted
   `'ENC:...'` as the canonical forms if unquoted secret-reference literals are not added.

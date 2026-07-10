@@ -33,6 +33,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<ServiceAccount> ServiceAccounts => Set<ServiceAccount>();
     public DbSet<PolicyVersionEntity> PolicyVersions => Set<PolicyVersionEntity>();
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
+    public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -151,6 +152,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         {
             e.Property(x => x.Version).IsConcurrencyToken();
             e.HasIndex(x => x.Alias).IsUnique();
+        });
+
+        builder.Entity<PortalSecret>(e =>
+        {
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => x.Name).IsUnique();
+            e.Property(x => x.Name).HasMaxLength(200);
         });
 
         builder.Entity<SubscriptionDelivery>(e =>

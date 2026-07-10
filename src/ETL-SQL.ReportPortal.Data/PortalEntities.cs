@@ -349,6 +349,26 @@ public class SubscriptionDelivery
     public DateTime? CompletedAt { get; set; }
 }
 
+// ── Portal-managed encrypted secret store ─────────────────────────────────────
+
+/// <summary>
+/// A named secret stored encrypted at rest with the portal's cluster-wide Data Protection keys.
+/// Administrators write values through the admin API; script execution resolves them as
+/// SECRET:name. The plaintext is never returned by any API after write.
+/// </summary>
+public class PortalSecret : IVersionedEntity
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "";
+    public string EncryptedValue { get; set; } = "";
+    public bool Disabled { get; set; }
+    public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
+    public int? CreatedByUserId { get; set; }
+    public int? UpdatedByUserId { get; set; }
+    public long Version { get; set; } = 1;
+}
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 
 public class AuditLog

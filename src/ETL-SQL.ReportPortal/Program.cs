@@ -333,6 +333,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliverySer
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.FolderPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
