@@ -8,31 +8,6 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 {
     private const string SecretPrefix = "SECRET:";
 
-    private static readonly HashSet<string> SensitiveOptionKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "PASSWORD",
-        "PWD",
-        "API_KEY",
-        "APIKEY",
-        "TOKEN",
-        "ACCESS_TOKEN",
-        "REFRESH_TOKEN",
-        "CLIENT_SECRET",
-        "CLIENTSECRET",
-        "SECRET",
-        "SECRET_KEY",
-        "SECRETKEY",
-        "ACCESS_KEY",
-        "ACCESSKEY",
-        "SAS_TOKEN",
-        "ACCOUNT_KEY",
-        "ACCOUNTKEY",
-        "PASSPHRASE",
-        "PRIVATE_KEY",
-        "SASL_PASSWORD",
-        "SASL_JAAS_CONFIG"
-    };
-
     public async Task<string> ResolveTargetAsync(string target, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(target))
@@ -54,7 +29,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
             if (!IsSecretReference(value))
                 continue;
 
-            if (!SensitiveOptionKeys.Contains(key))
+            if (!SecretResolvableFields.IsResolvable(key))
                 throw UnresolvedSecretReferenceError(key);
 
             resolved[key] = await ResolveSecretValueAsync(value, cancellationToken).ConfigureAwait(false);
@@ -75,7 +50,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         foreach (Match match in matches.Cast<Match>().Reverse())
         {
             var key = match.Groups["key"].Value;
-            if (!SensitiveOptionKeys.Contains(key))
+            if (!SecretResolvableFields.IsResolvable(key))
                 throw UnresolvedSecretReferenceError(key);
 
             var reference = match.Groups["value"].Value;
@@ -91,7 +66,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
     // connector as the literal text "SECRET:name" — reject it up front instead.
     private static ExecutionException UnresolvedSecretReferenceError(string key) =>
         new($"Connection field '{key}' uses a SECRET: reference, but secrets are only resolved for credential fields " +
-            $"({string.Join(", ", SensitiveOptionKeys.Order(StringComparer.OrdinalIgnoreCase))}). " +
+            $"({string.Join(", ", SecretResolvableFields.CredentialKeys.Order(StringComparer.OrdinalIgnoreCase))}). " +
             "The connector would receive the literal reference text instead of the secret value.");
 
     private async Task<string> ResolveSecretValueAsync(string reference, CancellationToken cancellationToken)
