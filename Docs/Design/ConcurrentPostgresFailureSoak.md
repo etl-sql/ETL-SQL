@@ -155,7 +155,10 @@ each fault, not just that an exception was thrown.
    `scripts/Test-PostgresHaMetricsSnapshot.ps1`. `scripts/Export-HaSoakDiagnostics.ps1` writes a
    non-secret diagnostics bundle after operator-run failures or completions, including redacted env,
    topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
-   generated run README both point to it. Real measured capacity reports remain open.)*
+   generated run README both point to it. `scripts/New-HaSoakRunbook.ps1` emits a non-secret
+   operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
+   long-running scripts can be run manually and diagnosed afterward from captured outputs. Real
+   measured capacity reports remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
    cleanup checks. *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json`
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required

@@ -97,6 +97,13 @@ $plan = [ordered]@{
             'docker-compose-logs.txt'
         )
     }
+    operatorRunbook = [ordered]@{
+        command = "scripts/New-HaSoakRunbook.ps1 -TopologyRunRoot $runLabel"
+        expectedArtifacts = @(
+            'ha-soak-runbook.json',
+            'ha-soak-runbook.md'
+        )
+    }
     gates = @(
         [ordered]@{
             gateId = 'sustained-postgres-ha-load'

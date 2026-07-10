@@ -23,6 +23,7 @@ that run so generated API keys stay outside source control:
 ```powershell
 .\scripts\New-PostgresHaSoakTopology.ps1 -RunId ha-soak-local -Start
 .\scripts\New-PostgresHaCapacityWorkload.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local -AdminPassword <portal-admin-password>
+.\scripts\New-HaSoakRunbook.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local
 node .\scripts\test-service-capacity.mjs --config .\.ha-soak-runs\ha-soak-local\postgres-ha-sustained.workload.local.json --out-dir .\certification-results\postgres-ha-soak\ha-soak-local
 .\scripts\Export-PostgresHaMetricsSnapshot.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local -OutputPath .\certification-results\postgres-ha-soak\ha-soak-local\postgres-ha-metrics.json
 .\scripts\Export-HaSoakDiagnostics.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local
