@@ -152,7 +152,11 @@ each fault, not just that an exception was thrown.
    validates materialization and the existing service-capacity harness schema. Real measured
    capacity reports and PostgreSQL-specific metrics remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
-   cleanup checks.
+   cleanup checks. *(Contract progress: `certification-results/phase6-large-job-soak-scenarios.json`
+   defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required
+   telemetry, cleanup invariants, fairness expectation, and cancellation points for scan,
+   spill-write, spill-read, and repartition. `Phase6LargeJobSoakManifestTests` validates the
+   contract. Runner implementation and measured soak artifacts remain open.)*
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and
    cancellation tests with deterministic cleanup verification.
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.

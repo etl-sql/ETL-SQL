@@ -235,6 +235,11 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   capture and checked-in measured capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
+  *(Contract progress: `certification-results/phase6-large-job-soak-scenarios.json` defines the
+  mixed concurrent workload, shared memory/disk budgets, cleanup invariants, fairness requirement,
+  required telemetry, and cancellation points for scan, spill-write, spill-read, and repartition.
+  `Phase6LargeJobSoakManifestTests` validates the manifest. Runner implementation and measured
+  soak artifacts remain open.)*
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
