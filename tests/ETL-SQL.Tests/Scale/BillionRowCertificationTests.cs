@@ -5,6 +5,7 @@ using System.Text.Json;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using Microsoft.Extensions.DependencyInjection;
@@ -66,8 +67,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         var expectedChecksum = checked(expectedIdSum + expectedAmountSum * 2);
         var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
         var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+        var planDecisions = evaluator.Telemetry.PlanDecisions;
+        var planFallbackCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
 
         Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(0, planFallbackCount);
         Assert.Equal(expectedSelected, selectedCount);
         Assert.Equal(expectedChecksum, projectionChecksum);
         Assert.Equal(100, rows.Length);
@@ -101,6 +105,9 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = planDecisions.Count,
+            planFallbackCount,
+            planDecisionSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions),
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);

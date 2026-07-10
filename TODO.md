@@ -174,7 +174,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
   `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window;
   `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed
-  plan output.)*
+  plan output. Certification progress: the native-required Gate F columnar-core metric records
+  plan-decision counts and fails on fallback, and `Test-GateFEvidence.ps1` fails current evidence
+  when native-required scenarios report fallback decisions.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and

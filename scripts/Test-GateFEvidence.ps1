@@ -273,6 +273,56 @@ function Compare-GateFBaseline {
     }
 }
 
+function Get-ScenarioManifest {
+    param(
+        [object]$GateFReport,
+        [string]$ScenarioName
+    )
+
+    $manifests = Get-PropValue $GateFReport @('scenarioManifests')
+    if ($null -eq $manifests) { return $null }
+
+    switch ($ScenarioName) {
+        'ColumnarCore' { return Get-PropValue $manifests @('columnarCore') }
+        'TempTableRoundTrip' { return Get-PropValue $manifests @('tempTableRoundTrip') }
+        'AllocProfile' { return Get-PropValue $manifests @('allocProfile') }
+        'ExternalSort' { return Get-PropValue $manifests @('externalSort') }
+        'ExternalJoin' { return Get-PropValue $manifests @('externalJoin') }
+        'HighCardinalityGrouping' { return Get-PropValue $manifests @('highCardinalityGrouping') }
+        'EligibleWindowRowNumber' { return Get-PropValue $manifests @('eligibleWindowRowNumber') }
+        default { return $null }
+    }
+}
+
+function Test-NativePathEvidence {
+    param(
+        [object]$GateFReport,
+        [string[]]$Scenarios
+    )
+
+    foreach ($scenario in $Scenarios) {
+        $manifest = Get-ScenarioManifest $GateFReport $scenario
+        $admission = Get-PropValue $manifest @('admission')
+        $nativeRequired = Get-PropValue $admission @('nativePathRequired')
+        if ($nativeRequired -ne $true) { continue }
+
+        $evidence = Get-ScenarioEvidence $GateFReport $scenario
+        if ($null -eq $evidence) { continue }
+
+        $fallbackCount = Get-MetricValue $evidence 'planFallbackCount'
+        if ($null -eq $fallbackCount) {
+            Add-Issue 'WARN' 'PLAN_FALLBACK_TELEMETRY' "$scenario requires a native path but the evidence lacks planFallbackCount; rerun Gate F with Phase 5 telemetry."
+            continue
+        }
+
+        if ($fallbackCount -gt 0) {
+            $summary = Get-PropValue $evidence @('planDecisionSummary', 'planFallbackSummary')
+            if (-not $summary) { $summary = 'no summary provided' }
+            Add-Issue 'FAIL' 'UNEXPECTED_NATIVE_FALLBACK' "$scenario requires a native path but reported $fallbackCount fallback decision(s): $summary."
+        }
+    }
+}
+
 function Write-MarkdownEvidence {
     param(
         [string]$Path,
@@ -349,6 +399,8 @@ foreach ($scenario in $requiredScenarios) {
         Add-Issue 'FAIL' 'MISSING_SCENARIO' "Gate F report is missing required scenario evidence: $scenario."
     }
 }
+
+Test-NativePathEvidence $gateF $requiredScenarios
 
 if (-not (Get-PropValue $gateF @('configFingerprint'))) {
     Add-Issue 'WARN' 'CONFIG_FINGERPRINT' 'Gate F report is missing configFingerprint; rerun Test-GateF.ps1 to capture schema v2 metadata.'

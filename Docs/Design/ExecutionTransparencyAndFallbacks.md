@@ -151,7 +151,8 @@ the correctness baseline and the recovery path for unsupported shapes.
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
    *(In progress: `SHOW PROFILE` includes plan-decision totals and grouped fallback summaries.
    `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary columns after executing the
-   query. Static `EXPLAIN` and certification reports remain open.)*
+   query. Gate F native-required evidence records plan-decision counts and fails validation on
+   unexpected fallback. Static `EXPLAIN` remains open.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
    frequency/cost across representative workloads.
 
