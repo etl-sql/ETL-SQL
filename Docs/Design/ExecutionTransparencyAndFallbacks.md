@@ -150,8 +150,11 @@ the correctness baseline and the recovery path for unsupported shapes.
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,
    streaming vs blocking, spill admission, and memory rejection. *(In progress: SQL `SELECT`
    pushdown now records accepted/fallback `SqlPushdown` decisions for standard result streaming
-   and `SELECT INTO`, including connection and fallback destination attributes. External spill,
-   streaming-vs-blocking, and memory-admission instrumentation remain open.)*
+   and `SELECT INTO`, including connection and fallback destination attributes. External sort,
+   join, aggregate, and window engines record accepted decisions. External join and aggregate
+   memory-governor pressure records `MemoryAdmissionRejected` degraded/rejected decisions for
+   repartition, spill-only churn, or fail-fast destinations. Streaming-vs-blocking attribution,
+   deeper spill admission detail, and per-operator cost attribution remain open.)*
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
    *(In progress: static `EXPLAIN` includes `Plan Candidates` and `Plan Notes` for obvious
    native-path candidates and runtime gates. `SHOW PROFILE` includes plan-decision totals and

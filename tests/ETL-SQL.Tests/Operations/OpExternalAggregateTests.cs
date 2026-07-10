@@ -6,6 +6,7 @@ using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Engines;
@@ -84,6 +85,9 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.True(grouped.ContainsKey("A"), "Group A should exist");
             Assert.True(grouped.ContainsKey("B"), "Group B should exist");
             Assert.True(grouped.ContainsKey("C"), "Group C should exist");
+            var decision = Assert.Single(eval.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "ExternalAggregate" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.Equal("external-aggregate", decision.OperatorId);
         }
 
         [Fact]

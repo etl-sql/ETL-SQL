@@ -9,8 +9,10 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Planning;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -106,6 +108,14 @@ public class ExternalWindowEngine
 
         _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {allWindowCalls.Count} window functions across {groups.Count} signature groups.[/]");
         _context.Telemetry.PartitionsCount = groups.Count;
+        PlanDecisionRecorder.Record(_context, "external-window", "ExternalWindow",
+            PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+            "External window path accepted.",
+            ("windowFunctionCount", allWindowCalls.Count.ToString()),
+            ("signatureGroupCount", groups.Count.ToString()),
+            ("knownRowCount", knownRowCount?.ToString()),
+            ("knownInputBytes", knownInputBytes?.ToString()),
+            ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
 
         IAsyncEnumerable<Row> currentStream = inputStream;
         var intermediates = new List<string>();

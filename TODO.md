@@ -174,7 +174,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   Slice C progress: SQL `SELECT` pushdown now emits accepted/fallback `SqlPushdown` decisions for
   standard result streaming and `SELECT INTO`, including connection and row-engine fallback
   attributes; focused pushdown tests cover accepted remote execution and engine-only-function
-  fallback.
+  fallback. External sort, join, aggregate, and window engines now emit accepted plan decisions,
+  and external join/aggregate memory-governor pressure records `MemoryAdmissionRejected`
+  degraded/rejected decisions for repartition, spill-only churn, or fail-fast destinations.
   Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
   `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window;
   `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed
