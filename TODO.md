@@ -205,8 +205,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   `certification-results/columnar-crossover-admission.json` and validated by
   `ColumnarCrossoverAdmissionTests`: exact checksum parity, no more than 10% small-workload
   slowdown, no medium-workload slowdown, no medium-workload allocation increase, and at least five
-  samples. Checked-in benchmark result captures and per-new-path differential test requirements
-  remain open.)*
+  samples. Per-new-path differential requirements are checked in as
+  `certification-results/native-path-differential-requirements.json` and validated by
+  `NativePathDifferentialRequirementsTests`. Checked-in benchmark result captures remain open.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 

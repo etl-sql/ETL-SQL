@@ -176,7 +176,9 @@ the correctness baseline and the recovery path for unsupported shapes.
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,
    and inner join at small/medium sizes. `columnar-crossover-admission.json` defines the
    admission thresholds and `ColumnarCrossoverAdmissionTests` protects the contract. Published
-   benchmark captures and per-new-path differential test requirements remain open.)*
+   per-path differential requirements are tracked in `native-path-differential-requirements.json`
+   and validated by `NativePathDifferentialRequirementsTests`. Published benchmark captures remain
+   open.)*
 
 ---
 
