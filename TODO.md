@@ -171,6 +171,10 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   `SelectStatementHandler` now records accepted/fallback decisions for native columnar join, sort,
   grouped aggregate, global aggregate, projection/filter, and columnar `SELECT INTO` routes, with
   focused routing tests covering accepted aggregate/projection paths and expression fallback.
+  Slice C progress: SQL `SELECT` pushdown now emits accepted/fallback `SqlPushdown` decisions for
+  standard result streaming and `SELECT INTO`, including connection and row-engine fallback
+  attributes; focused pushdown tests cover accepted remote execution and engine-only-function
+  fallback.
   Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
   `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window;
   `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed

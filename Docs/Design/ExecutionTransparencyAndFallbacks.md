@@ -1,6 +1,7 @@
 # Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design
 
-**Status:** Implementation in progress; Slice A telemetry contract is implemented.
+**Status:** Implementation in progress; Slice A telemetry contract is implemented, with Slice B
+columnar instrumentation and Slice C SQL pushdown instrumentation partially implemented.
 **TODO items covered:** v0.15.0 Phase 5 (fallback reason telemetry, fallback frequency/cost
 ranking, differential correctness and crossover benchmarks for new native paths).
 **Completion gate:** users and maintainers can see why a query left a native/columnar path, how
@@ -147,7 +148,10 @@ the correctness baseline and the recovery path for unsupported shapes.
    aggregate, projection/filter, and columnar `SELECT INTO` routes. Planner-specific rejection
    details still need richer result objects where candidate open currently returns only null.)*
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,
-   streaming vs blocking, spill admission, and memory rejection.
+   streaming vs blocking, spill admission, and memory rejection. *(In progress: SQL `SELECT`
+   pushdown now records accepted/fallback `SqlPushdown` decisions for standard result streaming
+   and `SELECT INTO`, including connection and fallback destination attributes. External spill,
+   streaming-vs-blocking, and memory-admission instrumentation remain open.)*
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
    *(In progress: static `EXPLAIN` includes `Plan Candidates` and `Plan Notes` for obvious
    native-path candidates and runtime gates. `SHOW PROFILE` includes plan-decision totals and

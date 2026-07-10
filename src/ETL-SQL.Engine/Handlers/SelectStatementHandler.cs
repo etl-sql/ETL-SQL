@@ -46,6 +46,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
             {
+                RecordSqlPushdownAccepted(context, "select.sql-pushdown", connName!);
                 var result = await _pushdownEngine.ExecutePushdown(selPush, connName!, context);
                 context.LastResult = result;
                 context.LastResultSets.Add(result);
@@ -82,10 +83,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             if (statement is SelectStatement selectQuery &&
                 _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
             {
+                RecordSqlPushdownAccepted(context, "select-into.sql-pushdown", connName!);
                 batches = _pushdownEngine.ExecuteStreamingPushdown(selectQuery with { IntoTable = null }, connName!, context);
             }
             else
             {
+                if (statement is SelectStatement fallbackSelect)
+                    RecordSqlPushdownFallbackIfRemote(context, "select-into.sql-pushdown", fallbackSelect);
                 batches = EvaluateQuery(statement, context);
             }
 
@@ -154,9 +158,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && !HasLateralColumnAlias(stmt.Columns)
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
+            RecordSqlPushdownAccepted(context, "select.stream.sql-pushdown", connName!);
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
             yield break;
         }
+
+        if (stmt.IntoTable == null)
+            RecordSqlPushdownFallbackIfRemote(context, "select.stream.sql-pushdown", stmt);
 
         if (ColumnarJoinSelectPlan.TryCreate(stmt, out var nativeJoinPlan)
             && await nativeJoinPlan!.TryOpenAsync(context) is { } nativeJoinExecution)
@@ -794,6 +802,32 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             ReasonCode: reasonCode,
             Message: message,
             Attributes: facts));
+    }
+
+    private static void RecordSqlPushdownAccepted(
+        IExecutionContext context,
+        string operatorId,
+        string connectionName)
+    {
+        RecordPlanDecision(context, operatorId, "SqlPushdown", PlanDecisionOutcome.Accepted,
+            PlanDecisionReasonCodes.SemanticGuard,
+            "SQL pushdown path accepted.",
+            ("connectionName", connectionName));
+    }
+
+    private static void RecordSqlPushdownFallbackIfRemote(
+        IExecutionContext context,
+        string operatorId,
+        SelectStatement statement)
+    {
+        var connectionName = statement.FromTable?.ConnectionName;
+        if (string.IsNullOrWhiteSpace(connectionName)) return;
+
+        RecordPlanDecision(context, operatorId, "SqlPushdown", PlanDecisionOutcome.Fallback,
+            PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+            "SQL pushdown candidate was not accepted; query will execute in the engine.",
+            ("connectionName", connectionName),
+            ("fallbackDestination", "row-engine"));
     }
 
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
