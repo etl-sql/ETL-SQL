@@ -185,6 +185,10 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   attribution remain open before approving any new native-path expansion.)*
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
+  *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus
+  native columnar comparisons for filter/projection, grouped aggregate, sort, and inner join at
+  1k/50k rows. Checked-in benchmark results, admission thresholds, and per-new-path differential
+  test requirements remain open.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 
