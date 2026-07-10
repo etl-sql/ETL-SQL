@@ -231,8 +231,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   `capacity-results/workloads/postgres-ha-sustained.workload.json` now defines the sustained
   Portal/Orchestrator HA workload, and `scripts/New-PostgresHaCapacityWorkload.ps1` materializes a local
   runnable copy from generated topology metadata/env files. `scripts/Test-PostgresHaCapacityWorkload.ps1`
-  validates the materialized workload through the existing capacity harness. PostgreSQL metrics
-  capture and checked-in measured capacity reports remain open.)*
+  validates the materialized workload through the existing capacity harness.
+  `scripts/Export-PostgresHaMetricsSnapshot.ps1` captures non-secret PostgreSQL size, connection,
+  activity, and I/O counters for the generated topology, with validation coverage in
+  `scripts/Test-PostgresHaMetricsSnapshot.ps1`. Checked-in measured capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
   *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the

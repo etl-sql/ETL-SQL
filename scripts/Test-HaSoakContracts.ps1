@@ -31,6 +31,10 @@ try {
         & (Join-Path $ScriptRoot 'Test-PostgresHaCapacityWorkload.ps1')
     }
 
+    Invoke-Step 'PostgreSQL HA metrics snapshot contract' {
+        & (Join-Path $ScriptRoot 'Test-PostgresHaMetricsSnapshot.ps1')
+    }
+
     Invoke-Step 'HA soak evidence plan generator' {
         & (Join-Path $ScriptRoot 'Test-HaSoakEvidencePlan.ps1')
     }

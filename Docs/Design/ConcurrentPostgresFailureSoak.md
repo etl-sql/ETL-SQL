@@ -149,8 +149,10 @@ each fault, not just that an exception was thrown.
    defines the PostgreSQL-backed HA Portal/Orchestrator sustained-load profile, and
    `scripts/New-PostgresHaCapacityWorkload.ps1` materializes a local runnable copy from a generated
    topology run without committing generated API keys. `scripts/Test-PostgresHaCapacityWorkload.ps1`
-   validates materialization and the existing service-capacity harness schema. Real measured
-   capacity reports and PostgreSQL-specific metrics remain open.)*
+   validates materialization and the existing service-capacity harness schema.
+   `scripts/Export-PostgresHaMetricsSnapshot.ps1` captures non-secret PostgreSQL size, connection,
+   activity, and I/O counters for the generated topology, with validation coverage in
+   `scripts/Test-PostgresHaMetricsSnapshot.ps1`. Real measured capacity reports remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
    cleanup checks. *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json`
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required

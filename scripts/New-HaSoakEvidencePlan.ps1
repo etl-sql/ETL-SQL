@@ -100,6 +100,8 @@ $plan = [ordered]@{
             requiredEvidence = @(
                 'capacity-report.json',
                 'capacity-report.md',
+                'postgres-ha-metrics.json',
+                'postgres-ha-metrics.md',
                 'topology-metadata.json',
                 'workload configuration with secrets redacted before check-in'
             )
