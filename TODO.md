@@ -163,15 +163,15 @@ Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCerti
 
 Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparencyAndFallbacks.md)
 
-- [ ] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
+- [x] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
   unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
-  *(Slice A progress: added the immutable `PlanDecision` contract, stable reason-code taxonomy,
-  bounded sanitized storage on `ITelemetryContext`, clear/cap behavior, and focused tests. Planner
-  instrumentation for native columnar rejection/acceptance points remains next. Slice B progress:
+  *(Complete: added the immutable `PlanDecision` contract, stable reason-code taxonomy,
+  bounded sanitized storage on `ITelemetryContext`, clear/cap behavior, and focused tests.
   `SelectStatementHandler` now records accepted/fallback decisions for native columnar join, sort,
   grouped aggregate, global aggregate, projection/filter, and columnar `SELECT INTO` routes, with
-  focused routing tests covering accepted aggregate/projection paths and expression fallback.
-  Slice C progress: SQL `SELECT` pushdown now emits accepted/fallback `SqlPushdown` decisions for
+  focused routing tests covering accepted paths, unsupported expression/type/predicate fallbacks,
+  planner-level aggregate rejection, and memory-estimate rejection. SQL `SELECT` pushdown now emits
+  accepted/fallback `SqlPushdown` decisions for
   standard result streaming and `SELECT INTO`, including connection and row-engine fallback
   attributes; focused pushdown tests cover accepted remote execution and engine-only-function
   fallback. External sort, join, aggregate, and window engines now emit accepted plan decisions,
@@ -188,7 +188,8 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   `Plan Candidates` and `Plan Notes` columns that identify obvious native-path candidates and the
   runtime gates that decide acceptance. Scale-certification metrics and Gate F operator metrics now
   include plan-decision counts plus fallback/degraded/rejected summaries so ranking can consume
-  checked-in or operator-run evidence JSON directly.)*
+  checked-in or operator-run evidence JSON directly. Future native paths must add matching
+  accepted/fallback decisions as part of their admission requirements.)*
 - [x] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
   *(Slice E complete: `scripts/Summarize-PlanFallbacks.ps1` aggregates legacy fallback summaries

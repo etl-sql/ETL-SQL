@@ -535,6 +535,24 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task UnsupportedGlobalAggregatePlannerEmitsFallbackDecision()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource(throwOnRowRead: false);
+        evaluator.Connections["col"] = source;
+        var statement = ParseSelect("SELECT SUM(Id + 1) AS total FROM col;");
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        await handler.EvaluateQuery(statement, evaluator).ToListAsync();
+
+        Assert.Contains(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "ColumnarAggregate"
+                && d.Outcome == PlanDecisionOutcome.Fallback
+                && d.ReasonCode == PlanDecisionReasonCodes.UnsupportedExpression
+                && d.Attributes["fallbackDestination"] == "heavy-row-pipeline");
+    }
+
+    [Fact]
     public async Task GroupedAggregatesAccumulateAcrossNativeBatches()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -607,6 +625,10 @@ public sealed class ColumnarSelectRoutingTests
         await new SelectStatementHandler(NullLogger.Instance).EvaluateQuery(statement, evaluator).ToListAsync();
 
         Assert.Equal(1, source.RowReadAttempts);
+        var decision = Assert.Single(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "ColumnarGroupedAggregate" && d.Outcome == PlanDecisionOutcome.Fallback);
+        Assert.Equal(PlanDecisionReasonCodes.UnsupportedExpression, decision.ReasonCode);
+        Assert.Equal("heavy-row-pipeline", decision.Attributes["fallbackDestination"]);
     }
 
     [Fact]

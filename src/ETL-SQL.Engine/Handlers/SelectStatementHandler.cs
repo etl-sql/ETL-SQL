@@ -205,7 +205,20 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             groupedPlan = singleGroupedPlan;
         else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(context, stmt, out var compositeGroupedPlan))
             groupedPlan = compositeGroupedPlan;
-        if (groupedPlan != null)
+        if (groupedPlan == null && IsGroupedColumnarAggregateCandidate(stmt))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                PlanDecisionOutcome.Fallback,
+                source is IColumnarDataSource
+                    ? PlanDecisionReasonCodes.UnsupportedExpression
+                    : PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                source is IColumnarDataSource
+                    ? "Columnar grouped aggregate planner rejected the statement shape before opening native batches."
+                    : "Columnar grouped aggregate candidate source does not expose columnar batches.",
+                ("fallbackDestination", "heavy-row-pipeline"));
+        }
+        else if (groupedPlan != null)
         {
             using (groupedPlan)
             {
@@ -308,7 +321,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             }
         }
 
-        if (IsGlobalColumnarAggregateCandidate(stmt)
+        var globalAggregateCandidate = IsGlobalColumnarAggregateCandidate(stmt) && HasAggregateProjection(stmt);
+        if (globalAggregateCandidate
             && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
         {
             var source = await context.ResolveDataSourceAsync(stmt.FromTable);
@@ -389,6 +403,19 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                     "Columnar aggregate candidate source does not expose columnar batches.",
                     ("fallbackDestination", "row-engine"));
             }
+        }
+        else if (globalAggregateCandidate)
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
+                PlanDecisionOutcome.Fallback,
+                source is IColumnarDataSource
+                    ? PlanDecisionReasonCodes.UnsupportedExpression
+                    : PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                source is IColumnarDataSource
+                    ? "Columnar aggregate planner rejected the statement shape before opening native batches."
+                    : "Columnar aggregate candidate source does not expose columnar batches.",
+                ("fallbackDestination", "heavy-row-pipeline"));
         }
 
         // Native island for the narrow read-only shape that can preserve semantics today. Complex
@@ -846,6 +873,18 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
             && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool IsGroupedColumnarAggregateCandidate(SelectStatement stmt)
+        => stmt.FromTable.TableOperators.Count == 0
+            && (stmt.Joins == null || stmt.Joins.Count == 0)
+            && stmt.GroupBy != null && stmt.GroupingSet == null
+            && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
+            && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool HasAggregateProjection(SelectStatement stmt)
+        => stmt.Columns.Any(column => column.Expression is FunctionCallExpression function
+            && function.FunctionName.ToUpperInvariant() is "COUNT" or "SUM" or "AVG" or "MIN" or "MAX");
 
     private static bool IsValidatedCountCandidate(SelectStatement stmt)
         => IsGlobalColumnarAggregateCandidate(stmt)

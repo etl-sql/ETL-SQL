@@ -35,7 +35,8 @@
       ],
       "existingCoverage": [
         "ColumnarSelectRoutingTests.GlobalAggregatesAccumulateAcrossNativeBatchesWithDecimalPromotion",
-        "ColumnarSelectRoutingTests.GlobalMinMaxSupportsTemporalAndGuidBuffersNatively"
+        "ColumnarSelectRoutingTests.GlobalMinMaxSupportsTemporalAndGuidBuffersNatively",
+        "ColumnarSelectRoutingTests.UnsupportedGlobalAggregatePlannerEmitsFallbackDecision"
       ]
     },
     {
@@ -49,7 +50,8 @@
       "existingCoverage": [
         "ColumnarSelectRoutingTests.GroupedAggregatesAccumulateAcrossNativeBatches",
         "ColumnarSelectRoutingTests.CompositeGroupedAggregatesMatchRowPlannerWithoutRowReads",
-        "ColumnarSelectRoutingTests.GroupedNativePlannerMatchesRowPipeline"
+        "ColumnarSelectRoutingTests.GroupedNativePlannerMatchesRowPipeline",
+        "ColumnarSelectRoutingTests.UnprojectedGroupedHavingDeclinesNativeRoute"
       ]
     },
     {

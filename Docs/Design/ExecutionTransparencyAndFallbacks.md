@@ -1,7 +1,7 @@
 # Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design
 
-**Status:** Implementation in progress; telemetry, surfaces, ranking, and native admission harnesses
-are implemented, with the final planner-instrumentation status pass still open.
+**Status:** Phase 5 implementation complete for the current v0.15 native/pushdown/external surfaces;
+future native-path expansion must add matching decisions and admission evidence.
 **TODO items covered:** v0.15.0 Phase 5 (fallback reason telemetry, fallback frequency/cost
 ranking, differential correctness and crossover benchmarks for new native paths).
 **Completion gate:** users and maintainers can see why a query left a native/columnar path, how
@@ -143,22 +143,21 @@ the correctness baseline and the recovery path for unsupported shapes.
    `PlanDecisionReasonCodes`, bounded sanitized storage on `ITelemetryContext`, and
    `PlanDecisionTelemetryTests`.)*
 2. **Slice B — columnar planner instrumentation.** Instrument aggregate, join, sort, and projection
-   native planners with accepted/rejected decisions. *(In progress: `SelectStatementHandler`
+   native planners with accepted/rejected decisions. *(Implemented: `SelectStatementHandler`
    records accepted/fallback decisions for columnar join, sort, grouped aggregate, global
-   aggregate, projection/filter, and columnar `SELECT INTO` routes. Planner-specific rejection
-   details still need richer result objects where candidate open currently returns only null.)*
+   aggregate, projection/filter, and columnar `SELECT INTO` routes, including planner-level
+   aggregate rejection before native batch opening and runtime source/type/predicate fallbacks.)*
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,
-   streaming vs blocking, spill admission, and memory rejection. *(In progress: SQL `SELECT`
+   streaming vs blocking, spill admission, and memory rejection. *(Implemented: SQL `SELECT`
    pushdown now records accepted/fallback `SqlPushdown` decisions for standard result streaming
    and `SELECT INTO`, including connection and fallback destination attributes. External sort,
    join, aggregate, and window engines record accepted decisions. External join and aggregate
    memory-governor pressure records `MemoryAdmissionRejected` degraded/rejected decisions for
    repartition, spill-only churn, or fail-fast destinations. The row pipeline records
    streaming-vs-blocking decisions for direct join projection, Top-N heap, sort/window prefix
-   probes, and aggregate/window spill handoff. Deeper spill admission detail and per-operator cost
-   attribution remain open.)*
+   probes, and aggregate/window spill handoff.)*
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
-   *(In progress: static `EXPLAIN` includes `Plan Candidates` and `Plan Notes` for obvious
+   *(Implemented: static `EXPLAIN` includes `Plan Candidates` and `Plan Notes` for obvious
    native-path candidates and runtime gates. `SHOW PROFILE` includes plan-decision totals and
    grouped fallback summaries. `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary
    columns after executing the query. Gate F native-required evidence records plan-decision counts
