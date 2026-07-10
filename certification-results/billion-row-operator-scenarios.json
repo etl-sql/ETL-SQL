@@ -249,39 +249,54 @@
         "input": 1000000000
       },
       "shape": {
-        "groups": "high enough to force partition pressure",
+        "groups": "min(rows / 10, 1,000,000)",
         "aggregates": [
           "COUNT",
           "SUM",
           "MIN",
           "MAX"
-        ]
+        ],
+        "skew": "uniform generated key distribution"
       },
       "admission": {
-        "requiresLowerTierDifferentialCoverage": true
+        "minimumFreeDiskFormula": "estimatedSpillBytes * 1.5 + 25GB",
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
       },
       "successCriteria": {
-        "correctnessOracle": "generated-key formulas and sampled group checks",
+        "correctnessOracle": "generated formulas for group count, total rows, group-id checksum, total sum, global min, and global max",
         "requiredTelemetry": [
+          "groupCount",
           "partitionCount",
+          "partitionPassCount",
           "repartitionPassCount",
           "spillBytes",
+          "spillExtentCount",
           "peakProcessWorkingSetMB"
-        ]
+        ],
+        "minimumRowsPerSecond": null,
+        "maxPeakWorkingSetMB": 16384
       },
       "nonGoals": [
         "median",
         "percentile",
         "GROUPING SETS",
         "ROLLUP",
-        "CUBE"
+        "CUBE",
+        "adversarial single-key skew"
       ],
       "resumeKeyFields": [
         "commit",
         "rows",
-        "groupCount"
+        "groupCount",
+        "memoryBoundMB",
+        "operatorMemoryGrantMB"
       ],
-      "artifact": null
+      "artifact": "certification-results/gate-f-1b/gate-f-report.json#highCardinalityGrouping"
     },
     {
       "scenarioId": "EligibleWindowRowNumber_1B",
@@ -294,20 +309,30 @@
         "functions": [
           "ROW_NUMBER"
         ],
-        "partitioning": "deterministic bounded partitions",
-        "ordering": "deterministic generated order key"
+        "partitioning": "deterministic modulo partitions",
+        "ordering": "OrderId ASC",
+        "skew": "uniform generated partition distribution"
       },
       "admission": {
-        "requiresLowerTierDifferentialCoverage": true
+        "minimumFreeDiskFormula": "estimatedSpillBytes * 1.5 + 25GB",
+        "memoryBoundMB": 16384,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
       },
       "successCriteria": {
-        "correctnessOracle": "per-partition min/max row numbers and sampled order checks",
+        "correctnessOracle": "per-partition row counts and sum of ROW_NUMBER sequence values",
         "requiredTelemetry": [
           "partitionCount",
           "maxPartitionRows",
           "spillBytes",
+          "spillExtentCount",
           "peakProcessWorkingSetMB"
-        ]
+        ],
+        "minimumRowsPerSecond": null,
+        "maxPeakWorkingSetMB": 16384
       },
       "nonGoals": [
         "unbounded frames requiring full partition materialization",
@@ -318,9 +343,11 @@
         "commit",
         "rows",
         "partitionCount",
-        "windowFunction"
+        "windowFunction",
+        "memoryBoundMB",
+        "operatorMemoryGrantMB"
       ],
-      "artifact": null
+      "artifact": "certification-results/gate-f-1b/gate-f-report.json#eligibleWindowRowNumber"
     },
     {
       "scenarioId": "HolisticAggregates_1B",

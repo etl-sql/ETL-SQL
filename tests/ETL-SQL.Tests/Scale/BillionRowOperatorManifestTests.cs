@@ -56,6 +56,37 @@ public sealed class BillionRowOperatorManifestTests
     }
 
     [Fact]
+    public void Phase4Manifest_DistinguishesRunnableCandidatesFromNonCertifiedShapes()
+    {
+        using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
+        var scenarios = document.RootElement.GetProperty("scenarios").EnumerateArray().ToArray();
+        var runnableCandidates = new[]
+        {
+            "ExternalSort_MultiKey_1B",
+            "ExternalEquiJoin_ControlledSkew_1B",
+            "HighCardinalityGrouping_1B",
+            "EligibleWindowRowNumber_1B"
+        };
+
+        foreach (var scenarioId in runnableCandidates)
+        {
+            var scenario = FindScenario(scenarios, scenarioId);
+            Assert.Equal("Candidate", scenario.GetProperty("state").GetString());
+            AssertRequiredObject(scenario, "admission", "memoryBoundMB", "operatorMemoryGrantMB", "spillPath");
+            AssertNonEmptyArray(scenario, "resumeKeyFields");
+            AssertNonEmptyArray(scenario.GetProperty("successCriteria"), "requiredTelemetry", scenarioId);
+        }
+
+        foreach (var scenarioId in new[] { "HolisticAggregates_1B", "HeterogeneousMerge_1B" })
+        {
+            var scenario = FindScenario(scenarios, scenarioId);
+            Assert.Equal("Not certified", scenario.GetProperty("state").GetString());
+            Assert.Equal(JsonValueKind.Null, scenario.GetProperty("artifact").ValueKind);
+            Assert.Equal(0, scenario.GetProperty("resumeKeyFields").GetArrayLength());
+        }
+    }
+
+    [Fact]
     public void LargeDataCertificationMatrix_MatchesManifestStatesAndAvoidsBlanketClaim()
     {
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
@@ -104,8 +135,19 @@ public sealed class BillionRowOperatorManifestTests
     private static void AssertNonEmptyArray(JsonElement scenario, string propertyName)
     {
         var array = scenario.GetProperty(propertyName);
+        AssertNonEmptyArrayValue(array, propertyName, scenario.GetProperty("scenarioId").GetString()!);
+    }
+
+    private static void AssertNonEmptyArray(JsonElement obj, string propertyName, string context)
+    {
+        var array = obj.GetProperty(propertyName);
+        AssertNonEmptyArrayValue(array, propertyName, context);
+    }
+
+    private static void AssertNonEmptyArrayValue(JsonElement array, string propertyName, string context)
+    {
         Assert.Equal(JsonValueKind.Array, array.ValueKind);
-        Assert.True(array.GetArrayLength() > 0, $"{scenario.GetProperty("scenarioId").GetString()} has empty {propertyName}");
+        Assert.True(array.GetArrayLength() > 0, $"{context} has empty {propertyName}");
     }
 
     private static Dictionary<string, MatrixRow> ParseMatrixRows(string markdown)

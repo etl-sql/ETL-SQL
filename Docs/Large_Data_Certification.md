@@ -39,8 +39,8 @@ and non-goals.
 | `GateF_TempTableRoundTrip_1B` | Temp-table spill round trip | Certified | `certification-results/gate-f-1b/gate-f-report.json#tempTableRoundTrip` |
 | `ExternalSort_MultiKey_1B` | External sort | Candidate | Pending operator-run artifact |
 | `ExternalEquiJoin_ControlledSkew_1B` | External equi-join | Candidate | Pending operator-run artifact |
-| `HighCardinalityGrouping_1B` | External aggregate | Candidate | Pending lower-tier differential evidence and operator-run artifact |
-| `EligibleWindowRowNumber_1B` | External window | Candidate | Pending lower-tier differential evidence and operator-run artifact |
+| `HighCardinalityGrouping_1B` | External aggregate | Candidate | Pending operator-run artifact at `certification-results/gate-f-1b/gate-f-report.json#highCardinalityGrouping` |
+| `EligibleWindowRowNumber_1B` | External window | Candidate | Pending operator-run artifact at `certification-results/gate-f-1b/gate-f-report.json#eligibleWindowRowNumber` |
 | `HolisticAggregates_1B` | Holistic aggregates | Not certified | No 1B claim |
 | `HeterogeneousMerge_1B` | Heterogeneous `MERGE` | Not certified | No 1B claim |
 
