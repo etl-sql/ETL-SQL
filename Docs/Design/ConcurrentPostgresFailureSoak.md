@@ -158,7 +158,12 @@ each fault, not just that an exception was thrown.
    spill-write, spill-read, and repartition. `Phase6LargeJobSoakManifestTests` validates the
    contract. Runner implementation and measured soak artifacts remain open.)*
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and
-   cancellation tests with deterministic cleanup verification.
+   cancellation tests with deterministic cleanup verification. *(Contract progress:
+   `certification-results/phase6-fault-injection-matrix.json` defines the deterministic fault
+   matrix, safety constraints, expected recovery behavior, cleanup invariants, and required evidence
+   for disk pressure, slow disk, corrupt/incomplete extents, worker crash, Portal/Orchestrator node
+   loss, PostgreSQL outage, and temp-root exhaustion. `Phase6FaultInjectionManifestTests` validates
+   the matrix. Fault runners and measured artifacts remain open.)*
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.
 
 ---

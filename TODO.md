@@ -243,6 +243,12 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
+  *(Contract progress: `certification-results/phase6-fault-injection-matrix.json` defines the
+  deterministic fault matrix, run-safety constraints, cleanup invariants, required evidence, and
+  expected recovery behavior for disk pressure, slow disk, corrupt/incomplete extents, worker crash,
+  Portal/Orchestrator node loss, PostgreSQL outage, and temp-root exhaustion.
+  `Phase6FaultInjectionManifestTests` validates the matrix. Fault runners and measured artifacts
+  remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 
