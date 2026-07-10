@@ -1,5 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
@@ -88,7 +89,7 @@ public class ConnectionSecretReferenceTests
     }
 
     [Fact]
-    public async Task CreateConnection_NonSensitiveOption_DoesNotResolveSecretReference()
+    public async Task CreateConnection_ResolvesSecretReferenceInAccessKeyOption()
     {
         var connector = new CapturingConnector();
         var registry = Registry(connector);
@@ -96,18 +97,64 @@ public class ConnectionSecretReferenceTests
         var handler = new CreateConnectionStatementHandler(
             registry.Object,
             new Mock<ILogger>().Object,
-            secretProvider: new DictionarySecretProvider(("not_used", "resolved")));
+            secretProvider: new DictionarySecretProvider(("archive_access_key", "resolved-access-key")));
         var statement = new CreateConnectionStatement(
-            "sales",
+            "archive",
             "CAPTURE",
             options: new Dictionary<string, Expression>
             {
-                ["LABEL"] = new LiteralExpression("SECRET:not_used", TokenType.STRING_LITERAL)
+                ["ACCESS_KEY"] = new LiteralExpression("SECRET:archive_access_key", TokenType.STRING_LITERAL)
             });
 
         await handler.Execute(statement, context);
 
-        Assert.Equal("SECRET:not_used", connector.LastOptions?["LABEL"]);
+        Assert.Equal("resolved-access-key", connector.LastOptions?["ACCESS_KEY"]);
+    }
+
+    [Fact]
+    public async Task CreateConnection_NonCredentialOption_RejectsSecretReference()
+    {
+        var connector = new CapturingConnector();
+        var registry = Registry(connector);
+        var context = Context();
+        var handler = new CreateConnectionStatementHandler(
+            registry.Object,
+            new Mock<ILogger>().Object,
+            secretProvider: new DictionarySecretProvider(("bucket_name", "prod-bucket")));
+        var statement = new CreateConnectionStatement(
+            "archive",
+            "CAPTURE",
+            options: new Dictionary<string, Expression>
+            {
+                ["BUCKET"] = new LiteralExpression("SECRET:bucket_name", TokenType.STRING_LITERAL)
+            });
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() => handler.Execute(statement, context));
+
+        Assert.Contains("BUCKET", ex.Message);
+        Assert.Contains("credential fields", ex.Message);
+        Assert.Null(connector.LastOptions);
+    }
+
+    [Fact]
+    public async Task CreateConnection_NonCredentialConnectionStringField_RejectsSecretReference()
+    {
+        var connector = new CapturingConnector();
+        var registry = Registry(connector);
+        var context = Context();
+        var handler = new CreateConnectionStatementHandler(
+            registry.Object,
+            new Mock<ILogger>().Object,
+            secretProvider: new DictionarySecretProvider(("sales_db_password", "resolved-password")));
+        var statement = new CreateConnectionStatement(
+            "sales",
+            "CAPTURE",
+            new LiteralExpression("Server=db;Bucket=SECRET:bucket_name;Password=SECRET:sales_db_password", TokenType.STRING_LITERAL));
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() => handler.Execute(statement, context));
+
+        Assert.Contains("Bucket", ex.Message);
+        Assert.Null(connector.LastConnectionString);
     }
 
     private static Mock<IConnectorRegistry> Registry(IConnector connector)

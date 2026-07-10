@@ -60,6 +60,10 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : IWritableSecre
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        if (!HasRecognizedProtectionPrefix(protectedValue))
+            throw new InvalidOperationException(
+                $"Secret '{name}' in the OS secret store is not in a recognized protected format; the store never reads plaintext values.");
+
         return new SecretResolutionResult(name, CryptoUtils.Unprotect(protectedValue, name), ProviderName);
     }
 
@@ -70,11 +74,19 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : IWritableSecre
 
         var path = GetSecretPath(name);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var protectedValue = CryptoUtils.Protect(value, name);
+        var protectedValue = CryptoUtils.ProtectMachine(value, name);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
+
+    // Machine scope lets an admin-written secret be read by a differently privileged service
+    // account. "DPAPI:" payloads predate machine scoping and stay readable by the account
+    // that wrote them; rotating the secret upgrades it to machine scope.
+    private static bool HasRecognizedProtectionPrefix(string value) =>
+        value.StartsWith("DPAPI-M:", StringComparison.Ordinal)
+        || value.StartsWith("DPAPI:", StringComparison.Ordinal)
+        || value.StartsWith("MACHINE:", StringComparison.Ordinal);
 
     private string GetSecretPath(string name)
     {

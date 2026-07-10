@@ -67,6 +67,16 @@ Supported SME paths:
 | Portal encrypted store | Portal/Orchestrator HA without external vault | Portal database plus cluster-wide keys | Encrypted at rest; requires identical key ring/data-protection material across nodes |
 | `HttpsVault` | enterprise | external vault service | Optional; existing integration remains supported |
 
+**Decision (2026-07-10): machine-scoped encryption.** `OsSecretStore` values are encrypted with
+`CryptoUtils.ProtectMachine` (`DPAPI-M:` prefix, DPAPI `LocalMachine` on Windows; the existing
+`MACHINE:` machine-id-derived AES-256-GCM elsewhere) so an administrator-written secret is readable
+by a differently privileged service account on the same machine. User-scoped DPAPI (the pre-Phase-7
+format) would have made the admin-writes/service-reads split impossible on Windows. Confidentiality
+against other local accounts comes from filesystem ACLs on the store directory, which install
+tooling must set. Legacy `DPAPI:` (user-scoped) values remain readable by the account that wrote
+them and upgrade to machine scope on rotate. The store fails closed on unrecognized file contents —
+there is no plaintext read path.
+
 `OsSecretStore` CLI workflow:
 
 ```powershell
@@ -103,20 +113,31 @@ CREATE CONNECTION sales AS MSSQL(
 );
 
 CREATE CONNECTION archive AS S3(
-  BUCKET = 'SECRET:archive_bucket_name',
+  BUCKET = 'archive-bucket',
   ACCESS_KEY = 'SECRET:archive_access_key',
   SECRET_KEY = 'SECRET:archive_secret_key'
 );
 ```
 
-Phase 7 must choose one parser contract and make it consistent:
+`SECRET:` references resolve only on credential fields (`PASSWORD`, `TOKEN`, `ACCESS_KEY`,
+`SECRET_KEY`, and similar). A reference on any other field — `BUCKET`, `HOST`, `DATABASE` — is
+rejected with a clear error instead of silently reaching the connector as literal text. Extending
+resolution to classified sensitive metadata is Section 6 work; until it ships, non-credential
+fields take literal values only.
 
-- **Preferred implementation:** accept unquoted `SECRET:name` anywhere `ENC:...` is accepted today,
-  then normalize formatting to quoted canonical output when serializing scripts.
-- **Fallback implementation:** document quoted `'SECRET:name'` and quoted `'ENC:...'` as canonical,
-  add lint/help diagnostics for unquoted forms that are not accepted, and keep examples consistent.
+**Decision (2026-07-10): quoted canonical form.** Quoted `'SECRET:name'` and quoted `'ENC:...'`
+are the canonical, documented forms (the second option below). Unquoted secret-reference literals
+are not added: `SECRET` is already a keyword token (`GENERATE JWT SECRET`), quoted references are
+what the resolver, redactor, and every shipped example already use, and unquoted forms would touch
+lexer, formatter, linter, and highlighting for no capability gain. Remaining Slice B work is
+lint/help diagnostics for unquoted forms and an example/docs consistency sweep.
 
-Either path must include parser, formatter, linter, help, syntax-highlighting, and connector tests.
+- Accept unquoted `SECRET:name` anywhere `ENC:...` is accepted today, then normalize formatting to
+  quoted canonical output when serializing scripts. **Rejected — see decision above.**
+- **Chosen:** document quoted `'SECRET:name'` and quoted `'ENC:...'` as canonical, add lint/help
+  diagnostics for unquoted forms that are not accepted, and keep examples consistent.
+
+The chosen path must include parser, formatter, linter, help, syntax-highlighting, and connector tests.
 
 ---
 

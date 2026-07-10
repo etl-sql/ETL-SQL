@@ -1,4 +1,5 @@
 using System.Net;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Governance;
 using Xunit;
 
@@ -32,6 +33,57 @@ public class SecretProviderTests
         Assert.Equal("OsSecretStore", result.Provider);
         Assert.Equal("stored-secret", result.Value);
         Assert.DoesNotContain("stored-secret", File.ReadAllText(Path.Combine(root, "sales_db_password.secret")));
+    }
+
+    [Fact]
+    public async Task OsSecretStoreProvider_StoresMachineScopedPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
+        var provider = new OsSecretStoreProvider(root);
+
+        await provider.StoreAsync("sales_db_password", "stored-secret");
+
+        var payload = File.ReadAllText(Path.Combine(root, "sales_db_password.secret"));
+        var expectedPrefix = OperatingSystem.IsWindows() ? "DPAPI-M:" : "MACHINE:";
+        Assert.StartsWith(expectedPrefix, payload);
+    }
+
+    [Fact]
+    public async Task OsSecretStoreProvider_ResolvesLegacyUserScopedPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            Path.Combine(root, "legacy_secret.secret"),
+            CryptoUtils.Protect("legacy-value", "legacy_secret"));
+        var provider = new OsSecretStoreProvider(root);
+
+        var result = await provider.ResolveAsync("legacy_secret");
+
+        Assert.Equal("legacy-value", result.Value);
+    }
+
+    [Fact]
+    public async Task OsSecretStoreProvider_RejectsUnprotectedPayload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etl-secret-store-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(Path.Combine(root, "tampered.secret"), "plaintext-value");
+        var provider = new OsSecretStoreProvider(root);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("tampered"));
+
+        Assert.DoesNotContain("plaintext-value", ex.Message);
+    }
+
+    [Fact]
+    public void ProtectMachine_RoundTripsAndUsesMachinePrefix()
+    {
+        var protectedValue = CryptoUtils.ProtectMachine("machine-secret", "entropy-1");
+
+        var expectedPrefix = OperatingSystem.IsWindows() ? "DPAPI-M:" : "MACHINE:";
+        Assert.StartsWith(expectedPrefix, protectedValue);
+        Assert.Equal("machine-secret", CryptoUtils.Unprotect(protectedValue, "entropy-1"));
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Engine.Services;
@@ -21,8 +22,11 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         "SECRET",
         "SECRET_KEY",
         "SECRETKEY",
+        "ACCESS_KEY",
+        "ACCESSKEY",
         "SAS_TOKEN",
         "ACCOUNT_KEY",
+        "ACCOUNTKEY",
         "PASSPHRASE",
         "PRIVATE_KEY",
         "SASL_PASSWORD",
@@ -47,8 +51,13 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         var resolved = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options)
         {
-            if (SensitiveOptionKeys.Contains(key) && IsSecretReference(value))
-                resolved[key] = await ResolveSecretValueAsync(value, cancellationToken).ConfigureAwait(false);
+            if (!IsSecretReference(value))
+                continue;
+
+            if (!SensitiveOptionKeys.Contains(key))
+                throw UnresolvedSecretReferenceError(key);
+
+            resolved[key] = await ResolveSecretValueAsync(value, cancellationToken).ConfigureAwait(false);
         }
 
         return resolved;
@@ -65,6 +74,10 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         var resolved = target;
         foreach (Match match in matches.Cast<Match>().Reverse())
         {
+            var key = match.Groups["key"].Value;
+            if (!SensitiveOptionKeys.Contains(key))
+                throw UnresolvedSecretReferenceError(key);
+
             var reference = match.Groups["value"].Value;
             var secret = await ResolveSecretValueAsync(reference, cancellationToken).ConfigureAwait(false);
             resolved = resolved.Remove(match.Groups["value"].Index, match.Groups["value"].Length)
@@ -73,6 +86,13 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 
         return resolved;
     }
+
+    // A SECRET: reference on a field outside the resolvable set would otherwise reach the
+    // connector as the literal text "SECRET:name" — reject it up front instead.
+    private static ExecutionException UnresolvedSecretReferenceError(string key) =>
+        new($"Connection field '{key}' uses a SECRET: reference, but secrets are only resolved for credential fields " +
+            $"({string.Join(", ", SensitiveOptionKeys.Order(StringComparer.OrdinalIgnoreCase))}). " +
+            "The connector would receive the literal reference text instead of the secret value.");
 
     private async Task<string> ResolveSecretValueAsync(string reference, CancellationToken cancellationToken)
     {
@@ -87,6 +107,6 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
     private static bool IsSecretReference(string value) =>
         value.Trim().StartsWith(SecretPrefix, StringComparison.OrdinalIgnoreCase);
 
-    [GeneratedRegex(@"(?i)(?:^|;)\s*(?:PASSWORD|PWD|API_KEY|APIKEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|CLIENT_SECRET|CLIENTSECRET|SECRET|SECRET_KEY|SECRETKEY|SAS_TOKEN|ACCOUNT_KEY|PASSPHRASE|PRIVATE_KEY|SASL_PASSWORD|SASL_JAAS_CONFIG)\s*=\s*(?<quote>['""]?)(?<value>SECRET:[^;'""]+)\k<quote>")]
+    [GeneratedRegex(@"(?i)(?:^|;)\s*(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<quote>['""]?)(?<value>SECRET:[^;'""]+)\k<quote>")]
     private static partial Regex ConnectionStringSecretFieldRegex();
 }

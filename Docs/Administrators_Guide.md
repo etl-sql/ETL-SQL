@@ -212,7 +212,7 @@ Supported providers:
 | Provider | Required settings | Operational notes |
 | :--- | :--- | :--- |
 | `Environment` | Optional `EnvironmentPrefix` | Secret names are uppercased; `.` and `-` become `_`. With the prefix above, `SECRET:sales_db_password` resolves from `ETLSQL_SECRET_SALES_DB_PASSWORD`. |
-| `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. On Unix, secret files are written owner-read/write only. Back up the store with the host or service identity that can decrypt it. |
+| `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. Values are encrypted machine-scoped (DPAPI `LocalMachine` on Windows, machine-id-derived AES-256-GCM elsewhere), so an administrator can write secrets that a differently privileged service account reads back; restrict the directory with filesystem ACLs since any account on the host that can read the files can decrypt them. On Unix, secret files are written owner-read/write only. Values written by releases before machine scoping are user-scoped and stay readable by the account that wrote them; rotating a secret upgrades it to machine scope. The store is never read as plaintext — unrecognized file contents fail closed. |
 | `HttpsVault` | `VaultEndpoint`; optional `VaultBearerToken` | The endpoint must be HTTPS. The provider requests `<VaultEndpoint>/<secret-name>` and accepts either a raw response body or JSON `{ "value": "secret" }`. |
 
 Environment-variable examples:
@@ -241,8 +241,12 @@ CREATE CONNECTION warehouse AS POSTGRES(
 );
 ```
 
-Only sensitive connector options and sensitive connection-string fields are expanded. Missing or unreachable
-secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an empty value.
+Only sensitive connector options and sensitive connection-string fields are expanded (`PASSWORD`, `TOKEN`,
+`ACCESS_KEY`, `SECRET_KEY`, `CLIENT_SECRET`, and similar credential fields). A `SECRET:` reference on any
+other field — for example `BUCKET` or `HOST` — is rejected with an error rather than passed to the connector
+as literal text; classifying non-credential metadata as sensitive is planned governance work. Missing or
+unreachable secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an
+empty value.
 Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
 raw secret values and `SECRET:` references before persistence or display.
 
