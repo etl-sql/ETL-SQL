@@ -35,6 +35,10 @@ try {
         & (Join-Path $ScriptRoot 'Test-PostgresHaMetricsSnapshot.ps1')
     }
 
+    Invoke-Step 'HA soak diagnostics bundle' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakDiagnostics.ps1')
+    }
+
     Invoke-Step 'HA soak evidence plan generator' {
         & (Join-Path $ScriptRoot 'Test-HaSoakEvidencePlan.ps1')
     }

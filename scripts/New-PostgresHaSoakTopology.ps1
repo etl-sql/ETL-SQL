@@ -211,6 +211,7 @@ $metadata = [ordered]@{
         start = 'docker compose --env-file "{0}" -f "{1}" up -d --scale portal={2} --scale orchestrator={3}' -f $envRelative, $composeRelative, $PortalScale, $OrchestratorScale
         status = 'docker compose --env-file "{0}" -f "{1}" ps' -f $envRelative, $composeRelative
         stop = 'docker compose --env-file "{0}" -f "{1}" down' -f $envRelative, $composeRelative
+        diagnostics = 'scripts/Export-HaSoakDiagnostics.ps1 -TopologyRunRoot "{0}"' -f (Resolve-Path -LiteralPath $runRoot -Relative)
     }
     secrets = 'Generated only in envFile; intentionally omitted from metadata.'
 }
@@ -239,6 +240,12 @@ $readmePath = Join-Path $runRoot 'README.md'
     '',
     '```powershell',
     $metadata.commands.stop,
+    '```',
+    '',
+    'Diagnostics after any failed or completed run:',
+    '',
+    '```powershell',
+    $metadata.commands.diagnostics,
     '```'
 ) | Set-Content -LiteralPath $readmePath -Encoding UTF8
 

@@ -152,7 +152,10 @@ each fault, not just that an exception was thrown.
    validates materialization and the existing service-capacity harness schema.
    `scripts/Export-PostgresHaMetricsSnapshot.ps1` captures non-secret PostgreSQL size, connection,
    activity, and I/O counters for the generated topology, with validation coverage in
-   `scripts/Test-PostgresHaMetricsSnapshot.ps1`. Real measured capacity reports remain open.)*
+   `scripts/Test-PostgresHaMetricsSnapshot.ps1`. `scripts/Export-HaSoakDiagnostics.ps1` writes a
+   non-secret diagnostics bundle after operator-run failures or completions, including redacted env,
+   topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
+   generated run README both point to it. Real measured capacity reports remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
    cleanup checks. *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json`
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required

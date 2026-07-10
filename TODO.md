@@ -234,7 +234,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   validates the materialized workload through the existing capacity harness.
   `scripts/Export-PostgresHaMetricsSnapshot.ps1` captures non-secret PostgreSQL size, connection,
   activity, and I/O counters for the generated topology, with validation coverage in
-  `scripts/Test-PostgresHaMetricsSnapshot.ps1`. Checked-in measured capacity reports remain open.)*
+  `scripts/Test-PostgresHaMetricsSnapshot.ps1`. `scripts/Export-HaSoakDiagnostics.ps1` now writes
+  a non-secret diagnostics bundle after operator-run failures or completions, including redacted env,
+  topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
+  generated run README both point to it. Checked-in measured capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
   *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the

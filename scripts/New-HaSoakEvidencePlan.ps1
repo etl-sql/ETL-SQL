@@ -86,6 +86,17 @@ $plan = [ordered]@{
     runId = $metadata.runId
     topologyMetadataPath = Get-RelativeLabel $metadataPath
     topology = $metadata.topology
+    diagnostics = [ordered]@{
+        command = "scripts/Export-HaSoakDiagnostics.ps1 -TopologyRunRoot $runLabel"
+        requiredAfterFailure = $true
+        expectedArtifacts = @(
+            'diagnostic-summary.json',
+            'postgres-ha-soak.redacted.env',
+            'run-root-inventory.json',
+            'docker-compose-ps.txt',
+            'docker-compose-logs.txt'
+        )
+    }
     gates = @(
         [ordered]@{
             gateId = 'sustained-postgres-ha-load'
