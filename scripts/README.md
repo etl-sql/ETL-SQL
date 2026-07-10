@@ -28,6 +28,7 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Test-Phase6CapacityWorkload.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-Phase6CapacityWorkload.ps1)** | PowerShell | Cross-platform | Self-test for Phase 6 workload materialization and capacity-harness schema validation. |
 | **[`New-Phase6EvidencePlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-Phase6EvidencePlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run Phase 6 evidence checklist from topology metadata, workload input, soak manifest, and fault matrix. |
 | **[`Test-Phase6EvidencePlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-Phase6EvidencePlan.ps1)** | PowerShell | Cross-platform | Self-test for Phase 6 evidence-plan generation and secret omission. |
+| **[`Test-Phase6Contracts.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-Phase6Contracts.ps1)** | PowerShell | Cross-platform | Runs the local Phase 6 contract suite: topology, workload materialization, evidence plan, capacity-workload schema validation, and manifest tests. |
 
 Gate F is intentionally operator-run because the spill-backed billion-row scenario can take hours.
 Start it with `./scripts/Test-GateF.ps1`; inspect progress from another shell with
