@@ -176,7 +176,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   attributes; focused pushdown tests cover accepted remote execution and engine-only-function
   fallback. External sort, join, aggregate, and window engines now emit accepted plan decisions,
   and external join/aggregate memory-governor pressure records `MemoryAdmissionRejected`
-  degraded/rejected decisions for repartition, spill-only churn, or fail-fast destinations.
+  degraded/rejected decisions for repartition, spill-only churn, or fail-fast destinations. The
+  row pipeline now records streaming-vs-blocking decisions for direct join projection, Top-N heap,
+  sort/window prefix probes, and aggregate/window spill handoff.
   Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
   `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window;
   `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed

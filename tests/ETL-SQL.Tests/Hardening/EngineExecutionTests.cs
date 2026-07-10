@@ -167,6 +167,10 @@ namespace ETL_SQL.Tests.Hardening
             var rows = batches.SelectMany(b => b.Rows).ToList();
             Assert.Equal(3, rows.Count);
             Assert.Equal(new[] { 0, 1, 2 }, rows.Select(r => Convert.ToInt32(r["Id"])).ToArray());
+            var decision = Assert.Single(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "RowPipeline" && d.OperatorId == "select.join-projection");
+            Assert.Equal(PlanDecisionOutcome.Accepted, decision.Outcome);
+            Assert.Equal("streaming", decision.Attributes["executionMode"]);
         }
 
         [Fact]
