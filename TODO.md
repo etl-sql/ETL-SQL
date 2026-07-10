@@ -201,8 +201,12 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   medium workloads do not regress for the large-tier headline.
   *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus
   native columnar comparisons for filter/projection, grouped aggregate, sort, and inner join at
-  1k/50k rows. Checked-in benchmark results, admission thresholds, and per-new-path differential
-  test requirements remain open.)*
+  1k/50k rows. Admission thresholds are checked in as
+  `certification-results/columnar-crossover-admission.json` and validated by
+  `ColumnarCrossoverAdmissionTests`: exact checksum parity, no more than 10% small-workload
+  slowdown, no medium-workload slowdown, no medium-workload allocation increase, and at least five
+  samples. Checked-in benchmark result captures and per-new-path differential test requirements
+  remain open.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 

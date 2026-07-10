@@ -174,8 +174,9 @@ the correctness baseline and the recovery path for unsupported shapes.
 6. **Slice F — native admission harness.** Add differential correctness requirements and crossover
    benchmarks for candidate native paths. *(In progress: `ColumnarCrossoverBenchmarks` compares
    row-reference and native columnar implementations for filter/projection, grouped aggregate, sort,
-   and inner join at small/medium sizes. Published benchmark captures and admission thresholds
-   remain open.)*
+   and inner join at small/medium sizes. `columnar-crossover-admission.json` defines the
+   admission thresholds and `ColumnarCrossoverAdmissionTests` protects the contract. Published
+   benchmark captures and per-new-path differential test requirements remain open.)*
 
 ---
 
