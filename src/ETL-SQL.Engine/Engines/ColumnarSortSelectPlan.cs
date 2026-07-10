@@ -58,7 +58,7 @@ internal sealed class ColumnarSortSelectPlan
             || dataSource is not IEstimatedCardinalityDataSource estimate)
             return null;
         var estimatedBytes = checked(estimate.EstimatedRowCount * 64L);
-        var operatorBudget = (long)context.OperatorMemoryGrantMB * 1024 * 1024;
+        var operatorBudget = (long)context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         if (operatorBudget > 0 && estimatedBytes > operatorBudget) return null;
 
         var keys = _orderKeys.Select(key => new NativeSortKey(
@@ -70,7 +70,7 @@ internal sealed class ColumnarSortSelectPlan
         long retainedBytes = 0;
         try
         {
-            await foreach (var batch in source.ReadColumnBatches(context.BatchSize, context.CancellationToken))
+            await foreach (var batch in source.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken))
             {
                 if (!HasColumns(batch, _sourceColumns) || !HasColumns(batch, keys.Select(key => key.ColumnName)))
                 {
@@ -191,7 +191,7 @@ internal sealed class ColumnarSortSelectPlan
                 output.Rows.Add(row);
                 var next = cursor with { Position = cursor.Position + 1 };
                 if (next.Position < _runs[next.Batch].Count) queue.Enqueue(next, next);
-                if (output.Rows.Count >= _context.BatchSize)
+                if (output.Rows.Count >= _context.EffectiveBatchSize)
                 {
                     yield return output;
                     output = NewBatch();

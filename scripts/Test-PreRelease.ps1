@@ -115,7 +115,7 @@ function Get-PlannedPreReleasePhases {
 
     if (-not $EffectiveSkipScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification smoke"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Smoke"; Reason = "Small certification workload still meets baseline." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1"; Reason = "Smoke certification metrics have not regressed." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (smoke)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-smoke.md"; Reason = "Smoke certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
     }
 
     if ($EffectiveIncludeDockerIntegration) {
@@ -124,7 +124,7 @@ function Get-PlannedPreReleasePhases {
 
     if ($EffectiveIncludeStandardScale) {
         $phases.Add([ordered]@{ Phase = "Scale certification standard"; Command = ".\scripts\Test-ScaleCertification.ps1 -Tier Standard"; Reason = "Release-size certification workload still meets baseline." })
-        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1"; Reason = "Standard certification metrics have not regressed." })
+        $phases.Add([ordered]@{ Phase = "Cert baseline regression check (standard)"; Command = ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport <run>\cert-baseline-standard.md"; Reason = "Standard certification metrics have not regressed; warning evidence is preserved in the validation artifacts." })
         $phases.Add([ordered]@{ Phase = "Spill allocation budget (10M)"; Command = ".\scripts\Test-SpillAllocProfile.ps1 -Rows 10000000 -SkipBuild"; Reason = "Gate F round-trip allocation, GC, and peak-memory containment stay within the checked-in budget." })
     }
 
@@ -383,7 +383,8 @@ function Invoke-LoggedPhase {
         [scriptblock]$Action,
         [hashtable]$PreviousPhaseMap,
         [string]$Fingerprint,
-        [System.Collections.Generic.List[object]]$Results
+        [System.Collections.Generic.List[object]]$Results,
+        [string[]]$Artifacts = @()
     )
 
     if ($Resume -and $PreviousPhaseMap.ContainsKey($Name)) {
@@ -395,6 +396,7 @@ function Invoke-LoggedPhase {
                 status = "Skipped"
                 elapsedSeconds = 0
                 log = $previous.log
+                artifacts = @($previous.artifacts)
                 note = "Skipped by -Resume; previous phase passed for this source fingerprint."
             })
             Save-State -Results $Results.ToArray() -Status "Running" -Fingerprint $Fingerprint
@@ -450,6 +452,7 @@ function Invoke-LoggedPhase {
         status = $status
         elapsedSeconds = [Math]::Round($timer.Elapsed.TotalSeconds, 2)
         log = $phaseLog
+        artifacts = @($Artifacts)
         note = $note
     }
     $Results.Add($result)
@@ -498,13 +501,20 @@ function Write-Reports {
     $lines.Add("")
     $lines.Add(('Source fingerprint: `{0}`' -f $Fingerprint))
     $lines.Add("")
-    $lines.Add("| Phase | Status | Seconds | Command | Log |")
-    $lines.Add("| :--- | :---: | ---: | :--- | :--- |")
+    $lines.Add("| Phase | Status | Seconds | Command | Log | Artifacts |")
+    $lines.Add("| :--- | :---: | ---: | :--- | :--- | :--- |")
     foreach ($r in $Results) {
         $relativeLog = Resolve-Path -LiteralPath $r.log -ErrorAction SilentlyContinue
         $logText = if ($relativeLog) { $relativeLog.Path } else { $r.log }
+        $artifactText = ""
+        if ($r.artifacts) {
+            $artifactText = (@($r.artifacts) | ForEach-Object {
+                $artifactPath = Resolve-Path -LiteralPath $_ -ErrorAction SilentlyContinue
+                if ($artifactPath) { $artifactPath.Path } else { $_ }
+            }) -join "<br>"
+        }
         $escapedCommand = ($r.command -replace '\|', '\|')
-        $lines.Add(('| {0} | {1} | {2} | `{3}` | `{4}` |' -f $r.name, $r.status, $r.elapsedSeconds, $escapedCommand, $logText))
+        $lines.Add(('| {0} | {1} | {2} | `{3}` | `{4}` | {5} |' -f $r.name, $r.status, $r.elapsedSeconds, $escapedCommand, $logText, $artifactText))
     }
     $lines.Add("")
     if ($Status -ne "Passed") {
@@ -730,10 +740,11 @@ try {
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Smoke" } `
             $previousPhaseMap $fingerprint $results
 
+        $smokeBaselineReport = Join-Path $RunDir "cert-baseline-smoke.md"
         Invoke-LoggedPhase "Cert baseline regression check (smoke)" `
-            ".\scripts\Compare-CertBaseline.ps1" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" } `
-            $previousPhaseMap $fingerprint $results
+            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $smokeBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $smokeBaselineReport } `
+            $previousPhaseMap $fingerprint $results @($smokeBaselineReport)
     }
 
     if ($EffectiveIncludeDockerIntegration) {
@@ -749,10 +760,11 @@ try {
             { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-ScaleCertification.ps1" "-Tier" "Standard" } `
             $previousPhaseMap $fingerprint $results
 
+        $standardBaselineReport = Join-Path $RunDir "cert-baseline-standard.md"
         Invoke-LoggedPhase "Cert baseline regression check (standard)" `
-            ".\scripts\Compare-CertBaseline.ps1" `
-            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" } `
-            $previousPhaseMap $fingerprint $results
+            ".\scripts\Compare-CertBaseline.ps1 -MarkdownReport $standardBaselineReport" `
+            { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Compare-CertBaseline.ps1" "-MarkdownReport" $standardBaselineReport } `
+            $previousPhaseMap $fingerprint $results @($standardBaselineReport)
 
         # Release configuration is already built by the Dotnet build phase, hence -SkipBuild.
         Invoke-LoggedPhase "Spill allocation budget (10M)" `

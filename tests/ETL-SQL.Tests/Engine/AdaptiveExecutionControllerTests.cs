@@ -1,0 +1,276 @@
+using ETL_SQL.App;
+using ETL_SQL.Core.Adaptive;
+using ETL_SQL.Core.Common;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace ETL_SQL.Tests.Engine;
+
+public class AdaptiveExecutionControllerTests
+{
+    private static AdaptiveExecutionOptions Options() => new()
+    {
+        Enabled = true,
+        ConsecutiveHighSamples = 2,
+        ConsecutiveLowSamples = 8,
+        CooldownSamples = 4,
+        MinBatchRows = 1000,
+        MinOperatorGrantRequestMB = 64,
+        LegacyBatchRows = 10000,
+        LegacyWorkerDegree = 4,
+        LegacyPipelineDepth = 1,
+        LegacySpillWriteConcurrency = 1,
+        LegacyOperatorGrantRequestMB = 256
+    };
+
+    private static AdaptiveExecutionCeilings Ceilings() => new(
+        BatchRows: 40000,
+        WorkerDegree: 8,
+        PipelineDepth: 2,
+        SpillWriteConcurrency: 2,
+        OperatorGrantRequestMB: 1024);
+
+    [Fact]
+    public void DisabledController_DoesNotChangeSetpoints()
+    {
+        var controller = new AdaptiveExecutionController(Options() with { Enabled = false });
+        using var advisor = controller.CreateAdvisor(Ceilings());
+        var before = advisor.Snapshot();
+
+        controller.Observe(new ResourceSignals(1, 1, 1));
+        controller.Observe(new ResourceSignals(1, 1, 1));
+
+        Assert.Equal(before, advisor.Snapshot());
+        Assert.All(controller.Decisions, d => Assert.Equal(AdaptiveDecisionKind.None, d.Kind));
+    }
+
+    [Fact]
+    public void HighPressure_ScalesDownAfterConsecutiveSamples()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+
+        var first = controller.Observe(new ResourceSignals(CpuUtilization: 0.95, MemoryLoad: 0.2, GrantPressure: 0.2));
+        var second = controller.Observe(new ResourceSignals(CpuUtilization: 0.95, MemoryLoad: 0.2, GrantPressure: 0.2));
+
+        Assert.Equal(AdaptiveDecisionKind.None, first.Kind);
+        Assert.Equal(AdaptiveDecisionKind.ScaleDown, second.Kind);
+        Assert.Equal("cpu-high", second.Reason);
+        Assert.Equal(5000, advisor.Snapshot().BatchRows);
+        Assert.Equal(2, advisor.Snapshot().WorkerDegree);
+        Assert.Equal(128, advisor.Snapshot().OperatorGrantRequestMB);
+    }
+
+    [Fact]
+    public void ScaleDown_StopsAtFloors()
+    {
+        var controller = new AdaptiveExecutionController(Options() with { CooldownSamples = 0 });
+        using var advisor = controller.CreateAdvisor(new AdaptiveExecutionCeilings(1000, 1, 0, 1, 64));
+
+        for (var i = 0; i < 8; i++)
+            controller.Observe(new ResourceSignals(CpuUtilization: 0.95, MemoryLoad: 0.2, GrantPressure: 0.2));
+
+        Assert.Equal(new AdaptiveSetpoints(1000, 1, 0, 1, 64), advisor.Snapshot());
+    }
+
+    [Fact]
+    public void IdleCapacity_ScalesUpSlowlyWithinCeilings()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+
+        for (var i = 0; i < 7; i++)
+            Assert.Equal(AdaptiveDecisionKind.None, controller.Observe(ResourceSignals.Idle).Kind);
+
+        var decision = controller.Observe(ResourceSignals.Idle);
+
+        Assert.Equal(AdaptiveDecisionKind.ScaleUp, decision.Kind);
+        Assert.Equal(20000, advisor.Snapshot().BatchRows);
+        Assert.Equal(4, advisor.Snapshot().WorkerDegree);
+        Assert.True(advisor.Snapshot().BatchRows <= advisor.ConfiguredCeilings.BatchRows);
+    }
+
+    [Fact]
+    public void Cooldown_PreventsImmediateRepeatedChanges()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+
+        controller.Observe(new ResourceSignals(0.95, 0.2, 0.2));
+        controller.Observe(new ResourceSignals(0.95, 0.2, 0.2));
+        var afterScaleDown = advisor.Snapshot();
+
+        for (var i = 0; i < 4; i++)
+            Assert.Equal(AdaptiveDecisionKind.None, controller.Observe(new ResourceSignals(0.95, 0.2, 0.2)).Kind);
+
+        Assert.Equal(afterScaleDown, advisor.Snapshot());
+    }
+
+    [Fact]
+    public void Deadband_DoesNotAccumulateTowardScaleUpOrDown()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+        var initial = advisor.Snapshot();
+
+        for (var i = 0; i < 20; i++)
+            controller.Observe(new ResourceSignals(0.70, 0.60, 0.60));
+
+        Assert.Equal(initial, advisor.Snapshot());
+    }
+
+    [Fact]
+    public void Fairness_CapsWorkerAndGrantCeilingsAcrossConcurrentAdvisors()
+    {
+        var controller = new AdaptiveExecutionController(
+            Options(),
+            totalGrantBudgetBytes: 512L * 1024 * 1024,
+            processorCount: 8);
+
+        using var first = controller.CreateAdvisor(Ceilings());
+        Assert.Equal(4, first.Snapshot().WorkerDegree);
+        Assert.Equal(256, first.Snapshot().OperatorGrantRequestMB);
+
+        using var second = controller.CreateAdvisor(Ceilings());
+
+        Assert.Equal(4, first.Snapshot().WorkerDegree);
+        Assert.Equal(4, second.Snapshot().WorkerDegree);
+        Assert.Equal(256, first.Snapshot().OperatorGrantRequestMB);
+        Assert.Equal(256, second.Snapshot().OperatorGrantRequestMB);
+
+        for (var i = 0; i < 8; i++)
+            controller.Observe(ResourceSignals.Idle);
+
+        Assert.Equal(4, first.Snapshot().WorkerDegree);
+        Assert.Equal(4, second.Snapshot().WorkerDegree);
+        Assert.True(first.Snapshot().OperatorGrantRequestMB <= 256);
+        Assert.True(second.Snapshot().OperatorGrantRequestMB <= 256);
+    }
+
+    [Fact]
+    public void DisposingAdvisor_RecomputesFairShareForRemainingAdvisor()
+    {
+        var controller = new AdaptiveExecutionController(Options(), processorCount: 8);
+        using var first = controller.CreateAdvisor(Ceilings());
+        var second = controller.CreateAdvisor(Ceilings());
+
+        second.Dispose();
+
+        for (var i = 0; i < 20; i++)
+            controller.Observe(ResourceSignals.Idle);
+
+        Assert.True(first.Snapshot().WorkerDegree > 4);
+        Assert.Equal(1, controller.ActiveAdvisorCount);
+    }
+
+    [Fact]
+    public void ExecutionContextEffectiveSetpoints_DefaultToStaticValuesWhenDisabled()
+    {
+        IExecutionContext context = new SystemExecutionContext
+        {
+            BatchSize = 40000,
+            MaxParallelDegree = 8,
+            OperatorMemoryGrantMB = 1024,
+            AdaptiveExecutionEnabled = false
+        };
+
+        Assert.Equal(40000, context.EffectiveBatchSize);
+        Assert.Equal(8, context.EffectiveMaxParallelDegree);
+        Assert.Equal(1024, context.EffectiveOperatorMemoryGrantMB);
+    }
+
+    [Fact]
+    public void ExecutionContextEffectiveSetpoints_UseAdvisorWhenEnabled()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+        IExecutionContext context = new SystemExecutionContext
+        {
+            BatchSize = 40000,
+            MaxParallelDegree = 8,
+            OperatorMemoryGrantMB = 1024,
+            AdaptiveExecutionEnabled = true,
+            AdaptiveAdvisor = advisor
+        };
+
+        Assert.Equal(10000, context.EffectiveBatchSize);
+        Assert.Equal(4, context.EffectiveMaxParallelDegree);
+        Assert.Equal(256, context.EffectiveOperatorMemoryGrantMB);
+    }
+
+    [Fact]
+    public void EvaluatorAdaptiveConfiguration_CreatesAdvisorAndKeepsStaticCeilings()
+    {
+        var services = DependencyInjectionSetup.BuildServiceProvider(new Dictionary<string, string?>
+        {
+            ["Engine:Adaptive:Enabled"] = "true",
+            ["Engine:BatchSize"] = "40000",
+            ["Engine:OperatorMemoryGrantMB"] = "1024",
+            ["Engine:TotalMemoryGrantMB"] = "2048",
+            ["Engine:Adaptive:MinBatchRows"] = "2000",
+            ["Engine:Adaptive:MinOperatorGrantRequestMB"] = "128",
+            ["Engine:Adaptive:MaxPipelineDepth"] = "3"
+        });
+
+        var evaluator = services.GetRequiredService<Evaluator>();
+        IExecutionContext context = evaluator;
+
+        Assert.True(evaluator.AdaptiveExecutionEnabled);
+        Assert.NotNull(evaluator.AdaptiveAdvisor);
+        Assert.Equal(40000, evaluator.BatchSize);
+        Assert.Equal(1024, evaluator.OperatorMemoryGrantMB);
+        Assert.Equal(10000, context.EffectiveBatchSize);
+        Assert.Equal(256, context.EffectiveOperatorMemoryGrantMB);
+        Assert.Equal(1, context.EffectivePipelineDepth);
+        Assert.Equal(1, context.EffectiveSpillWriteConcurrency);
+    }
+
+    [Fact]
+    public void SpillLatencyPressure_ScalesDownAfterConsecutiveSamples()
+    {
+        var controller = new AdaptiveExecutionController(Options());
+        using var advisor = controller.CreateAdvisor(Ceilings());
+
+        controller.Observe(new ResourceSignals(
+            CpuUtilization: 0.2,
+            MemoryLoad: 0.2,
+            GrantPressure: 0.2,
+            SpillWriteLatencyMsPerMB: 300));
+        var decision = controller.Observe(new ResourceSignals(
+            CpuUtilization: 0.2,
+            MemoryLoad: 0.2,
+            GrantPressure: 0.2,
+            SpillWriteLatencyMsPerMB: 300));
+
+        Assert.Equal(AdaptiveDecisionKind.ScaleDown, decision.Kind);
+        Assert.Equal("spill-latency-high", decision.Reason);
+        Assert.Equal(0, advisor.Snapshot().PipelineDepth);
+        Assert.Equal(1, advisor.Snapshot().SpillWriteConcurrency);
+    }
+
+    [Fact]
+    public void SingleWorkerCeiling_RemainsDeterministicWhenCapacityIsIdle()
+    {
+        var controller = new AdaptiveExecutionController(Options(), processorCount: 8);
+        using var advisor = controller.CreateAdvisor(Ceilings() with { WorkerDegree = 1 });
+
+        for (var i = 0; i < 32; i++)
+            controller.Observe(ResourceSignals.Idle);
+
+        Assert.Equal(1, advisor.Snapshot().WorkerDegree);
+    }
+
+    [Fact]
+    public void ResourceSignalSampler_IncludesRuntimeQueueAndSpillLatency()
+    {
+        var metrics = new AdaptiveRuntimeMetrics();
+        metrics.ReportQueueDepth(3);
+        metrics.ReportSpillWrite(bytesWritten: 1024 * 1024, elapsed: TimeSpan.FromMilliseconds(250));
+        var sampler = new ResourceSignalSampler(runtimeMetrics: metrics);
+
+        var sample = sampler.Sample();
+
+        Assert.Equal(3, sample.QueueDepth);
+        Assert.Equal(250, sample.SpillWriteLatencyMsPerMB);
+    }
+}

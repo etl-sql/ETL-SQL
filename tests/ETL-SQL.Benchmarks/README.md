@@ -23,5 +23,6 @@ dotnet run --project tests\ETL-SQL.Benchmarks -c Release -- --filter "*ParserBen
 - `TpcHBenchmarks`: representative analytic joins, filters, aggregates, grouping, ordering, and expression-heavy projections at small TPC-H mock scale.
 - `TpcHBenchmarksLargeScale`: same TPC-H query set at larger mock scale.
 - `RuntimeServiceBenchmarks`: encrypted Arrow snapshot save/load, report rendering, and SQLite-backed orchestrator scheduling acquisition.
+- `ColumnarCrossoverBenchmarks`: Phase 5 row-reference versus native columnar crossover checks for filter/projection, grouped aggregate, sort, and inner join at 1k and 50k rows. Admission thresholds and the latest checked-in capture are tracked in `certification-results/columnar-crossover-admission.json`; the 2026-07-10 capture does not admit any new native path because all current native candidates are slower than the row-reference paths at the checked row counts.
 
 Warm-runner process throughput remains an end-to-end capacity workload rather than a microbenchmark because process lifecycle and executable discovery dominate isolated BenchmarkDotNet iterations.

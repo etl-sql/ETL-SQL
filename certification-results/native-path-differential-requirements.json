@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "scope": "v0.15.0 Phase 5 native-path admission",
+  "requiredRowCounts": [1000, 50000],
+  "requiredComparisonMode": "native result must match row-engine result after deterministic ordering and type normalization",
+  "commonRequiredCases": [
+    "empty input",
+    "single row input",
+    "null values in every participating column",
+    "duplicate keys or duplicate sort values",
+    "case-sensitive and case-insensitive comparison modes where strings participate",
+    "fallback path forced for at least one unsupported shape"
+  ],
+  "paths": [
+    {
+      "candidatePath": "ColumnarProjection",
+      "requiredCases": [
+        "filter removes all rows",
+        "filter keeps all rows",
+        "computed projection aliases",
+        "unsupported scalar function falls back to row streaming"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.SimpleSelectFiltersAndProjectsNativeSourceWithoutCallingRowReader",
+        "ColumnarSelectRoutingTests.UnsupportedColumnarProjectionEmitsFallbackDecision"
+      ]
+    },
+    {
+      "candidatePath": "ColumnarAggregate",
+      "requiredCases": [
+        "COUNT(*) over empty and non-empty input",
+        "COUNT(column) ignores nulls",
+        "SUM/MIN/MAX/AVG decimal promotion",
+        "unsupported aggregate expression falls back to row pipeline"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.GlobalAggregatesAccumulateAcrossNativeBatchesWithDecimalPromotion",
+        "ColumnarSelectRoutingTests.GlobalMinMaxSupportsTemporalAndGuidBuffersNatively",
+        "ColumnarSelectRoutingTests.UnsupportedGlobalAggregatePlannerEmitsFallbackDecision"
+      ]
+    },
+    {
+      "candidatePath": "ColumnarGroupedAggregate",
+      "requiredCases": [
+        "single key grouping with null key bucket",
+        "composite key grouping",
+        "having/filter parity",
+        "unsupported key or aggregate type falls back to row pipeline"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.GroupedAggregatesAccumulateAcrossNativeBatches",
+        "ColumnarSelectRoutingTests.CompositeGroupedAggregatesMatchRowPlannerWithoutRowReads",
+        "ColumnarSelectRoutingTests.GroupedNativePlannerMatchesRowPipeline",
+        "ColumnarSelectRoutingTests.UnprojectedGroupedHavingDeclinesNativeRoute"
+      ]
+    },
+    {
+      "candidatePath": "ColumnarSort",
+      "requiredCases": [
+        "ascending and descending keys",
+        "null ordering",
+        "duplicate-key stable tie handling",
+        "oversized estimate routes to row external sort fallback"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.SortPlannerRejectsOversizedEstimateBeforeRowExternalSortFallback"
+      ]
+    },
+    {
+      "candidatePath": "ColumnarJoin",
+      "requiredCases": [
+        "inner equi-join",
+        "no-match input",
+        "duplicate-key fanout",
+        "null key SQL semantics",
+        "unsupported join shape falls back to row pipeline"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.LeftJoinPlannerProbesMultipleNativeBatchesAndProjectsOuterNullsWithoutRows",
+        "ColumnarSelectRoutingTests.SemiAndAntiJoinPlannerEmitEachLeftRowOnce",
+        "ColumnarSelectRoutingTests.JoinPlannerRejectsOversizedEstimateBeforeSafelyReplayingRowPipeline",
+        "ColumnarSelectRoutingTests.CompositeStringJoinPlannerUsesNormalizedNativeKeys"
+      ]
+    },
+    {
+      "candidatePath": "ColumnarSelectInto",
+      "requiredCases": [
+        "whole-batch transfer",
+        "projected column subset",
+        "predicate-filtered transfer",
+        "destination schema mismatch falls back to row SELECT INTO"
+      ],
+      "existingCoverage": [
+        "ColumnarSelectRoutingTests.SelectIntoTransfersCompatibleNativeBatchesWithoutRowMaterialization",
+        "ColumnarSelectRoutingTests.FilteredSelectIntoCompactsNativeBuffersWithoutCallingRowReader",
+        "ColumnarSelectRoutingTests.ReorderedAliasedSelectIntoCompactsAndRenamesNativeSchema",
+        "ColumnarSelectRoutingTests.ArithmeticSelectIntoBuildsNativeOutputBuffersWithoutRowMaterialization"
+      ]
+    }
+  ],
+  "admissionRule": "A new or expanded native path must add row-engine differential tests for every common case and every path-specific required case before it can be advertised or enabled by default."
+}

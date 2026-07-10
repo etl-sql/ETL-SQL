@@ -55,50 +55,170 @@ that result into an unsupported blanket billion-row claim.
   machine-pinned budgets in `certification-results/spill-alloc-budgets/` (10M: 638 B/row, gen2 81,
   peak 238 MB; 50M captured alongside). `Test-SpillAllocProfile.ps1` auto-compares every run
   (`-UpdateBudget` blesses); Gate F gains a resumable `AllocProfile` scenario so the operator-run
-  1B cert checks a 1B budget; `Test-PreRelease` enforces the 10M budget under
+  1B cert captures the allocation profile, while the budget comparator warns and skips if the
+  checked-in 1B budget has not been established yet; `Test-PreRelease` enforces the 10M budget under
   `-IncludeStandardScale`. Verified green path, tamper-fail (all three inflated metrics reported,
   exit 1), and gate-plan inclusion.)*
+- [x] Follow-up: close the 1B allocation-budget evidence gap by revising the Phase 1 completion note
+  to state the current behavior truthfully. The checked-in budgets cover 10M and 50M rows; a real
+  `certification-results/spill-alloc-budgets/budget-1000000000rows.json` should only be added after
+  a known-good 1B `AllocProfile` certification run is actually captured and blessed.
+- [x] Follow-up: clarify or fix `scripts/Compare-AllocBudget.ps1` PowerShell compatibility. The
+  comparator was made Windows PowerShell-safe by replacing Unicode dash text and isolating the
+  re-blessing hint string instead of relying on one long interpolated message.
 
 ### Phase 2: Adaptive resource utilization
 
-- [ ] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
+- [x] Add a bounded resource controller that can adjust batch size, worker count, prefetch depth,
   spill concurrency, and operator grant requests from measured CPU, memory pressure, queue depth, and
   storage latency.
-- [ ] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
+  *(Slice A progress: observe-mode Core implementation added with `AdaptiveExecutionController`,
+  per-job `AdaptiveAdvisor`, `ResourceSignalSampler`, bounded setpoints, decision log, cooldown,
+  and active-advisor fairness. Slice B progress: execution contexts now expose effective adaptive
+  setpoints and `PARALLEL`/`PARALLEL FOR` admission consumes the advised worker ceiling when adaptive
+  mode is explicitly enabled; batch-size consumers and operator memory-grant consumers now read
+  effective setpoints while the `SET` statements remain static ceilings; root evaluators now run a
+  bounded resource sampler loop while adaptive mode is enabled; spill writer calls are gated by the
+  effective spill-write concurrency setpoint without changing writer lifetime or format capability.
+  Temp-table spill pipeline depth now supports the bounded `0`/`1` behavior: `0` forces synchronous
+  spill writes, `1` preserves the existing one-write overlap. Deeper multi-write pipelining remains
+  Slice C scope because it requires independent extent ownership per in-flight write. Runtime sampling
+  now feeds CPU, memory, grant pressure, spill-write queue depth, and measured spill-write latency.)*
+- [x] Define stable hysteresis, minimum/maximum bounds, fairness across concurrent jobs, and explicit
   configuration overrides; adaptation must not oscillate or exceed governance policy.
-- [ ] Preserve deterministic single-worker execution for debugging/certification and prove that
+  *(Slice A progress: pure unit coverage proves high-pressure scale-down, idle slow-ramp,
+  deadband, cooldown, floors/ceilings, and two-advisor worker/grant fairness. Slice B coverage proves
+  evaluator config enables bounded effective setpoints while static `SET` ceilings remain intact.)*
+- [x] Preserve deterministic single-worker execution for debugging/certification and prove that
   adaptive mode scales down under pressure as well as up when capacity is idle.
+  *(Coverage proves idle scale-up, high CPU scale-down, spill-latency scale-down, and a worker ceiling
+  of one remains one even under idle-capacity samples.)*
 
 ### Phase 3: Performance regression quality
 
-- [ ] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
+Design: [PerformanceRegressionQuality.md](Docs/Design/PerformanceRegressionQuality.md)
+
+- [x] Replace Gate F's catastrophe-only throughput floor with scenario-specific warning and failure
   bands derived from checked-in baselines, while retaining a portable absolute safety floor for
   slower supported hardware.
-- [ ] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
+  *(Complete: `Compare-CertBaseline.ps1` supports scenario-family and per-baseline
+  warn/fail bands, schema v1 flat metrics and schema v2 metric objects, separate warning/failure
+  reporting, Markdown output, missing-baseline warnings, hardware-mismatch suppression of
+  performance failures, and explicit `-RegressionPct` legacy override. Checked-in smoke/standard
+  baselines now carry per-scenario bands and sample policies; Gate F evidence validation can compare
+  operator-run reports against a supplied baseline.)*
+- [x] Record runtime, hardware, configuration, commit, and variance across repeated samples; reject
   statistically meaningful regressions rather than relying on one unusually fast or slow run.
-- [ ] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
+  *(Complete: `Test-ScaleCertification.ps1` and `Test-ScaleBaseline.ps1` emit
+  schema-versioned reports with commit metadata, source fingerprint, config fingerprint, `host`
+  metadata alongside the legacy `hardware` alias, and Markdown evidence lines. Scale certification
+  supports repeated `-Samples`, aggregates scenario medians/maxima with distribution fields and raw
+  sample metrics, baseline capture defaults to five samples, and the comparator warns when a run has
+  fewer samples than baseline policy requests.)*
+- [x] Keep Gate F operator-run and outside smoke/release lanes, but require a current-commit run before
   publishing performance claims or closing a release candidate that changes certified paths.
+  *(Complete: `Test-GateFEvidence.ps1` enforces that captured Gate F evidence passed, contains the
+  required scenario set, reports source/config metadata warnings, and belongs to the current commit
+  or explicit `-RequiredCommit`; pre-release lanes record smoke/standard comparator Markdown
+  artifacts while Gate F remains an operator-run claim gate.)*
 
 ### Phase 4: Extend operator-specific billion-row coverage
 
-- [ ] Define separate admission and success criteria for external equi-join and sort at 1B, including
+Design: [BillionRowOperatorCertification.md](Docs/Design/BillionRowOperatorCertification.md)
+
+- [x] Define separate admission and success criteria for external equi-join and sort at 1B, including
   skew, partition passes, extent counts, spill bytes, useful throughput, and required free disk.
-- [ ] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
+  *(Slice A complete: `certification-results/billion-row-operator-scenarios.json` defines the
+  operator matrix and per-scenario contracts, including external sort and external equi-join
+  admission, telemetry, success criteria, resume keys, and non-goals. `Test-GateF.ps1` now emits
+  `scenarioManifests` and `admission` sections in future Gate F reports, and
+  `BillionRowOperatorManifestTests` validates the manifest contract. Slice B progress:
+  `Test-GateF.ps1 -Scenario ExternalSort` runs the explicit external-sort candidate with generated
+  rows, multi-key streaming order validation, resume/reuse keys, disk admission, and report output;
+  `Test-GateF.ps1 -Scenario ExternalJoin` runs the explicit external equi-join candidate with
+  generated left/right streams, controlled overlap, mathematical result-count/checksum validation,
+  partition-pass telemetry, resume/reuse keys, disk admission, and report output. The matrix stays
+  Candidate until real 1B operator-run artifacts pass.)*
+- [x] Add bounded 1B scenarios incrementally for high-cardinality grouping, eligible window shapes,
   holistic aggregates, and heterogeneous `MERGE`; a fail-fast memory contract is not equivalent to
   spill-to-completion certification.
-- [ ] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
+  *(Complete for v0.15.0 Phase 4 scope: `Test-GateF.ps1 -Scenario HighCardinalityGrouping` runs an explicit
+  high-cardinality external aggregate candidate with generated groups, `COUNT`/`SUM`/`MIN`/`MAX`,
+  formula-based validation, spill/partition telemetry, resume/reuse keys, disk admission, and report
+  output. `Test-GateF.ps1 -Scenario EligibleWindowRowNumber` runs an explicit bounded
+  `ROW_NUMBER` external-window candidate with deterministic partitions, per-partition sequence
+  validation, spill/partition telemetry, resume/reuse keys, disk admission, and report output.
+  Heterogeneous `MERGE` remains manifest-only and Not certified pending bounded source/target
+  staging evidence; holistic aggregates remain Not certified pending a bounded exact or approximate
+  design. These non-certified states are deliberate matrix outcomes, not 1B claims.)*
+- [x] Publish the exact certified matrix and keep unsupported expressions, adversarial distributions,
   and row-engine fallbacks explicit. Do not introduce a blanket “all SQL at 1B” claim.
+  *(Complete: `Docs/Large_Data_Certification.md` publishes the manifest-backed billion-row operator
+  matrix with Certified/Candidate/Not certified states, pending artifacts, and non-claim language.
+  `BillionRowOperatorManifestTests` now verifies the public matrix matches
+  `certification-results/billion-row-operator-scenarios.json` and rejects broad "1B SQL support"
+  wording.)*
 
 ### Phase 5: Fallback coverage and execution transparency
 
-- [ ] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
+Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparencyAndFallbacks.md)
+
+- [x] Emit plan/telemetry reasons whenever a query leaves a native columnar path, including the
   unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
-- [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
+  *(Complete: added the immutable `PlanDecision` contract, stable reason-code taxonomy,
+  bounded sanitized storage on `ITelemetryContext`, clear/cap behavior, and focused tests.
+  `SelectStatementHandler` now records accepted/fallback decisions for native columnar join, sort,
+  grouped aggregate, global aggregate, projection/filter, and columnar `SELECT INTO` routes, with
+  focused routing tests covering accepted paths, unsupported expression/type/predicate fallbacks,
+  planner-level aggregate rejection, and memory-estimate rejection. SQL `SELECT` pushdown now emits
+  accepted/fallback `SqlPushdown` decisions for
+  standard result streaming and `SELECT INTO`, including connection and row-engine fallback
+  attributes; focused pushdown tests cover accepted remote execution and engine-only-function
+  fallback. External sort, join, aggregate, and window engines now emit accepted plan decisions,
+  and external join/aggregate memory-governor pressure records `MemoryAdmissionRejected`
+  degraded/rejected decisions for repartition, spill-only churn, or fail-fast destinations. The
+  row pipeline now records streaming-vs-blocking decisions for direct join projection, Top-N heap,
+  sort/window prefix probes, and aggregate/window spill handoff.
+  Slice D progress: `SHOW PROFILE` now includes plan-decision totals and a grouped
+  `CandidatePath:ReasonCode=count` fallback summary for the current telemetry window;
+  `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed
+  plan output. Certification progress: the native-required Gate F columnar-core metric records
+  plan-decision counts and fails on fallback, and `Test-GateFEvidence.ps1` fails current evidence
+  when native-required scenarios report fallback decisions. Static `EXPLAIN` now includes
+  `Plan Candidates` and `Plan Notes` columns that identify obvious native-path candidates and the
+  runtime gates that decide acceptance. Scale-certification metrics and Gate F operator metrics now
+  include plan-decision counts plus fallback/degraded/rejected summaries so ranking can consume
+  checked-in or operator-run evidence JSON directly. Future native paths must add matching
+  accepted/fallback decisions as part of their admission requirements.)*
+- [x] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
-- [ ] Add differential correctness and crossover benchmarks for every new native path so small and
+  *(Slice E complete: `scripts/Summarize-PlanFallbacks.ps1` aggregates legacy fallback summaries
+  and structured per-operator fallback entries from JSON evidence/profile artifacts, ranks them by
+  `CandidatePath`/`ReasonCode` frequency, carries elapsed/spill/row/peak-memory cost context, and
+  emits JSON plus Markdown reports. Scale-certification and Gate F metric JSON emit the summary
+  fields for operator-run evidence, while
+  `certification-results/plan-fallback-ranking/latest/` provides a checked-in representative
+  ranking fixture/output. `scripts/Test-PlanFallbackRanking.ps1` covers structured and legacy input.
+  The ranking plus crossover evidence does not justify new native-path expansion yet, so the row
+  engine remains the correctness fallback.)*
+- [x] Add differential correctness and crossover benchmarks for every new native path so small and
   medium workloads do not regress for the large-tier headline.
+  *(Harness progress: `ColumnarCrossoverBenchmarks` now provides explicit row-reference versus
+  native columnar comparisons for filter/projection, grouped aggregate, sort, and inner join at
+  1k/50k rows. Admission thresholds are checked in as
+  `certification-results/columnar-crossover-admission.json` and validated by
+  `ColumnarCrossoverAdmissionTests`: exact checksum parity, no more than 10% small-workload
+  slowdown, no medium-workload slowdown, no medium-workload allocation increase, and at least five
+  samples. Per-new-path differential requirements are checked in as
+  `certification-results/native-path-differential-requirements.json` and validated by
+  `NativePathDifferentialRequirementsTests`. The 2026-07-10 checked-in crossover capture under
+  `certification-results/columnar-crossover-benchmarks/latest/` currently fails admission for every
+  candidate because the native paths are slower than the row-reference paths at both row counts; no
+  new native-path expansion is approved by this evidence.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
+
+Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailureSoak.md)
 
 - [ ] Run sustained PostgreSQL-backed Portal/Orchestrator load at representative report/job/history
   counts and concurrent execution levels; measure pool saturation, query latency, scheduler fairness,
@@ -159,6 +279,10 @@ Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretMan
 
 - [ ] Publish before/after Gate F allocation, GC, CPU, memory, I/O, and throughput results on the same
   hardware and workload; explain any tradeoff rather than selecting only favorable metrics.
+  *(Current caveat: the checked-in `certification-results/gate-f-1b/gate-f-report.json` predates the
+  `AllocProfile` scenario and schema v2 source/config fingerprints. Before publishing Gate F
+  performance claims or closing a release candidate that changes certified paths, rerun Gate F for
+  the current commit and validate it with `Test-GateFEvidence.ps1 -RequiredScenario All`.)*
 - [ ] Adaptive execution demonstrates higher utilization when resources are idle and safe throttling
   under contention, with fairness and governance ceilings proven by automated tests.
 - [ ] Every newly advertised 1B operator has an isolated, resumable certification scenario and an

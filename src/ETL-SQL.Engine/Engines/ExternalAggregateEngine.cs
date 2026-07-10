@@ -9,8 +9,10 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Planning;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -51,6 +53,14 @@ public class ExternalAggregateEngine
     /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
     public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null, long? knownRowCount = null, long? knownInputBytes = null)
     {
+        PlanDecisionRecorder.Record(_context, "external-aggregate", "ExternalAggregate",
+            PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+            "External aggregate path accepted.",
+            ("partitionCount", PartitionCount.ToString()),
+            ("knownRowCount", knownRowCount?.ToString()),
+            ("knownInputBytes", knownInputBytes?.ToString()),
+            ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
+
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         bool yieldedAny = false;
         string[]? partitionPaths = null;
@@ -247,6 +257,13 @@ public class ExternalAggregateEngine
             yield break;
         }
 
+        PlanDecisionRecorder.Record(_context, "external-aggregate.memory", "ExternalAggregate",
+            PlanDecisionOutcome.Degraded, PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            "External aggregate partition exceeded the memory ceiling; attempting recursive repartition.",
+            ("depth", depth.ToString()),
+            ("memoryCeilingBytes", ceiling.ToString()),
+            ("fallbackDestination", "recursive-repartition"));
+
         // Under memory pressure. Try to split this partition further (only useful for multi-group
         // partitions; a single huge group routes entirely to one sub-partition and won't reduce).
         if (PartitionCount > 1 && depth < MaxRecursivePartitionDepth && groupBy != null && groupBy.Count > 0)
@@ -270,6 +287,18 @@ public class ExternalAggregateEngine
         }
 
         // Cannot reduce further → apply governor policy.
+        PlanDecisionRecorder.Record(_context, "external-aggregate.memory", "ExternalAggregate",
+            _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                ? PlanDecisionOutcome.Rejected
+                : PlanDecisionOutcome.Degraded,
+            PlanDecisionReasonCodes.MemoryAdmissionRejected,
+            "External aggregate partition could not be reduced under the memory ceiling.",
+            ("depth", depth.ToString()),
+            ("memoryCeilingBytes", ceiling.ToString()),
+            ("fallbackDestination", _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                ? "execution-error"
+                : "spill-only-churn"));
+
         if (_context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail)
         {
             throw new ExecutionException(
@@ -539,7 +568,7 @@ public class ExternalAggregateEngine
         }
 
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)sample.Count;
         var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
         var plannedRows = hasExactTotal ? knownRowCount!.Value : sample.Count;
@@ -686,7 +715,7 @@ public class ExternalAggregateEngine
         }
 
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)expandedRows;
         var hasExactTotal = knownRowCount >= 0 && knownInputBytes >= 0;
         var plannedRows = hasExactTotal ? checked(knownRowCount!.Value * sets.Count) : expandedRows;

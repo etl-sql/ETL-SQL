@@ -203,3 +203,32 @@ Run certification locally:
 ```
 
 Committed baseline results live in `certification-results/`. Compare a new run's JSON output against the baseline before tagging a release.
+
+Gate F remains operator-run. After `.\scripts\Test-GateF.ps1` completes, validate that the captured
+`certification-results/gate-f-1b/gate-f-report.json` belongs to the current commit before citing
+Gate F performance results:
+
+```powershell
+.\scripts\Test-GateFEvidence.ps1
+
+# Compare an operator-run report saved outside the checked-in baseline folder
+.\scripts\Test-GateFEvidence.ps1 -Report .\certification-results\gate-f-candidate\gate-f-report.json `
+  -Baseline .\certification-results\gate-f-1b\gate-f-report.json
+```
+
+External sort is a Phase 4 candidate, not an advertised certified 1B operator yet. To run the
+operator candidates explicitly on a suitable machine:
+
+```powershell
+.\scripts\Test-GateF.ps1 -Scenario ExternalSort
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario ExternalSort
+
+.\scripts\Test-GateF.ps1 -Scenario ExternalJoin
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario ExternalJoin
+
+.\scripts\Test-GateF.ps1 -Scenario HighCardinalityGrouping
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario HighCardinalityGrouping
+
+.\scripts\Test-GateF.ps1 -Scenario EligibleWindowRowNumber
+.\scripts\Test-GateFEvidence.ps1 -RequiredScenario EligibleWindowRowNumber
+```

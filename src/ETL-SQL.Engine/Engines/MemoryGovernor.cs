@@ -17,8 +17,8 @@ internal static class MemoryGovernor
     public static long Ceiling(IExecutionContext ctx)
     {
         var processBytes = ctx.MemoryArbiter?.TotalBudgetBytes ?? 0;
-        var operatorBytes = ctx.OperatorMemoryGrantMB > 0
-            ? (long)ctx.OperatorMemoryGrantMB * 1024 * 1024
+        var operatorBytes = ctx.EffectiveOperatorMemoryGrantMB > 0
+            ? (long)ctx.EffectiveOperatorMemoryGrantMB * 1024 * 1024
             : 0;
         if (processBytes <= 0) return operatorBytes;
         if (operatorBytes <= 0) return processBytes;

@@ -62,6 +62,36 @@ namespace ETL_SQL.Tests.Analysis
             var plan = eval.LastResult;
             Assert.NotNull(plan);
             Assert.DoesNotContain("Actual Rows", plan.ColumnNames);
+            Assert.Contains("Plan Candidates", plan.ColumnNames);
+            Assert.Contains("Plan Notes", plan.ColumnNames);
+            Assert.DoesNotContain("Plan Decision Summary", plan.ColumnNames);
+
+            var scanRow = Assert.Single(plan.Rows, row => row["Operation"]?.ToString() == "Scan");
+            Assert.Equal("ColumnarProjection", scanRow["Plan Candidates"]);
+            Assert.Contains("runtime source capability", scanRow["Plan Notes"]?.ToString());
+        }
+
+        [Fact]
+        public async Task TestExplainAnalyze_IncludesPlanDecisionSummary()
+        {
+            var eval = await GetEvaluator();
+            var sql = @"
+                CREATE TABLE #T (ID INT, Name VARCHAR(20));
+                INSERT INTO #T VALUES (1, 'one'), (2, 'two');
+                EXPLAIN ANALYZE SELECT UPPER(Name) AS UpperName FROM #T;
+            ";
+
+            await eval.Evaluate(Parse(sql));
+
+            var plan = eval.LastResult;
+            Assert.NotNull(plan);
+            Assert.Contains("Plan Decisions", plan.ColumnNames);
+            Assert.Contains("Plan Fallbacks", plan.ColumnNames);
+            Assert.Contains("Plan Decision Summary", plan.ColumnNames);
+
+            var lastRow = plan.Rows.Last();
+            Assert.True(Convert.ToInt32(lastRow["Plan Decisions"]) >= 1);
+            Assert.Equal("ColumnarProjection:ConnectorCapabilityMissing=1", lastRow["Plan Decision Summary"]);
         }
 
         [Fact]

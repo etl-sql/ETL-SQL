@@ -1,9 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.App;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -528,6 +531,43 @@ namespace ETL_SQL.Tests.Engine
             var eval = Eval();
             await eval.Evaluate(Parse("SELECT 1 AS N INTO #T; SHOW PROFILE;"));
             Assert.NotNull(eval.LastResult);
+        }
+
+        [Fact]
+        public async Task ShowProfile_IncludesPlanDecisionSummary()
+        {
+            var eval = Eval();
+            eval.Telemetry.ProfileMetrics.Add(new ExecutionMetrics
+            {
+                Sql = "SELECT UPPER(Name) FROM #t",
+                DurationMs = 12,
+                RowsProcessed = 3
+            });
+            eval.Telemetry.RecordPlanDecision(new PlanDecision(
+                QueryId: "q1",
+                OperatorId: "select.projection",
+                CandidatePath: "ColumnarProjection",
+                Outcome: PlanDecisionOutcome.Fallback,
+                ReasonCode: PlanDecisionReasonCodes.UnsupportedExpression,
+                Message: "Columnar projection candidate replayed through the row streaming path.",
+                Attributes: new Dictionary<string, string>()));
+            eval.Telemetry.RecordPlanDecision(new PlanDecision(
+                QueryId: "q1",
+                OperatorId: "select.aggregate",
+                CandidatePath: "ColumnarAggregate",
+                Outcome: PlanDecisionOutcome.Accepted,
+                ReasonCode: PlanDecisionReasonCodes.SemanticGuard,
+                Message: "Columnar aggregate path accepted.",
+                Attributes: new Dictionary<string, string>()));
+
+            await eval.Evaluate(Parse("SHOW PROFILE;"));
+
+            Assert.NotNull(eval.LastResult);
+            var row = Assert.Single(eval.LastResult!.Rows);
+            Assert.Equal(2, Convert.ToInt32(row["PlanDecisions"]));
+            Assert.Equal(1, Convert.ToInt32(row["PlanAccepted"]));
+            Assert.Equal(1, Convert.ToInt32(row["PlanFallbacks"]));
+            Assert.Equal("ColumnarProjection:UnsupportedExpression=1", row["PlanFallbackSummary"]);
         }
 
         // ── SET PROFILING ─────────────────────────────────────────────────────

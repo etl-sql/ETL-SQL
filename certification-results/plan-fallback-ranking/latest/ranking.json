@@ -1,0 +1,57 @@
+[
+  {
+    "CandidatePath": "ColumnarProjection",
+    "ReasonCode": "UnsupportedExpression",
+    "Count": 3,
+    "ObservedElapsedMs": 84.5,
+    "ObservedSpillBytes": 0.0,
+    "ObservedRowsAffected": 120000.0,
+    "ObservedPeakWorkingSetMB": 142.2,
+    "SourceCount": 1,
+    "Sources": "certification-results/plan-fallback-ranking/latest/representative-workloads.json"
+  },
+  {
+    "CandidatePath": "ColumnarAggregate",
+    "ReasonCode": "UnsupportedType",
+    "Count": 2,
+    "ObservedElapsedMs": 119.75,
+    "ObservedSpillBytes": 0.0,
+    "ObservedRowsAffected": 85000.0,
+    "ObservedPeakWorkingSetMB": 155.8,
+    "SourceCount": 1,
+    "Sources": "certification-results/plan-fallback-ranking/latest/representative-workloads.json"
+  },
+  {
+    "CandidatePath": "SqlPushdown",
+    "ReasonCode": "ConnectorCapabilityMissing",
+    "Count": 2,
+    "ObservedElapsedMs": 44.25,
+    "ObservedSpillBytes": 0.0,
+    "ObservedRowsAffected": 45000.0,
+    "ObservedPeakWorkingSetMB": 118.4,
+    "SourceCount": 1,
+    "Sources": "certification-results/plan-fallback-ranking/latest/representative-workloads.json"
+  },
+  {
+    "CandidatePath": "ExternalJoin",
+    "ReasonCode": "MemoryAdmissionRejected",
+    "Count": 1,
+    "ObservedElapsedMs": 410.0,
+    "ObservedSpillBytes": 268435456.0,
+    "ObservedRowsAffected": 500000.0,
+    "ObservedPeakWorkingSetMB": 252.0,
+    "SourceCount": 1,
+    "Sources": "certification-results/plan-fallback-ranking/latest/representative-workloads.json"
+  },
+  {
+    "CandidatePath": "RowPipeline",
+    "ReasonCode": "SemanticGuard",
+    "Count": 1,
+    "ObservedElapsedMs": 230.5,
+    "ObservedSpillBytes": 125829120.0,
+    "ObservedRowsAffected": 300000.0,
+    "ObservedPeakWorkingSetMB": 248.9,
+    "SourceCount": 1,
+    "Sources": "certification-results/plan-fallback-ranking/latest/representative-workloads.json"
+  }
+]

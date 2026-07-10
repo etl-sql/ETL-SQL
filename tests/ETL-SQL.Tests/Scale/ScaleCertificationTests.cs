@@ -14,6 +14,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Tests.Core;
@@ -321,6 +322,10 @@ namespace ETL_SQL.Tests.Scale
                 ? rowsPerSecond >= minimumThroughput.Value
                 : (bool?)null;
             var certificationPassed = passed && memoryPassed && throughputPassed != false;
+            var planDecisions = telemetry?.PlanDecisions ?? Array.Empty<PlanDecision>();
+            var planFallbackCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+            var planRejectedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
+            var planDegradedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
 
             var metrics = new
             {
@@ -357,6 +362,11 @@ namespace ETL_SQL.Tests.Scale
                 correctnessPassed = passed,
                 memoryPassed,
                 throughputPassed,
+                planDecisionCount = planDecisions.Count,
+                planFallbackCount,
+                planRejectedCount,
+                planDegradedCount,
+                planDecisionSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions),
                 passed = certificationPassed
             };
             _out.WriteLine("CERT_METRIC:" + JsonSerializer.Serialize(metrics));

@@ -13,7 +13,7 @@
     workstation crossover; the value is recorded in the manifest and result reuse key.
 #>
 param(
-    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile')]
+    [ValidateSet('All', 'ColumnarCore', 'TempTableRoundTrip', 'AllocProfile', 'ExternalSort', 'ExternalJoin', 'HighCardinalityGrouping', 'EligibleWindowRowNumber')]
     [string]$Scenario = 'All',
     [ValidateRange(1000, 1000000000)]
     [long]$Rows = 1000000000,
@@ -43,6 +43,19 @@ $activeScenario = ''
 $commit = ''
 $runKey = ''
 
+function New-Sha256 {
+    param([string]$Text)
+
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+        $hash = $sha.ComputeHash($bytes)
+        return -join ($hash | ForEach-Object { $_.ToString('x2') })
+    } finally {
+        $sha.Dispose()
+    }
+}
+
 function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [string]$detail = '') {
     $status = [ordered]@{
         state = $state
@@ -60,6 +73,225 @@ function Write-Status([string]$state, [string]$current, [int]$childPid = 0, [str
     $temp = "$statusPath.tmp"
     $status | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $temp -Encoding UTF8
     Move-Item -LiteralPath $temp -Destination $statusPath -Force
+}
+
+function Get-GateFScenarioManifests {
+    $commonTelemetry = @(
+        'elapsedMs',
+        'rowsPerSecond',
+        'peakProcessWorkingSetMB',
+        'allocatedMB',
+        'gcPauseMs',
+        'cpuTimeMs'
+    )
+
+    return [ordered]@{
+        columnarCore = [ordered]@{
+            scenarioId = 'GateF_NativeScanFilterProjectionAggregate_1B'
+            operator = 'ColumnarScanFilterProjectionAggregate'
+            state = 'Certified'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('Id INT', 'GroupId INT', 'Amount BIGINT')
+                filter = 'Id > rows / 2'
+                groups = 100
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = 0
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $null
+                spillPath = 'none'
+                adaptiveExecution = 'off'
+                nativePathRequired = $true
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'generated formula for selected rows, grouped count, Id sum, and Amount sum'
+            telemetryContract = $commonTelemetry
+            nonGoals = @('row-engine fallback', 'high-cardinality grouping', 'arbitrary expressions', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryBoundMB', 'minimumRowsPerSecond', 'batchRows')
+        }
+        tempTableRoundTrip = [ordered]@{
+            scenarioId = 'GateF_TempTableRoundTrip_1B'
+            operator = 'TempTableSpillRoundTrip'
+            state = 'Certified'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('grp INT', 'val BIGINT')
+                spillThresholdRows = 10000
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'exact row count and checksum after SELECT INTO temp-table round trip'
+            telemetryContract = @($commonTelemetry + @('spillBytes', 'spillWriteBytes', 'spillReadBytes', 'spillExtentCount'))
+            nonGoals = @('secondary operators downstream of the temp table', 'persistent temp-table retention', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryBoundMB', 'memoryGrantMB', 'tempBatchRows', 'minimumRowsPerSecond')
+        }
+        allocProfile = [ordered]@{
+            scenarioId = 'GateF_TempTableAllocProfile_1B'
+            operator = 'TempTableSpillAllocationProfile'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('grp INT', 'val BIGINT')
+                profile = 'allocation, GC, process memory, CPU, and I/O for temp-table round trip'
+                skew = 'none'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'profile run must complete the same temp-table row count and checksum contract'
+            telemetryContract = @($commonTelemetry + @('bytesAllocatedPerRow', 'gcGen2Collections', 'physicalReadBytes', 'physicalWriteBytes'))
+            nonGoals = @('new operator certification', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'memoryGrantMB', 'tempBatchRows')
+        }
+        externalSort = [ordered]@{
+            scenarioId = 'ExternalSort_MultiKey_1B'
+            operator = 'ExternalSort'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                columns = @('Id BIGINT', 'SortKey INT', 'TieBreaker BIGINT', 'Payload BIGINT')
+                sortKeys = @('SortKey ASC', 'TieBreaker DESC')
+                randomSeed = 15041
+                skew = 'bounded duplicate sort keys'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'streaming ordered-output validator with row count, first/last key, checksum, and tie-breaker checks'
+            telemetryContract = @($commonTelemetry + @('sortRunCount', 'mergePassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('Top-N optimized plans', 'locale-specific collation', 'arbitrary expression sort keys', 'downstream operator certification')
+            resumeKeyFields = @('commit', 'rows', 'sortKeys', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
+        }
+        externalJoin = [ordered]@{
+            scenarioId = 'ExternalEquiJoin_ControlledSkew_1B'
+            operator = 'ExternalEquiJoin'
+            state = 'Candidate'
+            rows = [ordered]@{ left = $Rows; right = $Rows }
+            shape = [ordered]@{
+                columns = @('Id BIGINT', 'JoinKey INT', 'Payload BIGINT')
+                joinType = 'INNER'
+                keyOverlap = '50 percent'
+                duplicateFactor = 'bounded by generated key space'
+                randomSeed = 24017
+                skew = 'controlled hot-key distribution, no adversarial single-key collapse'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'mathematical result-count formula plus checksum over matched generated keys'
+            telemetryContract = @($commonTelemetry + @('partitionCount', 'partitionPassCount', 'repartitionPassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('non-equi joins', 'outer joins with high null expansion', 'adversarial single-key skew', 'provider-backed sources')
+            resumeKeyFields = @('commit', 'rows', 'joinType', 'keyOverlap', 'duplicateFactor', 'memoryBoundMB', 'memoryGrantMB', 'randomSeed')
+        }
+        highCardinalityGrouping = [ordered]@{
+            scenarioId = 'HighCardinalityGrouping_1B'
+            operator = 'ExternalAggregate'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                groups = 'min(rows / 10, 1,000,000)'
+                aggregates = @('COUNT', 'SUM', 'MIN', 'MAX')
+                skew = 'uniform generated key distribution'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'generated formulas for group count, total rows, group-id checksum, total sum, global min, and global max'
+            telemetryContract = @($commonTelemetry + @('groupCount', 'partitionCount', 'partitionPassCount', 'repartitionPassCount', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('median', 'percentile', 'GROUPING SETS', 'ROLLUP', 'CUBE', 'adversarial single-key skew')
+            resumeKeyFields = @('commit', 'rows', 'groupCount', 'memoryBoundMB', 'memoryGrantMB')
+        }
+        eligibleWindowRowNumber = [ordered]@{
+            scenarioId = 'EligibleWindowRowNumber_1B'
+            operator = 'ExternalWindow'
+            state = 'Candidate'
+            rows = [ordered]@{ input = $Rows }
+            shape = [ordered]@{
+                functions = @('ROW_NUMBER')
+                partitioning = 'deterministic modulo partitions'
+                ordering = 'OrderId ASC'
+                skew = 'uniform generated partition distribution'
+            }
+            admission = [ordered]@{
+                minimumFreeDiskGB = $MinimumFreeDiskGB
+                memoryBoundMB = $MemoryBoundMB
+                operatorMemoryGrantMB = $MemoryGrantMB
+                spillPath = 'temp-volume'
+                adaptiveExecution = 'off'
+                nativePathRequired = $false
+                releaseBuildRequired = $true
+            }
+            correctnessOracle = 'per-partition row counts and sum of ROW_NUMBER sequence values'
+            telemetryContract = @($commonTelemetry + @('partitionCount', 'maxPartitionRows', 'spillBytes', 'spillExtentCount'))
+            nonGoals = @('unbounded frames requiring full partition materialization', 'RANGE date/interval offsets', 'non-deterministic ordering')
+            resumeKeyFields = @('commit', 'rows', 'partitionCount', 'windowFunction', 'memoryBoundMB', 'memoryGrantMB')
+        }
+    }
+}
+
+function Get-GateFAdmissionResults {
+    param(
+        [object]$Manifests,
+        [double]$FreeDiskGB,
+        [string]$SpillDriveRoot
+    )
+
+    $results = [ordered]@{}
+    foreach ($property in $Manifests.GetEnumerator()) {
+        $manifest = $property.Value
+        $requiredDisk = 0.0
+        if ($null -ne $manifest.admission.minimumFreeDiskGB) {
+            $requiredDisk = [double]$manifest.admission.minimumFreeDiskGB
+        }
+        $requiresDisk = $requiredDisk -gt 0
+        $admitted = (-not $requiresDisk) -or ($FreeDiskGB -ge $requiredDisk)
+        $results[$property.Key] = [ordered]@{
+            scenarioId = $manifest.scenarioId
+            admitted = $admitted
+            reason = if ($admitted) { 'admitted' } else { 'insufficient spill disk' }
+            requiredFreeDiskGB = $requiredDisk
+            actualFreeDiskGB = [math]::Round($FreeDiskGB, 3)
+            spillDrive = $SpillDriveRoot
+            memoryBoundMB = $MemoryBoundMB
+            operatorMemoryGrantMB = $manifest.admission.operatorMemoryGrantMB
+            adaptiveExecution = $manifest.admission.adaptiveExecution
+        }
+    }
+    return $results
 }
 
 function Invoke-LoggedProcess(
@@ -93,7 +325,7 @@ try {
     $tempDriveName = [System.IO.Path]::GetPathRoot($tempRoot).TrimEnd(':','\')
     $tempDrive = Get-PSDrive -Name $tempDriveName
     $freeDiskGB = $tempDrive.Free / 1GB
-    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
+    if (($Scenario -eq 'All' -or $Scenario -eq 'TempTableRoundTrip' -or $Scenario -eq 'AllocProfile' -or $Scenario -eq 'ExternalSort' -or $Scenario -eq 'ExternalJoin' -or $Scenario -eq 'HighCardinalityGrouping' -or $Scenario -eq 'EligibleWindowRowNumber') -and $freeDiskGB -lt $MinimumFreeDiskGB) {
         $message = ("Gate F requires at least {0:N1} GB free on spill drive {1}; only {2:N1} GB is available. " +
             "Free disk space or override -MinimumFreeDiskGB only with a justified measured estimate.") -f `
             $MinimumFreeDiskGB, $tempDrive.Root, $freeDiskGB
@@ -124,9 +356,7 @@ try {
     ) | Add-Content -LiteralPath $runLog -Encoding UTF8
     Write-Status 'preparing' '' 0 "commit $commit"
 
-    $runManifest = [ordered]@{
-        startedAt = $startedAt.ToString('o')
-        commit = $commit
+    $config = [ordered]@{
         rows = $Rows
         requestedScenario = $Scenario
         memoryBoundMB = $MemoryBoundMB
@@ -134,9 +364,11 @@ try {
         tempBatchRows = $TempBatchRows
         minimumRowsPerSecond = $MinimumRowsPerSecond
         minimumFreeDiskGB = $MinimumFreeDiskGB
-        spillRoot = $tempRoot
-        spillDrive = $tempDrive.Root
-        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+    }
+    $configJson = $config | ConvertTo-Json -Depth 10 -Compress
+    $configFingerprint = New-Sha256 $configJson
+    $sourceFingerprint = New-Sha256 "$commit`nclean`n$configJson"
+    $hostProfile = [ordered]@{
         machineName = [Environment]::MachineName
         operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
         processArchitecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
@@ -147,7 +379,31 @@ try {
             [long][GC]::GetGCMemoryInfo().TotalAvailableMemoryBytes
         } else { 0 }
     }
-    $runManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
+    $scenarioManifests = Get-GateFScenarioManifests
+    $admissionResults = Get-GateFAdmissionResults $scenarioManifests $freeDiskGB $tempDrive.Root
+
+    $runManifest = [ordered]@{
+        schemaVersion = 2
+        startedAt = $startedAt.ToString('o')
+        capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+        commit = [ordered]@{
+            sha = $commit
+            isDirty = $false
+        }
+        commitSha = $commit
+        sourceFingerprint = $sourceFingerprint
+        configFingerprint = $configFingerprint
+        config = $config
+        rows = $Rows
+        requestedScenario = $Scenario
+        spillRoot = $tempRoot
+        spillDrive = $tempDrive.Root
+        spillDriveFreeBytesAtStart = [long]$tempDrive.Free
+        host = $hostProfile
+        scenarioManifests = $scenarioManifests
+        admission = $admissionResults
+    }
+    $runManifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $outRoot 'run-manifest.json') -Encoding UTF8
 
     if (-not $SkipBuild) {
         & dotnet build (Join-Path $repoRoot 'ETL-SQL.slnx') -c Release --no-restore -v quiet *>&1 |
@@ -231,12 +487,140 @@ try {
         }
     }
 
+    if ($Scenario -eq 'ExternalSort') {
+        # v0.15.0 Phase 4 candidate: external sort is intentionally opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'external-sort.json'
+        $resultKey = Join-Path $outRoot 'external-sort.key'
+        $sortChunkRows = 100000
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$sortChunkRows|$MinimumRowsPerSecond|ExternalSort"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_SORT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_SORT_CHUNK_ROWS = $sortChunkRows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_SORT_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'ExternalSort' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalSortMultiKeyCandidateStreamsAndValidatesOrder'
+            ) (Join-Path $outRoot 'external-sort.log') (Join-Path $outRoot 'external-sort.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'ExternalSort' 0 "reusing completed result for commit $commit"
+        }
+    }
+
+    if ($Scenario -eq 'ExternalJoin') {
+        # v0.15.0 Phase 4 candidate: external equi-join is opt-in until an operator-run artifact
+        # passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'external-join.json'
+        $resultKey = Join-Path $outRoot 'external-join.key'
+        $joinPartitions = 32
+        $runKey = "$commit|$Rows|$MemoryBoundMB|$MemoryGrantMB|$joinPartitions|$MinimumRowsPerSecond|ExternalJoin"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_JOIN_PARTITIONS = $joinPartitions.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_EXTERNAL_JOIN_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'ExternalJoin' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap'
+            ) (Join-Path $outRoot 'external-join.log') (Join-Path $outRoot 'external-join.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'ExternalJoin' 0 "reusing completed result for commit $commit"
+        }
+    }
+
+    if ($Scenario -eq 'HighCardinalityGrouping') {
+        # v0.15.0 Phase 4 candidate: high-cardinality grouping is opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'high-cardinality-grouping.json'
+        $resultKey = Join-Path $outRoot 'high-cardinality-grouping.key'
+        $groupCount = [math]::Min(1000000L, [math]::Max(1L, [long]($Rows / 10)))
+        $runKey = "$commit|$Rows|$groupCount|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond|HighCardinalityGrouping"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_COUNT = $groupCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_OPERATOR_MEMORY_GRANT_MB = $MemoryGrantMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_HIGH_CARD_GROUP_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'HighCardinalityGrouping' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals'
+            ) (Join-Path $outRoot 'high-cardinality-grouping.log') (Join-Path $outRoot 'high-cardinality-grouping.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'HighCardinalityGrouping' 0 "reusing completed result for commit $commit"
+        }
+    }
+
+    if ($Scenario -eq 'EligibleWindowRowNumber') {
+        # v0.15.0 Phase 4 candidate: ROW_NUMBER window is opt-in until an operator-run
+        # artifact passes and the public matrix moves it from Candidate to Certified.
+        $result = Join-Path $outRoot 'eligible-window-row-number.json'
+        $resultKey = Join-Path $outRoot 'eligible-window-row-number.key'
+        $partitionCount = [math]::Min(1000L, [math]::Max(1L, $Rows))
+        $windowSpillThreshold = 100000
+        $runKey = "$commit|$Rows|$partitionCount|$windowSpillThreshold|$MemoryBoundMB|$MemoryGrantMB|$MinimumRowsPerSecond|EligibleWindowRowNumber"
+        $reusable = (Test-Path $result) -and (Test-Path $resultKey) -and
+            ((Get-Content -LiteralPath $resultKey -Raw).Trim() -eq $runKey)
+        if ($Force -or -not $reusable) {
+            $env:GATE_F_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_ROWS = $Rows.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_PARTITIONS = $partitionCount.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_WINDOW_SPILL_THRESHOLD = $windowSpillThreshold.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_CERTIFICATION = '1'
+            $env:GATE_F_MEMORY_BOUND_MB = $MemoryBoundMB.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_MIN_ROWS_PER_SECOND = $MinimumRowsPerSecond.ToString([Globalization.CultureInfo]::InvariantCulture)
+            $env:GATE_F_ELIGIBLE_WINDOW_OUTPUT = $result
+            $testProject = Join-Path $repoRoot 'tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj'
+            Invoke-LoggedProcess 'EligibleWindowRowNumber' 'dotnet' @(
+                'test', $testProject, '-c', 'Release', '--no-build', '--no-restore', '-m:1',
+                '--filter', 'FullyQualifiedName=ETL_SQL.Tests.Scale.BillionRowCertificationTests.EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions'
+            ) (Join-Path $outRoot 'eligible-window-row-number.log') (Join-Path $outRoot 'eligible-window-row-number.err.log')
+            Set-Content -LiteralPath $resultKey -Value $runKey -Encoding ASCII
+        } else {
+            Write-Status 'resuming' 'EligibleWindowRowNumber' 0 "reusing completed result for commit $commit"
+        }
+    }
+
     $report = [ordered]@{
+        schemaVersion = 2
         generatedAt = (Get-Date).ToString('o')
-        commit = $commit
+        capturedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+        commit = [ordered]@{
+            sha = $commit
+            isDirty = $false
+        }
+        commitSha = $commit
+        sourceFingerprint = $sourceFingerprint
+        configFingerprint = $configFingerprint
         rows = $Rows
         testsPassed = $true
+        config = $config
+        host = $hostProfile
         run = $runManifest
+        scenarioManifests = $scenarioManifests
+        admission = $admissionResults
         columnarCore = if (Test-Path (Join-Path $outRoot 'columnar-core.json')) {
             Get-Content (Join-Path $outRoot 'columnar-core.json') -Raw | ConvertFrom-Json
         } else { $null }
@@ -248,6 +632,18 @@ try {
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($allocReport) { Get-Content $allocReport.FullName -Raw | ConvertFrom-Json } else { $null }
         }
+        externalSort = if (Test-Path (Join-Path $outRoot 'external-sort.json')) {
+            Get-Content (Join-Path $outRoot 'external-sort.json') -Raw | ConvertFrom-Json
+        } else { $null }
+        externalJoin = if (Test-Path (Join-Path $outRoot 'external-join.json')) {
+            Get-Content (Join-Path $outRoot 'external-join.json') -Raw | ConvertFrom-Json
+        } else { $null }
+        highCardinalityGrouping = if (Test-Path (Join-Path $outRoot 'high-cardinality-grouping.json')) {
+            Get-Content (Join-Path $outRoot 'high-cardinality-grouping.json') -Raw | ConvertFrom-Json
+        } else { $null }
+        eligibleWindowRowNumber = if (Test-Path (Join-Path $outRoot 'eligible-window-row-number.json')) {
+            Get-Content (Join-Path $outRoot 'eligible-window-row-number.json') -Raw | ConvertFrom-Json
+        } else { $null }
     }
     $report | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $outRoot 'gate-f-report.json') -Encoding UTF8
     Write-Status 'completed' '' 0 'Gate F completed successfully.'
@@ -262,5 +658,13 @@ finally {
     Remove-Item Env:GATE_F_CERTIFICATION,Env:GATE_F_ROWS,Env:GATE_F_BATCH_ROWS,Env:GATE_F_MEMORY_BOUND_MB,Env:GATE_F_MIN_ROWS_PER_SECOND,Env:GATE_F_OUTPUT `
         -ErrorAction SilentlyContinue
     Remove-Item Env:CERT_MEMORY_BOUND_MB,Env:CERT_MEMORY_GRANT_MB,Env:CERT_MIN_ROWS_PER_SECOND `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_EXTERNAL_SORT_ROWS,Env:GATE_F_SORT_CHUNK_ROWS,Env:GATE_F_EXTERNAL_SORT_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_EXTERNAL_JOIN_LEFT_ROWS,Env:GATE_F_EXTERNAL_JOIN_RIGHT_ROWS,Env:GATE_F_JOIN_PARTITIONS,Env:GATE_F_EXTERNAL_JOIN_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_HIGH_CARD_GROUP_ROWS,Env:GATE_F_HIGH_CARD_GROUP_COUNT,Env:GATE_F_OPERATOR_MEMORY_GRANT_MB,Env:GATE_F_HIGH_CARD_GROUP_OUTPUT `
+        -ErrorAction SilentlyContinue
+    Remove-Item Env:GATE_F_ELIGIBLE_WINDOW_ROWS,Env:GATE_F_ELIGIBLE_WINDOW_PARTITIONS,Env:GATE_F_WINDOW_SPILL_THRESHOLD,Env:GATE_F_ELIGIBLE_WINDOW_OUTPUT `
         -ErrorAction SilentlyContinue
 }

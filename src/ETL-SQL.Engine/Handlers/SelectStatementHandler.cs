@@ -8,6 +8,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Services;
@@ -45,6 +46,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         {
             if (_pushdownEngine.IsPushdownPossible(selPush, context, out var connName))
             {
+                RecordSqlPushdownAccepted(context, "select.sql-pushdown", connName!);
                 var result = await _pushdownEngine.ExecutePushdown(selPush, connName!, context);
                 context.LastResult = result;
                 context.LastResultSets.Add(result);
@@ -81,10 +83,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             if (statement is SelectStatement selectQuery &&
                 _pushdownEngine.IsPushdownPossible(selectQuery with { IntoTable = null }, context, out var connName))
             {
+                RecordSqlPushdownAccepted(context, "select-into.sql-pushdown", connName!);
                 batches = _pushdownEngine.ExecuteStreamingPushdown(selectQuery with { IntoTable = null }, connName!, context);
             }
             else
             {
+                if (statement is SelectStatement fallbackSelect)
+                    RecordSqlPushdownFallbackIfRemote(context, "select-into.sql-pushdown", fallbackSelect);
                 batches = EvaluateQuery(statement, context);
             }
 
@@ -153,24 +158,46 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && !HasLateralColumnAlias(stmt.Columns)
             && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
         {
+            RecordSqlPushdownAccepted(context, "select.stream.sql-pushdown", connName!);
             await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
             yield break;
         }
 
+        if (stmt.IntoTable == null)
+            RecordSqlPushdownFallbackIfRemote(context, "select.stream.sql-pushdown", stmt);
+
         if (ColumnarJoinSelectPlan.TryCreate(stmt, out var nativeJoinPlan)
             && await nativeJoinPlan!.TryOpenAsync(context) is { } nativeJoinExecution)
         {
+            RecordPlanDecision(context, "select.join", "ColumnarJoin", PlanDecisionOutcome.Accepted,
+                PlanDecisionReasonCodes.SemanticGuard, "Columnar join path accepted.");
             await using (nativeJoinExecution)
                 await foreach (var batch in nativeJoinExecution.ExecuteAsync()) yield return batch;
             yield break;
+        }
+        else if (nativeJoinPlan != null)
+        {
+            RecordPlanDecision(context, "select.join", "ColumnarJoin", PlanDecisionOutcome.Fallback,
+                PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                "Columnar join candidate could not open all sources as replayable columnar inputs.",
+                ("fallbackDestination", "row-engine"));
         }
 
         if (ColumnarSortSelectPlan.TryCreate(stmt, out var nativeSortPlan)
             && await nativeSortPlan!.TryOpenAsync(context) is { } nativeSortExecution)
         {
+            RecordPlanDecision(context, "select.sort", "ColumnarSort", PlanDecisionOutcome.Accepted,
+                PlanDecisionReasonCodes.SemanticGuard, "Columnar sort path accepted.");
             await using (nativeSortExecution)
                 await foreach (var batch in nativeSortExecution.ExecuteAsync()) yield return batch;
             yield break;
+        }
+        else if (nativeSortPlan != null)
+        {
+            RecordPlanDecision(context, "select.sort", "ColumnarSort", PlanDecisionOutcome.Fallback,
+                PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                "Columnar sort candidate could not open the source as replayable columnar input.",
+                ("fallbackDestination", "row-engine"));
         }
 
         IColumnarGroupedAggregatePlan? groupedPlan = null;
@@ -178,7 +205,20 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             groupedPlan = singleGroupedPlan;
         else if (ColumnarCompositeGroupedAggregatePlan.TryCreate(context, stmt, out var compositeGroupedPlan))
             groupedPlan = compositeGroupedPlan;
-        if (groupedPlan != null)
+        if (groupedPlan == null && IsGroupedColumnarAggregateCandidate(stmt))
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                PlanDecisionOutcome.Fallback,
+                source is IColumnarDataSource
+                    ? PlanDecisionReasonCodes.UnsupportedExpression
+                    : PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                source is IColumnarDataSource
+                    ? "Columnar grouped aggregate planner rejected the statement shape before opening native batches."
+                    : "Columnar grouped aggregate candidate source does not expose columnar batches.",
+                ("fallbackDestination", "heavy-row-pipeline"));
+        }
+        else if (groupedPlan != null)
         {
             using (groupedPlan)
             {
@@ -187,7 +227,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 {
                     var sourceColumns = (await source.GetColumnsAsync()).ToList();
                     var (groupedColumns, groupedNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
                     ColumnBatch? firstNative = null;
                     try
@@ -207,6 +247,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                 caseSensitiveComparison: context.CaseSensitiveComparison));
                         if (supported)
                         {
+                            RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                                PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                                "Columnar grouped aggregate path accepted.");
                             using (firstNative)
                             using (firstSelection)
                                 groupedPlan.Accumulate(firstNative, firstSelection);
@@ -229,6 +272,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         }
 
                         firstSelection?.Dispose();
+                        RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                            PlanDecisionOutcome.Fallback,
+                            groupedPlan.CanApply(firstNative)
+                                ? PlanDecisionReasonCodes.UnsupportedExpression
+                                : PlanDecisionReasonCodes.UnsupportedType,
+                            "Columnar grouped aggregate candidate replayed through the row pipeline.",
+                            ("fallbackDestination", "heavy-row-pipeline"));
                         var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
                         firstNative = null;
                         var executionEngine = new SelectExecutionEngine(context, _logger);
@@ -242,6 +292,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         firstNative?.Dispose();
                         await nativeEnumerator.DisposeAsync();
                     }
+                }
+                else
+                {
+                    RecordPlanDecision(context, "select.grouped-aggregate", "ColumnarGroupedAggregate",
+                        PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                        "Columnar grouped aggregate candidate source does not expose columnar batches.",
+                        ("fallbackDestination", "row-engine"));
                 }
             }
         }
@@ -264,7 +321,8 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             }
         }
 
-        if (IsGlobalColumnarAggregateCandidate(stmt)
+        var globalAggregateCandidate = IsGlobalColumnarAggregateCandidate(stmt) && HasAggregateProjection(stmt);
+        if (globalAggregateCandidate
             && ColumnarAggregatePlan.TryCreate(context, stmt.Columns, out var aggregatePlan))
         {
             var source = await context.ResolveDataSourceAsync(stmt.FromTable);
@@ -272,7 +330,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             {
                 var sourceColumns = (await source.GetColumnsAsync()).ToList();
                 var (aggregateColumns, aggregateNames) = await metadataHelper.ExpandColumns(stmt, sourceColumns);
-                var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                     .GetAsyncEnumerator(context.CancellationToken);
                 ColumnBatch? firstNative = null;
                 try
@@ -292,6 +350,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                             caseSensitiveComparison: context.CaseSensitiveComparison));
                     if (supported)
                     {
+                        RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
+                            PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                            "Columnar aggregate path accepted.");
                         using (firstNative)
                         using (firstSelection)
                             aggregatePlan.Accumulate(firstNative, firstSelection);
@@ -314,6 +375,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         yield break;
                     }
 
+                    RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
+                        PlanDecisionOutcome.Fallback,
+                        aggregatePlan.CanApply(firstNative)
+                            ? PlanDecisionReasonCodes.UnsupportedExpression
+                            : PlanDecisionReasonCodes.UnsupportedType,
+                        "Columnar aggregate candidate replayed through the row pipeline.",
+                        ("fallbackDestination", "heavy-row-pipeline"));
                     var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
                     firstNative = null;
                     var executionEngine = new SelectExecutionEngine(context, _logger);
@@ -328,6 +396,26 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                     await nativeEnumerator.DisposeAsync();
                 }
             }
+            else
+            {
+                RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
+                    PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                    "Columnar aggregate candidate source does not expose columnar batches.",
+                    ("fallbackDestination", "row-engine"));
+            }
+        }
+        else if (globalAggregateCandidate)
+        {
+            var source = await context.ResolveDataSourceAsync(stmt.FromTable);
+            RecordPlanDecision(context, "select.aggregate", "ColumnarAggregate",
+                PlanDecisionOutcome.Fallback,
+                source is IColumnarDataSource
+                    ? PlanDecisionReasonCodes.UnsupportedExpression
+                    : PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                source is IColumnarDataSource
+                    ? "Columnar aggregate planner rejected the statement shape before opening native batches."
+                    : "Columnar aggregate candidate source does not expose columnar batches.",
+                ("fallbackDestination", "heavy-row-pipeline"));
         }
 
         // Native island for the narrow read-only shape that can preserve semantics today. Complex
@@ -342,7 +430,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 // Open the native source once. Unsupported projection shapes replay the already-read
                 // batch through the established row evaluator without restarting the source.
                 {
-                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+                    var nativeEnumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
                         .GetAsyncEnumerator(context.CancellationToken);
                     ColumnBatch? firstNative = null;
                     try
@@ -358,6 +446,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
                         if (!ColumnarProjectionCompiler.CanProject(firstNative, nativeColumns))
                         {
+                            RecordPlanDecision(context, "select.projection", "ColumnarProjection",
+                                PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.UnsupportedExpression,
+                                "Columnar projection candidate replayed through the row streaming path.",
+                                ("fallbackDestination", "row-streaming"));
                             var projectionFallbackBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
                             firstNative = null;
                             await foreach (var batch in streamingEngine.ExecuteStreamingSelect(
@@ -374,6 +466,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                                 caseSensitiveComparison: context.CaseSensitiveComparison);
                         if (predicateSupported)
                         {
+                            RecordPlanDecision(context, "select.projection", "ColumnarProjection",
+                                PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                                "Columnar projection/filter path accepted.");
                             var yieldedRows = false;
                             using (firstNative)
                             using (firstSelection)
@@ -424,6 +519,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
 
                         // The expression shape or physical type is unsupported. Replay the already-read
                         // native batch through the established row evaluator; do not restart the source.
+                        RecordPlanDecision(context, "select.projection", "ColumnarProjection",
+                            PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.UnsupportedExpression,
+                            "Columnar predicate candidate replayed through the row streaming path.",
+                            ("fallbackDestination", "row-streaming"));
                         var rowBatches = ReplayNativeAsRows(firstNative, nativeEnumerator);
                         firstNative = null;
                         await foreach (var batch in streamingEngine.ExecuteStreamingSelect(
@@ -437,6 +536,13 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                         await nativeEnumerator.DisposeAsync();
                     }
                 }
+            }
+            else
+            {
+                RecordPlanDecision(context, "select.projection", "ColumnarProjection",
+                    PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+                    "Simple columnar candidate source does not expose columnar batches.",
+                    ("fallbackDestination", "row-streaming"));
             }
         }
 
@@ -568,7 +674,7 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && projectedColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase)
             && outputColumns.SequenceEqual(sourceColumns, StringComparer.OrdinalIgnoreCase);
 
-        var enumerator = columnarSource.ReadColumnBatches(context.BatchSize, context.CancellationToken)
+        var enumerator = columnarSource.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken)
             .GetAsyncEnumerator(context.CancellationToken);
         if (!await enumerator.MoveNextAsync())
         {
@@ -580,6 +686,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         if (expressionOutputFields != null
             && !ColumnarProjectionCompiler.CanProjectToSchema(first, statement.Columns, expressionOutputFields))
         {
+            RecordPlanDecision(context, "select-into.columnar", "ColumnarSelectInto",
+                PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.UnsupportedExpression,
+                "Columnar SELECT INTO candidate could not project to the destination schema.",
+                ("fallbackDestination", "row-select-into"));
             first.Dispose();
             await enumerator.DisposeAsync();
             return null;
@@ -590,6 +700,10 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             cancellationToken: context.CancellationToken,
             caseSensitiveComparison: context.CaseSensitiveComparison))
         {
+            RecordPlanDecision(context, "select-into.columnar", "ColumnarSelectInto",
+                PlanDecisionOutcome.Fallback, PlanDecisionReasonCodes.UnsupportedExpression,
+                "Columnar SELECT INTO candidate predicate is unsupported.",
+                ("fallbackDestination", "row-select-into"));
             first.Dispose();
             await enumerator.DisposeAsync();
             return null;
@@ -668,6 +782,9 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
         try
         {
             await sink.WriteColumnBatches(CountAndTransfer(), append: true, context.CancellationToken);
+            RecordPlanDecision(context, "select-into.columnar", "ColumnarSelectInto",
+                PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                "Columnar SELECT INTO path accepted.");
             return rowCount;
         }
         finally
@@ -691,6 +808,55 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
                 0, 0, DiagnosticSeverity.Info));
     }
 
+    private static void RecordPlanDecision(
+        IExecutionContext context,
+        string operatorId,
+        string candidatePath,
+        PlanDecisionOutcome outcome,
+        string reasonCode,
+        string message,
+        params (string Key, string Value)[] attributes)
+    {
+        var facts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in attributes)
+            facts[key] = value;
+
+        context.Telemetry.RecordPlanDecision(new PlanDecision(
+            QueryId: $"select:{context.SessionId}",
+            OperatorId: operatorId,
+            CandidatePath: candidatePath,
+            Outcome: outcome,
+            ReasonCode: reasonCode,
+            Message: message,
+            Attributes: facts));
+    }
+
+    private static void RecordSqlPushdownAccepted(
+        IExecutionContext context,
+        string operatorId,
+        string connectionName)
+    {
+        RecordPlanDecision(context, operatorId, "SqlPushdown", PlanDecisionOutcome.Accepted,
+            PlanDecisionReasonCodes.SemanticGuard,
+            "SQL pushdown path accepted.",
+            ("connectionName", connectionName));
+    }
+
+    private static void RecordSqlPushdownFallbackIfRemote(
+        IExecutionContext context,
+        string operatorId,
+        SelectStatement statement)
+    {
+        var connectionName = statement.FromTable?.ConnectionName;
+        if (string.IsNullOrWhiteSpace(connectionName)) return;
+
+        RecordPlanDecision(context, operatorId, "SqlPushdown", PlanDecisionOutcome.Fallback,
+            PlanDecisionReasonCodes.ConnectorCapabilityMissing,
+            "SQL pushdown candidate was not accepted; query will execute in the engine.",
+            ("connectionName", connectionName),
+            ("fallbackDestination", "row-engine"));
+    }
+
     private static bool IsSimpleColumnarCandidate(SelectStatement stmt)
         => stmt.FromTable.TableOperators.Count == 0
             && (stmt.Joins == null || stmt.Joins.Count == 0)
@@ -707,6 +873,18 @@ public class SelectStatementHandler(ILogger logger) : IStatementHandler
             && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
             && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
             && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool IsGroupedColumnarAggregateCandidate(SelectStatement stmt)
+        => stmt.FromTable.TableOperators.Count == 0
+            && (stmt.Joins == null || stmt.Joins.Count == 0)
+            && stmt.GroupBy != null && stmt.GroupingSet == null
+            && stmt.OrderBy == null && stmt.Offset == null && stmt.LimitCount == null && stmt.TopCount == null
+            && !stmt.IsDistinct && stmt.QualifyClause == null && stmt.Sample == null
+            && !stmt.IsTopPercent && !stmt.GroupByAll && !stmt.OrderByAll;
+
+    private static bool HasAggregateProjection(SelectStatement stmt)
+        => stmt.Columns.Any(column => column.Expression is FunctionCallExpression function
+            && function.FunctionName.ToUpperInvariant() is "COUNT" or "SUM" or "AVG" or "MIN" or "MAX");
 
     private static bool IsValidatedCountCandidate(SelectStatement stmt)
         => IsGlobalColumnarAggregateCandidate(stmt)

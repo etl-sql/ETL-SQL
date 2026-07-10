@@ -19,11 +19,21 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Test-ScaleCertification.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the scale certification test suite (Smoke/Standard/Stress/Huge/Provider tiers) and produces JSON and Markdown reports with per-scenario metrics. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
 | **[`Test-ScaleBaseline.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
 | **[`Test-GateF.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateF.ps1)** | PowerShell | Windows | Runs the resumable 1B Gate F matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
+| **[`Test-GateFEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateFEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run Gate F report passed, contains required scenario evidence, and belongs to the current commit before citing Gate F performance claims. |
+| **[`Summarize-PlanFallbacks.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Summarize-PlanFallbacks.ps1)** | PowerShell | Cross-platform | Ranks Phase 5 plan fallback summaries and structured fallback entries by candidate path, reason, frequency, and coarse cost context. |
+| **[`Test-PlanFallbackRanking.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PlanFallbackRanking.ps1)** | PowerShell | Cross-platform | Self-test for the plan fallback ranking script, covering structured per-operator entries and legacy summary strings. |
 
 Gate F is intentionally operator-run because the spill-backed billion-row scenario can take hours.
 Start it with `./scripts/Test-GateF.ps1`; inspect progress from another shell with
 `Get-Content ./certification-results/gate-f-1b/status.json`. Re-running the same command skips
 completed scenario artifacts; use `-Force` only when intentionally replacing prior results.
+Before publishing Gate F performance claims or closing a release candidate that changes certified
+paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`; pass
+`-Baseline` when comparing an operator-run report against the checked-in Gate F baseline.
+Phase 4 operator candidates are explicit. For example, `./scripts/Test-GateF.ps1 -Scenario ExternalSort`,
+`-Scenario ExternalJoin`, `-Scenario HighCardinalityGrouping`, or `-Scenario EligibleWindowRowNumber` runs an operator candidate, and
+`./scripts/Test-GateFEvidence.ps1 -RequiredScenario <scenario>` validates the resulting artifact.
+Candidate artifacts are not product claims until the public certification matrix marks them certified.
 | **[`test-service-capacity.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |
 | **[`test-capacity-workload-configs.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |
 | **[`compare-capacity-results.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/compare-capacity-results.mjs)** | Node.js | Cross-platform | Compares two service-capacity reports for p95 latency, throughput, and error-rate regressions. |

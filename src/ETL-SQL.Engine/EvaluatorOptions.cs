@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine;
@@ -44,6 +45,8 @@ public class EvaluatorOptions
     public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
     public int OperatorMemoryGrantMB { get; set; } = 256;
     public MemoryGovernorPolicy MemoryGovernorPolicy { get; set; } = MemoryGovernorPolicy.SpillOrFail;
+    public bool AdaptiveExecutionEnabled { get; set; }
+    public AdaptiveExecutionOptions AdaptiveExecutionOptions { get; set; } = new();
     public int SubqueryCacheSize { get; set; } = 5000;
     public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
     public long TempTableSpillThresholdRows { get; set; }

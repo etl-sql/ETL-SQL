@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -34,6 +35,41 @@ namespace ETL_SQL.Tests.Engine
             // Verification: Verify the SQL actually hit the mock
             Assert.Single(mock.ExecutedSql);
             Assert.Contains("SELECT UserID, UserName FROM Users", mock.ExecutedSql[0]);
+        }
+
+        [Fact]
+        public async Task SelectSqlPushdown_EmitsAcceptedPlanDecision()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
+            await ev.Evaluate(Parse("SELECT UserID, UserName FROM MyDb.Users;"));
+
+            Assert.Contains(mock.ExecutedSql, sql => sql.Contains("Users"));
+            var decision = Assert.Single(ev.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "SqlPushdown" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.Equal("select.sql-pushdown", decision.OperatorId);
+            Assert.Equal(PlanDecisionReasonCodes.SemanticGuard, decision.ReasonCode);
+            Assert.Equal("MyDb", decision.Attributes["connectionName"]);
+        }
+
+        [Fact]
+        public async Task SelectSqlPushdownFallback_EmitsPlanDecision()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
+            await ev.Evaluate(Parse("SELECT GET_JOB_STATE('test') AS StateVal FROM MyDb.Sales;"));
+
+            Assert.Empty(mock.ExecutedSql);
+            var decision = Assert.Single(ev.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "SqlPushdown" && d.Outcome == PlanDecisionOutcome.Fallback);
+            Assert.Equal("select.stream.sql-pushdown", decision.OperatorId);
+            Assert.Equal(PlanDecisionReasonCodes.ConnectorCapabilityMissing, decision.ReasonCode);
+            Assert.Equal("row-engine", decision.Attributes["fallbackDestination"]);
+            Assert.Equal("MyDb", decision.Attributes["connectionName"]);
         }
 
         [Fact]

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Tests.Core;
 using Microsoft.Extensions.DependencyInjection;
@@ -83,6 +84,11 @@ public class SelectSpillBoundaryTests
         var result = await Query(evaluator, "SELECT TOP 30 PERCENT v FROM #t ORDER BY v;");
 
         Assert.Equal(new[] { 1m, 2m, 3m }, result.Rows.Select(r => System.Convert.ToDecimal(r["v"])));
+        var decision = Assert.Single(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "RowPipeline" && d.OperatorId == "select.sort-probe");
+        Assert.Equal(PlanDecisionOutcome.Degraded, decision.Outcome);
+        Assert.Equal(PlanDecisionReasonCodes.MemoryAdmissionRejected, decision.ReasonCode);
+        Assert.Equal("ExternalSort", decision.Attributes["fallbackDestination"]);
     }
 
     [Fact]

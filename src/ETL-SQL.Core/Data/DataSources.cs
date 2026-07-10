@@ -943,7 +943,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
 
                     if (bytePressure || rowThresholdExceeded)
                     {
-                        if (ExecutionContext != null)
+                        var executionContext = ExecutionContext;
+                        if (executionContext != null)
                         {
                             // Keep at most one batch in the writer while the producer validates the
                             // next batch. Awaiting here bounds the pipeline to two logical batches:
@@ -956,6 +957,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                             var estimatedBytes = EstimateSpillPayloadBytes(processedBatch);
                             pendingSpillWrite = WriteSpillBatchAsync(processedBatch, estimatedBytes, batchLease);
                             batchLease = null; // ownership transfers to the pending writer task
+                            if (executionContext.EffectivePipelineDepth <= 0)
+                                await AwaitPendingSpillAsync();
                             _totalRowCount += processedBatch.Rows.Count;
 
                             // A row-threshold spill may occur after the arbiter accepted the
@@ -963,8 +966,8 @@ public class InMemoryDataSource : IDataSource, ISpillable, IEstimatedCardinality
                             // resident so the process-wide reservation does not retain phantom RAM.
                             RecalculateResidentMemoryReservation();
 
-                            if (ExecutionContext.Telemetry.IsProfiling)
-                                ExecutionContext.LoggingContext.Logger.Debug(
+                            if (executionContext.Telemetry.IsProfiling)
+                                executionContext.LoggingContext.Logger.Debug(
                                     "Temp table spill triggered by {Reason} (row threshold {Threshold}). Appended batch to extent: {ExtentName}",
                                     bytePressure ? "memory grant" : "row threshold", threshold, extentName);
 

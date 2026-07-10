@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Planning;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -59,6 +61,13 @@ public class ExternalJoinEngine
                 sampledBytes = checked(sampledBytes + row.EstimateHeapBytes());
             }
             ConfigurePartitionCount(rightSample, rightKeys, knownBuildRowCount, knownBuildBytes);
+            PlanDecisionRecorder.Record(_context, "external-join", "ExternalJoin",
+                PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+                "External hash join path accepted.",
+                ("partitionCount", PartitionCount.ToString()),
+                ("knownBuildRowCount", knownBuildRowCount?.ToString()),
+                ("knownBuildBytes", knownBuildBytes?.ToString()),
+                ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
 
             // 1. Partition Phase
             var leftPartitions = await PartitionStream(leftStream, leftKeys, "left", tempFiles);
@@ -117,7 +126,7 @@ public class ExternalJoinEngine
             frequencies[key] = frequencies.TryGetValue(key, out var count) ? count + 1 : 1;
         }
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Count == 0 ? 0 : frequencies.Values.Max() / (double)sample.Count;
         var hasPlannedTotal = knownBuildRowCount >= 0;
         var plannedRows = hasPlannedTotal ? knownBuildRowCount!.Value : sample.Count;
@@ -171,6 +180,14 @@ public class ExternalJoinEngine
 
         if (hashTable == null)
         {
+            PlanDecisionRecorder.Record(_context, "external-join.memory", "ExternalJoin",
+                PlanDecisionOutcome.Degraded, PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                "External join build partition exceeded the memory ceiling; attempting recursive repartition.",
+                ("depth", depth.ToString()),
+                ("rightRows", rightRowCount.ToString()),
+                ("memoryCeilingBytes", ceiling.ToString()),
+                ("fallbackDestination", "recursive-repartition"));
+
             if (depth < MaxRecursivePartitionDepth && PartitionCount > 1)
             {
                 var split = await TryRepartitionBothSides(leftName, rightName, leftKeys, rightKeys, rightRowCount, depth + 1, tempFiles);
@@ -181,6 +198,19 @@ public class ExternalJoinEngine
                     yield break;
                 }
             }
+
+            PlanDecisionRecorder.Record(_context, "external-join.memory", "ExternalJoin",
+                _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                    ? PlanDecisionOutcome.Rejected
+                    : PlanDecisionOutcome.Degraded,
+                PlanDecisionReasonCodes.MemoryAdmissionRejected,
+                "External join build partition could not be reduced under the memory ceiling.",
+                ("depth", depth.ToString()),
+                ("rightRows", rightRowCount.ToString()),
+                ("memoryCeilingBytes", ceiling.ToString()),
+                ("fallbackDestination", _context.MemoryGovernorPolicy == MemoryGovernorPolicy.SpillOrFail
+                    ? "execution-error"
+                    : "spill-only-churn"));
 
             MemoryGovernor.EnforcePolicy(_context,
                 "JOIN build side exceeded the memory governor ceiling (Engine:TotalMemoryGrantMB) and could not be " +

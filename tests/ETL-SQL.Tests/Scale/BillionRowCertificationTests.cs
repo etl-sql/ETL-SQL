@@ -5,7 +5,9 @@ using System.Text.Json;
 using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Engines;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
@@ -65,8 +67,13 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         var expectedChecksum = checked(expectedIdSum + expectedAmountSum * 2);
         var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
         var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+        var planDecisions = evaluator.Telemetry.PlanDecisions;
+        var planFallbackCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback);
+        var planRejectedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected);
+        var planDegradedCount = planDecisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded);
 
         Assert.Equal(0, source.RowReadAttempts);
+        Assert.Equal(0, planFallbackCount);
         Assert.Equal(expectedSelected, selectedCount);
         Assert.Equal(expectedChecksum, projectionChecksum);
         Assert.Equal(100, rows.Length);
@@ -100,6 +107,11 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
             cpuUtilizationPercent = resources.CpuUtilizationPercent,
             memoryBoundMB = memoryBoundMb,
             minimumRowsPerSecond,
+            planDecisionCount = planDecisions.Count,
+            planFallbackCount,
+            planRejectedCount,
+            planDegradedCount,
+            planDecisionSummary = PlanDecisionSummary.FormatFallbackSummary(planDecisions),
             passed = true
         };
         var json = JsonSerializer.Serialize(metric);
@@ -108,8 +120,500 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
     }
 
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task ExternalSortMultiKeyCandidateStreamsAndValidatesOrder()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_EXTERNAL_SORT_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_EXTERNAL_SORT_ROWS or GATE_F_ROWS must be explicitly set for external sort certification.");
+
+        var chunkRows = ReadPositiveInt("GATE_F_SORT_CHUNK_ROWS", 100_000);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.ExternalSortChunkSize = chunkRows;
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalSortEngine(evaluator, logger);
+        var orderBy = new List<OrderByClause>
+        {
+            new(new IdentifierExpression("SortKey"), false),
+            new(new IdentifierExpression("TieBreaker"), true)
+        };
+
+        var stopwatch = Stopwatch.StartNew();
+        long count = 0;
+        long checksum = 0;
+        int? previousSortKey = null;
+        long? previousTieBreaker = null;
+        int firstSortKey = 0;
+        int lastSortKey = 0;
+
+        await foreach (var row in engine.SortStreamAsync(GenerateExternalSortRows(rowCount), orderBy))
+        {
+            var sortKey = Convert.ToInt32(row["SortKey"], CultureInfo.InvariantCulture);
+            var tieBreaker = Convert.ToInt64(row["TieBreaker"], CultureInfo.InvariantCulture);
+            var id = Convert.ToInt64(row["Id"], CultureInfo.InvariantCulture);
+
+            if (previousSortKey.HasValue)
+            {
+                Assert.True(previousSortKey.Value <= sortKey,
+                    $"External sort order regressed at row {count}: {previousSortKey.Value} > {sortKey}.");
+                if (previousSortKey.Value == sortKey)
+                {
+                    Assert.True(previousTieBreaker!.Value >= tieBreaker,
+                        $"External sort tie-breaker regressed at row {count}: {previousTieBreaker.Value} < {tieBreaker}.");
+                }
+            }
+            else
+            {
+                firstSortKey = sortKey;
+            }
+
+            previousSortKey = sortKey;
+            previousTieBreaker = tieBreaker;
+            lastSortKey = sortKey;
+            checksum = checked(checksum + id);
+            count++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(rowCount, count);
+        Assert.Equal(SumRange(1, rowCount), checksum);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "External sort candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.SortSpillCount > 0, "External sort candidate expected sort spill count evidence.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
+
+        var metric = new
+        {
+            scenario = "ExternalSort_MultiKey_1B",
+            rowCount,
+            chunkRows,
+            sortKeys = new[] { "SortKey ASC", "TieBreaker DESC" },
+            checksum,
+            firstSortKey,
+            lastSortKey,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            sortRunCount = evaluator.Telemetry.SortSpillCount,
+            mergePassCount = engine.MergePassCount,
+            intermediateMergeRunCount = engine.IntermediateMergeRunCount,
+            maxConcurrentMergeReaders = engine.MaxConcurrentMergeReaders,
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_EXTERNAL_SORT_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_EXTERNAL_SORT_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task ExternalEquiJoinCandidateStreamsAndValidatesControlledOverlap()
+    {
+        var leftRows = ReadPositiveLong("GATE_F_EXTERNAL_JOIN_LEFT_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        var rightRows = ReadPositiveLong("GATE_F_EXTERNAL_JOIN_RIGHT_ROWS", leftRows);
+        if (leftRows <= 0 || rightRows <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_EXTERNAL_JOIN_LEFT_ROWS/right rows or GATE_F_ROWS must be explicitly set for external join certification.");
+
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+        var partitions = ReadPositiveInt("GATE_F_JOIN_PARTITIONS", 32);
+        var keySpace = Math.Max(leftRows, rightRows);
+        var overlapOffset = keySpace / 2;
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.ExternalHashPartitions = partitions;
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalJoinEngine(evaluator, logger);
+        var join = new JoinClause(
+            "INNER",
+            new TableReference("right"),
+            new BinaryExpression(new IdentifierExpression("JoinKey"), TokenType.EQUALS, new IdentifierExpression("JoinKey")));
+
+        var stopwatch = Stopwatch.StartNew();
+        long count = 0;
+        long checksum = 0;
+        await foreach (var row in engine.ApplyHashJoinExternal(
+            GenerateExternalJoinRows(leftRows, "L", payloadMultiplier: 3, keyOffset: 0),
+            GenerateExternalJoinRows(rightRows, "R", payloadMultiplier: 5, keyOffset: overlapOffset),
+            join,
+            new List<string> { "JoinKey" },
+            new List<string> { "JoinKey" },
+            knownBuildRowCount: rightRows,
+            knownBuildBytes: rightRows * 128))
+        {
+            var leftId = Convert.ToInt64(row["LId"], CultureInfo.InvariantCulture);
+            var rightId = Convert.ToInt64(row["RId"], CultureInfo.InvariantCulture);
+            checksum = checked(checksum + leftId + rightId);
+            count++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var expectedCount = ExpectedExternalJoinMatches(leftRows, rightRows, overlapOffset);
+        var expectedChecksum = ExpectedExternalJoinChecksum(leftRows, rightRows, overlapOffset);
+        var rowsPerSecond = (leftRows + rightRows) / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(expectedCount, count);
+        Assert.Equal(expectedChecksum, checksum);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "External join candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "External join candidate expected partition telemetry.");
+        Assert.True(evaluator.Telemetry.PartitionPassCount >= 2, "External join candidate expected left/right partition passes.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} source rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
+
+        var metric = new
+        {
+            scenario = "ExternalEquiJoin_ControlledSkew_1B",
+            leftRows,
+            rightRows,
+            keySpace,
+            overlapKeys = expectedCount,
+            joinType = "INNER",
+            resultRows = count,
+            checksum,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            partitionCount = engine.PartitionCount,
+            partitionPassCount = evaluator.Telemetry.PartitionPassCount,
+            repartitionPassCount = Math.Max(0, evaluator.Telemetry.PartitionPassCount - 2),
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_EXTERNAL_JOIN_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_EXTERNAL_JOIN_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task HighCardinalityGroupingCandidateStreamsAndValidatesAggregateTotals()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_HIGH_CARD_GROUP_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_HIGH_CARD_GROUP_ROWS or GATE_F_ROWS must be explicitly set for high-cardinality grouping certification.");
+
+        var configuredGroups = ReadPositiveLong("GATE_F_HIGH_CARD_GROUP_COUNT", Math.Min(1_000_000, Math.Max(1, rowCount / 10)));
+        var groupCount = Math.Min(rowCount, configuredGroups);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.OperatorMemoryGrantMB = ReadPositiveInt("GATE_F_OPERATOR_MEMORY_GRANT_MB", 8192);
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var engine = new ExternalAggregateEngine(evaluator, logger);
+
+        var groupBy = new List<Expression> { new IdentifierExpression("GroupId") };
+        var finalColumns = new List<SelectColumn>
+        {
+            new(new IdentifierExpression("GroupId"), "GroupId"),
+            new(new FunctionCallExpression("COUNT", new List<Expression> { new IdentifierExpression("Value") }), "N"),
+            new(new FunctionCallExpression("SUM", new List<Expression> { new IdentifierExpression("Value") }), "ValueSum"),
+            new(new FunctionCallExpression("MIN", new List<Expression> { new IdentifierExpression("Value") }), "MinValue"),
+            new(new FunctionCallExpression("MAX", new List<Expression> { new IdentifierExpression("Value") }), "MaxValue")
+        };
+        var colNames = new List<string> { "GroupId", "N", "ValueSum", "MinValue", "MaxValue" };
+
+        var stopwatch = Stopwatch.StartNew();
+        long resultGroups = 0;
+        long totalCount = 0;
+        long groupIdChecksum = 0;
+        decimal totalSum = 0;
+        decimal minOfMins = decimal.MaxValue;
+        decimal maxOfMaxes = decimal.MinValue;
+
+        await foreach (var row in engine.ApplyAggregationExternal(
+            GenerateHighCardinalityGroupRows(rowCount, groupCount),
+            groupBy,
+            finalColumns,
+            colNames,
+            knownRowCount: rowCount,
+            knownInputBytes: rowCount * 64))
+        {
+            var groupId = Convert.ToInt64(row["GroupId"], CultureInfo.InvariantCulture);
+            var count = Convert.ToInt64(row["N"], CultureInfo.InvariantCulture);
+            var sum = Convert.ToDecimal(row["ValueSum"], CultureInfo.InvariantCulture);
+            var min = Convert.ToDecimal(row["MinValue"], CultureInfo.InvariantCulture);
+            var max = Convert.ToDecimal(row["MaxValue"], CultureInfo.InvariantCulture);
+
+            Assert.True(count > 0, $"Group {groupId} emitted an empty aggregate.");
+            Assert.True(min <= max, $"Group {groupId} has min {min} greater than max {max}.");
+
+            resultGroups++;
+            totalCount = checked(totalCount + count);
+            groupIdChecksum = checked(groupIdChecksum + groupId);
+            totalSum += sum;
+            minOfMins = Math.Min(minOfMins, min);
+            maxOfMaxes = Math.Max(maxOfMaxes, max);
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+
+        Assert.Equal(groupCount, resultGroups);
+        Assert.Equal(rowCount, totalCount);
+        Assert.Equal(SumRange(0, groupCount - 1), groupIdChecksum);
+        Assert.Equal((decimal)SumRange(1, rowCount), totalSum);
+        Assert.Equal(1m, minOfMins);
+        Assert.Equal((decimal)rowCount, maxOfMaxes);
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "High-cardinality grouping expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "High-cardinality grouping expected partition telemetry.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
+
+        var metric = new
+        {
+            scenario = "HighCardinalityGrouping_1B",
+            rowCount,
+            groupCount,
+            resultGroups,
+            totalCount,
+            groupIdChecksum,
+            totalSum,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            partitionCount = engine.PartitionCount,
+            partitionPassCount = evaluator.Telemetry.PartitionPassCount,
+            repartitionPassCount = Math.Max(0, evaluator.Telemetry.PartitionPassCount - 1),
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_HIGH_CARD_GROUP_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_HIGH_CARD_GROUP_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
+    [GateFCertificationFact]
+    [Trait("Category", "BillionRowCertification")]
+    public async Task EligibleWindowRowNumberCandidateStreamsAndValidatesPartitions()
+    {
+        var rowCount = ReadPositiveLong("GATE_F_ELIGIBLE_WINDOW_ROWS", ReadPositiveLong("GATE_F_ROWS", 0));
+        if (rowCount <= 0)
+            throw new InvalidOperationException(
+                "GATE_F_ELIGIBLE_WINDOW_ROWS or GATE_F_ROWS must be explicitly set for eligible window certification.");
+
+        var configuredPartitions = ReadPositiveLong("GATE_F_ELIGIBLE_WINDOW_PARTITIONS", Math.Min(1_000, rowCount));
+        var partitionCount = Math.Min(rowCount, configuredPartitions);
+        var memoryBoundMb = ReadPositiveDouble("GATE_F_MEMORY_BOUND_MB") ?? 16_384;
+        var minimumRowsPerSecond = ReadPositiveDouble("GATE_F_MIN_ROWS_PER_SECOND");
+
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true);
+        GC.WaitForPendingFinalizers();
+        using var sampler = new ScenarioResourceSampler();
+        await using var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.WindowSpillThreshold = ReadPositiveInt("GATE_F_WINDOW_SPILL_THRESHOLD", 100_000);
+        var logger = evaluator.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var aggregateEngine = new AggregateEngine(evaluator, logger);
+        var windowEngine = new WindowEngine(evaluator, aggregateEngine, logger);
+        var externalWindowEngine = new ExternalWindowEngine(evaluator, windowEngine, logger);
+
+        var window = new WindowClause(
+            new List<Expression> { new IdentifierExpression("PartitionId") },
+            new List<OrderByClause> { new(new IdentifierExpression("OrderId"), false) });
+        var rowNumber = new FunctionCallExpression("ROW_NUMBER", new List<Expression>()) { Window = window };
+        var rowNumberKey = $"WINDOW_{rowNumber.ToSql().ToUpperInvariant()}";
+        var stmt = new SelectStatement(
+            new List<SelectColumn>
+            {
+                new(new IdentifierExpression("PartitionId"), "PartitionId"),
+                new(new IdentifierExpression("OrderId"), "OrderId"),
+                new(rowNumber, "RowNumber")
+            },
+            null,
+            new TableReference("#input"),
+            new List<JoinClause>(),
+            null);
+
+        var stopwatch = Stopwatch.StartNew();
+        var counts = new Dictionary<long, long>();
+        var rnSums = new Dictionary<long, decimal>();
+        long emittedRows = 0;
+        decimal rnTotal = 0;
+
+        await foreach (var row in externalWindowEngine.ApplyWindowFunctionsExternal(
+            GenerateEligibleWindowRows(rowCount, partitionCount),
+            stmt,
+            knownRowCount: rowCount,
+            knownInputBytes: rowCount * 64))
+        {
+            var partition = Convert.ToInt64(row["PartitionId"], CultureInfo.InvariantCulture);
+            var rn = Convert.ToDecimal(row[rowNumberKey], CultureInfo.InvariantCulture);
+            Assert.True(rn >= 1, $"Partition {partition} emitted invalid row number {rn}.");
+            counts[partition] = counts.TryGetValue(partition, out var count) ? count + 1 : 1;
+            rnSums[partition] = rnSums.TryGetValue(partition, out var sum) ? sum + rn : rn;
+            rnTotal += rn;
+            emittedRows++;
+        }
+        stopwatch.Stop();
+        var resources = sampler.SnapshotAndReset();
+
+        Assert.Equal(rowCount, emittedRows);
+        Assert.Equal(partitionCount, counts.Count);
+        foreach (var (partition, count) in counts)
+        {
+            var expectedCount = CountForModuloPartition(rowCount, partitionCount, partition);
+            Assert.Equal(expectedCount, count);
+            Assert.Equal((decimal)SumRange(1, expectedCount), rnSums[partition]);
+        }
+
+        var expectedRnTotal = 0m;
+        for (long partition = 0; partition < partitionCount; partition++)
+            expectedRnTotal += SumRange(1, CountForModuloPartition(rowCount, partitionCount, partition));
+        Assert.Equal(expectedRnTotal, rnTotal);
+
+        var rowsPerSecond = rowCount / Math.Max(0.001, stopwatch.Elapsed.TotalSeconds);
+        var peakWorkingSetMb = resources.PeakWorkingSetBytes / 1024d / 1024d;
+        Assert.True(evaluator.Telemetry.TotalSpilledBytes > 0, "Eligible window candidate expected spill evidence.");
+        Assert.True(evaluator.Telemetry.PartitionsCount > 0, "Eligible window candidate expected partition telemetry.");
+        Assert.True(peakWorkingSetMb < memoryBoundMb,
+            $"Peak process working set {peakWorkingSetMb:N1} MB exceeded {memoryBoundMb:N1} MB.");
+        if (minimumRowsPerSecond.HasValue)
+            Assert.True(rowsPerSecond >= minimumRowsPerSecond.Value,
+                $"Throughput {rowsPerSecond:N0} rows/s was below {minimumRowsPerSecond:N0} rows/s.");
+        var plan = PlanDecisionMetrics(evaluator);
+
+        var metric = new
+        {
+            scenario = "EligibleWindowRowNumber_1B",
+            rowCount,
+            partitionCount,
+            maxPartitionRows = counts.Values.Max(),
+            emittedRows,
+            rnTotal,
+            elapsedMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3),
+            rowsPerSecond = Math.Round(rowsPerSecond, 2),
+            enginePartitionCount = externalWindowEngine.PartitionCount,
+            spillBytes = evaluator.Telemetry.TotalSpilledBytes,
+            spillExtentCount = evaluator.Telemetry.SpillExtentCount,
+            peakProcessWorkingSetMB = Math.Round(peakWorkingSetMb, 1),
+            peakPrivateBytesMB = Math.Round(resources.PeakPrivateBytes / 1024d / 1024d, 1),
+            peakManagedHeapMB = Math.Round(resources.PeakManagedHeapBytes / 1024d / 1024d, 1),
+            allocatedMB = Math.Round(resources.AllocatedBytes / 1024d / 1024d, 1),
+            gcGen0Collections = resources.Gen0Collections,
+            gcGen1Collections = resources.Gen1Collections,
+            gcGen2Collections = resources.Gen2Collections,
+            gcPauseMs = Math.Round(resources.GcPauseTime.TotalMilliseconds, 1),
+            cpuTimeMs = Math.Round(resources.CpuTime.TotalMilliseconds, 1),
+            cpuUtilizationPercent = resources.CpuUtilizationPercent,
+            memoryBoundMB = memoryBoundMb,
+            minimumRowsPerSecond,
+            planDecisionCount = plan.Count,
+            planFallbackCount = plan.FallbackCount,
+            planRejectedCount = plan.RejectedCount,
+            planDegradedCount = plan.DegradedCount,
+            planDecisionSummary = plan.Summary,
+            passed = true
+        };
+        var json = JsonSerializer.Serialize(metric);
+        output.WriteLine("GATE_F_ELIGIBLE_WINDOW_METRIC:" + json);
+        var outputPath = Environment.GetEnvironmentVariable("GATE_F_ELIGIBLE_WINDOW_OUTPUT");
+        if (!string.IsNullOrWhiteSpace(outputPath)) File.WriteAllText(outputPath, json);
+    }
+
     private static long SumRange(long first, long last)
         => first > last ? 0 : checked((first + last) * (last - first + 1) / 2);
+
+    private static (int Count, int FallbackCount, int RejectedCount, int DegradedCount, string Summary) PlanDecisionMetrics(Evaluator evaluator)
+    {
+        var decisions = evaluator.Telemetry.PlanDecisions;
+        return (
+            decisions.Count,
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Fallback),
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Rejected),
+            decisions.Count(d => d.Outcome == PlanDecisionOutcome.Degraded),
+            PlanDecisionSummary.FormatFallbackSummary(decisions));
+    }
 
     private static long SumModuloRange(long first, long last, int modulus)
         => checked(SumModuloTo(last, modulus) - SumModuloTo(first - 1, modulus));
@@ -120,6 +624,85 @@ public sealed class BillionRowCertificationTests(ITestOutputHelper output)
         var fullCycles = value / modulus;
         var remainder = value % modulus;
         return checked(fullCycles * modulus * (modulus - 1L) / 2 + remainder * (remainder + 1) / 2);
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateExternalSortRows(long rowCount)
+    {
+        await Task.Yield();
+        var stride = Math.Max(1, rowCount - 1);
+        for (long ordinal = 0; ordinal < rowCount; ordinal++)
+        {
+            var id = checked((ordinal * stride) % rowCount + 1);
+            yield return new Row
+            {
+                ["Id"] = id,
+                ["SortKey"] = (int)(id % 100_000),
+                ["TieBreaker"] = id,
+                ["Payload"] = id * 3
+            };
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateExternalJoinRows(
+        long rowCount,
+        string prefix,
+        long payloadMultiplier,
+        long keyOffset)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                [$"{prefix}Id"] = id,
+                ["JoinKey"] = (int)(id - 1 + keyOffset),
+                [$"{prefix}Payload"] = id * payloadMultiplier
+            };
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateHighCardinalityGroupRows(long rowCount, long groupCount)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                ["GroupId"] = (int)((id - 1) % groupCount),
+                ["Value"] = id
+            };
+        }
+    }
+
+    private static async IAsyncEnumerable<Row> GenerateEligibleWindowRows(long rowCount, long partitionCount)
+    {
+        await Task.Yield();
+        for (long id = 1; id <= rowCount; id++)
+        {
+            yield return new Row
+            {
+                ["PartitionId"] = (int)((id - 1) % partitionCount),
+                ["OrderId"] = id,
+                ["Value"] = id * 7
+            };
+        }
+    }
+
+    private static long CountForModuloPartition(long rowCount, long partitionCount, long partition)
+        => partition >= rowCount ? 0 : ((rowCount - 1 - partition) / partitionCount) + 1;
+
+    private static long ExpectedExternalJoinMatches(long leftRows, long rightRows, long overlapOffset)
+        => Math.Max(0, Math.Min(leftRows - 1, overlapOffset + rightRows - 1) - overlapOffset + 1);
+
+    private static long ExpectedExternalJoinChecksum(long leftRows, long rightRows, long overlapOffset)
+    {
+        var matches = ExpectedExternalJoinMatches(leftRows, rightRows, overlapOffset);
+        if (matches == 0) return 0;
+        var firstLeftId = overlapOffset + 1;
+        var lastLeftId = overlapOffset + matches;
+        var firstRightId = 1L;
+        var lastRightId = matches;
+        return checked(SumRange(firstLeftId, lastLeftId) + SumRange(firstRightId, lastRightId));
     }
 
     private static long ReadPositiveLong(string name, long fallback)

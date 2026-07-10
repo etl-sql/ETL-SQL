@@ -25,7 +25,8 @@ public class ParallelForStatementHandler : IStatementHandler
             values.Add(i);
 
         int limit = stmt.ConcurrencyLimit > 0 ? stmt.ConcurrencyLimit : values.Count;
-        int safetyLimit = Math.Min(limit, context.MaxParallelDegree);
+        int adaptiveLimit = Math.Max(1, context.EffectiveMaxParallelDegree);
+        int safetyLimit = Math.Min(limit, adaptiveLimit);
 
         // Use a concurrent bag to collect results in the order tasks finish,
         // then sort by index before merging so the merge order is deterministic.

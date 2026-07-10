@@ -90,7 +90,7 @@ internal sealed class ExternalDistinctEngine
         if (sampledRows == 0) return;
 
         var budget = MemoryGovernor.Ceiling(_context);
-        if (budget <= 0) budget = Math.Max(1L, (long)_context.OperatorMemoryGrantMB * 1024 * 1024);
+        if (budget <= 0) budget = Math.Max(1L, (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024);
         var hotFraction = frequencies.Values.Max() / (double)sampledRows;
         var plan = HashPartitionSizing.Calculate(
             inputBytes,

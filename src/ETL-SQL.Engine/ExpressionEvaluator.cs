@@ -844,7 +844,7 @@ public class ExpressionEvaluator
             spillBatch ??= new DataTable { Schema = spillSchema };
             await spillBatch.AddRowAsync(new Row(spillSchema, new[] { value }));
 
-            if (spillBatch.Rows.Count >= _context.BatchSize)
+            if (spillBatch.Rows.Count >= _context.EffectiveBatchSize)
             {
                 await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { spillBatch }), append: true);
                 spillBatch = null;

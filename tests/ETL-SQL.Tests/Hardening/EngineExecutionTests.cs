@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Planning;
@@ -166,6 +167,10 @@ namespace ETL_SQL.Tests.Hardening
             var rows = batches.SelectMany(b => b.Rows).ToList();
             Assert.Equal(3, rows.Count);
             Assert.Equal(new[] { 0, 1, 2 }, rows.Select(r => Convert.ToInt32(r["Id"])).ToArray());
+            var decision = Assert.Single(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "RowPipeline" && d.OperatorId == "select.join-projection");
+            Assert.Equal(PlanDecisionOutcome.Accepted, decision.Outcome);
+            Assert.Equal("streaming", decision.Attributes["executionMode"]);
         }
 
         [Fact]
@@ -185,6 +190,10 @@ namespace ETL_SQL.Tests.Hardening
                 new List<string> { "Id" }).ToListAsync();
 
             Assert.Equal(50, result.Count);
+            var decision = Assert.Single(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "ExternalJoin" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.Equal("external-join", decision.OperatorId);
+            Assert.Equal(PlanDecisionReasonCodes.SemanticGuard, decision.ReasonCode);
         }
 
         [Fact]
@@ -235,6 +244,9 @@ namespace ETL_SQL.Tests.Hardening
             var result = await engine.SortExternal(rows, orderList);
 
             Assert.Equal(100, result.Count);
+            var decision = Assert.Single(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "ExternalSort" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.Equal("external-sort", decision.OperatorId);
 
             // Verify
             for (int i = 1; i < result.Count; i++)
@@ -296,6 +308,10 @@ namespace ETL_SQL.Tests.Hardening
                 Assert.True(
                     e.Telemetry.PartitionsCount > e.ExternalHashPartitions * 2,
                     "Expected byte-governed recursive partitioning beyond the initial left/right pass.");
+                Assert.Contains(e.Telemetry.PlanDecisions,
+                    d => d.CandidatePath == "ExternalJoin"
+                        && d.Outcome == PlanDecisionOutcome.Degraded
+                        && d.ReasonCode == PlanDecisionReasonCodes.MemoryAdmissionRejected);
             }
             finally
             {
@@ -379,6 +395,9 @@ namespace ETL_SQL.Tests.Hardening
             Assert.Equal(10, result.Count);
             Assert.Equal(10, externalWindowEngine.ColumnarWindowScanRows);
             Assert.Contains(logger.Messages, m => m.Message.Contains("PARTITION-REPLAY-SPILL", StringComparison.OrdinalIgnoreCase));
+            var decision = Assert.Single(e.Telemetry.PlanDecisions,
+                d => d.CandidatePath == "ExternalWindow" && d.Outcome == PlanDecisionOutcome.Accepted);
+            Assert.Equal("external-window", decision.OperatorId);
 
             var sumKey = $"WINDOW_{sum.ToSql().ToUpperInvariant()}";
             var countKey = $"WINDOW_{count.ToSql().ToUpperInvariant()}";

@@ -88,7 +88,7 @@ internal sealed class ColumnarJoinSelectPlan
             return null;
 
         var estimatedBytes = checked((leftEstimate.EstimatedRowCount + rightEstimate.EstimatedRowCount) * 64L);
-        var operatorBudget = (long)context.OperatorMemoryGrantMB * 1024 * 1024;
+        var operatorBudget = (long)context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         if (operatorBudget > 0 && estimatedBytes > operatorBudget) return null;
         if (rightEstimate.EstimatedRowCount == 0 && _kind == ColumnarJoinKind.LeftOuter
             && _projections.Any(projection => projection.Side == JoinSide.Right))
@@ -99,7 +99,7 @@ internal sealed class ColumnarJoinSelectPlan
         long retainedBytes = 0;
         try
         {
-            await foreach (var batch in right.ReadColumnBatches(context.BatchSize, context.CancellationToken))
+            await foreach (var batch in right.ReadColumnBatches(context.EffectiveBatchSize, context.CancellationToken))
             {
                 var prospective = checked(retainedBytes + batch.Columns.Sum(column => column.AllocatedBytes));
                 if (lease.RegisterAndCheckSpill(prospective))
@@ -198,7 +198,7 @@ internal sealed class ColumnarJoinSelectPlan
         public async IAsyncEnumerable<DataTable> ExecuteAsync()
         {
             var yielded = false;
-            await foreach (var leftBatch in _left.ReadColumnBatches(_context.BatchSize, _context.CancellationToken))
+            await foreach (var leftBatch in _left.ReadColumnBatches(_context.EffectiveBatchSize, _context.CancellationToken))
                 using (leftBatch)
                 {
                     var matched = new bool[leftBatch.RowCount];

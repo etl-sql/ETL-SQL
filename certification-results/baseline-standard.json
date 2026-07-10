@@ -15,7 +15,12 @@
       "checksum": 125000250000,
       "peakManagedMemoryMB": 406.1,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "ExternalAggregate_1000000_10grps",
@@ -28,7 +33,12 @@
       "checksum": 49999600000,
       "peakManagedMemoryMB": 391.9,
       "memoryBoundMB": 12000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "ExternalJoin_500000_equality",
@@ -41,7 +51,12 @@
       "checksum": 250000500000,
       "peakManagedMemoryMB": 760.5,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "TempTableSpill_500000_SELECT_INTO",
@@ -54,7 +69,12 @@
       "checksum": 500000,
       "peakManagedMemoryMB": 835,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "StreamingSelect_1000000_cap50000",
@@ -67,7 +87,12 @@
       "checksum": 50000,
       "peakManagedMemoryMB": 978.4,
       "memoryBoundMB": 12000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 8,
+        "failPct": 15,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "WindowFunction_ROW_NUMBER_500000",
@@ -80,7 +105,12 @@
       "checksum": 125000250000,
       "peakManagedMemoryMB": 1121.7,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "CsvIngest_500000",
@@ -93,7 +123,12 @@
       "checksum": 125000250000,
       "peakManagedMemoryMB": 933.1,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "ParquetRoundTrip_500000",
@@ -106,7 +141,12 @@
       "checksum": 125000250000,
       "peakManagedMemoryMB": 998,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "ReportDatasetSnapshotReload_500000",
@@ -119,7 +159,12 @@
       "checksum": 125000250000,
       "peakManagedMemoryMB": 1362.9,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 20,
+        "failPct": 35,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "CubeGroupingSets_500000_10x5",
@@ -132,7 +177,12 @@
       "checksum": 500001000000,
       "peakManagedMemoryMB": 1167.5,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "ScalarSubqueryCache_500000_1000keys",
@@ -145,7 +195,12 @@
       "checksum": 500500000,
       "peakManagedMemoryMB": 1526.1,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 12,
+        "failPct": 25,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "SpillCleanupSuccess_500000",
@@ -158,7 +213,12 @@
       "checksum": 49,
       "peakManagedMemoryMB": 1268.7,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 3
+      }
     },
     {
       "scenario": "SpillCleanupFailure_500000",
@@ -171,7 +231,12 @@
       "checksum": 1,
       "peakManagedMemoryMB": 1269.8,
       "memoryBoundMB": 6000,
-      "passed": true
+      "passed": true,
+      "bands": {
+        "warnPct": 10,
+        "failPct": 20,
+        "minSamples": 3
+      }
     }
   ]
 }

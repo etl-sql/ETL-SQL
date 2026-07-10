@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "benchmarkClass": "ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks",
+  "rowCounts": [1000, 50000],
+  "commonCriteria": {
+    "correctnessOracle": "Native checksum must exactly match the row-reference checksum for every benchmarked shape and row count.",
+    "smallWorkloadMaxSlowdownRatio": 1.10,
+    "mediumWorkloadMaxSlowdownRatio": 1.00,
+    "mediumWorkloadMaxAllocationRatio": 1.00,
+    "minimumSamples": 5,
+    "requiredExporter": "json",
+    "admissionRule": "A native path may be enabled by default only when every listed shape passes the correctness oracle and meets the slowdown/allocation thresholds at both row counts on the target tier."
+  },
+  "candidates": [
+    {
+      "candidatePath": "ColumnarProjection",
+      "rowReferenceBenchmark": "RowReference_FilterProject",
+      "nativeBenchmark": "NativeColumnar_FilterProject",
+      "semanticEnvelope": "Typed numeric filter plus projection over replayable columnar input.",
+      "fallbackReasonForExcludedShapes": "UnsupportedExpression"
+    },
+    {
+      "candidatePath": "ColumnarGroupedAggregate",
+      "rowReferenceBenchmark": "RowReference_GroupAggregate",
+      "nativeBenchmark": "NativeColumnar_GroupAggregate",
+      "semanticEnvelope": "Single typed group key with COUNT/SUM-style numeric aggregate state.",
+      "fallbackReasonForExcludedShapes": "UnsupportedExpression"
+    },
+    {
+      "candidatePath": "ColumnarSort",
+      "rowReferenceBenchmark": "RowReference_Sort",
+      "nativeBenchmark": "NativeColumnar_Sort",
+      "semanticEnvelope": "Typed sortable key over replayable columnar input with stable row ordinal tie-break.",
+      "fallbackReasonForExcludedShapes": "UnsupportedType"
+    },
+    {
+      "candidatePath": "ColumnarJoin",
+      "rowReferenceBenchmark": "RowReference_InnerJoin",
+      "nativeBenchmark": "NativeColumnar_InnerJoin",
+      "semanticEnvelope": "Inner equi-join on a typed non-null-compatible key with SQL null semantics.",
+      "fallbackReasonForExcludedShapes": "SemanticGuard"
+    }
+  ],
+  "resultStatus": {
+    "checkedInResults": true,
+    "latestCaptureDate": "2026-07-10",
+    "latestResultPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report-full-compressed.json",
+    "latestSummaryPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report-github.md",
+    "latestCsvPath": "certification-results/columnar-crossover-benchmarks/latest/results/ETL_SQL.Benchmarks.ColumnarCrossoverBenchmarks-report.csv",
+    "latestAdmissionPassed": false,
+    "notes": "The 2026-07-10 benchmark capture shows the current native columnar candidates are slower than the row-reference paths at both checked row counts. No new native path is approved by this capture."
+  }
+}

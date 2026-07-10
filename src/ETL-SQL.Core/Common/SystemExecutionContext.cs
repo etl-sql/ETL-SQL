@@ -5,9 +5,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
@@ -134,6 +136,9 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public IServiceProvider ServiceProvider => null!;
     public List<ExecutionMetrics> ProfileMetrics { get; } = new();
     public ExecutionTree ExecutionTree => new ExecutionTree();
+    public IReadOnlyList<PlanDecision> PlanDecisions { get; } = Array.Empty<PlanDecision>();
+    public int MaxPlanDecisions { get; set; } = 0;
+    public void RecordPlanDecision(PlanDecision decision) { }
     public void Clear() { }
     /// <summary>No-op for stateless context.</summary>
     void IReportContext.Clear() { }
@@ -162,6 +167,9 @@ public class SystemExecutionContext : IExecutionContext, IVariableContext, IRepo
     public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
     public long TempTableSpillThresholdRows { get; set; } = LanguageMetadata.DefaultTempTableSpillThresholdRows;
     public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
+    public bool AdaptiveExecutionEnabled { get; set; }
+    public AdaptiveAdvisor? AdaptiveAdvisor { get; set; }
+    public AdaptiveRuntimeMetrics AdaptiveMetrics { get; } = new();
     public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
     public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
     public string? CurrentScriptPath { get; set; }

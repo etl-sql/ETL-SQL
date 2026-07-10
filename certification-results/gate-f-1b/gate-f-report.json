@@ -46,7 +46,12 @@
     "cpuUtilizationPercent": 4.6,
     "memoryBoundMB": 16384,
     "minimumRowsPerSecond": 50000,
-    "passed": true
+    "passed": true,
+    "bands": {
+      "warnPct": 8,
+      "failPct": 15,
+      "minSamples": 1
+    }
   },
   "tempTableRoundTrip": {
     "scenario": "TempTableSpill_1000000000_SELECT_INTO",
@@ -79,6 +84,11 @@
     "correctnessPassed": true,
     "memoryPassed": true,
     "throughputPassed": true,
-    "passed": true
+    "passed": true,
+    "bands": {
+      "warnPct": 10,
+      "failPct": 20,
+      "minSamples": 1
+    }
   }
 }

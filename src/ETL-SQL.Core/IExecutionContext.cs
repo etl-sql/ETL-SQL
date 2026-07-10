@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Adaptive;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
 
@@ -158,6 +160,9 @@ public interface ITelemetryContext
     long LockWaitMs { get; set; }
     List<ExecutionMetrics> ProfileMetrics { get; }
     Common.ExecutionTree ExecutionTree { get; }
+    IReadOnlyList<PlanDecision> PlanDecisions { get; }
+    int MaxPlanDecisions { get; set; }
+    void RecordPlanDecision(PlanDecision decision);
     void Clear();
 }
 
@@ -404,6 +409,33 @@ public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
     /// <summary>The ID of the currently executing node in this task/context.</summary>
     Guid? CurrentNodeId { get; set; }
     Dictionary<string, string> PendingJobStateUpdates { get; }
+
+    /// <summary>Whether adaptive execution advice may affect this session's effective setpoints.</summary>
+    bool AdaptiveExecutionEnabled { get => false; set { } }
+    /// <summary>Per-job adaptive advisor. Null means static configured setpoints are in use.</summary>
+    AdaptiveAdvisor? AdaptiveAdvisor => null;
+    /// <summary>Live execution metrics sampled by the adaptive controller.</summary>
+    AdaptiveRuntimeMetrics AdaptiveMetrics => AdaptiveRuntimeMetricsShared.Empty;
+    /// <summary>Effective batch size, including adaptive advice when enabled.</summary>
+    int EffectiveBatchSize => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
+        ? AdaptiveAdvisor.Snapshot().BatchRows
+        : BatchSize;
+    /// <summary>Effective PARALLEL worker ceiling, including adaptive advice when enabled.</summary>
+    int EffectiveMaxParallelDegree => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
+        ? AdaptiveAdvisor.Snapshot().WorkerDegree
+        : MaxParallelDegree;
+    /// <summary>Effective spill pipeline depth, including adaptive advice when enabled.</summary>
+    int EffectivePipelineDepth => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
+        ? AdaptiveAdvisor.Snapshot().PipelineDepth
+        : 1;
+    /// <summary>Effective spill write concurrency, including adaptive advice when enabled.</summary>
+    int EffectiveSpillWriteConcurrency => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
+        ? AdaptiveAdvisor.Snapshot().SpillWriteConcurrency
+        : 1;
+    /// <summary>Effective operator memory grant request, including adaptive advice when enabled.</summary>
+    int EffectiveOperatorMemoryGrantMB => AdaptiveExecutionEnabled && AdaptiveAdvisor != null
+        ? AdaptiveAdvisor.Snapshot().OperatorGrantRequestMB
+        : OperatorMemoryGrantMB;
 
     /// <summary>Standardizer for file/path security and runaway protection.</summary>
     ETL_SQL.Services.SecurityService SecurityService { get; }

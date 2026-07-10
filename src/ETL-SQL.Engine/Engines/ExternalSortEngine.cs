@@ -8,6 +8,8 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Planning;
+using ETL_SQL.Engine.Planning;
 using ETL_SQL.Engine.Spill;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -73,6 +75,12 @@ public class ExternalSortEngine
         IAsyncEnumerable<Row> inputStream,
         List<OrderByClause> orderBy)
     {
+        PlanDecisionRecorder.Record(_context, "external-sort", "ExternalSort",
+            PlanDecisionOutcome.Accepted, PlanDecisionReasonCodes.SemanticGuard,
+            "External sort path accepted.",
+            ("chunkSizeRows", ChunkSize.ToString()),
+            ("memoryCeilingBytes", MemoryGovernor.Ceiling(_context).ToString()));
+
         using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
         var chunkPaths = new List<string>();
 

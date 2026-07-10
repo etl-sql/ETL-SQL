@@ -138,6 +138,10 @@ public class SelectExecutionEngine
 
             if (canStreamJoinToProjection)
             {
+                RecordRowPipelineDecision("select.join-projection", PlanDecisionOutcome.Accepted,
+                    "Join output can stream directly to projection.",
+                    ("executionMode", "streaming"),
+                    ("stage", "join-projection"));
                 IAsyncEnumerable<Row> joinedStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
                 if (!whereApplied && stmt.WhereClause != null)
                 {
@@ -156,6 +160,12 @@ public class SelectExecutionEngine
                 yield break;
             }
 
+            RecordRowPipelineDecision("select.join-blocking", PlanDecisionOutcome.Degraded,
+                "Join output requires a blocking downstream stage.",
+                PlanDecisionReasonCodes.SemanticGuard,
+                ("executionMode", "blocking"),
+                ("stage", hasGroupBy || hasAggInColumns ? "join-aggregate" : hasWindowInColumns ? "join-window" : "join-materialize"),
+                ("fallbackDestination", "blocking-row-pipeline"));
             IAsyncEnumerable<Row> blockingJoinStream = _joinEngine.ApplyJoinsStreaming(joinInput, stmt.Joins, stmt);
             if (!whereApplied && stmt.WhereClause != null)
             {
@@ -170,7 +180,7 @@ public class SelectExecutionEngine
                 bool joinEnumeratorHandedOff = false;
                 try
                 {
-                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                     while (bufferedJoinRows.Count < _context.JoinSpillThreshold && await joinEnumerator.MoveNextAsync())
                     {
                         bufferedJoinRows.Add(joinEnumerator.Current);
@@ -185,6 +195,15 @@ public class SelectExecutionEngine
                         || _memLease.RegisterAndCheckSpill(bufferedBytes);
                     if (needsSpill)
                     {
+                        RecordRowPipelineDecision("select.join-aggregate", PlanDecisionOutcome.Degraded,
+                            "Join aggregate exceeded the in-memory admission probe; routing to external aggregate.",
+                            ("executionMode", "external-streaming"),
+                            ("stage", "join-aggregate"),
+                            ("bufferedRows", bufferedJoinRows.Count.ToString()),
+                            ("bufferedBytes", bufferedBytes.ToString()),
+                            ("grantBytes", grantBytes.ToString()),
+                            ("rowThreshold", _context.JoinSpillThreshold.ToString()),
+                            ("fallbackDestination", "ExternalAggregate"));
                         var externalAggregate = new ExternalAggregateEngine(_context, _logger);
                         var aggregateInput = PrependRows(bufferedJoinRows, ContinueStreamAndDispose(joinEnumerator));
                         joinEnumeratorHandedOff = true;
@@ -212,7 +231,7 @@ public class SelectExecutionEngine
                 bool joinEnumeratorHandedOff = false;
                 try
                 {
-                    long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                    long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                     while (bufferedJoinRows.Count < _context.WindowSpillThreshold && await joinEnumerator.MoveNextAsync())
                     {
                         bufferedJoinRows.Add(joinEnumerator.Current);
@@ -227,6 +246,15 @@ public class SelectExecutionEngine
                         || _memLease.RegisterAndCheckSpill(bufferedBytes);
                     if (needsSpill)
                     {
+                        RecordRowPipelineDecision("select.join-window", PlanDecisionOutcome.Degraded,
+                            "Join window input exceeded the in-memory admission probe; routing to external window.",
+                            ("executionMode", "external-streaming"),
+                            ("stage", "join-window"),
+                            ("bufferedRows", bufferedJoinRows.Count.ToString()),
+                            ("bufferedBytes", bufferedBytes.ToString()),
+                            ("grantBytes", grantBytes.ToString()),
+                            ("rowThreshold", _context.WindowSpillThreshold.ToString()),
+                            ("fallbackDestination", "ExternalWindow"));
                         var windowInput = PrependRows(bufferedJoinRows, ContinueStreamAndDispose(joinEnumerator));
                         joinEnumeratorHandedOff = true;
                         externalEngineStream = _externalWindowEngine.ApplyWindowFunctionsExternal(windowInput, stmt);
@@ -267,7 +295,7 @@ public class SelectExecutionEngine
             try
             {
                 int count = 0;
-                long aggGrantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+                long aggGrantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
                 while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
                 {
                     bufferedForSpill.Add(enumerator.Current);
@@ -284,7 +312,16 @@ public class SelectExecutionEngine
                     || _memLease.RegisterAndCheckSpill(aggBufferedBytes);
                 if (aggNeedsSpill)
                 {
-                    _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.OperatorMemoryGrantMB);
+                    RecordRowPipelineDecision("select.aggregate-stream", PlanDecisionOutcome.Degraded,
+                        "Streaming aggregate admission probe exceeded the in-memory budget; routing to external aggregate.",
+                        ("executionMode", "external-streaming"),
+                        ("stage", "aggregate"),
+                        ("bufferedRows", count.ToString()),
+                        ("bufferedBytes", aggBufferedBytes.ToString()),
+                        ("grantBytes", aggGrantBytes.ToString()),
+                        ("rowThreshold", _context.JoinSpillThreshold.ToString()),
+                        ("fallbackDestination", "ExternalAggregate"));
+                    _logger.Info("[SELECT] Aggregate threshold reached ({Count} rows, grant={GrantMB} MB). Switching to ExternalAggregateEngine.", count, _context.EffectiveOperatorMemoryGrantMB);
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
                     var combinedStream = PrependRows(bufferedForSpill, ContinueStreamAndDispose(enumerator));
                     enumeratorHandedOff = true;
@@ -314,6 +351,10 @@ public class SelectExecutionEngine
 
             if (canTopN)
             {
+                RecordRowPipelineDecision("select.topn", PlanDecisionOutcome.Accepted,
+                    "ORDER BY with LIMIT/TOP can use bounded Top-N heap.",
+                    ("executionMode", "streaming"),
+                    ("stage", "top-n"));
                 int limit = Convert.ToInt32(await _context.EvaluateValue(
                     stmt.LimitCount ?? stmt.TopCount!, new Row()));
                 int topOffset = stmt.Offset != null
@@ -349,12 +390,25 @@ public class SelectExecutionEngine
                             sortPrefix.Add(sortEnumerator.Current);
                         if (sortPrefix.Count >= _context.ExternalSortChunkSize)
                         {
+                            RecordRowPipelineDecision("select.sort-probe", PlanDecisionOutcome.Degraded,
+                                "ORDER BY exceeded the in-memory prefix probe; deferring to external sort.",
+                                ("executionMode", "external-streaming"),
+                                ("stage", "sort"),
+                                ("bufferedRows", sortPrefix.Count.ToString()),
+                                ("rowThreshold", _context.ExternalSortChunkSize.ToString()),
+                                ("fallbackDestination", "ExternalSort"));
                             externalEngineStream = PrependRows(sortPrefix, ContinueStreamAndDispose(sortEnumerator));
                             sortEnumeratorHandedOff = true;
                             allRows = [];
                         }
                         else
                         {
+                            RecordRowPipelineDecision("select.sort-probe", PlanDecisionOutcome.Accepted,
+                                "ORDER BY input fit inside the in-memory prefix probe.",
+                                ("executionMode", "blocking"),
+                                ("stage", "sort"),
+                                ("bufferedRows", sortPrefix.Count.ToString()),
+                                ("rowThreshold", _context.ExternalSortChunkSize.ToString()));
                             allRows = sortPrefix;
                         }
                     }
@@ -400,12 +454,25 @@ public class SelectExecutionEngine
                                 winPrefix.Add(winEnumerator.Current);
                             if (winPrefix.Count >= winCap)
                             {
+                                RecordRowPipelineDecision("select.window-probe", PlanDecisionOutcome.Degraded,
+                                    "Window input exceeded the in-memory prefix probe; routing to external window.",
+                                    ("executionMode", "external-streaming"),
+                                    ("stage", "window"),
+                                    ("bufferedRows", winPrefix.Count.ToString()),
+                                    ("rowThreshold", winCap.ToString()),
+                                    ("fallbackDestination", "ExternalWindow"));
                                 externalEngineStream = PrependRows(winPrefix, ContinueStreamAndDispose(winEnumerator));
                                 winHandedOff = true;
                                 allRows = [];
                             }
                             else
                             {
+                                RecordRowPipelineDecision("select.window-probe", PlanDecisionOutcome.Accepted,
+                                    "Window input fit inside the in-memory prefix probe.",
+                                    ("executionMode", "blocking"),
+                                    ("stage", "window"),
+                                    ("bufferedRows", winPrefix.Count.ToString()),
+                                    ("rowThreshold", winCap.ToString()));
                                 allRows = winPrefix;
                             }
                         }
@@ -643,7 +710,7 @@ public class SelectExecutionEngine
         await foreach (var row in projectedRows)
         {
             await batch.AddRowAsync(row);
-            if (batch.Rows.Count >= _context.BatchSize)
+            if (batch.Rows.Count >= _context.EffectiveBatchSize)
             {
                 yield return batch;
                 yielded = true;
@@ -1019,7 +1086,7 @@ public class SelectExecutionEngine
     private bool ShouldSpill(IReadOnlyList<Row> rows)
     {
         if (rows.Count > _context.JoinSpillThreshold) return true;
-        long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+        long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
         if (bytes > grantBytes) return true;
         // Global pressure: spill if holding this buffer would breach the process-wide pool.
@@ -1029,10 +1096,32 @@ public class SelectExecutionEngine
     private bool ShouldSpillWindow(IReadOnlyList<Row> rows)
     {
         if (rows.Count >= _context.WindowSpillThreshold) return true;
-        long grantBytes = (long)_context.OperatorMemoryGrantMB * 1024 * 1024;
+        long grantBytes = (long)_context.EffectiveOperatorMemoryGrantMB * 1024 * 1024;
         long bytes = RowWidthEstimator.EstimateTotalBytes(rows);
         if (bytes > grantBytes) return true;
         return _memLease.RegisterAndCheckSpill(bytes);
+    }
+
+    private void RecordRowPipelineDecision(
+        string operatorId,
+        PlanDecisionOutcome outcome,
+        string message,
+        params (string Key, string? Value)[] attributes)
+        => RecordRowPipelineDecision(operatorId, outcome, message, null, attributes);
+
+    private void RecordRowPipelineDecision(
+        string operatorId,
+        PlanDecisionOutcome outcome,
+        string message,
+        string? reasonCode,
+        params (string Key, string? Value)[] attributes)
+    {
+        PlanDecisionRecorder.Record(_context, operatorId, "RowPipeline", outcome,
+            reasonCode ?? (outcome == PlanDecisionOutcome.Accepted
+                ? PlanDecisionReasonCodes.SemanticGuard
+                : PlanDecisionReasonCodes.MemoryAdmissionRejected),
+            message,
+            attributes);
     }
 
     private async Task<List<Row>> ApplyLimits(List<Row> rows, SelectStatement stmt,

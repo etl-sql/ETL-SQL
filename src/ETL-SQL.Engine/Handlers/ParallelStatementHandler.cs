@@ -19,7 +19,8 @@ public class ParallelStatementHandler : IStatementHandler
 
         // Phase 1: Determine concurrency limit (default to all if 0 or negative, capped by global MaxParallelDegree)
         int limit = stmt.ConcurrencyLimit > 0 ? stmt.ConcurrencyLimit : stmt.Body.Statements.Count;
-        int safetyLimit = Math.Min(limit, context.MaxParallelDegree);
+        int adaptiveLimit = Math.Max(1, context.EffectiveMaxParallelDegree);
+        int safetyLimit = Math.Min(limit, adaptiveLimit);
 
         var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
 
