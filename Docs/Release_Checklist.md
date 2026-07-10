@@ -81,8 +81,15 @@ The gate covers (in order): asset-drift check, **secret scan**, `dotnet restore`
 self-test, NuGet dependency audit (no known-vulnerable/deprecated packages), **SBOM generation**,
 `dotnet build` (Release), `dotnet format --verify-no-changes` (auto-fixes drift), smoke lane,
 fast lane, **N→N+1 upgrade-path drill**, sample scripts, then optionally SLT, VS Code npm
-(ci/audit/compile/**vsce package**/unit), scale certification (smoke + standard) with baseline
-regression checks, Docker integration, and installer builds.
+HA soak contract gate, then optionally SLT, VS Code npm (ci/audit/compile/**vsce package**/unit),
+scale certification (smoke + standard) with baseline regression checks, Docker integration, and
+installer builds.
+
+The HA soak contract gate is intentionally short and non-destructive. It validates that the
+PostgreSQL HA topology, sustained workload materialization, metrics snapshot, diagnostics bundle,
+operator runbook, and large-job/fault plan contracts still generate usable artifacts. The long
+operator-run HA soak evidence remains manual and should be attached only when publishing HA capacity
+or recovery claims.
 
 The PowerShell and Bash gates run the **same phases in the same order**; a few phases in the Bash
 gate bridge to the canonical PowerShell helpers via `pwsh`. Deep static security analysis (CodeQL)

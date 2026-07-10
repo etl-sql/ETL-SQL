@@ -239,8 +239,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
   generated run README both point to it. `scripts/New-HaSoakRunbook.ps1` now emits a non-secret
   operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
-  long-running scripts can be run manually and diagnosed afterward from captured outputs. Checked-in
-  measured capacity reports remain open.)*
+  long-running scripts can be run manually and diagnosed afterward from captured outputs.
+  `scripts/Test-PreRelease.ps1` and `scripts/test-pre-release.sh` now include the non-destructive
+  HA soak contract gate by default, and the release/testing docs list it as an always-on validation
+  phase. Checked-in measured capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
   *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the

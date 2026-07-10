@@ -164,24 +164,32 @@ The script writes timestamped JSON/Markdown reports and phase logs under `releas
 | # | Phase | Enabled by |
 | ---: | :--- | :--- |
 | 1 | Asset drift check | Always |
-| 2 | Dotnet restore | Always |
-| 3 | NuGet dependency audit | Always |
-| 4 | Dotnet build | Always |
-| 5 | Smoke lane | Always |
-| 6 | Fast lane | Always |
-| 7 | Sample scripts | Always |
-| 8 | SLT lane | `-IncludeSlt` |
-| 9 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
-| 10 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
-| 11 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
-| 12 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
-| 13 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
-| 14 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
-| 15 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
-| 16 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
-| 17 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
-| 18 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
-| 19 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
+| 2 | Secret scan | Always |
+| 3 | Dotnet restore | Always |
+| 4 | Dependency-audit self-test | Always |
+| 5 | NuGet dependency audit | Always |
+| 6 | SBOM generation | Always |
+| 7 | Dotnet build | Always |
+| 8 | Format verify | Always |
+| 9 | Smoke lane | Always |
+| 10 | Fast lane | Always |
+| 11 | N->N+1 upgrade-path drill | Always |
+| 12 | Sample scripts | Always |
+| 13 | HA soak contract gate | Always |
+| 14 | SLT lane | `-IncludeSlt` |
+| 15 | VS Code npm ci | Default; skipped by `-SkipNode` or `-Quick` |
+| 16 | VS Code npm audit | Default; skipped by `-SkipNode` or `-Quick` |
+| 17 | VS Code compile | Default; skipped by `-SkipNode` or `-Quick` |
+| 18 | VS Code VSIX package | Default; skipped by `-SkipNode` or `-Quick` |
+| 19 | VS Code unit tests | Default; skipped by `-SkipNode` or `-Quick` |
+| 20 | Scale certification smoke | Default; skipped by `-SkipScale` or `-Quick` |
+| 21 | Cert baseline regression check (smoke) | Default; skipped by `-SkipScale` or `-Quick` |
+| 22 | Docker integration lane | `-IncludeDockerIntegration`; disabled by `-Quick` |
+| 23 | Scale certification standard | `-IncludeStandardScale`; disabled by `-Quick` |
+| 24 | Cert baseline regression check (standard) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 25 | Spill allocation budget (10M) | `-IncludeStandardScale`; disabled by `-Quick` |
+| 26 | Release publish artifacts | `-BuildInstallers`; disabled by `-Quick` |
+| 27 | Windows MSI | `-BuildInstallers -Platforms win-x64`; disabled by `-Quick` |
 
 `fast` is the default local correctness lane. `full` runs the normal xUnit test projects and skips the benchmark executable and deployment-only SLT corpus so `dotnet test` output stays meaningful.
 
