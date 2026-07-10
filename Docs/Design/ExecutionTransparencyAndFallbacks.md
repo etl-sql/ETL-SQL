@@ -149,10 +149,11 @@ the correctness baseline and the recovery path for unsupported shapes.
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,
    streaming vs blocking, spill admission, and memory rejection.
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.
-   *(In progress: `SHOW PROFILE` includes plan-decision totals and grouped fallback summaries.
-   `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary columns after executing the
-   query. Gate F native-required evidence records plan-decision counts and fails validation on
-   unexpected fallback. Static `EXPLAIN` remains open.)*
+   *(In progress: static `EXPLAIN` includes `Plan Candidates` and `Plan Notes` for obvious
+   native-path candidates and runtime gates. `SHOW PROFILE` includes plan-decision totals and
+   grouped fallback summaries. `EXPLAIN ANALYZE` appends plan-decision totals and fallback summary
+   columns after executing the query. Gate F native-required evidence records plan-decision counts
+   and fails validation on unexpected fallback.)*
 5. **Slice E — ranking report.** Add a script or report artifact that summarizes fallback
    frequency/cost across representative workloads. *(In progress:
    `scripts/Summarize-PlanFallbacks.ps1` aggregates existing JSON evidence/profile fallback

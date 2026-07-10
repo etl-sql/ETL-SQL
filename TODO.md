@@ -176,7 +176,9 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   `EXPLAIN ANALYZE` now appends plan-decision totals and fallback summary columns to the analyzed
   plan output. Certification progress: the native-required Gate F columnar-core metric records
   plan-decision counts and fails on fallback, and `Test-GateFEvidence.ps1` fails current evidence
-  when native-required scenarios report fallback decisions.)*
+  when native-required scenarios report fallback decisions. Static `EXPLAIN` now includes
+  `Plan Candidates` and `Plan Notes` columns that identify obvious native-path candidates and the
+  runtime gates that decide acceptance.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
   *(Slice E progress: `scripts/Summarize-PlanFallbacks.ps1` aggregates fallback summaries from JSON

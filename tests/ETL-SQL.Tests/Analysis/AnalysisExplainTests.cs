@@ -62,7 +62,13 @@ namespace ETL_SQL.Tests.Analysis
             var plan = eval.LastResult;
             Assert.NotNull(plan);
             Assert.DoesNotContain("Actual Rows", plan.ColumnNames);
+            Assert.Contains("Plan Candidates", plan.ColumnNames);
+            Assert.Contains("Plan Notes", plan.ColumnNames);
             Assert.DoesNotContain("Plan Decision Summary", plan.ColumnNames);
+
+            var scanRow = Assert.Single(plan.Rows, row => row["Operation"]?.ToString() == "Scan");
+            Assert.Equal("ColumnarProjection", scanRow["Plan Candidates"]);
+            Assert.Contains("runtime source capability", scanRow["Plan Notes"]?.ToString());
         }
 
         [Fact]
