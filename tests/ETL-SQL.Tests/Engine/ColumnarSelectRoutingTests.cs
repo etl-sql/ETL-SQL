@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using Microsoft.Extensions.DependencyInjection;
@@ -315,6 +316,30 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal(new[] { "ResultId" }, results.Single().ColumnNames);
         Assert.Equal(new object?[] { 3m }, results.Single().Rows.Select(row => row["ResultId"]).ToArray());
         Assert.Equal(0, source.RowReadAttempts);
+        var decision = Assert.Single(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "ColumnarProjection");
+        Assert.Equal(PlanDecisionOutcome.Accepted, decision.Outcome);
+    }
+
+    [Fact]
+    public async Task UnsupportedColumnarProjectionEmitsFallbackDecision()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        await using var source = CreateSource(throwOnRowRead: false);
+        evaluator.Connections["col"] = source;
+        var statement = ParseSelect("SELECT UPPER(Name) AS UpperName FROM col;");
+        var handler = new SelectStatementHandler(NullLogger.Instance);
+
+        var results = await handler.EvaluateQuery(statement, evaluator).ToListAsync();
+
+        Assert.Equal(
+            new object?[] { "ONE", "NULL-ID", "THREE" },
+            results.SelectMany(batch => batch.Rows).Select(row => row["UpperName"]).ToArray());
+        Assert.Equal(0, source.RowReadAttempts);
+        var decision = Assert.Single(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "ColumnarProjection" && d.Outcome == PlanDecisionOutcome.Fallback);
+        Assert.Equal(PlanDecisionReasonCodes.UnsupportedExpression, decision.ReasonCode);
+        Assert.Equal("row-streaming", decision.Attributes["fallbackDestination"]);
     }
 
     [Fact]
@@ -433,6 +458,9 @@ public sealed class ColumnarSelectRoutingTests
         Assert.Equal((decimal)int.MaxValue, row["mx"]);
         Assert.Equal(1_073_741_824.5m, row["av"]);
         Assert.Equal(0, source.RowReadAttempts);
+        var decision = Assert.Single(evaluator.Telemetry.PlanDecisions,
+            d => d.CandidatePath == "ColumnarAggregate");
+        Assert.Equal(PlanDecisionOutcome.Accepted, decision.Outcome);
     }
 
     [Fact]

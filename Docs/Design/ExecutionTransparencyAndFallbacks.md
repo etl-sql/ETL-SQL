@@ -142,7 +142,10 @@ the correctness baseline and the recovery path for unsupported shapes.
    `PlanDecisionReasonCodes`, bounded sanitized storage on `ITelemetryContext`, and
    `PlanDecisionTelemetryTests`.)*
 2. **Slice B — columnar planner instrumentation.** Instrument aggregate, join, sort, and projection
-   native planners with accepted/rejected decisions.
+   native planners with accepted/rejected decisions. *(In progress: `SelectStatementHandler`
+   records accepted/fallback decisions for columnar join, sort, grouped aggregate, global
+   aggregate, projection/filter, and columnar `SELECT INTO` routes. Planner-specific rejection
+   details still need richer result objects where candidate open currently returns only null.)*
 3. **Slice C — pushdown and external engine instrumentation.** Emit decisions for SQL pushdown,
    streaming vs blocking, spill admission, and memory rejection.
 4. **Slice D — surfaces.** Extend `EXPLAIN`, `EXPLAIN ANALYZE`, profile metrics, and cert reports.

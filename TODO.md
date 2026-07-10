@@ -167,7 +167,10 @@ Design: [ExecutionTransparencyAndFallbacks.md](Docs/Design/ExecutionTransparency
   unsupported expression, type/coercion, collation, memory-admission, or semantic constraint.
   *(Slice A progress: added the immutable `PlanDecision` contract, stable reason-code taxonomy,
   bounded sanitized storage on `ITelemetryContext`, clear/cap behavior, and focused tests. Planner
-  instrumentation for native columnar rejection/acceptance points remains next.)*
+  instrumentation for native columnar rejection/acceptance points remains next. Slice B progress:
+  `SelectStatementHandler` now records accepted/fallback decisions for native columnar join, sort,
+  grouped aggregate, global aggregate, projection/filter, and columnar `SELECT INTO` routes, with
+  focused routing tests covering accepted aggregate/projection paths and expression fallback.)*
 - [ ] Rank fallback frequency and cost from representative workloads, then add native paths only where
   measurements justify them; retain the row engine as the correctness fallback.
 - [ ] Add differential correctness and crossover benchmarks for every new native path so small and
