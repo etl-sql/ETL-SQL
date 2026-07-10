@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    Materializes a Phase 6 sustained-load workload config from a generated topology run.
+    Materializes a PostgreSQL HA sustained-load workload config from a generated topology run.
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$TopologyRunRoot,
 
-    [string]$Template = 'capacity-results/workloads/phase6-postgres-ha-sustained.workload.json',
+    [string]$Template = 'capacity-results/workloads/postgres-ha-sustained.workload.json',
     [string]$OutputPath = '',
     [string]$AdminPassword = 'CHANGE_ME',
     [switch]$Force
@@ -39,13 +39,13 @@ function Read-EnvFile {
 }
 
 $runRoot = Resolve-Path -LiteralPath $TopologyRunRoot
-$envFile = Join-Path $runRoot.Path 'phase6.env'
+$envFile = Join-Path $runRoot.Path 'postgres-ha-soak.env'
 $metadataFile = Join-Path $runRoot.Path 'topology-metadata.json'
 if (-not (Test-Path -LiteralPath $envFile -PathType Leaf)) {
-    throw "Phase 6 env file not found: $envFile"
+    throw "PostgreSQL HA soak env file not found: $envFile"
 }
 if (-not (Test-Path -LiteralPath $metadataFile -PathType Leaf)) {
-    throw "Phase 6 topology metadata not found: $metadataFile"
+    throw "PostgreSQL HA soak topology metadata not found: $metadataFile"
 }
 
 $templatePath = Resolve-RepoPath $Template
@@ -54,7 +54,7 @@ if (-not (Test-Path -LiteralPath $templatePath -PathType Leaf)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $runRoot.Path 'phase6-sustained.workload.local.json'
+    $OutputPath = Join-Path $runRoot.Path 'postgres-ha-sustained.workload.local.json'
 }
 if ((Test-Path -LiteralPath $OutputPath) -and -not $Force) {
     throw "Output workload already exists: $OutputPath. Use -Force to replace it."
@@ -73,7 +73,7 @@ foreach ($required in @('PORT_PORTAL', 'PORT_ORCH', 'ORCH_API_KEY')) {
 $portalBaseUrl = "http://localhost:$($env['PORT_PORTAL'])"
 $orchestratorBaseUrl = "http://localhost:$($env['PORT_ORCH'])"
 
-$workload.environment.deploymentMode = "Phase 6 PostgreSQL HA topology ($($metadata.runId))"
+$workload.environment.deploymentMode = "PostgreSQL HA soak topology ($($metadata.runId))"
 $workload.environment.databaseLocation = "PostgreSQL via $($metadata.composeFile)"
 $workload.environment.notes = "Materialized from $($metadata.envFile). Generated workload contains the local Orchestrator API key; do not commit it."
 $workload.environment | Add-Member -NotePropertyName topologyMetadataPath -NotePropertyValue $metadataFile -Force

@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "matrixStatus": "phase6-fault-contract",
+  "matrixStatus": "ha-fault-contract",
   "scope": "Deterministic failure injection and recovery certification",
   "runSafety": {
     "isolatedRunRootRequired": true,
     "disposablePostgresRequired": true,
     "productionTargetsAllowed": false,
-    "destructiveFilesystemScope": "exact Phase 6 run directory only",
+    "destructiveFilesystemScope": "exact HA soak run directory only",
     "orchestratorApiAuthenticationRequired": true,
     "rawSecretLoggingAllowed": false
   },

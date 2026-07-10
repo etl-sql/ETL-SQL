@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Scale;
 
-public sealed class Phase6LargeJobSoakManifestTests
+public sealed class HaLargeJobSoakManifestTests
 {
     [Fact]
     public void Manifest_DefinesMixedConcurrentWorkloadAndCancellationPoints()
@@ -14,7 +14,7 @@ public sealed class Phase6LargeJobSoakManifestTests
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
         var root = document.RootElement;
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal("phase6-soak-contract", root.GetProperty("matrixStatus").GetString());
+        Assert.Equal("ha-soak-contract", root.GetProperty("matrixStatus").GetString());
 
         var budgets = root.GetProperty("sharedBudgets");
         Assert.True(budgets.GetProperty("memoryBoundMB").GetInt32() > 0);
@@ -73,6 +73,6 @@ public sealed class Phase6LargeJobSoakManifestTests
     private static string ManifestPath()
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-        return Path.Combine(root, "certification-results", "phase6-large-job-soak-scenarios.json");
+        return Path.Combine(root, "certification-results", "ha-large-job-soak-scenarios.json");
     }
 }

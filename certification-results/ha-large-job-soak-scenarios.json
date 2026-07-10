@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "matrixStatus": "phase6-soak-contract",
+  "matrixStatus": "ha-soak-contract",
   "scope": "Concurrent large-job soak and cancellation certification",
   "defaultDuration": {
     "ciSmokeMinutes": 15,

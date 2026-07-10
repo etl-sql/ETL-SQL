@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Self-test for Phase 6 sustained workload materialization.
+    Self-test for PostgreSQL HA sustained workload materialization.
 #>
 [CmdletBinding()]
 param()
@@ -14,18 +14,18 @@ function Assert-True {
     if (-not $Condition) { throw $Message }
 }
 
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-phase6-workload-" + [Guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-ha-soak-workload-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 
 try {
-    $topology = & (Join-Path $ScriptRoot 'New-Phase6Topology.ps1') `
-        -RunId 'phase6-workload-test' `
+    $topology = & (Join-Path $ScriptRoot 'New-PostgresHaSoakTopology.ps1') `
+        -RunId 'ha-soak-workload-test' `
         -OutputRoot $tempRoot `
         -PortalPort 5900 `
         -OrchestratorPort 5901 `
         -PostgresPort 5932
 
-    $materialized = & (Join-Path $ScriptRoot 'New-Phase6CapacityWorkload.ps1') `
+    $materialized = & (Join-Path $ScriptRoot 'New-PostgresHaCapacityWorkload.ps1') `
         -TopologyRunRoot $topology.runRoot `
         -AdminPassword 'local-test-password'
 
@@ -39,7 +39,7 @@ try {
 
     & node (Join-Path $RepoRoot 'scripts/test-service-capacity.mjs') --config $materialized.outputPath --validate-only
 
-    Write-Host 'Phase 6 capacity workload self-test passed.'
+    Write-Host 'PostgreSQL HA capacity workload self-test passed.'
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {

@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Creates an isolated Phase 6 PostgreSQL/HA topology run configuration.
+    Creates an isolated PostgreSQL HA soak topology run configuration.
 
 .DESCRIPTION
     Generates a disposable environment file, shared data-root directories, and non-secret run
-    metadata for the v0.15.0 Phase 6 PostgreSQL/Portal/Orchestrator soak lanes.
+    metadata for the v0.15.0 PostgreSQL/Portal/Orchestrator HA soak lanes.
 
     Docker execution is opt-in. Without -Start, the script only prepares and validates the topology
     inputs so generated secrets stay local and reviewable before any containers are started.
@@ -12,7 +12,7 @@
 [CmdletBinding()]
 param(
     [string]$RunId = '',
-    [string]$OutputRoot = '.phase6-runs',
+    [string]$OutputRoot = '.ha-soak-runs',
     [string]$ComposeFile = 'deploy/docker/docker-compose.ha.yml',
     [string]$EnvExample = 'deploy/docker/environment-ha.env.example',
     [int]$PortalScale = 2,
@@ -65,7 +65,7 @@ function Assert-TopologyTemplate {
         'Portal__Orchestrator__ApiKey=${ORCH_API_KEY}'
     )) {
         if (-not $compose.Contains($required)) {
-            throw "Compose file is missing required Phase 6 HA token: $required"
+            throw "Compose file is missing required PostgreSQL HA soak token: $required"
         }
     }
 
@@ -81,7 +81,7 @@ function Assert-TopologyTemplate {
         'ORCH_API_KEY='
     )) {
         if (-not $example.Contains($required)) {
-            throw "Environment example is missing required Phase 6 token: $required"
+            throw "Environment example is missing required PostgreSQL HA soak token: $required"
         }
     }
 }
@@ -120,7 +120,7 @@ if ($ValidateOnly) {
 }
 
 if ([string]::IsNullOrWhiteSpace($RunId)) {
-    $RunId = 'phase6-' + (Get-Date).ToString('yyyyMMdd-HHmmss')
+    $RunId = 'ha-soak-' + (Get-Date).ToString('yyyyMMdd-HHmmss')
 }
 
 if ($RunId -notmatch '^[a-zA-Z0-9][a-zA-Z0-9_.-]*$') {
@@ -158,16 +158,16 @@ foreach ($path in $pathsToCreate) {
 }
 
 $projectSuffix = ($RunId.ToLowerInvariant() -replace '[^a-z0-9-]', '-')
-$envFile = Join-Path $runRoot 'phase6.env'
+$envFile = Join-Path $runRoot 'postgres-ha-soak.env'
 $envLines = @(
-    'ETLSQL_ENV=phase6',
+    'ETLSQL_ENV=postgres-ha-soak',
     "COMPOSE_PROJECT_NAME=etlsql-$projectSuffix",
     "ETLSQL_IMAGE_TAG=$ImageTag",
     "PORT_PORTAL=$PortalPort",
     "PORT_ORCH=$OrchestratorPort",
     "PORT_PG=$PostgresPort",
     "ENV_DATA_ROOT=$(Convert-ToEnvPath $dataRoot)",
-    'PG_USER=etlsql_phase6',
+    'PG_USER=etlsql_ha_soak',
     "PG_PASSWORD=$(New-Base64Secret 24)",
     'PG_DB_PORTAL=portal',
     'PG_DB_ORCH=orch',
@@ -220,13 +220,13 @@ $metadataPath = Join-Path $runRoot 'topology-metadata.json'
 
 $readmePath = Join-Path $runRoot 'README.md'
 @(
-    '# Phase 6 Topology Run',
+    '# PostgreSQL HA Soak Topology Run',
     '',
     ('Run id: `{0}`' -f $RunId),
     '',
     'Generated files:',
     '',
-    '- `phase6.env` - local disposable credentials and port/data-root settings. Do not commit this file.',
+    '- `postgres-ha-soak.env` - local disposable credentials and port/data-root settings. Do not commit this file.',
     '- `topology-metadata.json` - non-secret run metadata for capacity and soak evidence.',
     '',
     'Start:',

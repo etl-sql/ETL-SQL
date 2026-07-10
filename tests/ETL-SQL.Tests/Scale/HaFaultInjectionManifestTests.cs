@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ETL_SQL.Tests.Scale;
 
-public sealed class Phase6FaultInjectionManifestTests
+public sealed class HaFaultInjectionManifestTests
 {
     [Fact]
     public void Manifest_DefinesRequiredFaultsSafetyAndCleanupEvidence()
@@ -14,7 +14,7 @@ public sealed class Phase6FaultInjectionManifestTests
         using var document = JsonDocument.Parse(File.ReadAllText(ManifestPath()));
         var root = document.RootElement;
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
-        Assert.Equal("phase6-fault-contract", root.GetProperty("matrixStatus").GetString());
+        Assert.Equal("ha-fault-contract", root.GetProperty("matrixStatus").GetString());
 
         var safety = root.GetProperty("runSafety");
         Assert.True(safety.GetProperty("isolatedRunRootRequired").GetBoolean());
@@ -63,6 +63,6 @@ public sealed class Phase6FaultInjectionManifestTests
     private static string ManifestPath()
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-        return Path.Combine(root, "certification-results", "phase6-fault-injection-matrix.json");
+        return Path.Combine(root, "certification-results", "ha-fault-injection-matrix.json");
     }
 }

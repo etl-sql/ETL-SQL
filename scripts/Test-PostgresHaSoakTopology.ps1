@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Self-test for the Phase 6 topology harness.
+    Self-test for the PostgreSQL HA soak topology harness.
 #>
 [CmdletBinding()]
 param()
@@ -13,15 +13,15 @@ function Assert-True {
     if (-not $Condition) { throw $Message }
 }
 
-$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-phase6-topology-" + [Guid]::NewGuid().ToString('N'))
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("etl-sql-ha-soak-topology-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 
 try {
-    $validation = & (Join-Path $ScriptRoot 'New-Phase6Topology.ps1') -ValidateOnly
+    $validation = & (Join-Path $ScriptRoot 'New-PostgresHaSoakTopology.ps1') -ValidateOnly
     Assert-True ($validation.status -eq 'Valid') 'Expected topology template validation to pass.'
 
-    $result = & (Join-Path $ScriptRoot 'New-Phase6Topology.ps1') `
-        -RunId 'phase6-test' `
+    $result = & (Join-Path $ScriptRoot 'New-PostgresHaSoakTopology.ps1') `
+        -RunId 'ha-soak-test' `
         -OutputRoot $tempRoot `
         -PortalScale 2 `
         -OrchestratorScale 2 `
@@ -45,7 +45,7 @@ try {
     Assert-True ($metadata.requirements.orchestratorAuthentication -eq 'X-Orchestrator-Key') 'Expected authenticated Orchestrator requirement.'
     Assert-True (-not ((Get-Content -LiteralPath $result.metadataPath -Raw).Contains('PORTAL_JWT_SECRET='))) 'Metadata must not include secret values.'
 
-    Write-Host 'Phase 6 topology harness self-test passed.'
+    Write-Host 'PostgreSQL HA soak topology harness self-test passed.'
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) {

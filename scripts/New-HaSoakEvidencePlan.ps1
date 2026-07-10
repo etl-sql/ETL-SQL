@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Creates a non-secret Phase 6 evidence plan for a generated topology run.
+    Creates a non-secret HA soak evidence plan for a generated topology run.
 #>
 [CmdletBinding()]
 param(
@@ -8,8 +8,8 @@ param(
     [string]$TopologyRunRoot,
 
     [string]$SustainedWorkloadPath = '',
-    [string]$LargeJobSoakManifest = 'certification-results/phase6-large-job-soak-scenarios.json',
-    [string]$FaultMatrix = 'certification-results/phase6-fault-injection-matrix.json',
+    [string]$LargeJobSoakManifest = 'certification-results/ha-large-job-soak-scenarios.json',
+    [string]$FaultMatrix = 'certification-results/ha-fault-injection-matrix.json',
     [string]$OutputPath = '',
     [switch]$Force
 )
@@ -41,7 +41,7 @@ if (-not (Test-Path -LiteralPath $metadataPath -PathType Leaf)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($SustainedWorkloadPath)) {
-    $candidate = Join-Path $runRoot.Path 'phase6-sustained.workload.local.json'
+    $candidate = Join-Path $runRoot.Path 'postgres-ha-sustained.workload.local.json'
     if (Test-Path -LiteralPath $candidate -PathType Leaf) {
         $SustainedWorkloadPath = $candidate
     }
@@ -60,7 +60,7 @@ if (-not [string]::IsNullOrWhiteSpace($SustainedWorkloadPath) -and -not (Test-Pa
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $runRoot.Path 'phase6-evidence-plan.json'
+    $OutputPath = Join-Path $runRoot.Path 'ha-soak-evidence-plan.json'
 }
 if ((Test-Path -LiteralPath $OutputPath) -and -not $Force) {
     throw "Evidence plan already exists: $OutputPath. Use -Force to replace it."
@@ -75,9 +75,9 @@ $soakScenarioCount = $soakDocument.RootElement.GetProperty('scenarios').GetArray
 $faultCount = $faultDocument.RootElement.GetProperty('faults').GetArrayLength()
 
 $runLabel = Get-RelativeLabel $runRoot.Path
-$sustainedOutDir = "certification-results/phase6-postgres-ha/$($metadata.runId)"
-$soakOutDir = "certification-results/phase6-large-job-soak/$($metadata.runId)"
-$faultOutDir = "certification-results/phase6-fault-injection/$($metadata.runId)"
+$sustainedOutDir = "certification-results/postgres-ha-soak/$($metadata.runId)"
+$soakOutDir = "certification-results/ha-large-job-soak/$($metadata.runId)"
+$faultOutDir = "certification-results/ha-fault-injection/$($metadata.runId)"
 
 $plan = [ordered]@{
     schemaVersion = 1
@@ -93,7 +93,7 @@ $plan = [ordered]@{
             input = if ([string]::IsNullOrWhiteSpace($SustainedWorkloadPath)) { $null } else { Get-RelativeLabel $SustainedWorkloadPath }
             expectedOutputDirectory = $sustainedOutDir
             command = if ([string]::IsNullOrWhiteSpace($SustainedWorkloadPath)) {
-                "Run scripts/New-Phase6CapacityWorkload.ps1 -TopologyRunRoot $runLabel first."
+                "Run scripts/New-PostgresHaCapacityWorkload.ps1 -TopologyRunRoot $runLabel first."
             } else {
                 "node scripts/test-service-capacity.mjs --config `"$((Get-RelativeLabel $SustainedWorkloadPath))`" --out-dir `"$sustainedOutDir`""
             }

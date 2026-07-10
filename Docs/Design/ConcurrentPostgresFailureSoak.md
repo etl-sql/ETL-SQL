@@ -139,31 +139,31 @@ each fault, not just that an exception was thrown.
 
 1. **Slice A — topology harness.** Add scripts/config templates to bring up disposable
    PostgreSQL-backed Portal/Orchestrator test topologies and write run metadata. *(Implemented:
-   `scripts/New-Phase6Topology.ps1` validates the existing HA Docker Compose topology, generates
+   `scripts/New-PostgresHaSoakTopology.ps1` validates the existing HA Docker Compose topology, generates
    isolated local env/data-root configuration with disposable credentials, emits non-secret
    `topology-metadata.json`, and optionally starts Docker only when `-Start` is passed.
-   `scripts/Test-Phase6Topology.ps1` covers template validation, generated configuration, metadata,
+   `scripts/Test-PostgresHaSoakTopology.ps1` covers template validation, generated configuration, metadata,
    and secret omission.)*
 2. **Slice B — sustained load.** Implement report/job/history workload drivers and capacity report
-   output. *(In progress: `capacity-results/workloads/phase6-postgres-ha-sustained.workload.json`
+   output. *(In progress: `capacity-results/workloads/postgres-ha-sustained.workload.json`
    defines the PostgreSQL-backed HA Portal/Orchestrator sustained-load profile, and
-   `scripts/New-Phase6CapacityWorkload.ps1` materializes a local runnable copy from a generated
-   topology run without committing generated API keys. `scripts/Test-Phase6CapacityWorkload.ps1`
+   `scripts/New-PostgresHaCapacityWorkload.ps1` materializes a local runnable copy from a generated
+   topology run without committing generated API keys. `scripts/Test-PostgresHaCapacityWorkload.ps1`
    validates materialization and the existing service-capacity harness schema. Real measured
    capacity reports and PostgreSQL-specific metrics remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
-   cleanup checks. *(Contract progress: `certification-results/phase6-large-job-soak-scenarios.json`
+   cleanup checks. *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json`
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required
    telemetry, cleanup invariants, fairness expectation, and cancellation points for scan,
-   spill-write, spill-read, and repartition. `Phase6LargeJobSoakManifestTests` validates the
+   spill-write, spill-read, and repartition. `HaLargeJobSoakManifestTests` validates the
    contract. Runner implementation and measured soak artifacts remain open.)*
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and
    cancellation tests with deterministic cleanup verification. *(Contract progress:
-   `certification-results/phase6-fault-injection-matrix.json` defines the deterministic fault
+   `certification-results/ha-fault-injection-matrix.json` defines the deterministic fault
    matrix, safety constraints, expected recovery behavior, cleanup invariants, and required evidence
    for disk pressure, slow disk, corrupt/incomplete extents, worker crash, Portal/Orchestrator node
-   loss, PostgreSQL outage, and temp-root exhaustion. `Phase6FaultInjectionManifestTests` validates
-   the matrix. `scripts/New-Phase6EvidencePlan.ps1` ties a generated topology, sustained workload,
+   loss, PostgreSQL outage, and temp-root exhaustion. `HaFaultInjectionManifestTests` validates
+   the matrix. `scripts/New-HaSoakEvidencePlan.ps1` ties a generated topology, sustained workload,
    soak manifest, and fault matrix into a non-secret per-run evidence checklist. Fault runners and
    measured artifacts remain open.)*
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.
