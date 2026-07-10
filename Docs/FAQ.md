@@ -16,7 +16,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > -- or capture it
 > DECLARE @v STRING = @@VERSION;
 > ```
-> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.14.0**.
+> Use `SHOW VERSION;` to display version info from within a script session. The current release baseline is **v0.15.0**.
 
 **Q: Where do I start?**
 > Read the [User Manual](User_Manual.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](Cookbook.md) for production-ready examples.
@@ -81,8 +81,15 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > ```
 
 
-**Q: My script uses `PIVOT`. Will it work?**
-> Yes, PIVOT/UNPIVOT has been implemented in the engine.
+**Q: Does ETL-SQL support PIVOT and UNPIVOT?**
+> Yes, the engine fully supports rotating rows into columns (PIVOT) and columns into rows (UNPIVOT) in engine-side queries against `#temp` tables:
+> ```sql
+> SELECT Year, [Q1], [Q2], [Q3], [Q4]
+> FROM #quarterly_revenue
+> PIVOT (
+>     SUM(Revenue) FOR Quarter IN ([Q1], [Q2], [Q3], [Q4])
+> ) AS PivotTable;
+> ```
 
 ---
 
@@ -120,6 +127,24 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > USE SETS !DEV;
 > CREATE CONNECTION db AS MSSQL(SERVER=@server, DATABASE='Sales', PASSWORD=@pwd);
 > ```
+
+---
+
+## High Availability (HA)
+
+**Q: How do I configure ETL-SQL for High Availability (HA) in production?**
+> By default, standalone installations run with SQLite and local directories. To scale to a multi-node HA cluster:
+> 1. **Shared State:** Configure both Portal and Orchestrator to use PostgreSQL (`Portal:Database:Provider = Postgres` and `Orchestrator:Database:Provider = Postgres`).
+> 2. **Shared Storage:** Mount a shared filesystem (like SMB or UNC shares) for report scripts, snapshots, and parquet datasets, and configure the path settings.
+> 3. **Shared Key Ring:** Configure a shared path for the ASP.NET Data Protection key ring. This ensures all nodes can decrypt cookies and secure states identically.
+> 4. **Session Affinity:** Set up your load balancer with sticky routing bound to the `ETLSQL_PORTAL_AFFINITY` cookie.
+>
+> For full details, see the [Administrators Guide](Administrators_Guide.md).
+
+**Q: How do HA nodes avoid duplicate scheduled runs or schema migration conflicts?**
+> ETL-SQL uses a database-backed **lease fencing** system. 
+> * For scheduled jobs and refreshes, only one node can acquire the execution lease at any given time.
+> * For upgrades, the first booting node acquires a schema migration lock, applies migrations forward-only, and releases it, preventing other booting nodes from racing or corrupting the database.
 
 ---
 
@@ -193,6 +218,24 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 
 ---
 
+## Data Lineage & Governance
+
+**Q: How does ETL-SQL track data lineage and tagging?**
+> Data lineage tracking is natively built into the engine's query processor:
+> * **Pipeline Lineage:** The engine automatically tracks source-to-target dependencies. When a query pulls data from `db_conn.Orders` into `#staging` and then merges it into `warehouse.Sales`, the engine builds a dependency graph.
+> * **Metadata Tagging:** You can tag columns or tables with metadata using the `TAG` statement:
+>   ```sql
+>   TAG #staging.Email WITH (Sensitive = 'PII', Retention = '7 Years');
+>   ```
+> Lineage tags automatically flow downstream through `SELECT INTO` and `JOIN` operations.
+>
+> For more details, see [Lineage.md](Reference/Lineage.md).
+
+**Q: Can I enforce security policies based on data tags?**
+> Yes. The **Governance Core** applies zero-trust policy enforcement at both lint and compile boundaries. If a column is tagged as `PII` or `Restricted`, the linter will block scripts from writing it to insecure destinations (such as SMTP email bodies or raw flat files) unless an explicit audit override is configured.
+
+---
+
 ## Performance
 
 **Q: My join across a SQL Server table and a CSV file is very slow. How can I speed it up?**
@@ -218,6 +261,15 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > SHOW PROFILE INTO #perf;
 > SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 > ```
+
+**Q: What is Adaptive Execution and how does it optimize performance?**
+> In **v0.15.0**, the engine features a dynamic **Adaptive Execution Controller**. It samples whole-host and process-level resource metrics (CPU %, memory load, disk latency) at every node heartbeat. 
+> If the system is under memory pressure, the controller dynamically scales down parallel degree, batch sizes, and prefetch depth. If the system is idle, it dynamically scales them up to maximize throughput.
+
+**Q: How does ETL-SQL process datasets that exceed available physical RAM?**
+> The engine relies on an encrypted **Spill-to-Disk** architecture managed by the [MemoryArbiter](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Engines/MemoryGovernor.cs) and [SpillStore](file:///C:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Engine/Spill/SpillStore.cs). 
+> When active query pipelines (like large sort, join, or aggregation operations) exceed their allocated memory grant, the engine writes intermediate data chunks to encrypted, compressed files on disk (AES-GCM + GZip). Once writing is complete, the engine merges the spilled files in a single pass. This prevents Out of Memory (OOM) crashes and guarantees job completion.
+
 
 **Q: Why did `PUBLISH BUNDLE` fail on `RUN SCRIPT @path`?**
 > Published bundles must know every sub-script at publish time so the Orchestrator can version and store the full dependency graph. Dynamic script paths cannot be packaged safely. Use live mode for those jobs:
