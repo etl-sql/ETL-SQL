@@ -163,7 +163,9 @@ each fault, not just that an exception was thrown.
    matrix, safety constraints, expected recovery behavior, cleanup invariants, and required evidence
    for disk pressure, slow disk, corrupt/incomplete extents, worker crash, Portal/Orchestrator node
    loss, PostgreSQL outage, and temp-root exhaustion. `Phase6FaultInjectionManifestTests` validates
-   the matrix. Fault runners and measured artifacts remain open.)*
+   the matrix. `scripts/New-Phase6EvidencePlan.ps1` ties a generated topology, sustained workload,
+   soak manifest, and fault matrix into a non-secret per-run evidence checklist. Fault runners and
+   measured artifacts remain open.)*
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.
 
 ---

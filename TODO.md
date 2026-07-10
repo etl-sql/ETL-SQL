@@ -247,8 +247,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   deterministic fault matrix, run-safety constraints, cleanup invariants, required evidence, and
   expected recovery behavior for disk pressure, slow disk, corrupt/incomplete extents, worker crash,
   Portal/Orchestrator node loss, PostgreSQL outage, and temp-root exhaustion.
-  `Phase6FaultInjectionManifestTests` validates the matrix. Fault runners and measured artifacts
-  remain open.)*
+  `Phase6FaultInjectionManifestTests` validates the matrix. `scripts/New-Phase6EvidencePlan.ps1`
+  now produces a non-secret per-run evidence checklist that ties together topology metadata,
+  sustained workload input, large-job soak contract, and fault matrix. Fault runners and measured
+  artifacts remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 
