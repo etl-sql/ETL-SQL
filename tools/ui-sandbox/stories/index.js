@@ -10,5 +10,19 @@ import adminCatalog from './admin-catalog.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
+import lineageMockup from './lineage-mockup.story.js';
 
-export const stories = [dag, scriptEditor, designer, lineageUi, lineageCatalog, datasetsAdmin, subscriptionHistory, adminCatalog, vscodeWebviews, secretsAdmin, connectionsAdmin];
+export const stories = [
+  dag,
+  scriptEditor,
+  designer,
+  lineageUi,
+  lineageCatalog,
+  datasetsAdmin,
+  subscriptionHistory,
+  adminCatalog,
+  vscodeWebviews,
+  secretsAdmin,
+  connectionsAdmin,
+  lineageMockup
+];
