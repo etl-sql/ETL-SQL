@@ -19,7 +19,7 @@ namespace ETL_SQL.FuzzTests
 
         private static readonly HashSet<string> AllowedStatementStarters = new(StringComparer.OrdinalIgnoreCase)
         {
-            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH"
+            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH", "COMMIT", "ROLLBACK"
         };
 
         public GrammarWalkGenerator(GrammarStateTree tree, Random rng)
@@ -180,6 +180,12 @@ namespace ETL_SQL.FuzzTests
                 else if (label.Equals("<time_expression>", StringComparison.OrdinalIgnoreCase))
                 {
                     var tok = new Token(TokenType.STRING_LITERAL, "'00:00:05'", 0, 0, 0, 0);
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
+                }
+                else if (label.Equals("<transaction_name>", StringComparison.OrdinalIgnoreCase) ||
+                         label.Equals("<transaction_token>", StringComparison.OrdinalIgnoreCase))
+                {
+                    var tok = new Token(TokenType.IDENTIFIER, "tx1", 0, 0, 0, 0);
                     if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
 
