@@ -99,10 +99,10 @@ function _computeLayout(nodes, edges) {
         (byLayer[l] = byLayer[l] || []).push(id);
     }
 
-    const LAYER_H    = 160;
-    const SUB_ROW_H  = 100;
-    const NODE_W     = 240;
-    const MAX_PER_ROW = 10;
+    const LAYER_H    = 300;
+    const SUB_ROW_H  = 180;
+    const NODE_W     = 360;
+    const MAX_PER_ROW = 6;
 
     const pos = {};
     let yBase = 0;
@@ -167,12 +167,6 @@ function _lineageReach(rootId, allEdges, allNodes) {
  *   showDetail(id) — opens a node detail panel programmatically (used by tests/sandbox)
  */
 export function renderDag(container, { nodes, edges }, options = {}) {
-    const ec = window.echarts;
-
-    if (!ec) {
-        container.innerHTML = '<div class="etlsql-dag-empty">ECharts not loaded.</div>';
-        return { dispose: () => {}, resize: () => {} };
-    }
 
     if (!nodes?.length) {
         container.innerHTML = '<div class="etlsql-dag-empty">No structure data available.</div>';
@@ -383,26 +377,49 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     badge.style.display = 'none';
     badge.addEventListener('click', () => { focusedNode = null; render(); });
     toolbar.appendChild(badge);
-
-    container.appendChild(toolbar);
+container.appendChild(toolbar);
 
     // Body = canvas (fills) + a collapsible detail panel on the right.
     const body = document.createElement('div');
     body.className = 'etlsql-dag-body';
     container.appendChild(body);
 
+    // Setup Card-based Lineage viewport and Canvas
     const chartDiv = document.createElement('div');
     chartDiv.className = 'etlsql-dag-canvas';
+    chartDiv.style.position = 'relative';
+    chartDiv.style.overflow = 'hidden';
+    chartDiv.style.background = '#090d16';
     body.appendChild(chartDiv);
+
+    const viewport = document.createElement('div');
+    viewport.className = 'etlsql-dag-viewport';
+    chartDiv.appendChild(viewport);
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'etlsql-dag-svg');
+    viewport.appendChild(svg);
+
+    const badgeContainer = document.createElement('div');
+    badgeContainer.className = 'etlsql-dag-badge-container';
+    viewport.appendChild(badgeContainer);
+
+    let panX = 0;
+    let panY = 0;
+    let activeHighlightNode = null;
+    let activeColumnPath = null;
+    let activeColumnPathSet = null;
+    let piiComplianceHighlight = false;
+    const draggedPositions = {};
+    let hasInitializedView = false;
+    let viewDimensionsValid = false;
 
     const panel = document.createElement('div');
     panel.className = 'etlsql-dag-panel';
     panel.style.display = 'none';
     body.appendChild(panel);
 
-    const chart = ec.init(chartDiv, null, { renderer: 'canvas' });
-
-    // Floating Zoom Controls (+, -, Reset)
+    // ── Floating Zoom Controls (+, -, Reset) ──────────────────────────────
     const zoomControls = document.createElement('div');
     zoomControls.className = 'etlsql-dag-zoom-controls';
 
@@ -413,8 +430,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnIn.title = 'Zoom In';
     btnIn.setAttribute('aria-label', 'Zoom In');
     btnIn.addEventListener('click', () => {
-        currentZoom *= 1.25;
-        render();
+        currentZoom = Math.min(2.0, currentZoom * 1.25);
+        updateViewportFromCenter();
+        updateConnections();
+        drawMinimap();
     });
 
     const btnOut = document.createElement('button');
@@ -424,8 +443,10 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnOut.title = 'Zoom Out';
     btnOut.setAttribute('aria-label', 'Zoom Out');
     btnOut.addEventListener('click', () => {
-        currentZoom = Math.max(currentZoom / 1.25, 0.1);
-        render();
+        currentZoom = Math.max(0.08, currentZoom / 1.25);
+        updateViewportFromCenter();
+        updateConnections();
+        drawMinimap();
     });
 
     const btnReset = document.createElement('button');
@@ -435,47 +456,41 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     btnReset.title = 'Reset View';
     btnReset.setAttribute('aria-label', 'Reset View');
     btnReset.addEventListener('click', () => {
-        let centerX = 0, centerY = 0;
-        const positions = Object.values(lastGraph?.pos || {});
-        if (positions.length > 1) {
-            const xs = positions.map(p => p.x);
-            const ys = positions.map(p => p.y);
-            centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
-            centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-        }
-
-        let initialZoom = 1;
-        const containerW = chart.getWidth();
-        const containerH = chart.getHeight();
-        if (positions.length > 1 && containerW > 0 && containerH > 0) {
-            const xs = positions.map(p => p.x);
-            const ys = positions.map(p => p.y);
-            const graphW = Math.max(...xs) - Math.min(...xs) + 240;
-            const graphH = Math.max(...ys) - Math.min(...ys) + 160;
-            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
-            initialZoom = Math.max(fitZoom, 0.65);
-        }
-
-        currentZoom = initialZoom;
-        currentCenter = [centerX, centerY];
+        hasInitializedView = false;
         render();
     });
 
     zoomControls.append(btnIn, btnOut, btnReset);
     body.appendChild(zoomControls);
 
-    chart.on('graphRoam', () => {
-        const option = chart.getOption();
-        if (option && option.series && option.series[0]) {
-            if (option.series[0].zoom !== undefined) {
-                currentZoom = option.series[0].zoom;
-            }
-            if (option.series[0].center !== undefined) {
-                currentCenter = option.series[0].center;
-            }
+    // ── Zero-Trust PII compliance toggle button ───────────────────────────
+    const piiBtn = document.createElement('button');
+    piiBtn.type = 'button';
+    piiBtn.className = 'etlsql-dag-focusbadge';
+    piiBtn.style.display = 'inline-block';
+    piiBtn.style.background = '#1e293b';
+    piiBtn.style.borderColor = '#ef4444';
+    piiBtn.style.color = '#ef4444';
+    piiBtn.style.borderWidth = '1px';
+    piiBtn.style.borderStyle = 'solid';
+    piiBtn.style.marginLeft = '8px';
+    piiBtn.innerHTML = '🔒 PII';
+    piiBtn.title = 'Highlight PII Compliance';
+    piiBtn.addEventListener('click', () => {
+        piiComplianceHighlight = !piiComplianceHighlight;
+        if (piiComplianceHighlight) {
+            piiBtn.style.background = '#991b1b';
+            piiBtn.style.color = '#fff';
+            focusedNode = null;
+            activeColumnPath = null;
+            activeColumnPathSet = null;
+        } else {
+            piiBtn.style.background = '#1e293b';
+            piiBtn.style.color = '#ef4444';
         }
-        drawMinimap();
+        render();
     });
+    toolbar.appendChild(piiBtn);
 
     // ── Detail panel (columns for tables, field mappings for charts) ─────────
     const _ROLE_LABEL = {
@@ -485,7 +500,12 @@ export function renderDag(container, { nodes, edges }, options = {}) {
     };
     const _el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
 
-    function closePanel() { panel.style.display = 'none'; chart.resize(); drawMinimap(); }
+    function closePanel() {
+        panel.style.display = 'none';
+        updateViewportFromCenter();
+        updateConnections();
+        drawMinimap();
+    }
 
     function renderPanelList(title, items, emptyText) {
         const h = _el('div', 'etlsql-dag-panel-h');
@@ -516,110 +536,439 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         return hit ? hit.id : null;
     }
 
-    // Walk a column back through its sources, rendering each hop (transform,
-    // origin table, inherited description / tags) indented by depth.
-    function appendColumnLineage(container, tableNodeId, column, depth, seen) {
-        seen = seen || new Set();
-        const key = `${tableNodeId}|${column}`;
-        if (seen.has(key) || depth > 12) return;
-        seen.add(key);
-
-        const tnode = _nodeById[tableNodeId];
-        const cl = tnode?.meta?.columnLineage?.[column];
-
-        const row = _el('div', 'etlsql-dag-lin');
-        row.style.paddingLeft = `${depth * 14}px`;
-        if (depth > 0) { const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; row.append(a); }
-        const colEl = _el('span', 'etlsql-dag-lin-col'); colEl.textContent = column; row.append(colEl);
-        if (cl?.transform) { const t = _el('span', 'etlsql-dag-lin-expr'); t.textContent = `= ${cl.transform}`; row.append(t); }
-        const tbl = _el('span', 'etlsql-dag-lin-tbl'); tbl.textContent = tnode?.label ?? tableNodeId; row.append(tbl);
-        container.append(row);
-
-        if (cl?.tags && Object.keys(cl.tags).length) {
-            const tagRow = _el('div', 'etlsql-dag-lin-meta'); tagRow.style.paddingLeft = `${depth * 14 + 16}px`;
-            for (const k of Object.keys(cl.tags)) { const tg = _el('span', 'etlsql-dag-lin-tag'); tg.textContent = `⚠ ${k}`; tagRow.append(tg); }
-            container.append(tagRow);
+    function getConnectionDialect(node) {
+        if (node.type === 'dataset') return 'Dataset';
+        if (node.type === 'page' || node.type === 'visual') return null;
+        
+        const label = node.label;
+        if (label.startsWith('Raw')) {
+            if (label.includes('Sales') || label.includes('Returns')) return 'MSSQL';
+            if (label.includes('Discount')) return 'Postgres';
+            if (label.includes('Target')) return 'Snowflake';
+            if (label.includes('Pipeline')) return 'CSV';
+            if (label.includes('Inventory')) return 'Oracle';
+            if (label.includes('Shipment')) return 'SFTP';
+            return 'MSSQL';
         }
-        if (cl?.description) {
-            const d = _el('div', 'etlsql-dag-lin-desc'); d.style.paddingLeft = `${depth * 14 + 16}px`;
-            d.textContent = cl.description; container.append(d);
+        if (label.startsWith('Stg') || label.startsWith('Enriched') || label.includes('Rollup') || label.includes('Plan') || label.includes('Log') || label.startsWith('Fact')) {
+            return 'Engine';
         }
+        return 'Database';
+    }
 
-        for (const s of (cl?.sources ?? [])) {
-            if (!s.column) continue;
-            const srcId = findTableNodeId(s.table);
-            if (srcId) {
-                appendColumnLineage(container, srcId, s.column, depth + 1, seen);
-            } else {
-                const leaf = _el('div', 'etlsql-dag-lin'); leaf.style.paddingLeft = `${(depth + 1) * 14}px`;
-                const a = _el('span', 'etlsql-dag-lin-arrow'); a.textContent = '↖'; leaf.append(a);
-                const c = _el('span', 'etlsql-dag-lin-col'); c.textContent = s.column; leaf.append(c);
-                const tb = _el('span', 'etlsql-dag-lin-tbl'); tb.textContent = s.table; leaf.append(tb);
-                container.append(leaf);
+    function _traceColumnPath(nodeId, colName, pathSet, direction = 'both') {
+        const colKey = `${nodeId}__col__${colName}`;
+        if (pathSet.has(colKey)) return;
+        pathSet.add(colKey);
+        pathSet.add(nodeId);
+
+        const node = _nodeById[nodeId];
+        if (!node) return;
+
+        if (direction === 'both' || direction === 'up') {
+            const cl = node.meta?.columnLineage?.[colName];
+            if (cl?.sources) {
+                cl.sources.forEach(src => {
+                    const srcId = findTableNodeId(src.table);
+                    if (srcId) {
+                        _traceColumnPath(srcId, src.column, pathSet, 'up');
+                    }
+                });
             }
+        }
+
+        if (direction === 'both' || direction === 'down') {
+            nodes.forEach(other => {
+                if (other.meta?.columnLineage) {
+                    Object.entries(other.meta.columnLineage).forEach(([otherCol, lin]) => {
+                        if (lin.sources) {
+                            lin.sources.forEach(src => {
+                                const isMatch = src.table === node.label && src.column === colName;
+                                if (isMatch) {
+                                    _traceColumnPath(other.id, otherCol, pathSet, 'down');
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+
+            nodes.forEach(other => {
+                if (other.type === 'visual' && other.meta?.mappings) {
+                    const hasEdge = edges.some(e => e.source === nodeId && e.target === other.id);
+                    if (hasEdge) {
+                        other.meta.mappings.forEach(m => {
+                            const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
+                            if (cleanCol === colName) {
+                                pathSet.add(other.id);
+                                pathSet.add(`${other.id}__map__${m.role}`);
+                            }
+                        });
+                    }
+                }
+            });
         }
     }
 
-    // node: { id, label, type, meta }
-    function showDetail(node) {
-        panel.replaceChildren();
+    function updateUIForPathIsolation() {
+        nodes.forEach(n => {
+            const card = document.getElementById(`node__${n.id}`);
+            if (!card) return;
 
-        const head = _el('div', 'etlsql-dag-panel-head');
-        const dot = _el('span', 'etlsql-dag-panel-dot'); dot.style.background = _nodeColor(node.type);
-        const title = _el('strong', 'etlsql-dag-panel-title'); title.textContent = node.label;
-        const close = _el('button', 'etlsql-dag-panel-x'); close.type = 'button'; close.textContent = '✕'; close.title = 'Close';
-        close.addEventListener('click', closePanel);
-        head.append(dot, title, close);
-        panel.appendChild(head);
+            if (activeColumnPathSet) {
+                if (activeColumnPathSet.has(n.id)) {
+                    card.style.opacity = '1';
+                    card.style.borderColor = '#10b981';
+                    
+                    if (n.meta?.columns) {
+                        n.meta.columns.forEach(c => {
+                            const row = document.getElementById(`${n.id}__col__${c}`);
+                            if (row) {
+                                const inPath = activeColumnPathSet.has(`${n.id}__col__${c}`);
+                                row.style.opacity = inPath ? '1' : '0.12';
+                                const labelSpan = row.querySelector('.col-label-span');
+                                if (labelSpan) labelSpan.style.color = inPath ? '#34d399' : '#4b5563';
+                            }
+                        });
+                    }
+                    if (n.meta?.mappings) {
+                        n.meta.mappings.forEach(m => {
+                            const row = document.getElementById(`${n.id}__map__${m.role}`);
+                            if (row) {
+                                const inPath = activeColumnPathSet.has(`${n.id}__map__${m.role}`);
+                                row.style.opacity = inPath ? '1' : '0.12';
+                                const labelSpan = row.querySelector('.col-label-span');
+                                if (labelSpan) labelSpan.style.color = inPath ? '#34d399' : '#4b5563';
+                            }
+                        });
+                    }
+                } else {
+                    card.style.opacity = '0.08';
+                    card.style.borderColor = '#1f2937';
+                }
+            } else if (piiComplianceHighlight) {
+                let nodeHasPii = false;
+                if (n.meta?.columns) {
+                    n.meta.columns.forEach(c => {
+                        const cl = n.meta.columnLineage?.[c];
+                        if (cl?.tags?.pii) nodeHasPii = true;
+                    });
+                }
 
-        const sub = _el('div', 'etlsql-dag-panel-sub');
-        sub.textContent = [node.type, node.meta?.visualType, node.meta?.page && `page: ${node.meta.page}`]
-            .filter(Boolean).join(' · ');
-        panel.appendChild(sub);
-
-        if (node.type === 'visual') {
-            const maps = node.meta?.mappings ?? [];
-            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = 'Fields'; panel.append(h);
-            if (!maps.length) {
-                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No field mappings.'; panel.append(e);
+                if (nodeHasPii) {
+                    card.style.opacity = '1';
+                    card.style.borderColor = '#ef4444';
+                    
+                    if (n.meta?.columns) {
+                        n.meta.columns.forEach(c => {
+                            const row = document.getElementById(`${n.id}__col__${c}`);
+                            if (row) {
+                                const cl = n.meta.columnLineage?.[c];
+                                const isPii = !!cl?.tags?.pii;
+                                row.style.opacity = isPii ? '1' : '0.15';
+                                const labelSpan = row.querySelector('.col-label-span');
+                                if (labelSpan) labelSpan.style.color = isPii ? '#f87171' : '#4b5563';
+                            }
+                        });
+                    }
+                } else {
+                    card.style.opacity = '0.1';
+                    card.style.borderColor = '#1f2937';
+                }
+            } else if (focusSet) {
+                if (focusSet.has(n.id)) {
+                    card.style.opacity = '1';
+                    card.style.borderColor = '#4f46e5';
+                } else {
+                    card.style.opacity = '0.12';
+                }
             } else {
-                // Source tables/datasets feeding this visual, to resolve mapping columns against.
-                const srcIds = (edges ?? [])
-                    .filter(e => e.target === node.id)
-                    .map(e => e.source)
-                    .filter(sid => { const t = _nodeById[sid]?.type; return t === 'table' || t === 'dataset'; });
-                const sourceFor = (col) =>
-                    srcIds.find(sid => _nodeById[sid]?.meta?.columnLineage?.[col]
-                                    || (_nodeById[sid]?.meta?.columns || []).includes(col)) || srcIds[0];
-
-                for (const m of maps) {
-                    const fieldRow = _el('div', 'etlsql-dag-lin-field');
-                    const k = _el('span', 'etlsql-dag-panel-k'); k.textContent = `${_ROLE_LABEL[m.role] ?? String(m.role ?? '').toLowerCase()}:`;
-                    const v = _el('span', 'etlsql-dag-panel-v'); v.textContent = m.column;
-                    fieldRow.append(k, v); panel.append(fieldRow);
-                    const srcId = sourceFor(m.column);
-                    if (srcId) appendColumnLineage(panel, srcId, m.column, 1);
+                card.style.opacity = '1';
+                card.style.borderColor = n.type === 'table' ? '#2563eb' : (n.type === 'dataset' ? '#7c3aed' : (n.type === 'visual' ? '#059669' : '#475569'));
+                
+                if (n.meta?.columns) {
+                    n.meta.columns.forEach(c => {
+                        const row = document.getElementById(`${n.id}__col__${c}`);
+                        if (row) {
+                            row.style.opacity = '1';
+                            const labelSpan = row.querySelector('.col-label-span');
+                            if (labelSpan) labelSpan.style.color = '#cbd5e1';
+                        }
+                    });
+                }
+                if (n.meta?.mappings) {
+                    n.meta.mappings.forEach(m => {
+                        const row = document.getElementById(`${n.id}__map__${m.role}`);
+                        if (row) {
+                            row.style.opacity = '1';
+                            const labelSpan = row.querySelector('.col-label-span');
+                            if (labelSpan) labelSpan.style.color = '#cbd5e1';
+                        }
+                    });
                 }
             }
-        } else if (node.type === 'page') {
-            const kids = (pageChildren[node.id] ?? []).map(vid => ({ v: _nodeById[vid]?.label ?? vid }));
-            renderPanelList(`Visuals (${kids.length})`, kids, 'No visuals.');
-        } else {
-            const cols = node.meta?.columns ?? [];
-            const h = _el('div', 'etlsql-dag-panel-h'); h.textContent = `Columns (${cols.length})`; panel.append(h);
-            if (!cols.length) {
-                const e = _el('div', 'etlsql-dag-panel-empty'); e.textContent = 'No column metadata.'; panel.append(e);
-            } else {
-                for (const c of cols) appendColumnLineage(panel, node.id, c, 0);
-            }
-        }
-
-        panel.style.display = 'block';
-        chart.resize();
-        drawMinimap();
+        });
     }
 
-    // ── Search ───────────────────────────────────────────────────────────────
+    const colConnections = [];
+    nodes.forEach(n => {
+        if (n.meta?.columnLineage) {
+            Object.entries(n.meta.columnLineage).forEach(([tgtCol, lin]) => {
+                if (lin.sources) {
+                    lin.sources.forEach(src => {
+                        const srcNode = nodes.find(x => x.label === src.table);
+                        if (srcNode) {
+                            colConnections.push({
+                                from: `${srcNode.id}__col__${src.column}`,
+                                to: `${n.id}__col__${tgtCol}`,
+                                fromTable: srcNode.id,
+                                toTable: n.id
+                            });
+                        }
+                    });
+                }
+            });
+        }
+    });
+
+    let activePaths = [];
+
+    function updateConnections() {
+        activePaths.forEach(p => p.remove());
+        activePaths = [];
+        badgeContainer.innerHTML = '';
+
+        if (!lastGraph) return;
+
+        const vRect = viewport.getBoundingClientRect();
+
+        lastGraph.allEdges.forEach(e => {
+            const fromNode = _nodeById[e.source];
+            const toNode = _nodeById[e.target];
+
+            if (!fromNode || !toNode) return;
+
+            if (toNode.type === 'visual' && toNode.meta?.mappings && fromNode.meta?.columns) {
+                let routedAny = false;
+                toNode.meta.mappings.forEach(m => {
+                    const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
+                    if (fromNode.meta.columns.includes(cleanCol)) {
+                        const fromEl = document.getElementById(`${e.source}__col__${cleanCol}`);
+                        const toEl = document.getElementById(`${e.target}__map__${m.role}`);
+
+                        if (fromEl && toEl) {
+                            const fromPort = fromEl.querySelector('.port-right');
+                            const toPort = toEl.querySelector('.port-left');
+                            if (fromPort && toPort) {
+                                const r1 = fromPort.getBoundingClientRect();
+                                const r2 = toPort.getBoundingClientRect();
+                                const x1 = (r1.left + r1.width / 2 - vRect.left) / currentZoom;
+                                const y1 = (r1.top + r1.height / 2 - vRect.top) / currentZoom;
+                                const x2 = (r2.left + r2.width / 2 - vRect.left) / currentZoom;
+                                const y2 = (r2.top + r2.height / 2 - vRect.top) / currentZoom;
+
+                                const inPath = activeColumnPathSet && activeColumnPathSet.has(`${e.source}__col__${cleanCol}`) && activeColumnPathSet.has(`${e.target}__map__${m.role}`);
+                                const isDimmed = activeColumnPathSet && !inPath;
+                                
+                                const isHighlightActive = activeHighlightNode && (activeHighlightNode === e.source || activeHighlightNode === e.target);
+                                const isDimmedHighlight = activeHighlightNode && !isHighlightActive;
+
+                                const color = inPath ? '#06b6d4' : (isDimmed || isDimmedHighlight ? 'rgba(71,85,105,0.06)' : '#34d399');
+                                const width = inPath ? 3.0 : (isDimmed || isDimmedHighlight ? 0.75 : 1.5);
+
+                                const path = drawLink(x1, y1, x2, y2, color, width);
+                                activePaths.push(path);
+                                routedAny = true;
+
+                                const edgeTransform = m.column.includes('(') ? m.column.split('(')[0] : 'SELECT';
+                                drawEdgeBadge(x1, y1, x2, y2, edgeTransform, inPath, isDimmed || isDimmedHighlight);
+                            }
+                        }
+                    }
+                });
+                if (routedAny) return;
+            }
+
+            const fromCard = document.getElementById(`node__${e.source}`);
+            const toCard = document.getElementById(`node__${e.target}`);
+
+            if (!fromCard || !toCard) return;
+
+            const fromPort = fromCard.querySelector('.card-port-right');
+            const toPort = toCard.querySelector('.card-port-left');
+
+            if (!fromPort || !toPort) return;
+
+            const r1 = fromPort.getBoundingClientRect();
+            const r2 = toPort.getBoundingClientRect();
+
+            const x1 = (r1.left + r1.width / 2 - vRect.left) / currentZoom;
+            const y1 = (r1.top + r1.height / 2 - vRect.top) / currentZoom;
+            const x2 = (r2.left + r2.width / 2 - vRect.left) / currentZoom;
+            const y2 = (r2.top + r2.height / 2 - vRect.top) / currentZoom;
+
+            const inPath = activeColumnPathSet && activeColumnPathSet.has(e.source) && activeColumnPathSet.has(e.target);
+            const isDimmed = (activeColumnPathSet && !inPath) || (activeHighlightNode && activeHighlightNode !== e.source && activeHighlightNode !== e.target);
+            
+            const color = inPath ? '#06b6d4' : (isDimmed ? 'rgba(71,85,105,0.06)' : '#475569');
+            const width = inPath ? 2.5 : (isDimmed ? 0.75 : 1.5);
+
+            const path = drawLink(x1, y1, x2, y2, color, width);
+            activePaths.push(path);
+
+            if (e.label) {
+                drawEdgeBadge(x1, y1, x2, y2, e.label, inPath, isDimmed);
+            }
+        });
+
+        colConnections.forEach(c => {
+            if (activeHighlightNode && activeHighlightNode !== c.fromTable && activeHighlightNode !== c.toTable) return;
+
+            const inPath = activeColumnPathSet && activeColumnPathSet.has(c.from) && activeColumnPathSet.has(c.to);
+            const isDimmed = activeColumnPathSet && !inPath;
+
+            const fromEl = document.getElementById(c.from);
+            const toEl = document.getElementById(c.to);
+
+            if (!fromEl || !toEl) return;
+
+            const fromPort = fromEl.querySelector('.port-right');
+            const toPort = toEl.querySelector('.port-left');
+
+            if (!fromPort || !toPort) return;
+
+            const r1 = fromPort.getBoundingClientRect();
+            const r2 = toPort.getBoundingClientRect();
+
+            const x1 = (r1.left + r1.width / 2 - vRect.left) / currentZoom;
+            const y1 = (r1.top + r1.height / 2 - vRect.top) / currentZoom;
+            const x2 = (r2.left + r2.width / 2 - vRect.left) / currentZoom;
+            const y2 = (r2.top + r2.height / 2 - vRect.top) / currentZoom;
+
+            const color = inPath ? '#10b981' : (isDimmed ? 'rgba(16,185,129,0.04)' : (activeHighlightNode ? '#10b981' : 'rgba(16,185,129,0.35)'));
+            const width = inPath ? 3.0 : (isDimmed ? 0.5 : (activeHighlightNode ? 2.5 : 1));
+
+            const path = drawLink(x1, y1, x2, y2, color, width, !activeHighlightNode && !inPath);
+            activePaths.push(path);
+
+            const fromNode = _nodeById[c.toTable];
+            const toColName = c.to.split('__col__')[1];
+            const cl = fromNode?.meta?.columnLineage?.[toColName];
+            if (cl?.transform && !isDimmed) {
+                const transformLabel = cl.transform.includes('(') ? cl.transform.split('(')[0] : 'PASS';
+                drawEdgeBadge(x1, y1, x2, y2, transformLabel, inPath, isDimmed);
+            }
+        });
+    }
+
+    function drawLink(x1, y1, x2, y2, color = '#64748b', width = 1.5, isDashed = false) {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const dx = Math.abs(x2 - x1) * 0.45;
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`);
+        path.setAttribute('stroke', color);
+        path.setAttribute('stroke-width', width);
+        path.setAttribute('fill', 'none');
+        path.setAttribute('opacity', '0.85');
+        if (isDashed) {
+            path.setAttribute('stroke-dasharray', '4 4');
+        }
+        svg.appendChild(path);
+        return path;
+    }
+
+    function drawEdgeBadge(x1, y1, x2, y2, text, inPath, isDimmed) {
+        if (!text) return;
+        const mx = (x1 + x2) / 2;
+        const my = (y1 + y2) / 2;
+
+        const badge = document.createElement('div');
+        badge.className = 'etlsql-dag-edge-badge';
+        badge.style.left = `${mx}px`;
+        badge.style.top = `${my}px`;
+        
+        badge.style.background = inPath ? '#0f766e' : (isDimmed ? 'rgba(17,24,39,0.05)' : '#1e293b');
+        badge.style.border = inPath ? '1px solid #14b8a6' : (isDimmed ? '1px solid rgba(55,65,81,0.05)' : '1px solid #3b82f6');
+        badge.style.color = inPath ? '#ccfbf1' : (isDimmed ? 'rgba(156,163,175,0.05)' : '#93c5fd');
+        badge.style.opacity = isDimmed ? '0.1' : '1';
+        badge.style.boxShadow = isDimmed ? 'none' : '0 2px 4px rgba(0,0,0,0.5)';
+        badge.textContent = text;
+        
+        badgeContainer.appendChild(badge);
+    }
+
+    function updateViewportFromCenter() {
+        const CX = chartDiv.clientWidth / 2;
+        const CY = chartDiv.clientHeight / 2;
+        panX = CX - currentCenter[0] * currentZoom;
+        panY = CY - currentCenter[1] * currentZoom;
+        viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+    }
+
+    // ── Mouse / Wheel Canvas Events ─────────────────────────────────────────
+    chartDiv.addEventListener('wheel', e => {
+        e.preventDefault();
+        const rect = chartDiv.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+
+        const CX = rect.width / 2;
+        const CY = rect.height / 2;
+
+        const vx = (mouseX - CX - panX) / currentZoom;
+        const vy = (mouseY - CY - panY) / currentZoom;
+
+        const factor = 1.15;
+        if (e.deltaY < 0) {
+            currentZoom = Math.min(2.0, currentZoom * factor);
+        } else {
+            currentZoom = Math.max(0.08, currentZoom / factor);
+        }
+
+        panX = mouseX - CX - vx * currentZoom;
+        panY = mouseY - CY - vy * currentZoom;
+
+        currentCenter = [
+            (CX - panX) / currentZoom,
+            (CY - panY) / currentZoom
+        ];
+
+        viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+        updateConnections();
+        drawMinimap();
+    });
+
+    let isPanning = false;
+    let startX = 0;
+    let startY = 0;
+
+    chartDiv.addEventListener('mousedown', e => {
+        if (e.target === chartDiv || e.target === viewport) {
+            isPanning = true;
+            startX = e.clientX - panX;
+            startY = e.clientY - panY;
+            chartDiv.style.cursor = 'grabbing';
+        }
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!isPanning) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        currentCenter = [
+            (chartDiv.clientWidth / 2 - panX) / currentZoom,
+            (chartDiv.clientHeight / 2 - panY) / currentZoom
+        ];
+        viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (isPanning) {
+            isPanning = false;
+            chartDiv.style.cursor = 'default';
+        }
+    });
+
+    // ── Search &goToNode flash helper ────────────────────────────────────────
     let _hlTimer = null;
 
     function recomputeMatches() {
@@ -644,21 +993,23 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         goToNode(searchMatches[searchIdx]);
     }
 
-    // Center the main view on a node and flash-highlight it.
     function goToNode(id) {
         if (!lastGraph) return;
         const p = lastGraph.pos[id];
         if (!p) return;
-        const curZoom = chart.getOption().series?.[0]?.zoom || 1;
-        currentZoom = Math.max(curZoom, 1.5);
+        currentZoom = Math.max(currentZoom, 1.25);
         currentCenter = [p.x, p.y];
         render();
-        const di = lastGraph.allNodes.findIndex(n => n.id === id);
-        if (di >= 0) {
-            chart.dispatchAction({ type: 'downplay', seriesIndex: 0 });
-            chart.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: di });
+
+        const card = document.getElementById(`node__${id}`);
+        if (card) {
+            card.style.boxShadow = '0 0 40px #ef4444';
+            card.style.borderColor = '#ef4444';
             clearTimeout(_hlTimer);
-            _hlTimer = setTimeout(() => chart.dispatchAction({ type: 'downplay', seriesIndex: 0 }), 1800);
+            _hlTimer = setTimeout(() => {
+                card.style.boxShadow = '';
+                card.style.borderColor = '';
+            }, 1800);
         }
     }
 
@@ -729,24 +1080,22 @@ export function renderDag(container, { nodes, edges }, options = {}) {
             miniCtx.fill();
         }
 
-        // Current viewport rectangle, read straight from the chart's transform.
-        try {
-            const tl = chart.convertFromPixel({ seriesIndex: 0 }, [0, 0]);
-            const br = chart.convertFromPixel({ seriesIndex: 0 }, [chartDiv.clientWidth, chartDiv.clientHeight]);
-            if (tl && br) {
-                const [x0, y0] = d2m(tl[0], tl[1]);
-                const [x1, y1] = d2m(br[0], br[1]);
-                miniCtx.strokeStyle = 'rgba(37,99,235,0.7)';
-                miniCtx.lineWidth = 1.5;
-                const vx = Math.min(x0, x1);
-                const vy = Math.min(y0, y1);
-                const vw = Math.abs(x1 - x0);
-                const vh = Math.abs(y1 - y0);
-                miniCtx.fillStyle = 'rgba(37,99,235,0.06)';
-                miniCtx.fillRect(vx, vy, vw, vh);
-                miniCtx.strokeRect(vx, vy, vw, vh);
-            }
-        } catch { /* convertFromPixel not ready yet — next roam/render fixes it */ }
+        // Current viewport rectangle computed mathematically
+        const tl = [ -panX / currentZoom, -panY / currentZoom ];
+        const br = [ (chartDiv.clientWidth - panX) / currentZoom, (chartDiv.clientHeight - panY) / currentZoom ];
+        if (tl && br) {
+            const [x0, y0] = d2m(tl[0], tl[1]);
+            const [x1, y1] = d2m(br[0], br[1]);
+            miniCtx.strokeStyle = 'rgba(37,99,235,0.7)';
+            miniCtx.lineWidth = 1.5;
+            const vx = Math.min(x0, x1);
+            const vy = Math.min(y0, y1);
+            const vw = Math.abs(x1 - x0);
+            const vh = Math.abs(y1 - y0);
+            miniCtx.fillStyle = 'rgba(37,99,235,0.06)';
+            miniCtx.fillRect(vx, vy, vw, vh);
+            miniCtx.strokeRect(vx, vy, vw, vh);
+        }
     }
 
     miniCanvas.addEventListener('click', e => {
@@ -847,131 +1196,7 @@ export function renderDag(container, { nodes, edges }, options = {}) {
         soloBadge.style.display = 'flex';
     }
 
-    function render() {
-        // Hiding the Pages type while soloed would orphan the slice — drop solo.
-        if (soloedPage && hiddenTypes.has('page')) soloedPage = null;
-        const graph = buildGraph();
-        lastGraph = graph;
-        // A type filter may have hidden the focused node — drop focus if so.
-        if (focusedNode && !graph.allNodes.some(n => n.id === focusedNode)) focusedNode = null;
-        focusSet = focusedNode ? _lineageReach(focusedNode, graph.allEdges, graph.allNodes) : null;
-        const { eNodes, eEdges } = toECharts(graph);
-
-        // Center on the data bounding-box midpoint; zoom=1 lets ECharts auto-fit.
-        // ECharts graph series treats `center` as the DATA coordinate shown at the
-        // canvas centre, and `zoom` as a multiplier on its own internal fit scale.
-        let centerX = 0, centerY = 0;
-        const positions = Object.values(graph.pos);
-        if (positions.length > 1) {
-            const xs = positions.map(p => p.x);
-            const ys = positions.map(p => p.y);
-            centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
-            centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
-        }
-
-        let initialZoom = 1;
-        const containerW = chart.getWidth();
-        const containerH = chart.getHeight();
-        if (positions.length > 1 && containerW > 0 && containerH > 0) {
-            const xs = positions.map(p => p.x);
-            const ys = positions.map(p => p.y);
-            const graphW = Math.max(...xs) - Math.min(...xs) + 240; // 240 is NODE_W
-            const graphH = Math.max(...ys) - Math.min(...ys) + 160; // 160 is LAYER_H
-            const fitZoom = Math.min(containerW / graphW, containerH / graphH);
-            initialZoom = Math.max(fitZoom, 0.65);
-            viewDimensionsValid = true;
-        }
-
-        if (!hasInitializedView || !viewDimensionsValid) {
-            currentZoom = initialZoom;
-            currentCenter = [centerX, centerY];
-            if (viewDimensionsValid) {
-                hasInitializedView = true;
-            }
-        }
-
-        const seriesOpt = {
-            type:           'graph',
-            layout:         'none',
-            nodes:          eNodes,
-            edges:          eEdges,
-            roam:           true,
-            edgeSymbol:     ['none', 'arrow'],
-            edgeSymbolSize: 8,
-            lineStyle:      { curveness: 0.15 },
-            label:          { position: 'inside', color: '#fff' },
-            emphasis:       { focus: 'adjacency' },
-            zoom:           currentZoom,
-            center:         currentCenter,
-        };
-
-        chart.setOption({
-            // notMerge replace below would otherwise replay the full entrance
-            // animation of every node on each collapse/filter/focus re-render,
-            // making the prior layout appear to linger. Snap instead.
-            animation: false,
-            tooltip: { show: true, confine: true },
-            series: [seriesOpt],
-        }, true);
-
-        updateFocusBadge();
-        updateSoloBadge();
-        recomputeMatches();
-        drawMinimap();
-    }
-
-    render();
-
-    // Single click isolates a node's lineage (focus mode); double click solos a
-    // page or opens the detail panel. A short timer lets a double click cancel
-    // the pending single, so the two gestures don't fight.
-    let clickTimer = null;
-    chart.on('click', params => {
-        if (params.dataType !== 'node') return;
-        const id   = params.data.id;
-        const meta = params.data._meta;
-        if (clickTimer) clearTimeout(clickTimer);
-        clickTimer = setTimeout(() => {
-            clickTimer = null;
-            focusedNode = (focusedNode === id) ? null : id;
-            render();
-            if (options.onNodeClick) options.onNodeClick(id, meta);
-        }, 220);
-    });
-
-    chart.on('dblclick', params => {
-        if (params.dataType !== 'node') return;
-        if (clickTimer) { clearTimeout(clickTimer); clickTimer = null; }
-        const id   = params.data.id;
-        // Pages solo (drill in); tables/datasets/charts open the detail panel.
-        if (params.data._type === 'page') {
-            soloedPage = (soloedPage === id) ? null : id;
-            focusedNode = null;   // solo supersedes a dim-focus
-            render();
-        } else {
-            showDetail({ id, label: params.data.name, type: params.data._type, meta: params.data._meta });
-        }
-    });
-
-    // Click on empty canvas clears focus.
-    chart.getZr().on('click', e => {
-        if (!e.target && focusedNode) { focusedNode = null; render(); }
-    });
-
-    return {
-        dispose: () => { if (clickTimer) clearTimeout(clickTimer); clearTimeout(_hlTimer); chart.dispose(); },
-        resize:  () => {
-            chart.resize();
-            drawMinimap();
-            if (!hasInitializedView) {
-                render();
-            }
-        },
-        showDetail: (id) => {
-            const node = nodes.find(n => n.id === id);
-            if (node) showDetail(node);
-        },
-    };
+}
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
