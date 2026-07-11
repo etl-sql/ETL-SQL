@@ -54,29 +54,8 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       }
       return { created, updated };
     },
-    async listAcl(alias) { return (acls[alias] || []).map((a) => ({ ...a })); },
-    async grantAcl(alias, groupId) {
-      acls[alias] = acls[alias] || [];
-      if (!acls[alias].some((a) => a.groupId === groupId)) {
-        const group = fakeGroups.find((g) => g.id === groupId);
-        acls[alias].push({ groupId, groupName: group?.name ?? `group-${groupId}`, permission: 'Use' });
-      }
-      return {};
-    },
-    async revokeAcl(alias, groupId) {
-      acls[alias] = (acls[alias] || []).filter((a) => a.groupId !== groupId);
-      return {};
-    },
   };
 }
-
-const fakeGroups = [
-  { id: 1, name: 'Analysts' },
-  { id: 2, name: 'Finance' },
-  { id: 3, name: 'ETL-Operators' },
-];
-const fakeAdminApi = { async listGroups() { return fakeGroups.map((g) => ({ ...g })); } };
-let acls = {};
 
 const seed = [
   {
@@ -115,17 +94,14 @@ export default {
     const { createConnectionsAdmin } = await importFresh('/src/ETL-SQL.ReportPortal/wwwroot/js/connections-admin.js');
     stage.classList.add('portal-page');
 
-    acls = fixtureId === 'healthy'
-      ? { sales_dw: [{ groupId: 2, groupName: 'Finance', permission: 'Use' }] }
-      : {};
     const connectionsApi =
       fixtureId === 'empty' ? makeFakeApi([]) :
       fixtureId === 'unresolvable' ? makeFakeApi(seed, { unresolvable: ['sales_dw', 'archive_s3'] }) :
       makeFakeApi(seed);
 
-    const surface = createConnectionsAdmin({ host: stage, connectionsApi, adminApi: fakeAdminApi });
+    const surface = createConnectionsAdmin({ host: stage, connectionsApi });
     await surface.load();
-    ctx.stat('createConnectionsAdmin() — detail shows use grants; grant/revoke mutate the fake in-memory ACLs');
+    ctx.stat('createConnectionsAdmin() — detail masks non-reference credentials server-side; save rejects raw credentials');
     return { dispose() {}, resize() {} };
   },
 };

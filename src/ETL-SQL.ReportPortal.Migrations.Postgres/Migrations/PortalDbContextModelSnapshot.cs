@@ -1302,33 +1302,6 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("ServiceAccounts");
                 });
 
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("GroupId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Permission")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("SharedConnectionId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GroupId");
-
-                    b.HasIndex("SharedConnectionId", "GroupId")
-                        .IsUnique();
-
-                    b.ToTable("SharedConnectionAcls");
-                });
-
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1833,25 +1806,6 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Navigation("OwnerUser");
                 });
 
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
-                {
-                    b.HasOne("ETL_SQL.ReportPortal.Data.Group", "Group")
-                        .WithMany()
-                        .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
-                        .WithMany("Acls")
-                        .HasForeignKey("SharedConnectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Group");
-
-                    b.Navigation("SharedConnection");
-                });
-
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
@@ -1967,11 +1921,6 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Navigation("FolderAcls");
 
                     b.Navigation("UserGroups");
-                });
-
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalSharedConnection", b =>
-                {
-                    b.Navigation("Acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>

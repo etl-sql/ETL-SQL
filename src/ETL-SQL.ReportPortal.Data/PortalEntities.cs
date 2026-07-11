@@ -391,25 +391,6 @@ public class PortalSharedConnection : IVersionedEntity
     public DateTime? LastUsedAtUtc { get; set; }
     public DateTime? LastVerifiedAtUtc { get; set; }
     public long Version { get; set; } = 1;
-
-    public ICollection<SharedConnectionAcl> Acls { get; set; } = [];
-}
-
-public enum SharedConnectionPermission { Use = 0 }
-
-/// <summary>
-/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). An entry with no
-/// grants is usable by any caller; an entry with grants requires an admin, its owner, or a
-/// member of a granted group — and a caller without an injected identity is denied.
-/// </summary>
-public class SharedConnectionAcl
-{
-    public int Id { get; set; }
-    public int SharedConnectionId { get; set; }
-    public PortalSharedConnection SharedConnection { get; set; } = null!;
-    public int GroupId { get; set; }
-    public Group Group { get; set; } = null!;
-    public SharedConnectionPermission Permission { get; set; } = SharedConnectionPermission.Use;
 }
 
 /// <summary>

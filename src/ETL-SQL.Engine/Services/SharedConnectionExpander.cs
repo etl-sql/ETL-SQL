@@ -23,7 +23,6 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         string? declaredConnectorType,
         string target,
         Dictionary<string, string>? scriptOptions,
-        ExecutionIdentity? identity,
         CancellationToken cancellationToken)
     {
         var alias = target.Trim()[SharedPrefix.Length..].Trim();
@@ -38,16 +37,11 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
         SharedConnectionDefinition definition;
         try
         {
-            definition = await catalogProvider.ResolveAsync(alias, identity, cancellationToken).ConfigureAwait(false);
+            definition = await catalogProvider.ResolveAsync(alias, cancellationToken).ConfigureAwait(false);
         }
         catch (KeyNotFoundException)
         {
             throw new ExecutionException($"Connection catalog entry '{alias}' was not found in provider '{catalogProvider.ProviderName}'.");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            // Per-connection use-ACL denial: the message names the alias and caller, never entry contents.
-            throw new ExecutionException(ex.Message);
         }
         catch (InvalidOperationException ex)
         {

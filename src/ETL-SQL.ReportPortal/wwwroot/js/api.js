@@ -318,9 +318,6 @@ export const connectionsApi = {
     remove:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'DELETE' }),
     exportAll: ()             => apiJson('/api/admin/connections/export'),
     importAll: (entries)      => apiJson('/api/admin/connections/import', { method: 'POST', body: entries }),
-    listAcl:   (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`),
-    grantAcl:  (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`, { method: 'POST', body: { groupId } }),
-    revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
 };
 
 // ── Admin — users ──────────────────────────────────────────────────────────────

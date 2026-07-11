@@ -285,14 +285,6 @@ last-used/last-verified timestamps for governance review. Pair it with
 `Governance:Secrets:Provider=PortalStore` so both the catalog and the secrets it references are
 cluster-wide.
 
-Portal-cataloged entries can additionally carry **use grants** (Admin → Connections → Detail →
-Access, or `api/admin/connections/{alias}/acl`): an entry with no grants is usable by any caller
-(the default), while an entry with grants can only be expanded by administrators, its owner, or
-members of a granted group. The executing user's identity is checked at `SHARED:alias` expansion
-time, denials are audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any secret, and
-executions without an injected identity are denied for restricted entries. Grants are group-based,
-matching the folder/dataset permission model.
-
 ### Native admin services
 
 The `samples/admin_operations` scheduler scripts have managed, first-class replacements: three

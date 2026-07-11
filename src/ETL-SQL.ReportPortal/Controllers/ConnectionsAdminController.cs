@@ -138,56 +138,6 @@ public class ConnectionsAdminController(
         return NoContent();
     }
 
-    public sealed record GrantUseRequest(int GroupId);
-
-    /// <summary>
-    /// Use grants: an entry with no grants is usable by any caller; adding the first grant
-    /// restricts use to admins, the owner, and members of granted groups.
-    /// </summary>
-    [HttpGet("{alias}/acl")]
-    public async Task<IActionResult> ListAcl(string alias, CancellationToken ct)
-    {
-        if (await catalog.GetStatusAsync(alias, ct) == SecretLifecycleStatus.NotFound)
-            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
-
-        return Ok(await catalog.ListAclsAsync(alias, ct));
-    }
-
-    [HttpPost("{alias}/acl")]
-    public async Task<IActionResult> GrantUse(string alias, [FromBody] GrantUseRequest request, CancellationToken ct)
-    {
-        if (await catalog.GetStatusAsync(alias, ct) == SecretLifecycleStatus.NotFound)
-            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
-
-        try
-        {
-            audit.Stage(CurrentUserId, "SHARED_CONNECTION_GRANT_USE", "PortalSharedConnection", alias,
-                $"GroupId={request.GroupId}");
-            var created = await catalog.GrantUseAsync(alias, request.GroupId, ct);
-            await catalog.SaveAsync(ct);
-            return created ? NoContent() : Ok(new { alreadyGranted = true });
-        }
-        catch (KeyNotFoundException ex)
-        {
-            return NotFound(new { error = ex.Message });
-        }
-    }
-
-    [HttpDelete("{alias}/acl/{groupId:int}")]
-    public async Task<IActionResult> RevokeUse(string alias, int groupId, CancellationToken ct)
-    {
-        if (await catalog.GetStatusAsync(alias, ct) == SecretLifecycleStatus.NotFound)
-            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
-
-        audit.Stage(CurrentUserId, "SHARED_CONNECTION_REVOKE_USE", "PortalSharedConnection", alias,
-            $"GroupId={groupId}");
-        var removed = await catalog.RevokeUseAsync(alias, groupId, ct);
-        await catalog.SaveAsync(ct);
-        return removed
-            ? NoContent()
-            : NotFound(new { error = $"No use grant for group {groupId} on '{alias}'." });
-    }
-
     /// <summary>Exports entry metadata (options hold SECRET: references only, never secret values).</summary>
     [HttpGet("export")]
     public async Task<IActionResult> Export(CancellationToken ct)

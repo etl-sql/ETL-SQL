@@ -171,8 +171,7 @@ namespace ETL_SQL.App
             if (string.IsNullOrWhiteSpace(alias))
                 return MissingArgument("--alias", logger);
 
-            // The CLI manages the local catalog, which has no user model — identity is not applicable.
-            var definition = await catalog.ResolveAsync(alias.Trim(), identity: null, cancellationToken: ct);
+            var definition = await catalog.ResolveAsync(alias.Trim(), ct);
 
             var references = definition.Options.Values
                 .Where(value => value.TrimStart().StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase))

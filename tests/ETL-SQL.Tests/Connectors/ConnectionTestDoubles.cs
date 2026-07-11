@@ -16,12 +16,9 @@ internal static class ConnectionTestDoubles
         return registry;
     }
 
-    public static IExecutionContext Context(
-        Dictionary<string, IDataSource>? connections = null,
-        ExecutionIdentity? identity = null)
+    public static IExecutionContext Context(Dictionary<string, IDataSource>? connections = null)
     {
         var context = new Mock<IExecutionContext>();
-        context.SetupGet(c => c.ExecutionIdentity).Returns(identity);
         context.SetupGet(c => c.Connections).Returns(connections ?? new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase));
         context.SetupGet(c => c.CancellationToken).Returns(CancellationToken.None);
         context.SetupGet(c => c.InteractiveMode).Returns(false);

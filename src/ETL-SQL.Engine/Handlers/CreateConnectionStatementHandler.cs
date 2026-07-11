@@ -102,8 +102,7 @@ public class CreateConnectionStatementHandler(
         target = Interpolate(target ?? "");
         if (SharedConnectionExpander.IsSharedReference(target))
         {
-            var expanded = await _sharedExpander.ExpandAsync(
-                connectionType, target, options, context.ExecutionIdentity, context.CancellationToken);
+            var expanded = await _sharedExpander.ExpandAsync(connectionType, target, options, context.CancellationToken);
             target = expanded.Target;
             options = expanded.Options;
         }

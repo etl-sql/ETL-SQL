@@ -21,7 +21,7 @@ function _nodeColor(type) {
 function getConnectionDialect(node) {
   if (node.type === 'dataset') return 'Dataset';
   if (node.type === 'page' || node.type === 'visual') return null;
-  
+
   const label = node.label;
   if (label.startsWith('Raw')) {
     if (label.includes('Sales') || label.includes('Returns')) return 'MSSQL';
@@ -55,7 +55,7 @@ function _lineageReach(rootId, allEdges, allNodes) {
   };
   walk(down);  // descendants
   walk(up);    // ancestors
-  
+
   // Keep expanded column children whose parent node is in focus.
   for (const n of allNodes) if (n.meta?.parent && keep.has(n.meta.parent)) keep.add(n.id);
   return keep;
@@ -132,7 +132,7 @@ export default {
   ],
   async mount(stage, fixtureId, ctx) {
     stage.innerHTML = '';
-    
+
     // 1. Setup stage as relative container
     stage.style.position = 'relative';
     stage.style.width = '100%';
@@ -164,7 +164,7 @@ export default {
     panel.style.padding = '12px 14px 16px';
     panel.style.boxShadow = '-5px 0 25px rgba(0, 0, 0, 0.5)';
     panel.style.display = 'none';
-    
+
     // Overriding light theme variable defaults specifically inside the panel to ensure dark mode visibility
     panel.style.setProperty('--portal-text', '#e2e8f0');
     panel.style.setProperty('--portal-text-soft', '#94a3b8');
@@ -255,7 +255,7 @@ export default {
       badge.style.left = `${mx}px`;
       badge.style.top = `${my}px`;
       badge.style.transform = 'translate(-50%, -50%)';
-      
+
       badge.style.background = inPath ? '#0f766e' : (isDimmed ? 'rgba(17,24,39,0.05)' : '#1e293b');
       badge.style.border = inPath ? '1px solid #14b8a6' : (isDimmed ? '1px solid rgba(55,65,81,0.05)' : '1px solid #3b82f6');
       badge.style.borderRadius = '10px';
@@ -267,7 +267,7 @@ export default {
       badge.style.whiteSpace = 'nowrap';
       badge.style.boxShadow = isDimmed ? 'none' : '0 2px 4px rgba(0,0,0,0.5)';
       badge.textContent = text;
-      
+
       badgeContainer.appendChild(badge);
     }
 
@@ -317,7 +317,7 @@ export default {
       piiBtn.style.background = '#1e293b';
       piiBtn.style.borderColor = '#334155';
       filterBanner.style.display = 'none';
-      
+
       graph.nodes.forEach(n => {
         const card = document.getElementById(`node__${n.id}`);
         if (card) card.style.display = visibleTypes[n.type] ? 'block' : 'none';
@@ -329,11 +329,11 @@ export default {
     function applyFilter(nodeId) {
       currentFilterNode = nodeId;
       filteredNodes = _lineageReach(nodeId, graph.edges, graph.nodes);
-      
+
       filterBanner.style.display = 'flex';
       const label = graph.nodes.find(x => x.id === nodeId)?.label || nodeId;
       filterBanner.querySelector('span').textContent = `Showing lineage for: ${label}`;
-      
+
       graph.nodes.forEach(n => {
         const card = document.getElementById(`node__${n.id}`);
         if (card) {
@@ -418,7 +418,7 @@ export default {
         const nodeId = parts[0];
         const colName = parts[parts.length - 1];
         const label = _nodeById[nodeId]?.label || nodeId;
-        
+
         filterBanner.style.display = 'flex';
         filterBanner.querySelector('span').textContent = `Isolated Path: ${label} ➔ ${colName}`;
       } else if (piiComplianceHighlight) {
@@ -438,7 +438,7 @@ export default {
           if (activeColumnPathSet.has(n.id)) {
             card.style.opacity = '1';
             card.style.borderColor = '#10b981';
-            
+
             if (n.meta?.columns) {
               n.meta.columns.forEach(c => {
                 const row = document.getElementById(`${n.id}__col__${c}`);
@@ -482,7 +482,7 @@ export default {
           if (nodeHasPii) {
             card.style.opacity = '1';
             card.style.borderColor = '#ef4444'; // Red for compliance attention
-            
+
             if (n.meta?.columns) {
               n.meta.columns.forEach(c => {
                 const row = document.getElementById(`${n.id}__col__${c}`);
@@ -504,7 +504,7 @@ export default {
         } else {
           card.style.opacity = '1';
           card.style.borderColor = n.type === 'table' ? '#2563eb' : (n.type === 'dataset' ? '#7c3aed' : (n.type === 'visual' ? '#059669' : '#475569'));
-          
+
           if (n.meta?.columns) {
             n.meta.columns.forEach(c => {
               const row = document.getElementById(`${n.id}__col__${c}`);
@@ -541,7 +541,7 @@ export default {
       // Header
       const head = document.createElement('div');
       head.className = 'etlsql-dag-panel-head';
-      
+
       const dot = document.createElement('span');
       dot.className = 'etlsql-dag-panel-dot';
       dot.style.background = _nodeColor(node.type);
@@ -772,7 +772,7 @@ export default {
         dbBadge.style.borderRadius = '3px';
         dbBadge.style.marginLeft = 'auto';
         dbBadge.style.marginRight = '8px';
-        
+
         if (dialect === 'MSSQL') {
           dbBadge.style.background = '#1e3a8a';
           dbBadge.style.color = '#93c5fd';
@@ -954,7 +954,7 @@ export default {
               activeColumnPath = mapKey;
               activeColumnPathSet = new Set();
               const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
-              
+
               // Find matching edge to trace backwards
               const srcEdge = graph.edges.find(x => x.target === n.id && (x.label?.includes(cleanCol) || _nodeById[x.source]?.meta?.columns?.includes(cleanCol)));
               if (srcEdge) {
@@ -1042,7 +1042,7 @@ export default {
       // Interactive Click Logic (Ctrl+Click to filter, regular Click to highlight + show sidebar)
       card.addEventListener('click', e => {
         if (e.target !== header && e.target !== titleSpan && e.target !== typeDot) return;
-        
+
         if (e.ctrlKey) {
           // Isolate Lineage Filter Mode
           if (currentFilterNode === n.id) {
@@ -1132,7 +1132,7 @@ export default {
 
                   const inPath = activeColumnPathSet && activeColumnPathSet.has(`${e.source}__col__${cleanCol}`) && activeColumnPathSet.has(`${e.target}__map__${m.role}`);
                   const isDimmed = activeColumnPathSet && !inPath;
-                  
+
                   const isHighlightNodeActive = activeHighlightNode && (activeHighlightNode === e.source || activeHighlightNode === e.target);
                   const isDimmedHighlight = activeHighlightNode && !isHighlightNodeActive;
 
@@ -1172,7 +1172,7 @@ export default {
 
         const inPath = activeColumnPathSet && activeColumnPathSet.has(e.source) && activeColumnPathSet.has(e.target);
         const isDimmed = (activeColumnPathSet && !inPath) || (activeHighlightNode && activeHighlightNode !== e.source && activeHighlightNode !== e.target);
-        
+
         const color = inPath ? '#06b6d4' : (isDimmed ? 'rgba(71,85,105,0.06)' : '#475569');
         const width = inPath ? 2.5 : (isDimmed ? 0.75 : 1.5);
 
@@ -1235,7 +1235,7 @@ export default {
     }
 
     // 10. Floating Interactive Toolbars & Controls
-    
+
     // 10.1 Top Left Category Filter Chips (Toggles Pages/Visuals/Tables)
     const toolbar = document.createElement('div');
     toolbar.style.position = 'absolute';
@@ -1266,11 +1266,11 @@ export default {
       chip.style.cursor = 'pointer';
       chip.style.opacity = '1';
       chip.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
-      
+
       chip.addEventListener('click', () => {
         visibleTypes[cat.key] = !visibleTypes[cat.key];
         chip.style.opacity = visibleTypes[cat.key] ? '1' : '0.4';
-        
+
         // Toggle card elements
         graph.nodes.forEach(n => {
           if (n.type === cat.key) {
@@ -1297,7 +1297,7 @@ export default {
     piiBtn.style.borderRadius = '14px';
     piiBtn.style.cursor = 'pointer';
     piiBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
-    
+
     piiBtn.addEventListener('click', () => {
       piiComplianceHighlight = !piiComplianceHighlight;
       if (piiComplianceHighlight) {
@@ -1381,7 +1381,7 @@ export default {
 
     canvasContainer.addEventListener('wheel', e => {
       e.preventDefault();
-      
+
       const rect = canvasContainer.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;

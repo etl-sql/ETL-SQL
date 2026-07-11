@@ -99,24 +99,6 @@ public class SharedConnectionTests
         Assert.Contains("Governance:ConnectionCatalog:Provider", noProvider.Message);
     }
 
-    [Fact]
-    public async Task SharedReference_ThreadsExecutionIdentityToTheCatalogProvider()
-    {
-        var catalog = Catalog(new SharedConnectionDefinition("my_sql_server", "CAPTURE", null, Options(("SERVER", "sql01")), false));
-        var identity = new ExecutionIdentity
-        {
-            EffectiveUser = "ann",
-            RealUser = "ann",
-            IsAdmin = false,
-            Groups = ["Analysts"]
-        };
-
-        await Handler(new CapturingConnector(), catalog)
-            .Execute(SharedCreate("m", "SHARED:my_sql_server"), ConnectionTestDoubles.Context(identity: identity));
-
-        Assert.Same(identity, catalog.LastIdentity);
-    }
-
     private static CreateConnectionStatement SharedCreate(string name, string target) =>
         new(name, "CAPTURE", new LiteralExpression(target, TokenType.STRING_LITERAL));
 
@@ -142,12 +124,8 @@ public class SharedConnectionTests
 
         public string ProviderName => "TestCatalog";
 
-        public ExecutionIdentity? LastIdentity { get; private set; }
-
-        public Task<SharedConnectionDefinition> ResolveAsync(
-            string alias, ExecutionIdentity? identity = null, CancellationToken cancellationToken = default)
+        public Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default)
         {
-            LastIdentity = identity;
             if (!_entries.TryGetValue(alias, out var definition))
                 throw new KeyNotFoundException(alias);
             return Task.FromResult(definition);

@@ -22,8 +22,6 @@ public sealed record PortalSharedConnectionDetail(
     string? Target,
     IReadOnlyDictionary<string, string> Options);
 
-public sealed record SharedConnectionAclEntry(int GroupId, string GroupName, string Permission);
-
 /// <summary>An entry as exported/imported: definition metadata with SECRET: references, never secret values.</summary>
 public sealed record PortalSharedConnectionExport(
     string Alias,
@@ -85,18 +83,14 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     /// <summary>Resolution path for script execution; the last-used touch is best-effort.</summary>
     public async Task<SharedConnectionDefinition> ResolveDefinitionAsync(
         string alias,
-        ExecutionIdentity? identity = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await db.PortalSharedConnections
-            .Include(c => c.Acls).ThenInclude(a => a.Group)
             .SingleOrDefaultAsync(c => c.Alias == alias, cancellationToken)
             ?? throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the Portal connection catalog.");
 
         if (entity.Disabled)
             throw new InvalidOperationException($"Shared connection '{alias}' is disabled.");
-
-        await EnforceUseAclAsync(entity, identity, cancellationToken);
 
         var definition = new SharedConnectionDefinition(
             entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false);
@@ -113,92 +107,6 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         }
 
         return definition;
-    }
-
-    /// <summary>
-    /// Entries without grants are usable by any caller (restriction is opt-in per entry). Entries
-    /// with grants require an admin, the entry's owner, or membership in a granted group; callers
-    /// without an injected identity are denied. Group membership is resolved authoritatively from
-    /// the user id when present, falling back to identity group names for federated identities.
-    /// </summary>
-    private async Task EnforceUseAclAsync(
-        PortalSharedConnection entity,
-        ExecutionIdentity? identity,
-        CancellationToken cancellationToken)
-    {
-        if (entity.Acls.Count == 0)
-            return;
-
-        if (identity != null)
-        {
-            if (identity.IsAdmin)
-                return;
-            if (entity.OwnerUserId != null && identity.EffectiveUserId == entity.OwnerUserId)
-                return;
-
-            if (identity.EffectiveUserId is int userId)
-            {
-                var groupIds = await db.UserGroups
-                    .AsNoTracking()
-                    .Where(ug => ug.UserId == userId)
-                    .Select(ug => ug.GroupId)
-                    .ToListAsync(cancellationToken);
-                if (entity.Acls.Any(a => groupIds.Contains(a.GroupId)))
-                    return;
-            }
-            else if (entity.Acls.Any(a => identity.HasGroup(a.Group.Name)))
-            {
-                return;
-            }
-        }
-
-        throw new UnauthorizedAccessException(
-            $"Identity '{identity?.EffectiveUser ?? "(none)"}' is not authorized to use shared connection '{entity.Alias}'. " +
-            "Ask an administrator for a use grant on this connection.");
-    }
-
-    public async Task<IReadOnlyList<SharedConnectionAclEntry>> ListAclsAsync(string alias, CancellationToken cancellationToken = default)
-    {
-        var entity = await Require(alias, cancellationToken);
-        return await db.SharedConnectionAcls
-            .AsNoTracking()
-            .Where(a => a.SharedConnectionId == entity.Id)
-            .OrderBy(a => a.Group.Name)
-            .Select(a => new SharedConnectionAclEntry(a.GroupId, a.Group.Name, a.Permission.ToString()))
-            .ToListAsync(cancellationToken);
-    }
-
-    /// <summary>Grants use to a group (idempotent). Returns false when the grant already existed.</summary>
-    public async Task<bool> GrantUseAsync(string alias, int groupId, CancellationToken cancellationToken = default)
-    {
-        var entity = await Require(alias, cancellationToken);
-        var exists = await db.SharedConnectionAcls
-            .AnyAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
-        if (exists)
-            return false;
-
-        if (!await db.Groups.AnyAsync(g => g.Id == groupId, cancellationToken))
-            throw new KeyNotFoundException($"Group {groupId} does not exist.");
-
-        db.SharedConnectionAcls.Add(new SharedConnectionAcl
-        {
-            SharedConnectionId = entity.Id,
-            GroupId = groupId,
-            Permission = SharedConnectionPermission.Use
-        });
-        return true;
-    }
-
-    public async Task<bool> RevokeUseAsync(string alias, int groupId, CancellationToken cancellationToken = default)
-    {
-        var entity = await Require(alias, cancellationToken);
-        var acl = await db.SharedConnectionAcls
-            .SingleOrDefaultAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
-        if (acl == null)
-            return false;
-
-        db.SharedConnectionAcls.Remove(acl);
-        return true;
     }
 
     public async Task<IReadOnlyList<PortalSharedConnectionSummary>> ListAsync(CancellationToken cancellationToken = default)
