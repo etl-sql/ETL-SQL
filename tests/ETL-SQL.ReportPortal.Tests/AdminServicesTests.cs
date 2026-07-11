@@ -1,0 +1,276 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using ETL_SQL.Core.Data;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace ETL_SQL.ReportPortal.Tests;
+
+[Trait("Category", "Portal")]
+public class AdminServicesTests
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    [Fact]
+    public async Task FailureDigest_AlertOnly_SkipsWhenNoFailures_RecordsRunAndAudit()
+    {
+        using var factory = new AdminServicesFactory();
+        var service = NewFailureDigest(factory);
+
+        var run = await service.RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("Skipped", run.Outcome);
+        Assert.Empty(factory.Sender.Sent);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.Single(await db.AdminServiceRuns.Where(r => r.ServiceName == "failure-digest").ToListAsync());
+        Assert.Contains(await db.AuditLogs.Select(a => a.Action).ToListAsync(), a => a == "ADMIN_SERVICE_RUN");
+    }
+
+    [Fact]
+    public async Task FailureDigest_SendsWhenFailuresExist()
+    {
+        using var factory = new AdminServicesFactory();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PortalExecutionJobs.Add(new PortalExecutionJob
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Kind = "Report",
+                Status = "Failed",
+                CompletedAt = DateTime.UtcNow.AddMinutes(-5),
+                Error = "boom: connection refused"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var run = await NewFailureDigest(factory).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("Sent", run.Outcome);
+        var sent = Assert.Single(factory.Sender.Sent);
+        Assert.Contains("1 failure(s)", sent.Subject);
+        Assert.Contains("boom: connection refused", sent.Body);
+        Assert.Equal("ops@example.com", sent.Recipients);
+    }
+
+    [Fact]
+    public async Task FailureDigest_RetriesDeliveryAndRecordsFailure()
+    {
+        using var factory = new AdminServicesFactory();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PortalExecutionJobs.Add(new PortalExecutionJob
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Status = "Failed",
+                CompletedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // Fails once, then succeeds → Sent with two attempts.
+        factory.Sender.FailuresBeforeSuccess = 1;
+        var run = await NewFailureDigest(factory).RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Sent", run.Outcome);
+        Assert.Equal(2, run.Attempts);
+
+        // Always fails → Failed after MaxAttempts.
+        factory.Sender.FailuresBeforeSuccess = int.MaxValue;
+        var failed = await NewFailureDigest(factory).RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Failed", failed.Outcome);
+        Assert.Equal(2, failed.Attempts); // MaxAttempts = 2 in this fixture
+        Assert.Contains("smtp down", failed.Detail);
+    }
+
+    [Fact]
+    public async Task BackupReport_AlertsOnMissingFailedAndStale_SkipsWhenHealthy()
+    {
+        using var factory = new AdminServicesFactory();
+        var jobHistory = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await jobHistory.InitializeAsync();
+        var service = NewBackupReport(factory);
+
+        // No outcome ever recorded → alert.
+        var missing = await service.RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Sent", missing.Outcome);
+        Assert.Contains("ALERT", factory.Sender.Sent[^1].Subject);
+
+        // Fresh successful backup → alert-only skips.
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_status", "success");
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_exit_code", "0");
+        var healthy = await service.RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Skipped", healthy.Outcome);
+
+        // Stale backup → alert.
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.AddDays(-3).ToString("o"));
+        var stale = await service.RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Sent", stale.Outcome);
+        Assert.Contains("STALE", factory.Sender.Sent[^1].Body);
+
+        // Failed backup → alert.
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_status", "failed");
+        await jobHistory.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+        var failedBackup = await service.RunOnceAsync(CancellationToken.None);
+        Assert.Equal("Sent", failedBackup.Outcome);
+        Assert.Contains("FAILED", factory.Sender.Sent[^1].Body);
+    }
+
+    [Fact]
+    public async Task CapacityReport_AlwaysSends_AndPrunesOldHistory()
+    {
+        using var factory = new AdminServicesFactory();
+        var jobHistory = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await jobHistory.InitializeAsync();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.AdminServiceRuns.Add(new AdminServiceRun
+            {
+                ServiceName = "capacity-report",
+                Outcome = "Sent",
+                StartedAtUtc = DateTime.UtcNow.AddDays(-400)
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var run = await NewCapacityReport(factory).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("Sent", run.Outcome);
+        Assert.Contains("capacity report", factory.Sender.Sent[^1].Subject);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var rows = await db.AdminServiceRuns.Where(r => r.ServiceName == "capacity-report").ToListAsync();
+            var row = Assert.Single(rows); // the 400-day-old row was pruned
+            Assert.Equal("Sent", row.Outcome);
+        }
+    }
+
+    [Fact]
+    public async Task StatusApi_ReportsServicesAndHistory()
+    {
+        using var factory = new AdminServicesFactory();
+        using var client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/admin/services")).StatusCode);
+
+        await NewCapacityReport(factory).RunOnceAsync(CancellationToken.None);
+
+        var token = await GetAdminTokenAsync(client);
+        var response = await SendAsync(client, HttpMethod.Get, token, "/api/admin/services");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Equal(3, body!.Count);
+        var capacity = body.Single(n => n!["name"]!.GetValue<string>() == "capacity-report");
+        Assert.True(capacity!["enabled"]!.GetValue<bool>());
+        Assert.Equal("Sent", capacity["lastRun"]!["outcome"]!.GetValue<string>());
+
+        var history = await SendAsync(client, HttpMethod.Get, token, "/api/admin/services/capacity-report/history");
+        Assert.Equal(HttpStatusCode.OK, history.StatusCode);
+        Assert.Single((await history.Content.ReadFromJsonAsync<JsonArray>(Json))!);
+    }
+
+    // ── fixtures ────────────────────────────────────────────────────────────────
+
+    private static FailureDigestAdminService NewFailureDigest(AdminServicesFactory factory) => new(
+        factory.Services.GetRequiredService<IServiceScopeFactory>(),
+        factory.Services.GetRequiredService<PortalConfig>(),
+        factory.Services.GetRequiredService<IClusterLockStore>(),
+        NullLogger<FailureDigestAdminService>.Instance);
+
+    private static BackupReportAdminService NewBackupReport(AdminServicesFactory factory) => new(
+        factory.Services.GetRequiredService<IServiceScopeFactory>(),
+        factory.Services.GetRequiredService<PortalConfig>(),
+        factory.Services.GetRequiredService<IClusterLockStore>(),
+        NullLogger<BackupReportAdminService>.Instance);
+
+    private static CapacityReportAdminService NewCapacityReport(AdminServicesFactory factory) => new(
+        factory.Services.GetRequiredService<IServiceScopeFactory>(),
+        factory.Services.GetRequiredService<PortalConfig>(),
+        factory.Services.GetRequiredService<IClusterLockStore>(),
+        NullLogger<CapacityReportAdminService>.Instance);
+
+    private sealed class AdminServicesFactory : PortalWebFactory
+    {
+        public FakeSender Sender { get; } = new();
+
+        protected override void CustomizePortalConfig(PortalConfig config)
+        {
+            foreach (var schedule in new AdminServiceScheduleConfig[]
+            {
+                config.AdminServices.FailureDigest,
+                config.AdminServices.BackupReport,
+                config.AdminServices.CapacityReport
+            })
+            {
+                schedule.Enabled = true;
+                schedule.Recipients = "ops@example.com";
+                schedule.SmtpAlias = "mailer";
+                schedule.MaxAttempts = 2;
+                schedule.RetryDelaySeconds = 0;
+            }
+        }
+
+        protected override void CustomizeServices(IServiceCollection services)
+        {
+            services.RemoveAll<IAdminNotificationSender>();
+            services.AddSingleton<IAdminNotificationSender>(Sender);
+        }
+    }
+
+    private sealed class FakeSender : IAdminNotificationSender
+    {
+        public List<AdminNotification> Sent { get; } = new();
+        public int FailuresBeforeSuccess { get; set; }
+
+        public Task<(bool Success, string? Error)> SendAsync(AdminNotification notification, CancellationToken ct)
+        {
+            if (FailuresBeforeSuccess > 0)
+            {
+                FailuresBeforeSuccess--;
+                return Task.FromResult<(bool, string?)>((false, "smtp down"));
+            }
+
+            Sent.Add(notification);
+            return Task.FromResult<(bool, string?)>((true, null));
+        }
+    }
+
+    private static async Task<string> GetAdminTokenAsync(HttpClient client)
+    {
+        var initial = await LoginAsync(client, "admin", "Admin@12345!");
+        var change = await SendAsync(client, HttpMethod.Post, initial, "/api/auth/change-password",
+            new { currentPassword = "Admin@12345!", newPassword = "Admin@Tests99!" });
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
+        return await LoginAsync(client, "admin", "Admin@Tests99!");
+    }
+
+    private static async Task<string> LoginAsync(HttpClient client, string username, string password)
+    {
+        var response = await client.PostAsJsonAsync("/api/auth/login", new { username, password });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        return body!["token"]!.GetValue<string>();
+    }
+
+    private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method,
+        string token, string url, object? body = null)
+    {
+        var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new("Bearer", token);
+        if (body is not null) request.Content = JsonContent.Create(body);
+        return await client.SendAsync(request);
+    }
+}

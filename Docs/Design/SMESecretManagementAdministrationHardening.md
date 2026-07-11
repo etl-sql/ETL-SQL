@@ -99,6 +99,13 @@ Portal encrypted store workflow:
 - support backup/restore validation that proves encrypted values are decryptable by the restored
   environment without printing them.
 
+**Admin UI requirement (applies to the secret store AND the Connection Catalog UI):** the pages
+are built as extracted portal UI modules hosted in the `tools/ui-sandbox` stories harness — a
+story per surface with fixture data and the injectable mock fetch (`mockApi.js`) stubbing the
+`api/admin/secrets` / `api/admin/connections` endpoints — so the UI is viewable and debuggable
+without running the portal. Sandbox story first, then portal page integration; the story stays as
+the development-troubleshooting surface afterward.
+
 ---
 
 ## 5. Syntax and Resolution
@@ -166,6 +173,14 @@ Rules:
 - redaction should preserve enough shape for troubleshooting, such as provider and field name, without
   revealing values;
 - resolved sensitive metadata must not be written back into scripts or generated artifacts.
+
+*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — designated
+fields become SECRET:-resolvable (`SecretResolvableFields` org set, honored by the resolver and
+the SecretReferenceUsage lint rule) and masked through `SecretRedactor.IsSensitiveKey` (SHOW
+CONNECTION / data-source config) and connection-string diagnostics rendering. Designation
+deliberately does NOT extend the catalog's raw-credential rejection: designated metadata may
+still be stored as plain values — designation controls resolution and masking, not storage.
+Remaining: per-connector metadata defaults and per-catalog-entry classification.)*
 
 ---
 
@@ -324,7 +339,8 @@ configuration.
    verify-all/disable/delete; values never returned) with audited mutations, the `PortalStore`
    `ISecretProvider` for Portal-hosted execution, the `secret-store-keyring` health check that
    decrypt-probes every stored secret on each node, and `verify-all` as the backup/restore
-   validation surface. Remaining: an Admin UI page over the API.)*
+   validation surface. Admin UI: the Secrets tab in admin.html, backed by the extracted
+   `js/secrets-admin.js` module with a ui-sandbox story.)*
 4. **Slice D - Connection Catalog.** Add `IConnectionCatalogProvider` with the local (CLI-managed,
    machine-scoped) provider and `SHARED:name` execution-time expansion first; then the Portal
    provider with catalog schema, RBAC, masked diagnostics, import/export metadata, and impact
@@ -335,11 +351,21 @@ configuration.
    prefixes, and the Portal catalog: `PortalSharedConnections` schema (endpoints encrypted at rest),
    audited `api/admin/connections` API with masked detail, verify, metadata-only export/import,
    owner/environment-scope/last-used/last-verified governance metadata, and the `PortalCatalog`
-   provider for Portal-hosted execution. Deferred: per-connection use-ACLs (needs caller-identity
-   flow into the expansion path — pair with a dedicated RBAC pass) and deep impact inventory
-   (which reports/jobs reference an alias — pair with script inspection).)*
+   provider for Portal-hosted execution. Admin UI: the Connections tab in admin.html, backed by
+   the extracted `js/connections-admin.js` module with a ui-sandbox story. Deferred:
+   per-connection use-ACLs (needs caller-identity flow into the expansion path — pair with a
+   dedicated RBAC pass) and deep impact inventory (which reports/jobs reference an alias — pair
+   with script inspection).)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
-   Portal/Orchestrator background services with leases and operational history.
+   Portal/Orchestrator background services with leases and operational history. *(Shipped:
+   `Portal:AdminServices` config (per-service enable/interval/recipients/SMTP alias/retries),
+   `FailureDigest`/`BackupReport`/`CapacityReport` services on the cluster-lock interval-TTL
+   cadence, `AdminServiceRun` history with retention, `ADMIN_SERVICE_RUN` audit,
+   `api/admin/services` status/history API, delivery through the shared
+   `IAdminNotificationSender` (also adopted by the operational-metrics digest), and
+   `etl-sql admin backup` now records its outcome (job-state `admin-backup`) so the backup report
+   needs no scheduler wiring. Samples remain as examples with a README pointing at the native
+   path.)*
 
 ---
 

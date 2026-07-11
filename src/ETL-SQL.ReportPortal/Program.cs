@@ -431,6 +431,14 @@ builder.Services.AddHostedService(sp =>
 // HA-safe: a cluster lock ensures exactly one node sends per interval.
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OperationalMetricsDigestService>();
 
+// Native admin services (Portal:AdminServices; all disabled by default) — managed replacements for
+// the samples/admin_operations scheduler scripts. Same HA cluster-lock cadence as the digest above.
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.IAdminNotificationSender,
+    ETL_SQL.ReportPortal.Services.SmtpAdminNotificationSender>();
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.FailureDigestAdminService>();
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.BackupReportAdminService>();
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.CapacityReportAdminService>();
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());

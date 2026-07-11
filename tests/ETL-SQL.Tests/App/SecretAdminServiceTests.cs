@@ -22,6 +22,10 @@ public class SecretAdminServiceTests
         Assert.Equal(1, await Run("verify-secret", "db_password", null, provider, logger));
         Assert.Contains(logger.Messages, m => m.Contains("disabled"));
 
+        // enable restores the previously stored value without requiring a new one
+        Assert.Equal(0, await Run("enable-secret", "db_password", null, provider, logger));
+        Assert.Equal("second-value", (await provider.ResolveAsync("db_password")).Value);
+
         Assert.Equal(0, await Run("set-secret", "db_password", "third-value", provider, logger));
         Assert.Equal("third-value", (await provider.ResolveAsync("db_password")).Value);
 

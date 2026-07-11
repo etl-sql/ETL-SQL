@@ -66,8 +66,12 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
     // connector as the literal text "SECRET:name" — reject it up front instead.
     private static ExecutionException UnresolvedSecretReferenceError(string key) =>
         new($"Connection field '{key}' uses a SECRET: reference, but secrets are only resolved for credential fields " +
-            $"({string.Join(", ", SecretResolvableFields.CredentialKeys.Order(StringComparer.OrdinalIgnoreCase))}). " +
-            "The connector would receive the literal reference text instead of the secret value.");
+            $"({string.Join(", ", SecretResolvableFields.CredentialKeys.Order(StringComparer.OrdinalIgnoreCase))})" +
+            (SecretResolvableFields.OrganizationFields.Count > 0
+                ? $" and organization-designated fields ({string.Join(", ", SecretResolvableFields.OrganizationFields.Order(StringComparer.OrdinalIgnoreCase))})"
+                : string.Empty) +
+            ". The connector would receive the literal reference text instead of the secret value. " +
+            "To treat this field as sensitive, add it to Governance:Secrets:SensitiveConnectionFields.");
 
     private async Task<string> ResolveSecretValueAsync(string reference, CancellationToken cancellationToken)
     {

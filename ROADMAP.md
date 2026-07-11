@@ -187,6 +187,12 @@ requirements; unfinished items may move to the next release without weakening th
 - [ ] Produce a machine-readable recovery report with achieved RPO/RTO, missing dependencies, data loss window, and operator actions.
 - [ ] Document regional/site failure, split custody, backup retention, immutable/offline backup, and emergency access procedures.
 
+#### 6.8 Searchable Portal Documentation Hub
+
+- [ ] Compile the repository's markdown document library (cookbooks, reference guides, manuals) into a unified, searchable static website using a static site generator (e.g., MkDocs or Docusaurus).
+- [ ] Host the compiled documentation site natively inside the Report Portal (e.g. under a `/docs` route) to allow administrators, analysts, and business users to search and navigate documentation in their web browser.
+- [ ] Reconcile the static site's theme and search indices with the Portal's user interface, ensuring sensitive configurations remain excluded from the compiled index.
+
 #### Phase 6 prioritization gates
 
 - [ ] Rank each workstream using measured administrative pain, customer deployment scale, security impact, and dependency on external infrastructure.
@@ -263,3 +269,23 @@ zero-trust safety.*
   - Add a VS Code debug adapter configuration that uses the same engine debug protocol.
 - [ ] **Phase 4: Portal/Orchestrator Guardrails**
   - Define whether scheduled or Portal jobs can be debugged, who can attach, what is redacted, and how sessions are audited.
+
+---
+
+## Automated SQL Logic & Parser Fuzzer
+
+*Establishes continuous automated validation of the parser, compiler, and query execution engine by fuzzing query trees.*
+
+### Candidate phases
+
+- [ ] **Phase 1: Grammar-Walk Fuzzer & MOCKDB Integration**
+  - Create a dedicated test harness project (`tests/ETL-SQL.FuzzTests`) that boots a local session with pre-seeded `MOCKDB()` tables.
+  - Implement a token walker that uses the `GrammarStateEngine` metadata to construct syntactically valid SQL statements via random walks.
+  - Classify execution exceptions, filtering out expected errors (type mismatches, math exceptions) and logging unhandled crashes (`NullReferenceException`, optimizer faults).
+- [ ] **Phase 2: Query AST Reducer (Minimizer)**
+  - Implement a delta-debugging AST visitor that systematically prunes nodes and sub-clauses from a crashing query.
+  - Re-run the pruned query iteratively to produce the absolute minimal reproducing SQL statement.
+  - Save unique reproducers grouped by stack trace hash to `logs/fuzz/`.
+- [ ] **Phase 3: Differential Query Testing**
+  - Validate engine correctness by running fuzzed queries concurrently against both the in-memory engine and a reference database connector (e.g., PostgreSQL or SQLite).
+  - Compare execution results, column metadata, and sort order, flagging differences as correctness bugs.

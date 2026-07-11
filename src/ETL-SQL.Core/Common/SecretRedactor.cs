@@ -40,6 +40,7 @@ public static partial class SecretRedactor
     public static bool IsSensitiveKey(string? key)
     {
         if (string.IsNullOrWhiteSpace(key)) return false;
+        if (Governance.SecretResolvableFields.IsOrganizationDesignated(key)) return true;
         return key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase)
             || key.Equals("PWD", StringComparison.OrdinalIgnoreCase)
             || key.Contains("SECRET", StringComparison.OrdinalIgnoreCase)

@@ -214,7 +214,7 @@ Supported providers:
 | `Environment` | Optional `EnvironmentPrefix` | Secret names are uppercased; `.` and `-` become `_`. With the prefix above, `SECRET:sales_db_password` resolves from `ETLSQL_SECRET_SALES_DB_PASSWORD`. |
 | `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. Values are encrypted machine-scoped (DPAPI `LocalMachine` on Windows, machine-id-derived AES-256-GCM elsewhere), so an administrator can write secrets that a differently privileged service account reads back; restrict the directory with filesystem ACLs since any account on the host that can read the files can decrypt them. On Unix, secret files are written owner-read/write only. Values written by releases before machine scoping are user-scoped and stay readable by the account that wrote them; rotating a secret upgrades it to machine scope. The store is never read as plaintext — unrecognized file contents fail closed. |
 | `HttpsVault` | `VaultEndpoint`; optional `VaultBearerToken` | The endpoint must be HTTPS. The provider requests `<VaultEndpoint>/<secret-name>` and accepts either a raw response body or JSON `{ "value": "secret" }`. |
-| `PortalStore` | none (Portal host only) | Stores secrets encrypted in the Portal database using the cluster-wide Data Protection key ring — the supported multi-node path without an external vault. Managed through `api/admin/secrets` (set, list metadata, verify, verify-all, disable, delete; values are never returned after write, and every mutation is audited). The `secret-store-keyring` health check under `GET /health` decrypt-probes every stored secret so an HA node with a wrong `Portal:Storage:KeyRingPath` fails fast; run `POST api/admin/secrets/verify-all` after a backup/restore to prove the restored key ring can decrypt every value without printing them. Not available to standalone CLI/Orchestrator deployments. |
+| `PortalStore` | none (Portal host only) | Stores secrets encrypted in the Portal database using the cluster-wide Data Protection key ring — the supported multi-node path without an external vault. Managed through `api/admin/secrets` (set, list metadata, verify, verify-all, disable, enable, delete; values are never returned after write, and every mutation is audited). The `secret-store-keyring` health check under `GET /health` decrypt-probes every stored secret so an HA node with a wrong `Portal:Storage:KeyRingPath` fails fast; run `POST api/admin/secrets/verify-all` after a backup/restore to prove the restored key ring can decrypt every value without printing them. Not available to standalone CLI/Orchestrator deployments. |
 
 Environment-variable examples:
 
@@ -233,7 +233,8 @@ without touching secret files directly:
 etl-sql admin set-secret --name sales_db_password      # prompts (masked) and confirms
 etl-sql admin verify-secret --name sales_db_password   # proves the secret resolves; never prints it
 etl-sql admin rotate-secret --name sales_db_password   # replaces the value; fails if it does not exist
-etl-sql admin disable-secret --name sales_db_password  # resolution fails until a new value is stored
+etl-sql admin disable-secret --name sales_db_password  # resolution fails until re-enabled
+etl-sql admin enable-secret --name sales_db_password   # re-enables; the stored value resolves again
 etl-sql admin delete-secret --name sales_db_password   # permanently removes the secret
 ```
 
@@ -256,7 +257,8 @@ with filesystem ACLs), then manage entries from the CLI:
 etl-sql admin set-connection --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
 etl-sql admin list-connections                       # aliases and Active/Disabled status
 etl-sql admin verify-connection --alias sales_dw     # proves the entry and its SECRET: references resolve
-etl-sql admin disable-connection --alias sales_dw
+etl-sql admin disable-connection --alias sales_dw    # SHARED:sales_dw fails until re-enabled
+etl-sql admin enable-connection --alias sales_dw     # re-enables; the stored definition is retained
 etl-sql admin delete-connection --alias sales_dw
 ```
 
@@ -283,6 +285,50 @@ last-used/last-verified timestamps for governance review. Pair it with
 `Governance:Secrets:Provider=PortalStore` so both the catalog and the secrets it references are
 cluster-wide.
 
+### Native admin services
+
+The `samples/admin_operations` scheduler scripts have managed, first-class replacements: three
+Portal background services configured under `Portal:AdminServices`, all disabled by default. Each
+runs on its own interval with an HA cluster lease (exactly one node runs per interval; restarts do
+not re-send), retries delivery up to `MaxAttempts` per run, records every run — sent, skipped, or
+failed — in a durable history (pruned per `RunHistoryRetentionDays`, default 90), and audits each
+run as `ADMIN_SERVICE_RUN`.
+
+```json
+{
+  "Portal": {
+    "AdminServices": {
+      "FailureDigest": {
+        "Enabled": true, "IntervalHours": 24, "LookbackHours": 25,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer", "AlertOnly": true
+      },
+      "BackupReport": {
+        "Enabled": true, "IntervalHours": 24, "MaxBackupAgeHours": 26,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer", "AlertOnly": true
+      },
+      "CapacityReport": {
+        "Enabled": true, "IntervalHours": 24, "LookbackHours": 24,
+        "Recipients": "ops-team@example.com", "SmtpAlias": "mailer"
+      }
+    }
+  }
+}
+```
+
+Migration from the sample scripts:
+
+| Sample script | Native replacement |
+| :--- | :--- |
+| `daily_failure_digest.etlsql` | `FailureDigest` — failed scheduled jobs (including `INTERRUPTED`), failed/cancelled portal executions, and failed/denied subscription deliveries in the lookback window. |
+| `backup_and_report.etlsql` | `BackupReport` — `etl-sql admin backup` now records its outcome automatically (job-state `admin-backup`); the service alerts when the last backup failed, was never recorded, or is older than `MaxBackupAgeHours`. The two-step scheduler wiring is no longer needed. |
+| `capacity_report.etlsql` | `CapacityReport` — worst-point per-node disk/memory/CPU from host metrics plus job run/failure counts; always sends when enabled. |
+
+Notifications go through a stored SMTP connection selected by `SmtpAlias` (the credential is
+decrypted per send and never leaves the portal). `GET api/admin/services` shows each service's
+configuration and last run; `GET api/admin/services/{name}/history` returns the run ledger. The
+sample scripts remain as examples for custom workflows, but the supported production path is this
+configuration.
+
 Use named references in connector definitions:
 
 ```sql
@@ -304,9 +350,17 @@ CREATE CONNECTION warehouse AS POSTGRES(
 Only sensitive connector options and sensitive connection-string fields are expanded (`PASSWORD`, `TOKEN`,
 `ACCESS_KEY`, `SECRET_KEY`, `CLIENT_SECRET`, and similar credential fields). A `SECRET:` reference on any
 other field — for example `BUCKET` or `HOST` — is rejected with an error rather than passed to the connector
-as literal text; classifying non-credential metadata as sensitive is planned governance work. Missing or
-unreachable secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an
-empty value.
+as literal text. Organizations that consider specific metadata sensitive can designate additional fields:
+
+```json
+{ "Governance": { "Secrets": { "SensitiveConnectionFields": "HOST, PATH, BUCKET" } } }
+```
+
+Designated fields become `SECRET:`-resolvable and are masked in `SHOW CONNECTION`, diagnostics, and
+connection-string rendering — without being treated as secrets in every deployment: unlike credential
+fields they may still hold plain values (in scripts or catalog entries), so designating `HOST` does not
+force every hostname into the secret store. Missing or unreachable secrets fail closed with an error;
+ETL-SQL does not silently replace a missing secret with an empty value.
 Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
 raw secret values and `SECRET:` references before persistence or display.
 

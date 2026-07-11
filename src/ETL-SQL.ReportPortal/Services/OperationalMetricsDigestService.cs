@@ -1,7 +1,4 @@
-using System.Text;
 using ETL_SQL.Core.Data;
-using ETL_SQL.ReportPortal.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -85,17 +82,8 @@ public sealed class OperationalMetricsDigestService(
     {
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
-        var db = sp.GetRequiredService<PortalDbContext>();
         var metricsService = sp.GetRequiredService<OperationalMetricsService>();
-        var pwdProtector = sp.GetRequiredService<SmtpPasswordProtector>();
-        var runner = sp.GetRequiredService<ISubscriptionScriptRunner>();
-
-        var smtp = await db.SmtpConnections.FirstOrDefaultAsync(c => c.Alias == cfg.SmtpAlias, ct);
-        if (smtp is null)
-        {
-            log.LogWarning("Operational digest SMTP alias '{Alias}' no longer exists; skipping.", cfg.SmtpAlias);
-            return;
-        }
+        var sender = sp.GetRequiredService<IAdminNotificationSender>();
 
         var metrics = await metricsService.GetAsync(ct);
         var content = OperationalMetricsDigest.Build(metrics, cfg);
@@ -106,20 +94,9 @@ public sealed class OperationalMetricsDigestService(
             return;
         }
 
-        var password = pwdProtector.Unprotect(smtp.EncryptedPassword);
-        if (!string.IsNullOrEmpty(smtp.EncryptedPassword) && password is null)
-        {
-            log.LogWarning("Operational digest: SMTP credential could not be resolved; skipping.");
-            return;
-        }
-
-        var fromAddr = !string.IsNullOrWhiteSpace(cfg.Sender)
-            ? cfg.Sender
-            : smtp.FromAddress ?? smtp.Username ?? "etlsql@localhost";
-
-        var script = ComposeScript(smtp, password, fromAddr, cfg.Recipients, content);
-
-        var (success, error) = await runner.RunAsync(script, $"opsdigest-{Guid.NewGuid():N}", ct);
+        var (success, error) = await sender.SendAsync(
+            new AdminNotification(cfg.SmtpAlias, cfg.Sender, cfg.Recipients, content.Subject, content.Body, "opsdigest"),
+            ct);
         if (success)
         {
             log.LogInformation(
@@ -128,37 +105,7 @@ public sealed class OperationalMetricsDigestService(
         }
         else
         {
-            var safe = ETL_SQL.Core.Common.SecretRedactor.Redact(
-                (error ?? "unknown error").Replace(password ?? "\0", "***")) ?? "delivery failed";
-            log.LogWarning("Operational digest send failed: {Error}", safe);
+            log.LogWarning("Operational digest send failed: {Error}", error);
         }
     }
-
-    private static string ComposeScript(
-        SmtpConnection smtp, string? password, string fromAddr, string recipients,
-        OperationalMetricsDigest.DigestContent content)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("CREATE CONNECTION __opsdigest_smtp AS SMTP(");
-        sb.AppendLine($"    HOST     = '{Esc(smtp.Host)}',");
-        sb.AppendLine($"    PORT     = {smtp.Port},");
-        if (!string.IsNullOrEmpty(smtp.Username))
-            sb.AppendLine($"    USERNAME = '{Esc(smtp.Username)}',");
-        if (!string.IsNullOrEmpty(password))
-            sb.AppendLine($"    PASSWORD = '{Esc(password)}',");
-        sb.AppendLine($"    USE_SSL  = '{smtp.UseSsl.ToString().ToLowerInvariant()}'");
-        sb.AppendLine(");");
-        sb.AppendLine();
-        sb.AppendLine("SEND EMAIL");
-        sb.AppendLine($"    TO      '{Esc(recipients)}'");
-        sb.AppendLine($"    FROM    '{Esc(fromAddr)}'");
-        sb.AppendLine($"    SUBJECT '{Esc(content.Subject)}'");
-        sb.AppendLine($"    BODY    '{Esc(content.Body)}'");
-        sb.AppendLine("    AT __opsdigest_smtp;");
-        return sb.ToString();
-    }
-
-    // The lexer escapes a quote by doubling it ('' -> '); newlines inside a string literal are kept
-    // verbatim, so the multi-line body needs no special handling.
-    private static string Esc(string? s) => (s ?? string.Empty).Replace("'", "''");
 }

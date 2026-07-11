@@ -97,10 +97,15 @@ public class PortalConnectionCatalogApiTests
         var reimported = await provider.ResolveAsync("sales_dw");
         Assert.Equal("SECRET:sales_db_password", reimported.Options["PASSWORD"]);
 
-        // disable blocks resolution
+        // disable blocks resolution; enable restores it without re-supplying the definition
         Assert.Equal(HttpStatusCode.NoContent,
             (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/disable", null)).StatusCode);
         await Assert.ThrowsAsync<InvalidOperationException>(() => provider.ResolveAsync("sales_dw"));
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/enable", null)).StatusCode);
+        Assert.Equal("sql01", (await provider.ResolveAsync("sales_dw")).Options["SERVER"]);
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/sales_dw/disable", null)).StatusCode);
 
         // audit trail
         using (var scope = factory.Services.CreateScope())
@@ -114,6 +119,7 @@ public class PortalConnectionCatalogApiTests
             Assert.Contains("SHARED_CONNECTION_IMPORT", actions);
             Assert.Contains("SHARED_CONNECTION_DELETE", actions);
             Assert.Contains("SHARED_CONNECTION_DISABLE", actions);
+            Assert.Contains("SHARED_CONNECTION_ENABLE", actions);
         }
     }
 

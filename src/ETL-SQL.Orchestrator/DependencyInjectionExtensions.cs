@@ -80,6 +80,12 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ISecretProvider>(_ =>
                 new SecretProviderFactory(new HttpClient()).Create(BuildSecretProviderOptions(configuration)));
 
+            // Organization-designated sensitive connection metadata (design §6): the listed fields
+            // become SECRET:-resolvable and masked in display/diagnostic surfaces process-wide.
+            SecretResolvableFields.ConfigureOrganizationFields(
+                (configuration["Governance:Secrets:SensitiveConnectionFields"] ?? string.Empty)
+                    .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
             var connectionCatalog = ConnectionCatalogProviderFactory.Create(BuildConnectionCatalogOptions(configuration));
             if (connectionCatalog != null)
                 services.AddSingleton(connectionCatalog);

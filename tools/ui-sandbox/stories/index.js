@@ -8,5 +8,7 @@ import datasetsAdmin from './datasets-admin.story.js';
 import subscriptionHistory from './subscription-history.story.js';
 import adminCatalog from './admin-catalog.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
+import secretsAdmin from './secrets-admin.story.js';
+import connectionsAdmin from './connections-admin.story.js';
 
-export const stories = [dag, scriptEditor, designer, lineageUi, lineageCatalog, datasetsAdmin, subscriptionHistory, adminCatalog, vscodeWebviews];
+export const stories = [dag, scriptEditor, designer, lineageUi, lineageCatalog, datasetsAdmin, subscriptionHistory, adminCatalog, vscodeWebviews, secretsAdmin, connectionsAdmin];

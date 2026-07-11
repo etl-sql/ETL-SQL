@@ -34,6 +34,10 @@ public class ConnectionAdminServiceTests
         Assert.Equal(1, await Run("verify-connection", catalog, secrets, logger, ctx => ctx.ConnectionAlias = "my_sql_server"));
         Assert.Contains(logger.Messages, m => m.Contains("disabled"));
 
+        // enable restores the stored definition without re-supplying it
+        Assert.Equal(0, await Run("enable-connection", catalog, secrets, logger, ctx => ctx.ConnectionAlias = "my_sql_server"));
+        Assert.Equal(0, await Run("verify-connection", catalog, secrets, logger, ctx => ctx.ConnectionAlias = "my_sql_server"));
+
         Assert.Equal(0, await Run("delete-connection", catalog, secrets, logger, ctx => ctx.ConnectionAlias = "my_sql_server"));
         Assert.Equal(1, await Run("delete-connection", catalog, secrets, logger, ctx => ctx.ConnectionAlias = "my_sql_server"));
     }

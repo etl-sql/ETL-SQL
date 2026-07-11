@@ -117,6 +117,26 @@ public sealed class PortalSecretStoreService
         }
     }
 
+    public async Task EnableAsync(
+        string name,
+        int? userId = null,
+        CancellationToken cancellationToken = default)
+    {
+        name = NormalizeName(name);
+        var secret = await db.PortalSecrets
+            .SingleOrDefaultAsync(item => item.Name == name, cancellationToken)
+            ?? throw new InvalidOperationException($"Portal secret '{name}' does not exist.");
+
+        if (secret.Disabled)
+        {
+            secret.Disabled = false;
+            secret.UpdatedAtUtc = DateTime.UtcNow;
+            secret.UpdatedByUserId = userId;
+            secret.Version++;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task DeleteAsync(string name, CancellationToken cancellationToken = default)
     {
         name = NormalizeName(name);

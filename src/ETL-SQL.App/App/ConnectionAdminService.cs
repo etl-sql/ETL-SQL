@@ -79,7 +79,11 @@ namespace ETL_SQL.App
                     case "disable-connection":
                         return await MutateAsync(ctx.ConnectionAlias, catalog, logger, cancellationToken,
                             (writable, alias, ct) => writable.DisableAsync(alias, ct),
-                            alias => $"Shared connection '{alias}' disabled. SHARED:{alias} now fails until it is stored again.");
+                            alias => $"Shared connection '{alias}' disabled; scripts referencing it now fail until it is re-enabled.");
+                    case "enable-connection":
+                        return await MutateAsync(ctx.ConnectionAlias, catalog, logger, cancellationToken,
+                            (writable, alias, ct) => writable.EnableAsync(alias, ct),
+                            alias => $"Shared connection '{alias}' enabled; scripts referencing it resolve again.");
                     case "delete-connection":
                         return await MutateAsync(ctx.ConnectionAlias, catalog, logger, cancellationToken,
                             (writable, alias, ct) => writable.DeleteAsync(alias, ct),

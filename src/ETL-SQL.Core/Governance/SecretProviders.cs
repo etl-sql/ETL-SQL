@@ -33,6 +33,8 @@ public interface ISecretLifecycleProvider : IWritableSecretProvider
 {
     Task<SecretLifecycleStatus> GetStatusAsync(string name, CancellationToken cancellationToken = default);
     Task DisableAsync(string name, CancellationToken cancellationToken = default);
+    /// <summary>Re-enables a disabled entry without requiring a new value. No-op when already active.</summary>
+    Task EnableAsync(string name, CancellationToken cancellationToken = default);
     Task DeleteAsync(string name, CancellationToken cancellationToken = default);
 }
 
@@ -121,6 +123,20 @@ public sealed class OsSecretStoreProvider(string rootDirectory) : ISecretLifecyc
             throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
 
         File.Move(path, GetDisabledPath(name), overwrite: true);
+        return Task.CompletedTask;
+    }
+
+    public Task EnableAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var path = GetSecretPath(name);
+        if (File.Exists(path))
+            return Task.CompletedTask;
+
+        var disabledPath = GetDisabledPath(name);
+        if (!File.Exists(disabledPath))
+            throw new KeyNotFoundException($"Secret '{name}' was not found in the OS secret store.");
+
+        File.Move(disabledPath, path);
         return Task.CompletedTask;
     }
 

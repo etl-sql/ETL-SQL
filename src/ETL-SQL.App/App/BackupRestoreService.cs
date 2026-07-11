@@ -35,14 +35,50 @@ namespace ETL_SQL.App
 
         // ── Backup ────────────────────────────────────────────────────────────────
 
-        internal static Task<int> BackupAsync(CliContext ctx, ILogger logger)
+        internal static async Task<int> BackupAsync(CliContext ctx, ILogger logger)
         {
             var config = Program.ServiceProvider.GetService<IConfiguration>()
                 ?? new ConfigurationBuilder().Build();
             var outputDir = string.IsNullOrWhiteSpace(ctx.BackupOutputDir)
                 ? Directory.GetCurrentDirectory()
                 : Path.GetFullPath(ctx.BackupOutputDir.Trim('"', '\'', ' '));
-            return BackupCoreAsync(config, AppContext.BaseDirectory, outputDir, logger);
+
+            int exitCode;
+            try
+            {
+                exitCode = await BackupCoreAsync(config, AppContext.BaseDirectory, outputDir, logger);
+            }
+            catch
+            {
+                await RecordBackupOutcomeAsync(exitCode: 1, logger);
+                throw;
+            }
+
+            await RecordBackupOutcomeAsync(exitCode, logger);
+            return exitCode;
+        }
+
+        /// <summary>
+        /// Records the backup outcome under job-state name 'admin-backup' so the Portal's native
+        /// backup-report admin service can alert on failed, missing, or stale backups without the
+        /// two-step scheduler wiring the samples used. Best-effort: recording never changes the
+        /// backup's exit code.
+        /// </summary>
+        private static async Task RecordBackupOutcomeAsync(int exitCode, ILogger logger)
+        {
+            try
+            {
+                var store = Program.ServiceProvider.GetService<ETL_SQL.Core.Data.IJobHistoryStore>();
+                if (store == null) return;
+                await store.InitializeAsync();
+                await store.SetJobStateAsync("admin-backup", "last_backup_status", exitCode == 0 ? "success" : "failed");
+                await store.SetJobStateAsync("admin-backup", "last_backup_at", DateTime.UtcNow.ToString("o"));
+                await store.SetJobStateAsync("admin-backup", "last_backup_exit_code", exitCode.ToString());
+            }
+            catch (Exception ex)
+            {
+                logger.WriteLine($"Note: the backup outcome could not be recorded for the backup-report service: {ex.Message}", ConsoleColor.Yellow);
+            }
         }
 
         /// <summary>Testable backup core: explicit config, install/base directory, and output directory.</summary>

@@ -25,6 +25,74 @@ public class PortalConfig
     public PortalStorageConfig Storage { get; set; } = new();
     public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
+    public AdminServicesConfig AdminServices { get; set; } = new();
+}
+
+/// <summary>
+/// Native replacements for the samples/admin_operations scheduler scripts: managed background
+/// services with per-service enablement, schedule, HA singleton lease, retry, run history, and
+/// SMTP notification targets. All disabled by default — opt in per deployment.
+/// </summary>
+public class AdminServicesConfig
+{
+    public FailureDigestServiceConfig FailureDigest { get; set; } = new();
+    public BackupReportServiceConfig BackupReport { get; set; } = new();
+    public CapacityReportServiceConfig CapacityReport { get; set; } = new();
+
+    /// <summary>Days of AdminServiceRun history retained; pruned by the services themselves.</summary>
+    public int RunHistoryRetentionDays { get; set; } = 90;
+}
+
+/// <summary>Schedule and delivery controls shared by every native admin service.</summary>
+public class AdminServiceScheduleConfig
+{
+    /// <summary>Enables the service. Default false; requires <see cref="Recipients"/> and <see cref="SmtpAlias"/>.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Hours between runs. Minimum effective value is 1; default 24.</summary>
+    public int IntervalHours { get; set; } = 24;
+
+    /// <summary>Semicolon/comma-separated administrator recipients.</summary>
+    public string Recipients { get; set; } = string.Empty;
+
+    /// <summary>Alias of a configured SMTP connection used to send the report.</summary>
+    public string SmtpAlias { get; set; } = string.Empty;
+
+    /// <summary>From address; when empty the SMTP connection's own from/username is used.</summary>
+    public string Sender { get; set; } = string.Empty;
+
+    /// <summary>Delivery attempts per run before the run is recorded as Failed. Default 3.</summary>
+    public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>Delay between delivery attempts within one run. Default 300 seconds.</summary>
+    public int RetryDelaySeconds { get; set; } = 300;
+}
+
+/// <summary>Native replacement for samples/admin_operations/daily_failure_digest.etlsql.</summary>
+public class FailureDigestServiceConfig : AdminServiceScheduleConfig
+{
+    /// <summary>Hours of history examined; keep slightly above the interval so windows overlap. Default 25.</summary>
+    public int LookbackHours { get; set; } = 25;
+
+    /// <summary>When true (default), send only when failures were found.</summary>
+    public bool AlertOnly { get; set; } = true;
+}
+
+/// <summary>Native replacement for samples/admin_operations/backup_and_report.etlsql.</summary>
+public class BackupReportServiceConfig : AdminServiceScheduleConfig
+{
+    /// <summary>Alert when the last recorded backup (job-state 'admin-backup') is older than this. Default 26 hours.</summary>
+    public int MaxBackupAgeHours { get; set; } = 26;
+
+    /// <summary>When true (default), send only when the last backup failed, is missing, or is stale.</summary>
+    public bool AlertOnly { get; set; } = true;
+}
+
+/// <summary>Native replacement for samples/admin_operations/capacity_report.etlsql. Always sends a summary.</summary>
+public class CapacityReportServiceConfig : AdminServiceScheduleConfig
+{
+    /// <summary>Hours of host metric samples aggregated per report. Default 24.</summary>
+    public int LookbackHours { get; set; } = 24;
 }
 
 /// <summary>

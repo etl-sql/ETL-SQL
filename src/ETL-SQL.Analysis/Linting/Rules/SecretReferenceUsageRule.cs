@@ -105,8 +105,9 @@ public partial class SecretReferenceUsageRule : ILintRule
             RuleName = Name,
             Severity = LintSeverity.Error,
             Message = $"Connection '{connectionName}': field '{key}' uses a SECRET: reference, but secrets are only " +
-                      "resolved for credential fields (PASSWORD, TOKEN, ACCESS_KEY, SECRET_KEY, ...). " +
-                      "This fails at execution time; use a literal value or move the secret to a credential field.",
+                      "resolved for credential fields (PASSWORD, TOKEN, ACCESS_KEY, SECRET_KEY, ...) and fields " +
+                      "listed in Governance:Secrets:SensitiveConnectionFields. This fails at execution time unless " +
+                      "the field is designated sensitive in that setting.",
             LineNumber = node.Line,
             ColumnNumber = node.Column
         });
