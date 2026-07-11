@@ -45,6 +45,30 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   destructive/manual fault suite against a live HA topology, publish recovery evidence, and document
   operational limits.)*
 
+### Phase 7: Shared Connection & Secret Governance follow-ups
+
+Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretManagementAdministrationHardening.md)
+
+These items continue the shipped SME secret-management work. The first priority is tightening who
+may use shared connections and giving administrators impact visibility before they disable or
+delete cataloged secrets/connections.
+
+- [ ] Add per-connection use ACLs for cataloged shared connections. Enforce who may expand and use
+  `SHARED:alias`, not only who may manage the catalog entry. Caller/service identity must flow into
+  the engine expansion path, group-based grants should match the existing Portal ACL model, and
+  denials must be audited without resolving or logging secrets.
+- [ ] Add connection and secret impact inventory before disable/delete operations. Show reports,
+  subscriptions, scheduled jobs, and scripts that reference a shared connection alias or secret name,
+  using script inspection where possible, and record last-used details per consumer rather than only
+  a single timestamp per entry.
+- [ ] Add finer-grained sensitive-metadata classification. Extend the current organization-wide
+  `Governance:Secrets:SensitiveConnectionFields` with per-connector defaults and per-catalog-entry
+  field classification so endpoints, paths, bucket/container names, and similar metadata can be
+  protected without making every deployment treat the same field as secret.
+- [ ] Decide whether catalog approval workflow belongs in this phase or the broader Review Workflow
+  track. If included here, design propose/approve for shared-connection create/update/delete with
+  segregation of duties and audit; otherwise leave it in ROADMAP with the data-stewardship workflow.
+
 ### v0.15.0 completion gates
 
 - [ ] Publish before/after Gate F allocation, GC, CPU, memory, I/O, and throughput results on the same
