@@ -112,26 +112,36 @@ export default {
   async mount(stage, fixtureId, ctx) {
     stage.innerHTML = '';
     
-    // 1. Setup layout grid containing Canvas + Sidebar panel
-    stage.style.display = 'flex';
-    stage.style.flexDirection = 'row';
+    // 1. Setup stage as a relative container to hold absolute elements
+    stage.style.position = 'relative';
     stage.style.width = '100%';
     stage.style.height = '100%';
     stage.style.background = '#090d16';
     stage.style.overflow = 'hidden';
     stage.style.userSelect = 'none';
 
-    // Canvas container (takes remaining flex space)
+    // Canvas container (takes 100% space)
     const canvasContainer = document.createElement('div');
-    canvasContainer.style.flex = '1 1 auto';
+    canvasContainer.style.width = '100%';
     canvasContainer.style.height = '100%';
     canvasContainer.style.position = 'relative';
     canvasContainer.style.overflow = 'hidden';
     stage.appendChild(canvasContainer);
 
-    // Sidebar detail panel (reuses production CSS class: etlsql-dag-panel)
+    // Sidebar detail panel (floats on the right via absolute positioning)
     const panel = document.createElement('div');
     panel.className = 'etlsql-dag-panel';
+    panel.style.position = 'absolute';
+    panel.style.right = '0';
+    panel.style.top = '0';
+    panel.style.width = '320px';
+    panel.style.height = '100%';
+    panel.style.background = '#0f172a';
+    panel.style.borderLeft = '1px solid #1e293b';
+    panel.style.zIndex = '100'; // sits on top of canvas/nodes
+    panel.style.overflowY = 'auto';
+    panel.style.padding = '12px 14px 16px';
+    panel.style.boxShadow = '-5px 0 25px rgba(0, 0, 0, 0.5)';
     panel.style.display = 'none';
     stage.appendChild(panel);
 
@@ -182,7 +192,7 @@ export default {
     let currentFilterNode = null;   // Ctrl-clicked node for filtering whole graph
     let filteredNodes = null;       // Set of visible node IDs under active filter
 
-    // 5. Setup filter notification banner at top of canvas
+    // Setup filter notification banner at top of canvas
     const filterBanner = document.createElement('div');
     filterBanner.style.position = 'absolute';
     filterBanner.style.top = '12px';
@@ -236,7 +246,7 @@ export default {
       updateConnections();
     }
 
-    // 6. Sidebar Properties Panel Render Function
+    // Sidebar Properties Panel Render Function
     function showNodeDetails(node) {
       panel.style.display = 'block';
       panel.innerHTML = '';
@@ -410,7 +420,7 @@ export default {
       }
     }
 
-    // 7. Render Nodes onto infinite viewport
+    // Render Nodes onto infinite viewport
     graph.nodes.forEach(n => {
       const card = document.createElement('div');
       card.id = `node__${n.id}`;
@@ -720,7 +730,7 @@ export default {
       });
     }
 
-    // 10. Pan and Zoom Interaction
+    // 10. Pan and Zoom Interaction (Zoom-to-cursor to prevent drift)
     let panX = 0;
     let panY = 0;
     let zoom = fixtureId === 'kitchen' ? 0.22 : 0.65;
@@ -729,12 +739,29 @@ export default {
 
     canvasContainer.addEventListener('wheel', e => {
       e.preventDefault();
+      
+      const rect = canvasContainer.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const CX = rect.width / 2;
+      const CY = rect.height * 0.4;
+
+      // Mouse coordinate in the unscaled viewport namespace before scaling
+      const vx = (mouseX - CX - panX) / zoom;
+      const vy = (mouseY - CY - panY) / zoom;
+
       const factor = 1.15;
       if (e.deltaY < 0) {
         zoom = Math.min(2, zoom * factor);
       } else {
         zoom = Math.max(0.08, zoom / factor);
       }
+
+      // Adjust panning values to pin the mouse cursor coordinate
+      panX = mouseX - CX - vx * zoom;
+      panY = mouseY - CY - vy * zoom;
+
       viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
       updateConnections();
     });
