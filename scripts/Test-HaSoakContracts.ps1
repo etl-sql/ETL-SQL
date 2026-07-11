@@ -47,6 +47,10 @@ try {
         & (Join-Path $ScriptRoot 'Test-HaSoakRunbook.ps1')
     }
 
+    Invoke-Step 'HA soak evidence validator' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakEvidenceValidation.ps1')
+    }
+
     Invoke-Step 'HA large-job soak plan generator' {
         & (Join-Path $ScriptRoot 'Test-HaLargeJobSoakPlan.ps1')
     }

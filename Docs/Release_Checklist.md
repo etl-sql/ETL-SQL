@@ -92,6 +92,9 @@ operator-run HA soak evidence remains manual and should be attached only when pu
 or recovery claims. Operators should use `etl-sql admin ha-soak ...` as the stable front door for
 manual HA soak preparation, runbooks, metrics, and diagnostics; the underlying scripts remain the
 release-gate implementation.
+Before publishing PostgreSQL HA capacity observations from an operator run, attach the
+`etl-sql admin ha-soak validate --required-gate Sustained` summary; switch to `--required-gate All`
+only when large-job and fault-injection measured reports are present.
 
 The PowerShell and Bash gates run the **same phases in the same order**; a few phases in the Bash
 gate bridge to the canonical PowerShell helpers via `pwsh`. Deep static security analysis (CodeQL)

@@ -82,6 +82,9 @@ public class CliContext
     public string? HaSoakOutputRoot { get; set; }
     public string? HaSoakOutputPath { get; set; }
     public string? HaSoakMode { get; set; }
+    public string? HaSoakRequiredGate { get; set; }
+    public string? HaSoakRequiredCommit { get; set; }
+    public string? HaSoakMarkdownReport { get; set; }
     public string? HaSoakSustainedWorkloadPath { get; set; }
     public string? HaSoakAdminPassword { get; set; }
     public string? HaSoakComposeFile { get; set; }
@@ -96,6 +99,7 @@ public class CliContext
     public bool HaSoakStart { get; set; }
     public bool HaSoakPull { get; set; }
     public bool HaSoakValidateOnly { get; set; }
+    public bool HaSoakAllowDirty { get; set; }
     public bool HaSoakNoDocker { get; set; }
     public bool HaSoakForce { get; set; }
 

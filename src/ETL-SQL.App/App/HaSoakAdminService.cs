@@ -20,6 +20,7 @@ namespace ETL_SQL.App
             ["admin-ha-soak-large-job-plan"] = "New-HaLargeJobSoakPlan.ps1",
             ["admin-ha-soak-fault-plan"] = "New-HaFaultInjectionPlan.ps1",
             ["admin-ha-soak-metrics"] = "Export-PostgresHaMetricsSnapshot.ps1",
+            ["admin-ha-soak-validate"] = "Test-HaSoakEvidence.ps1",
             ["admin-ha-soak-diagnostics"] = "Export-HaSoakDiagnostics.ps1",
         };
 
@@ -208,6 +209,13 @@ namespace ETL_SQL.App
                     AddValue(args, "-OutputPath", ctx.HaSoakOutputPath);
                     AddSwitch(args, "-ValidateOnly", ctx.HaSoakValidateOnly);
                     AddSwitch(args, "-Force", ctx.HaSoakForce);
+                    break;
+                case "admin-ha-soak-validate":
+                    AddValue(args, "-TopologyRunRoot", ctx.HaSoakRunRoot);
+                    AddValue(args, "-RequiredGate", ctx.HaSoakRequiredGate);
+                    AddValue(args, "-RequiredCommit", ctx.HaSoakRequiredCommit);
+                    AddValue(args, "-MarkdownReport", ctx.HaSoakMarkdownReport);
+                    AddSwitch(args, "-AllowDirty", ctx.HaSoakAllowDirty);
                     break;
                 case "admin-ha-soak-diagnostics":
                     AddValue(args, "-TopologyRunRoot", ctx.HaSoakRunRoot);

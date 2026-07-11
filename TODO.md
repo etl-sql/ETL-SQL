@@ -243,6 +243,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   `etl-sql admin ha-soak ...` now exposes the topology, workload, runbook, evidence, metrics,
   diagnostics, large-job-plan, and fault-plan workflows as first-class admin CLI commands so
   operators have a stable front door while the scripts remain the auditable implementation.
+  `scripts/Test-HaSoakEvidence.ps1` and `etl-sql admin ha-soak validate` now provide a cheap
+  post-run evidence gate for completed sustained-load artifacts, checking required reports,
+  PostgreSQL metrics, pass/breach status, redaction, and commit metadata before capacity claims
+  are cited.
   `scripts/Test-PreRelease.ps1` and `scripts/test-pre-release.sh` now include the non-destructive
   HA soak contract gate by default, and the release/testing docs list it as an always-on validation
   phase. Checked-in measured capacity reports remain open.)*

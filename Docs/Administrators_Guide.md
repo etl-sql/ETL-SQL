@@ -1242,10 +1242,15 @@ etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode Man
 # Capture post-run evidence or diagnostics
 etl-sql admin ha-soak metrics --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak diagnostics --run-root .ha-soak-runs/ha-20260710 --log-tail 1000 --force
+
+# Validate completed sustained-load evidence before citing capacity claims
+etl-sql admin ha-soak validate --run-root .ha-soak-runs/ha-20260710 --required-gate Sustained --markdown-report certification-results/postgres-ha-soak/ha-20260710/evidence-validation.md
 ```
 
 Use `prepare --start --pull` only when you are ready to start the Docker topology. Generated env
 files and local workload configs may contain disposable credentials or API keys; they belong in the
 ignored run root, not source control. The script names remain documented in `scripts/README.md` for
 developers and release maintainers, but administrators should prefer the `etl-sql admin ha-soak`
-commands as the stable interface.
+commands as the stable interface. Use `validate --required-gate All` only after large-job and
+fault-injection measured reports exist; until those runners are complete, `Sustained` is the
+publishable evidence gate for PostgreSQL HA capacity observations.

@@ -116,7 +116,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
-    print_plan_phase "$i" "HA soak contract gate" "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, and fault/soak plan contracts stay usable before release."; i=$((i + 1))
+    print_plan_phase "$i" "HA soak contract gate" "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release."; i=$((i + 1))
 
     if [[ "$INCLUDE_SLT" == true ]]; then
         print_plan_phase "$i" "SLT lane" "./scripts/test-lane.sh --lane slt" "SQL logic corpus checks parser/evaluator compatibility."; i=$((i + 1))

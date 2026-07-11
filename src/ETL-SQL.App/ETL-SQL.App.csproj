@@ -39,6 +39,9 @@
     <Content Include="..\..\scripts\Export-HaSoakDiagnostics.ps1" Link="scripts\Export-HaSoakDiagnostics.ps1">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\scripts\Test-HaSoakEvidence.ps1" Link="scripts\Test-HaSoakEvidence.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\deploy\docker\docker-compose.ha.yml" Link="deploy\docker\docker-compose.ha.yml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

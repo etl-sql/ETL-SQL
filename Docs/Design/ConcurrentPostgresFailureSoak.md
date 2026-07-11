@@ -157,8 +157,10 @@ each fault, not just that an exception was thrown.
    topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
    generated run README both point to it. `scripts/New-HaSoakRunbook.ps1` emits a non-secret
    operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
-   long-running scripts can be run manually and diagnosed afterward from captured outputs. Real
-   measured capacity reports remain open.)*
+   long-running scripts can be run manually and diagnosed afterward from captured outputs.
+   `scripts/Test-HaSoakEvidence.ps1` validates completed sustained-load evidence before it is cited,
+   including required artifacts, capacity breaches, PostgreSQL metrics, redaction, and commit
+   metadata. Real measured capacity reports remain open.)*
 3. **Slice C — concurrent large-job soak.** Add mixed workload runner, resource assertions, and
    cleanup checks. *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json`
    defines the mixed scan/spill/sort/join/aggregate workload, shared memory/disk budgets, required

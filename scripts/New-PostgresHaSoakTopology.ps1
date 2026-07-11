@@ -98,6 +98,18 @@ function Convert-ToEnvPath {
     return $PathValue.Replace('\', '/')
 }
 
+function Get-GitCommit {
+    try {
+        $commit = (& git -C $RepoRoot rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($commit)) {
+            return [string]$commit
+        }
+    } catch {
+        return ''
+    }
+    return ''
+}
+
 Assert-Positive $PortalScale 'PortalScale'
 Assert-Positive $OrchestratorScale 'OrchestratorScale'
 Assert-Positive $PortalPort 'PortalPort'
@@ -184,6 +196,7 @@ $metadata = [ordered]@{
     schemaVersion = 1
     phase = 'v0.15.0 Phase 6'
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
+    commit = Get-GitCommit
     runId = $RunId
     composeFile = $composeRelative.Replace('\', '/').TrimStart('.', '/', '\')
     envFile = $envRelative.Replace('\', '/').TrimStart('.', '/', '\')

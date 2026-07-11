@@ -273,6 +273,24 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => "CiSmoke"
         };
+        private static readonly Option<string?> HaSoakRequiredGateOption = new("--required-gate", Array.Empty<string>())
+        {
+            Description = "Evidence gate to validate: Sustained, LargeJob, FaultInjection, or All.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => "Sustained"
+        };
+        private static readonly Option<string?> HaSoakRequiredCommitOption = new("--required-commit", Array.Empty<string>())
+        {
+            Description = "Source commit SHA required by topology metadata; defaults to current HEAD.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakMarkdownReportOption = new("--markdown-report", Array.Empty<string>())
+        {
+            Description = "Optional path for the HA soak evidence validation Markdown summary.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> HaSoakSustainedWorkloadOption = new("--workload", Array.Empty<string>())
         {
             Description = "Path to the materialized sustained-workload JSON.",
@@ -344,6 +362,10 @@ namespace ETL_SQL.App
         private static readonly Option<bool> HaSoakValidateOnlyOption = new("--validate-only", Array.Empty<string>())
         {
             Description = "Validate the topology/script contract without writing runtime artifacts."
+        };
+        private static readonly Option<bool> HaSoakAllowDirtyOption = new("--allow-dirty", Array.Empty<string>())
+        {
+            Description = "Allow evidence validation while the current worktree has uncommitted changes."
         };
         private static readonly Option<bool> HaSoakNoDockerOption = new("--no-docker", Array.Empty<string>())
         {
@@ -634,6 +656,17 @@ namespace ETL_SQL.App
             haSoakMetricsCommand.SetAction(context => Dispatch(context, "admin-ha-soak-metrics", handler));
             haSoakCommand.Add(haSoakMetricsCommand);
 
+            var haSoakValidateCommand = new Command("validate", "Validate completed HA soak evidence before citing it")
+            {
+                HaSoakRunRootOption,
+                HaSoakRequiredGateOption,
+                HaSoakRequiredCommitOption,
+                HaSoakAllowDirtyOption,
+                HaSoakMarkdownReportOption,
+            };
+            haSoakValidateCommand.SetAction(context => Dispatch(context, "admin-ha-soak-validate", handler));
+            haSoakCommand.Add(haSoakValidateCommand);
+
             var haSoakDiagnosticsCommand = new Command("diagnostics", "Export a redacted diagnostics bundle for a topology run")
             {
                 HaSoakRunRootOption,
@@ -902,6 +935,9 @@ namespace ETL_SQL.App
                 cliContext.HaSoakOutputRoot = TryGetString(res, HaSoakOutputRootOption);
                 cliContext.HaSoakOutputPath = TryGetString(res, HaSoakOutputPathOption);
                 cliContext.HaSoakMode = TryGetString(res, HaSoakModeOption);
+                cliContext.HaSoakRequiredGate = TryGetString(res, HaSoakRequiredGateOption);
+                cliContext.HaSoakRequiredCommit = TryGetString(res, HaSoakRequiredCommitOption);
+                cliContext.HaSoakMarkdownReport = TryGetString(res, HaSoakMarkdownReportOption);
                 cliContext.HaSoakSustainedWorkloadPath = TryGetString(res, HaSoakSustainedWorkloadOption);
                 cliContext.HaSoakAdminPassword = TryGetString(res, HaSoakAdminPasswordOption);
                 cliContext.HaSoakComposeFile = TryGetString(res, HaSoakComposeFileOption);
@@ -916,6 +952,7 @@ namespace ETL_SQL.App
                 cliContext.HaSoakStart = TryGetBool(res, HaSoakStartOption);
                 cliContext.HaSoakPull = TryGetBool(res, HaSoakPullOption);
                 cliContext.HaSoakValidateOnly = TryGetBool(res, HaSoakValidateOnlyOption);
+                cliContext.HaSoakAllowDirty = TryGetBool(res, HaSoakAllowDirtyOption);
                 cliContext.HaSoakNoDocker = TryGetBool(res, HaSoakNoDockerOption);
                 cliContext.HaSoakForce = TryGetBool(res, HaSoakForceOption);
             }
