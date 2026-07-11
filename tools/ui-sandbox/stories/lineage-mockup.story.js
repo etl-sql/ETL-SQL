@@ -112,7 +112,7 @@ export default {
   async mount(stage, fixtureId, ctx) {
     stage.innerHTML = '';
     
-    // 1. Setup stage as a relative container to hold absolute elements
+    // 1. Setup stage as relative container
     stage.style.position = 'relative';
     stage.style.width = '100%';
     stage.style.height = '100%';
@@ -134,7 +134,7 @@ export default {
     panel.style.position = 'absolute';
     panel.style.right = '0';
     panel.style.top = '0';
-    panel.style.width = '320px';
+    panel.style.width = '340px';
     panel.style.height = '100%';
     panel.style.background = '#0f172a';
     panel.style.borderLeft = '1px solid #1e293b';
@@ -143,9 +143,37 @@ export default {
     panel.style.padding = '12px 14px 16px';
     panel.style.boxShadow = '-5px 0 25px rgba(0, 0, 0, 0.5)';
     panel.style.display = 'none';
+    
+    // Overriding light theme variable defaults specifically inside the panel to ensure dark mode visibility
+    panel.style.setProperty('--portal-text', '#e2e8f0');
+    panel.style.setProperty('--portal-text-soft', '#94a3b8');
+    panel.style.setProperty('--portal-text-muted', '#64748b');
+    panel.style.setProperty('--portal-muted', '#94a3b8');
+    panel.style.setProperty('--portal-accent', '#60a5fa');
+    panel.style.color = '#e2e8f0';
+
     stage.appendChild(panel);
 
     const graph = (BUILDERS[fixtureId] ?? buildKitchenSinkGraph)();
+
+    // Inject high-fidelity metadata (tags/descriptions) dynamically for demonstration
+    graph.nodes.forEach(n => {
+      if (n.meta?.columns) {
+        n.meta.columns.forEach(c => {
+          n.meta.columnLineage ??= {};
+          n.meta.columnLineage[c] ??= { sources: [] };
+          if (c === 'Revenue' || c === 'Discount' || c === 'email') {
+            n.meta.columnLineage[c].tags = { pii: 'true', classification: 'confidential', owner: 'finance' };
+            n.meta.columnLineage[c].description = `Financial metrics for column: ${c}. Raw transaction amount.`;
+          } else if (c === 'Region' || c === 'Category') {
+            n.meta.columnLineage[c].description = `Grouping axis: ${c}. Derived from dimensions hub.`;
+          }
+        });
+      }
+    });
+
+    const _nodeById = Object.fromEntries(graph.nodes.map(n => [n.id, n]));
+
     ctx.stat(`Mockup: ${graph.nodes.length} nodes · Drag headers to move · Click to inspect · Ctrl+Click to filter`);
 
     const viewport = document.createElement('div');
@@ -246,6 +274,119 @@ export default {
       updateConnections();
     }
 
+    // Resolve a source table name (as recorded in lineage) to a graph node id.
+    function findTableNodeId(tableName) {
+      if (_nodeById[`ds:${tableName}`])    return `ds:${tableName}`;
+      if (_nodeById[`table:${tableName}`]) return `table:${tableName}`;
+      const hit = graph.nodes.find(n => (n.type === 'table' || n.type === 'dataset') && n.label === tableName);
+      return hit ? hit.id : null;
+    }
+
+    // Walk a column back through its sources recursively (production matching)
+    function appendColumnLineage(container, tableNodeId, column, depth, seen) {
+      seen = seen || new Set();
+      const key = `${tableNodeId}|${column}`;
+      if (seen.has(key) || depth > 12) return;
+      seen.add(key);
+
+      const tnode = _nodeById[tableNodeId];
+      const cl = tnode?.meta?.columnLineage?.[column];
+
+      const row = document.createElement('div');
+      row.className = 'etlsql-dag-lin';
+      row.style.paddingLeft = `${depth * 14}px`;
+      row.style.margin = '4px 0';
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.flexWrap = 'wrap';
+      row.style.gap = '4px';
+
+      if (depth > 0) {
+        const a = document.createElement('span');
+        a.className = 'etlsql-dag-lin-arrow';
+        a.textContent = '↖';
+        row.appendChild(a);
+      }
+
+      const colEl = document.createElement('span');
+      colEl.className = 'etlsql-dag-lin-col';
+      colEl.textContent = column;
+      row.appendChild(colEl);
+
+      if (cl?.transform) {
+        const t = document.createElement('span');
+        t.className = 'etlsql-dag-lin-expr';
+        t.textContent = `= ${cl.transform}`;
+        row.appendChild(t);
+      }
+
+      const tbl = document.createElement('span');
+      tbl.className = 'etlsql-dag-lin-tbl';
+      tbl.textContent = tnode?.label ?? tableNodeId;
+      row.appendChild(tbl);
+      container.appendChild(row);
+
+      // Render Tags
+      if (cl?.tags && Object.keys(cl.tags).length) {
+        const tagRow = document.createElement('div');
+        tagRow.className = 'etlsql-dag-lin-meta';
+        tagRow.style.paddingLeft = `${depth * 14 + 16}px`;
+        tagRow.style.display = 'flex';
+        tagRow.style.gap = '4px';
+        tagRow.style.margin = '2px 0';
+        for (const k of Object.keys(cl.tags)) {
+          const tg = document.createElement('span');
+          tg.className = 'etlsql-dag-lin-tag';
+          tg.textContent = `⚠ ${k}`;
+          tagRow.appendChild(tg);
+        }
+        container.appendChild(tagRow);
+      }
+
+      // Render Description
+      if (cl?.description) {
+        const d = document.createElement('div');
+        d.className = 'etlsql-dag-lin-desc';
+        d.style.paddingLeft = `${depth * 14 + 16}px`;
+        d.textContent = cl.description;
+        container.appendChild(d);
+      }
+
+      // Walk recursively
+      for (const s of (cl?.sources ?? [])) {
+        if (!s.column) continue;
+        const srcId = findTableNodeId(s.table);
+        if (srcId) {
+          appendColumnLineage(container, srcId, s.column, depth + 1, seen);
+        } else {
+          const leaf = document.createElement('div');
+          leaf.className = 'etlsql-dag-lin';
+          leaf.style.paddingLeft = `${(depth + 1) * 14}px`;
+          leaf.style.margin = '4px 0';
+          leaf.style.display = 'flex';
+          leaf.style.alignItems = 'center';
+          leaf.style.gap = '4px';
+
+          const a = document.createElement('span');
+          a.className = 'etlsql-dag-lin-arrow';
+          a.textContent = '↖';
+          leaf.appendChild(a);
+
+          const c = document.createElement('span');
+          c.className = 'etlsql-dag-lin-col';
+          c.textContent = s.column;
+          leaf.appendChild(c);
+
+          const tb = document.createElement('span');
+          tb.className = 'etlsql-dag-lin-tbl';
+          tb.textContent = s.table;
+          leaf.appendChild(tb);
+
+          container.appendChild(leaf);
+        }
+      }
+    }
+
     // Sidebar Properties Panel Render Function
     function showNodeDetails(node) {
       panel.style.display = 'block';
@@ -336,37 +477,16 @@ export default {
         panel.appendChild(ul);
       }
 
-      // Columns metadata section
+      // Columns metadata section (matching production lineage walk)
       if (node.type === 'table' || node.type === 'dataset') {
         const cHeader = document.createElement('div');
         cHeader.className = 'etlsql-dag-panel-h';
         cHeader.textContent = `Columns (${node.meta?.columns?.length ?? 0})`;
         panel.appendChild(cHeader);
 
-        const list = document.createElement('ul');
-        list.className = 'etlsql-dag-panel-list';
-        if (node.meta?.columns) {
+        if (node.meta?.columns?.length) {
           node.meta.columns.forEach(c => {
-            const li = document.createElement('li');
-            li.className = 'etlsql-dag-panel-li';
-            
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'etlsql-dag-panel-v';
-            nameSpan.textContent = c;
-            li.appendChild(nameSpan);
-
-            // Fetch column lineage mapping if present
-            if (node.meta.columnLineage && node.meta.columnLineage[c]) {
-              const lin = node.meta.columnLineage[c];
-              if (lin.sources && lin.sources[0]) {
-                const fromSpan = document.createElement('span');
-                fromSpan.className = 'etlsql-dag-panel-from';
-                fromSpan.style.color = '#10b981';
-                fromSpan.textContent = ` ← ${lin.sources[0].table}.${lin.sources[0].column}`;
-                li.appendChild(fromSpan);
-              }
-            }
-            list.appendChild(li);
+            appendColumnLineage(panel, node.id, c, 0);
           });
         } else {
           const empty = document.createElement('div');
@@ -374,7 +494,6 @@ export default {
           empty.textContent = 'No columns defined.';
           panel.appendChild(empty);
         }
-        panel.appendChild(list);
       } else if (node.type === 'visual') {
         const mHeader = document.createElement('div');
         mHeader.className = 'etlsql-dag-panel-h';
@@ -399,6 +518,12 @@ export default {
             li.appendChild(colSpan);
 
             list.appendChild(li);
+
+            // Also draw column lineage for this mapped field
+            const srcId = findTableNodeId(graph.nodes.find(x => x.id === activeHighlightNode || x.label === node.meta.page)?.id || '');
+            if (srcId) {
+              appendColumnLineage(panel, srcId, m.column, 1);
+            }
           });
         } else {
           const empty = document.createElement('div');
@@ -411,7 +536,7 @@ export default {
         const vInfo = document.createElement('div');
         vInfo.style.marginTop = '15px';
         vInfo.style.fontSize = '11px';
-        vInfo.style.color = '#64748b';
+        vInfo.style.color = '#94a3b8';
         vInfo.innerHTML = `
           <div><strong>Chart Visual Type:</strong> ${node.meta?.visualType ?? 'Unknown'}</div>
           <div><strong>Report Page:</strong> ${node.meta?.page ?? 'None'}</div>
@@ -620,21 +745,21 @@ export default {
             applyFilter(n.id);
           }
         } else {
-          // Open details sidebar
-          showNodeDetails(n);
-
           // Highlight column connections
           if (activeHighlightNode === n.id) {
             activeHighlightNode = null;
+            panel.style.display = 'none';
           } else {
             activeHighlightNode = n.id;
+            // Open details sidebar with metadata details
+            showNodeDetails(n);
           }
           updateConnections();
         }
       });
     });
 
-    // 8. Parse Column-to-Column Lineage
+    // Parse Column-to-Column Lineage
     const colConnections = [];
     graph.nodes.forEach(n => {
       if (n.meta?.columnLineage) {
@@ -658,7 +783,7 @@ export default {
 
     let activePaths = [];
 
-    // 9. Draw/Update Connections
+    // Draw/Update Connections
     function updateConnections() {
       activePaths.forEach(p => p.remove());
       activePaths = [];
@@ -730,7 +855,7 @@ export default {
       });
     }
 
-    // 10. Pan and Zoom Interaction (Zoom-to-cursor to prevent drift)
+    // Pan and Zoom Interaction (Zoom-to-cursor to prevent drift)
     let panX = 0;
     let panY = 0;
     let zoom = fixtureId === 'kitchen' ? 0.22 : 0.65;
@@ -747,7 +872,6 @@ export default {
       const CX = rect.width / 2;
       const CY = rect.height * 0.4;
 
-      // Mouse coordinate in the unscaled viewport namespace before scaling
       const vx = (mouseX - CX - panX) / zoom;
       const vy = (mouseY - CY - panY) / zoom;
 
@@ -758,7 +882,6 @@ export default {
         zoom = Math.max(0.08, zoom / factor);
       }
 
-      // Adjust panning values to pin the mouse cursor coordinate
       panX = mouseX - CX - vx * zoom;
       panY = mouseY - CY - vy * zoom;
 
