@@ -162,12 +162,17 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 /// </summary>
 public static class SharedConnectionValidator
 {
-    /// <summary>Returns the first credential field carrying a raw value instead of a SECRET:/ENC: reference, or null.</summary>
+    /// <summary>
+    /// Returns the first credential field carrying a raw value instead of a SECRET:/ENC: reference,
+    /// or null. Deliberately checks the strict credential set only: organization-designated
+    /// sensitive metadata (HOST, PATH, ...) may still be stored as plain values — designation
+    /// controls resolution and masking, not storage.
+    /// </summary>
     public static string? FindRawCredential(IReadOnlyDictionary<string, string> options, string? target)
     {
         foreach (var (key, value) in options)
         {
-            if (SecretResolvableFields.IsResolvable(key) && !IsReference(value))
+            if (SecretResolvableFields.IsCredential(key) && !IsReference(value))
                 return key;
         }
 
@@ -176,7 +181,7 @@ public static class SharedConnectionValidator
             foreach (var segment in target.Split(';'))
             {
                 var parts = segment.Split('=', 2);
-                if (parts.Length == 2 && SecretResolvableFields.IsResolvable(parts[0].Trim()) && !IsReference(parts[1]))
+                if (parts.Length == 2 && SecretResolvableFields.IsCredential(parts[0].Trim()) && !IsReference(parts[1]))
                     return parts[0].Trim();
             }
         }

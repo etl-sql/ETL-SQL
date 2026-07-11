@@ -348,9 +348,17 @@ CREATE CONNECTION warehouse AS POSTGRES(
 Only sensitive connector options and sensitive connection-string fields are expanded (`PASSWORD`, `TOKEN`,
 `ACCESS_KEY`, `SECRET_KEY`, `CLIENT_SECRET`, and similar credential fields). A `SECRET:` reference on any
 other field — for example `BUCKET` or `HOST` — is rejected with an error rather than passed to the connector
-as literal text; classifying non-credential metadata as sensitive is planned governance work. Missing or
-unreachable secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an
-empty value.
+as literal text. Organizations that consider specific metadata sensitive can designate additional fields:
+
+```json
+{ "Governance": { "Secrets": { "SensitiveConnectionFields": "HOST, PATH, BUCKET" } } }
+```
+
+Designated fields become `SECRET:`-resolvable and are masked in `SHOW CONNECTION`, diagnostics, and
+connection-string rendering — without being treated as secrets in every deployment: unlike credential
+fields they may still hold plain values (in scripts or catalog entries), so designating `HOST` does not
+force every hostname into the secret store. Missing or unreachable secrets fail closed with an error;
+ETL-SQL does not silently replace a missing secret with an empty value.
 Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
 raw secret values and `SECRET:` references before persistence or display.
 

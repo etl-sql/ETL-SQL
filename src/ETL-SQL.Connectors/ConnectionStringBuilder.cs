@@ -84,7 +84,9 @@ namespace ETL_SQL.Connectors
             return Build(provider, redactedProps);
         }
 
-        public static bool IsSensitiveKey(string key) => SensitiveKeys.Contains(key);
+        public static bool IsSensitiveKey(string key) =>
+            SensitiveKeys.Contains(key)
+            || ETL_SQL.Core.Governance.SecretResolvableFields.IsOrganizationDesignated(key);
 
         private static void ValidateProvider(string provider)
         {

@@ -174,6 +174,14 @@ Rules:
   revealing values;
 - resolved sensitive metadata must not be written back into scripts or generated artifacts.
 
+*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — designated
+fields become SECRET:-resolvable (`SecretResolvableFields` org set, honored by the resolver and
+the SecretReferenceUsage lint rule) and masked through `SecretRedactor.IsSensitiveKey` (SHOW
+CONNECTION / data-source config) and connection-string diagnostics rendering. Designation
+deliberately does NOT extend the catalog's raw-credential rejection: designated metadata may
+still be stored as plain values — designation controls resolution and masking, not storage.
+Remaining: per-connector metadata defaults and per-catalog-entry classification.)*
+
 ---
 
 ## 7. Connection Catalog (Shared Connections)
