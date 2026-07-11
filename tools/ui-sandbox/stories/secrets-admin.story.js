@@ -26,6 +26,16 @@ function makeFakeApi(seed, { failVerify = [], keyRingBroken = false } = {}) {
     },
     async disable(name) { secrets.find((s) => s.name === name).disabled = true; return {}; },
     async enable(name) { secrets.find((s) => s.name === name).disabled = false; return {}; },
+    async impact(name) {
+      return {
+        reference: `SECRET:${name}`,
+        consumerCount: 2,
+        consumers: [
+          { type: 'Report', name: 'Sales Overview', detail: 'reports/sales.rptsql', lastUsedAtUtc: null },
+          { type: 'SharedConnection', name: 'sales_dw', detail: 'MSSQL', lastUsedAtUtc: '2026-07-10T02:15:00Z' },
+        ],
+      };
+    },
     async remove(name) { secrets = secrets.filter((s) => s.name !== name); return {}; },
   };
 }

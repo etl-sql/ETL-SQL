@@ -20,7 +20,10 @@ public sealed record PortalSharedConnectionSummary(
 public sealed record PortalSharedConnectionDetail(
     PortalSharedConnectionSummary Summary,
     string? Target,
-    IReadOnlyDictionary<string, string> Options);
+    IReadOnlyDictionary<string, string> Options,
+    IReadOnlyList<string> SensitiveFields);
+
+public sealed record SharedConnectionAclEntry(int GroupId, string GroupName, string Permission);
 
 /// <summary>An entry as exported/imported: definition metadata with SECRET: references, never secret values.</summary>
 public sealed record PortalSharedConnectionExport(
@@ -29,7 +32,8 @@ public sealed record PortalSharedConnectionExport(
     string? Target,
     Dictionary<string, string> Options,
     string? EnvironmentScope,
-    bool Disabled);
+    bool Disabled,
+    List<string>? SensitiveFields = null);
 
 /// <summary>
 /// Portal-managed shared connection catalog (SHARED:alias). Credential fields hold SECRET:
@@ -57,6 +61,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
                 OptionsJson = JsonSerializer.Serialize(entry.Options),
                 Disabled = entry.Disabled,
                 EnvironmentScope = entry.EnvironmentScope,
+                SensitiveFieldsCsv = ToCsv(entry.SensitiveFields),
                 OwnerUserId = userId,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
@@ -72,6 +77,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         existing.OptionsJson = JsonSerializer.Serialize(entry.Options);
         existing.Disabled = entry.Disabled;
         existing.EnvironmentScope = entry.EnvironmentScope;
+        existing.SensitiveFieldsCsv = ToCsv(entry.SensitiveFields);
         existing.UpdatedAtUtc = now;
         existing.UpdatedByUserId = userId;
         existing.Version++;
@@ -83,21 +89,48 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
     /// <summary>Resolution path for script execution; the last-used touch is best-effort.</summary>
     public async Task<SharedConnectionDefinition> ResolveDefinitionAsync(
         string alias,
+        ExecutionIdentity? identity = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await db.PortalSharedConnections
+            .Include(c => c.Acls).ThenInclude(a => a.Group)
             .SingleOrDefaultAsync(c => c.Alias == alias, cancellationToken)
             ?? throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the Portal connection catalog.");
 
         if (entity.Disabled)
             throw new InvalidOperationException($"Shared connection '{alias}' is disabled.");
 
+        await EnforceUseAclAsync(entity, identity, cancellationToken);
+
         var definition = new SharedConnectionDefinition(
-            entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false);
+            entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false,
+            FromCsv(entity.SensitiveFieldsCsv));
 
         try
         {
-            entity.LastUsedAtUtc = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            entity.LastUsedAtUtc = now;
+
+            var consumer = identity?.EffectiveUser ?? "(none)";
+            var usage = await db.SharedConnectionUsages
+                .SingleOrDefaultAsync(
+                    u => u.SharedConnectionId == entity.Id && u.ConsumerUser == consumer, cancellationToken);
+            if (usage == null)
+            {
+                db.SharedConnectionUsages.Add(new SharedConnectionUsage
+                {
+                    SharedConnectionId = entity.Id,
+                    ConsumerUser = consumer,
+                    LastUsedAtUtc = now,
+                    UseCount = 1
+                });
+            }
+            else
+            {
+                usage.LastUsedAtUtc = now;
+                usage.UseCount++;
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }
         catch
@@ -107,6 +140,97 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         }
 
         return definition;
+    }
+
+    /// <summary>
+    /// Entries without grants are usable by any caller. Entries with grants require an admin, the
+    /// entry owner, or membership in a granted group; identity-less callers are denied.
+    /// </summary>
+    private async Task EnforceUseAclAsync(
+        PortalSharedConnection entity,
+        ExecutionIdentity? identity,
+        CancellationToken cancellationToken)
+    {
+        if (entity.Acls.Count == 0)
+            return;
+
+        if (identity != null)
+        {
+            if (identity.IsAdmin)
+                return;
+            if (entity.OwnerUserId != null && identity.EffectiveUserId == entity.OwnerUserId)
+                return;
+
+            if (identity.EffectiveUserId is int userId)
+            {
+                var groupIds = await db.UserGroups
+                    .AsNoTracking()
+                    .Where(ug => ug.UserId == userId)
+                    .Select(ug => ug.GroupId)
+                    .ToListAsync(cancellationToken);
+                if (entity.Acls.Any(a => groupIds.Contains(a.GroupId)))
+                    return;
+            }
+            else if (entity.Acls.Any(a => identity.HasGroup(a.Group.Name)))
+            {
+                return;
+            }
+        }
+
+        throw new UnauthorizedAccessException(
+            $"Identity '{identity?.EffectiveUser ?? "(none)"}' is not authorized to use shared connection '{entity.Alias}'. " +
+            "Ask an administrator for a use grant on this connection.");
+    }
+
+    public async Task<IReadOnlyList<SharedConnectionAclEntry>> ListAclsAsync(
+        string alias,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await Require(alias, cancellationToken);
+        return await db.SharedConnectionAcls
+            .AsNoTracking()
+            .Where(a => a.SharedConnectionId == entity.Id)
+            .OrderBy(a => a.Group.Name)
+            .Select(a => new SharedConnectionAclEntry(a.GroupId, a.Group.Name, a.Permission.ToString()))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<bool> GrantUseAsync(
+        string alias,
+        int groupId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await Require(alias, cancellationToken);
+        var exists = await db.SharedConnectionAcls
+            .AnyAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
+        if (exists)
+            return false;
+
+        if (!await db.Groups.AnyAsync(g => g.Id == groupId, cancellationToken))
+            throw new KeyNotFoundException($"Group {groupId} does not exist.");
+
+        db.SharedConnectionAcls.Add(new SharedConnectionAcl
+        {
+            SharedConnectionId = entity.Id,
+            GroupId = groupId,
+            Permission = SharedConnectionPermission.Use
+        });
+        return true;
+    }
+
+    public async Task<bool> RevokeUseAsync(
+        string alias,
+        int groupId,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = await Require(alias, cancellationToken);
+        var acl = await db.SharedConnectionAcls
+            .SingleOrDefaultAsync(a => a.SharedConnectionId == entity.Id && a.GroupId == groupId, cancellationToken);
+        if (acl == null)
+            return false;
+
+        db.SharedConnectionAcls.Remove(acl);
+        return true;
     }
 
     public async Task<IReadOnlyList<PortalSharedConnectionSummary>> ListAsync(CancellationToken cancellationToken = default)
@@ -125,7 +249,12 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         if (entity == null)
             return null;
 
-        return new PortalSharedConnectionDetail(ToSummary(entity), MaskTarget(entity.Target), MaskOptions(DeserializeOptions(entity)));
+        var sensitiveFields = FromCsv(entity.SensitiveFieldsCsv);
+        return new PortalSharedConnectionDetail(
+            ToSummary(entity),
+            MaskTarget(entity.Target, entity.ConnectorType, sensitiveFields),
+            MaskOptions(DeserializeOptions(entity), entity.ConnectorType, sensitiveFields),
+            sensitiveFields);
     }
 
     public async Task<IReadOnlyList<PortalSharedConnectionExport>> ExportAsync(CancellationToken cancellationToken = default)
@@ -139,7 +268,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
                 entity.Target,
                 new Dictionary<string, string>(DeserializeOptions(entity), StringComparer.OrdinalIgnoreCase),
                 entity.EnvironmentScope,
-                entity.Disabled))
+                entity.Disabled,
+                FromCsv(entity.SensitiveFieldsCsv).ToList()))
             .ToList();
 
     public async Task<SecretLifecycleStatus> GetStatusAsync(string alias, CancellationToken cancellationToken = default)
@@ -223,6 +353,12 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
             throw new ArgumentException(
                 $"Field '{rawCredential}' holds a raw credential value. The catalog stores references only: " +
                 "store the value in the secret store and reference it as SECRET:name.", nameof(entry));
+
+        var maskedPlaceholder = FindMaskedPlaceholder(entry);
+        if (maskedPlaceholder != null)
+            throw new ArgumentException(
+                $"Field '{maskedPlaceholder}' contains a masked display placeholder. Re-enter the original value or a SECRET:name reference before saving.",
+                nameof(entry));
     }
 
     private static Dictionary<string, string> DeserializeOptions(PortalSharedConnection entity)
@@ -242,16 +378,18 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         entity.Version);
 
     // Write-side validation guarantees credential fields hold references, but masking is
-    // belt-and-braces for entries that arrived by import or older versions.
-    private static IReadOnlyDictionary<string, string> MaskOptions(Dictionary<string, string> options)
+    // belt-and-braces for entries that arrived by import or older versions. Entry-classified
+    // sensitive fields are masked even when they hold plain values.
+    private static IReadOnlyDictionary<string, string> MaskOptions(
+        Dictionary<string, string> options, string connectorType, IReadOnlyCollection<string> sensitiveFields)
         => options.ToDictionary(
             pair => pair.Key,
-            pair => SecretResolvableFields.IsResolvable(pair.Key) && !IsReference(pair.Value)
+            pair => IsMaskedField(pair.Key, connectorType, sensitiveFields) && !IsReference(pair.Value)
                 ? SecretRedactor.Mask
                 : pair.Value,
             StringComparer.OrdinalIgnoreCase);
 
-    private static string? MaskTarget(string? target)
+    private static string? MaskTarget(string? target, string connectorType, IReadOnlyCollection<string> sensitiveFields)
     {
         if (string.IsNullOrEmpty(target))
             return target;
@@ -260,11 +398,44 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         for (var i = 0; i < segments.Length; i++)
         {
             var parts = segments[i].Split('=', 2);
-            if (parts.Length == 2 && SecretResolvableFields.IsResolvable(parts[0].Trim()) && !IsReference(parts[1]))
+            if (parts.Length == 2 && IsMaskedField(parts[0].Trim(), connectorType, sensitiveFields) && !IsReference(parts[1]))
                 segments[i] = $"{parts[0]}={SecretRedactor.Mask}";
         }
 
         return string.Join(';', segments);
+    }
+
+    private static bool IsMaskedField(string key, string connectorType, IReadOnlyCollection<string> sensitiveFields) =>
+        SecretResolvableFields.IsResolvable(key, connectorType)
+        || sensitiveFields.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    private static string? FindMaskedPlaceholder(PortalSharedConnectionExport entry)
+    {
+        var sensitiveFields = entry.SensitiveFields ?? [];
+        foreach (var (key, value) in entry.Options)
+        {
+            if (IsMaskedField(key, entry.ConnectorType, sensitiveFields)
+                && string.Equals(value?.Trim(), SecretRedactor.Mask, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Target))
+        {
+            foreach (var segment in entry.Target.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = segment.Split('=', 2);
+                if (parts.Length == 2
+                    && IsMaskedField(parts[0].Trim(), entry.ConnectorType, sensitiveFields)
+                    && string.Equals(parts[1].Trim(), SecretRedactor.Mask, StringComparison.Ordinal))
+                {
+                    return parts[0].Trim();
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool IsReference(string value)
@@ -273,4 +444,19 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         return trimmed.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string? ToCsv(IEnumerable<string>? fields)
+    {
+        var normalized = (fields ?? [])
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => f.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return normalized.Count == 0 ? null : string.Join(',', normalized);
+    }
+
+    private static IReadOnlyList<string> FromCsv(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

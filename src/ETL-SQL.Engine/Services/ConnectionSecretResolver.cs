@@ -8,7 +8,11 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
 {
     private const string SecretPrefix = "SECRET:";
 
-    public async Task<string> ResolveTargetAsync(string target, CancellationToken cancellationToken)
+    public async Task<string> ResolveTargetAsync(
+        string target,
+        CancellationToken cancellationToken,
+        string? connectorType = null,
+        IReadOnlyCollection<string>? entrySensitiveFields = null)
     {
         if (string.IsNullOrEmpty(target))
             return target;
@@ -16,12 +20,15 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         if (IsSecretReference(target))
             return await ResolveSecretValueAsync(target, cancellationToken).ConfigureAwait(false);
 
-        return await ReplaceConnectionStringSecretFieldsAsync(target, cancellationToken).ConfigureAwait(false);
+        return await ReplaceConnectionStringSecretFieldsAsync(
+            target, connectorType, entrySensitiveFields, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Dictionary<string, string>> ResolveOptionsAsync(
         Dictionary<string, string> options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? connectorType = null,
+        IReadOnlyCollection<string>? entrySensitiveFields = null)
     {
         var resolved = new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options)
@@ -29,7 +36,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
             if (!IsSecretReference(value))
                 continue;
 
-            if (!SecretResolvableFields.IsResolvable(key))
+            if (!IsResolvableField(key, connectorType, entrySensitiveFields))
                 throw UnresolvedSecretReferenceError(key);
 
             resolved[key] = await ResolveSecretValueAsync(value, cancellationToken).ConfigureAwait(false);
@@ -38,8 +45,17 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         return resolved;
     }
 
+    // Resolvable = built-in credential set ∪ org-designated (global or connector-scoped) ∪ fields
+    // the catalog entry itself classifies as sensitive.
+    private static bool IsResolvableField(
+        string key, string? connectorType, IReadOnlyCollection<string>? entrySensitiveFields) =>
+        SecretResolvableFields.IsResolvable(key, connectorType)
+        || (entrySensitiveFields?.Contains(key, StringComparer.OrdinalIgnoreCase) ?? false);
+
     private async Task<string> ReplaceConnectionStringSecretFieldsAsync(
         string target,
+        string? connectorType,
+        IReadOnlyCollection<string>? entrySensitiveFields,
         CancellationToken cancellationToken)
     {
         var matches = ConnectionStringSecretFieldRegex().Matches(target);
@@ -50,7 +66,7 @@ internal sealed partial class ConnectionSecretResolver(ISecretProvider? secretPr
         foreach (Match match in matches.Cast<Match>().Reverse())
         {
             var key = match.Groups["key"].Value;
-            if (!SecretResolvableFields.IsResolvable(key))
+            if (!IsResolvableField(key, connectorType, entrySensitiveFields))
                 throw UnresolvedSecretReferenceError(key);
 
             var reference = match.Groups["value"].Value;

@@ -13,13 +13,22 @@ public sealed record SharedConnectionDefinition(
     string ConnectorType,
     string? Target,
     IReadOnlyDictionary<string, string> Options,
-    bool Disabled);
+    bool Disabled,
+    IReadOnlyCollection<string>? SensitiveFields = null);
 
 /// <summary>Resolves SHARED:alias references to cataloged connection definitions.</summary>
 public interface IConnectionCatalogProvider
 {
     string ProviderName { get; }
-    Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves an alias for the given caller. Providers that support per-connection use ACLs
+    /// must fail closed for restricted entries when the identity is null or not authorized.
+    /// </summary>
+    Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
@@ -43,9 +52,15 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 {
     public string ProviderName => "LocalCatalog";
 
-    private sealed record EntryPayload(string ConnectorType, string? Target, Dictionary<string, string> Options);
+    private sealed record EntryPayload(
+        string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null);
 
-    public async Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default)
+    // The local catalog has no user model: its trust boundary is filesystem access on the single
+    // node, so the caller identity is not evaluated here.
+    public async Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default)
     {
         var path = GetEntryPath(alias);
         if (!File.Exists(path))
@@ -59,7 +74,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false);
+        return new SharedConnectionDefinition(
+            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields);
     }
 
     public async Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default)
@@ -73,7 +89,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         var payload = new EntryPayload(
             definition.ConnectorType.Trim(),
             definition.Target,
-            new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
+            definition.SensitiveFields?.ToList());
         var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Alias);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())

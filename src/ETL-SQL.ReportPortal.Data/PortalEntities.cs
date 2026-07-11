@@ -384,6 +384,8 @@ public class PortalSharedConnection : IVersionedEntity
     public bool Disabled { get; set; }
     public string? EnvironmentScope { get; set; }
     public int? OwnerUserId { get; set; }
+    /// <summary>Comma-separated fields this entry classifies as sensitive (masked + SECRET:-resolvable).</summary>
+    public string? SensitiveFieldsCsv { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public int? CreatedByUserId { get; set; }
@@ -391,6 +393,41 @@ public class PortalSharedConnection : IVersionedEntity
     public DateTime? LastUsedAtUtc { get; set; }
     public DateTime? LastVerifiedAtUtc { get; set; }
     public long Version { get; set; } = 1;
+
+    public ICollection<SharedConnectionAcl> Acls { get; set; } = [];
+}
+
+public enum SharedConnectionPermission { Use = 0 }
+
+/// <summary>
+/// A per-connection use grant (group-scoped, like <see cref="DatasetAcl"/>). An entry with no
+/// grants is usable by any caller; an entry with grants requires an admin, its owner, or a
+/// member of a granted group — and a caller without an injected identity is denied.
+/// </summary>
+public class SharedConnectionAcl
+{
+    public int Id { get; set; }
+    public int SharedConnectionId { get; set; }
+    public PortalSharedConnection SharedConnection { get; set; } = null!;
+    public int GroupId { get; set; }
+    public Group Group { get; set; } = null!;
+    public SharedConnectionPermission Permission { get; set; } = SharedConnectionPermission.Use;
+}
+
+/// <summary>
+/// Per-consumer usage of a shared connection: who resolved SHARED:alias and when, so
+/// administrators see impact per consumer before disabling or deleting an entry (rather than a
+/// single last-used timestamp). Written best-effort at resolution time.
+/// </summary>
+public class SharedConnectionUsage
+{
+    public int Id { get; set; }
+    public int SharedConnectionId { get; set; }
+    public PortalSharedConnection SharedConnection { get; set; } = null!;
+    /// <summary>Effective user of the resolving execution, or "(none)" for identity-less runs.</summary>
+    public string ConsumerUser { get; set; } = "";
+    public DateTime LastUsedAtUtc { get; set; }
+    public long UseCount { get; set; }
 }
 
 /// <summary>

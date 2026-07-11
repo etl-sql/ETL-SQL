@@ -174,13 +174,15 @@ Rules:
   revealing values;
 - resolved sensitive metadata must not be written back into scripts or generated artifacts.
 
-*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — designated
-fields become SECRET:-resolvable (`SecretResolvableFields` org set, honored by the resolver and
-the SecretReferenceUsage lint rule) and masked through `SecretRedactor.IsSensitiveKey` (SHOW
-CONNECTION / data-source config) and connection-string diagnostics rendering. Designation
-deliberately does NOT extend the catalog's raw-credential rejection: designated metadata may
-still be stored as plain values — designation controls resolution and masking, not storage.
-Remaining: per-connector metadata defaults and per-catalog-entry classification.)*
+*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — plain field
+names apply globally and `TYPE:FIELD` entries apply only to that connector type. Designated fields
+become SECRET:-resolvable (`SecretResolvableFields`, honored by the resolver and the
+SecretReferenceUsage lint rule) and masked through connection display/diagnostic rendering. Portal
+and local catalog entries can also classify per-entry sensitive fields (`SensitiveFields` /
+`--sensitive`), which are masked, export/import round-trip, and become SECRET:-resolvable for that
+entry. Designation deliberately does NOT extend raw-credential rejection for non-credential
+metadata: designated metadata may still be stored as plain values — designation controls
+resolution and masking, not storage.)*
 
 ---
 
@@ -300,6 +302,15 @@ Secret and catalog operations require:
 Every mutation should produce durable audit events. Security-sensitive mutations should follow the
 existing fail-closed audit behavior when that policy is enabled.
 
+**Decision (2026-07-11): catalog approval workflow stays with the Review Workflow & Data
+Stewardship track (ROADMAP), not this phase.** Propose→approve with segregation of duties is a
+general stewardship capability the stewardship strategy already plans (review, certification,
+publication workflows); building a one-off approval pipeline only for shared connections would
+duplicate that machinery and then need reconciling with it. This phase's SME audience is covered
+by immediate-apply + full audit on every mutation plus per-connection use grants; organizations
+needing four-eyes control get it when the stewardship workflow lands, with catalog mutations as
+one of its governed operation types.
+
 ---
 
 ## 9. Native Admin Background Services
@@ -352,10 +363,19 @@ configuration.
    audited `api/admin/connections` API with masked detail, verify, metadata-only export/import,
    owner/environment-scope/last-used/last-verified governance metadata, and the `PortalCatalog`
    provider for Portal-hosted execution. Admin UI: the Connections tab in admin.html, backed by
-   the extracted `js/connections-admin.js` module with a ui-sandbox story. Deferred:
-   per-connection use-ACLs (needs caller-identity flow into the expansion path — pair with a
-   dedicated RBAC pass) and deep impact inventory (which reports/jobs reference an alias — pair
-   with script inspection).)*
+   the extracted `js/connections-admin.js` module with a ui-sandbox story. Per-connection
+   use-ACLs shipped as a follow-up: the RLS `ExecutionIdentity` now flows from
+   CreateConnectionStatementHandler through `SharedConnectionExpander` into
+   `IConnectionCatalogProvider.ResolveAsync`; `SharedConnectionAcl` grants (group-scoped, like
+   `DatasetAcl`) restrict use to admins/owner/granted groups, entries without grants stay open,
+   null identities fail closed on restricted entries, and denials audit
+   `SHARED_CONNECTION_USE_DENIED` from the Portal provider scope. The local catalog ignores
+   identity (its trust boundary is filesystem access). Impact inventory also shipped:
+   `ReferenceImpactService` scans report/subscription/orchestrator-job scripts for
+   `SHARED:alias`/`SECRET:name` tokens (boundary-aware matching, bounded reads), includes catalog
+   entries referencing a secret, and `SharedConnectionUsage` records per-consumer
+   last-used/use-count at resolution time — surfaced via `{alias}/impact`, `{name}/impact`, and
+   Impact buttons in both admin tabs.)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
    Portal/Orchestrator background services with leases and operational history. *(Shipped:
    `Portal:AdminServices` config (per-service enable/interval/recipients/SMTP alias/retries),

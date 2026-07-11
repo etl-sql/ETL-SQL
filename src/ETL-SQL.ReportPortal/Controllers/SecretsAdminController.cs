@@ -79,6 +79,16 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
         return result;
     }
 
+    /// <summary>What breaks if this secret is disabled or deleted: referencing scripts and catalog entries.</summary>
+    [HttpGet("{name}/impact")]
+    public async Task<IActionResult> Impact(string name, [FromServices] ReferenceImpactService impact, CancellationToken ct)
+    {
+        if (await store.GetStatusAsync(name, ct) == SecretLifecycleStatus.NotFound)
+            return NotFound(new { error = $"Secret '{name}' does not exist." });
+
+        return Ok(await impact.ForSecretAsync(name, ct));
+    }
+
     /// <summary>Decrypt-probe of every stored secret — the backup/restore and HA key validation surface.</summary>
     [HttpPost("verify-all")]
     public async Task<IActionResult> VerifyAll(CancellationToken ct)

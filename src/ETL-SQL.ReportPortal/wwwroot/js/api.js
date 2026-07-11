@@ -303,6 +303,7 @@ export const secretsApi = {
     verifyAll: ()            => apiJson('/api/admin/secrets/verify-all', { method: 'POST' }),
     disable:   (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/disable`, { method: 'POST' }),
     enable:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/enable`, { method: 'POST' }),
+    impact:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/impact`),
     remove:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 };
 
@@ -318,6 +319,10 @@ export const connectionsApi = {
     remove:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'DELETE' }),
     exportAll: ()             => apiJson('/api/admin/connections/export'),
     importAll: (entries)      => apiJson('/api/admin/connections/import', { method: 'POST', body: entries }),
+    impact:    (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/impact`),
+    listAcl:   (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`),
+    grantAcl:  (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`, { method: 'POST', body: { groupId } }),
+    revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
 };
 
 // ── Admin — users ──────────────────────────────────────────────────────────────

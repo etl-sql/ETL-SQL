@@ -3,16 +3,19 @@ using System;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace ETL_SQL.ReportPortal.Data.Migrations
+namespace ETLSQL.ReportPortal.Data.Migrations
 {
     [DbContext(typeof(PortalDbContext))]
-    partial class PortalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711164045_AddSharedConnectionAcls")]
+    partial class AddSharedConnectionAcls
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -698,9 +701,6 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<int?>("OwnerUserId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("SensitiveFieldsCsv")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Target")
                         .HasColumnType("TEXT");
 
@@ -1279,34 +1279,6 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.ToTable("SharedConnectionAcls");
                 });
 
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ConsumerUser")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("LastUsedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SharedConnectionId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<long>("UseCount")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SharedConnectionId", "ConsumerUser")
-                        .IsUnique();
-
-                    b.ToTable("SharedConnectionUsages");
-                });
-
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1820,17 +1792,6 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("SharedConnection");
                 });
 
-            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
-                {
-                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
-                        .WithMany()
-                        .HasForeignKey("SharedConnectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SharedConnection");
-                });
-
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
@@ -1946,6 +1907,11 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("FolderAcls");
 
                     b.Navigation("UserGroups");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalSharedConnection", b =>
+                {
+                    b.Navigation("Acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>

@@ -731,6 +731,9 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Property<int?>("OwnerUserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SensitiveFieldsCsv")
+                        .HasColumnType("text");
+
                     b.Property<string>("Target")
                         .HasColumnType("text");
 
@@ -1302,6 +1305,63 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("ServiceAccounts");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Permission")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SharedConnectionId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("SharedConnectionId", "GroupId")
+                        .IsUnique();
+
+                    b.ToTable("SharedConnectionAcls");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConsumerUser")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SharedConnectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("UseCount")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SharedConnectionId", "ConsumerUser")
+                        .IsUnique();
+
+                    b.ToTable("SharedConnectionUsages");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1804,6 +1864,36 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsRequired();
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
+                        .WithMany("Acls")
+                        .HasForeignKey("SharedConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("SharedConnection");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
+                        .WithMany()
+                        .HasForeignKey("SharedConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SharedConnection");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>

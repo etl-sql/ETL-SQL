@@ -41,6 +41,7 @@ const PANEL_HTML = `
       </div>
     </div>
     <div id="sec-tableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading secrets…</span></div></div>
+    <div id="sec-impactWrap"></div>
   </div>
 
   <div class="card">
@@ -101,6 +102,7 @@ export function createSecretsAdmin({ host, secretsApi }) {
                 <td>${esc(formatDate(s.updatedAtUtc))}</td>
                 <td>${esc(s.version)}</td>
                 <td class="table-actions">
+                  <button class="btn btn-outline btn-sm" data-act="impact">Impact</button>
                   <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
                   ${s.disabled
                     ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
@@ -131,6 +133,22 @@ export function createSecretsAdmin({ host, secretsApi }) {
           const status = err.body?.status || (err.status === 404 ? 'missing' : 'error');
           row.querySelector('.sec-row-status').innerHTML = `<span class="badge badge-error">${esc(status)}</span>`;
         }
+      } else if (btn.dataset.act === 'impact') {
+        const impact = await secretsApi.impact(name);
+        $('sec-impactWrap').innerHTML = !impact.consumers.length
+          ? `<div class="empty-state">No known consumers reference SECRET:${esc(name)}.</div>`
+          : `
+            <h4 class="section-kicker">Impact — ${esc(impact.consumerCount)} consumer(s) of <code>${esc(impact.reference)}</code></h4>
+            <table class="data-table">
+              <thead><tr><th>Type</th><th>Name</th><th>Detail</th><th>Last used</th></tr></thead>
+              <tbody>${impact.consumers.map((c) => `
+                <tr>
+                  <td>${esc(c.type)}</td>
+                  <td>${esc(c.name)}</td>
+                  <td>${esc(c.detail || '—')}</td>
+                  <td>${esc(formatDate(c.lastUsedAtUtc))}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
       } else if (btn.dataset.act === 'disable') {
         if (!window.confirm(`Disable secret '${name}'? SECRET:${name} will fail until it is re-enabled.`)) return;
         await secretsApi.disable(name);

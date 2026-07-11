@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
@@ -121,6 +122,197 @@ public class PortalConnectionCatalogApiTests
             Assert.Contains("SHARED_CONNECTION_DISABLE", actions);
             Assert.Contains("SHARED_CONNECTION_ENABLE", actions);
         }
+    }
+
+    [Fact]
+    public async Task UseAcls_RestrictExpansionToAdminsOwnersAndGrantedGroups()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        // catalog an unrestricted entry
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/acl_dw", new
+            {
+                connectorType = "MSSQL",
+                options = new Dictionary<string, string> { ["SERVER"] = "sql01" }
+            })).StatusCode);
+
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+
+        // no grants → usable without any identity (backward compatible)
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+
+        // create a group and grant it use
+        var group = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "ConnUsers" });
+        Assert.Equal(HttpStatusCode.Created, group.StatusCode);
+        var groupId = (await group.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/acl_dw/acl", new { groupId })).StatusCode);
+
+        var acl = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/acl_dw/acl", null);
+        var aclBody = await acl.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Single(aclBody!);
+        Assert.Equal("ConnUsers", aclBody![0]!["groupName"]!.GetValue<string>());
+
+        // once granted: no identity → denied (fail closed) and the denial is audited
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw"));
+
+        // non-member, non-admin identity → denied
+        var outsider = new ExecutionIdentity
+        {
+            EffectiveUser = "bob", RealUser = "bob", IsAdmin = false, Groups = ["OtherTeam"]
+        };
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
+
+        // group member (name-based federated identity) → allowed
+        var member = new ExecutionIdentity
+        {
+            EffectiveUser = "ann", RealUser = "ann", IsAdmin = false, Groups = ["connusers"]
+        };
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", member)).Options["SERVER"]);
+
+        // admin → allowed
+        var admin = new ExecutionIdentity { EffectiveUser = "root", RealUser = "root", IsAdmin = true };
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", admin)).Options["SERVER"]);
+
+        // revoke → unrestricted again
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, token, $"/api/admin/connections/acl_dw/acl/{groupId}", null)).StatusCode);
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+
+        using var scope = factory.Services.CreateScope();
+        var actions = await scope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .AuditLogs.Where(a => a.ResourceType == "PortalSharedConnection" && a.ResourceId == "acl_dw")
+            .Select(a => a.Action).ToListAsync();
+        Assert.Contains("SHARED_CONNECTION_GRANT_USE", actions);
+        Assert.Contains("SHARED_CONNECTION_REVOKE_USE", actions);
+        Assert.Contains("SHARED_CONNECTION_USE_DENIED", actions);
+    }
+
+    [Fact]
+    public async Task SensitiveFields_RoundTripMaskExportAndResolve()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PortalSecretStoreService>()
+                .StoreAsync("prod_host", "pg01.internal");
+        }
+
+        var set = await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/sensitive_dw", new
+        {
+            connectorType = "POSTGRES",
+            target = "Host=pg01.internal;Database=dw",
+            options = new Dictionary<string, string>
+            {
+                ["HOST"] = "SECRET:prod_host",
+                ["DATABASE"] = "dw"
+            },
+            sensitiveFields = new[] { "HOST" }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, set.StatusCode);
+
+        var detail = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/sensitive_dw", null);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains("SECRET:prod_host", body);
+        Assert.Contains("\"sensitiveFields\":[\"HOST\"]", body);
+        Assert.DoesNotContain("pg01.internal", body);
+
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        var definition = await provider.ResolveAsync("sensitive_dw");
+        Assert.Contains("HOST", definition.SensitiveFields!);
+
+        var export = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/export", null);
+        var exported = await export.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var entry = Assert.Single(exported!);
+        Assert.Equal("HOST", entry!["sensitiveFields"]![0]!.GetValue<string>());
+
+        var maskedSave = await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/sensitive_dw", new
+        {
+            connectorType = "POSTGRES",
+            target = "Host=********;Database=dw",
+            options = new Dictionary<string, string> { ["DATABASE"] = "dw" },
+            sensitiveFields = new[] { "HOST" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, maskedSave.StatusCode);
+        Assert.Contains("masked display placeholder", await maskedSave.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Impact_ListsReferencingScriptsJobsCatalogEntriesAndConsumers()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        // a catalog entry whose credential references a secret
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/impact_dw", new
+            {
+                connectorType = "MSSQL",
+                options = new Dictionary<string, string> { ["SERVER"] = "sql01", ["PASSWORD"] = "SECRET:impact_secret" }
+            })).StatusCode);
+
+        // a published report whose script references both the alias and the secret
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var config = factory.Services.GetRequiredService<PortalConfig>();
+            var scriptRoot = Path.GetFullPath(config.ScriptRootPath);
+            Directory.CreateDirectory(scriptRoot);
+            await File.WriteAllTextAsync(
+                Path.Combine(scriptRoot, "impact_report.rptsql"),
+                "CREATE CONNECTION dw AS MSSQL('SHARED:impact_dw');\n-- also uses SECRET:impact_secret");
+
+            var folder = new Folder { Name = "impact", Path = "/impact", OwnerId = 1 };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            db.Reports.Add(new Report
+            {
+                FolderId = folder.Id,
+                Name = "Impact Report",
+                ScriptPath = "impact_report.rptsql",
+                CreatedBy = 1
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // an orchestrator scheduled job whose script value references the alias
+        var jobs = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await jobs.InitializeAsync();
+        await jobs.SaveJobAsync(new JobDefinition(
+            "impact-job", "RUN SCRIPT referencing SHARED:impact_dw", 1, "days", null, null, null));
+
+        // a recorded consumer via resolution
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        var ann = new ExecutionIdentity { EffectiveUser = "ann", RealUser = "ann", IsAdmin = false };
+        _ = await provider.ResolveAsync("impact_dw", ann);
+
+        var connImpact = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/impact_dw/impact", null);
+        Assert.Equal(HttpStatusCode.OK, connImpact.StatusCode);
+        var connBody = await connImpact.Content.ReadAsStringAsync();
+        Assert.Contains("Impact Report", connBody);
+        Assert.Contains("impact-job", connBody);
+        Assert.Contains("ann", connBody);
+
+        // the secret's impact includes the report script and the catalog entry that references it
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PortalSecretStoreService>()
+                .StoreAsync("impact_secret", "value");
+        }
+
+        var secretImpact = await SendAsync(client, HttpMethod.Get, token, "/api/admin/secrets/impact_secret/impact", null);
+        Assert.Equal(HttpStatusCode.OK, secretImpact.StatusCode);
+        var secretBody = await secretImpact.Content.ReadAsStringAsync();
+        Assert.Contains("Impact Report", secretBody);
+        Assert.Contains("impact_dw", secretBody);
     }
 
     [Fact]

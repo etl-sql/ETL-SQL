@@ -155,7 +155,8 @@ namespace ETL_SQL.App
 
             await writable.StoreAsync(
                 new SharedConnectionDefinition(ctx.ConnectionAlias.Trim(), ctx.ConnectionType.Trim(),
-                    string.IsNullOrWhiteSpace(ctx.ConnectionTarget) ? null : ctx.ConnectionTarget, options, Disabled: false),
+                    string.IsNullOrWhiteSpace(ctx.ConnectionTarget) ? null : ctx.ConnectionTarget, options, Disabled: false,
+                    ctx.ConnectionSensitiveFields is { Length: > 0 } ? ctx.ConnectionSensitiveFields : null),
                 ct);
             // The alias is not secret, but "SHARED:alias" would be masked by the redactor — phrase around it.
             logger.WriteLine(
@@ -171,7 +172,7 @@ namespace ETL_SQL.App
             if (string.IsNullOrWhiteSpace(alias))
                 return MissingArgument("--alias", logger);
 
-            var definition = await catalog.ResolveAsync(alias.Trim(), ct);
+            var definition = await catalog.ResolveAsync(alias.Trim(), identity: null, cancellationToken: ct);
 
             var references = definition.Options.Values
                 .Where(value => value.TrimStart().StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase))
