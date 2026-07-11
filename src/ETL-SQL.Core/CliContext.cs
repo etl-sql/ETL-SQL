@@ -76,6 +76,29 @@ public class CliContext
     public string? MigrateTo { get; set; }
     public bool MigrateDryRun { get; set; }
 
+    // admin ha-soak commands
+    public string? HaSoakRunId { get; set; }
+    public string? HaSoakRunRoot { get; set; }
+    public string? HaSoakOutputRoot { get; set; }
+    public string? HaSoakOutputPath { get; set; }
+    public string? HaSoakMode { get; set; }
+    public string? HaSoakSustainedWorkloadPath { get; set; }
+    public string? HaSoakAdminPassword { get; set; }
+    public string? HaSoakComposeFile { get; set; }
+    public string? HaSoakEnvExample { get; set; }
+    public string? HaSoakImageTag { get; set; }
+    public int HaSoakPortalScale { get; set; } = 2;
+    public int HaSoakOrchestratorScale { get; set; } = 2;
+    public int HaSoakPortalPort { get; set; } = 5600;
+    public int HaSoakOrchestratorPort { get; set; } = 5601;
+    public int HaSoakPostgresPort { get; set; } = 5632;
+    public int HaSoakLogTail { get; set; } = 500;
+    public bool HaSoakStart { get; set; }
+    public bool HaSoakPull { get; set; }
+    public bool HaSoakValidateOnly { get; set; }
+    public bool HaSoakNoDocker { get; set; }
+    public bool HaSoakForce { get; set; }
+
     // admin secret lifecycle commands
     public string? SecretName { get; set; }
     public string? SecretValue { get; set; }

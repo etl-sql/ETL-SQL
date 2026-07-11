@@ -244,6 +244,115 @@ namespace ETL_SQL.App
         {
             Description = "Verify counts and target schema compatibility without writing any data."
         };
+        private static readonly Option<string?> HaSoakRunIdOption = new("--run-id", Array.Empty<string>())
+        {
+            Description = "Stable run identifier for generated HA soak topology artifacts.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakRunRootOption = new("--run-root", new[] { "-r" })
+        {
+            Description = "Path to a generated HA soak topology run root.",
+            Arity = ArgumentArity.ExactlyOne
+        };
+        private static readonly Option<string?> HaSoakOutputRootOption = new("--output-root", Array.Empty<string>())
+        {
+            Description = "Directory for generated HA soak runs or diagnostics.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakOutputPathOption = new("--output", new[] { "-o" })
+        {
+            Description = "Destination file path for the generated HA soak artifact.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakModeOption = new("--mode", Array.Empty<string>())
+        {
+            Description = "Plan depth: CiSmoke or ManualCertification.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => "CiSmoke"
+        };
+        private static readonly Option<string?> HaSoakSustainedWorkloadOption = new("--workload", Array.Empty<string>())
+        {
+            Description = "Path to the materialized sustained-workload JSON.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakAdminPasswordOption = new("--admin-password", Array.Empty<string>())
+        {
+            Description = "Admin password to place in the local workload config; defaults to CHANGE_ME.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakComposeFileOption = new("--compose-file", Array.Empty<string>())
+        {
+            Description = "Docker Compose file used by the generated topology.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakEnvExampleOption = new("--env-example", Array.Empty<string>())
+        {
+            Description = "Environment template used by the generated topology.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<string?> HaSoakImageTagOption = new("--image-tag", Array.Empty<string>())
+        {
+            Description = "Container image tag to use when preparing the topology.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
+        private static readonly Option<int> HaSoakPortalScaleOption = new("--portal-scale", Array.Empty<string>())
+        {
+            Description = "Portal replica count for the HA soak topology.",
+            DefaultValueFactory = _ => 2
+        };
+        private static readonly Option<int> HaSoakOrchestratorScaleOption = new("--orchestrator-scale", Array.Empty<string>())
+        {
+            Description = "Orchestrator replica count for the HA soak topology.",
+            DefaultValueFactory = _ => 2
+        };
+        private static readonly Option<int> HaSoakPortalPortOption = new("--portal-port", Array.Empty<string>())
+        {
+            Description = "Host port for the HA soak load-balanced Portal endpoint.",
+            DefaultValueFactory = _ => 5600
+        };
+        private static readonly Option<int> HaSoakOrchestratorPortOption = new("--orchestrator-port", Array.Empty<string>())
+        {
+            Description = "Host port for the HA soak Orchestrator endpoint.",
+            DefaultValueFactory = _ => 5601
+        };
+        private static readonly Option<int> HaSoakPostgresPortOption = new("--postgres-port", Array.Empty<string>())
+        {
+            Description = "Host port for the HA soak PostgreSQL endpoint.",
+            DefaultValueFactory = _ => 5632
+        };
+        private static readonly Option<int> HaSoakLogTailOption = new("--log-tail", Array.Empty<string>())
+        {
+            Description = "Number of Docker log lines per service to include in diagnostics.",
+            DefaultValueFactory = _ => 500
+        };
+        private static readonly Option<bool> HaSoakStartOption = new("--start", Array.Empty<string>())
+        {
+            Description = "Start the generated Docker topology after writing the environment files."
+        };
+        private static readonly Option<bool> HaSoakPullOption = new("--pull", Array.Empty<string>())
+        {
+            Description = "Pull container images before starting the generated topology."
+        };
+        private static readonly Option<bool> HaSoakValidateOnlyOption = new("--validate-only", Array.Empty<string>())
+        {
+            Description = "Validate the topology/script contract without writing runtime artifacts."
+        };
+        private static readonly Option<bool> HaSoakNoDockerOption = new("--no-docker", Array.Empty<string>())
+        {
+            Description = "Skip Docker status/log capture when exporting diagnostics."
+        };
+        private static readonly Option<bool> HaSoakForceOption = new("--force", new[] { "-f" })
+        {
+            Description = "Overwrite existing generated HA soak artifacts."
+        };
         private static readonly Option<string?> EnterpriseTenantOption = new("--tenant")
         {
             Description = "Enterprise tenant or environment identifier.",
@@ -443,6 +552,100 @@ namespace ETL_SQL.App
             migrateDbCommand.SetAction(context => Dispatch(context, "admin-migrate-database", handler));
             adminCommand.Add(migrateDbCommand);
 
+            var haSoakCommand = new Command("ha-soak", "Prepare and collect PostgreSQL HA soak certification artifacts");
+            var haSoakPrepareCommand = new Command("prepare", "Generate an isolated PostgreSQL HA soak topology run root")
+            {
+                HaSoakRunIdOption,
+                HaSoakOutputRootOption,
+                HaSoakComposeFileOption,
+                HaSoakEnvExampleOption,
+                HaSoakPortalScaleOption,
+                HaSoakOrchestratorScaleOption,
+                HaSoakPortalPortOption,
+                HaSoakOrchestratorPortOption,
+                HaSoakPostgresPortOption,
+                HaSoakImageTagOption,
+                HaSoakValidateOnlyOption,
+                HaSoakStartOption,
+                HaSoakPullOption,
+                HaSoakForceOption,
+            };
+            haSoakPrepareCommand.SetAction(context => Dispatch(context, "admin-ha-soak-prepare", handler));
+            haSoakCommand.Add(haSoakPrepareCommand);
+
+            var haSoakWorkloadCommand = new Command("workload", "Materialize the sustained-load workload config for a topology run")
+            {
+                HaSoakRunRootOption,
+                HaSoakOutputPathOption,
+                HaSoakAdminPasswordOption,
+                HaSoakForceOption,
+            };
+            haSoakWorkloadCommand.SetAction(context => Dispatch(context, "admin-ha-soak-workload", handler));
+            haSoakCommand.Add(haSoakWorkloadCommand);
+
+            var haSoakRunbookCommand = new Command("runbook", "Generate an ordered operator runbook for a topology run")
+            {
+                HaSoakRunRootOption,
+                HaSoakSustainedWorkloadOption,
+                HaSoakModeOption,
+                HaSoakOutputPathOption,
+                HaSoakForceOption,
+            };
+            haSoakRunbookCommand.SetAction(context => Dispatch(context, "admin-ha-soak-runbook", handler));
+            haSoakCommand.Add(haSoakRunbookCommand);
+
+            var haSoakEvidenceCommand = new Command("evidence", "Generate the non-secret HA soak evidence checklist")
+            {
+                HaSoakRunRootOption,
+                HaSoakSustainedWorkloadOption,
+                HaSoakOutputPathOption,
+                HaSoakForceOption,
+            };
+            haSoakEvidenceCommand.SetAction(context => Dispatch(context, "admin-ha-soak-evidence", handler));
+            haSoakCommand.Add(haSoakEvidenceCommand);
+
+            var haSoakLargeJobCommand = new Command("large-job-plan", "Generate the concurrent large-job soak plan")
+            {
+                HaSoakRunRootOption,
+                HaSoakModeOption,
+                HaSoakOutputPathOption,
+                HaSoakForceOption,
+            };
+            haSoakLargeJobCommand.SetAction(context => Dispatch(context, "admin-ha-soak-large-job-plan", handler));
+            haSoakCommand.Add(haSoakLargeJobCommand);
+
+            var haSoakFaultCommand = new Command("fault-plan", "Generate the HA fault-injection plan")
+            {
+                HaSoakRunRootOption,
+                HaSoakModeOption,
+                HaSoakOutputPathOption,
+                HaSoakForceOption,
+            };
+            haSoakFaultCommand.SetAction(context => Dispatch(context, "admin-ha-soak-fault-plan", handler));
+            haSoakCommand.Add(haSoakFaultCommand);
+
+            var haSoakMetricsCommand = new Command("metrics", "Capture a non-secret PostgreSQL metrics snapshot")
+            {
+                HaSoakRunRootOption,
+                HaSoakOutputPathOption,
+                HaSoakValidateOnlyOption,
+                HaSoakForceOption,
+            };
+            haSoakMetricsCommand.SetAction(context => Dispatch(context, "admin-ha-soak-metrics", handler));
+            haSoakCommand.Add(haSoakMetricsCommand);
+
+            var haSoakDiagnosticsCommand = new Command("diagnostics", "Export a redacted diagnostics bundle for a topology run")
+            {
+                HaSoakRunRootOption,
+                HaSoakOutputRootOption,
+                HaSoakLogTailOption,
+                HaSoakNoDockerOption,
+                HaSoakForceOption,
+            };
+            haSoakDiagnosticsCommand.SetAction(context => Dispatch(context, "admin-ha-soak-diagnostics", handler));
+            haSoakCommand.Add(haSoakDiagnosticsCommand);
+            adminCommand.Add(haSoakCommand);
+
             var setSecretCommand = new Command("set-secret", "Encrypt and store a named secret in the configured secret store (machine scope)")
             {
                 SecretNameOption,
@@ -580,6 +783,15 @@ namespace ETL_SQL.App
             return doctorCommand;
         }
 
+        private static string? TryGetString(ParseResult res, Option<string?> option) =>
+            res.GetResult(option)?.GetValueOrDefault<string?>();
+
+        private static int TryGetInt(ParseResult res, Option<int> option, int defaultValue) =>
+            res.GetResult(option) == null ? defaultValue : res.GetValue(option);
+
+        private static bool TryGetBool(ParseResult res, Option<bool> option) =>
+            res.GetResult(option) != null && res.GetValue(option);
+
         private static async Task<int> Dispatch(ParseResult res, string commandName, Func<CliContext, Task<int>> handler)
         {
             var cliContext = new CliContext
@@ -683,6 +895,30 @@ namespace ETL_SQL.App
                 cliContext.MigrateTo = res.GetValue(MigrateToOption);
                 cliContext.MigrateDryRun = res.GetValue(MigrateDryRunOption);
             }
+            else if (commandName.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
+            {
+                cliContext.HaSoakRunId = TryGetString(res, HaSoakRunIdOption);
+                cliContext.HaSoakRunRoot = TryGetString(res, HaSoakRunRootOption);
+                cliContext.HaSoakOutputRoot = TryGetString(res, HaSoakOutputRootOption);
+                cliContext.HaSoakOutputPath = TryGetString(res, HaSoakOutputPathOption);
+                cliContext.HaSoakMode = TryGetString(res, HaSoakModeOption);
+                cliContext.HaSoakSustainedWorkloadPath = TryGetString(res, HaSoakSustainedWorkloadOption);
+                cliContext.HaSoakAdminPassword = TryGetString(res, HaSoakAdminPasswordOption);
+                cliContext.HaSoakComposeFile = TryGetString(res, HaSoakComposeFileOption);
+                cliContext.HaSoakEnvExample = TryGetString(res, HaSoakEnvExampleOption);
+                cliContext.HaSoakImageTag = TryGetString(res, HaSoakImageTagOption);
+                cliContext.HaSoakPortalScale = TryGetInt(res, HaSoakPortalScaleOption, 2);
+                cliContext.HaSoakOrchestratorScale = TryGetInt(res, HaSoakOrchestratorScaleOption, 2);
+                cliContext.HaSoakPortalPort = TryGetInt(res, HaSoakPortalPortOption, 5600);
+                cliContext.HaSoakOrchestratorPort = TryGetInt(res, HaSoakOrchestratorPortOption, 5601);
+                cliContext.HaSoakPostgresPort = TryGetInt(res, HaSoakPostgresPortOption, 5632);
+                cliContext.HaSoakLogTail = TryGetInt(res, HaSoakLogTailOption, 500);
+                cliContext.HaSoakStart = TryGetBool(res, HaSoakStartOption);
+                cliContext.HaSoakPull = TryGetBool(res, HaSoakPullOption);
+                cliContext.HaSoakValidateOnly = TryGetBool(res, HaSoakValidateOnlyOption);
+                cliContext.HaSoakNoDocker = TryGetBool(res, HaSoakNoDockerOption);
+                cliContext.HaSoakForce = TryGetBool(res, HaSoakForceOption);
+            }
             else if (commandName is "admin-set-secret" or "admin-rotate-secret")
             {
                 cliContext.SecretName = res.GetValue(SecretNameOption);
@@ -779,6 +1015,7 @@ namespace ETL_SQL.App
             table.AddRow("admin backup", "Back up portal/orchestrator state into split-custody data + keys archives.");
             table.AddRow("admin restore", "Validate (--validate) and restore a backup (--from <data> --keys <keys> --to <dir>).");
             table.AddRow("admin migrate-database", "Copy SQLite Portal/Orchestrator state into the configured PostgreSQL (--dry-run to verify only).");
+            table.AddRow("admin ha-soak", "Prepare HA soak topology artifacts, runbooks, metrics, and diagnostics through the admin CLI.");
             table.AddRow("enterprise enroll|status|unenroll", "Manage protected machine-level enterprise policy enrollment.");
             table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("purge", "Delete all runtime data (reports, snapshots, DBs, logs, sessions). Use --dry-run to preview.");

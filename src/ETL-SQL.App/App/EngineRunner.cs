@@ -137,6 +137,11 @@ namespace ETL_SQL.App
                 return await DatabaseMigrationService.RunAsync(ctx, logger);
             }
 
+            if (ctx.Command.StartsWith("admin-ha-soak-", StringComparison.Ordinal))
+            {
+                return await HaSoakAdminService.RunAsync(ctx, logger);
+            }
+
             if (ctx.Command.StartsWith("admin-", StringComparison.Ordinal) && ctx.Command.EndsWith("-secret", StringComparison.Ordinal))
             {
                 return await SecretAdminService.RunAsync(ctx, logger);

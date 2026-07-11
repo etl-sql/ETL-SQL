@@ -89,7 +89,9 @@ The HA soak contract gate is intentionally short and non-destructive. It validat
 PostgreSQL HA topology, sustained workload materialization, metrics snapshot, diagnostics bundle,
 operator runbook, and large-job/fault plan contracts still generate usable artifacts. The long
 operator-run HA soak evidence remains manual and should be attached only when publishing HA capacity
-or recovery claims.
+or recovery claims. Operators should use `etl-sql admin ha-soak ...` as the stable front door for
+manual HA soak preparation, runbooks, metrics, and diagnostics; the underlying scripts remain the
+release-gate implementation.
 
 The PowerShell and Bash gates run the **same phases in the same order**; a few phases in the Bash
 gate bridge to the canonical PowerShell helpers via `pwsh`. Deep static security analysis (CodeQL)

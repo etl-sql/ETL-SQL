@@ -15,6 +15,45 @@
     <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\scripts\New-PostgresHaSoakTopology.ps1" Link="scripts\New-PostgresHaSoakTopology.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\New-PostgresHaCapacityWorkload.ps1" Link="scripts\New-PostgresHaCapacityWorkload.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\New-HaSoakRunbook.ps1" Link="scripts\New-HaSoakRunbook.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\New-HaSoakEvidencePlan.ps1" Link="scripts\New-HaSoakEvidencePlan.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\New-HaLargeJobSoakPlan.ps1" Link="scripts\New-HaLargeJobSoakPlan.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\New-HaFaultInjectionPlan.ps1" Link="scripts\New-HaFaultInjectionPlan.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\Export-PostgresHaMetricsSnapshot.ps1" Link="scripts\Export-PostgresHaMetricsSnapshot.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\scripts\Export-HaSoakDiagnostics.ps1" Link="scripts\Export-HaSoakDiagnostics.ps1">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\deploy\docker\docker-compose.ha.yml" Link="deploy\docker\docker-compose.ha.yml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\deploy\docker\environment-ha.env.example" Link="deploy\docker\environment-ha.env.example">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\capacity-results\workloads\postgres-ha-sustained.workload.json" Link="capacity-results\workloads\postgres-ha-sustained.workload.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\certification-results\ha-large-job-soak-scenarios.json" Link="certification-results\ha-large-job-soak-scenarios.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\certification-results\ha-fault-injection-matrix.json" Link="certification-results\ha-fault-injection-matrix.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

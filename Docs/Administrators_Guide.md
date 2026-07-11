@@ -1220,3 +1220,32 @@ all-or-nothing.
 Once the migration succeeds, switch each `Provider` from `Sqlite` to `Postgres` and restart to cut over.
 After cutover, configure every Portal node with the same shared artifact roots and key-ring path,
 configure load-balancer affinity, and verify `GET /healthz` on each node before sending user traffic.
+
+### 11.6 PostgreSQL HA soak operations — `etl-sql admin ha-soak`
+
+The HA soak scripts are exposed through the admin CLI so operators do not have to discover individual
+files under `scripts/`. The CLI commands stream the underlying script output to the console; capture
+that transcript when running long soaks so failures can be diagnosed later without monitoring the
+run live.
+
+```bash
+# Prepare a disposable topology run root without starting containers
+etl-sql admin ha-soak prepare --run-id ha-20260710 --output-root .ha-soak-runs --force
+
+# Materialize the sustained workload and operator artifacts
+etl-sql admin ha-soak workload --run-root .ha-soak-runs/ha-20260710 --admin-password CHANGE_ME --force
+etl-sql admin ha-soak runbook --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak evidence --run-root .ha-soak-runs/ha-20260710 --force
+etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+
+# Capture post-run evidence or diagnostics
+etl-sql admin ha-soak metrics --run-root .ha-soak-runs/ha-20260710 --force
+etl-sql admin ha-soak diagnostics --run-root .ha-soak-runs/ha-20260710 --log-tail 1000 --force
+```
+
+Use `prepare --start --pull` only when you are ready to start the Docker topology. Generated env
+files and local workload configs may contain disposable credentials or API keys; they belong in the
+ignored run root, not source control. The script names remain documented in `scripts/README.md` for
+developers and release maintainers, but administrators should prefer the `etl-sql admin ha-soak`
+commands as the stable interface.

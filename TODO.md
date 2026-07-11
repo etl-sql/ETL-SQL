@@ -240,6 +240,9 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   generated run README both point to it. `scripts/New-HaSoakRunbook.ps1` now emits a non-secret
   operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
   long-running scripts can be run manually and diagnosed afterward from captured outputs.
+  `etl-sql admin ha-soak ...` now exposes the topology, workload, runbook, evidence, metrics,
+  diagnostics, large-job-plan, and fault-plan workflows as first-class admin CLI commands so
+  operators have a stable front door while the scripts remain the auditable implementation.
   `scripts/Test-PreRelease.ps1` and `scripts/test-pre-release.sh` now include the non-destructive
   HA soak contract gate by default, and the release/testing docs list it as an always-on validation
   phase. Checked-in measured capacity reports remain open.)*

@@ -6,6 +6,10 @@ This directory contains build, test, utility, and release packaging scripts for 
 
 ## 1. Quick Reference Table
 
+Administrator-facing HA soak workflows are available through `etl-sql admin ha-soak ...`. Keep these
+scripts as the auditable implementation and release-gate surface; use the CLI commands for routine
+operator runs so admins do not have to hunt through this directory.
+
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.ps1)** / **[`build-debug.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
