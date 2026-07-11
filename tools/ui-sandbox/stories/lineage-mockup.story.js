@@ -174,7 +174,7 @@ export default {
 
     const _nodeById = Object.fromEntries(graph.nodes.map(n => [n.id, n]));
 
-    ctx.stat(`Mockup: ${graph.nodes.length} nodes · Drag headers to move · Click to inspect · Ctrl+Click to filter`);
+    ctx.stat(`Mockup: ${graph.nodes.length} nodes · Drag headers to move · Click to inspect · Click column row to isolate path`);
 
     const viewport = document.createElement('div');
     viewport.style.position = 'absolute';
@@ -196,6 +196,17 @@ export default {
     svg.style.zIndex = '1';
     viewport.appendChild(svg);
 
+    // Setup HTML overlay container for edge badges/pills
+    const badgeContainer = document.createElement('div');
+    badgeContainer.style.position = 'absolute';
+    badgeContainer.style.top = '0';
+    badgeContainer.style.left = '0';
+    badgeContainer.style.width = '100%';
+    badgeContainer.style.height = '100%';
+    badgeContainer.style.pointerEvents = 'none';
+    badgeContainer.style.zIndex = '5';
+    viewport.appendChild(badgeContainer);
+
     // Helper to draw Bezier Curve
     function drawLink(x1, y1, x2, y2, color = '#64748b', width = 1.5, isDashed = false) {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -212,6 +223,34 @@ export default {
       return path;
     }
 
+    // Helper to draw Inline Edge transformation badges/pills
+    function drawEdgeBadge(x1, y1, x2, y2, text, inPath, isDimmed) {
+      if (!text) return;
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+
+      const badge = document.createElement('div');
+      badge.style.position = 'absolute';
+      badge.style.left = `${mx}px`;
+      badge.style.top = `${my}px`;
+      badge.style.transform = 'translate(-50%, -50%)';
+      
+      // Styling representing states
+      badge.style.background = inPath ? '#0f766e' : (isDimmed ? 'rgba(17,24,39,0.05)' : '#1e293b');
+      badge.style.border = inPath ? '1px solid #14b8a6' : (isDimmed ? '1px solid rgba(55,65,81,0.05)' : '1px solid #3b82f6');
+      badge.style.borderRadius = '10px';
+      badge.style.padding = '1px 6px';
+      badge.style.color = inPath ? '#ccfbf1' : (isDimmed ? 'rgba(156,163,175,0.05)' : '#93c5fd');
+      badge.style.fontSize = '8px';
+      badge.style.fontWeight = 'bold';
+      badge.style.pointerEvents = 'none';
+      badge.style.whiteSpace = 'nowrap';
+      badge.style.boxShadow = isDimmed ? 'none' : '0 2px 4px rgba(0,0,0,0.5)';
+      badge.textContent = text;
+      
+      badgeContainer.appendChild(badge);
+    }
+
     // Compute layout positions
     const pos = _computeLayout(graph.nodes, graph.edges);
 
@@ -219,6 +258,8 @@ export default {
     let activeHighlightNode = null; // clicked node for highlighting column lineage
     let currentFilterNode = null;   // Ctrl-clicked node for filtering whole graph
     let filteredNodes = null;       // Set of visible node IDs under active filter
+    let activeColumnPath = null;    // colKey of currently isolated column path
+    let activeColumnPathSet = null; // Set of elements in the isolated column path
 
     // Setup filter notification banner at top of canvas
     const filterBanner = document.createElement('div');
@@ -248,12 +289,15 @@ export default {
     function clearFilter() {
       currentFilterNode = null;
       filteredNodes = null;
+      activeColumnPath = null;
+      activeColumnPathSet = null;
       filterBanner.style.display = 'none';
       
       graph.nodes.forEach(n => {
         const card = document.getElementById(`node__${n.id}`);
         if (card) card.style.display = 'block';
       });
+      updateUIForPathIsolation();
       updateConnections();
     }
 
@@ -280,6 +324,140 @@ export default {
       if (_nodeById[`table:${tableName}`]) return `table:${tableName}`;
       const hit = graph.nodes.find(n => (n.type === 'table' || n.type === 'dataset') && n.label === tableName);
       return hit ? hit.id : null;
+    }
+
+    // Trace column paths recursively (both upstream and downstream)
+    function _traceColumnPath(nodeId, colName, pathSet, direction = 'both') {
+      const colKey = `${nodeId}__col__${colName}`;
+      if (pathSet.has(colKey)) return;
+      pathSet.add(colKey);
+      pathSet.add(nodeId);
+
+      const node = _nodeById[nodeId];
+      if (!node) return;
+
+      // 1. Upstream (Ancestors)
+      if (direction === 'both' || direction === 'up') {
+        const cl = node.meta?.columnLineage?.[colName];
+        if (cl?.sources) {
+          cl.sources.forEach(src => {
+            const srcId = findTableNodeId(src.table);
+            if (srcId) {
+              _traceColumnPath(srcId, src.column, pathSet, 'up');
+            }
+          });
+        }
+      }
+
+      // 2. Downstream (Descendants)
+      if (direction === 'both' || direction === 'down') {
+        // Look at other tables/datasets
+        graph.nodes.forEach(other => {
+          if (other.meta?.columnLineage) {
+            Object.entries(other.meta.columnLineage).forEach(([otherCol, lin]) => {
+              if (lin.sources) {
+                lin.sources.forEach(src => {
+                  const isMatch = src.table === node.label && src.column === colName;
+                  if (isMatch) {
+                    _traceColumnPath(other.id, otherCol, pathSet, 'down');
+                  }
+                });
+              }
+            });
+          }
+        });
+
+        // Look at visual mapping rows
+        graph.nodes.forEach(other => {
+          if (other.type === 'visual' && other.meta?.mappings) {
+            const hasEdge = graph.edges.some(e => e.source === nodeId && e.target === other.id);
+            if (hasEdge) {
+              other.meta.mappings.forEach(m => {
+                const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
+                if (cleanCol === colName) {
+                  pathSet.add(other.id);
+                  pathSet.add(`${other.id}__map__${m.role}`);
+                }
+              });
+            }
+          }
+        });
+      }
+    }
+
+    // Toggle card/column opacity states during path isolation
+    function updateUIForPathIsolation() {
+      if (activeColumnPath) {
+        const parts = activeColumnPath.split('__');
+        const nodeId = parts[0];
+        const colName = parts[parts.length - 1];
+        const label = _nodeById[nodeId]?.label || nodeId;
+        
+        filterBanner.style.display = 'flex';
+        filterBanner.querySelector('span').textContent = `Isolated Path: ${label} ➔ ${colName}`;
+      } else {
+        if (!currentFilterNode) {
+          filterBanner.style.display = 'none';
+        }
+      }
+
+      graph.nodes.forEach(n => {
+        const card = document.getElementById(`node__${n.id}`);
+        if (!card) return;
+
+        if (activeColumnPathSet) {
+          if (activeColumnPathSet.has(n.id)) {
+            card.style.opacity = '1';
+            card.style.borderColor = '#10b981';
+            
+            if (n.meta?.columns) {
+              n.meta.columns.forEach(c => {
+                const row = document.getElementById(`${n.id}__col__${c}`);
+                if (row) {
+                  const inPath = activeColumnPathSet.has(`${n.id}__col__${c}`);
+                  row.style.opacity = inPath ? '1' : '0.12';
+                  row.style.color = inPath ? '#34d399' : '#4b5563';
+                }
+              });
+            }
+            if (n.meta?.mappings) {
+              n.meta.mappings.forEach(m => {
+                const row = document.getElementById(`${n.id}__map__${m.role}`);
+                if (row) {
+                  const inPath = activeColumnPathSet.has(`${n.id}__map__${m.role}`);
+                  row.style.opacity = inPath ? '1' : '0.12';
+                  row.style.color = inPath ? '#34d399' : '#4b5563';
+                }
+              });
+            }
+          } else {
+            card.style.opacity = '0.08';
+            card.style.borderColor = '#1f2937';
+          }
+        } else {
+          card.style.opacity = '1';
+          card.style.borderColor = n.type === 'table' ? '#2563eb' : (n.type === 'dataset' ? '#7c3aed' : (n.type === 'visual' ? '#059669' : '#475569'));
+          
+          if (n.meta?.columns) {
+            n.meta.columns.forEach(c => {
+              const row = document.getElementById(`${n.id}__col__${c}`);
+              if (row) {
+                row.style.opacity = '1';
+                row.style.color = '#cbd5e1';
+              }
+            });
+          }
+          if (n.meta?.mappings) {
+            n.meta.mappings.forEach(m => {
+              const row = document.getElementById(`${n.id}__map__${m.role}`);
+              if (row) {
+                row.style.opacity = '1';
+                row.style.color = '#cbd5e1';
+              }
+            });
+          }
+        }
+      });
     }
 
     // Walk a column back through its sources recursively (production matching)
@@ -536,7 +714,7 @@ export default {
         const vInfo = document.createElement('div');
         vInfo.style.marginTop = '15px';
         vInfo.style.fontSize = '11px';
-        vInfo.style.color = '#94a3b8';
+        vInfo.style.color = '#64748b';
         vInfo.innerHTML = `
           <div><strong>Chart Visual Type:</strong> ${node.meta?.visualType ?? 'Unknown'}</div>
           <div><strong>Report Page:</strong> ${node.meta?.page ?? 'None'}</div>
@@ -627,6 +805,7 @@ export default {
           row.style.justifyContent = 'space-between';
           row.style.position = 'relative';
           row.style.borderBottom = '1px solid #1f2937';
+          row.style.cursor = 'pointer';
 
           const label = document.createElement('span');
           label.textContent = c;
@@ -659,6 +838,78 @@ export default {
           row.appendChild(rp);
 
           card.appendChild(row);
+
+          // Click a column row to isolate its path
+          row.addEventListener('click', e => {
+            e.stopPropagation();
+            const colKey = `${n.id}__col__${c}`;
+            if (activeColumnPath === colKey) {
+              activeColumnPath = null;
+              activeColumnPathSet = null;
+            } else {
+              activeColumnPath = colKey;
+              activeColumnPathSet = new Set();
+              _traceColumnPath(n.id, c, activeColumnPathSet);
+            }
+            updateUIForPathIsolation();
+            updateConnections();
+          });
+        });
+      } else if (n.type === 'visual' && n.meta?.mappings) {
+        // Visual Mapping Ports: Display mapping columns as left-connected rows on visual card
+        n.meta.mappings.forEach(m => {
+          const row = document.createElement('div');
+          row.id = `${n.id}__map__${m.role}`;
+          row.style.padding = '5px 12px';
+          row.style.fontSize = '11px';
+          row.style.display = 'flex';
+          row.style.alignItems = 'center';
+          row.style.justifyContent = 'space-between';
+          row.style.position = 'relative';
+          row.style.borderBottom = '1px solid #1f2937';
+          row.style.cursor = 'pointer';
+
+          const label = document.createElement('span');
+          label.innerHTML = `<strong>${m.role}:</strong> ${m.column}`;
+          row.appendChild(label);
+
+          const lp = document.createElement('div');
+          lp.className = 'port-left';
+          lp.style.position = 'absolute';
+          lp.style.left = '-4px';
+          lp.style.top = '50%';
+          lp.style.transform = 'translateY(-50%)';
+          lp.style.width = '8px';
+          lp.style.height = '8px';
+          lp.style.borderRadius = '50%';
+          lp.style.background = '#475569';
+          lp.style.border = '1px solid #0f172a';
+          row.appendChild(lp);
+
+          card.appendChild(row);
+
+          // Click a visual mapping row to isolate its path
+          row.addEventListener('click', e => {
+            e.stopPropagation();
+            const mapKey = `${n.id}__map__${m.role}`;
+            if (activeColumnPath === mapKey) {
+              activeColumnPath = null;
+              activeColumnPathSet = null;
+            } else {
+              activeColumnPath = mapKey;
+              activeColumnPathSet = new Set();
+              const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
+              
+              // Find matching edge to trace backwards
+              const srcEdge = graph.edges.find(x => x.target === n.id && (x.label?.includes(cleanCol) || _nodeById[x.source]?.meta?.columns?.includes(cleanCol)));
+              if (srcEdge) {
+                activeColumnPathSet.add(mapKey);
+                _traceColumnPath(srcEdge.source, cleanCol, activeColumnPathSet);
+              }
+            }
+            updateUIForPathIsolation();
+            updateConnections();
+          });
         });
       } else {
         const desc = document.createElement('div');
@@ -787,6 +1038,7 @@ export default {
     function updateConnections() {
       activePaths.forEach(p => p.remove());
       activePaths = [];
+      badgeContainer.innerHTML = '';
 
       const vRect = viewport.getBoundingClientRect();
 
@@ -794,6 +1046,54 @@ export default {
       graph.edges.forEach(e => {
         // If filters are active, skip edges connected to hidden nodes
         if (filteredNodes && (!filteredNodes.has(e.source) || !filteredNodes.has(e.target))) return;
+
+        const fromNode = _nodeById[e.source];
+        const toNode = _nodeById[e.target];
+
+        if (!fromNode || !toNode) return;
+
+        // Visual Mapping Ports: Route directly from dataset column port to visual role port
+        if (toNode.type === 'visual' && toNode.meta?.mappings && fromNode.meta?.columns) {
+          let routedAny = false;
+          toNode.meta.mappings.forEach(m => {
+            const cleanCol = m.column.replace(/.*\((.*)\)/, '$1');
+            if (fromNode.meta.columns.includes(cleanCol)) {
+              const fromEl = document.getElementById(`${e.source}__col__${cleanCol}`);
+              const toEl = document.getElementById(`${e.target}__map__${m.role}`);
+
+              if (fromEl && toEl) {
+                const fromPort = fromEl.querySelector('.port-right');
+                const toPort = toEl.querySelector('.port-left');
+                if (fromPort && toPort) {
+                  const r1 = fromPort.getBoundingClientRect();
+                  const r2 = toPort.getBoundingClientRect();
+                  const x1 = (r1.left + r1.width / 2 - vRect.left) / zoom;
+                  const y1 = (r1.top + r1.height / 2 - vRect.top) / zoom;
+                  const x2 = (r2.left + r2.width / 2 - vRect.left) / zoom;
+                  const y2 = (r2.top + r2.height / 2 - vRect.top) / zoom;
+
+                  const inPath = activeColumnPathSet && activeColumnPathSet.has(`${e.source}__col__${cleanCol}`) && activeColumnPathSet.has(`${e.target}__map__${m.role}`);
+                  const isDimmed = activeColumnPathSet && !inPath;
+                  
+                  const isHighlightNodeActive = activeHighlightNode && (activeHighlightNode === e.source || activeHighlightNode === e.target);
+                  const isDimmedHighlight = activeHighlightNode && !isHighlightNodeActive;
+
+                  const color = inPath ? '#06b6d4' : (isDimmed || isDimmedHighlight ? 'rgba(71,85,105,0.06)' : '#34d399');
+                  const width = inPath ? 3.0 : (isDimmed || isDimmedHighlight ? 0.75 : 1.5);
+
+                  const path = drawLink(x1, y1, x2, y2, color, width);
+                  activePaths.push(path);
+                  routedAny = true;
+
+                  // Transformation edge badge midpoint
+                  const edgeTransform = m.column.includes('(') ? m.column.split('(')[0] : 'SELECT';
+                  drawEdgeBadge(x1, y1, x2, y2, edgeTransform, inPath, isDimmed || isDimmedHighlight);
+                }
+              }
+            }
+          });
+          if (routedAny) return; // skip card-to-card fallbacks
+        }
 
         const fromCard = document.getElementById(`node__${e.source}`);
         const toCard = document.getElementById(`node__${e.target}`);
@@ -813,21 +1113,29 @@ export default {
         const x2 = (r2.left + r2.width / 2 - vRect.left) / zoom;
         const y2 = (r2.top + r2.height / 2 - vRect.top) / zoom;
 
-        const isDimmed = activeHighlightNode && (activeHighlightNode !== e.source && activeHighlightNode !== e.target);
-        const color = isDimmed ? 'rgba(71,85,105,0.1)' : '#475569';
-        const width = isDimmed ? 0.75 : 1.5;
+        const inPath = activeColumnPathSet && activeColumnPathSet.has(e.source) && activeColumnPathSet.has(e.target);
+        const isDimmed = (activeColumnPathSet && !inPath) || (activeHighlightNode && activeHighlightNode !== e.source && activeHighlightNode !== e.target);
+        
+        const color = inPath ? '#06b6d4' : (isDimmed ? 'rgba(71,85,105,0.06)' : '#475569');
+        const width = inPath ? 2.5 : (isDimmed ? 0.75 : 1.5);
 
         const path = drawLink(x1, y1, x2, y2, color, width);
         activePaths.push(path);
+
+        if (e.label) {
+          drawEdgeBadge(x1, y1, x2, y2, e.label, inPath, isDimmed);
+        }
       });
 
       // Render column-to-column connections
       colConnections.forEach(c => {
-        // If filters are active, skip columns belonging to hidden tables
         if (filteredNodes && (!filteredNodes.has(c.fromTable) || !filteredNodes.has(c.toTable))) return;
 
         const isDirectConnection = activeHighlightNode === c.fromTable || activeHighlightNode === c.toTable;
         if (activeHighlightNode && !isDirectConnection) return;
+
+        const inPath = activeColumnPathSet && activeColumnPathSet.has(c.from) && activeColumnPathSet.has(c.to);
+        const isDimmed = activeColumnPathSet && !inPath;
 
         const fromEl = document.getElementById(c.from);
         const toEl = document.getElementById(c.to);
@@ -847,11 +1155,19 @@ export default {
         const x2 = (r2.left + r2.width / 2 - vRect.left) / zoom;
         const y2 = (r2.top + r2.height / 2 - vRect.top) / zoom;
 
-        const color = activeHighlightNode ? '#10b981' : 'rgba(16,185,129,0.35)';
-        const width = activeHighlightNode ? 2.5 : 1;
+        const color = inPath ? '#10b981' : (isDimmed ? 'rgba(16,185,129,0.04)' : (activeHighlightNode ? '#10b981' : 'rgba(16,185,129,0.35)'));
+        const width = inPath ? 3.0 : (isDimmed ? 0.5 : (activeHighlightNode ? 2.5 : 1));
 
-        const path = drawLink(x1, y1, x2, y2, color, width, !activeHighlightNode);
+        const path = drawLink(x1, y1, x2, y2, color, width, !activeHighlightNode && !inPath);
         activePaths.push(path);
+
+        const fromNode = _nodeById[c.toTable];
+        const toColName = c.to.split('__col__')[1];
+        const cl = fromNode?.meta?.columnLineage?.[toColName];
+        if (cl?.transform && !isDimmed) {
+          const transformLabel = cl.transform.includes('(') ? cl.transform.split('(')[0] : 'PASS';
+          drawEdgeBadge(x1, y1, x2, y2, transformLabel, inPath, isDimmed);
+        }
       });
     }
 
