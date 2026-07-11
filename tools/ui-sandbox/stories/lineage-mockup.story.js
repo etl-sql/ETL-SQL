@@ -1,5 +1,4 @@
 import { buildKitchenSinkGraph, buildSmallGraph, buildEdwExampleGraph, buildCrossScriptGraph } from '../fixture.js';
-import { importFresh, DESIGNER_JS } from '../util.js';
 
 const BUILDERS = {
   kitchen: buildKitchenSinkGraph,
@@ -8,7 +7,40 @@ const BUILDERS = {
   xscript: buildCrossScriptGraph,
 };
 
-// Custom BFS layout algorithm (matching designer.js layout spacing)
+function _nodeColor(type) {
+  switch (type) {
+    case 'page':    return '#475569';
+    case 'visual':  return '#10b981';
+    case 'dataset': return '#8b5cf6';
+    case 'table':   return '#3b82f6';
+    default:        return '#64748b';
+  }
+}
+
+// Reachability calculation for lineage flow (ancestors + descendants)
+function _lineageReach(rootId, allEdges, allNodes) {
+  const down = {}, up = {};
+  for (const e of allEdges) {
+    (down[e.source] ??= []).push(e.target);
+    (up[e.target]   ??= []).push(e.source);
+  }
+  const keep = new Set([rootId]);
+  const walk = (adj) => {
+    const stack = [rootId];
+    while (stack.length) {
+      const id = stack.pop();
+      for (const nxt of (adj[id] ?? [])) if (!keep.has(nxt)) { keep.add(nxt); stack.push(nxt); }
+    }
+  };
+  walk(down);  // descendants
+  walk(up);    // ancestors
+  
+  // Keep expanded column children whose parent node is in focus.
+  for (const n of allNodes) if (n.meta?.parent && keep.has(n.meta.parent)) keep.add(n.id);
+  return keep;
+}
+
+// Custom BFS layout algorithm
 function _computeLayout(nodes, edges) {
   const ids     = nodes.map(n => n.id);
   const inDeg   = Object.fromEntries(ids.map(id => [id, 0]));
@@ -44,10 +76,10 @@ function _computeLayout(nodes, edges) {
   const LAYER_H    = 280;
   const SUB_ROW_H  = 160;
   const NODE_W     = 340;
-  const MAX_PER_ROW = 6; // slightly narrower wrap for compact presentation
+  const MAX_PER_ROW = 6;
 
   const pos = {};
-  let yBase = -200; // center vertically
+  let yBase = -200;
   const sortedLayers = Object.keys(byLayer).map(Number).sort((a, b) => a - b);
   for (const l of sortedLayers) {
     const layerIds = byLayer[l];
@@ -79,17 +111,32 @@ export default {
   ],
   async mount(stage, fixtureId, ctx) {
     stage.innerHTML = '';
-
-    const graph = (BUILDERS[fixtureId] ?? buildKitchenSinkGraph)();
-    ctx.stat(`Mockup: ${graph.nodes.length} nodes · Drag headers to move · Wheel to zoom · Drag background to pan`);
-
-    // 1. Setup infinite-canvas viewport
-    stage.style.position = 'relative';
+    
+    // 1. Setup layout grid containing Canvas + Sidebar panel
+    stage.style.display = 'flex';
+    stage.style.flexDirection = 'row';
     stage.style.width = '100%';
     stage.style.height = '100%';
     stage.style.background = '#090d16';
     stage.style.overflow = 'hidden';
     stage.style.userSelect = 'none';
+
+    // Canvas container (takes remaining flex space)
+    const canvasContainer = document.createElement('div');
+    canvasContainer.style.flex = '1 1 auto';
+    canvasContainer.style.height = '100%';
+    canvasContainer.style.position = 'relative';
+    canvasContainer.style.overflow = 'hidden';
+    stage.appendChild(canvasContainer);
+
+    // Sidebar detail panel (reuses production CSS class: etlsql-dag-panel)
+    const panel = document.createElement('div');
+    panel.className = 'etlsql-dag-panel';
+    panel.style.display = 'none';
+    stage.appendChild(panel);
+
+    const graph = (BUILDERS[fixtureId] ?? buildKitchenSinkGraph)();
+    ctx.stat(`Mockup: ${graph.nodes.length} nodes · Drag headers to move · Click to inspect · Ctrl+Click to filter`);
 
     const viewport = document.createElement('div');
     viewport.style.position = 'absolute';
@@ -98,9 +145,9 @@ export default {
     viewport.style.width = '0';
     viewport.style.height = '0';
     viewport.style.transformOrigin = 'center center';
-    stage.appendChild(viewport);
+    canvasContainer.appendChild(viewport);
 
-    // 2. Setup large SVG overlay for lines
+    // Setup large SVG overlay for lines
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.style.position = 'absolute';
     svg.style.left = '-10000px';
@@ -127,18 +174,248 @@ export default {
       return path;
     }
 
-    // 3. Compute layout positions
+    // Compute layout positions
     const pos = _computeLayout(graph.nodes, graph.edges);
 
     const cardElements = [];
     let activeHighlightNode = null; // clicked node for highlighting column lineage
+    let currentFilterNode = null;   // Ctrl-clicked node for filtering whole graph
+    let filteredNodes = null;       // Set of visible node IDs under active filter
 
-    // 4. Render Nodes
+    // 5. Setup filter notification banner at top of canvas
+    const filterBanner = document.createElement('div');
+    filterBanner.style.position = 'absolute';
+    filterBanner.style.top = '12px';
+    filterBanner.style.left = '50%';
+    filterBanner.style.transform = 'translateX(-50%)';
+    filterBanner.style.background = '#1e1b4b';
+    filterBanner.style.border = '1px solid #4f46e5';
+    filterBanner.style.borderRadius = '20px';
+    filterBanner.style.padding = '6px 16px';
+    filterBanner.style.color = '#c7d2fe';
+    filterBanner.style.fontSize = '12px';
+    filterBanner.style.display = 'none';
+    filterBanner.style.alignItems = 'center';
+    filterBanner.style.gap = '10px';
+    filterBanner.style.zIndex = '50';
+    filterBanner.style.boxShadow = '0 4px 10px rgba(0, 0, 0, 0.4)';
+    filterBanner.innerHTML = `
+      <span style="font-weight: 500;">Filter active</span>
+      <button style="background: #4f46e5; border: none; color: #fff; border-radius: 12px; padding: 2px 10px; cursor: pointer; font-size: 11px; font-weight: bold;">Clear</button>
+    `;
+    canvasContainer.appendChild(filterBanner);
+
+    filterBanner.querySelector('button').addEventListener('click', clearFilter);
+
+    function clearFilter() {
+      currentFilterNode = null;
+      filteredNodes = null;
+      filterBanner.style.display = 'none';
+      
+      graph.nodes.forEach(n => {
+        const card = document.getElementById(`node__${n.id}`);
+        if (card) card.style.display = 'block';
+      });
+      updateConnections();
+    }
+
+    function applyFilter(nodeId) {
+      currentFilterNode = nodeId;
+      filteredNodes = _lineageReach(nodeId, graph.edges, graph.nodes);
+      
+      filterBanner.style.display = 'flex';
+      const label = graph.nodes.find(x => x.id === nodeId)?.label || nodeId;
+      filterBanner.querySelector('span').textContent = `Showing lineage for: ${label}`;
+      
+      graph.nodes.forEach(n => {
+        const card = document.getElementById(`node__${n.id}`);
+        if (card) {
+          card.style.display = filteredNodes.has(n.id) ? 'block' : 'none';
+        }
+      });
+      updateConnections();
+    }
+
+    // 6. Sidebar Properties Panel Render Function
+    function showNodeDetails(node) {
+      panel.style.display = 'block';
+      panel.innerHTML = '';
+
+      // Header
+      const head = document.createElement('div');
+      head.className = 'etlsql-dag-panel-head';
+      
+      const dot = document.createElement('span');
+      dot.className = 'etlsql-dag-panel-dot';
+      dot.style.background = _nodeColor(node.type);
+      head.appendChild(dot);
+
+      const title = document.createElement('strong');
+      title.className = 'etlsql-dag-panel-title';
+      title.textContent = node.label;
+      head.appendChild(title);
+
+      const close = document.createElement('button');
+      close.className = 'etlsql-dag-panel-x';
+      close.textContent = '✕';
+      close.title = 'Close';
+      close.addEventListener('click', () => {
+        panel.style.display = 'none';
+      });
+      head.appendChild(close);
+      panel.appendChild(head);
+
+      // Subtitle
+      const subtitle = document.createElement('div');
+      subtitle.className = 'etlsql-dag-panel-sub';
+      subtitle.textContent = `Type: ${node.type.toUpperCase()}`;
+      panel.appendChild(subtitle);
+
+      // Divider
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.background = '#1e293b';
+      hr.style.margin = '10px 0';
+      panel.appendChild(hr);
+
+      // Upstream/Downstream relations (calculated from edges)
+      const upstream = [];
+      const downstream = [];
+      graph.edges.forEach(e => {
+        if (e.target === node.id) {
+          const srcNode = graph.nodes.find(x => x.id === e.source);
+          if (srcNode) upstream.push(srcNode.label);
+        }
+        if (e.source === node.id) {
+          const tgtNode = graph.nodes.find(x => x.id === e.target);
+          if (tgtNode) downstream.push(tgtNode.label);
+        }
+      });
+
+      if (upstream.length > 0) {
+        const uHeader = document.createElement('div');
+        uHeader.className = 'etlsql-dag-panel-h';
+        uHeader.textContent = 'Upstream Sources';
+        panel.appendChild(uHeader);
+
+        const ul = document.createElement('ul');
+        ul.className = 'etlsql-dag-panel-list';
+        upstream.forEach(name => {
+          const li = document.createElement('li');
+          li.className = 'etlsql-dag-panel-li';
+          li.textContent = name;
+          ul.appendChild(li);
+        });
+        panel.appendChild(ul);
+      }
+
+      if (downstream.length > 0) {
+        const dHeader = document.createElement('div');
+        dHeader.className = 'etlsql-dag-panel-h';
+        dHeader.textContent = 'Downstream Dependencies';
+        panel.appendChild(dHeader);
+
+        const ul = document.createElement('ul');
+        ul.className = 'etlsql-dag-panel-list';
+        downstream.forEach(name => {
+          const li = document.createElement('li');
+          li.className = 'etlsql-dag-panel-li';
+          li.textContent = name;
+          ul.appendChild(li);
+        });
+        panel.appendChild(ul);
+      }
+
+      // Columns metadata section
+      if (node.type === 'table' || node.type === 'dataset') {
+        const cHeader = document.createElement('div');
+        cHeader.className = 'etlsql-dag-panel-h';
+        cHeader.textContent = `Columns (${node.meta?.columns?.length ?? 0})`;
+        panel.appendChild(cHeader);
+
+        const list = document.createElement('ul');
+        list.className = 'etlsql-dag-panel-list';
+        if (node.meta?.columns) {
+          node.meta.columns.forEach(c => {
+            const li = document.createElement('li');
+            li.className = 'etlsql-dag-panel-li';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'etlsql-dag-panel-v';
+            nameSpan.textContent = c;
+            li.appendChild(nameSpan);
+
+            // Fetch column lineage mapping if present
+            if (node.meta.columnLineage && node.meta.columnLineage[c]) {
+              const lin = node.meta.columnLineage[c];
+              if (lin.sources && lin.sources[0]) {
+                const fromSpan = document.createElement('span');
+                fromSpan.className = 'etlsql-dag-panel-from';
+                fromSpan.style.color = '#10b981';
+                fromSpan.textContent = ` ← ${lin.sources[0].table}.${lin.sources[0].column}`;
+                li.appendChild(fromSpan);
+              }
+            }
+            list.appendChild(li);
+          });
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'etlsql-dag-panel-empty';
+          empty.textContent = 'No columns defined.';
+          panel.appendChild(empty);
+        }
+        panel.appendChild(list);
+      } else if (node.type === 'visual') {
+        const mHeader = document.createElement('div');
+        mHeader.className = 'etlsql-dag-panel-h';
+        mHeader.textContent = 'Field Mappings';
+        panel.appendChild(mHeader);
+
+        const list = document.createElement('ul');
+        list.className = 'etlsql-dag-panel-list';
+        if (node.meta?.mappings) {
+          node.meta.mappings.forEach(m => {
+            const li = document.createElement('li');
+            li.className = 'etlsql-dag-panel-li';
+
+            const roleSpan = document.createElement('span');
+            roleSpan.className = 'etlsql-dag-panel-k';
+            roleSpan.textContent = `${m.role}: `;
+            li.appendChild(roleSpan);
+
+            const colSpan = document.createElement('span');
+            colSpan.className = 'etlsql-dag-panel-v';
+            colSpan.textContent = m.column;
+            li.appendChild(colSpan);
+
+            list.appendChild(li);
+          });
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'etlsql-dag-panel-empty';
+          empty.textContent = 'No field mappings.';
+          panel.appendChild(empty);
+        }
+        panel.appendChild(list);
+
+        const vInfo = document.createElement('div');
+        vInfo.style.marginTop = '15px';
+        vInfo.style.fontSize = '11px';
+        vInfo.style.color = '#64748b';
+        vInfo.innerHTML = `
+          <div><strong>Chart Visual Type:</strong> ${node.meta?.visualType ?? 'Unknown'}</div>
+          <div><strong>Report Page:</strong> ${node.meta?.page ?? 'None'}</div>
+        `;
+        panel.appendChild(vInfo);
+      }
+    }
+
+    // 7. Render Nodes onto infinite viewport
     graph.nodes.forEach(n => {
       const card = document.createElement('div');
       card.id = `node__${n.id}`;
       card.style.position = 'absolute';
-      card.style.left = `${pos[n.id].x - 120}px`; // center node X
+      card.style.left = `${pos[n.id].x - 120}px`;
       card.style.top = `${pos[n.id].y}px`;
       card.style.background = '#111827';
       card.style.borderRadius = '8px';
@@ -147,18 +424,17 @@ export default {
       card.style.zIndex = '10';
       card.style.cursor = 'grab';
 
-      // Assign type specific styling
       let titleColor = '#cbd5e1';
       let borderStyle = '1px solid #1f2937';
       let showColumns = false;
 
       if (n.type === 'table') {
-        titleColor = '#3b82f6'; // blue
+        titleColor = '#3b82f6';
         borderStyle = '1px solid #2563eb';
         showColumns = true;
         card.style.width = '240px';
       } else if (n.type === 'dataset') {
-        titleColor = '#8b5cf6'; // purple
+        titleColor = '#8b5cf6';
         borderStyle = '1px solid #7c3aed';
         showColumns = true;
         card.style.width = '240px';
@@ -167,7 +443,7 @@ export default {
         borderStyle = '1px solid #475569';
         card.style.width = '180px';
       } else if (n.type === 'visual') {
-        titleColor = '#10b981'; // green
+        titleColor = '#10b981';
         borderStyle = '1px solid #059669';
         card.style.width = '200px';
       }
@@ -221,7 +497,6 @@ export default {
           label.textContent = c;
           row.appendChild(label);
 
-          // Left/Right ports
           const lp = document.createElement('div');
           lp.className = 'port-left';
           lp.style.position = 'absolute';
@@ -260,7 +535,7 @@ export default {
         card.appendChild(desc);
       }
 
-      // Add generic card-level connection ports
+      // Card-level connection ports
       const cardLp = document.createElement('div');
       cardLp.className = 'card-port-left';
       cardLp.style.position = 'absolute';
@@ -305,7 +580,7 @@ export default {
         function onMouseMove(me) {
           const dx = (me.clientX - startX) / zoom;
           const dy = (me.clientY - startY) / zoom;
-          pos[n.id].x = origX + 120 + dx; // adjust for center offset
+          pos[n.id].x = origX + 120 + dx;
           pos[n.id].y = origY + dy;
           card.style.left = `${pos[n.id].x - 120}px`;
           card.style.top = `${pos[n.id].y}px`;
@@ -323,26 +598,39 @@ export default {
         document.addEventListener('mouseup', onMouseUp);
       });
 
-      // Selection logic: Click on a table/dataset node to toggle its column-level lineage
+      // Interactive Click Logic (Ctrl+Click to filter, regular Click to highlight + show sidebar)
       card.addEventListener('click', e => {
         if (e.target !== header && e.target !== titleSpan && e.target !== typeDot) return;
-        if (activeHighlightNode === n.id) {
-          activeHighlightNode = null;
+        
+        if (e.ctrlKey) {
+          // Isolate Lineage Filter Mode
+          if (currentFilterNode === n.id) {
+            clearFilter();
+          } else {
+            applyFilter(n.id);
+          }
         } else {
-          activeHighlightNode = n.id;
+          // Open details sidebar
+          showNodeDetails(n);
+
+          // Highlight column connections
+          if (activeHighlightNode === n.id) {
+            activeHighlightNode = null;
+          } else {
+            activeHighlightNode = n.id;
+          }
+          updateConnections();
         }
-        updateConnections();
       });
     });
 
-    // 5. Parse Column-to-Column Lineage from fixture metadata
+    // 8. Parse Column-to-Column Lineage
     const colConnections = [];
     graph.nodes.forEach(n => {
       if (n.meta?.columnLineage) {
         Object.entries(n.meta.columnLineage).forEach(([tgtCol, lin]) => {
           if (lin.sources) {
             lin.sources.forEach(src => {
-              // Find the source node id by matching label
               const srcNode = graph.nodes.find(x => x.label === src.table);
               if (srcNode) {
                 colConnections.push({
@@ -360,15 +648,18 @@ export default {
 
     let activePaths = [];
 
-    // 6. Draw/Update Connections
+    // 9. Draw/Update Connections
     function updateConnections() {
       activePaths.forEach(p => p.remove());
       activePaths = [];
 
       const vRect = viewport.getBoundingClientRect();
 
-      // 6.1 Render primary table-level connections
+      // Render primary table-level connections
       graph.edges.forEach(e => {
+        // If filters are active, skip edges connected to hidden nodes
+        if (filteredNodes && (!filteredNodes.has(e.source) || !filteredNodes.has(e.target))) return;
+
         const fromCard = document.getElementById(`node__${e.source}`);
         const toCard = document.getElementById(`node__${e.target}`);
 
@@ -387,7 +678,6 @@ export default {
         const x2 = (r2.left + r2.width / 2 - vRect.left) / zoom;
         const y2 = (r2.top + r2.height / 2 - vRect.top) / zoom;
 
-        // Dim lines if a specific node is highlighted
         const isDimmed = activeHighlightNode && (activeHighlightNode !== e.source && activeHighlightNode !== e.target);
         const color = isDimmed ? 'rgba(71,85,105,0.1)' : '#475569';
         const width = isDimmed ? 0.75 : 1.5;
@@ -396,11 +686,13 @@ export default {
         activePaths.push(path);
       });
 
-      // 6.2 Render column-to-column connections
+      // Render column-to-column connections
       colConnections.forEach(c => {
-        // Only show column lineage globally if no node is active, or highlight it if it's connected to the selected node
+        // If filters are active, skip columns belonging to hidden tables
+        if (filteredNodes && (!filteredNodes.has(c.fromTable) || !filteredNodes.has(c.toTable))) return;
+
         const isDirectConnection = activeHighlightNode === c.fromTable || activeHighlightNode === c.toTable;
-        if (activeHighlightNode && !isDirectConnection) return; // Hide unrelated column lines in focus mode
+        if (activeHighlightNode && !isDirectConnection) return;
 
         const fromEl = document.getElementById(c.from);
         const toEl = document.getElementById(c.to);
@@ -420,7 +712,7 @@ export default {
         const x2 = (r2.left + r2.width / 2 - vRect.left) / zoom;
         const y2 = (r2.top + r2.height / 2 - vRect.top) / zoom;
 
-        const color = activeHighlightNode ? '#10b981' : 'rgba(16,185,129,0.35)'; // bold green on focus, subtle green by default
+        const color = activeHighlightNode ? '#10b981' : 'rgba(16,185,129,0.35)';
         const width = activeHighlightNode ? 2.5 : 1;
 
         const path = drawLink(x1, y1, x2, y2, color, width, !activeHighlightNode);
@@ -428,15 +720,14 @@ export default {
       });
     }
 
-    // 7. Pan and Zoom Interaction
+    // 10. Pan and Zoom Interaction
     let panX = 0;
     let panY = 0;
-    let zoom = fixtureId === 'kitchen' ? 0.25 : 0.65; // Zoom out further for kitchen sink by default
+    let zoom = fixtureId === 'kitchen' ? 0.22 : 0.65;
 
-    // Align viewport initial transform
     viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
 
-    stage.addEventListener('wheel', e => {
+    canvasContainer.addEventListener('wheel', e => {
       e.preventDefault();
       const factor = 1.15;
       if (e.deltaY < 0) {
@@ -452,12 +743,12 @@ export default {
     let startX = 0;
     let startY = 0;
 
-    stage.addEventListener('mousedown', e => {
-      if (e.target !== stage && e.target !== svg) return;
+    canvasContainer.addEventListener('mousedown', e => {
+      if (e.target !== canvasContainer && e.target !== svg) return;
       isPanning = true;
       startX = e.clientX - panX;
       startY = e.clientY - panY;
-      stage.style.cursor = 'grabbing';
+      canvasContainer.style.cursor = 'grabbing';
     });
 
     document.addEventListener('mousemove', e => {
@@ -470,7 +761,7 @@ export default {
     document.addEventListener('mouseup', () => {
       if (isPanning) {
         isPanning = false;
-        stage.style.cursor = 'default';
+        canvasContainer.style.cursor = 'default';
       }
     });
 
