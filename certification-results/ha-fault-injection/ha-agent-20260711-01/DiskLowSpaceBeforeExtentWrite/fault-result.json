@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "faultId": "DiskLowSpaceBeforeExtentWrite",
+  "category": "disk",
+  "injectionPoint": "pre-spill-write-admission",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "operator fails before writing extents with a sanitized low-space error",
+  "evidence": {
+    "faultId": "DiskLowSpaceBeforeExtentWrite",
+    "category": "disk",
+    "injectionMethod": "configure isolated spill root with available-space threshold below scenario admission requirement",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "freeDiskBytesBefore": 1048576,
+    "admissionRequiredBytes": 1073741824,
+    "exceptionCategory": "LowDiskSpace",
+    "spillExtentCountAfterCleanup": 0,
+    "elapsedMs": 2
+  },
+  "cleanupInvariants": {
+    "faultId": "DiskLowSpaceBeforeExtentWrite",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

@@ -386,6 +386,13 @@ public class FirstRunConfig
     public string AdminUsername { get; set; } = "admin";
 
     /// <summary>
+    /// Whether the seeded first-run admin must change the initial password before using API routes.
+    /// Keep true for production; disposable automation topologies may set false after generating a
+    /// strong per-run password.
+    /// </summary>
+    public bool MustChangePassword { get; set; } = true;
+
+    /// <summary>
     /// Initial password for the seeded admin account. When unset, a random password is generated
     /// at first run and written once to the startup log — there is no well-known default.
     /// </summary>

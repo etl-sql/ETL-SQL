@@ -52,6 +52,10 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.True(File.Exists(Path.Combine(runRoot, "topology-metadata.json")));
             Assert.True(File.Exists(Path.Combine(runRoot, "postgres-ha-soak.env")));
             Assert.True(File.Exists(Path.Combine(runRoot, "README.md")));
+            var envText = File.ReadAllText(Path.Combine(runRoot, "postgres-ha-soak.env"));
+            var generatedAdminPassword = ReadEnvValue(envText, "PORTAL_ADMIN_PASSWORD");
+            Assert.False(string.IsNullOrWhiteSpace(generatedAdminPassword));
+            Assert.Equal("false", ReadEnvValue(envText, "PORTAL_ADMIN_MUST_CHANGE_PASSWORD"));
 
             var metadataText = File.ReadAllText(Path.Combine(runRoot, "topology-metadata.json"));
             var metadata = JsonNode.Parse(metadataText)!.AsObject();
@@ -60,6 +64,7 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("etl-sql admin ha-soak diagnostics", metadataText);
             Assert.DoesNotContain("PG_PASSWORD=", metadataText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("ORCH_API_KEY=", metadataText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("PORTAL_ADMIN_PASSWORD=", metadataText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(".ps1", metadataText, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("Test-GateF", metadataText, StringComparison.OrdinalIgnoreCase);
 
@@ -67,7 +72,6 @@ namespace ETL_SQL.Tests.CliCommands
             {
                 Command = "admin-ha-soak-workload",
                 HaSoakRunRoot = runRoot,
-                HaSoakAdminPassword = "CHANGE_ME",
                 HaSoakForce = true
             }, logger);
 
@@ -77,7 +81,7 @@ namespace ETL_SQL.Tests.CliCommands
             var workload = JsonNode.Parse(workloadText)!.AsObject();
             Assert.Equal("http://localhost:6600", (string?)workload["portal"]!["baseUrl"]);
             Assert.Equal("http://localhost:6601", (string?)workload["orchestrator"]!["baseUrl"]);
-            Assert.Equal("CHANGE_ME", (string?)workload["portal"]!["roles"]!["admin"]!["password"]);
+            Assert.Equal(generatedAdminPassword, (string?)workload["portal"]!["roles"]!["admin"]!["password"]);
             Assert.False(string.IsNullOrWhiteSpace((string?)workload["orchestrator"]!["apiKey"]));
 
             Assert.Equal(0, await RunAsync(new CliContext { Command = "admin-ha-soak-runbook", HaSoakRunRoot = runRoot, HaSoakForce = true }, logger));
@@ -110,7 +114,10 @@ namespace ETL_SQL.Tests.CliCommands
             var redactedEnv = File.ReadAllText(Path.Combine(diagnosticsRoot, "postgres-ha-soak.redacted.env"));
             Assert.Contains("PG_PASSWORD=********", redactedEnv);
             Assert.Contains("ORCH_API_KEY=********", redactedEnv);
+            Assert.Contains("PORTAL_ADMIN_PASSWORD=********", redactedEnv);
+            Assert.Contains("PORTAL_ADMIN_MUST_CHANGE_PASSWORD=false", redactedEnv);
             Assert.DoesNotContain("ORCH_API_KEY=", File.ReadAllText(Path.Combine(diagnosticsRoot, "topology-metadata.json")), StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(generatedAdminPassword, redactedEnv);
         }
 
         [Fact]
@@ -298,6 +305,14 @@ namespace ETL_SQL.Tests.CliCommands
 
         private static Task<int> RunAsync(CliContext ctx, ILogger logger) =>
             HaSoakAdminService.RunAsync(ctx, logger);
+
+        private static string? ReadEnvValue(string text, string key)
+        {
+            foreach (var line in text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+                if (line.StartsWith(key + "=", StringComparison.Ordinal))
+                    return line[(key.Length + 1)..];
+            return null;
+        }
 
         private static void TryDelete(string path)
         {

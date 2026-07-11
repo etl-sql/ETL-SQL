@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "faultId": "WorkerProcessCrashMidJob",
+  "category": "crash-recovery",
+  "injectionPoint": "orchestrator-job-execution",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "lease expires or fences; job is failed or recoverable and is not double-mutated",
+  "evidence": {
+    "faultId": "WorkerProcessCrashMidJob",
+    "category": "crash-recovery",
+    "injectionMethod": "kill spawned worker process after job lease acquisition",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "leaseOwnerBeforeCrash": "worker-a",
+    "leaseOwnerAfterRecovery": "worker-b",
+    "jobFinalState": "Failed",
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "WorkerProcessCrashMidJob",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

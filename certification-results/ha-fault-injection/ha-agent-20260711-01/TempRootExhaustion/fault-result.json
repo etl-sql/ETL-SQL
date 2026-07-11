@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "faultId": "TempRootExhaustion",
+  "category": "filesystem",
+  "injectionPoint": "temp-root-admission",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "job fails before unbounded spill growth and cleanup leaves no orphaned run root",
+  "evidence": {
+    "faultId": "TempRootExhaustion",
+    "category": "filesystem",
+    "injectionMethod": "set isolated temp-root quota/admission below the expected spill footprint",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "configuredTempRootLimitBytes": 1048576,
+    "expectedSpillBytes": 1073741824,
+    "admissionFailureObserved": true,
+    "runRootDeletedAfterCleanup": true,
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "TempRootExhaustion",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

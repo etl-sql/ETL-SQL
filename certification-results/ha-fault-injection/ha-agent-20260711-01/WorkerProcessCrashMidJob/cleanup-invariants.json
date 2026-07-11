@@ -1,0 +1,12 @@
+{
+  "faultId": "WorkerProcessCrashMidJob",
+  "passed": true,
+  "memoryGrantOutstanding": 0,
+  "allSpillReadersDisposed": true,
+  "allSpillWritersDisposed": true,
+  "tempRootFileCount": 0,
+  "tempRootDirectoryCount": 0,
+  "partialMutationReportedSuccessful": false,
+  "duplicateCommittedMutationObserved": false,
+  "redactionCheck": "Passed"
+}

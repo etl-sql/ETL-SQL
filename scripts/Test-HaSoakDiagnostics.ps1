@@ -42,6 +42,7 @@ try {
         Out-String
     Assert-True (-not $bundleText.Contains('PG_PASSWORD=' + ((Get-Content -LiteralPath $topology.envFile | Where-Object { $_ -like 'PG_PASSWORD=*' }) -split '=', 2)[1])) 'Diagnostics bundle must not contain raw PostgreSQL password.'
     Assert-True (-not $bundleText.Contains('ORCH_API_KEY=' + ((Get-Content -LiteralPath $topology.envFile | Where-Object { $_ -like 'ORCH_API_KEY=*' }) -split '=', 2)[1])) 'Diagnostics bundle must not contain raw Orchestrator API key.'
+    Assert-True (-not $bundleText.Contains('PORTAL_ADMIN_PASSWORD=' + ((Get-Content -LiteralPath $topology.envFile | Where-Object { $_ -like 'PORTAL_ADMIN_PASSWORD=*' }) -split '=', 2)[1])) 'Diagnostics bundle must not contain raw Portal admin password.'
 
     Write-Host 'HA soak diagnostics self-test passed.'
 }

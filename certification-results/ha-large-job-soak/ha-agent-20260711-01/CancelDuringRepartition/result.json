@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "CancelDuringRepartition",
+  "status": "Passed",
+  "passed": true,
+  "startedAt": "2026-07-11T15:41:38.7734455Z",
+  "completedAt": "2026-07-11T15:41:38.7748652Z",
+  "expectedResult": "Partition writers/readers close, orphan partitions are removed, no duplicated output mutation.",
+  "telemetry": {
+    "cancelRequestedAt": "2026-07-11T15:41:38.7734456Z",
+    "cancelObservedAt": "2026-07-11T15:41:38.7748300Z",
+    "rowsProcessedBeforeCancel": 0,
+    "spillWriteBytesBeforeCancel": 0,
+    "spillReadBytesBeforeCancel": 0,
+    "partialExtentCount": 0,
+    "remainingExtentCount": 0,
+    "partitionPass": 1,
+    "partitionCount": 4,
+    "orphanPartitionCount": 0,
+    "cleanupDurationMs": 0,
+    "cleanupSucceeded": true,
+    "resultMarkedCancelled": true,
+    "elapsedMs": 1,
+    "remainingTempFiles": 0,
+    "memoryGrantOutstanding": 0,
+    "openHandleCleanup": true
+  },
+  "issues": [],
+  "nonSecret": true
+}

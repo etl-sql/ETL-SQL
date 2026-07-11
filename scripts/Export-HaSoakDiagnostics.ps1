@@ -34,7 +34,7 @@ function Get-RelativeLabel {
 
 function Redact-Line {
     param([string]$Line)
-    if ($Line -match '^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY)=') {
+    if ($Line -match '^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY|PORTAL_ADMIN_PASSWORD)=') {
         return (($Line -split '=', 2)[0] + '=********')
     }
     return $Line

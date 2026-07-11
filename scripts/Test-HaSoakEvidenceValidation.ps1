@@ -28,8 +28,7 @@ try {
         -PostgresPort 6432
 
     $workload = & (Join-Path $ScriptRoot 'New-PostgresHaCapacityWorkload.ps1') `
-        -TopologyRunRoot $topology.runRoot `
-        -AdminPassword 'CHANGE_ME'
+        -TopologyRunRoot $topology.runRoot
 
     & (Join-Path $ScriptRoot 'New-HaSoakEvidencePlan.ps1') `
         -TopologyRunRoot $topology.runRoot `

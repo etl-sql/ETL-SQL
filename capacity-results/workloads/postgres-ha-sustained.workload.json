@@ -13,9 +13,6 @@
     "maxQueuedWork": 100
   },
   "variables": {
-    "reportId": "1",
-    "folderId": "1",
-    "datasetId": "1",
     "jobName": "ha-soak-sustained-noop"
   },
   "portal": {
@@ -36,12 +33,12 @@
       { "name": "healthz", "method": "GET", "path": "/healthz", "weight": 8 },
       { "name": "health", "method": "GET", "path": "/health", "weight": 6 },
       { "name": "folders", "method": "GET", "path": "/api/folders", "role": "admin", "weight": 12 },
-      { "name": "folder-reports", "method": "GET", "path": "/api/folders/{{folderId}}/reports", "role": "admin", "weight": 8 },
       { "name": "catalog-search", "method": "GET", "path": "/api/catalog/search?q=ha-soak", "role": "admin", "weight": 8 },
       { "name": "datasets", "method": "GET", "path": "/api/datasets", "role": "admin", "weight": 8 },
-      { "name": "dataset-detail", "method": "GET", "path": "/api/datasets/{{datasetId}}", "role": "admin", "weight": 4 },
-      { "name": "snapshot", "method": "GET", "path": "/api/reports/{{reportId}}/snapshot", "role": "admin", "weight": 8 },
-      { "name": "refresh", "method": "POST", "path": "/api/reports/{{reportId}}/refresh", "role": "admin", "weight": 2, "thinkTimeMs": 3000 },
+      { "name": "admin-reports", "method": "GET", "path": "/api/admin/reports", "role": "admin", "weight": 6 },
+      { "name": "admin-users", "method": "GET", "path": "/api/admin/users?pageSize=50", "role": "admin", "weight": 4 },
+      { "name": "admin-groups-catalog", "method": "GET", "path": "/api/admin/groups/catalog", "role": "admin", "weight": 4 },
+      { "name": "fleet-status", "method": "GET", "path": "/api/fleet/status", "role": "admin", "weight": 4 },
       { "name": "admin-usage", "method": "GET", "path": "/api/admin/metrics/usage", "role": "admin", "weight": 4 },
       { "name": "admin-audit", "method": "GET", "path": "/api/admin/audit?pageSize=50", "role": "admin", "weight": 4 }
     ]

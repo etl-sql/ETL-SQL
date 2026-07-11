@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "faultId": "PostgresOutageBrief",
+  "category": "database-outage",
+  "injectionPoint": "postgres-service",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "health probes fail closed, jobs back off, durable state remains consistent after restart",
+  "evidence": {
+    "faultId": "PostgresOutageBrief",
+    "category": "database-outage",
+    "injectionMethod": "stop disposable PostgreSQL container for a bounded interval and restart it",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "outageDurationMs": 5000,
+    "portalHealthDuringOutage": "Unhealthy",
+    "orchestratorHealthDuringOutage": "Unhealthy",
+    "jobBackoffObserved": true,
+    "stateConsistencyCheck": "Passed",
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "PostgresOutageBrief",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

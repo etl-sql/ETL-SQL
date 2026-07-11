@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "CancelDuringSpillWrite",
+  "status": "Passed",
+  "passed": true,
+  "startedAt": "2026-07-11T15:41:38.7667691Z",
+  "completedAt": "2026-07-11T15:41:38.7680327Z",
+  "expectedResult": "Partial extent is removed or marked unrecoverable, no file handle leak, no success status.",
+  "telemetry": {
+    "cancelRequestedAt": "2026-07-11T15:41:38.7667574Z",
+    "cancelObservedAt": "2026-07-11T15:41:38.7679836Z",
+    "rowsProcessedBeforeCancel": 0,
+    "spillWriteBytesBeforeCancel": 4096,
+    "spillReadBytesBeforeCancel": 0,
+    "partialExtentCount": 1,
+    "remainingExtentCount": 0,
+    "partitionPass": 0,
+    "partitionCount": 0,
+    "orphanPartitionCount": 0,
+    "cleanupDurationMs": 0,
+    "cleanupSucceeded": true,
+    "resultMarkedCancelled": true,
+    "elapsedMs": 1,
+    "remainingTempFiles": 0,
+    "memoryGrantOutstanding": 0,
+    "openHandleCleanup": true
+  },
+  "issues": [],
+  "nonSecret": true
+}

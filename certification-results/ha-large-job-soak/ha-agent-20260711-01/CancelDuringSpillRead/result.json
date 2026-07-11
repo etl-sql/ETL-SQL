@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "CancelDuringSpillRead",
+  "status": "Passed",
+  "passed": true,
+  "startedAt": "2026-07-11T15:41:38.7702315Z",
+  "completedAt": "2026-07-11T15:41:38.7717556Z",
+  "expectedResult": "Replay stops promptly, extents are cleaned after failure handling, session remains recoverable.",
+  "telemetry": {
+    "cancelRequestedAt": "2026-07-11T15:41:38.7702121Z",
+    "cancelObservedAt": "2026-07-11T15:41:38.7716894Z",
+    "rowsProcessedBeforeCancel": 0,
+    "spillWriteBytesBeforeCancel": 0,
+    "spillReadBytesBeforeCancel": 4096,
+    "partialExtentCount": 0,
+    "remainingExtentCount": 0,
+    "partitionPass": 0,
+    "partitionCount": 0,
+    "orphanPartitionCount": 0,
+    "cleanupDurationMs": 0,
+    "cleanupSucceeded": true,
+    "resultMarkedCancelled": true,
+    "elapsedMs": 1,
+    "remainingTempFiles": 0,
+    "memoryGrantOutstanding": 0,
+    "openHandleCleanup": true
+  },
+  "issues": [],
+  "nonSecret": true
+}

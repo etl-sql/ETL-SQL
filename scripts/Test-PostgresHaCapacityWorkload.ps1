@@ -26,15 +26,16 @@ try {
         -PostgresPort 5932
 
     $materialized = & (Join-Path $ScriptRoot 'New-PostgresHaCapacityWorkload.ps1') `
-        -TopologyRunRoot $topology.runRoot `
-        -AdminPassword 'local-test-password'
+        -TopologyRunRoot $topology.runRoot
+
+    $envAdminPassword = ((Get-Content -LiteralPath $topology.envFile | Where-Object { $_ -like 'PORTAL_ADMIN_PASSWORD=*' }) -split '=', 2)[1]
 
     Assert-True (Test-Path -LiteralPath $materialized.outputPath -PathType Leaf) 'Expected materialized workload file.'
     $workload = Get-Content -LiteralPath $materialized.outputPath -Raw | ConvertFrom-Json
     Assert-True ($workload.portal.baseUrl -eq 'http://localhost:5900') 'Expected Portal URL from topology env.'
     Assert-True ($workload.orchestrator.baseUrl -eq 'http://localhost:5901') 'Expected Orchestrator URL from topology env.'
     Assert-True ($workload.orchestrator.apiKey -ne 'CHANGE_ME') 'Expected generated Orchestrator API key.'
-    Assert-True ($workload.portal.roles.admin.password -eq 'local-test-password') 'Expected supplied admin password.'
+    Assert-True ($workload.portal.roles.admin.password -eq $envAdminPassword) 'Expected generated admin password.'
     Assert-True ($workload.environment.topologyMetadataPath.EndsWith('topology-metadata.json')) 'Expected metadata path in workload environment.'
 
     & node (Join-Path $RepoRoot 'scripts/test-service-capacity.mjs') --config $materialized.outputPath --validate-only

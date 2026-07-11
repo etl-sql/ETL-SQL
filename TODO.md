@@ -249,7 +249,13 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   are cited.
   `scripts/Test-PreRelease.ps1` and `scripts/test-pre-release.sh` now include the non-destructive
   HA soak contract gate by default, and the release/testing docs list it as an always-on validation
-  phase. Checked-in measured capacity reports remain open.)*
+  phase. CI-smoke measured evidence captured under
+  `certification-results/postgres-ha-soak/ha-agent-20260711-01/`: sustained Portal and
+  Orchestrator capacity passed at concurrency 1/10/25 with 0% errors, PostgreSQL metrics were
+  captured, diagnostics were bundled under
+  `.ha-soak-runs/ha-agent-20260711-01/diagnostics/20260711-104207`, and
+  `etl-sql admin ha-soak validate --required-gate All` passed. Representative production-scale
+  counts and checked-in/manual-certification capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
   *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the
@@ -260,7 +266,11 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   for CI-smoke or manual-certification modes; `scripts/Test-HaLargeJobSoakPlan.ps1` validates
   the plan contract. `etl-sql admin ha-soak large-job-run` now executes the native bounded
   large-job CI-smoke harness from a generated plan and writes `soak-report.json/.md`, per-scenario
-  `result.json/.md`, and `runner.log` artifacts accepted by the LargeJob evidence gate. Multi-hour
+  `result.json/.md`, and `runner.log` artifacts accepted by the LargeJob evidence gate. CI-smoke
+  measured evidence captured under
+  `certification-results/ha-large-job-soak/ha-agent-20260711-01/` passed with a 60-second
+  per-scenario runner duration, including mixed concurrent spill/sort/join/aggregate cleanup and
+  cancellation cleanup at scan, spill-write, spill-read, and repartition points. Multi-hour
   manual-certification execution and measured production-scale soak artifacts remain open.)*
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
@@ -278,8 +288,11 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   `etl-sql admin ha-soak fault-run` now executes the native bounded fault-injection CI-smoke
   harness from a generated plan and writes `fault-report.json/.md`, per-fault
   `fault-result.json/.md`, `cleanup-invariants.json`, and `runner.log` artifacts accepted by the
-  FaultInjection evidence gate. Destructive/manual fault execution against the live HA topology and
-  measured recovery artifacts remain open.)*
+  FaultInjection evidence gate. CI-smoke measured evidence captured under
+  `certification-results/ha-fault-injection/ha-agent-20260711-01/` passed for disk pressure,
+  slow disk, corrupt/incomplete extent, worker crash, node loss, brief PostgreSQL outage, and
+  temp-root exhaustion scenarios. Destructive/manual fault execution against the live HA topology
+  and measured recovery artifacts remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 

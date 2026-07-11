@@ -7,7 +7,8 @@
       "ExpiryMinutes": 60
     },
     "FirstRun": {
-      "AdminUsername": "admin"
+      "AdminUsername": "admin",
+      "MustChangePassword": true
     },
     "PolicyAuthority": {
       "SigningCertThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"

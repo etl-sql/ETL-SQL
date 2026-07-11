@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "phase": "v0.15.0 Phase 6",
+  "generatedAt": "2026-07-11T14:54:44.1359754Z",
+  "runId": "ha-agent-20260711-01",
+  "mode": "CiSmoke",
+  "durationMinutes": 15,
+  "topologyMetadataPath": "ha-soak-runs/ha-agent-20260711-01/topology-metadata.json",
+  "manifestPath": "certification-results/ha-large-job-soak-scenarios.json",
+  "expectedOutputDirectory": "certification-results/ha-large-job-soak/ha-agent-20260711-01",
+  "sharedBudgets": {
+    "memoryBoundMB": 16384,
+    "operatorGrantMB": 4096,
+    "minimumFreeDiskGB": 50,
+    "spillRoot": "isolated run temp root",
+    "adaptiveExecution": "scenario-specific"
+  },
+  "cleanupInvariants": [
+    "MemoryGrantArbiter reports zero outstanding reservations after each job completes, fails, or is cancelled",
+    "No orphan spill extents remain under the run temp root after cleanup",
+    "No leaked file handles prevent deletion of the run temp root",
+    "No job is marked successful after a cancellation or injected crash",
+    "No duplicate committed mutation is observed after retry, restart, or lease reacquisition"
+  ],
+  "scenarios": [
+    {
+      "scenarioId": "MixedScanSpillSortJoinAggregate_Concurrent",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "purpose": "Run mixed scan/filter/projection, temp spill, external sort, external join, and external aggregate jobs concurrently under shared resource budgets.",
+      "concurrentJobs": 3,
+      "durationMinutes": 15,
+      "workloads": [
+        "StreamingScanFilterProjection",
+        "TempTableSpillRoundTrip",
+        "ExternalSort",
+        "ExternalEquiJoin",
+        "HighCardinalityExternalAggregate"
+      ],
+      "cancellationPoint": null,
+      "expectedResult": null,
+      "requiredTelemetry": [
+        "elapsedMs",
+        "rowsProcessed",
+        "peakProcessWorkingSetMB",
+        "memoryGrantOutstanding",
+        "spillBytes",
+        "spillExtentCount",
+        "openHandleCleanup",
+        "schedulerQueueDepth",
+        "jobStartDelayMs"
+      ],
+      "expectedArtifacts": [
+        "MixedScanSpillSortJoinAggregate_Concurrent/result.json",
+        "MixedScanSpillSortJoinAggregate_Concurrent/result.md",
+        "MixedScanSpillSortJoinAggregate_Concurrent/runner.log"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringScan",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "purpose": "Cancel a large streaming scan/filter/projection job while rows are being consumed.",
+      "concurrentJobs": 1,
+      "durationMinutes": 15,
+      "workloads": [],
+      "cancellationPoint": "scan",
+      "expectedResult": "Prompt cancellation, session remains usable, no leaked grants or temp roots.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "cancelObservedAt",
+        "rowsProcessedBeforeCancel",
+        "memoryGrantOutstanding",
+        "cleanupDurationMs"
+      ],
+      "expectedArtifacts": [
+        "CancelDuringScan/result.json",
+        "CancelDuringScan/result.md",
+        "CancelDuringScan/runner.log"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringSpillWrite",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "purpose": "Cancel a temp-table or external-operator job during spill extent write.",
+      "concurrentJobs": 1,
+      "durationMinutes": 15,
+      "workloads": [],
+      "cancellationPoint": "spill-write",
+      "expectedResult": "Partial extent is removed or marked unrecoverable, no file handle leak, no success status.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "spillWriteBytesBeforeCancel",
+        "partialExtentCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "CancelDuringSpillWrite/result.json",
+        "CancelDuringSpillWrite/result.md",
+        "CancelDuringSpillWrite/runner.log"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringSpillRead",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "purpose": "Cancel a spill-backed job while replaying extents.",
+      "concurrentJobs": 1,
+      "durationMinutes": 15,
+      "workloads": [],
+      "cancellationPoint": "spill-read",
+      "expectedResult": "Replay stops promptly, extents are cleaned after failure handling, session remains recoverable.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "spillReadBytesBeforeCancel",
+        "remainingExtentCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "CancelDuringSpillRead/result.json",
+        "CancelDuringSpillRead/result.md",
+        "CancelDuringSpillRead/runner.log"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringRepartition",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "purpose": "Cancel external join or high-cardinality aggregate while repartitioning spill partitions.",
+      "concurrentJobs": 1,
+      "durationMinutes": 15,
+      "workloads": [],
+      "cancellationPoint": "repartition",
+      "expectedResult": "Partition writers/readers close, orphan partitions are removed, no duplicated output mutation.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "partitionPass",
+        "partitionCount",
+        "orphanPartitionCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "CancelDuringRepartition/result.json",
+        "CancelDuringRepartition/result.md",
+        "CancelDuringRepartition/runner.log"
+      ]
+    }
+  ],
+  "runnerState": "ReadyForNativeRunner",
+  "nonSecret": true
+}

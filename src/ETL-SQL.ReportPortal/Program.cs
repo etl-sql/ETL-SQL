@@ -798,7 +798,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
             UserName = adminUsername,
             Email = $"{adminUsername}@localhost",
             IsActive = true,
-            MustChangePassword = true
+            MustChangePassword = config.FirstRun.MustChangePassword
         };
         // Temporary password — must be changed on first login. No hardcoded default: either the
         // operator supplies Portal:FirstRun:AdminPassword or a random one is generated and logged once.

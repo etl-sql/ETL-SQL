@@ -112,7 +112,7 @@ $steps += [ordered]@{
 $steps += [ordered]@{
     order = 3
     name = 'Materialize sustained workload'
-    command = "scripts/New-PostgresHaCapacityWorkload.ps1 -TopologyRunRoot $runLabel -AdminPassword PORTAL_ADMIN_PASSWORD -Force"
+    command = "scripts/New-PostgresHaCapacityWorkload.ps1 -TopologyRunRoot $runLabel -Force"
     expectedArtifacts = @('postgres-ha-sustained.workload.local.json')
 }
 if ($null -ne $workloadLabel) {

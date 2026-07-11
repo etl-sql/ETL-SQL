@@ -62,7 +62,10 @@ function Assert-TopologyTemplate {
         'Orchestrator__Database__Provider=Postgres',
         'Portal__Storage__KeyRingPath=/app/data/.portal-keys',
         'Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}',
-        'Portal__Orchestrator__ApiKey=${ORCH_API_KEY}'
+        'Portal__Orchestrator__ApiKey=${ORCH_API_KEY}',
+        'Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}',
+        'Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}',
+        'Session__Root=/app/Sessions'
     )) {
         if (-not $compose.Contains($required)) {
             throw "Compose file is missing required PostgreSQL HA soak token: $required"
@@ -78,7 +81,9 @@ function Assert-TopologyTemplate {
         'PG_DB_ORCH=',
         'PORTAL_JWT_SECRET=',
         'PORTAL_DATASET_KEY=',
-        'ORCH_API_KEY='
+        'ORCH_API_KEY=',
+        'PORTAL_ADMIN_PASSWORD=',
+        'PORTAL_ADMIN_MUST_CHANGE_PASSWORD='
     )) {
         if (-not $example.Contains($required)) {
             throw "Environment example is missing required PostgreSQL HA soak token: $required"
@@ -89,8 +94,18 @@ function Assert-TopologyTemplate {
 function New-Base64Secret {
     param([int]$ByteCount)
     $bytes = [byte[]]::new($ByteCount)
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($bytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
     return [Convert]::ToBase64String($bytes)
+}
+
+function New-PortalAdminPassword {
+    return "Aa1!$(New-Base64Secret 18)"
 }
 
 function Convert-ToEnvPath {
@@ -163,7 +178,8 @@ $pathsToCreate = @(
     (Join-Path $dataRoot 'datasets'),
     (Join-Path $dataRoot 'maps'),
     (Join-Path $dataRoot 'portal-data'),
-    (Join-Path $dataRoot 'logs')
+    (Join-Path $dataRoot 'logs'),
+    (Join-Path $dataRoot 'Sessions')
 )
 foreach ($path in $pathsToCreate) {
     New-Item -ItemType Directory -Force -Path $path | Out-Null
@@ -186,7 +202,9 @@ $envLines = @(
     "PORTAL_JWT_SECRET=$(New-Base64Secret 48)",
     "PORTAL_DATASET_KEY=$(New-Base64Secret 32)",
     "ORCH_API_KEY=$(New-Base64Secret 32)",
-    'PORTAL_ADMIN_USERNAME=admin'
+    'PORTAL_ADMIN_USERNAME=admin',
+    "PORTAL_ADMIN_PASSWORD=$(New-PortalAdminPassword)",
+    'PORTAL_ADMIN_MUST_CHANGE_PASSWORD=false'
 )
 $envLines | Set-Content -LiteralPath $envFile -Encoding UTF8
 
@@ -217,6 +235,7 @@ $metadata = [ordered]@{
         orchestratorDatabaseProvider = 'Postgres'
         sharedArtifactRoot = 'ENV_DATA_ROOT'
         sharedDataProtectionKeyRing = 'Portal__Storage__KeyRingPath=/app/data/.portal-keys'
+        sessionRoot = 'Session__Root=/app/Sessions'
         stickyAffinity = 'ETLSQL_PORTAL_AFFINITY via deploy/docker/haproxy.cfg'
         orchestratorAuthentication = 'X-Orchestrator-Key'
     }

@@ -18,7 +18,7 @@ namespace ETL_SQL.App
     internal static class HaSoakAdminService
     {
         private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
-        private static readonly Regex SecretEnvPattern = new("^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY)=", RegexOptions.Compiled);
+        private static readonly Regex SecretEnvPattern = new("^(PG_PASSWORD|PORTAL_JWT_SECRET|PORTAL_DATASET_KEY|ORCH_API_KEY|PORTAL_ADMIN_PASSWORD)=", RegexOptions.Compiled);
         private static readonly Regex RunIdPattern = new("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$", RegexOptions.Compiled);
 
         internal static async Task<int> RunAsync(CliContext ctx, ILogger logger)
@@ -106,7 +106,8 @@ namespace ETL_SQL.App
             {
                 runRoot, dataRoot, Path.Combine(dataRoot, "Reports"), Path.Combine(dataRoot, "Snapshots"),
                 Path.Combine(dataRoot, "datasets"), Path.Combine(dataRoot, "maps"),
-                Path.Combine(dataRoot, "portal-data"), Path.Combine(dataRoot, "logs")
+                Path.Combine(dataRoot, "portal-data"), Path.Combine(dataRoot, "logs"),
+                Path.Combine(dataRoot, "Sessions")
             })
             {
                 Directory.CreateDirectory(path);
@@ -130,7 +131,9 @@ namespace ETL_SQL.App
                 $"PORTAL_JWT_SECRET={NewBase64Secret(48)}",
                 $"PORTAL_DATASET_KEY={NewBase64Secret(32)}",
                 $"ORCH_API_KEY={NewBase64Secret(32)}",
-                "PORTAL_ADMIN_USERNAME=admin"
+                "PORTAL_ADMIN_USERNAME=admin",
+                $"PORTAL_ADMIN_PASSWORD={NewPortalAdminPassword()}",
+                "PORTAL_ADMIN_MUST_CHANGE_PASSWORD=false"
             });
 
             var composeRelative = RelativeLabel(composePath);
@@ -165,6 +168,7 @@ namespace ETL_SQL.App
                     ["orchestratorDatabaseProvider"] = "Postgres",
                     ["sharedArtifactRoot"] = "ENV_DATA_ROOT",
                     ["sharedDataProtectionKeyRing"] = "Portal__Storage__KeyRingPath=/app/data/.portal-keys",
+                    ["sessionRoot"] = "Session__Root=/app/Sessions",
                     ["stickyAffinity"] = "ETLSQL_PORTAL_AFFINITY via deploy/docker/haproxy.cfg",
                     ["orchestratorAuthentication"] = "X-Orchestrator-Key"
                 },
@@ -219,7 +223,7 @@ namespace ETL_SQL.App
             var env = ReadEnv(envFile);
             var metadata = ReadJsonObject(metadataPath);
             var workload = ReadJsonObject(templatePath);
-            RequireEnv(env, "PORT_PORTAL", "PORT_ORCH", "ORCH_API_KEY");
+            RequireEnv(env, "PORT_PORTAL", "PORT_ORCH", "ORCH_API_KEY", "PORTAL_ADMIN_PASSWORD");
 
             workload["environment"] ??= new JsonObject();
             var environment = workload["environment"]!.AsObject();
@@ -229,7 +233,7 @@ namespace ETL_SQL.App
             environment["topologyMetadataPath"] = metadataPath;
 
             workload["portal"]!["baseUrl"] = $"http://localhost:{env["PORT_PORTAL"]}";
-            workload["portal"]!["roles"]!["admin"]!["password"] = ctx.HaSoakAdminPassword ?? "CHANGE_ME";
+            workload["portal"]!["roles"]!["admin"]!["password"] = ctx.HaSoakAdminPassword ?? env["PORTAL_ADMIN_PASSWORD"];
             workload["orchestrator"]!["baseUrl"] = $"http://localhost:{env["PORT_ORCH"]}";
             workload["orchestrator"]!["apiKey"] = env["ORCH_API_KEY"];
             foreach (var setup in workload["setupRequests"]?.AsArray() ?? new JsonArray())
@@ -263,7 +267,7 @@ namespace ETL_SQL.App
             {
                 Step(1, "Start topology", metadata["commands"]!["start"]!.GetValue<string>(), "topology-metadata.json", "postgres-ha-soak.env"),
                 Step(2, "Check topology status", metadata["commands"]!["status"]!.GetValue<string>(), "docker-compose-ps output"),
-                Step(3, "Materialize sustained workload", $"etl-sql admin ha-soak workload --run-root \"{runLabel}\" --admin-password PORTAL_ADMIN_PASSWORD --force", "postgres-ha-sustained.workload.local.json"),
+                Step(3, "Materialize sustained workload", $"etl-sql admin ha-soak workload --run-root \"{runLabel}\" --force", "postgres-ha-sustained.workload.local.json"),
                 Step(4, "Run sustained service capacity workload", $"node scripts/test-service-capacity.mjs --config \"{workload ?? $"{runLabel}/postgres-ha-sustained.workload.local.json"}\" --out-dir \"{sustainedOut}\"", $"{sustainedOut}/capacity-report.json", $"{sustainedOut}/capacity-report.md"),
                 Step(5, "Capture PostgreSQL metrics", $"etl-sql admin ha-soak metrics --run-root \"{runLabel}\" --output \"{sustainedOut}/postgres-ha-metrics.json\" --force", $"{sustainedOut}/postgres-ha-metrics.json", $"{sustainedOut}/postgres-ha-metrics.md"),
                 Step(6, "Create large-job soak plan", $"etl-sql admin ha-soak large-job-plan --run-root \"{runLabel}\" --mode {mode} --output \"{largeOut}/ha-large-job-soak-plan.json\" --force", $"{largeOut}/ha-large-job-soak-plan.json", $"{largeOut}/ha-large-job-soak-plan.md"),
@@ -1145,6 +1149,7 @@ namespace ETL_SQL.App
                 "PORTAL_JWT_SECRET\\s*=\\s*(?!\\*{4,})\\S+",
                 "PORTAL_DATASET_KEY\\s*=\\s*(?!\\*{4,})\\S+",
                 "ORCH_API_KEY\\s*=\\s*(?!\\*{4,})\\S+",
+                "PORTAL_ADMIN_PASSWORD\\s*=\\s*(?!\\*{4,})\\S+",
                 "\"apiKey\"\\s*:\\s*\"(?!\\*{4,}|CHANGE_ME\")([^\"]+)\"",
                 "\"password\"\\s*:\\s*\"(?!\\*{4,}|CHANGE_ME\")([^\"]+)\""
             })
@@ -1231,6 +1236,8 @@ namespace ETL_SQL.App
         private static void CopyPlanArtifact(string sourcePath, string outputRoot, string fileName, bool force)
         {
             var destination = Path.Combine(outputRoot, fileName);
+            if (string.Equals(Path.GetFullPath(sourcePath), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
+                return;
             if (File.Exists(destination) && !force)
                 throw new InvalidOperationException($"Output already exists: {destination}. Use --force to replace it.");
             File.Copy(sourcePath, destination, overwrite: force);
@@ -1334,11 +1341,11 @@ namespace ETL_SQL.App
         private static void AssertTopologyTemplate(string composePath, string examplePath)
         {
             var compose = File.ReadAllText(RequireFile(composePath, "Compose file"));
-            foreach (var token in new[] { "postgres:", "orchestrator:", "portal:", "loadbalancer:", "Portal__Database__Provider=Postgres", "Orchestrator__Database__Provider=Postgres", "Portal__Storage__KeyRingPath=/app/data/.portal-keys", "Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}", "Portal__Orchestrator__ApiKey=${ORCH_API_KEY}" })
+            foreach (var token in new[] { "postgres:", "orchestrator:", "portal:", "loadbalancer:", "Portal__Database__Provider=Postgres", "Orchestrator__Database__Provider=Postgres", "Portal__Storage__KeyRingPath=/app/data/.portal-keys", "Portal__Dataset__AtRestKey=${PORTAL_DATASET_KEY}", "Portal__Orchestrator__ApiKey=${ORCH_API_KEY}", "Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}", "Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}", "Session__Root=/app/Sessions" })
                 if (!compose.Contains(token, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Compose file is missing required PostgreSQL HA soak token: {token}");
             var example = File.ReadAllText(RequireFile(examplePath, "Environment example"));
-            foreach (var token in new[] { "COMPOSE_PROJECT_NAME=", "ENV_DATA_ROOT=", "PG_PASSWORD=", "PG_DB_PORTAL=", "PG_DB_ORCH=", "PORTAL_JWT_SECRET=", "PORTAL_DATASET_KEY=", "ORCH_API_KEY=" })
+            foreach (var token in new[] { "COMPOSE_PROJECT_NAME=", "ENV_DATA_ROOT=", "PG_PASSWORD=", "PG_DB_PORTAL=", "PG_DB_ORCH=", "PORTAL_JWT_SECRET=", "PORTAL_DATASET_KEY=", "ORCH_API_KEY=", "PORTAL_ADMIN_PASSWORD=", "PORTAL_ADMIN_MUST_CHANGE_PASSWORD=" })
                 if (!example.Contains(token, StringComparison.Ordinal))
                     throw new InvalidOperationException($"Environment example is missing required PostgreSQL HA soak token: {token}");
         }
@@ -1384,6 +1391,7 @@ namespace ETL_SQL.App
         private static void AssertPositive(int value, string name) { if (value < 1) throw new InvalidOperationException($"{name} must be at least 1."); }
         private static string ToEnvPath(string value) => value.Replace('\\', '/');
         private static string NewBase64Secret(int bytes) { var buffer = new byte[bytes]; RandomNumberGenerator.Fill(buffer); return Convert.ToBase64String(buffer); }
+        private static string NewPortalAdminPassword() => "Aa1!" + NewBase64Secret(18);
         private static JsonArray JsonArrayFrom(params string[] values) { var a = new JsonArray(); foreach (var value in values) a.Add(value); return a; }
         private static string RedactEnvLine(string line) => SecretEnvPattern.IsMatch(line) ? line.Split('=', 2)[0] + "=********" : line;
         private static string RedactLines(string text) => string.Join(Environment.NewLine, text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Select(RedactEnvLine));

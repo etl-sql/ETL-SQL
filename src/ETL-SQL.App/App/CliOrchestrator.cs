@@ -305,7 +305,7 @@ namespace ETL_SQL.App
         };
         private static readonly Option<string?> HaSoakAdminPasswordOption = new("--admin-password", Array.Empty<string>())
         {
-            Description = "Admin password to place in the local workload config; defaults to CHANGE_ME.",
+            Description = "Admin password to place in the local workload config; defaults to the generated run-root password.",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => null
         };

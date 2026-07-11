@@ -1232,7 +1232,7 @@ can be diagnosed later without monitoring the run live.
 etl-sql admin ha-soak prepare --run-id ha-20260710 --output-root .ha-soak-runs --force
 
 # Materialize the sustained workload and operator artifacts
-etl-sql admin ha-soak workload --run-root .ha-soak-runs/ha-20260710 --admin-password CHANGE_ME --force
+etl-sql admin ha-soak workload --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak runbook --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
 etl-sql admin ha-soak evidence --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force

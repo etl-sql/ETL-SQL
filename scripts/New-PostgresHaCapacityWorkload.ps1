@@ -9,7 +9,7 @@ param(
 
     [string]$Template = 'capacity-results/workloads/postgres-ha-sustained.workload.json',
     [string]$OutputPath = '',
-    [string]$AdminPassword = 'CHANGE_ME',
+    [string]$AdminPassword = '',
     [switch]$Force
 )
 
@@ -64,21 +64,30 @@ $env = Read-EnvFile $envFile
 $metadata = Get-Content -LiteralPath $metadataFile -Raw | ConvertFrom-Json
 $workload = Get-Content -LiteralPath $templatePath -Raw | ConvertFrom-Json
 
-foreach ($required in @('PORT_PORTAL', 'PORT_ORCH', 'ORCH_API_KEY')) {
+foreach ($required in @('PORT_PORTAL', 'PORT_ORCH', 'ORCH_API_KEY', 'PORTAL_ADMIN_PASSWORD')) {
     if (-not $env.ContainsKey($required) -or [string]::IsNullOrWhiteSpace($env[$required])) {
         throw "Generated topology env is missing $required."
     }
 }
 
+function Write-Utf8NoBom {
+    param([string]$Path, [string]$Text)
+    $parent = Split-Path -Parent $Path
+    if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
+    $encoding = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($Path, $Text, $encoding)
+}
+
 $portalBaseUrl = "http://localhost:$($env['PORT_PORTAL'])"
 $orchestratorBaseUrl = "http://localhost:$($env['PORT_ORCH'])"
+$effectiveAdminPassword = if ([string]::IsNullOrWhiteSpace($AdminPassword)) { $env['PORTAL_ADMIN_PASSWORD'] } else { $AdminPassword }
 
 $workload.environment.deploymentMode = "PostgreSQL HA soak topology ($($metadata.runId))"
 $workload.environment.databaseLocation = "PostgreSQL via $($metadata.composeFile)"
 $workload.environment.notes = "Materialized from $($metadata.envFile). Generated workload contains the local Orchestrator API key; do not commit it."
 $workload.environment | Add-Member -NotePropertyName topologyMetadataPath -NotePropertyValue $metadataFile -Force
 $workload.portal.baseUrl = $portalBaseUrl
-$workload.portal.roles.admin.password = $AdminPassword
+$workload.portal.roles.admin.password = $effectiveAdminPassword
 $workload.orchestrator.baseUrl = $orchestratorBaseUrl
 $workload.orchestrator.apiKey = $env['ORCH_API_KEY']
 
@@ -88,9 +97,7 @@ foreach ($request in @($workload.setupRequests) + @($workload.cleanupRequests)) 
     }
 }
 
-$parent = Split-Path -Parent $OutputPath
-if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
-$workload | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+Write-Utf8NoBom -Path $OutputPath -Text ($workload | ConvertTo-Json -Depth 20)
 
 [pscustomobject]@{
     outputPath = (Resolve-Path -LiteralPath $OutputPath).Path
