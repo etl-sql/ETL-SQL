@@ -17,6 +17,28 @@ function _nodeColor(type) {
   }
 }
 
+// Maps a node to its mock connection database dialect/system type
+function getConnectionDialect(node) {
+  if (node.type === 'dataset') return 'Dataset';
+  if (node.type === 'page' || node.type === 'visual') return null;
+  
+  const label = node.label;
+  if (label.startsWith('Raw')) {
+    if (label.includes('Sales') || label.includes('Returns')) return 'MSSQL';
+    if (label.includes('Discount')) return 'Postgres';
+    if (label.includes('Target')) return 'Snowflake';
+    if (label.includes('Pipeline')) return 'CSV';
+    if (label.includes('Inventory')) return 'Oracle';
+    if (label.includes('Shipment')) return 'SFTP';
+    return 'MSSQL';
+  }
+  // Staging / facts / rollups are in-memory temp tables coordinated by the engine
+  if (label.startsWith('Stg') || label.startsWith('Enriched') || label.includes('Rollup') || label.includes('Plan') || label.includes('Log') || label.startsWith('Fact')) {
+    return 'Engine';
+  }
+  return 'Database';
+}
+
 // Reachability calculation for lineage flow (ancestors + descendants)
 function _lineageReach(rootId, allEdges, allNodes) {
   const down = {}, up = {};
@@ -73,9 +95,9 @@ function _computeLayout(nodes, edges) {
     (byLayer[l] = byLayer[l] || []).push(id);
   }
 
-  const LAYER_H    = 280;
-  const SUB_ROW_H  = 160;
-  const NODE_W     = 340;
+  const LAYER_H    = 300; // Increased spacing slightly to make room for inline formulas
+  const SUB_ROW_H  = 180;
+  const NODE_W     = 360;
   const MAX_PER_ROW = 6;
 
   const pos = {};
@@ -156,7 +178,7 @@ export default {
 
     const graph = (BUILDERS[fixtureId] ?? buildKitchenSinkGraph)();
 
-    // Inject high-fidelity metadata (tags/descriptions) dynamically for demonstration
+    // Inject high-fidelity metadata (tags/descriptions/transformations) dynamically for demonstration
     graph.nodes.forEach(n => {
       if (n.meta?.columns) {
         n.meta.columns.forEach(c => {
@@ -235,7 +257,6 @@ export default {
       badge.style.top = `${my}px`;
       badge.style.transform = 'translate(-50%, -50%)';
       
-      // Styling representing states
       badge.style.background = inPath ? '#0f766e' : (isDimmed ? 'rgba(17,24,39,0.05)' : '#1e293b');
       badge.style.border = inPath ? '1px solid #14b8a6' : (isDimmed ? '1px solid rgba(55,65,81,0.05)' : '1px solid #3b82f6');
       badge.style.borderRadius = '10px';
@@ -416,7 +437,10 @@ export default {
                 if (row) {
                   const inPath = activeColumnPathSet.has(`${n.id}__col__${c}`);
                   row.style.opacity = inPath ? '1' : '0.12';
-                  row.style.color = inPath ? '#34d399' : '#4b5563';
+                  const labelSpan = row.querySelector('.col-label-span');
+                  if (labelSpan) {
+                    labelSpan.style.color = inPath ? '#34d399' : '#4b5563';
+                  }
                 }
               });
             }
@@ -426,7 +450,10 @@ export default {
                 if (row) {
                   const inPath = activeColumnPathSet.has(`${n.id}__map__${m.role}`);
                   row.style.opacity = inPath ? '1' : '0.12';
-                  row.style.color = inPath ? '#34d399' : '#4b5563';
+                  const labelSpan = row.querySelector('.col-label-span');
+                  if (labelSpan) {
+                    labelSpan.style.color = inPath ? '#34d399' : '#4b5563';
+                  }
                 }
               });
             }
@@ -443,7 +470,10 @@ export default {
               const row = document.getElementById(`${n.id}__col__${c}`);
               if (row) {
                 row.style.opacity = '1';
-                row.style.color = '#cbd5e1';
+                const labelSpan = row.querySelector('.col-label-span');
+                if (labelSpan) {
+                  labelSpan.style.color = '#cbd5e1';
+                }
               }
             });
           }
@@ -452,7 +482,10 @@ export default {
               const row = document.getElementById(`${n.id}__map__${m.role}`);
               if (row) {
                 row.style.opacity = '1';
-                row.style.color = '#cbd5e1';
+                const labelSpan = row.querySelector('.col-label-span');
+                if (labelSpan) {
+                  labelSpan.style.color = '#cbd5e1';
+                }
               }
             });
           }
@@ -793,6 +826,47 @@ export default {
 
       card.appendChild(header);
 
+      // Connection dialect badge in header (proves cross-source movement)
+      const dialect = getConnectionDialect(n);
+      if (dialect) {
+        const dbBadge = document.createElement('span');
+        dbBadge.textContent = dialect;
+        dbBadge.style.fontSize = '8px';
+        dbBadge.style.fontWeight = 'bold';
+        dbBadge.style.padding = '1px 5px';
+        dbBadge.style.borderRadius = '3px';
+        dbBadge.style.marginLeft = 'auto';
+        dbBadge.style.marginRight = '8px';
+        
+        if (dialect === 'MSSQL') {
+          dbBadge.style.background = '#1e3a8a';
+          dbBadge.style.color = '#93c5fd';
+        } else if (dialect === 'Postgres') {
+          dbBadge.style.background = '#065f46';
+          dbBadge.style.color = '#a7f3d0';
+        } else if (dialect === 'Snowflake') {
+          dbBadge.style.background = '#0369a1';
+          dbBadge.style.color = '#bae6fd';
+        } else if (dialect === 'CSV') {
+          dbBadge.style.background = '#78350f';
+          dbBadge.style.color = '#fef3c7';
+        } else if (dialect === 'Oracle') {
+          dbBadge.style.background = '#991b1b';
+          dbBadge.style.color = '#fee2e2';
+        } else if (dialect === 'SFTP') {
+          dbBadge.style.background = '#3730a3';
+          dbBadge.style.color = '#e0e7ff';
+        } else if (dialect === 'Engine') {
+          dbBadge.style.background = '#374151';
+          dbBadge.style.color = '#cbd5e1';
+          dbBadge.style.border = '1px solid #4b5563';
+        } else if (dialect === 'Dataset') {
+          dbBadge.style.background = '#581c87';
+          dbBadge.style.color = '#f3e8ff';
+        }
+        header.insertBefore(dbBadge, typeDot);
+      }
+
       // Card Body
       if (showColumns && n.meta?.columns) {
         n.meta.columns.forEach(c => {
@@ -807,9 +881,46 @@ export default {
           row.style.borderBottom = '1px solid #1f2937';
           row.style.cursor = 'pointer';
 
-          const label = document.createElement('span');
-          label.textContent = c;
-          row.appendChild(label);
+          // Layout grid for column name and formula
+          const labelGrid = document.createElement('div');
+          labelGrid.style.display = 'flex';
+          labelGrid.style.flexDirection = 'column';
+          labelGrid.style.gap = '1px';
+
+          const colNameSpan = document.createElement('span');
+          colNameSpan.className = 'col-label-span';
+          colNameSpan.textContent = c;
+          colNameSpan.style.color = '#cbd5e1';
+          labelGrid.appendChild(colNameSpan);
+
+          // Inline formula detail rendering
+          const cl = n.meta?.columnLineage?.[c];
+          if (cl?.transform) {
+            const formSpan = document.createElement('span');
+            formSpan.style.fontSize = '8px';
+            formSpan.style.color = '#64748b';
+            formSpan.style.fontStyle = 'italic';
+            const cleanForm = cl.transform.startsWith('=') ? cl.transform : `= ${cl.transform}`;
+            formSpan.textContent = cleanForm;
+            labelGrid.appendChild(formSpan);
+          }
+
+          row.appendChild(labelGrid);
+
+          // Render tags inline inside column row for comparison
+          if (cl?.tags && Object.keys(cl.tags).length) {
+            const inlineTag = document.createElement('span');
+            inlineTag.textContent = Object.keys(cl.tags)[0].toUpperCase();
+            inlineTag.style.fontSize = '7px';
+            inlineTag.style.background = '#ef4444';
+            inlineTag.style.color = '#fff';
+            inlineTag.style.padding = '1px 3px';
+            inlineTag.style.borderRadius = '2px';
+            inlineTag.style.fontWeight = 'bold';
+            inlineTag.style.marginLeft = 'auto';
+            inlineTag.style.marginRight = '8px';
+            row.appendChild(inlineTag);
+          }
 
           const lp = document.createElement('div');
           lp.className = 'port-left';
@@ -869,9 +980,18 @@ export default {
           row.style.borderBottom = '1px solid #1f2937';
           row.style.cursor = 'pointer';
 
-          const label = document.createElement('span');
-          label.innerHTML = `<strong>${m.role}:</strong> ${m.column}`;
-          row.appendChild(label);
+          const labelGrid = document.createElement('div');
+          labelGrid.style.display = 'flex';
+          labelGrid.style.flexDirection = 'column';
+          labelGrid.style.gap = '1px';
+
+          const colNameSpan = document.createElement('span');
+          colNameSpan.className = 'col-label-span';
+          colNameSpan.innerHTML = `<strong>${m.role}:</strong> ${m.column}`;
+          colNameSpan.style.color = '#cbd5e1';
+          labelGrid.appendChild(colNameSpan);
+
+          row.appendChild(labelGrid);
 
           const lp = document.createElement('div');
           lp.className = 'port-left';
