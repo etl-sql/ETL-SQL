@@ -222,6 +222,35 @@ turning that result into an unsupported blanket billion-row claim.
 
 ---
 
+## Shared Connection & Secret Governance (deferred from v0.15.0)
+
+*The v0.15.0 SME secret-management track shipped the secret stores (OS/Portal), the connection
+catalog with `SHARED:alias` expansion, the admin CLI/API/UI, organization-designated sensitive
+metadata, and the native admin services. These follow-ups were deliberately deferred because they
+need capabilities (caller-identity flow, script inspection) that deserve their own pass.*
+
+Design: [`Docs/Design/SMESecretManagementAdministrationHardening.md`](Docs/Design/SMESecretManagementAdministrationHardening.md)
+
+### Candidate phases
+
+- [ ] **Per-connection use-ACLs** — enforce *who may use* a cataloged shared connection, not just
+  who may manage it. Requires the caller/service identity to flow into the engine's `SHARED:alias`
+  expansion path; group-based grants like `FolderAcl`/`DatasetAcl`, checked at expansion time and
+  audited on denial. Pair with a broader execution-identity RBAC pass.
+- [ ] **Connection impact inventory** — before disabling or deleting a catalog entry or secret,
+  show which reports, subscriptions, and scheduled jobs reference the alias/name (script scanning
+  via the portal's script-inspection service), and record last-used per consumer rather than one
+  timestamp per entry.
+- [ ] **Finer-grained sensitive-metadata classification** — extend the org-wide
+  `Governance:Secrets:SensitiveConnectionFields` setting with per-connector metadata defaults
+  (e.g. SFTP always treats `HOST` as sensitive) and per-catalog-entry field classification.
+- [ ] **Catalog approval workflow (optional)** — propose→approve on shared-connection
+  create/update/delete for organizations that need four-eyes control; today every mutation is
+  audited but applies immediately. Natural fit alongside the Review Workflow & Data Stewardship
+  track below.
+
+---
+
 ## Review Workflow & Data Stewardship
 
 *Combines steward-facing governance with four-eyes review, certification, impact analysis, and

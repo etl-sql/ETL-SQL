@@ -54,6 +54,9 @@ PortalUser ──< RefreshToken
 SmtpConnection  (standalone)
 AuditLog        (append-oriented portal event table)
 PortalExecutionJob (durable portal execution/refresh polling state)
+PortalSecret            (encrypted secret store: SECRET:name for Portal-hosted execution)
+PortalSharedConnection  (governed connection catalog: SHARED:alias; Target/OptionsJson encrypted at rest)
+AdminServiceRun         (per-run ledger for the native admin background services)
 ```
 
 ### Key Design Decisions
@@ -69,6 +72,12 @@ PortalExecutionJob (durable portal execution/refresh polling state)
 - **`SmtpConnection.EncryptedPassword`** — stored via .NET Data Protection API. The `SmtpPasswordProtector` service wraps `IDataProtector`. The password is never returned to clients in any API response.
 
 - **Catalog and embedding records** — favorites, share links, embed tokens, saved views, alerts, dependencies, and usage metrics are first-class portal records exposed through the report/admin API and ETL-SQL portal scripting commands.
+
+- **`PortalSecret` values are write-only** (v0.15.0) — encrypted by `PortalSecretStoreService` with the cluster-wide Data Protection key ring (purpose `ETL_SQL.Portal.SecretStore.v1`); no API returns a value after write. With `Governance:Secrets:Provider=PortalStore`, `PortalStoreSecretProvider` resolves `SECRET:name` for Portal-hosted script execution (registered as a resolve-time dispatcher over the `AddEtlSqlEngine` default). The `secret-store-keyring` health check decrypt-probes every stored secret so an HA node with the wrong key ring fails fast; `POST /api/admin/secrets/verify-all` is the backup/restore validation surface.
+
+- **`PortalSharedConnection` holds references, never credential values** (v0.15.0) — `SharedConnectionValidator` (Core) rejects raw credentials at write time, and `Target`/`OptionsJson` are additionally encrypted at rest via the PII converter. With `Governance:ConnectionCatalog:Provider=Portal`, `PortalCatalogConnectionProvider` expands `SHARED:alias` in CREATE CONNECTION: the declared connector type must match the entry, script options cannot override cataloged credential fields, and the last-used touch is best-effort so audit fail-closed can never break execution.
+
+- **`AdminServiceRun` is the native admin services ledger** (v0.15.0) — the failure-digest, backup-report, and capacity-report services (`AdminDigestServiceBase` subclasses, configured under `Portal:AdminServices`) each run behind an `IClusterLockStore` lease with a one-interval TTL (exactly one node per interval; the lock is deliberately not renewed — expiry re-enables the next run), retry delivery, send email through the shared `IAdminNotificationSender`, audit `ADMIN_SERVICE_RUN`, and prune their own history per `RunHistoryRetentionDays`.
 
 ---
 
@@ -413,6 +422,43 @@ are deleted with the user.
 | GET | `/api/admin/metrics/usage` | Admin | Portal usage metrics |
 | GET | `/api/admin/settings/orchestrator` | Admin | Get orchestrator settings |
 | PUT | `/api/admin/settings/orchestrator` | Admin | Update orchestrator settings |
+
+### Admin — Secrets (Portal secret store)
+
+Values are write-only: no endpoint returns a secret value after write; every mutation is audited.
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/admin/secrets` | Admin | List secret metadata (name, status, timestamps, version) |
+| PUT | `/api/admin/secrets/{name}` | Admin | Set/rotate a secret (re-enables if disabled) |
+| POST | `/api/admin/secrets/{name}/verify` | Admin | Prove the secret decrypts; never prints it |
+| POST | `/api/admin/secrets/verify-all` | Admin | Decrypt-probe every secret (backup/restore + HA key validation) |
+| POST | `/api/admin/secrets/{name}/disable` | Admin | Disable; `SECRET:name` fails until re-enabled |
+| POST | `/api/admin/secrets/{name}/enable` | Admin | Re-enable; the stored value resolves again |
+| DELETE | `/api/admin/secrets/{name}` | Admin | Permanently remove the secret |
+
+### Admin — Shared Connections (connection catalog)
+
+Entries hold `SECRET:name` references, never credential values; detail responses mask any non-reference credential value.
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/admin/connections` | Admin | List entries (alias, type, scope, status, last-used/verified) |
+| GET | `/api/admin/connections/{alias}` | Admin | Masked entry detail |
+| PUT | `/api/admin/connections/{alias}` | Admin | Create/update an entry (raw credential values rejected) |
+| POST | `/api/admin/connections/{alias}/verify` | Admin | Prove the entry and its `SECRET:` references resolve |
+| POST | `/api/admin/connections/{alias}/disable` | Admin | Disable; `SHARED:alias` fails until re-enabled |
+| POST | `/api/admin/connections/{alias}/enable` | Admin | Re-enable; the stored definition is retained |
+| DELETE | `/api/admin/connections/{alias}` | Admin | Permanently remove the entry |
+| GET | `/api/admin/connections/export` | Admin | Metadata-only export (references, never values) |
+| POST | `/api/admin/connections/import` | Admin | Import exported entries (same write-side validation) |
+
+### Admin — Native Admin Services
+
+| Method | Path | Auth | Description |
+| :--- | :--- | :--- | :--- |
+| GET | `/api/admin/services` | Admin | Configuration + last run of each native admin service |
+| GET | `/api/admin/services/{name}/history` | Admin | Run ledger for one service (`?limit=`) |
 
 ### Catalog
 

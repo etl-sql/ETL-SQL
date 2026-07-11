@@ -294,51 +294,55 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   temp-root exhaustion scenarios. Destructive/manual fault execution against the live HA topology
   and measured recovery artifacts remain open.)*
 
-### Phase 7: SME Secret Management & Administration Hardening
+### Phase 7: SME Secret Management & Administration Hardening — COMPLETE (merged 86d0a68a)
 
 Design: [SMESecretManagementAdministrationHardening.md](Docs/Design/SMESecretManagementAdministrationHardening.md)
+(decisions and shipped/deferred status recorded inline). Deferred follow-ups (per-connection
+use-ACLs, connection impact inventory, per-connector/per-entry sensitivity classification,
+optional approval workflow) moved to `ROADMAP.md` → *Shared Connection & Secret Governance*.
 
-- [ ] Design and implement the administrative "middle ground" for connection secret management,
-  supporting SMEs without external vaults while maintaining Zero-Trust boundaries. The built-in
-  `OsSecretStore`, environment-provider, and Portal-managed encrypted store are the supported
-  low-dependency paths; HTTPS vault integration remains optional for organizations that already
-  operate one.
-- [ ] Add an administrative CLI command (`etl-sql admin set-secret --name <name> --value <value>`)
-  to securely encrypt and write secrets to the local OS Secret Store (`OsSecretStore`) under the
-  machine/root context, ensuring the Portal process remains restricted to read-only.
-- [ ] Implement a Portal-managed, database-backed encrypted secret store where credentials can be
-  entered via Web UI and are stored encrypted at rest using the portal's cluster-wide keys, solving
-  the multi-node sync problem for simple HA environments without requiring a separate vault product.
-  *(Slice C progress: added the `PortalSecrets` schema for SQLite/Postgres, `PortalSecretStoreService`
-  with Data Protection encryption, resolve/list/verify/disable/delete lifecycle behavior, DI
-  registration, and focused tests proving encrypted-at-rest storage, list redaction, rotate/reenable,
-  disabled fail-closed behavior, unencrypted payload rejection, and wrong-key-ring failure. Admin
-  UI/API, audit events, HA key checks, and backup/restore validation remain open.)*
-- [ ] Add named-secret syntax parity and tests so `SECRET:name` can be used consistently wherever
-  `ENC:...` credential values are accepted, or document quoted `'SECRET:name'` and quoted
-  `'ENC:...'` as the canonical forms if unquoted secret-reference literals are not added.
-- [ ] Extend named-secret resolution and redaction beyond password-like fields through connector
-  metadata or governance policy. Organizations must be able to mark `HOST`, `SERVER`, `DATABASE`,
-  `PATH`, `ROOT_PATH`, bucket/container names, endpoints, and similar connection metadata as
-  sensitive without making those fields globally secret for every deployment.
-- [ ] Design a Portal Connection Catalog to store connection metadata (`HOST`, `PORT`, `DATABASE`,
-  `USER`, default options) centrally using `SECRET:name` credential references. Developers should
-  be able to query approved pre-configured connections without re-declaring endpoints or exposing
-  credentials in scripts.
-- [ ] Add catalog governance for pre-configured connections: ownership, environment/tenant scope,
-  per-connection RBAC, approval/audit on create/update/delete, last-used/impact inventory, masked
-  preview/test-connection diagnostics, and runtime expansion that never persists resolved secrets
-  or sensitive metadata back into scripts, logs, reports, lineage, or cached execution state.
-- [ ] Add secret and connection lifecycle operations for SME deployments: rotate, disable, delete,
-  verify, rebind, export/import metadata without secret material, backup/restore validation, HA key
-  compatibility checks, and clear behavior when the OS store, Portal store, or configured provider
-  is unavailable.
-- [ ] Move administrative operations (capacity reporting, failure digests, and backup reporting
-  currently in `samples/admin_operations`) into first-class background services managed natively in
-  Portal/Orchestrator configuration, removing the need for user-maintained scheduler scripts.
-- [ ] Give native admin background services production controls: enable/disable, schedule, HA
-  singleton lease, retry/backoff, retention, audit trail, notification targets through configured
-  SMTP/Portal channels, and safe migration from the current sample scripts.
+- [x] Design and implement the administrative "middle ground" for connection secret management.
+  *(Complete: `OsSecretStore` (machine-scoped `DPAPI-M:` crypto, legacy-readable, no plaintext
+  read path), environment provider, and the Portal-managed encrypted store are the supported
+  low-dependency paths; `HttpsVault` remains optional.)*
+- [x] Administrative CLI for the OS secret store.
+  *(Complete: `etl-sql admin set/verify/rotate/disable/enable/delete-secret` with masked confirmed
+  prompt or stdin, shell-history warning on `--value`; values never echoed or logged.)*
+- [x] Portal-managed, database-backed encrypted secret store.
+  *(Complete: `PortalSecrets` schema (both providers), cluster-key encryption, audited
+  `api/admin/secrets` API + Secrets admin tab (values write-only), `PortalStore` `ISecretProvider`
+  for Portal-hosted execution, `secret-store-keyring` health check, `verify-all` as the
+  backup/restore validation surface.)*
+- [x] Named-secret syntax parity.
+  *(Complete: quoted `'SECRET:name'`/`'ENC:...'` documented as canonical; unquoted forms get a
+  targeted "must be quoted" parser diagnostic; `SecretReferenceUsage` lint rule and the runtime
+  resolver share one key set and fail loudly on non-resolvable fields.)*
+- [x] Extend resolution/redaction beyond password-like fields via governance policy.
+  *(Complete for org policy: `Governance:Secrets:SensitiveConnectionFields` makes designated
+  fields SECRET:-resolvable and masked without forcing them into the secret store. Per-connector
+  defaults and per-catalog-entry classification: ROADMAP.)*
+- [x] Portal Connection Catalog with `SECRET:name` references.
+  *(Complete: `CREATE CONNECTION m AS MSSQL('SHARED:alias')` expands from the local
+  (machine-encrypted, CLI-managed) or Portal (database, encrypted-at-rest) catalog; type match
+  enforced; script options cannot override cataloged credential fields.)*
+- [x] Catalog governance.
+  *(Complete: ownership, environment scope, audit on every mutation, last-used/last-verified,
+  masked detail/verify diagnostics, metadata-only export/import, raw credential values rejected at
+  write time, resolved secrets never persisted back. Per-connection use-RBAC and deep impact
+  inventory: ROADMAP.)*
+- [x] Secret and connection lifecycle operations.
+  *(Complete: rotate/disable/enable/delete/verify across CLI, Portal API, and admin UI; rebind =
+  editing an entry's references; export/import carries metadata only; HA key compatibility via the
+  key-ring health check and `verify-all`; missing/unavailable providers fail closed with clear
+  errors.)*
+- [x] Native admin background services replacing `samples/admin_operations`.
+  *(Complete: failure digest, backup report, and capacity report as Portal services;
+  `etl-sql admin backup` records its outcome so the backup report needs no scheduler wiring;
+  samples remain as examples with a README pointing at `Portal:AdminServices`.)*
+- [x] Production controls for the native admin services.
+  *(Complete: per-service enable/interval/recipients/SMTP alias, HA singleton lease (one run per
+  interval cluster-wide), delivery retry with backoff, `AdminServiceRuns` history with retention,
+  `ADMIN_SERVICE_RUN` audit, and the `api/admin/services` status/history API.)*
 
 ### v0.15.0 completion gates
 
