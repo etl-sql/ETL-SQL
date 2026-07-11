@@ -17,6 +17,11 @@ namespace ETL_SQL.FuzzTests
         private static readonly string[] MockColumns = { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
         private static readonly string[] MockVariables = { "@myVar", "@id", "@name", "@price" };
 
+        private static readonly HashSet<string> AllowedStatementStarters = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH"
+        };
+
         public GrammarWalkGenerator(GrammarStateTree tree, Random rng)
         {
             _tree = tree;
@@ -28,7 +33,7 @@ namespace ETL_SQL.FuzzTests
             var tokens = new List<Token>();
             var currentState = _tree.Root;
             int stepCount = 0;
-            const int maxSteps = 120; // Increased to allow complex expressions
+            const int maxSteps = 150; // Increased to support multi-statement scripts
 
             _tokenQueue.Clear();
 
@@ -46,8 +51,34 @@ namespace ETL_SQL.FuzzTests
                     break;
                 }
 
-                // Pick a transition randomly
-                var transition = currentState.Transitions[_rng.Next(currentState.Transitions.Count)];
+                // Escape hatch to end statements and avoid self-loop traps
+                if (currentState != _tree.Root && tokens.Count > 4 && _rng.Next(10) < 3)
+                {
+                    var semi = new Token(TokenType.SEMICOLON, ";", 1, tokens.Count + 1, 1, tokens.Count + 2);
+                    tokens.Add(semi);
+                    currentState = _tree.Root;
+                    continue;
+                }
+
+                // Pick a transition randomly, filtering statement starters at Root
+                List<StateTransition> transitions;
+                if (currentState == _tree.Root)
+                {
+                    transitions = currentState.Transitions
+                        .Where(t => t.Label != null && AllowedStatementStarters.Contains(t.Label))
+                        .ToList();
+
+                    if (transitions.Count == 0)
+                    {
+                        transitions = currentState.Transitions;
+                    }
+                }
+                else
+                {
+                    transitions = currentState.Transitions;
+                }
+
+                var transition = transitions[_rng.Next(transitions.Count)];
                 
                 // Try generating tokens for this transition
                 bool generated = TryGenerateForTransition(transition);
@@ -60,7 +91,7 @@ namespace ETL_SQL.FuzzTests
                     }
                     currentState = transition.Target;
 
-                    if (currentState == _tree.Root && tokens.Count > 10 && _rng.Next(2) == 0)
+                    if (currentState == _tree.Root && tokens.Count > 12 && _rng.Next(2) == 0)
                     {
                         break;
                     }
@@ -68,7 +99,7 @@ namespace ETL_SQL.FuzzTests
                 else
                 {
                     // Try alternative transitions
-                    var shuffledTransitions = currentState.Transitions.OrderBy(_ => _rng.Next()).ToList();
+                    var shuffledTransitions = transitions.OrderBy(_ => _rng.Next()).ToList();
                     bool found = false;
                     foreach (var altTransition in shuffledTransitions)
                     {
@@ -134,7 +165,9 @@ namespace ETL_SQL.FuzzTests
                 }
                 else if (label.Equals("<expression>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<value>", StringComparison.OrdinalIgnoreCase) ||
-                         label.Equals("<sets_assignment_token>", StringComparison.OrdinalIgnoreCase))
+                         label.Equals("<sets_assignment_token>", StringComparison.OrdinalIgnoreCase) ||
+                         label.Equals("<declaration_token>", StringComparison.OrdinalIgnoreCase) ||
+                         label.Equals("<expression_token>", StringComparison.OrdinalIgnoreCase))
                 {
                     // Generate a recursive expression
                     var expr = GenerateExpressionTokens(3);
