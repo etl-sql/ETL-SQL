@@ -293,6 +293,13 @@ time, denials are audited (`SHARED_CONNECTION_USE_DENIED`) without resolving any
 executions without an injected identity are denied for restricted entries. Grants are group-based,
 matching the folder/dataset permission model.
 
+Before disabling or deleting, check **impact** (the Impact button in either admin tab, or
+`GET api/admin/connections/{alias}/impact` / `GET api/admin/secrets/{name}/impact`): it lists
+published reports, subscription job scripts, and orchestrator scheduled jobs whose scripts
+reference the alias or secret name, catalog entries that reference a secret, and — for shared
+connections — the recorded per-consumer usage (which user resolved the entry, when, and how many
+times), captured automatically at `SHARED:alias` resolution.
+
 ### Native admin services
 
 The `samples/admin_operations` scheduler scripts have managed, first-class replacements: three

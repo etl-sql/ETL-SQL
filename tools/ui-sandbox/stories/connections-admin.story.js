@@ -38,6 +38,17 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
     },
     async disable(alias) { entries.find((x) => x.alias === alias).disabled = true; return {}; },
     async enable(alias) { entries.find((x) => x.alias === alias).disabled = false; return {}; },
+    async impact(alias) {
+      return {
+        reference: `SHARED:${alias}`,
+        consumerCount: 3,
+        consumers: [
+          { type: 'Report', name: 'Sales Overview', detail: 'reports/sales.rptsql', lastUsedAtUtc: null, useCount: null },
+          { type: 'ScheduledJob', name: 'nightly-load', detail: 'jobs/nightly.etlsql', lastUsedAtUtc: '2026-07-11T01:00:00Z', useCount: null },
+          { type: 'Consumer', name: 'ann', detail: 'Recorded at SHARED: resolution', lastUsedAtUtc: '2026-07-10T02:15:00Z', useCount: 42 },
+        ],
+      };
+    },
     async remove(alias) { entries = entries.filter((x) => x.alias !== alias); return {}; },
     async exportAll() {
       return entries.map((e) => ({

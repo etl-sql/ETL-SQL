@@ -36,6 +36,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
     public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
     public DbSet<SharedConnectionAcl> SharedConnectionAcls => Set<SharedConnectionAcl>();
+    public DbSet<SharedConnectionUsage> SharedConnectionUsages => Set<SharedConnectionUsage>();
     public DbSet<AdminServiceRun> AdminServiceRuns => Set<AdminServiceRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -180,6 +181,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.HasIndex(x => new { x.SharedConnectionId, x.GroupId }).IsUnique();
             e.HasOne(x => x.SharedConnection).WithMany(c => c.Acls).HasForeignKey(x => x.SharedConnectionId);
             e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
+        });
+
+        builder.Entity<SharedConnectionUsage>(e =>
+        {
+            e.HasIndex(x => new { x.SharedConnectionId, x.ConsumerUser }).IsUnique();
+            e.Property(x => x.ConsumerUser).HasMaxLength(256);
+            e.HasOne(x => x.SharedConnection).WithMany().HasForeignKey(x => x.SharedConnectionId);
         });
 
         builder.Entity<AdminServiceRun>(e =>

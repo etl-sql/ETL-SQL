@@ -1329,6 +1329,36 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.ToTable("SharedConnectionAcls");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConsumerUser")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime>("LastUsedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SharedConnectionId")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("UseCount")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SharedConnectionId", "ConsumerUser")
+                        .IsUnique();
+
+                    b.ToTable("SharedConnectionUsages");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1848,6 +1878,17 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                         .IsRequired();
 
                     b.Navigation("Group");
+
+                    b.Navigation("SharedConnection");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionUsage", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
+                        .WithMany()
+                        .HasForeignKey("SharedConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("SharedConnection");
                 });

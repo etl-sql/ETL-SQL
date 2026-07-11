@@ -413,6 +413,22 @@ public class SharedConnectionAcl
 }
 
 /// <summary>
+/// Per-consumer usage of a shared connection: who resolved SHARED:alias and when, so
+/// administrators see impact per consumer before disabling or deleting an entry (rather than a
+/// single last-used timestamp). Written best-effort at resolution time.
+/// </summary>
+public class SharedConnectionUsage
+{
+    public int Id { get; set; }
+    public int SharedConnectionId { get; set; }
+    public PortalSharedConnection SharedConnection { get; set; } = null!;
+    /// <summary>Effective user of the resolving execution, or "(none)" for identity-less runs.</summary>
+    public string ConsumerUser { get; set; } = "";
+    public DateTime LastUsedAtUtc { get; set; }
+    public long UseCount { get; set; }
+}
+
+/// <summary>
 /// One run of a native admin background service (failure digest, backup report, capacity report):
 /// the durable per-run ledger behind retention, the admin status API, and operational review.
 /// </summary>

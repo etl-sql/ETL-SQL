@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
@@ -188,6 +189,77 @@ public class PortalConnectionCatalogApiTests
         Assert.Contains("SHARED_CONNECTION_GRANT_USE", actions);
         Assert.Contains("SHARED_CONNECTION_REVOKE_USE", actions);
         Assert.Contains("SHARED_CONNECTION_USE_DENIED", actions);
+    }
+
+    [Fact]
+    public async Task Impact_ListsReferencingScriptsJobsCatalogEntriesAndConsumers()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        // a catalog entry whose credential references a secret
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/impact_dw", new
+            {
+                connectorType = "MSSQL",
+                options = new Dictionary<string, string> { ["SERVER"] = "sql01", ["PASSWORD"] = "SECRET:impact_secret" }
+            })).StatusCode);
+
+        // a published report whose script references both the alias and the secret
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var config = factory.Services.GetRequiredService<PortalConfig>();
+            var scriptRoot = Path.GetFullPath(config.ScriptRootPath);
+            Directory.CreateDirectory(scriptRoot);
+            await File.WriteAllTextAsync(
+                Path.Combine(scriptRoot, "impact_report.rptsql"),
+                "CREATE CONNECTION dw AS MSSQL('SHARED:impact_dw');\n-- also uses SECRET:impact_secret");
+
+            var folder = new Folder { Name = "impact", Path = "/impact", OwnerId = 1 };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+            db.Reports.Add(new Report
+            {
+                FolderId = folder.Id,
+                Name = "Impact Report",
+                ScriptPath = "impact_report.rptsql",
+                CreatedBy = 1
+            });
+            await db.SaveChangesAsync();
+        }
+
+        // an orchestrator scheduled job whose script value references the alias
+        var jobs = factory.Services.GetRequiredService<IJobHistoryStore>();
+        await jobs.InitializeAsync();
+        await jobs.SaveJobAsync(new JobDefinition(
+            "impact-job", "RUN SCRIPT referencing SHARED:impact_dw", 1, "days", null, null, null));
+
+        // a recorded consumer via resolution
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        var ann = new ExecutionIdentity { EffectiveUser = "ann", RealUser = "ann", IsAdmin = false };
+        _ = await provider.ResolveAsync("impact_dw", ann);
+
+        var connImpact = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/impact_dw/impact", null);
+        Assert.Equal(HttpStatusCode.OK, connImpact.StatusCode);
+        var connBody = await connImpact.Content.ReadAsStringAsync();
+        Assert.Contains("Impact Report", connBody);
+        Assert.Contains("impact-job", connBody);
+        Assert.Contains("ann", connBody);
+
+        // the secret's impact includes the report script and the catalog entry that references it
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PortalSecretStoreService>()
+                .StoreAsync("impact_secret", "value");
+        }
+
+        var secretImpact = await SendAsync(client, HttpMethod.Get, token, "/api/admin/secrets/impact_secret/impact", null);
+        Assert.Equal(HttpStatusCode.OK, secretImpact.StatusCode);
+        var secretBody = await secretImpact.Content.ReadAsStringAsync();
+        Assert.Contains("Impact Report", secretBody);
+        Assert.Contains("impact_dw", secretBody);
     }
 
     [Fact]

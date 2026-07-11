@@ -141,6 +141,7 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
                 <td>${esc(formatDate(c.lastVerifiedAtUtc))}</td>
                 <td class="table-actions">
                   <button class="btn btn-outline btn-sm" data-act="detail">Detail</button>
+                  <button class="btn btn-outline btn-sm" data-act="impact">Impact</button>
                   <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
                   ${c.disabled
                     ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
@@ -178,6 +179,32 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
     $('conn-scope').value = detail.summary.environmentScope || '';
     $('conn-target').value = detail.target || '';
     $('conn-options').value = options.map(([k, v]) => `${k}=${v}`).join('\n');
+  }
+
+  async function showImpact(alias) {
+    const impact = await connectionsApi.impact(alias);
+    $('conn-detailAlias').textContent = `${alias} — impact`;
+    $('conn-detailBody').innerHTML = renderImpact(impact);
+    $('conn-detailCard').style.display = '';
+  }
+
+  function renderImpact(impact) {
+    if (!impact.consumers.length) {
+      return '<div class="empty-state">No known consumers reference this entry.</div>';
+    }
+    return `
+      <div class="form-hint">${esc(impact.consumerCount)} consumer(s) reference <code>${esc(impact.reference)}</code>. Review before disabling or deleting.</div>
+      <table class="data-table">
+        <thead><tr><th>Type</th><th>Name</th><th>Detail</th><th>Last used</th><th>Uses</th></tr></thead>
+        <tbody>${impact.consumers.map((c) => `
+          <tr>
+            <td>${esc(c.type)}</td>
+            <td>${esc(c.name)}</td>
+            <td>${esc(c.detail || '—')}</td>
+            <td>${esc(formatDate(c.lastUsedAtUtc))}</td>
+            <td>${esc(c.useCount ?? '—')}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
   }
 
   async function renderAcl(alias) {
@@ -251,6 +278,8 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
     try {
       if (btn.dataset.act === 'detail') {
         await showDetail(alias);
+      } else if (btn.dataset.act === 'impact') {
+        await showImpact(alias);
       } else if (btn.dataset.act === 'verify') {
         try {
           const result = await connectionsApi.verify(alias);

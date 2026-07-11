@@ -363,6 +363,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionServic
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReferenceImpactService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();

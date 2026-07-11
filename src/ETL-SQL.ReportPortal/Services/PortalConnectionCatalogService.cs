@@ -103,7 +103,29 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
 
         try
         {
-            entity.LastUsedAtUtc = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            entity.LastUsedAtUtc = now;
+
+            var consumer = identity?.EffectiveUser ?? "(none)";
+            var usage = await db.SharedConnectionUsages
+                .SingleOrDefaultAsync(
+                    u => u.SharedConnectionId == entity.Id && u.ConsumerUser == consumer, cancellationToken);
+            if (usage == null)
+            {
+                db.SharedConnectionUsages.Add(new SharedConnectionUsage
+                {
+                    SharedConnectionId = entity.Id,
+                    ConsumerUser = consumer,
+                    LastUsedAtUtc = now,
+                    UseCount = 1
+                });
+            }
+            else
+            {
+                usage.LastUsedAtUtc = now;
+                usage.UseCount++;
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }
         catch

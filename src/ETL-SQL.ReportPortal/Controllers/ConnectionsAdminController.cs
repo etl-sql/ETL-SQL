@@ -138,6 +138,16 @@ public class ConnectionsAdminController(
         return NoContent();
     }
 
+    /// <summary>What breaks if this entry is disabled or deleted: referencing scripts + recorded consumers.</summary>
+    [HttpGet("{alias}/impact")]
+    public async Task<IActionResult> Impact(string alias, [FromServices] ReferenceImpactService impact, CancellationToken ct)
+    {
+        if (await catalog.GetStatusAsync(alias, ct) == SecretLifecycleStatus.NotFound)
+            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
+
+        return Ok(await impact.ForSharedConnectionAsync(alias, ct));
+    }
+
     public sealed record GrantUseRequest(int GroupId);
 
     /// <summary>

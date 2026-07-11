@@ -359,8 +359,12 @@ configuration.
    `DatasetAcl`) restrict use to admins/owner/granted groups, entries without grants stay open,
    null identities fail closed on restricted entries, and denials audit
    `SHARED_CONNECTION_USE_DENIED` from the Portal provider scope. The local catalog ignores
-   identity (its trust boundary is filesystem access). Remaining deferred: deep impact inventory
-   (which reports/jobs reference an alias — pair with script inspection).)*
+   identity (its trust boundary is filesystem access). Impact inventory also shipped:
+   `ReferenceImpactService` scans report/subscription/orchestrator-job scripts for
+   `SHARED:alias`/`SECRET:name` tokens (boundary-aware matching, bounded reads), includes catalog
+   entries referencing a secret, and `SharedConnectionUsage` records per-consumer
+   last-used/use-count at resolution time — surfaced via `{alias}/impact`, `{name}/impact`, and
+   Impact buttons in both admin tabs.)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
    Portal/Orchestrator background services with leases and operational history. *(Shipped:
    `Portal:AdminServices` config (per-service enable/interval/recipients/SMTP alias/retries),
