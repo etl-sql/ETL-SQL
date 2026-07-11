@@ -255,6 +255,7 @@ with filesystem ACLs), then manage entries from the CLI:
 
 ```powershell
 etl-sql admin set-connection --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
+etl-sql admin set-connection --alias archive_s3 --type S3 --option BUCKET=archive-prod --option ACCESS_KEY=SECRET:archive_access_key --option SECRET_KEY=SECRET:archive_secret_key --sensitive BUCKET
 etl-sql admin list-connections                       # aliases and Active/Disabled status
 etl-sql admin verify-connection --alias sales_dw     # proves the entry and its SECRET: references resolve
 etl-sql admin disable-connection --alias sales_dw    # SHARED:sales_dw fails until re-enabled
@@ -272,7 +273,7 @@ CREATE CONNECTION dw AS MSSQL('SHARED:sales_dw');
 
 At execution the alias expands to the cataloged definition, `SECRET:` references resolve through
 the configured secret provider, and script-local options may add to but never override cataloged
-credential fields. An unknown alias, a disabled entry, a connector type mismatch, or an
+credential fields or catalog-owned sensitive fields. An unknown alias, a disabled entry, a connector type mismatch, or an
 unconfigured catalog fails connection creation with a clear error.
 
 For multi-node deployments, set `Governance:ConnectionCatalog:Provider=Portal` on the Portal so
@@ -371,11 +372,19 @@ as literal text. Organizations that consider specific metadata sensitive can des
 { "Governance": { "Secrets": { "SensitiveConnectionFields": "HOST, PATH, BUCKET" } } }
 ```
 
+Use `TYPE:FIELD` to scope a designation to one connector type:
+
+```json
+{ "Governance": { "Secrets": { "SensitiveConnectionFields": "SFTP:HOST, S3:BUCKET" } } }
+```
+
 Designated fields become `SECRET:`-resolvable and are masked in `SHOW CONNECTION`, diagnostics, and
 connection-string rendering — without being treated as secrets in every deployment: unlike credential
 fields they may still hold plain values (in scripts or catalog entries), so designating `HOST` does not
-force every hostname into the secret store. Missing or unreachable secrets fail closed with an error;
-ETL-SQL does not silently replace a missing secret with an empty value.
+force every hostname into the secret store. Shared connection entries can also classify fields per
+entry with `--sensitive FIELD` or the Portal Connections admin form; those fields are masked in
+catalog detail/export displays and may use `SECRET:name` for that entry. Missing or unreachable
+secrets fail closed with an error; ETL-SQL does not silently replace a missing secret with an empty value.
 Logs, diagnostics, audit rows, support bundles, result formatting, and portal/orchestrator error surfaces redact
 raw secret values and `SECRET:` references before persistence or display.
 

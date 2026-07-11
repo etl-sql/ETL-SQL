@@ -23,7 +23,8 @@ public class ConnectionsAdminController(
         string ConnectorType,
         string? Target,
         Dictionary<string, string>? Options,
-        string? EnvironmentScope);
+        string? EnvironmentScope,
+        List<string>? SensitiveFields = null);
 
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -50,7 +51,8 @@ public class ConnectionsAdminController(
             request?.Target,
             new Dictionary<string, string>(request?.Options ?? [], StringComparer.OrdinalIgnoreCase),
             request?.EnvironmentScope,
-            Disabled: false);
+            Disabled: false,
+            request?.SensitiveFields);
 
         try
         {

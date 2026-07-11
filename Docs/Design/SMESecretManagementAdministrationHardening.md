@@ -174,13 +174,15 @@ Rules:
   revealing values;
 - resolved sensitive metadata must not be written back into scripts or generated artifacts.
 
-*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — designated
-fields become SECRET:-resolvable (`SecretResolvableFields` org set, honored by the resolver and
-the SecretReferenceUsage lint rule) and masked through `SecretRedactor.IsSensitiveKey` (SHOW
-CONNECTION / data-source config) and connection-string diagnostics rendering. Designation
-deliberately does NOT extend the catalog's raw-credential rejection: designated metadata may
-still be stored as plain values — designation controls resolution and masking, not storage.
-Remaining: per-connector metadata defaults and per-catalog-entry classification.)*
+*(Shipped: organization policy via `Governance:Secrets:SensitiveConnectionFields` — plain field
+names apply globally and `TYPE:FIELD` entries apply only to that connector type. Designated fields
+become SECRET:-resolvable (`SecretResolvableFields`, honored by the resolver and the
+SecretReferenceUsage lint rule) and masked through connection display/diagnostic rendering. Portal
+and local catalog entries can also classify per-entry sensitive fields (`SensitiveFields` /
+`--sensitive`), which are masked, export/import round-trip, and become SECRET:-resolvable for that
+entry. Designation deliberately does NOT extend raw-credential rejection for non-credential
+metadata: designated metadata may still be stored as plain values — designation controls
+resolution and masking, not storage.)*
 
 ---
 
@@ -299,6 +301,15 @@ Secret and catalog operations require:
 
 Every mutation should produce durable audit events. Security-sensitive mutations should follow the
 existing fail-closed audit behavior when that policy is enabled.
+
+**Decision (2026-07-11): catalog approval workflow stays with the Review Workflow & Data
+Stewardship track (ROADMAP), not this phase.** Propose→approve with segregation of duties is a
+general stewardship capability the stewardship strategy already plans (review, certification,
+publication workflows); building a one-off approval pipeline only for shared connections would
+duplicate that machinery and then need reconciling with it. This phase's SME audience is covered
+by immediate-apply + full audit on every mutation plus per-connection use grants; organizations
+needing four-eyes control get it when the stewardship workflow lands, with catalog mutations as
+one of its governed operation types.
 
 ---
 

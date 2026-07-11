@@ -14,8 +14,8 @@
 // Injected api contract:
 //   list()            -> [{ alias, connectorType, disabled, environmentScope, createdAtUtc,
 //                           updatedAtUtc, lastUsedAtUtc, lastVerifiedAtUtc, version }]
-//   detail(alias)     -> { summary: {...as list row}, target, options: {KEY: value} }
-//   set(alias, entry) -> {}   entry = { connectorType, target, options, environmentScope }
+//   detail(alias)     -> { summary: {...as list row}, target, options: {KEY: value}, sensitiveFields: [] }
+//   set(alias, entry) -> {}   entry = { connectorType, target, options, environmentScope, sensitiveFields }
 //   verify(alias)     -> { alias, status: 'ok', secretReferences } (throws .status 404/409 otherwise)
 //   disable(alias)    -> {}
 //   remove(alias)     -> {}
@@ -94,6 +94,11 @@ const PANEL_HTML = `
       <label for="conn-options">Options — one KEY=VALUE per line (credentials as SECRET:name)</label>
       <textarea id="conn-options" rows="5" spellcheck="false" placeholder="SERVER=sql01&#10;DATABASE=Sales&#10;PASSWORD=SECRET:sales_db_password"></textarea>
     </div>
+    <div class="form-group">
+      <label for="conn-sensitive">Sensitive metadata fields — one field per line or comma-separated</label>
+      <textarea id="conn-sensitive" rows="3" spellcheck="false" placeholder="HOST&#10;BUCKET&#10;PATH"></textarea>
+      <span class="form-hint">These fields are masked in catalog displays and may use SECRET:name references for this shared connection.</span>
+    </div>
     <div id="conn-error" class="error-msg"></div>
     <div class="form-actions">
       <button class="btn btn-primary btn-sm" id="conn-saveBtn">Save</button>
@@ -116,6 +121,14 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
     return c.disabled
       ? '<span class="chip chip-inactive">Disabled</span>'
       : '<span class="chip chip-active">Active</span>';
+  }
+
+  function parseSensitiveFields(value) {
+    return [...new Set(String(value || '')
+      .split(/[\n,]/)
+      .map((v) => v.trim())
+      .filter(Boolean)
+      .map((v) => v.toUpperCase()))];
   }
 
   async function load() {
@@ -160,10 +173,12 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
     const detail = await connectionsApi.detail(alias);
     $('conn-detailAlias').textContent = alias;
     const options = Object.entries(detail.options || {});
+    const sensitiveFields = detail.sensitiveFields || [];
     $('conn-detailBody').innerHTML = `
       <div class="form-hint">${esc(detail.summary.connectorType)}${detail.summary.environmentScope ? ` · ${esc(detail.summary.environmentScope)}` : ''}
         · created ${esc(formatDate(detail.summary.createdAtUtc))} · updated ${esc(formatDate(detail.summary.updatedAtUtc))}</div>
       ${detail.target ? `<p><strong>Target:</strong> <code>${esc(detail.target)}</code></p>` : ''}
+      ${sensitiveFields.length ? `<p><strong>Sensitive fields:</strong> ${sensitiveFields.map((f) => `<code>${esc(f)}</code>`).join(' ')}</p>` : ''}
       ${options.length ? `
         <table class="data-table">
           <thead><tr><th>Option</th><th>Value</th></tr></thead>
@@ -179,6 +194,7 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
     $('conn-scope').value = detail.summary.environmentScope || '';
     $('conn-target').value = detail.target || '';
     $('conn-options').value = options.map(([k, v]) => `${k}=${v}`).join('\n');
+    $('conn-sensitive').value = sensitiveFields.join('\n');
   }
 
   async function showImpact(alias) {
@@ -330,6 +346,7 @@ export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }
         target: $('conn-target').value.trim() || null,
         options,
         environmentScope: $('conn-scope').value.trim() || null,
+        sensitiveFields: parseSensitiveFields($('conn-sensitive').value),
       });
       setStatus(`Shared connection '${alias}' saved.`);
       await load();

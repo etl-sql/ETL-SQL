@@ -2,7 +2,7 @@
 import { importFresh } from '../util.js';
 
 function makeFakeApi(seed, { unresolvable = [] } = {}) {
-  let entries = seed.map((e) => ({ ...e, options: { ...e.options } }));
+  let entries = seed.map((e) => ({ ...e, options: { ...e.options }, sensitiveFields: [...(e.sensitiveFields || [])] }));
   const err = (status, body) => Object.assign(new Error(body.error || body.status || 'error'), { status, body });
   const summary = (e) => ({
     alias: e.alias, connectorType: e.connectorType, disabled: e.disabled, environmentScope: e.environmentScope,
@@ -14,7 +14,7 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
     async detail(alias) {
       const e = entries.find((x) => x.alias === alias);
       if (!e) throw err(404, { error: `Shared connection '${alias}' does not exist.` });
-      return { summary: summary(e), target: e.target, options: { ...e.options } };
+      return { summary: summary(e), target: e.target, options: { ...e.options }, sensitiveFields: [...(e.sensitiveFields || [])] };
     },
     async set(alias, entry) {
       const raw = Object.entries(entry.options || {}).find(([k, v]) =>
@@ -54,6 +54,7 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       return entries.map((e) => ({
         alias: e.alias, connectorType: e.connectorType, target: e.target,
         options: { ...e.options }, environmentScope: e.environmentScope, disabled: e.disabled,
+        sensitiveFields: [...(e.sensitiveFields || [])],
       }));
     },
     async importAll(list) {
@@ -101,6 +102,7 @@ const seed = [
     alias: 'archive_s3', connectorType: 'S3', disabled: false, environmentScope: 'Prod',
     target: null,
     options: { BUCKET: 'archive-bucket', ACCESS_KEY: 'SECRET:archive_access_key', SECRET_KEY: 'SECRET:archive_secret_key' },
+    sensitiveFields: ['BUCKET'],
     createdAtUtc: '2026-06-12T11:00:00Z', updatedAtUtc: '2026-06-12T11:00:00Z',
     lastUsedAtUtc: null, lastVerifiedAtUtc: null, version: 1,
   },

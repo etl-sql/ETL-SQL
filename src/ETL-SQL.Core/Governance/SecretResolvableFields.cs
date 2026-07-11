@@ -41,22 +41,58 @@ public static class SecretResolvableFields
         "SASL_JAAS_CONFIG"
     };
 
+    // Connector-scoped designations from "TYPE:FIELD" config entries (e.g. "SFTP:HOST"): the
+    // field is sensitive only for that connector type.
+    private static volatile Dictionary<string, HashSet<string>> _connectorFields =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public static bool IsResolvable(string key) =>
         CredentialKeys.Contains(key) || _organizationFields.Contains(key);
+
+    /// <summary>Connector-type-aware variant: also honors "TYPE:FIELD" designations for that type.</summary>
+    public static bool IsResolvable(string key, string? connectorType) =>
+        IsResolvable(key) || IsConnectorDesignated(key, connectorType);
 
     /// <summary>True for credential fields only — the set on which raw values are never stored.</summary>
     public static bool IsCredential(string key) => CredentialKeys.Contains(key);
 
-    /// <summary>True when the organization designated this metadata field as sensitive.</summary>
+    /// <summary>True when the organization designated this metadata field as sensitive (globally).</summary>
     public static bool IsOrganizationDesignated(string key) => _organizationFields.Contains(key);
+
+    /// <summary>True when the organization designated the field as sensitive for this connector type.</summary>
+    public static bool IsConnectorDesignated(string key, string? connectorType) =>
+        connectorType != null
+        && _connectorFields.TryGetValue(connectorType.Trim(), out var fields)
+        && fields.Contains(key);
 
     public static IReadOnlyCollection<string> OrganizationFields => _organizationFields;
 
-    /// <summary>Replaces the organization-designated field set (composition-root startup call).</summary>
+    /// <summary>
+    /// Replaces the organization-designated field set (composition-root startup call). Plain
+    /// entries apply to every connector; "TYPE:FIELD" entries apply to that connector type only.
+    /// </summary>
     public static void ConfigureOrganizationFields(IEnumerable<string>? fields)
     {
-        _organizationFields = new HashSet<string>(
-            (fields ?? []).Where(f => !string.IsNullOrWhiteSpace(f)).Select(f => f.Trim()),
-            StringComparer.OrdinalIgnoreCase);
+        var global = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var perConnector = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in (fields ?? []).Where(f => !string.IsNullOrWhiteSpace(f)))
+        {
+            var entry = raw.Trim();
+            var separator = entry.IndexOf(':');
+            if (separator > 0 && separator < entry.Length - 1)
+            {
+                var type = entry[..separator].Trim();
+                if (!perConnector.TryGetValue(type, out var set))
+                    perConnector[type] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                set.Add(entry[(separator + 1)..].Trim());
+            }
+            else
+            {
+                global.Add(entry);
+            }
+        }
+
+        _organizationFields = global;
+        _connectorFields = perConnector;
     }
 }

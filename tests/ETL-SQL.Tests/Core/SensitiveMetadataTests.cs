@@ -46,6 +46,25 @@ public class SensitiveMetadataTests
     }
 
     [Fact]
+    public void ConnectorScopedFields_ApplyOnlyToMatchingConnectorType()
+    {
+        try
+        {
+            SecretResolvableFields.ConfigureOrganizationFields(["SFTP:HOST", "S3:BUCKET"]);
+
+            Assert.True(SecretResolvableFields.IsResolvable("HOST", "SFTP"));
+            Assert.False(SecretResolvableFields.IsResolvable("HOST", "MSSQL"));
+            Assert.True(SecretResolvableFields.IsResolvable("BUCKET", "S3"));
+            Assert.False(SecretResolvableFields.IsResolvable("BUCKET"));
+            Assert.False(SecretResolvableFields.IsCredential("HOST"));
+        }
+        finally
+        {
+            SecretResolvableFields.ConfigureOrganizationFields(null);
+        }
+    }
+
+    [Fact]
     public void CatalogValidation_AllowsRawValuesOnDesignatedMetadata_RejectsRawCredentials()
     {
         try

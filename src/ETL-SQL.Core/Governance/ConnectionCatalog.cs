@@ -13,7 +13,8 @@ public sealed record SharedConnectionDefinition(
     string ConnectorType,
     string? Target,
     IReadOnlyDictionary<string, string> Options,
-    bool Disabled);
+    bool Disabled,
+    IReadOnlyCollection<string>? SensitiveFields = null);
 
 /// <summary>Resolves SHARED:alias references to cataloged connection definitions.</summary>
 public interface IConnectionCatalogProvider
@@ -53,7 +54,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 {
     public string ProviderName => "LocalCatalog";
 
-    private sealed record EntryPayload(string ConnectorType, string? Target, Dictionary<string, string> Options);
+    private sealed record EntryPayload(
+        string ConnectorType, string? Target, Dictionary<string, string> Options, List<string>? SensitiveFields = null);
 
     // The local catalog has no user model: its trust boundary is filesystem access on the single
     // node (same as the OS secret store), so the caller identity is not evaluated here.
@@ -74,7 +76,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
         var protectedValue = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
         var payload = Deserialize(alias, CryptoUtils.Unprotect(protectedValue, alias));
-        return new SharedConnectionDefinition(alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false);
+        return new SharedConnectionDefinition(
+            alias, payload.ConnectorType, payload.Target, payload.Options, Disabled: false, payload.SensitiveFields);
     }
 
     public async Task StoreAsync(SharedConnectionDefinition definition, CancellationToken cancellationToken = default)
@@ -88,7 +91,8 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
         var payload = new EntryPayload(
             definition.ConnectorType.Trim(),
             definition.Target,
-            new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, string>(definition.Options, StringComparer.OrdinalIgnoreCase),
+            definition.SensitiveFields?.ToList());
         var protectedValue = CryptoUtils.ProtectMachine(JsonSerializer.Serialize(payload), definition.Alias);
         await File.WriteAllTextAsync(path, protectedValue, cancellationToken).ConfigureAwait(false);
         if (!OperatingSystem.IsWindows())

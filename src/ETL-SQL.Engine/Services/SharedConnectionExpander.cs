@@ -14,7 +14,10 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
 {
     private const string SharedPrefix = "SHARED:";
 
-    public sealed record ExpandedConnection(string Target, Dictionary<string, string> Options);
+    public sealed record ExpandedConnection(
+        string Target,
+        Dictionary<string, string> Options,
+        IReadOnlyCollection<string>? SensitiveFields);
 
     public static bool IsSharedReference(string? target) =>
         !string.IsNullOrEmpty(target) && target.TrimStart().StartsWith(SharedPrefix, StringComparison.OrdinalIgnoreCase);
@@ -75,15 +78,19 @@ internal sealed class SharedConnectionExpander(IConnectionCatalogProvider? catal
             {
                 // The catalog owns credentials; a script overriding them would redirect a shared
                 // connection's identity without the administrator's knowledge.
-                if (SecretResolvableFields.IsResolvable(key) && definition.Options.ContainsKey(key))
+                if (IsCatalogOwnedSensitiveField(definition, key) && definition.Options.ContainsKey(key))
                     throw new ExecutionException(
-                        $"Option '{key}' is a credential field managed by connection catalog entry '{alias}' and cannot " +
+                        $"Option '{key}' is a sensitive field managed by connection catalog entry '{alias}' and cannot " +
                         "be overridden in the script.");
 
                 merged[key] = value;
             }
         }
 
-        return new ExpandedConnection(definition.Target ?? string.Empty, merged);
+        return new ExpandedConnection(definition.Target ?? string.Empty, merged, definition.SensitiveFields);
     }
+
+    private static bool IsCatalogOwnedSensitiveField(SharedConnectionDefinition definition, string key) =>
+        SecretResolvableFields.IsResolvable(key, definition.ConnectorType)
+        || (definition.SensitiveFields?.Contains(key, StringComparer.OrdinalIgnoreCase) ?? false);
 }

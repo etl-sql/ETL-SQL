@@ -66,6 +66,35 @@ public class SharedConnectionTests
     }
 
     [Fact]
+    public async Task SharedReference_EntrySensitiveFieldsResolveAndCannotBeOverridden()
+    {
+        var catalog = Catalog(new SharedConnectionDefinition(
+            "archive", "CAPTURE", null,
+            Options(("HOST", "SECRET:archive_host"), ("DATABASE", "dw")),
+            Disabled: false,
+            SensitiveFields: ["HOST"]));
+        var secrets = new DictionarySecretProvider(("archive_host", "sftp01.internal"));
+
+        var connector = new CapturingConnector();
+        await Handler(connector, catalog, secrets)
+            .Execute(SharedCreate("archive", "SHARED:archive"), ConnectionTestDoubles.Context());
+
+        Assert.Equal("sftp01.internal", connector.LastOptions?["HOST"]);
+
+        var overriding = new CreateConnectionStatement(
+            "archive2", "CAPTURE",
+            new LiteralExpression("SHARED:archive", TokenType.STRING_LITERAL),
+            new Dictionary<string, Expression>
+            {
+                ["HOST"] = new LiteralExpression("attacker-host", TokenType.STRING_LITERAL)
+            });
+        var ex = await Assert.ThrowsAsync<ExecutionException>(
+            () => Handler(new CapturingConnector(), catalog, secrets).Execute(overriding, ConnectionTestDoubles.Context()));
+        Assert.Contains("HOST", ex.Message);
+        Assert.Contains("cannot", ex.Message);
+    }
+
+    [Fact]
     public async Task SharedReference_ConnectorTypeMismatch_Fails()
     {
         var handler = Handler(new CapturingConnector(),

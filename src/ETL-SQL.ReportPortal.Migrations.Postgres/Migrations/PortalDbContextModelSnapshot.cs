@@ -731,6 +731,9 @@ namespace ETLSQL.ReportPortal.Migrations.Postgres.Migrations
                     b.Property<int?>("OwnerUserId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("SensitiveFieldsCsv")
+                        .HasColumnType("text");
+
                     b.Property<string>("Target")
                         .HasColumnType("text");
 

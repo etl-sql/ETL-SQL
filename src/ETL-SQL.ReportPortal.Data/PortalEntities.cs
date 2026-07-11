@@ -384,6 +384,8 @@ public class PortalSharedConnection : IVersionedEntity
     public bool Disabled { get; set; }
     public string? EnvironmentScope { get; set; }
     public int? OwnerUserId { get; set; }
+    /// <summary>Comma-separated fields this entry classifies as sensitive (masked + SECRET:-resolvable).</summary>
+    public string? SensitiveFieldsCsv { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
     public int? CreatedByUserId { get; set; }

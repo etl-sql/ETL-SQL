@@ -33,13 +33,13 @@ public partial class SecretReferenceUsageRule : ILintRule
     {
         if (statement is CreateConnectionStatement create)
         {
-            CheckOptions(create.ConnectionName, create.Options, create, results);
-            CheckTarget(create.ConnectionName, create.TargetExpression, create, results);
+            CheckOptions(create.ConnectionName, create.ConnectionType, create.Options, create, results);
+            CheckTarget(create.ConnectionName, create.ConnectionType, create.TargetExpression, create, results);
         }
         else if (statement is AlterConnectionStatement alter)
         {
-            CheckOptions(alter.ConnectionName, alter.Options, alter, results);
-            CheckTarget(alter.ConnectionName, alter.TargetExpression, alter, results);
+            CheckOptions(alter.ConnectionName, alter.ConnectionType, alter.Options, alter, results);
+            CheckTarget(alter.ConnectionName, alter.ConnectionType, alter.TargetExpression, alter, results);
         }
         else if (statement is BlockStatement block)
         {
@@ -71,7 +71,7 @@ public partial class SecretReferenceUsageRule : ILintRule
         }
     }
 
-    private void CheckOptions(string connectionName, Dictionary<string, Expression>? options, AstNode node, List<LintResult> results)
+    private void CheckOptions(string connectionName, string? connectorType, Dictionary<string, Expression>? options, AstNode node, List<LintResult> results)
     {
         if (options == null) return;
 
@@ -79,21 +79,27 @@ public partial class SecretReferenceUsageRule : ILintRule
         {
             if (expr is LiteralExpression { Value: string s }
                 && s.TrimStart().StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
-                && !SecretResolvableFields.IsResolvable(key))
+                && !SecretResolvableFields.IsResolvable(key, connectorType))
             {
                 Report(connectionName, key, node, results);
             }
         }
     }
 
-    private void CheckTarget(string connectionName, Expression? target, AstNode node, List<LintResult> results)
+    private void CheckTarget(string connectionName, string? connectorType, Expression? target, AstNode node, List<LintResult> results)
     {
-        if (target is not LiteralExpression { Value: string s }) return;
+        // SHARED:alias targets are cataloged definitions; their fields (including entry-classified
+        // sensitive metadata) are validated at expansion time, not from the script text.
+        if (target is not LiteralExpression { Value: string s }
+            || s.TrimStart().StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
 
         foreach (Match match in ConnectionStringSecretFieldRegex().Matches(s))
         {
             var key = match.Groups["key"].Value;
-            if (!SecretResolvableFields.IsResolvable(key))
+            if (!SecretResolvableFields.IsResolvable(key, connectorType))
                 Report(connectionName, key, node, results);
         }
     }

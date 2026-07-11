@@ -20,7 +20,8 @@ public sealed record PortalSharedConnectionSummary(
 public sealed record PortalSharedConnectionDetail(
     PortalSharedConnectionSummary Summary,
     string? Target,
-    IReadOnlyDictionary<string, string> Options);
+    IReadOnlyDictionary<string, string> Options,
+    IReadOnlyList<string> SensitiveFields);
 
 public sealed record SharedConnectionAclEntry(int GroupId, string GroupName, string Permission);
 
@@ -31,7 +32,8 @@ public sealed record PortalSharedConnectionExport(
     string? Target,
     Dictionary<string, string> Options,
     string? EnvironmentScope,
-    bool Disabled);
+    bool Disabled,
+    List<string>? SensitiveFields = null);
 
 /// <summary>
 /// Portal-managed shared connection catalog (SHARED:alias). Credential fields hold SECRET:
@@ -59,6 +61,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
                 OptionsJson = JsonSerializer.Serialize(entry.Options),
                 Disabled = entry.Disabled,
                 EnvironmentScope = entry.EnvironmentScope,
+                SensitiveFieldsCsv = ToCsv(entry.SensitiveFields),
                 OwnerUserId = userId,
                 CreatedAtUtc = now,
                 UpdatedAtUtc = now,
@@ -74,6 +77,7 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         existing.OptionsJson = JsonSerializer.Serialize(entry.Options);
         existing.Disabled = entry.Disabled;
         existing.EnvironmentScope = entry.EnvironmentScope;
+        existing.SensitiveFieldsCsv = ToCsv(entry.SensitiveFields);
         existing.UpdatedAtUtc = now;
         existing.UpdatedByUserId = userId;
         existing.Version++;
@@ -99,7 +103,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         await EnforceUseAclAsync(entity, identity, cancellationToken);
 
         var definition = new SharedConnectionDefinition(
-            entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false);
+            entity.Alias, entity.ConnectorType, entity.Target, DeserializeOptions(entity), Disabled: false,
+            FromCsv(entity.SensitiveFieldsCsv));
 
         try
         {
@@ -239,7 +244,12 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         if (entity == null)
             return null;
 
-        return new PortalSharedConnectionDetail(ToSummary(entity), MaskTarget(entity.Target), MaskOptions(DeserializeOptions(entity)));
+        var sensitiveFields = FromCsv(entity.SensitiveFieldsCsv);
+        return new PortalSharedConnectionDetail(
+            ToSummary(entity),
+            MaskTarget(entity.Target, entity.ConnectorType, sensitiveFields),
+            MaskOptions(DeserializeOptions(entity), entity.ConnectorType, sensitiveFields),
+            sensitiveFields);
     }
 
     public async Task<IReadOnlyList<PortalSharedConnectionExport>> ExportAsync(CancellationToken cancellationToken = default)
@@ -253,7 +263,8 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
                 entity.Target,
                 new Dictionary<string, string>(DeserializeOptions(entity), StringComparer.OrdinalIgnoreCase),
                 entity.EnvironmentScope,
-                entity.Disabled))
+                entity.Disabled,
+                FromCsv(entity.SensitiveFieldsCsv).ToList()))
             .ToList();
 
     public async Task<SecretLifecycleStatus> GetStatusAsync(string alias, CancellationToken cancellationToken = default)
@@ -337,6 +348,12 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
             throw new ArgumentException(
                 $"Field '{rawCredential}' holds a raw credential value. The catalog stores references only: " +
                 "store the value in the secret store and reference it as SECRET:name.", nameof(entry));
+
+        var maskedPlaceholder = FindMaskedPlaceholder(entry);
+        if (maskedPlaceholder != null)
+            throw new ArgumentException(
+                $"Field '{maskedPlaceholder}' contains a masked display placeholder. Re-enter the original value or a SECRET:name reference before saving.",
+                nameof(entry));
     }
 
     private static Dictionary<string, string> DeserializeOptions(PortalSharedConnection entity)
@@ -356,16 +373,18 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         entity.Version);
 
     // Write-side validation guarantees credential fields hold references, but masking is
-    // belt-and-braces for entries that arrived by import or older versions.
-    private static IReadOnlyDictionary<string, string> MaskOptions(Dictionary<string, string> options)
+    // belt-and-braces for entries that arrived by import or older versions. Entry-classified
+    // sensitive fields are masked even when they hold plain values.
+    private static IReadOnlyDictionary<string, string> MaskOptions(
+        Dictionary<string, string> options, string connectorType, IReadOnlyCollection<string> sensitiveFields)
         => options.ToDictionary(
             pair => pair.Key,
-            pair => SecretResolvableFields.IsResolvable(pair.Key) && !IsReference(pair.Value)
+            pair => IsMaskedField(pair.Key, connectorType, sensitiveFields) && !IsReference(pair.Value)
                 ? SecretRedactor.Mask
                 : pair.Value,
             StringComparer.OrdinalIgnoreCase);
 
-    private static string? MaskTarget(string? target)
+    private static string? MaskTarget(string? target, string connectorType, IReadOnlyCollection<string> sensitiveFields)
     {
         if (string.IsNullOrEmpty(target))
             return target;
@@ -374,11 +393,44 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         for (var i = 0; i < segments.Length; i++)
         {
             var parts = segments[i].Split('=', 2);
-            if (parts.Length == 2 && SecretResolvableFields.IsResolvable(parts[0].Trim()) && !IsReference(parts[1]))
+            if (parts.Length == 2 && IsMaskedField(parts[0].Trim(), connectorType, sensitiveFields) && !IsReference(parts[1]))
                 segments[i] = $"{parts[0]}={SecretRedactor.Mask}";
         }
 
         return string.Join(';', segments);
+    }
+
+    private static bool IsMaskedField(string key, string connectorType, IReadOnlyCollection<string> sensitiveFields) =>
+        SecretResolvableFields.IsResolvable(key, connectorType)
+        || sensitiveFields.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    private static string? FindMaskedPlaceholder(PortalSharedConnectionExport entry)
+    {
+        var sensitiveFields = entry.SensitiveFields ?? [];
+        foreach (var (key, value) in entry.Options)
+        {
+            if (IsMaskedField(key, entry.ConnectorType, sensitiveFields)
+                && string.Equals(value?.Trim(), SecretRedactor.Mask, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Target))
+        {
+            foreach (var segment in entry.Target.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var parts = segment.Split('=', 2);
+                if (parts.Length == 2
+                    && IsMaskedField(parts[0].Trim(), entry.ConnectorType, sensitiveFields)
+                    && string.Equals(parts[1].Trim(), SecretRedactor.Mask, StringComparison.Ordinal))
+                {
+                    return parts[0].Trim();
+                }
+            }
+        }
+
+        return null;
     }
 
     private static bool IsReference(string value)
@@ -387,4 +439,19 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         return trimmed.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
     }
+
+    private static string? ToCsv(IEnumerable<string>? fields)
+    {
+        var normalized = (fields ?? [])
+            .Where(f => !string.IsNullOrWhiteSpace(f))
+            .Select(f => f.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return normalized.Count == 0 ? null : string.Join(',', normalized);
+    }
+
+    private static IReadOnlyList<string> FromCsv(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }

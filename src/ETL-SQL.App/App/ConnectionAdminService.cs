@@ -155,7 +155,8 @@ namespace ETL_SQL.App
 
             await writable.StoreAsync(
                 new SharedConnectionDefinition(ctx.ConnectionAlias.Trim(), ctx.ConnectionType.Trim(),
-                    string.IsNullOrWhiteSpace(ctx.ConnectionTarget) ? null : ctx.ConnectionTarget, options, Disabled: false),
+                    string.IsNullOrWhiteSpace(ctx.ConnectionTarget) ? null : ctx.ConnectionTarget, options, Disabled: false,
+                    ctx.ConnectionSensitiveFields is { Length: > 0 } ? ctx.ConnectionSensitiveFields : null),
                 ct);
             // The alias is not secret, but "SHARED:alias" would be masked by the redactor — phrase around it.
             logger.WriteLine(

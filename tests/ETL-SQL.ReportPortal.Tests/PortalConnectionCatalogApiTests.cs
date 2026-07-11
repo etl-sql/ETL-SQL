@@ -192,6 +192,59 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    public async Task SensitiveFields_RoundTripMaskExportAndResolve()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PortalSecretStoreService>()
+                .StoreAsync("prod_host", "pg01.internal");
+        }
+
+        var set = await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/sensitive_dw", new
+        {
+            connectorType = "POSTGRES",
+            target = "Host=pg01.internal;Database=dw",
+            options = new Dictionary<string, string>
+            {
+                ["HOST"] = "SECRET:prod_host",
+                ["DATABASE"] = "dw"
+            },
+            sensitiveFields = new[] { "HOST" }
+        });
+        Assert.Equal(HttpStatusCode.NoContent, set.StatusCode);
+
+        var detail = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/sensitive_dw", null);
+        Assert.Equal(HttpStatusCode.OK, detail.StatusCode);
+        var body = await detail.Content.ReadAsStringAsync();
+        Assert.Contains("SECRET:prod_host", body);
+        Assert.Contains("\"sensitiveFields\":[\"HOST\"]", body);
+        Assert.DoesNotContain("pg01.internal", body);
+
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+        var definition = await provider.ResolveAsync("sensitive_dw");
+        Assert.Contains("HOST", definition.SensitiveFields!);
+
+        var export = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/export", null);
+        var exported = await export.Content.ReadFromJsonAsync<JsonArray>(Json);
+        var entry = Assert.Single(exported!);
+        Assert.Equal("HOST", entry!["sensitiveFields"]![0]!.GetValue<string>());
+
+        var maskedSave = await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/sensitive_dw", new
+        {
+            connectorType = "POSTGRES",
+            target = "Host=********;Database=dw",
+            options = new Dictionary<string, string> { ["DATABASE"] = "dw" },
+            sensitiveFields = new[] { "HOST" }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, maskedSave.StatusCode);
+        Assert.Contains("masked display placeholder", await maskedSave.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Impact_ListsReferencingScriptsJobsCatalogEntriesAndConsumers()
     {
         using var factory = new CatalogFactory();

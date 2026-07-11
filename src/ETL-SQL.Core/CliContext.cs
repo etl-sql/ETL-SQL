@@ -114,6 +114,7 @@ public class CliContext
     public string? ConnectionType { get; set; }
     public string? ConnectionTarget { get; set; }
     public string[]? ConnectionOptions { get; set; }
+    public string[]? ConnectionSensitiveFields { get; set; }
 
     // enterprise enrollment commands
     public string? EnterpriseTenant { get; set; }

@@ -100,16 +100,20 @@ public class CreateConnectionStatementHandler(
             target = context.DecryptValue(target);
         }
         target = Interpolate(target ?? "");
+        IReadOnlyCollection<string>? entrySensitiveFields = null;
         if (SharedConnectionExpander.IsSharedReference(target))
         {
             var expanded = await _sharedExpander.ExpandAsync(
                 connectionType, target, options, context.ExecutionIdentity, context.CancellationToken);
             target = expanded.Target;
             options = expanded.Options;
+            entrySensitiveFields = expanded.SensitiveFields;
         }
-        target = await _secretResolver.ResolveTargetAsync(target, context.CancellationToken);
+        target = await _secretResolver.ResolveTargetAsync(
+            target, context.CancellationToken, connectionType, entrySensitiveFields);
         if (options != null)
-            options = await _secretResolver.ResolveOptionsAsync(options, context.CancellationToken);
+            options = await _secretResolver.ResolveOptionsAsync(
+                options, context.CancellationToken, connectionType, entrySensitiveFields);
 
         var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
         if (connector == null)

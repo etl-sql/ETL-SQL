@@ -228,6 +228,11 @@ namespace ETL_SQL.App
             Description = "Connection option as KEY=VALUE (repeatable). Credential fields must reference SECRET:name.",
             AllowMultipleArgumentsPerToken = true
         };
+        private static readonly Option<string[]> ConnectionSensitiveOption = new("--sensitive", Array.Empty<string>())
+        {
+            Description = "Field name this entry classifies as sensitive (repeatable): masked in displays and SECRET:-resolvable.",
+            AllowMultipleArgumentsPerToken = true
+        };
         private static readonly Option<string?> MigrateFromOption = new("--from", Array.Empty<string>())
         {
             Description = "Source database provider (only 'sqlite' is supported).",
@@ -761,6 +766,7 @@ namespace ETL_SQL.App
                 ConnectionTypeOption,
                 ConnectionTargetOption,
                 ConnectionOptionOption,
+                ConnectionSensitiveOption,
             };
             setConnectionCommand.SetAction(context => Dispatch(context, "admin-set-connection", handler));
             adminCommand.Add(setConnectionCommand);
@@ -1019,6 +1025,7 @@ namespace ETL_SQL.App
                 cliContext.ConnectionType = res.GetValue(ConnectionTypeOption);
                 cliContext.ConnectionTarget = res.GetValue(ConnectionTargetOption);
                 cliContext.ConnectionOptions = res.GetValue(ConnectionOptionOption);
+                cliContext.ConnectionSensitiveFields = res.GetValue(ConnectionSensitiveOption);
             }
             else if (commandName is "admin-verify-connection" or "admin-disable-connection" or "admin-enable-connection" or "admin-delete-connection")
             {
