@@ -11,6 +11,7 @@ namespace ETL_SQL.FuzzTests
     {
         private readonly GrammarStateTree _tree;
         private readonly Random _rng;
+        private readonly Queue<Token> _tokenQueue = new();
 
         private static readonly string[] MockTables = { "Users", "Products", "Sales", "Employees" };
         private static readonly string[] MockColumns = { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
@@ -27,10 +28,19 @@ namespace ETL_SQL.FuzzTests
             var tokens = new List<Token>();
             var currentState = _tree.Root;
             int stepCount = 0;
-            const int maxSteps = 60;
+            const int maxSteps = 120; // Increased to allow complex expressions
+
+            _tokenQueue.Clear();
 
             while (stepCount++ < maxSteps)
             {
+                if (_tokenQueue.Count > 0)
+                {
+                    var token = _tokenQueue.Dequeue();
+                    tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+                    continue;
+                }
+
                 if (currentState.Transitions.Count == 0)
                 {
                     break;
@@ -38,30 +48,37 @@ namespace ETL_SQL.FuzzTests
 
                 // Pick a transition randomly
                 var transition = currentState.Transitions[_rng.Next(currentState.Transitions.Count)];
-                var token = GenerateTokenFor(transition);
-
-                if (token != null)
+                
+                // Try generating tokens for this transition
+                bool generated = TryGenerateForTransition(transition);
+                if (generated)
                 {
-                    tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+                    if (_tokenQueue.Count > 0)
+                    {
+                        var token = _tokenQueue.Dequeue();
+                        tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+                    }
                     currentState = transition.Target;
 
-                    // If we reach root and have a decent query size, we can stop
-                    if (currentState == _tree.Root && tokens.Count > 5 && _rng.Next(2) == 0)
+                    if (currentState == _tree.Root && tokens.Count > 10 && _rng.Next(2) == 0)
                     {
                         break;
                     }
                 }
                 else
                 {
-                    // Try to find any other transition that we can generate a token for
+                    // Try alternative transitions
                     var shuffledTransitions = currentState.Transitions.OrderBy(_ => _rng.Next()).ToList();
                     bool found = false;
                     foreach (var altTransition in shuffledTransitions)
                     {
-                        var altToken = GenerateTokenFor(altTransition);
-                        if (altToken != null)
+                        if (TryGenerateForTransition(altTransition))
                         {
-                            tokens.Add(altToken with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + altToken.Value.Length });
+                            if (_tokenQueue.Count > 0)
+                            {
+                                var token = _tokenQueue.Dequeue();
+                                tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+                            }
                             currentState = altTransition.Target;
                             found = true;
                             break;
@@ -75,12 +92,18 @@ namespace ETL_SQL.FuzzTests
                 }
             }
 
-            // Append EOF token
+            // Flush remaining queue
+            while (_tokenQueue.Count > 0)
+            {
+                var token = _tokenQueue.Dequeue();
+                tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+            }
+
             tokens.Add(new Token(TokenType.EOF, "", 1, tokens.Count + 1, 1, tokens.Count + 1));
             return tokens;
         }
 
-        private Token? GenerateTokenFor(StateTransition transition)
+        private bool TryGenerateForTransition(StateTransition transition)
         {
             var label = transition.Label;
             if (!string.IsNullOrEmpty(label))
@@ -90,50 +113,48 @@ namespace ETL_SQL.FuzzTests
                 {
                     var table = "src." + MockTables[_rng.Next(MockTables.Length)];
                     var tok = new Token(TokenType.IDENTIFIER, table, 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
                 else if (label.Equals("<column_name>", StringComparison.OrdinalIgnoreCase))
                 {
                     var col = MockColumns[_rng.Next(MockColumns.Length)];
                     var tok = new Token(TokenType.IDENTIFIER, col, 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
                 else if (label.Equals("<connection_name>", StringComparison.OrdinalIgnoreCase))
                 {
                     var tok = new Token(TokenType.IDENTIFIER, "src", 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
                 else if (label.Equals("<variable_name>", StringComparison.OrdinalIgnoreCase))
                 {
                     var val = MockVariables[_rng.Next(MockVariables.Length)];
                     var tok = new Token(TokenType.VARIABLE, val, 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
                 else if (label.Equals("<expression>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<value>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<sets_assignment_token>", StringComparison.OrdinalIgnoreCase))
                 {
-                    string val = _rng.Next(4) switch
+                    // Generate a recursive expression
+                    var expr = GenerateExpressionTokens(3);
+                    if (expr.Count > 0 && transition.Condition(expr[0]))
                     {
-                        0 => "100",
-                        1 => "'User_1'",
-                        2 => "Price",
-                        _ => "TRUE"
-                    };
-                    var tok = new Token(TokenType.IDENTIFIER, val, 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                        foreach (var t in expr) _tokenQueue.Enqueue(t);
+                        return true;
+                    }
                 }
                 else if (label.Equals("<time_expression>", StringComparison.OrdinalIgnoreCase))
                 {
                     var tok = new Token(TokenType.STRING_LITERAL, "'00:00:05'", 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
 
                 var resolvedType = ResolveTokenType(label);
                 if (resolvedType != null)
                 {
                     var tok = new Token(resolvedType.Value, label, 0, 0, 0, 0);
-                    if (transition.Condition(tok)) return tok;
+                    if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
             }
 
@@ -149,7 +170,7 @@ namespace ETL_SQL.FuzzTests
                     SuggestionType.OptionValue => new Token(TokenType.IDENTIFIER, "OFF", 0, 0, 0, 0),
                     _ => null
                 };
-                if (tok != null && transition.Condition(tok)) return tok;
+                if (tok != null && transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
             }
 
             var probes = new List<Token>
@@ -175,11 +196,103 @@ namespace ETL_SQL.FuzzTests
             {
                 if (transition.Condition(probe))
                 {
-                    return probe;
+                    _tokenQueue.Enqueue(probe);
+                    return true;
                 }
             }
 
-            return null;
+            return false;
+        }
+
+        private List<Token> GenerateExpressionTokens(int depth)
+        {
+            var exprTokens = new List<Token>();
+
+            // Leaf base case
+            if (depth <= 0 || _rng.Next(3) == 0)
+            {
+                exprTokens.Add(GenerateLeafToken());
+                return exprTokens;
+            }
+
+            int choice = _rng.Next(4);
+            switch (choice)
+            {
+                case 0: // Binary expression: left OP right
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    exprTokens.Add(GenerateOperatorToken());
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    break;
+
+                case 1: // Function call: FUNC(expr)
+                    exprTokens.Add(GenerateFunctionToken());
+                    exprTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    exprTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
+                    break;
+
+                case 2: // Parenthesized: ( expr )
+                    exprTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    exprTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
+                    break;
+
+                default: // Function call with 2 args: FUNC2(expr, expr)
+                    exprTokens.Add(GenerateFunction2Token());
+                    exprTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    exprTokens.Add(new Token(TokenType.COMMA, ",", 0, 0, 0, 0));
+                    exprTokens.AddRange(GenerateExpressionTokens(depth - 1));
+                    exprTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
+                    break;
+            }
+
+            return exprTokens;
+        }
+
+        private Token GenerateLeafToken()
+        {
+            return _rng.Next(5) switch
+            {
+                0 => new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0),
+                1 => new Token(TokenType.NUMBER, _rng.Next(1, 100).ToString(), 0, 0, 0, 0),
+                2 => new Token(TokenType.STRING_LITERAL, $"'Val_{_rng.Next(1, 10)}'", 0, 0, 0, 0),
+                3 => new Token(TokenType.TRUE, "TRUE", 0, 0, 0, 0),
+                _ => new Token(TokenType.FALSE, "FALSE", 0, 0, 0, 0)
+            };
+        }
+
+        private Token GenerateOperatorToken()
+        {
+            return _rng.Next(8) switch
+            {
+                0 => new Token(TokenType.PLUS, "+", 0, 0, 0, 0),
+                1 => new Token(TokenType.MINUS, "-", 0, 0, 0, 0),
+                2 => new Token(TokenType.STAR, "*", 0, 0, 0, 0),
+                3 => new Token(TokenType.EQUALS, "=", 0, 0, 0, 0),
+                4 => new Token(TokenType.GREATER_THAN, ">", 0, 0, 0, 0),
+                5 => new Token(TokenType.LESS_THAN, "<", 0, 0, 0, 0),
+                6 => new Token(TokenType.AND, "AND", 0, 0, 0, 0),
+                _ => new Token(TokenType.OR, "OR", 0, 0, 0, 0)
+            };
+        }
+
+        private Token GenerateFunctionToken()
+        {
+            return _rng.Next(2) switch
+            {
+                0 => new Token(TokenType.UPPER, "UPPER", 0, 0, 0, 0),
+                _ => new Token(TokenType.LOWER, "LOWER", 0, 0, 0, 0)
+            };
+        }
+
+        private Token GenerateFunction2Token()
+        {
+            return _rng.Next(2) switch
+            {
+                0 => new Token(TokenType.CONCAT, "CONCAT", 0, 0, 0, 0),
+                _ => new Token(TokenType.IDENTIFIER, "ISNULL", 0, 0, 0, 0)
+            };
         }
 
         private TokenType? ResolveTokenType(string value)

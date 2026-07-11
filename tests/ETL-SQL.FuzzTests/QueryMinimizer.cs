@@ -56,7 +56,7 @@ namespace ETL_SQL.FuzzTests
                         if (progress) continue;
                     }
 
-                    // B. Try statement-internal pruning
+                    // B. Try statement-internal clause pruning
                     for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
                     {
                         var stmt = script.Statements[sIdx];
@@ -124,6 +124,62 @@ namespace ETL_SQL.FuzzTests
                         }
                     }
                     if (progress) continue;
+
+                    // C. Try expression-level pruning (sub-expression reduction)
+                    for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
+                    {
+                        var stmt = script.Statements[sIdx];
+                        if (stmt is SelectStatement selectStmt)
+                        {
+                            var exprList = new List<Expression>();
+                            if (selectStmt.WhereClause != null) exprList.Add(selectStmt.WhereClause);
+                            if (selectStmt.HavingClause != null) exprList.Add(selectStmt.HavingClause);
+                            foreach (var col in selectStmt.Columns)
+                            {
+                                if (col.Expression != null) exprList.Add(col.Expression);
+                            }
+
+                            bool exprPruned = false;
+                            foreach (var rootExpr in exprList)
+                            {
+                                var subExprs = GetSubExpressions(rootExpr).ToList();
+                                foreach (var sub in subExprs)
+                                {
+                                    var replacement = new LiteralExpression(1, TokenType.NUMBER);
+                                    var candidateRoot = ReplaceNode(rootExpr, sub, replacement);
+
+                                    SelectStatement? candidateStmt = null;
+                                    if (rootExpr == selectStmt.WhereClause) candidateStmt = selectStmt with { WhereClause = candidateRoot };
+                                    else if (rootExpr == selectStmt.HavingClause) candidateStmt = selectStmt with { HavingClause = candidateRoot };
+                                    else
+                                    {
+                                        var colsCopy = selectStmt.Columns.ToList();
+                                        int colIdx = colsCopy.FindIndex(c => c.Expression == rootExpr);
+                                        if (colIdx >= 0)
+                                        {
+                                            colsCopy[colIdx] = new SelectColumn(candidateRoot, colsCopy[colIdx].Alias, colsCopy[colIdx].Metadata);
+                                            candidateStmt = selectStmt with { Columns = colsCopy };
+                                        }
+                                    }
+
+                                    if (candidateStmt != null)
+                                    {
+                                        var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
+                                        if (testFunction(candidateSql))
+                                        {
+                                            currentSql = candidateSql;
+                                            progress = true;
+                                            exprPruned = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (exprPruned) break;
+                            }
+                            if (exprPruned) break;
+                        }
+                    }
+                    if (progress) continue;
                 }
 
                 // 2. Token-level delta-debugging fallback
@@ -163,6 +219,72 @@ namespace ETL_SQL.FuzzTests
             var statementsCopy = script.Statements.ToList();
             statementsCopy[index] = newStatement;
             return new Script { Statements = statementsCopy };
+        }
+
+        private static IEnumerable<Expression> GetSubExpressions(Expression expr)
+        {
+            if (expr is BinaryExpression binary)
+            {
+                yield return binary.Left;
+                yield return binary.Right;
+                foreach (var sub in GetSubExpressions(binary.Left)) yield return sub;
+                foreach (var sub in GetSubExpressions(binary.Right)) yield return sub;
+            }
+            else if (expr is FunctionCallExpression func)
+            {
+                foreach (var arg in func.Arguments)
+                {
+                    yield return arg;
+                    foreach (var sub in GetSubExpressions(arg)) yield return sub;
+                }
+            }
+        }
+
+        private static Expression ReplaceNode(Expression current, Expression target, Expression replacement)
+        {
+            if (current == target)
+            {
+                return replacement;
+            }
+
+            if (current is BinaryExpression binary)
+            {
+                var newLeft = ReplaceNode(binary.Left, target, replacement);
+                var newRight = ReplaceNode(binary.Right, target, replacement);
+                if (newLeft != binary.Left || newRight != binary.Right)
+                {
+                    return new BinaryExpression(newLeft, binary.Operator, newRight)
+                    {
+                        Line = binary.Line,
+                        Column = binary.Column,
+                        EndLine = binary.EndLine,
+                        EndColumn = binary.EndColumn
+                    };
+                }
+            }
+            else if (current is FunctionCallExpression func)
+            {
+                bool changed = false;
+                var newArgs = new List<Expression>();
+                foreach (var arg in func.Arguments)
+                {
+                    var newArg = ReplaceNode(arg, target, replacement);
+                    if (newArg != arg) changed = true;
+                    newArgs.Add(newArg);
+                }
+                if (changed)
+                {
+                    return new FunctionCallExpression(func.FunctionName, newArgs)
+                    {
+                        Line = func.Line,
+                        Column = func.Column,
+                        EndLine = func.EndLine,
+                        EndColumn = func.EndColumn
+                    };
+                }
+            }
+
+            return current;
         }
     }
 }

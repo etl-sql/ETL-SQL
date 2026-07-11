@@ -23,7 +23,6 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Moq" />
-    <PackageReference Include="Microsoft.Data.Sqlite" />
   </ItemGroup>
 
   <ItemGroup>
