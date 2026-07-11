@@ -86,6 +86,7 @@ public class CliContext
     public string? HaSoakRequiredCommit { get; set; }
     public string? HaSoakMarkdownReport { get; set; }
     public string? HaSoakSustainedWorkloadPath { get; set; }
+    public string? HaSoakPlanPath { get; set; }
     public string? HaSoakAdminPassword { get; set; }
     public string? HaSoakComposeFile { get; set; }
     public string? HaSoakEnvExample { get; set; }
@@ -96,6 +97,7 @@ public class CliContext
     public int HaSoakOrchestratorPort { get; set; } = 5601;
     public int HaSoakPostgresPort { get; set; } = 5632;
     public int HaSoakLogTail { get; set; } = 500;
+    public int HaSoakDurationSeconds { get; set; }
     public bool HaSoakStart { get; set; }
     public bool HaSoakPull { get; set; }
     public bool HaSoakValidateOnly { get; set; }

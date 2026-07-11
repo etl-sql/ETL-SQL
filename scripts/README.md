@@ -9,6 +9,8 @@ This directory contains build, test, utility, and release packaging scripts for 
 Administrator-facing HA soak workflows are native `etl-sql admin ha-soak ...` commands. Keep these
 scripts as developer contract tests and release-gate helpers; use the CLI commands for routine
 operator runs so admins do not need PowerShell or this directory.
+The native HA CLI includes `large-job-run`, which emits LargeJob evidence reports and scenario logs
+from a generated plan; the scripts below remain contract helpers rather than the operator front door.
 
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |

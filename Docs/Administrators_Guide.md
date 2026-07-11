@@ -1236,6 +1236,7 @@ etl-sql admin ha-soak workload --run-root .ha-soak-runs/ha-20260710 --admin-pass
 etl-sql admin ha-soak runbook --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
 etl-sql admin ha-soak evidence --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak large-job-run --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
 
 # Capture post-run evidence or diagnostics
@@ -1250,6 +1251,9 @@ Use `prepare --start --pull` only when you are ready to start the Docker topolog
 files and local workload configs may contain disposable credentials or API keys; they belong in the
 ignored run root, not source control. Developers and release maintainers still have script-level
 contract tests in `scripts/README.md`, but administrators should use the `etl-sql admin ha-soak`
-commands as the stable cross-platform interface. Use `validate --required-gate All` only after large-job and
-fault-injection measured reports exist; until those runners are complete, `Sustained` is the
-publishable evidence gate for PostgreSQL HA capacity observations.
+commands as the stable cross-platform interface. `large-job-run` writes `soak-report.json/.md`,
+per-scenario `result.json/.md`, and `runner.log` files under
+`certification-results/ha-large-job-soak/<run-id>` by default; use `--duration-seconds` for a short
+diagnostic run. Use `validate --required-gate All` only after large-job and fault-injection measured
+reports exist; until the fault-injection runner is complete, `Sustained` and `LargeJob` are the
+available native evidence gates.

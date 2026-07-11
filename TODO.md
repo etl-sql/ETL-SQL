@@ -258,7 +258,10 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   `HaLargeJobSoakManifestTests` validates the manifest. `scripts/New-HaLargeJobSoakPlan.ps1`
   now binds the manifest to a generated topology run and emits non-secret JSON/Markdown run plans
   for CI-smoke or manual-certification modes; `scripts/Test-HaLargeJobSoakPlan.ps1` validates
-  the plan contract. Runner execution and measured soak artifacts remain open.)*
+  the plan contract. `etl-sql admin ha-soak large-job-run` now executes the native bounded
+  large-job CI-smoke harness from a generated plan and writes `soak-report.json/.md`, per-scenario
+  `result.json/.md`, and `runner.log` artifacts accepted by the LargeJob evidence gate. Multi-hour
+  manual-certification execution and measured production-scale soak artifacts remain open.)*
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.

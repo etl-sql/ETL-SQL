@@ -168,8 +168,10 @@ each fault, not just that an exception was thrown.
    spill-write, spill-read, and repartition. `HaLargeJobSoakManifestTests` validates the
    contract. `scripts/New-HaLargeJobSoakPlan.ps1` binds the manifest to a generated topology run
    and emits non-secret JSON/Markdown run plans for CI-smoke or manual-certification modes, with
-   validation coverage in `scripts/Test-HaLargeJobSoakPlan.ps1`. Runner execution and measured
-   soak artifacts remain open.)*
+   validation coverage in `scripts/Test-HaLargeJobSoakPlan.ps1`. `etl-sql admin ha-soak
+   large-job-run` consumes the plan and writes bounded native CI-smoke evidence (`soak-report`,
+   per-scenario results, and logs) that the LargeJob gate can validate. Multi-hour manual
+   certification and production-scale measured artifacts remain open.)*
 4. **Slice D — fault injection.** Add disk, corruption, crash, DB outage, node loss, and
    cancellation tests with deterministic cleanup verification. *(Contract progress:
    `certification-results/ha-fault-injection-matrix.json` defines the deterministic fault

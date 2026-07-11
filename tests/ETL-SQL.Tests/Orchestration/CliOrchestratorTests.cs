@@ -220,6 +220,35 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_AdminHaSoakLargeJobRunParsesRunnerOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "ha-soak", "large-job-run",
+                "--run-root", "runs/phase6",
+                "--plan", "runs/phase6/ha-large-job-soak-plan.json",
+                "--output-root", "certification-results/ha-large-job-soak/run-1",
+                "--duration-seconds", "2",
+                "--force"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-ha-soak-large-job-run", capturedContext!.Command);
+            Assert.Equal("runs/phase6", capturedContext.HaSoakRunRoot);
+            Assert.Equal("runs/phase6/ha-large-job-soak-plan.json", capturedContext.HaSoakPlanPath);
+            Assert.Equal("certification-results/ha-large-job-soak/run-1", capturedContext.HaSoakOutputRoot);
+            Assert.Equal(2, capturedContext.HaSoakDurationSeconds);
+            Assert.True(capturedContext.HaSoakForce);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_EnterpriseEnrollParsesProtectedBootstrapOptions()
         {
             CliContext? capturedContext = null;

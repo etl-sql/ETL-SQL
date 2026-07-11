@@ -297,6 +297,12 @@ namespace ETL_SQL.App
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => null
         };
+        private static readonly Option<string?> HaSoakPlanOption = new("--plan", Array.Empty<string>())
+        {
+            Description = "Existing HA soak plan path to execute.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> HaSoakAdminPasswordOption = new("--admin-password", Array.Empty<string>())
         {
             Description = "Admin password to place in the local workload config; defaults to CHANGE_ME.",
@@ -350,6 +356,11 @@ namespace ETL_SQL.App
         {
             Description = "Number of Docker log lines per service to include in diagnostics.",
             DefaultValueFactory = _ => 500
+        };
+        private static readonly Option<int> HaSoakDurationSecondsOption = new("--duration-seconds", Array.Empty<string>())
+        {
+            Description = "Override runner duration in seconds for bounded local execution.",
+            DefaultValueFactory = _ => 0
         };
         private static readonly Option<bool> HaSoakStartOption = new("--start", Array.Empty<string>())
         {
@@ -635,6 +646,17 @@ namespace ETL_SQL.App
             };
             haSoakLargeJobCommand.SetAction(context => Dispatch(context, "admin-ha-soak-large-job-plan", handler));
             haSoakCommand.Add(haSoakLargeJobCommand);
+
+            var haSoakLargeJobRunCommand = new Command("large-job-run", "Run the bounded concurrent large-job soak harness")
+            {
+                HaSoakRunRootOption,
+                HaSoakPlanOption,
+                HaSoakOutputRootOption,
+                HaSoakDurationSecondsOption,
+                HaSoakForceOption,
+            };
+            haSoakLargeJobRunCommand.SetAction(context => Dispatch(context, "admin-ha-soak-large-job-run", handler));
+            haSoakCommand.Add(haSoakLargeJobRunCommand);
 
             var haSoakFaultCommand = new Command("fault-plan", "Generate the HA fault-injection plan")
             {
@@ -939,6 +961,7 @@ namespace ETL_SQL.App
                 cliContext.HaSoakRequiredCommit = TryGetString(res, HaSoakRequiredCommitOption);
                 cliContext.HaSoakMarkdownReport = TryGetString(res, HaSoakMarkdownReportOption);
                 cliContext.HaSoakSustainedWorkloadPath = TryGetString(res, HaSoakSustainedWorkloadOption);
+                cliContext.HaSoakPlanPath = TryGetString(res, HaSoakPlanOption);
                 cliContext.HaSoakAdminPassword = TryGetString(res, HaSoakAdminPasswordOption);
                 cliContext.HaSoakComposeFile = TryGetString(res, HaSoakComposeFileOption);
                 cliContext.HaSoakEnvExample = TryGetString(res, HaSoakEnvExampleOption);
@@ -949,6 +972,7 @@ namespace ETL_SQL.App
                 cliContext.HaSoakOrchestratorPort = TryGetInt(res, HaSoakOrchestratorPortOption, 5601);
                 cliContext.HaSoakPostgresPort = TryGetInt(res, HaSoakPostgresPortOption, 5632);
                 cliContext.HaSoakLogTail = TryGetInt(res, HaSoakLogTailOption, 500);
+                cliContext.HaSoakDurationSeconds = TryGetInt(res, HaSoakDurationSecondsOption, 0);
                 cliContext.HaSoakStart = TryGetBool(res, HaSoakStartOption);
                 cliContext.HaSoakPull = TryGetBool(res, HaSoakPullOption);
                 cliContext.HaSoakValidateOnly = TryGetBool(res, HaSoakValidateOnlyOption);

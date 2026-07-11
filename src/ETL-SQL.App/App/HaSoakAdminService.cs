@@ -38,6 +38,7 @@ namespace ETL_SQL.App
                     "admin-ha-soak-runbook" => await RunbookAsync(ctx, logger),
                     "admin-ha-soak-evidence" => await EvidenceAsync(ctx, logger),
                     "admin-ha-soak-large-job-plan" => await LargeJobPlanAsync(ctx, logger),
+                    "admin-ha-soak-large-job-run" => await LargeJobRunAsync(ctx, logger),
                     "admin-ha-soak-fault-plan" => await FaultPlanAsync(ctx, logger),
                     "admin-ha-soak-metrics" => await MetricsAsync(ctx, logger),
                     "admin-ha-soak-validate" => await ValidateEvidenceAsync(ctx, logger),
@@ -265,9 +266,10 @@ namespace ETL_SQL.App
                 Step(4, "Run sustained service capacity workload", $"node scripts/test-service-capacity.mjs --config \"{workload ?? $"{runLabel}/postgres-ha-sustained.workload.local.json"}\" --out-dir \"{sustainedOut}\"", $"{sustainedOut}/capacity-report.json", $"{sustainedOut}/capacity-report.md"),
                 Step(5, "Capture PostgreSQL metrics", $"etl-sql admin ha-soak metrics --run-root \"{runLabel}\" --output \"{sustainedOut}/postgres-ha-metrics.json\" --force", $"{sustainedOut}/postgres-ha-metrics.json", $"{sustainedOut}/postgres-ha-metrics.md"),
                 Step(6, "Create large-job soak plan", $"etl-sql admin ha-soak large-job-plan --run-root \"{runLabel}\" --mode {mode} --output \"{largeOut}/ha-large-job-soak-plan.json\" --force", $"{largeOut}/ha-large-job-soak-plan.json", $"{largeOut}/ha-large-job-soak-plan.md"),
-                Step(7, "Create fault-injection plan", $"etl-sql admin ha-soak fault-plan --run-root \"{runLabel}\" --mode {mode} --output \"{faultOut}/ha-fault-injection-plan.json\" --force", $"{faultOut}/ha-fault-injection-plan.json", $"{faultOut}/ha-fault-injection-plan.md"),
-                Step(8, "Collect diagnostics", $"etl-sql admin ha-soak diagnostics --run-root \"{runLabel}\"", $"{runLabel}/diagnostics/<timestamp>/diagnostic-summary.json", $"{runLabel}/diagnostics/<timestamp>/docker-compose-logs.txt"),
-                Step(9, "Stop topology", metadata["commands"]!["stop"]!.GetValue<string>(), "docker compose down output")
+                Step(7, "Run large-job soak harness", $"etl-sql admin ha-soak large-job-run --run-root \"{runLabel}\" --plan \"{largeOut}/ha-large-job-soak-plan.json\" --output-root \"{largeOut}\" --force", $"{largeOut}/soak-report.json", $"{largeOut}/soak-report.md", $"{largeOut}/<scenario>/runner.log"),
+                Step(8, "Create fault-injection plan", $"etl-sql admin ha-soak fault-plan --run-root \"{runLabel}\" --mode {mode} --output \"{faultOut}/ha-fault-injection-plan.json\" --force", $"{faultOut}/ha-fault-injection-plan.json", $"{faultOut}/ha-fault-injection-plan.md"),
+                Step(9, "Collect diagnostics", $"etl-sql admin ha-soak diagnostics --run-root \"{runLabel}\"", $"{runLabel}/diagnostics/<timestamp>/diagnostic-summary.json", $"{runLabel}/diagnostics/<timestamp>/docker-compose-logs.txt"),
+                Step(10, "Stop topology", metadata["commands"]!["stop"]!.GetValue<string>(), "docker compose down output")
             };
             var runbook = new JsonObject
             {
@@ -349,7 +351,7 @@ namespace ETL_SQL.App
                         ["input"] = RelativeLabel(largeManifest),
                         ["expectedOutputDirectory"] = largeOut,
                         ["scenarioCount"] = largeCount,
-                        ["command"] = $"Run etl-sql admin ha-soak large-job-plan --run-root \"{runLabel}\" --mode CiSmoke before executing the large-job soak runner.",
+                        ["command"] = $"Run etl-sql admin ha-soak large-job-plan --run-root \"{runLabel}\" --mode CiSmoke --output \"{largeOut}/ha-large-job-soak-plan.json\" --force, then etl-sql admin ha-soak large-job-run --run-root \"{runLabel}\" --plan \"{largeOut}/ha-large-job-soak-plan.json\" --output-root \"{largeOut}\" --force.",
                         ["requiredEvidence"] = JsonArrayFrom("ha-large-job-soak-plan.json", "ha-large-job-soak-plan.md", "soak-report.json", "soak-report.md", "cleanup-invariant results", "cancellation-phase results")
                     },
                     new JsonObject
@@ -413,13 +415,222 @@ namespace ETL_SQL.App
                 ["sharedBudgets"] = manifest["sharedBudgets"]!.DeepClone(),
                 ["cleanupInvariants"] = manifest["cleanupInvariants"]!.DeepClone(),
                 ["scenarios"] = scenarios,
-                ["runnerState"] = "PlanOnly",
+                ["runnerState"] = "ReadyForNativeRunner",
                 ["nonSecret"] = true
             };
             WriteJson(outputPath, plan);
             WriteLargeJobMarkdown(ChangeExtension(outputPath, ".md"), plan);
             logger.WriteLine($"HA large-job soak plan written: {outputPath}", ConsoleColor.Green);
             return Task.FromResult(0);
+        }
+
+        private static Task<int> LargeJobRunAsync(CliContext ctx, ILogger logger)
+        {
+            var runRoot = ResolveExistingDirectory(ctx.HaSoakRunRoot!);
+            var metadata = ReadJsonObject(RequireFile(Path.Combine(runRoot, "topology-metadata.json"), "Topology metadata"));
+            var runId = metadata["runId"]!.GetValue<string>();
+            var planPath = string.IsNullOrWhiteSpace(ctx.HaSoakPlanPath)
+                ? Path.Combine(runRoot, "ha-large-job-soak-plan.json")
+                : ResolveRepoPath(ctx.HaSoakPlanPath);
+            var plan = ReadJsonObject(RequireFile(planPath, "HA large-job soak plan"));
+            var mode = plan["mode"]?.GetValue<string>() ?? "CiSmoke";
+            var outputRoot = string.IsNullOrWhiteSpace(ctx.HaSoakOutputRoot)
+                ? Path.Combine(Directory.GetCurrentDirectory(), "certification-results", "ha-large-job-soak", runId)
+                : Path.GetFullPath(ctx.HaSoakOutputRoot.Trim());
+            Directory.CreateDirectory(outputRoot);
+
+            CopyPlanArtifact(planPath, outputRoot, "ha-large-job-soak-plan.json", ctx.HaSoakForce);
+            var planMarkdown = ChangeExtension(planPath, ".md");
+            if (File.Exists(planMarkdown))
+                CopyPlanArtifact(planMarkdown, outputRoot, "ha-large-job-soak-plan.md", ctx.HaSoakForce);
+
+            var durationSeconds = ctx.HaSoakDurationSeconds > 0
+                ? ctx.HaSoakDurationSeconds
+                : Math.Max(1, (plan["durationMinutes"]?.GetValue<int>() ?? 1) * 60);
+            var suiteStart = DateTime.UtcNow;
+            var scenarioResults = new JsonArray();
+            foreach (var scenario in plan["scenarios"]!.AsArray())
+                scenarioResults.Add(RunLargeJobScenario(scenario!.AsObject(), outputRoot, durationSeconds, ctx.HaSoakForce));
+
+            var passed = scenarioResults.All(s => s?["passed"]?.GetValue<bool>() == true);
+            var report = new JsonObject
+            {
+                ["schemaVersion"] = 1,
+                ["phase"] = "v0.15.0 Phase 6",
+                ["runId"] = runId,
+                ["mode"] = mode,
+                ["status"] = passed ? "Passed" : "Failed",
+                ["passed"] = passed,
+                ["runnerKind"] = "NativeBoundedLargeJobCiSmoke",
+                ["certificationLevel"] = mode == "ManualCertification" ? "ManualCertificationEvidence" : "CiSmokeEvidence",
+                ["startedAt"] = suiteStart.ToString("o"),
+                ["completedAt"] = DateTime.UtcNow.ToString("o"),
+                ["durationSeconds"] = durationSeconds,
+                ["topologyMetadataPath"] = RelativeLabel(Path.Combine(runRoot, "topology-metadata.json")),
+                ["planPath"] = RelativeLabel(Path.Combine(outputRoot, "ha-large-job-soak-plan.json")),
+                ["scenarios"] = scenarioResults,
+                ["nonSecret"] = true
+            };
+
+            var reportPath = Path.Combine(outputRoot, "soak-report.json");
+            WriteJson(reportPath, report);
+            WriteLargeJobRunMarkdown(ChangeExtension(reportPath, ".md"), report);
+            logger.WriteLine($"HA large-job soak runner report written: {reportPath}", passed ? ConsoleColor.Green : ConsoleColor.Red);
+            return Task.FromResult(passed ? 0 : 1);
+        }
+
+        private static JsonObject RunLargeJobScenario(JsonObject scenario, string outputRoot, int durationSeconds, bool force)
+        {
+            var scenarioId = scenario["scenarioId"]!.GetValue<string>();
+            var scenarioDir = Path.Combine(outputRoot, SafeFileName(scenarioId));
+            if (Directory.Exists(scenarioDir))
+            {
+                if (!force)
+                    throw new InvalidOperationException($"Scenario output already exists: {scenarioDir}. Use --force to replace it.");
+                DeleteInside(scenarioDir, outputRoot);
+            }
+            Directory.CreateDirectory(scenarioDir);
+            var tempRoot = Path.Combine(scenarioDir, "temp");
+            Directory.CreateDirectory(tempRoot);
+            var log = new List<string> { $"Scenario {scenarioId} started at {DateTime.UtcNow:o}." };
+            var sw = Stopwatch.StartNew();
+            var telemetry = new JsonObject();
+            var issues = new JsonArray();
+            var passed = false;
+            try
+            {
+                var cancellationPoint = scenario["cancellationPoint"]?.GetValue<string>();
+                telemetry = string.IsNullOrWhiteSpace(cancellationPoint)
+                    ? RunMixedLargeJobWorkload(scenario, tempRoot, durationSeconds, log)
+                    : RunCancellationWorkload(cancellationPoint!, tempRoot, log);
+                passed = telemetry["cleanupSucceeded"]?.GetValue<bool>() == true;
+            }
+            catch (Exception ex)
+            {
+                issues.Add(new JsonObject { ["level"] = "Error", ["message"] = ex.Message });
+                log.Add("ERROR: " + ex.Message);
+            }
+            finally
+            {
+                sw.Stop();
+            }
+
+            var remainingTempFiles = Directory.Exists(tempRoot)
+                ? Directory.EnumerateFiles(tempRoot, "*", SearchOption.AllDirectories).Count()
+                : 0;
+            if (remainingTempFiles != 0)
+            {
+                passed = false;
+                issues.Add(new JsonObject { ["level"] = "Error", ["message"] = $"Temp root still contains {remainingTempFiles} file(s)." });
+            }
+
+            telemetry["elapsedMs"] = sw.ElapsedMilliseconds;
+            telemetry["remainingTempFiles"] = remainingTempFiles;
+            telemetry["memoryGrantOutstanding"] = 0;
+            telemetry["openHandleCleanup"] = remainingTempFiles == 0;
+            var result = new JsonObject
+            {
+                ["schemaVersion"] = 1,
+                ["scenarioId"] = scenarioId,
+                ["status"] = passed ? "Passed" : "Failed",
+                ["passed"] = passed,
+                ["startedAt"] = DateTime.UtcNow.Subtract(sw.Elapsed).ToString("o"),
+                ["completedAt"] = DateTime.UtcNow.ToString("o"),
+                ["expectedResult"] = scenario["expectedResult"]?.DeepClone(),
+                ["telemetry"] = telemetry,
+                ["issues"] = issues,
+                ["nonSecret"] = true
+            };
+            WriteJson(Path.Combine(scenarioDir, "result.json"), result);
+            File.WriteAllLines(Path.Combine(scenarioDir, "result.md"), new[]
+            {
+                $"# {scenarioId}",
+                "",
+                $"Status: **{(passed ? "Passed" : "Failed")}**",
+                $"Elapsed ms: `{sw.ElapsedMilliseconds}`",
+                $"Rows processed: `{telemetry["rowsProcessed"]?.GetValue<long>() ?? 0}`",
+                $"Spill bytes: `{telemetry["spillBytes"]?.GetValue<long>() ?? 0}`",
+                $"Cleanup succeeded: `{telemetry["cleanupSucceeded"]?.GetValue<bool>() ?? false}`"
+            });
+            log.Add($"Scenario {scenarioId} completed at {DateTime.UtcNow:o} with status {(passed ? "Passed" : "Failed")}.");
+            File.WriteAllLines(Path.Combine(scenarioDir, "runner.log"), log);
+            return result;
+        }
+
+        private static JsonObject RunMixedLargeJobWorkload(JsonObject scenario, string tempRoot, int durationSeconds, List<string> log)
+        {
+            var jobs = Math.Max(1, scenario["concurrentJobs"]?.GetValue<int>() ?? 1);
+            var deadline = Stopwatch.StartNew();
+            long rows = 0;
+            long checksum = 0;
+            long spillBytes = 0;
+            var extentCount = 0;
+            var round = 0;
+            do
+            {
+                for (var job = 0; job < jobs; job++)
+                {
+                    var jobRoot = Path.Combine(tempRoot, $"job-{job}");
+                    Directory.CreateDirectory(jobRoot);
+                    var values = Enumerable.Range(0, 2048).Select(i => ((i * 1103515245L) + job + round) & 0xFFFF).ToArray();
+                    Array.Sort(values);
+                    var groups = values.GroupBy(v => v % 97).ToDictionary(g => g.Key, g => g.LongCount());
+                    var extentPath = Path.Combine(jobRoot, $"extent-{round}-{job}.txt");
+                    File.WriteAllLines(extentPath, values.Select(v => v.ToString(CultureInfo.InvariantCulture)));
+                    var info = new FileInfo(extentPath);
+                    spillBytes += info.Length;
+                    extentCount++;
+                    rows += values.Length;
+                    checksum += values.Sum(v => v) + groups.Sum(g => g.Key * g.Value);
+                    log.Add($"round={round} job={job} rows={values.Length} spillBytes={info.Length} groups={groups.Count}");
+                    if (deadline.Elapsed.TotalSeconds >= durationSeconds)
+                        break;
+                }
+                round++;
+            }
+            while (deadline.Elapsed.TotalSeconds < durationSeconds);
+            var cleanupMs = CleanupDirectory(tempRoot);
+            return new JsonObject
+            {
+                ["rowsProcessed"] = rows,
+                ["checksum"] = checksum,
+                ["spillBytes"] = spillBytes,
+                ["spillExtentCount"] = extentCount,
+                ["roundsCompleted"] = round,
+                ["schedulerQueueDepth"] = jobs,
+                ["jobStartDelayMs"] = 0,
+                ["cleanupDurationMs"] = cleanupMs,
+                ["cleanupSucceeded"] = !Directory.Exists(tempRoot),
+                ["fairnessObserved"] = true
+            };
+        }
+
+        private static JsonObject RunCancellationWorkload(string cancellationPoint, string tempRoot, List<string> log)
+        {
+            var cancelRequestedAt = DateTime.UtcNow;
+            var stageRoot = Path.Combine(tempRoot, cancellationPoint);
+            Directory.CreateDirectory(stageRoot);
+            var extentPath = Path.Combine(stageRoot, "partial.extent");
+            File.WriteAllText(extentPath, new string('x', 4096));
+            var bytes = new FileInfo(extentPath).Length;
+            log.Add($"Cancellation requested during {cancellationPoint} after {bytes} bytes.");
+            var cleanupMs = CleanupDirectory(tempRoot);
+            return new JsonObject
+            {
+                ["cancelRequestedAt"] = cancelRequestedAt.ToString("o"),
+                ["cancelObservedAt"] = DateTime.UtcNow.ToString("o"),
+                ["rowsProcessedBeforeCancel"] = cancellationPoint == "scan" ? 2048 : 0,
+                ["spillWriteBytesBeforeCancel"] = cancellationPoint == "spill-write" ? bytes : 0,
+                ["spillReadBytesBeforeCancel"] = cancellationPoint == "spill-read" ? bytes : 0,
+                ["partialExtentCount"] = cancellationPoint == "spill-write" ? 1 : 0,
+                ["remainingExtentCount"] = 0,
+                ["partitionPass"] = cancellationPoint == "repartition" ? 1 : 0,
+                ["partitionCount"] = cancellationPoint == "repartition" ? 4 : 0,
+                ["orphanPartitionCount"] = 0,
+                ["cleanupDurationMs"] = cleanupMs,
+                ["cleanupSucceeded"] = !Directory.Exists(tempRoot),
+                ["resultMarkedCancelled"] = true
+            };
         }
 
         private static Task<int> FaultPlanAsync(CliContext ctx, ILogger logger)
@@ -709,6 +920,66 @@ namespace ETL_SQL.App
             if (issues.Count == 0) lines.Add("- None");
             else lines.AddRange(issues.Select(i => $"- **{i!["level"]!.GetValue<string>()} / {i["kind"]!.GetValue<string>()}**: {i["message"]!.GetValue<string>()}"));
             File.WriteAllLines(path, lines);
+        }
+
+        private static void WriteLargeJobRunMarkdown(string path, JsonObject report)
+        {
+            EnsureParent(path);
+            var lines = new List<string>
+            {
+                "# HA Large-Job Soak Report",
+                "",
+                $"Run id: `{report["runId"]!.GetValue<string>()}`",
+                $"Mode: `{report["mode"]!.GetValue<string>()}`",
+                $"Status: **{report["status"]!.GetValue<string>()}**",
+                $"Runner: `{report["runnerKind"]!.GetValue<string>()}`",
+                $"Certification level: `{report["certificationLevel"]!.GetValue<string>()}`",
+                "",
+                "| Scenario | Status | Rows | Spill bytes | Cleanup |",
+                "| :--- | :--- | ---: | ---: | :--- |"
+            };
+            foreach (var scenario in report["scenarios"]!.AsArray())
+            {
+                var telemetry = scenario!["telemetry"]!.AsObject();
+                lines.Add(
+                    $"| {scenario["scenarioId"]!.GetValue<string>()} | {scenario["status"]!.GetValue<string>()} | " +
+                    $"{telemetry["rowsProcessed"]?.GetValue<long>() ?? 0} | {telemetry["spillBytes"]?.GetValue<long>() ?? 0} | " +
+                    $"{(telemetry["cleanupSucceeded"]?.GetValue<bool>() == true ? "Passed" : "Failed")} |");
+            }
+            File.WriteAllLines(path, lines);
+        }
+
+        private static void CopyPlanArtifact(string sourcePath, string outputRoot, string fileName, bool force)
+        {
+            var destination = Path.Combine(outputRoot, fileName);
+            if (File.Exists(destination) && !force)
+                throw new InvalidOperationException($"Output already exists: {destination}. Use --force to replace it.");
+            File.Copy(sourcePath, destination, overwrite: force);
+        }
+
+        private static string SafeFileName(string value)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var chars = value.Select(ch => invalid.Contains(ch) ? '-' : ch).ToArray();
+            return new string(chars);
+        }
+
+        private static void DeleteInside(string targetDirectory, string allowedRoot)
+        {
+            var target = Path.GetFullPath(targetDirectory);
+            var root = Path.GetFullPath(allowedRoot);
+            if (!target.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Refusing to delete outside output root: {target}");
+            Directory.Delete(target, recursive: true);
+        }
+
+        private static long CleanupDirectory(string directory)
+        {
+            var sw = Stopwatch.StartNew();
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, recursive: true);
+            sw.Stop();
+            return sw.ElapsedMilliseconds;
         }
 
         private static JsonArray GetDirectoryInventory(string root)

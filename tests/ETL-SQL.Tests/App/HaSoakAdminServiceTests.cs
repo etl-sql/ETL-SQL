@@ -161,6 +161,64 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("Status: **Passed**", File.ReadAllText(passedReportPath));
         }
 
+        [Fact]
+        public async Task LargeJobRunProducesEvidenceAcceptedByValidator()
+        {
+            var logger = new CapturingLogger();
+            var runRoot = Path.Combine(_outputRoot, _runId);
+
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-prepare",
+                HaSoakRunId = _runId,
+                HaSoakOutputRoot = _outputRoot,
+                HaSoakForce = true
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-large-job-plan",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-evidence",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger));
+
+            var runExit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-large-job-run",
+                HaSoakRunRoot = runRoot,
+                HaSoakDurationSeconds = 1,
+                HaSoakForce = true
+            }, logger);
+
+            Assert.Equal(0, runExit);
+            var outputRoot = Path.Combine(_evidenceRoot, "ha-large-job-soak", _runId);
+            Assert.True(File.Exists(Path.Combine(outputRoot, "soak-report.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "soak-report.md")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "MixedScanSpillSortJoinAggregate_Concurrent", "runner.log")));
+
+            var report = JsonNode.Parse(File.ReadAllText(Path.Combine(outputRoot, "soak-report.json")))!.AsObject();
+            Assert.True((bool?)report["passed"]);
+            Assert.Equal("NativeBoundedLargeJobCiSmoke", (string?)report["runnerKind"]);
+
+            var validationReport = Path.Combine(_outputRoot, "large-job-validation.md");
+            var validationExit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-validate",
+                HaSoakRunRoot = runRoot,
+                HaSoakRequiredGate = "LargeJob",
+                HaSoakAllowDirty = true,
+                HaSoakMarkdownReport = validationReport
+            }, logger);
+
+            Assert.True(validationExit == 0, File.ReadAllText(validationReport));
+            Assert.Contains("Status: **Passed**", File.ReadAllText(validationReport));
+        }
+
         private void SeedSustainedEvidence()
         {
             var dir = Path.Combine(_evidenceRoot, "postgres-ha-soak", _runId);
