@@ -32,7 +32,6 @@ function getConnectionDialect(node) {
     if (label.includes('Shipment')) return 'SFTP';
     return 'MSSQL';
   }
-  // Staging / facts / rollups are in-memory temp tables coordinated by the engine
   if (label.startsWith('Stg') || label.startsWith('Enriched') || label.includes('Rollup') || label.includes('Plan') || label.includes('Log') || label.startsWith('Fact')) {
     return 'Engine';
   }
@@ -95,7 +94,7 @@ function _computeLayout(nodes, edges) {
     (byLayer[l] = byLayer[l] || []).push(id);
   }
 
-  const LAYER_H    = 300; // Increased spacing slightly to make room for inline formulas
+  const LAYER_H    = 300;
   const SUB_ROW_H  = 180;
   const NODE_W     = 360;
   const MAX_PER_ROW = 6;
@@ -281,6 +280,8 @@ export default {
     let filteredNodes = null;       // Set of visible node IDs under active filter
     let activeColumnPath = null;    // colKey of currently isolated column path
     let activeColumnPathSet = null; // Set of elements in the isolated column path
+    let visibleTypes = { table: true, dataset: true, page: true, visual: true };
+    let piiComplianceHighlight = false; // toggle PII sensitive fields
 
     // Setup filter notification banner at top of canvas
     const filterBanner = document.createElement('div');
@@ -312,11 +313,14 @@ export default {
       filteredNodes = null;
       activeColumnPath = null;
       activeColumnPathSet = null;
+      piiComplianceHighlight = false;
+      piiBtn.style.background = '#1e293b';
+      piiBtn.style.borderColor = '#334155';
       filterBanner.style.display = 'none';
       
       graph.nodes.forEach(n => {
         const card = document.getElementById(`node__${n.id}`);
-        if (card) card.style.display = 'block';
+        if (card) card.style.display = visibleTypes[n.type] ? 'block' : 'none';
       });
       updateUIForPathIsolation();
       updateConnections();
@@ -333,7 +337,8 @@ export default {
       graph.nodes.forEach(n => {
         const card = document.getElementById(`node__${n.id}`);
         if (card) {
-          card.style.display = filteredNodes.has(n.id) ? 'block' : 'none';
+          const visible = filteredNodes.has(n.id) && visibleTypes[n.type];
+          card.style.display = visible ? 'block' : 'none';
         }
       });
       updateConnections();
@@ -406,7 +411,7 @@ export default {
       }
     }
 
-    // Toggle card/column opacity states during path isolation
+    // Toggle card/column opacity states during path isolation or PII highlight
     function updateUIForPathIsolation() {
       if (activeColumnPath) {
         const parts = activeColumnPath.split('__');
@@ -416,6 +421,9 @@ export default {
         
         filterBanner.style.display = 'flex';
         filterBanner.querySelector('span').textContent = `Isolated Path: ${label} ➔ ${colName}`;
+      } else if (piiComplianceHighlight) {
+        filterBanner.style.display = 'flex';
+        filterBanner.querySelector('span').textContent = `🔒 Zero-Trust Mode: PII Auditing Active`;
       } else {
         if (!currentFilterNode) {
           filterBanner.style.display = 'none';
@@ -461,6 +469,38 @@ export default {
             card.style.opacity = '0.08';
             card.style.borderColor = '#1f2937';
           }
+        } else if (piiComplianceHighlight) {
+          // Highlight nodes with PII columns, dim the rest
+          let nodeHasPii = false;
+          if (n.meta?.columns) {
+            n.meta.columns.forEach(c => {
+              const cl = n.meta.columnLineage?.[c];
+              if (cl?.tags?.pii) nodeHasPii = true;
+            });
+          }
+
+          if (nodeHasPii) {
+            card.style.opacity = '1';
+            card.style.borderColor = '#ef4444'; // Red for compliance attention
+            
+            if (n.meta?.columns) {
+              n.meta.columns.forEach(c => {
+                const row = document.getElementById(`${n.id}__col__${c}`);
+                if (row) {
+                  const cl = n.meta.columnLineage?.[c];
+                  const isPii = !!cl?.tags?.pii;
+                  row.style.opacity = isPii ? '1' : '0.15';
+                  const labelSpan = row.querySelector('.col-label-span');
+                  if (labelSpan) {
+                    labelSpan.style.color = isPii ? '#f87171' : '#4b5563';
+                  }
+                }
+              });
+            }
+          } else {
+            card.style.opacity = '0.1';
+            card.style.borderColor = '#1f2937';
+          }
         } else {
           card.style.opacity = '1';
           card.style.borderColor = n.type === 'table' ? '#2563eb' : (n.type === 'dataset' ? '#7c3aed' : (n.type === 'visual' ? '#059669' : '#475569'));
@@ -491,111 +531,6 @@ export default {
           }
         }
       });
-    }
-
-    // Walk a column back through its sources recursively (production matching)
-    function appendColumnLineage(container, tableNodeId, column, depth, seen) {
-      seen = seen || new Set();
-      const key = `${tableNodeId}|${column}`;
-      if (seen.has(key) || depth > 12) return;
-      seen.add(key);
-
-      const tnode = _nodeById[tableNodeId];
-      const cl = tnode?.meta?.columnLineage?.[column];
-
-      const row = document.createElement('div');
-      row.className = 'etlsql-dag-lin';
-      row.style.paddingLeft = `${depth * 14}px`;
-      row.style.margin = '4px 0';
-      row.style.display = 'flex';
-      row.style.alignItems = 'center';
-      row.style.flexWrap = 'wrap';
-      row.style.gap = '4px';
-
-      if (depth > 0) {
-        const a = document.createElement('span');
-        a.className = 'etlsql-dag-lin-arrow';
-        a.textContent = '↖';
-        row.appendChild(a);
-      }
-
-      const colEl = document.createElement('span');
-      colEl.className = 'etlsql-dag-lin-col';
-      colEl.textContent = column;
-      row.appendChild(colEl);
-
-      if (cl?.transform) {
-        const t = document.createElement('span');
-        t.className = 'etlsql-dag-lin-expr';
-        t.textContent = `= ${cl.transform}`;
-        row.appendChild(t);
-      }
-
-      const tbl = document.createElement('span');
-      tbl.className = 'etlsql-dag-lin-tbl';
-      tbl.textContent = tnode?.label ?? tableNodeId;
-      row.appendChild(tbl);
-      container.appendChild(row);
-
-      // Render Tags
-      if (cl?.tags && Object.keys(cl.tags).length) {
-        const tagRow = document.createElement('div');
-        tagRow.className = 'etlsql-dag-lin-meta';
-        tagRow.style.paddingLeft = `${depth * 14 + 16}px`;
-        tagRow.style.display = 'flex';
-        tagRow.style.gap = '4px';
-        tagRow.style.margin = '2px 0';
-        for (const k of Object.keys(cl.tags)) {
-          const tg = document.createElement('span');
-          tg.className = 'etlsql-dag-lin-tag';
-          tg.textContent = `⚠ ${k}`;
-          tagRow.appendChild(tg);
-        }
-        container.appendChild(tagRow);
-      }
-
-      // Render Description
-      if (cl?.description) {
-        const d = document.createElement('div');
-        d.className = 'etlsql-dag-lin-desc';
-        d.style.paddingLeft = `${depth * 14 + 16}px`;
-        d.textContent = cl.description;
-        container.appendChild(d);
-      }
-
-      // Walk recursively
-      for (const s of (cl?.sources ?? [])) {
-        if (!s.column) continue;
-        const srcId = findTableNodeId(s.table);
-        if (srcId) {
-          appendColumnLineage(container, srcId, s.column, depth + 1, seen);
-        } else {
-          const leaf = document.createElement('div');
-          leaf.className = 'etlsql-dag-lin';
-          leaf.style.paddingLeft = `${(depth + 1) * 14}px`;
-          leaf.style.margin = '4px 0';
-          leaf.style.display = 'flex';
-          leaf.style.alignItems = 'center';
-          leaf.style.gap = '4px';
-
-          const a = document.createElement('span');
-          a.className = 'etlsql-dag-lin-arrow';
-          a.textContent = '↖';
-          leaf.appendChild(a);
-
-          const c = document.createElement('span');
-          c.className = 'etlsql-dag-lin-col';
-          c.textContent = s.column;
-          leaf.appendChild(c);
-
-          const tb = document.createElement('span');
-          tb.className = 'etlsql-dag-lin-tbl';
-          tb.textContent = s.table;
-          leaf.appendChild(tb);
-
-          container.appendChild(leaf);
-        }
-      }
     }
 
     // Sidebar Properties Panel Render Function
@@ -1172,6 +1107,9 @@ export default {
 
         if (!fromNode || !toNode) return;
 
+        // Skip drawing connections for filtered out node types
+        if (!visibleTypes[fromNode.type] || !visibleTypes[toNode.type]) return;
+
         // Visual Mapping Ports: Route directly from dataset column port to visual role port
         if (toNode.type === 'visual' && toNode.meta?.mappings && fromNode.meta?.columns) {
           let routedAny = false;
@@ -1205,7 +1143,6 @@ export default {
                   activePaths.push(path);
                   routedAny = true;
 
-                  // Transformation edge badge midpoint
                   const edgeTransform = m.column.includes('(') ? m.column.split('(')[0] : 'SELECT';
                   drawEdgeBadge(x1, y1, x2, y2, edgeTransform, inPath, isDimmed || isDimmedHighlight);
                 }
@@ -1254,6 +1191,13 @@ export default {
         const isDirectConnection = activeHighlightNode === c.fromTable || activeHighlightNode === c.toTable;
         if (activeHighlightNode && !isDirectConnection) return;
 
+        const fromNode = _nodeById[c.toTable];
+        const sourceNode = _nodeById[c.fromTable];
+        if (!fromNode || !sourceNode) return;
+
+        // Skip drawing column lines if either end is filtered out
+        if (!visibleTypes[fromNode.type] || !visibleTypes[sourceNode.type]) return;
+
         const inPath = activeColumnPathSet && activeColumnPathSet.has(c.from) && activeColumnPathSet.has(c.to);
         const isDimmed = activeColumnPathSet && !inPath;
 
@@ -1281,7 +1225,6 @@ export default {
         const path = drawLink(x1, y1, x2, y2, color, width, !activeHighlightNode && !inPath);
         activePaths.push(path);
 
-        const fromNode = _nodeById[c.toTable];
         const toColName = c.to.split('__col__')[1];
         const cl = fromNode?.meta?.columnLineage?.[toColName];
         if (cl?.transform && !isDimmed) {
@@ -1290,6 +1233,144 @@ export default {
         }
       });
     }
+
+    // 10. Floating Interactive Toolbars & Controls
+    
+    // 10.1 Top Left Category Filter Chips (Toggles Pages/Visuals/Tables)
+    const toolbar = document.createElement('div');
+    toolbar.style.position = 'absolute';
+    toolbar.style.top = '12px';
+    toolbar.style.left = '16px';
+    toolbar.style.display = 'flex';
+    toolbar.style.gap = '8px';
+    toolbar.style.zIndex = '50';
+    canvasContainer.appendChild(toolbar);
+
+    const categories = [
+      { key: 'table', label: 'Tables', color: '#2563eb' },
+      { key: 'dataset', label: 'Datasets', color: '#7c3aed' },
+      { key: 'page', label: 'Pages', color: '#475569' },
+      { key: 'visual', label: 'Visuals', color: '#059669' }
+    ];
+
+    categories.forEach(cat => {
+      const chip = document.createElement('button');
+      chip.textContent = cat.label;
+      chip.style.background = cat.color;
+      chip.style.border = '1px solid transparent';
+      chip.style.color = '#fff';
+      chip.style.fontSize = '11px';
+      chip.style.fontWeight = 'bold';
+      chip.style.padding = '4px 10px';
+      chip.style.borderRadius = '14px';
+      chip.style.cursor = 'pointer';
+      chip.style.opacity = '1';
+      chip.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+      
+      chip.addEventListener('click', () => {
+        visibleTypes[cat.key] = !visibleTypes[cat.key];
+        chip.style.opacity = visibleTypes[cat.key] ? '1' : '0.4';
+        
+        // Toggle card elements
+        graph.nodes.forEach(n => {
+          if (n.type === cat.key) {
+            const card = document.getElementById(`node__${n.id}`);
+            if (card) {
+              card.style.display = visibleTypes[cat.key] ? 'block' : 'none';
+            }
+          }
+        });
+        updateConnections();
+      });
+      toolbar.appendChild(chip);
+    });
+
+    // 10.2 Zero-Trust PII Compliance Highlight button
+    const piiBtn = document.createElement('button');
+    piiBtn.innerHTML = '🔒 Highlight PII';
+    piiBtn.style.background = '#1e293b';
+    piiBtn.style.border = '1px solid #334155';
+    piiBtn.style.color = '#f87171';
+    piiBtn.style.fontSize = '11px';
+    piiBtn.style.fontWeight = 'bold';
+    piiBtn.style.padding = '4px 10px';
+    piiBtn.style.borderRadius = '14px';
+    piiBtn.style.cursor = 'pointer';
+    piiBtn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+    
+    piiBtn.addEventListener('click', () => {
+      piiComplianceHighlight = !piiComplianceHighlight;
+      if (piiComplianceHighlight) {
+        piiBtn.style.background = '#991b1b';
+        piiBtn.style.borderColor = '#f87171';
+        piiBtn.style.color = '#fff';
+        // Clear conflicting selections
+        activeColumnPath = null;
+        activeColumnPathSet = null;
+      } else {
+        piiBtn.style.background = '#1e293b';
+        piiBtn.style.borderColor = '#334155';
+        piiBtn.style.color = '#f87171';
+      }
+      updateUIForPathIsolation();
+      updateConnections();
+    });
+    toolbar.appendChild(piiBtn);
+
+    // 10.3 Floating Navigation Zoom Controls (Bottom Right)
+    const zoomControls = document.createElement('div');
+    zoomControls.style.position = 'absolute';
+    zoomControls.style.bottom = '16px';
+    zoomControls.style.right = '16px';
+    zoomControls.style.display = 'flex';
+    zoomControls.style.flexDirection = 'column';
+    zoomControls.style.gap = '6px';
+    zoomControls.style.zIndex = '50';
+    canvasContainer.appendChild(zoomControls);
+
+    function createZoomBtn(label, onClick) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.style.width = '28px';
+      btn.style.height = '28px';
+      btn.style.background = '#1e293b';
+      btn.style.border = '1px solid #334155';
+      btn.style.color = '#e2e8f0';
+      btn.style.fontSize = '14px';
+      btn.style.fontWeight = 'bold';
+      btn.style.borderRadius = '6px';
+      btn.style.cursor = 'pointer';
+      btn.style.display = 'flex';
+      btn.style.alignItems = 'center';
+      btn.style.justifyContent = 'center';
+      btn.style.boxShadow = '0 2px 5px rgba(0,0,0,0.4)';
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    const zoomInBtn = createZoomBtn('+', () => {
+      zoom = Math.min(2.0, zoom * 1.25);
+      viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      updateConnections();
+    });
+
+    const zoomOutBtn = createZoomBtn('-', () => {
+      zoom = Math.max(0.08, zoom / 1.25);
+      viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      updateConnections();
+    });
+
+    const zoomResetBtn = createZoomBtn('⟲', () => {
+      panX = 0;
+      panY = 0;
+      zoom = fixtureId === 'kitchen' ? 0.22 : 0.65;
+      viewport.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`;
+      updateConnections();
+    });
+
+    zoomControls.appendChild(zoomInBtn);
+    zoomControls.appendChild(zoomOutBtn);
+    zoomControls.appendChild(zoomResetBtn);
 
     // Pan and Zoom Interaction (Zoom-to-cursor to prevent drift)
     let panX = 0;
