@@ -25,6 +25,7 @@ function makeFakeApi(seed, { failVerify = [], keyRingBroken = false } = {}) {
       return { secretCount: secrets.length, failedCount: failed, firstFailedName: failed ? (failVerify[0] ?? secrets[0]?.name) : null };
     },
     async disable(name) { secrets.find((s) => s.name === name).disabled = true; return {}; },
+    async enable(name) { secrets.find((s) => s.name === name).disabled = false; return {}; },
     async remove(name) { secrets = secrets.filter((s) => s.name !== name); return {}; },
   };
 }

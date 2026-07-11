@@ -214,7 +214,7 @@ Supported providers:
 | `Environment` | Optional `EnvironmentPrefix` | Secret names are uppercased; `.` and `-` become `_`. With the prefix above, `SECRET:sales_db_password` resolves from `ETLSQL_SECRET_SALES_DB_PASSWORD`. |
 | `OsSecretStore` | `OsStoreRoot` | Stores protected values under a fully qualified local directory. Values are encrypted machine-scoped (DPAPI `LocalMachine` on Windows, machine-id-derived AES-256-GCM elsewhere), so an administrator can write secrets that a differently privileged service account reads back; restrict the directory with filesystem ACLs since any account on the host that can read the files can decrypt them. On Unix, secret files are written owner-read/write only. Values written by releases before machine scoping are user-scoped and stay readable by the account that wrote them; rotating a secret upgrades it to machine scope. The store is never read as plaintext — unrecognized file contents fail closed. |
 | `HttpsVault` | `VaultEndpoint`; optional `VaultBearerToken` | The endpoint must be HTTPS. The provider requests `<VaultEndpoint>/<secret-name>` and accepts either a raw response body or JSON `{ "value": "secret" }`. |
-| `PortalStore` | none (Portal host only) | Stores secrets encrypted in the Portal database using the cluster-wide Data Protection key ring — the supported multi-node path without an external vault. Managed through `api/admin/secrets` (set, list metadata, verify, verify-all, disable, delete; values are never returned after write, and every mutation is audited). The `secret-store-keyring` health check under `GET /health` decrypt-probes every stored secret so an HA node with a wrong `Portal:Storage:KeyRingPath` fails fast; run `POST api/admin/secrets/verify-all` after a backup/restore to prove the restored key ring can decrypt every value without printing them. Not available to standalone CLI/Orchestrator deployments. |
+| `PortalStore` | none (Portal host only) | Stores secrets encrypted in the Portal database using the cluster-wide Data Protection key ring — the supported multi-node path without an external vault. Managed through `api/admin/secrets` (set, list metadata, verify, verify-all, disable, enable, delete; values are never returned after write, and every mutation is audited). The `secret-store-keyring` health check under `GET /health` decrypt-probes every stored secret so an HA node with a wrong `Portal:Storage:KeyRingPath` fails fast; run `POST api/admin/secrets/verify-all` after a backup/restore to prove the restored key ring can decrypt every value without printing them. Not available to standalone CLI/Orchestrator deployments. |
 
 Environment-variable examples:
 
@@ -233,7 +233,8 @@ without touching secret files directly:
 etl-sql admin set-secret --name sales_db_password      # prompts (masked) and confirms
 etl-sql admin verify-secret --name sales_db_password   # proves the secret resolves; never prints it
 etl-sql admin rotate-secret --name sales_db_password   # replaces the value; fails if it does not exist
-etl-sql admin disable-secret --name sales_db_password  # resolution fails until a new value is stored
+etl-sql admin disable-secret --name sales_db_password  # resolution fails until re-enabled
+etl-sql admin enable-secret --name sales_db_password   # re-enables; the stored value resolves again
 etl-sql admin delete-secret --name sales_db_password   # permanently removes the secret
 ```
 
@@ -256,7 +257,8 @@ with filesystem ACLs), then manage entries from the CLI:
 etl-sql admin set-connection --alias sales_dw --type MSSQL --option SERVER=sql01 --option DATABASE=Sales --option USER=etl_worker --option PASSWORD=SECRET:sales_db_password
 etl-sql admin list-connections                       # aliases and Active/Disabled status
 etl-sql admin verify-connection --alias sales_dw     # proves the entry and its SECRET: references resolve
-etl-sql admin disable-connection --alias sales_dw
+etl-sql admin disable-connection --alias sales_dw    # SHARED:sales_dw fails until re-enabled
+etl-sql admin enable-connection --alias sales_dw     # re-enables; the stored definition is retained
 etl-sql admin delete-connection --alias sales_dw
 ```
 

@@ -69,7 +69,15 @@ public class PortalSecretsApiTests
         var verifyDisabled = await SendAsync(client, HttpMethod.Post, token, "/api/admin/secrets/sales_db_password/verify", null);
         Assert.Equal(HttpStatusCode.Conflict, verifyDisabled.StatusCode);
 
-        // set again re-enables
+        // enable restores the stored value without a new one
+        var enable = await SendAsync(client, HttpMethod.Post, token, "/api/admin/secrets/sales_db_password/enable", null);
+        Assert.Equal(HttpStatusCode.NoContent, enable.StatusCode);
+        var verifyEnabled = await SendAsync(client, HttpMethod.Post, token, "/api/admin/secrets/sales_db_password/verify", null);
+        Assert.Equal(HttpStatusCode.OK, verifyEnabled.StatusCode);
+
+        // disable again, then set re-enables with a new value
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/secrets/sales_db_password/disable", null)).StatusCode);
         var reset = await SendAsync(client, HttpMethod.Put, token, "/api/admin/secrets/sales_db_password",
             new { value = "rotated-value" });
         Assert.Equal(HttpStatusCode.NoContent, reset.StatusCode);
@@ -94,6 +102,7 @@ public class PortalSecretsApiTests
         Assert.Contains(auditRows, a => a.Action == "SECRET_VERIFY");
         Assert.Contains(auditRows, a => a.Action == "SECRET_VERIFY_ALL");
         Assert.Contains(auditRows, a => a.Action == "SECRET_DISABLE");
+        Assert.Contains(auditRows, a => a.Action == "SECRET_ENABLE");
         Assert.Contains(auditRows, a => a.Action == "SECRET_DELETE");
         Assert.DoesNotContain(auditRows, a =>
             (a.Detail ?? "").Contains(secretValue) || (a.ResourceId ?? "").Contains(secretValue));

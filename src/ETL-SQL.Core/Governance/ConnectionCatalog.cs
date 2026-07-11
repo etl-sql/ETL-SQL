@@ -28,6 +28,8 @@ public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
     Task<IReadOnlyList<string>> ListAsync(CancellationToken cancellationToken = default);
     Task<SecretLifecycleStatus> GetStatusAsync(string alias, CancellationToken cancellationToken = default);
     Task DisableAsync(string alias, CancellationToken cancellationToken = default);
+    /// <summary>Re-enables a disabled entry without re-supplying its definition. No-op when already active.</summary>
+    Task EnableAsync(string alias, CancellationToken cancellationToken = default);
     Task DeleteAsync(string alias, CancellationToken cancellationToken = default);
 }
 
@@ -116,6 +118,20 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
             throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
 
         File.Move(path, GetDisabledPath(alias), overwrite: true);
+        return Task.CompletedTask;
+    }
+
+    public Task EnableAsync(string alias, CancellationToken cancellationToken = default)
+    {
+        var path = GetEntryPath(alias);
+        if (File.Exists(path))
+            return Task.CompletedTask;
+
+        var disabledPath = GetDisabledPath(alias);
+        if (!File.Exists(disabledPath))
+            throw new KeyNotFoundException($"Shared connection '{alias}' was not found in the connection catalog.");
+
+        File.Move(disabledPath, path);
         return Task.CompletedTask;
     }
 

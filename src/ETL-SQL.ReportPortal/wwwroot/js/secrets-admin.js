@@ -102,7 +102,9 @@ export function createSecretsAdmin({ host, secretsApi }) {
                 <td>${esc(s.version)}</td>
                 <td class="table-actions">
                   <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
-                  ${s.disabled ? '' : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
+                  ${s.disabled
+                    ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
+                    : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
                   <button class="btn btn-danger-soft btn-sm" data-act="delete">Delete</button>
                 </td>
               </tr>`).join('')}
@@ -130,8 +132,11 @@ export function createSecretsAdmin({ host, secretsApi }) {
           row.querySelector('.sec-row-status').innerHTML = `<span class="badge badge-error">${esc(status)}</span>`;
         }
       } else if (btn.dataset.act === 'disable') {
-        if (!window.confirm(`Disable secret '${name}'? SECRET:${name} will fail until a new value is stored.`)) return;
+        if (!window.confirm(`Disable secret '${name}'? SECRET:${name} will fail until it is re-enabled.`)) return;
         await secretsApi.disable(name);
+        await load();
+      } else if (btn.dataset.act === 'enable') {
+        await secretsApi.enable(name);
         await load();
       } else if (btn.dataset.act === 'delete') {
         if (!window.confirm(`Permanently delete secret '${name}'?`)) return;

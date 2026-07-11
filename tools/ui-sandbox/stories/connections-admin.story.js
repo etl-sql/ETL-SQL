@@ -37,6 +37,7 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       return { alias, status: 'ok', secretReferences: refs };
     },
     async disable(alias) { entries.find((x) => x.alias === alias).disabled = true; return {}; },
+    async enable(alias) { entries.find((x) => x.alias === alias).disabled = false; return {}; },
     async remove(alias) { entries = entries.filter((x) => x.alias !== alias); return {}; },
     async exportAll() {
       return entries.map((e) => ({

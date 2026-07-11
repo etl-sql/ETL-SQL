@@ -170,6 +170,18 @@ public sealed class PortalConnectionCatalogService(PortalDbContext db)
         }
     }
 
+    public async Task EnableAsync(string alias, int? userId = null, CancellationToken cancellationToken = default)
+    {
+        var entity = await Require(alias, cancellationToken);
+        if (entity.Disabled)
+        {
+            entity.Disabled = false;
+            entity.UpdatedAtUtc = DateTime.UtcNow;
+            entity.UpdatedByUserId = userId;
+            entity.Version++;
+        }
+    }
+
     public async Task DeleteAsync(string alias, CancellationToken cancellationToken = default)
         => db.PortalSharedConnections.Remove(await Require(alias, cancellationToken));
 

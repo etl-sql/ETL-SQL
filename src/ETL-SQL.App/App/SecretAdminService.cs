@@ -101,7 +101,16 @@ namespace ETL_SQL.App
                             return LifecycleUnsupported(provider, logger);
 
                         await lifecycle.DisableAsync(name, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' disabled. Resolution now fails until a new value is stored.", ConsoleColor.Green);
+                        logger.WriteLine($"Secret '{name}' disabled. Resolution now fails until it is re-enabled.", ConsoleColor.Green);
+                        return 0;
+                    }
+                    case "enable-secret":
+                    {
+                        if (provider is not ISecretLifecycleProvider lifecycle)
+                            return LifecycleUnsupported(provider, logger);
+
+                        await lifecycle.EnableAsync(name, cancellationToken);
+                        logger.WriteLine($"Secret '{name}' enabled; the previously stored value resolves again.", ConsoleColor.Green);
                         return 0;
                     }
                     case "delete-secret":

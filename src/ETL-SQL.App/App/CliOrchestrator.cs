@@ -466,12 +466,19 @@ namespace ETL_SQL.App
             rotateSecretCommand.SetAction(context => Dispatch(context, "admin-rotate-secret", handler));
             adminCommand.Add(rotateSecretCommand);
 
-            var disableSecretCommand = new Command("disable-secret", "Disable a named secret so resolution fails until a new value is stored")
+            var disableSecretCommand = new Command("disable-secret", "Disable a named secret so resolution fails until it is re-enabled")
             {
                 SecretNameOption,
             };
             disableSecretCommand.SetAction(context => Dispatch(context, "admin-disable-secret", handler));
             adminCommand.Add(disableSecretCommand);
+
+            var enableSecretCommand = new Command("enable-secret", "Re-enable a disabled secret; the stored value resolves again")
+            {
+                SecretNameOption,
+            };
+            enableSecretCommand.SetAction(context => Dispatch(context, "admin-enable-secret", handler));
+            adminCommand.Add(enableSecretCommand);
 
             var deleteSecretCommand = new Command("delete-secret", "Permanently remove a named secret from the secret store")
             {
@@ -501,12 +508,19 @@ namespace ETL_SQL.App
             verifyConnectionCommand.SetAction(context => Dispatch(context, "admin-verify-connection", handler));
             adminCommand.Add(verifyConnectionCommand);
 
-            var disableConnectionCommand = new Command("disable-connection", "Disable a shared connection so SHARED:alias fails until it is stored again")
+            var disableConnectionCommand = new Command("disable-connection", "Disable a shared connection so SHARED:alias fails until it is re-enabled")
             {
                 ConnectionAliasOption,
             };
             disableConnectionCommand.SetAction(context => Dispatch(context, "admin-disable-connection", handler));
             adminCommand.Add(disableConnectionCommand);
+
+            var enableConnectionCommand = new Command("enable-connection", "Re-enable a disabled shared connection; its stored definition is retained")
+            {
+                ConnectionAliasOption,
+            };
+            enableConnectionCommand.SetAction(context => Dispatch(context, "admin-enable-connection", handler));
+            adminCommand.Add(enableConnectionCommand);
 
             var deleteConnectionCommand = new Command("delete-connection", "Permanently remove a shared connection from the catalog")
             {
@@ -688,7 +702,7 @@ namespace ETL_SQL.App
                 cliContext.SecretName = res.GetValue(SecretNameOption);
                 cliContext.SecretValue = res.GetValue(SecretValueOption);
             }
-            else if (commandName is "admin-verify-secret" or "admin-disable-secret" or "admin-delete-secret")
+            else if (commandName is "admin-verify-secret" or "admin-disable-secret" or "admin-enable-secret" or "admin-delete-secret")
             {
                 cliContext.SecretName = res.GetValue(SecretNameOption);
             }
@@ -699,7 +713,7 @@ namespace ETL_SQL.App
                 cliContext.ConnectionTarget = res.GetValue(ConnectionTargetOption);
                 cliContext.ConnectionOptions = res.GetValue(ConnectionOptionOption);
             }
-            else if (commandName is "admin-verify-connection" or "admin-disable-connection" or "admin-delete-connection")
+            else if (commandName is "admin-verify-connection" or "admin-disable-connection" or "admin-enable-connection" or "admin-delete-connection")
             {
                 cliContext.ConnectionAlias = res.GetValue(ConnectionAliasOption);
             }

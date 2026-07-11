@@ -142,7 +142,9 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
                 <td class="table-actions">
                   <button class="btn btn-outline btn-sm" data-act="detail">Detail</button>
                   <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
-                  ${c.disabled ? '' : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
+                  ${c.disabled
+                    ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
+                    : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
                   <button class="btn btn-danger-soft btn-sm" data-act="delete">Delete</button>
                 </td>
               </tr>`).join('')}
@@ -196,8 +198,11 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
           row.querySelector('.conn-row-status').innerHTML = `<span class="badge badge-error">${esc(status)}</span>`;
         }
       } else if (btn.dataset.act === 'disable') {
-        if (!window.confirm(`Disable shared connection '${alias}'? SHARED:${alias} will fail until it is stored again.`)) return;
+        if (!window.confirm(`Disable shared connection '${alias}'? SHARED:${alias} will fail until it is re-enabled.`)) return;
         await connectionsApi.disable(alias);
+        await load();
+      } else if (btn.dataset.act === 'enable') {
+        await connectionsApi.enable(alias);
         await load();
       } else if (btn.dataset.act === 'delete') {
         if (!window.confirm(`Permanently delete shared connection '${alias}'?`)) return;

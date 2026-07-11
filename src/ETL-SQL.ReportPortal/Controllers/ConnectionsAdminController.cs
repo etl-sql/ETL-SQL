@@ -113,6 +113,19 @@ public class ConnectionsAdminController(
         return NoContent();
     }
 
+    /// <summary>Re-enables a disabled entry; the stored definition is retained.</summary>
+    [HttpPost("{alias}/enable")]
+    public async Task<IActionResult> Enable(string alias, CancellationToken ct)
+    {
+        if (await catalog.GetStatusAsync(alias, ct) == SecretLifecycleStatus.NotFound)
+            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
+
+        audit.Stage(CurrentUserId, "SHARED_CONNECTION_ENABLE", "PortalSharedConnection", alias);
+        await catalog.EnableAsync(alias, CurrentUserId, ct);
+        await catalog.SaveAsync(ct);
+        return NoContent();
+    }
+
     [HttpDelete("{alias}")]
     public async Task<IActionResult> Delete(string alias, CancellationToken ct)
     {

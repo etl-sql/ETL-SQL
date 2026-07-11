@@ -100,6 +100,18 @@ public class SecretsAdminController(PortalSecretStoreService store, AuditService
         return NoContent();
     }
 
+    /// <summary>Re-enables a disabled secret; the stored value is retained, no new value required.</summary>
+    [HttpPost("{name}/enable")]
+    public async Task<IActionResult> Enable(string name, CancellationToken ct)
+    {
+        if (await store.GetStatusAsync(name, ct) == SecretLifecycleStatus.NotFound)
+            return NotFound(new { error = $"Secret '{name}' does not exist." });
+
+        audit.Stage(CurrentUserId, "SECRET_ENABLE", "PortalSecret", name);
+        await store.EnableAsync(name, CurrentUserId, ct);
+        return NoContent();
+    }
+
     [HttpDelete("{name}")]
     public async Task<IActionResult> Delete(string name, CancellationToken ct)
     {
