@@ -1251,6 +1251,31 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.ToTable("ServiceAccounts");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Permission")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SharedConnectionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GroupId");
+
+                    b.HasIndex("SharedConnectionId", "GroupId")
+                        .IsUnique();
+
+                    b.ToTable("SharedConnectionAcls");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SmtpConnection", b =>
                 {
                     b.Property<int>("Id")
@@ -1745,6 +1770,25 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("OwnerUser");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.SharedConnectionAcl", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.ReportPortal.Data.PortalSharedConnection", "SharedConnection")
+                        .WithMany("Acls")
+                        .HasForeignKey("SharedConnectionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Group");
+
+                    b.Navigation("SharedConnection");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Subscription", b =>
                 {
                     b.HasOne("ETL_SQL.ReportPortal.Data.Report", "Report")
@@ -1860,6 +1904,11 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("FolderAcls");
 
                     b.Navigation("UserGroups");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalSharedConnection", b =>
+                {
+                    b.Navigation("Acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>

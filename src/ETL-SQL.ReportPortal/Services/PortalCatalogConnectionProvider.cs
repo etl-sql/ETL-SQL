@@ -4,18 +4,39 @@ namespace ETL_SQL.ReportPortal.Services;
 
 /// <summary>
 /// Resolves SHARED:alias references from the Portal connection catalog for Portal-hosted script
-/// execution. Singleton; reaches the scoped catalog service through a scope per resolution.
+/// execution, enforcing per-connection use-ACLs against the caller identity. Singleton; reaches
+/// the scoped catalog service through a scope per resolution. ACL denials are audited here
+/// (with the identity passed explicitly — subscription/scheduled runs have no HTTP context)
+/// and surface to the script as a clear error that never contains entry contents.
 /// </summary>
 public sealed class PortalCatalogConnectionProvider(IServiceScopeFactory scopes) : IConnectionCatalogProvider
 {
     public string ProviderName => "PortalCatalog";
 
-    public async Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default)
+    public async Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default)
     {
         SecretNameValidator.Validate(alias);
         using var scope = scopes.CreateScope();
         var catalog = scope.ServiceProvider.GetRequiredService<PortalConnectionCatalogService>();
-        return await catalog.ResolveDefinitionAsync(alias, cancellationToken);
+        try
+        {
+            return await catalog.ResolveDefinitionAsync(alias, identity, cancellationToken);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            var audit = scope.ServiceProvider.GetRequiredService<AuditService>();
+            await audit.LogAsync(
+                identity?.EffectiveUserId,
+                "SHARED_CONNECTION_USE_DENIED",
+                "PortalSharedConnection",
+                alias,
+                $"EffectiveUser={identity?.EffectiveUser ?? "(none)"}; RealUser={identity?.RealUser ?? "(none)"}",
+                actorType: identity == null ? "System" : "User");
+            throw;
+        }
     }
 }
 
@@ -26,7 +47,10 @@ public sealed class UnconfiguredConnectionCatalogProvider : IConnectionCatalogPr
 
     public string ProviderName => "Unconfigured";
 
-    public Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default) =>
+    public Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default) =>
         throw new InvalidOperationException(
             "no connection catalog provider is configured (Governance:ConnectionCatalog:Provider).");
 }

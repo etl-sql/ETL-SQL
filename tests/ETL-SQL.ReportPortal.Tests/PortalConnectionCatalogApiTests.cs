@@ -124,6 +124,73 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    public async Task UseAcls_RestrictExpansionToAdminsOwnersAndGrantedGroups()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        // catalog an unrestricted entry
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/acl_dw", new
+            {
+                connectorType = "MSSQL",
+                options = new Dictionary<string, string> { ["SERVER"] = "sql01" }
+            })).StatusCode);
+
+        var provider = factory.Services.GetRequiredService<IConnectionCatalogProvider>();
+
+        // no grants → usable without any identity (backward compatible)
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+
+        // create a group and grant it use
+        var group = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "ConnUsers" });
+        Assert.Equal(HttpStatusCode.Created, group.StatusCode);
+        var groupId = (await group.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/acl_dw/acl", new { groupId })).StatusCode);
+
+        var acl = await SendAsync(client, HttpMethod.Get, token, "/api/admin/connections/acl_dw/acl", null);
+        var aclBody = await acl.Content.ReadFromJsonAsync<JsonArray>(Json);
+        Assert.Single(aclBody!);
+        Assert.Equal("ConnUsers", aclBody![0]!["groupName"]!.GetValue<string>());
+
+        // once granted: no identity → denied (fail closed) and the denial is audited
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw"));
+
+        // non-member, non-admin identity → denied
+        var outsider = new ExecutionIdentity
+        {
+            EffectiveUser = "bob", RealUser = "bob", IsAdmin = false, Groups = ["OtherTeam"]
+        };
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
+
+        // group member (name-based federated identity) → allowed
+        var member = new ExecutionIdentity
+        {
+            EffectiveUser = "ann", RealUser = "ann", IsAdmin = false, Groups = ["connusers"]
+        };
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", member)).Options["SERVER"]);
+
+        // admin → allowed
+        var admin = new ExecutionIdentity { EffectiveUser = "root", RealUser = "root", IsAdmin = true };
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", admin)).Options["SERVER"]);
+
+        // revoke → unrestricted again
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Delete, token, $"/api/admin/connections/acl_dw/acl/{groupId}", null)).StatusCode);
+        Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw")).Options["SERVER"]);
+
+        using var scope = factory.Services.CreateScope();
+        var actions = await scope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .AuditLogs.Where(a => a.ResourceType == "PortalSharedConnection" && a.ResourceId == "acl_dw")
+            .Select(a => a.Action).ToListAsync();
+        Assert.Contains("SHARED_CONNECTION_GRANT_USE", actions);
+        Assert.Contains("SHARED_CONNECTION_REVOKE_USE", actions);
+        Assert.Contains("SHARED_CONNECTION_USE_DENIED", actions);
+    }
+
+    [Fact]
     public async Task Set_RejectsRawCredentialValues()
     {
         using var factory = new CatalogFactory();

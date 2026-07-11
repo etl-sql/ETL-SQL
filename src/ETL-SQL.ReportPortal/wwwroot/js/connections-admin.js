@@ -101,7 +101,7 @@ const PANEL_HTML = `
     </div>
   </div>`;
 
-export function createConnectionsAdmin({ host, connectionsApi }) {
+export function createConnectionsAdmin({ host, connectionsApi, adminApi = null }) {
   host.innerHTML = PANEL_HTML;
   const $ = (id) => host.querySelector(`#${id}`);
 
@@ -167,8 +167,10 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
         <table class="data-table">
           <thead><tr><th>Option</th><th>Value</th></tr></thead>
           <tbody>${options.map(([k, v]) => `<tr><td>${esc(k)}</td><td><code>${esc(v)}</code></td></tr>`).join('')}</tbody>
-        </table>` : '<div class="empty-state">No options.</div>'}`;
+        </table>` : '<div class="empty-state">No options.</div>'}
+      <div id="conn-aclSection"></div>`;
     $('conn-detailCard').style.display = '';
+    await renderAcl(alias);
 
     // Pre-fill the edit form for quick updates.
     $('conn-alias').value = alias;
@@ -177,6 +179,67 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
     $('conn-target').value = detail.target || '';
     $('conn-options').value = options.map(([k, v]) => `${k}=${v}`).join('\n');
   }
+
+  async function renderAcl(alias) {
+    const section = $('conn-aclSection');
+    if (!section || !connectionsApi.listAcl) return;
+    try {
+      const grants = await connectionsApi.listAcl(alias);
+      const groups = adminApi?.listGroups ? await adminApi.listGroups() : [];
+      const ungranted = groups.filter((g) => !grants.some((a) => a.groupId === g.id));
+      section.innerHTML = `
+        <h4 class="section-kicker">Access — use grants</h4>
+        <div class="form-hint">${grants.length
+          ? 'Only admins, the owner, and members of these groups may use this connection in scripts.'
+          : 'No grants: any caller may use this connection. Add a grant to restrict it.'}</div>
+        ${grants.length ? `
+          <table class="data-table">
+            <thead><tr><th>Group</th><th>Permission</th><th></th></tr></thead>
+            <tbody>${grants.map((a) => `
+              <tr>
+                <td>${esc(a.groupName)}</td>
+                <td>${esc(a.permission)}</td>
+                <td class="table-actions">
+                  <button class="btn btn-danger-soft btn-sm" data-acl-revoke="${escAttr(a.groupId)}" data-acl-alias="${escAttr(alias)}">Revoke</button>
+                </td>
+              </tr>`).join('')}</tbody>
+          </table>` : ''}
+        ${ungranted.length ? `
+          <div class="form-row">
+            <div class="form-group">
+              <label for="conn-acl-group">Grant use to group</label>
+              <select id="conn-acl-group">${ungranted.map((g) => `<option value="${escAttr(g.id)}">${esc(g.name)}</option>`).join('')}</select>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary btn-sm" data-acl-grant="1" data-acl-alias="${escAttr(alias)}">Grant</button>
+            </div>
+          </div>` : ''}`;
+    } catch (err) {
+      section.innerHTML = `<div class="error-msg show">Could not load access grants: ${esc(err.message)}</div>`;
+    }
+  }
+
+  host.addEventListener('click', async (e) => {
+    const grantBtn = e.target.closest('button[data-acl-grant]');
+    if (grantBtn) {
+      try {
+        await connectionsApi.grantAcl(grantBtn.dataset.aclAlias, Number($('conn-acl-group').value));
+        await renderAcl(grantBtn.dataset.aclAlias);
+      } catch (err) {
+        setError('conn-error', err.message);
+      }
+      return;
+    }
+    const revokeBtn = e.target.closest('button[data-acl-revoke]');
+    if (revokeBtn) {
+      try {
+        await connectionsApi.revokeAcl(revokeBtn.dataset.aclAlias, Number(revokeBtn.dataset.aclRevoke));
+        await renderAcl(revokeBtn.dataset.aclAlias);
+      } catch (err) {
+        setError('conn-error', err.message);
+      }
+    }
+  });
 
   host.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-act]');

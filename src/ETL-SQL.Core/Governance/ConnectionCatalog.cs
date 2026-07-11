@@ -19,7 +19,17 @@ public sealed record SharedConnectionDefinition(
 public interface IConnectionCatalogProvider
 {
     string ProviderName { get; }
-    Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resolves an alias for the given caller. <paramref name="identity"/> is the executing
+    /// user/service identity (null for standalone/CLI execution); providers that support
+    /// per-connection use-ACLs must fail closed for entries with grants when the identity is
+    /// null or not authorized. Entries without grants remain usable by any caller.
+    /// </summary>
+    Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IWritableConnectionCatalogProvider : IConnectionCatalogProvider
@@ -45,7 +55,12 @@ public sealed class LocalConnectionCatalogProvider(string rootDirectory) : IWrit
 
     private sealed record EntryPayload(string ConnectorType, string? Target, Dictionary<string, string> Options);
 
-    public async Task<SharedConnectionDefinition> ResolveAsync(string alias, CancellationToken cancellationToken = default)
+    // The local catalog has no user model: its trust boundary is filesystem access on the single
+    // node (same as the OS secret store), so the caller identity is not evaluated here.
+    public async Task<SharedConnectionDefinition> ResolveAsync(
+        string alias,
+        ExecutionIdentity? identity = null,
+        CancellationToken cancellationToken = default)
     {
         var path = GetEntryPath(alias);
         if (!File.Exists(path))

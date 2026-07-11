@@ -352,10 +352,15 @@ configuration.
    audited `api/admin/connections` API with masked detail, verify, metadata-only export/import,
    owner/environment-scope/last-used/last-verified governance metadata, and the `PortalCatalog`
    provider for Portal-hosted execution. Admin UI: the Connections tab in admin.html, backed by
-   the extracted `js/connections-admin.js` module with a ui-sandbox story. Deferred:
-   per-connection use-ACLs (needs caller-identity flow into the expansion path — pair with a
-   dedicated RBAC pass) and deep impact inventory (which reports/jobs reference an alias — pair
-   with script inspection).)*
+   the extracted `js/connections-admin.js` module with a ui-sandbox story. Per-connection
+   use-ACLs shipped as a follow-up: the RLS `ExecutionIdentity` now flows from
+   CreateConnectionStatementHandler through `SharedConnectionExpander` into
+   `IConnectionCatalogProvider.ResolveAsync`; `SharedConnectionAcl` grants (group-scoped, like
+   `DatasetAcl`) restrict use to admins/owner/granted groups, entries without grants stay open,
+   null identities fail closed on restricted entries, and denials audit
+   `SHARED_CONNECTION_USE_DENIED` from the Portal provider scope. The local catalog ignores
+   identity (its trust boundary is filesystem access). Remaining deferred: deep impact inventory
+   (which reports/jobs reference an alias — pair with script inspection).)*
 5. **Slice E - native admin services.** Convert capacity/failure/backup reporting into managed
    Portal/Orchestrator background services with leases and operational history. *(Shipped:
    `Portal:AdminServices` config (per-service enable/interval/recipients/SMTP alias/retries),

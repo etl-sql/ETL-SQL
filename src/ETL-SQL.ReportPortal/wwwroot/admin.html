@@ -1682,7 +1682,7 @@ function mountSecrets() {
 let connectionsAdmin = null;
 function mountConnections() {
   if (!connectionsAdmin) {
-    connectionsAdmin = createConnectionsAdmin({ host: document.getElementById('panel-connections'), connectionsApi });
+    connectionsAdmin = createConnectionsAdmin({ host: document.getElementById('panel-connections'), connectionsApi, adminApi });
   }
   connectionsAdmin.load();
 }

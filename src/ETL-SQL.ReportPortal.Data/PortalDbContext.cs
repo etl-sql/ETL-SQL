@@ -35,6 +35,7 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<PolicyMachineEntity> PolicyMachines => Set<PolicyMachineEntity>();
     public DbSet<PortalSecret> PortalSecrets => Set<PortalSecret>();
     public DbSet<PortalSharedConnection> PortalSharedConnections => Set<PortalSharedConnection>();
+    public DbSet<SharedConnectionAcl> SharedConnectionAcls => Set<SharedConnectionAcl>();
     public DbSet<AdminServiceRun> AdminServiceRuns => Set<AdminServiceRun>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -172,6 +173,13 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
             e.Property(x => x.EnvironmentScope).HasMaxLength(100);
             e.Property(x => x.Target).HasConversion(piiNullableConverter);
             e.Property(x => x.OptionsJson).HasConversion(piiConverter);
+        });
+
+        builder.Entity<SharedConnectionAcl>(e =>
+        {
+            e.HasIndex(x => new { x.SharedConnectionId, x.GroupId }).IsUnique();
+            e.HasOne(x => x.SharedConnection).WithMany(c => c.Acls).HasForeignKey(x => x.SharedConnectionId);
+            e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
         });
 
         builder.Entity<AdminServiceRun>(e =>
