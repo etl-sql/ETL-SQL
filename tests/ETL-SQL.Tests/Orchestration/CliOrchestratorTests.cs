@@ -249,6 +249,33 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_AdminHaSoakFaultRunParsesRunnerOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "ha-soak", "fault-run",
+                "--run-root", "runs/phase6",
+                "--plan", "runs/phase6/ha-fault-injection-plan.json",
+                "--output-root", "certification-results/ha-fault-injection/run-1",
+                "--force"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-ha-soak-fault-run", capturedContext!.Command);
+            Assert.Equal("runs/phase6", capturedContext.HaSoakRunRoot);
+            Assert.Equal("runs/phase6/ha-fault-injection-plan.json", capturedContext.HaSoakPlanPath);
+            Assert.Equal("certification-results/ha-fault-injection/run-1", capturedContext.HaSoakOutputRoot);
+            Assert.True(capturedContext.HaSoakForce);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_EnterpriseEnrollParsesProtectedBootstrapOptions()
         {
             CliContext? capturedContext = null;

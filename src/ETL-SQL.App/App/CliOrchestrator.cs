@@ -668,6 +668,16 @@ namespace ETL_SQL.App
             haSoakFaultCommand.SetAction(context => Dispatch(context, "admin-ha-soak-fault-plan", handler));
             haSoakCommand.Add(haSoakFaultCommand);
 
+            var haSoakFaultRunCommand = new Command("fault-run", "Run the bounded HA fault-injection harness")
+            {
+                HaSoakRunRootOption,
+                HaSoakPlanOption,
+                HaSoakOutputRootOption,
+                HaSoakForceOption,
+            };
+            haSoakFaultRunCommand.SetAction(context => Dispatch(context, "admin-ha-soak-fault-run", handler));
+            haSoakCommand.Add(haSoakFaultRunCommand);
+
             var haSoakMetricsCommand = new Command("metrics", "Capture a non-secret PostgreSQL metrics snapshot")
             {
                 HaSoakRunRootOption,

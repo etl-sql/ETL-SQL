@@ -219,6 +219,64 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("Status: **Passed**", File.ReadAllText(validationReport));
         }
 
+        [Fact]
+        public async Task FaultRunProducesEvidenceAcceptedByValidator()
+        {
+            var logger = new CapturingLogger();
+            var runRoot = Path.Combine(_outputRoot, _runId);
+
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-prepare",
+                HaSoakRunId = _runId,
+                HaSoakOutputRoot = _outputRoot,
+                HaSoakForce = true
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-fault-plan",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger));
+            Assert.Equal(0, await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-evidence",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger));
+
+            var runExit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-fault-run",
+                HaSoakRunRoot = runRoot,
+                HaSoakForce = true
+            }, logger);
+
+            Assert.Equal(0, runExit);
+            var outputRoot = Path.Combine(_evidenceRoot, "ha-fault-injection", _runId);
+            Assert.True(File.Exists(Path.Combine(outputRoot, "fault-report.json")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "fault-report.md")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "DiskFullDuringExtentWrite", "runner.log")));
+            Assert.True(File.Exists(Path.Combine(outputRoot, "DiskFullDuringExtentWrite", "cleanup-invariants.json")));
+
+            var report = JsonNode.Parse(File.ReadAllText(Path.Combine(outputRoot, "fault-report.json")))!.AsObject();
+            Assert.True((bool?)report["passed"]);
+            Assert.Equal("NativeBoundedFaultInjectionCiSmoke", (string?)report["runnerKind"]);
+
+            var validationReport = Path.Combine(_outputRoot, "fault-validation.md");
+            var validationExit = await RunAsync(new CliContext
+            {
+                Command = "admin-ha-soak-validate",
+                HaSoakRunRoot = runRoot,
+                HaSoakRequiredGate = "FaultInjection",
+                HaSoakAllowDirty = true,
+                HaSoakMarkdownReport = validationReport
+            }, logger);
+
+            Assert.True(validationExit == 0, File.ReadAllText(validationReport));
+            Assert.Contains("Status: **Passed**", File.ReadAllText(validationReport));
+        }
+
         private void SeedSustainedEvidence()
         {
             var dir = Path.Combine(_evidenceRoot, "postgres-ha-soak", _runId);

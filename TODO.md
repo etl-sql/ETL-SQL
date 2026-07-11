@@ -274,8 +274,12 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   sustained workload input, large-job soak contract, and fault matrix.
   `scripts/New-HaFaultInjectionPlan.ps1` now binds the matrix to a generated topology run and emits
   non-secret JSON/Markdown run plans with safety constraints, expected artifacts, and diagnostics
-  command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract. Fault
-  runners and measured artifacts remain open.)*
+  command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract.
+  `etl-sql admin ha-soak fault-run` now executes the native bounded fault-injection CI-smoke
+  harness from a generated plan and writes `fault-report.json/.md`, per-fault
+  `fault-result.json/.md`, `cleanup-invariants.json`, and `runner.log` artifacts accepted by the
+  FaultInjection evidence gate. Destructive/manual fault execution against the live HA topology and
+  measured recovery artifacts remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 

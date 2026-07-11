@@ -1238,6 +1238,7 @@ etl-sql admin ha-soak evidence --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak large-job-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
 etl-sql admin ha-soak large-job-run --run-root .ha-soak-runs/ha-20260710 --force
 etl-sql admin ha-soak fault-plan --run-root .ha-soak-runs/ha-20260710 --mode ManualCertification --force
+etl-sql admin ha-soak fault-run --run-root .ha-soak-runs/ha-20260710 --force
 
 # Capture post-run evidence or diagnostics
 etl-sql admin ha-soak metrics --run-root .ha-soak-runs/ha-20260710 --force
@@ -1254,6 +1255,9 @@ contract tests in `scripts/README.md`, but administrators should use the `etl-sq
 commands as the stable cross-platform interface. `large-job-run` writes `soak-report.json/.md`,
 per-scenario `result.json/.md`, and `runner.log` files under
 `certification-results/ha-large-job-soak/<run-id>` by default; use `--duration-seconds` for a short
-diagnostic run. Use `validate --required-gate All` only after large-job and fault-injection measured
-reports exist; until the fault-injection runner is complete, `Sustained` and `LargeJob` are the
-available native evidence gates.
+diagnostic run. `fault-run` writes `fault-report.json/.md`, per-fault `fault-result.json/.md`,
+`cleanup-invariants.json`, and `runner.log` files under
+`certification-results/ha-fault-injection/<run-id>` by default. Use `validate --required-gate All`
+only after sustained-load, large-job, and fault-injection measured reports exist; the native
+`LargeJob` and `FaultInjection` gates cover bounded CI-smoke evidence, while release publication
+still requires the longer operator-run evidence called out in `TODO.md`.

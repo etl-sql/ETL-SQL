@@ -182,8 +182,11 @@ each fault, not just that an exception was thrown.
    soak manifest, and fault matrix into a non-secret per-run evidence checklist.
    `scripts/New-HaFaultInjectionPlan.ps1` binds the matrix to a generated topology run and emits
    non-secret JSON/Markdown run plans with safety constraints, expected artifacts, and diagnostics
-   command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract. Fault
-   runners and measured artifacts remain open.)*
+   command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract.
+   `etl-sql admin ha-soak fault-run` consumes the plan and writes bounded native CI-smoke evidence
+   (`fault-report`, per-fault results, cleanup invariants, and logs) that the FaultInjection gate
+   can validate. Destructive/manual fault execution against the live HA topology and measured
+   recovery artifacts remain open.)*
 5. **Slice E — publication.** Update admin/capacity docs with measured limits and known boundaries.
 
 ---
