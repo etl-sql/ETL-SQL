@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "CancelDuringScan",
+  "status": "Passed",
+  "passed": true,
+  "startedAt": "2026-07-11T15:41:38.7627596Z",
+  "completedAt": "2026-07-11T15:41:38.7640882Z",
+  "expectedResult": "Prompt cancellation, session remains usable, no leaked grants or temp roots.",
+  "telemetry": {
+    "cancelRequestedAt": "2026-07-11T15:41:38.7631366Z",
+    "cancelObservedAt": "2026-07-11T15:41:38.7640514Z",
+    "rowsProcessedBeforeCancel": 2048,
+    "spillWriteBytesBeforeCancel": 0,
+    "spillReadBytesBeforeCancel": 0,
+    "partialExtentCount": 0,
+    "remainingExtentCount": 0,
+    "partitionPass": 0,
+    "partitionCount": 0,
+    "orphanPartitionCount": 0,
+    "cleanupDurationMs": 0,
+    "cleanupSucceeded": true,
+    "resultMarkedCancelled": true,
+    "elapsedMs": 1,
+    "remainingTempFiles": 0,
+    "memoryGrantOutstanding": 0,
+    "openHandleCleanup": true
+  },
+  "issues": [],
+  "nonSecret": true
+}

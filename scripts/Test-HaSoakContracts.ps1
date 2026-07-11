@@ -1,0 +1,78 @@
+<#
+.SYNOPSIS
+    Runs the local HA soak contract and harness validation suite.
+#>
+[CmdletBinding()]
+param(
+    [switch]$NoDotNet
+)
+
+$ErrorActionPreference = 'Stop'
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = Resolve-Path (Join-Path $ScriptRoot '..')
+
+function Invoke-Step {
+    param(
+        [string]$Name,
+        [scriptblock]$Action
+    )
+
+    Write-Host "== $Name =="
+    & $Action
+}
+
+Push-Location $RepoRoot
+try {
+    Invoke-Step 'PostgreSQL HA soak topology harness' {
+        & (Join-Path $ScriptRoot 'Test-PostgresHaSoakTopology.ps1')
+    }
+
+    Invoke-Step 'PostgreSQL HA capacity workload materializer' {
+        & (Join-Path $ScriptRoot 'Test-PostgresHaCapacityWorkload.ps1')
+    }
+
+    Invoke-Step 'PostgreSQL HA metrics snapshot contract' {
+        & (Join-Path $ScriptRoot 'Test-PostgresHaMetricsSnapshot.ps1')
+    }
+
+    Invoke-Step 'HA soak diagnostics bundle' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakDiagnostics.ps1')
+    }
+
+    Invoke-Step 'HA soak evidence plan generator' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakEvidencePlan.ps1')
+    }
+
+    Invoke-Step 'HA soak operator runbook generator' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakRunbook.ps1')
+    }
+
+    Invoke-Step 'HA soak evidence validator' {
+        & (Join-Path $ScriptRoot 'Test-HaSoakEvidenceValidation.ps1')
+    }
+
+    Invoke-Step 'HA large-job soak plan generator' {
+        & (Join-Path $ScriptRoot 'Test-HaLargeJobSoakPlan.ps1')
+    }
+
+    Invoke-Step 'HA fault-injection plan generator' {
+        & (Join-Path $ScriptRoot 'Test-HaFaultInjectionPlan.ps1')
+    }
+
+    Invoke-Step 'Capacity workload schemas' {
+        & node (Join-Path $ScriptRoot 'test-capacity-workload-configs.mjs')
+    }
+
+    if (-not $NoDotNet) {
+        Invoke-Step 'HA soak manifest and native CLI tests' {
+            dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj `
+                --filter "FullyQualifiedName~ETL_SQL.Tests.Scale.HaLargeJobSoakManifestTests|FullyQualifiedName~ETL_SQL.Tests.Scale.HaFaultInjectionManifestTests|FullyQualifiedName~HaSoakAdminServiceTests|FullyQualifiedName~CliOrchestrator_AdminHaSoak" `
+                --no-restore
+        }
+    }
+
+    Write-Host 'HA soak contract validation passed.'
+}
+finally {
+    Pop-Location
+}

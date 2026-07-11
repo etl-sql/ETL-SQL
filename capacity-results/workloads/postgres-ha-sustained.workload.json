@@ -1,0 +1,91 @@
+{
+  "environment": {
+    "deploymentMode": "PostgreSQL HA soak topology",
+    "databaseLocation": "PostgreSQL container from deploy/docker/docker-compose.ha.yml",
+    "diskType": "record host disk type",
+    "dotnetVersion": "record runtime from container image",
+    "notes": "Template for sustained PostgreSQL-backed Portal/Orchestrator load. Materialize with scripts/New-PostgresHaCapacityWorkload.ps1 so URLs and API key come from a generated PostgreSQL HA soak topology run."
+  },
+  "breachCriteria": {
+    "maxErrorRatePct": 1,
+    "maxP95LatencyMs": 5000,
+    "maxSqliteContentionCount": 0,
+    "maxQueuedWork": 100
+  },
+  "variables": {
+    "jobName": "ha-soak-sustained-noop"
+  },
+  "portal": {
+    "baseUrl": "http://localhost:5600",
+    "roles": {
+      "admin": { "username": "admin", "password": "CHANGE_ME" }
+    },
+    "warmupIterations": 2,
+    "metricsPath": "/health",
+    "metricSampleIntervalMs": 1000,
+    "thinkTimeMs": 100,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 10, "durationSeconds": 300 },
+      { "concurrency": 25, "durationSeconds": 300 }
+    ],
+    "workload": [
+      { "name": "healthz", "method": "GET", "path": "/healthz", "weight": 8 },
+      { "name": "health", "method": "GET", "path": "/health", "weight": 6 },
+      { "name": "folders", "method": "GET", "path": "/api/folders", "role": "admin", "weight": 12 },
+      { "name": "catalog-search", "method": "GET", "path": "/api/catalog/search?q=ha-soak", "role": "admin", "weight": 8 },
+      { "name": "datasets", "method": "GET", "path": "/api/datasets", "role": "admin", "weight": 8 },
+      { "name": "admin-reports", "method": "GET", "path": "/api/admin/reports", "role": "admin", "weight": 6 },
+      { "name": "admin-users", "method": "GET", "path": "/api/admin/users?pageSize=50", "role": "admin", "weight": 4 },
+      { "name": "admin-groups-catalog", "method": "GET", "path": "/api/admin/groups/catalog", "role": "admin", "weight": 4 },
+      { "name": "fleet-status", "method": "GET", "path": "/api/fleet/status", "role": "admin", "weight": 4 },
+      { "name": "admin-usage", "method": "GET", "path": "/api/admin/metrics/usage", "role": "admin", "weight": 4 },
+      { "name": "admin-audit", "method": "GET", "path": "/api/admin/audit?pageSize=50", "role": "admin", "weight": 4 }
+    ]
+  },
+  "orchestrator": {
+    "baseUrl": "http://localhost:5601",
+    "apiKey": "CHANGE_ME",
+    "metricsPath": "/metrics",
+    "metricSampleIntervalMs": 1000,
+    "thinkTimeMs": 250,
+    "steps": [
+      { "concurrency": 1, "durationSeconds": 60 },
+      { "concurrency": 10, "durationSeconds": 300 },
+      { "concurrency": 25, "durationSeconds": 300 }
+    ],
+    "workload": [
+      { "name": "health", "method": "GET", "path": "/health", "service": "orchestrator", "weight": 8 },
+      { "name": "metrics", "method": "GET", "path": "/metrics", "service": "orchestrator", "weight": 8 },
+      { "name": "list-jobs", "method": "GET", "path": "/api/scheduled-jobs", "service": "orchestrator", "useApiKey": true, "weight": 6 },
+      { "name": "trigger-ha-soak", "method": "POST", "path": "/api/scheduled-jobs/{{jobName}}/trigger", "service": "orchestrator", "useApiKey": true, "weight": 4, "thinkTimeMs": 1000 },
+      { "name": "history-ha-soak", "method": "GET", "path": "/api/scheduled-jobs/{{jobName}}/history?limit=50", "service": "orchestrator", "useApiKey": true, "weight": 4 }
+    ]
+  },
+  "setupRequests": [
+    {
+      "name": "create-ha-soak-noop",
+      "baseUrl": "http://localhost:5601",
+      "method": "POST",
+      "path": "/api/scheduled-jobs",
+      "useApiKey": true,
+      "body": {
+        "name": "{{jobName}}",
+        "scriptText": "WAITFOR DELAY '00:00:01';\nSELECT 'ha-soak' AS workload INTO #ha_soak_sustained;",
+        "interval": 1,
+        "unit": "MINUTE",
+        "maxRetries": 0
+      }
+    }
+  ],
+  "cleanupRequests": [
+    {
+      "name": "delete-ha-soak-noop",
+      "baseUrl": "http://localhost:5601",
+      "method": "DELETE",
+      "path": "/api/scheduled-jobs/{{jobName}}",
+      "useApiKey": true,
+      "required": false
+    }
+  ]
+}

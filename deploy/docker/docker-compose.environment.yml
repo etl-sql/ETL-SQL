@@ -43,11 +43,13 @@ services:
       - Orchestrator__Database__Provider=Postgres
       - Orchestrator__Database__ConnectionString=Host=postgres;Database=${PG_DB_ORCH};Username=${PG_USER};Password=${PG_PASSWORD}
       - Orchestrator__ApiKey=${ORCH_API_KEY}
+      - Session__Root=/app/Sessions
       - Jobs__UseProcessSpawning=false
     volumes:
       - ${ENV_DATA_ROOT}/Reports:/app/Reports
       - ${ENV_DATA_ROOT}/Snapshots:/app/Snapshots
       - ${ENV_DATA_ROOT}/logs:/app/logs
+      - ${ENV_DATA_ROOT}/Sessions:/app/Sessions
     ports:
       - "${PORT_ORCH}:5001"
     healthcheck:
@@ -79,12 +81,16 @@ services:
       - Portal__Orchestrator__ApiUrl=http://orchestrator:5001
       - Portal__Orchestrator__ApiKey=${ORCH_API_KEY}
       - Portal__FirstRun__AdminUsername=${PORTAL_ADMIN_USERNAME:-admin}
+      - Portal__FirstRun__AdminPassword=${PORTAL_ADMIN_PASSWORD}
+      - Portal__FirstRun__MustChangePassword=${PORTAL_ADMIN_MUST_CHANGE_PASSWORD:-true}
+      - Session__Root=/app/Sessions
     volumes:
       - ${ENV_DATA_ROOT}/Reports:/app/Reports
       - ${ENV_DATA_ROOT}/Snapshots:/app/Snapshots
       - ${ENV_DATA_ROOT}/datasets:/app/datasets
       - ${ENV_DATA_ROOT}/maps:/app/maps
       - ${ENV_DATA_ROOT}/portal-data:/app/data
+      - ${ENV_DATA_ROOT}/Sessions:/app/Sessions
     ports:
       - "${PORT_PORTAL}:5000"
     healthcheck:

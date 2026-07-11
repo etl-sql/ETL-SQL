@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "faultId": "DiskFullDuringExtentWrite",
+  "category": "disk",
+  "injectionPoint": "spill-write",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "partial extent is deleted or marked unrecoverable; job fails and releases grants/handles",
+  "evidence": {
+    "faultId": "DiskFullDuringExtentWrite",
+    "category": "disk",
+    "injectionMethod": "bounded faulting spill writer throws after a configured byte count inside the isolated run root",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "bytesWrittenBeforeFault": 4096,
+    "partialExtentPath": "partial.extent",
+    "partialExtentRemoved": true,
+    "openHandleCleanup": true,
+    "elapsedMs": 1
+  },
+  "cleanupInvariants": {
+    "faultId": "DiskFullDuringExtentWrite",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

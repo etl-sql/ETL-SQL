@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "faultId": "CorruptExtentBeforeRead",
+  "category": "corruption",
+  "injectionPoint": "pre-spill-read",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "sanitized execution failure; no silent row loss or successful checksum",
+  "evidence": {
+    "faultId": "CorruptExtentBeforeRead",
+    "category": "corruption",
+    "injectionMethod": "modify one generated spill extent under the exact run temp root before replay",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "corruptedExtentPath": "extent.bin",
+    "checksumBefore": "6db7d803e74f1ffa7d8f5adc0bf95b3e15bf4c8373fffadf546227cc6c6742cb",
+    "checksumAfter": "f39592393ef0859cb196a52693d2cea00fb2df784b3c04ae54aa7cadb8e562f8",
+    "exceptionCategory": "CorruptSpillExtent",
+    "elapsedMs": 7
+  },
+  "cleanupInvariants": {
+    "faultId": "CorruptExtentBeforeRead",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

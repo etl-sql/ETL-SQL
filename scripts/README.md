@@ -6,6 +6,13 @@ This directory contains build, test, utility, and release packaging scripts for 
 
 ## 1. Quick Reference Table
 
+Administrator-facing HA soak workflows are native `etl-sql admin ha-soak ...` commands. Keep these
+scripts as developer contract tests and release-gate helpers; use the CLI commands for routine
+operator runs so admins do not need PowerShell or this directory.
+The native HA CLI includes `large-job-run` and `fault-run`, which emit evidence reports and
+per-scenario/per-fault logs from generated plans; the scripts below remain contract helpers rather
+than the operator front door.
+
 | Script Name | Language | Platform | Description |
 | :--- | :--- | :---: | :--- |
 | **[`build-debug.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.ps1)** / **[`build-debug.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/build-debug.sh)** | PowerShell / Bash | Cross-platform | Builds the .NET solution, VS Code UI (Vite), extension TypeScript compiler, and runs extension unit tests. |
@@ -18,21 +25,43 @@ This directory contains build, test, utility, and release packaging scripts for 
 | **[`Compare-Benchmarks.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Compare-Benchmarks.ps1)** / **[`compare-benchmarks.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/compare-benchmarks.sh)** | PowerShell / Bash | Cross-platform | Compares BenchmarkDotNet JSON results against a checked-in baseline file and returns an exit code of 1 if regression exceeds a given threshold. |
 | **[`Test-ScaleCertification.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-ScaleCertification.ps1)** / **[`test-scale-certification.sh`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-scale-certification.sh)** | PowerShell / Bash | Cross-platform | Runs the scale certification test suite (Smoke/Standard/Stress/Huge/Provider tiers) and produces JSON and Markdown reports with per-scenario metrics. Huge (~50M+, 1000x) is opt-in and needs a capable host. |
 | **[`Test-ScaleBaseline.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-ScaleBaseline.ps1)** | PowerShell | Windows / macOS / Linux | Captures resumable 10M or 50M core baselines with one Release/server-GC test host per scenario, avoiding cross-scenario memory contamination. |
-| **[`Test-GateF.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateF.ps1)** | PowerShell | Windows | Runs the resumable 1B Gate F matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
-| **[`Test-GateFEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateFEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run Gate F report passed, contains required scenario evidence, and belongs to the current commit before citing Gate F performance claims. |
+| **[`Test-BillionRowCertification.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-BillionRowCertification.ps1)** | PowerShell | Windows | Runs the resumable 1B operator certification matrix with disk preflight, isolated child logs, heartbeat/status JSON, and per-scenario restart. |
+| **[`Test-BillionRowEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-BillionRowEvidence.ps1)** | PowerShell | Windows / macOS / Linux | Validates that an operator-run billion-row certification report passed, contains required scenario evidence, and belongs to the current commit before citing performance claims. |
+| **[`Test-GateF.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateF.ps1)** / **[`Test-GateFEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-GateFEvidence.ps1)** | PowerShell | Compatibility | Historical aliases retained for existing automation; prefer the `Test-BillionRow*` script names in new docs and workflows. |
 | **[`Summarize-PlanFallbacks.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Summarize-PlanFallbacks.ps1)** | PowerShell | Cross-platform | Ranks Phase 5 plan fallback summaries and structured fallback entries by candidate path, reason, frequency, and coarse cost context. |
 | **[`Test-PlanFallbackRanking.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PlanFallbackRanking.ps1)** | PowerShell | Cross-platform | Self-test for the plan fallback ranking script, covering structured per-operator entries and legacy summary strings. |
+| **[`New-PostgresHaSoakTopology.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-PostgresHaSoakTopology.ps1)** | PowerShell | Cross-platform | Generates an isolated PostgreSQL HA soak topology env/data root and non-secret metadata, with Docker startup opt-in via `-Start`. |
+| **[`Test-PostgresHaSoakTopology.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PostgresHaSoakTopology.ps1)** | PowerShell | Cross-platform | Self-test for the PostgreSQL HA soak topology harness and metadata contract. |
+| **[`New-PostgresHaCapacityWorkload.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-PostgresHaCapacityWorkload.ps1)** | PowerShell | Cross-platform | Materializes a local PostgreSQL HA sustained-load workload config from a generated topology run. |
+| **[`Test-PostgresHaCapacityWorkload.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PostgresHaCapacityWorkload.ps1)** | PowerShell | Cross-platform | Self-test for PostgreSQL HA workload materialization and capacity-harness schema validation. |
+| **[`Export-PostgresHaMetricsSnapshot.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Export-PostgresHaMetricsSnapshot.ps1)** | PowerShell | Cross-platform | Captures non-secret PostgreSQL database size, connection, activity, and I/O metrics for an HA soak topology run. |
+| **[`Test-PostgresHaMetricsSnapshot.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-PostgresHaMetricsSnapshot.ps1)** | PowerShell | Cross-platform | Self-test for PostgreSQL HA metrics snapshot validation and redaction behavior. |
+| **[`Export-HaSoakDiagnostics.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Export-HaSoakDiagnostics.ps1)** | PowerShell | Cross-platform | Exports a non-secret diagnostics bundle with redacted env, topology metadata, run-root inventory, and Docker Compose status/logs. |
+| **[`Test-HaSoakDiagnostics.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakDiagnostics.ps1)** | PowerShell | Cross-platform | Self-test for diagnostics bundle generation and secret omission. |
+| **[`New-HaSoakEvidencePlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaSoakEvidencePlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run HA soak evidence checklist from topology metadata, workload input, soak manifest, and fault matrix. |
+| **[`Test-HaSoakEvidencePlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakEvidencePlan.ps1)** | PowerShell | Cross-platform | Self-test for HA soak evidence-plan generation and secret omission. |
+| **[`New-HaSoakRunbook.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaSoakRunbook.ps1)** | PowerShell | Cross-platform | Creates a non-secret operator runbook with ordered HA soak commands, expected artifacts, and diagnostics instructions. |
+| **[`Test-HaSoakRunbook.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakRunbook.ps1)** | PowerShell | Cross-platform | Self-test for runbook generation, command sequencing, diagnostics references, and secret omission. |
+| **[`Test-HaSoakEvidence.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakEvidence.ps1)** | PowerShell | Cross-platform | Validates completed operator-run HA soak evidence before it is cited for capacity or recovery claims. |
+| **[`Test-HaSoakEvidenceValidation.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakEvidenceValidation.ps1)** | PowerShell | Cross-platform | Self-test for completed HA soak evidence validation, including missing-artifact failure behavior. |
+| **[`New-HaLargeJobSoakPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run large-job soak plan from the manifest and generated topology metadata. |
+| **[`Test-HaLargeJobSoakPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaLargeJobSoakPlan.ps1)** | PowerShell | Cross-platform | Self-test for large-job soak plan generation, scenario binding, and secret omission. |
+| **[`New-HaFaultInjectionPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/New-HaFaultInjectionPlan.ps1)** | PowerShell | Cross-platform | Creates a non-secret per-run fault-injection plan from the matrix and generated topology metadata. |
+| **[`Test-HaFaultInjectionPlan.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaFaultInjectionPlan.ps1)** | PowerShell | Cross-platform | Self-test for fault-injection plan generation, safety constraints, and secret omission. |
+| **[`Test-HaSoakContracts.ps1`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/Test-HaSoakContracts.ps1)** | PowerShell | Cross-platform | Runs the local HA soak contract suite: topology, workload materialization, evidence plan, capacity-workload schema validation, and manifest tests. |
 
-Gate F is intentionally operator-run because the spill-backed billion-row scenario can take hours.
-Start it with `./scripts/Test-GateF.ps1`; inspect progress from another shell with
-`Get-Content ./certification-results/gate-f-1b/status.json`. Re-running the same command skips
-completed scenario artifacts; use `-Force` only when intentionally replacing prior results.
-Before publishing Gate F performance claims or closing a release candidate that changes certified
-paths, run `./scripts/Test-GateFEvidence.ps1` against the captured `gate-f-report.json`; pass
-`-Baseline` when comparing an operator-run report against the checked-in Gate F baseline.
-Phase 4 operator candidates are explicit. For example, `./scripts/Test-GateF.ps1 -Scenario ExternalSort`,
-`-Scenario ExternalJoin`, `-Scenario HighCardinalityGrouping`, or `-Scenario EligibleWindowRowNumber` runs an operator candidate, and
-`./scripts/Test-GateFEvidence.ps1 -RequiredScenario <scenario>` validates the resulting artifact.
+Billion-row certification is intentionally operator-run because the spill-backed 1B scenarios can take
+hours. Start it with `./scripts/Test-BillionRowCertification.ps1`; inspect progress from another
+shell with `Get-Content ./certification-results/billion-row-operator-certification/status.json`.
+Re-running the same command skips completed scenario artifacts; use `-Force` only when intentionally
+replacing prior results. Before publishing billion-row performance claims or closing a release
+candidate that changes certified paths, run `./scripts/Test-BillionRowEvidence.ps1` against the
+captured `gate-f-report.json`; pass `-Baseline` when comparing an operator-run report against the
+checked-in baseline. Phase 4 operator candidates are explicit. For example,
+`./scripts/Test-BillionRowCertification.ps1 -Scenario ExternalSort`, `-Scenario ExternalJoin`,
+`-Scenario HighCardinalityGrouping`, or `-Scenario EligibleWindowRowNumber` runs an operator
+candidate, and `./scripts/Test-BillionRowEvidence.ps1 -RequiredScenario <scenario>` validates the
+resulting artifact.
 Candidate artifacts are not product claims until the public certification matrix marks them certified.
 | **[`test-service-capacity.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-service-capacity.mjs)** | Node.js | Cross-platform | Runs stepped Portal-user and Orchestrator-job capacity workloads from a JSON configuration and writes JSON/Markdown reports. |
 | **[`test-capacity-workload-configs.mjs`](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/test-capacity-workload-configs.mjs)** | Node.js | Cross-platform | Validates all checked-in capacity workload JSON files with the capacity harness `--validate-only` mode. |

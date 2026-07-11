@@ -223,11 +223,76 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
 - [ ] Run sustained PostgreSQL-backed Portal/Orchestrator load at representative report/job/history
   counts and concurrent execution levels; measure pool saturation, query latency, scheduler fairness,
   lease behavior, and database growth rather than inferring HA performance from SQLite tests.
+  *(Slice A progress: `scripts/New-PostgresHaSoakTopology.ps1` now prepares disposable PostgreSQL-backed HA
+  topology runs from the existing Docker Compose HA template, creates isolated shared artifact roots,
+  writes local generated env files with disposable credentials, and emits non-secret
+  `topology-metadata.json` for capacity/soak evidence. `scripts/Test-PostgresHaSoakTopology.ps1` validates
+  the topology template and generated metadata.
+  `capacity-results/workloads/postgres-ha-sustained.workload.json` now defines the sustained
+  Portal/Orchestrator HA workload, and `scripts/New-PostgresHaCapacityWorkload.ps1` materializes a local
+  runnable copy from generated topology metadata/env files. `scripts/Test-PostgresHaCapacityWorkload.ps1`
+  validates the materialized workload through the existing capacity harness.
+  `scripts/Export-PostgresHaMetricsSnapshot.ps1` captures non-secret PostgreSQL size, connection,
+  activity, and I/O counters for the generated topology, with validation coverage in
+  `scripts/Test-PostgresHaMetricsSnapshot.ps1`. `scripts/Export-HaSoakDiagnostics.ps1` now writes
+  a non-secret diagnostics bundle after operator-run failures or completions, including redacted env,
+  topology metadata, run-root inventory, and Docker Compose status/log tails; the evidence plan and
+  generated run README both point to it. `scripts/New-HaSoakRunbook.ps1` now emits a non-secret
+  operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
+  long-running scripts can be run manually and diagnosed afterward from captured outputs.
+  `etl-sql admin ha-soak ...` now exposes the topology, workload, runbook, evidence, metrics,
+  diagnostics, large-job-plan, and fault-plan workflows as native first-class admin CLI commands so
+  operators have a stable cross-platform front door without requiring PowerShell.
+  `scripts/Test-HaSoakEvidence.ps1` and `etl-sql admin ha-soak validate` now provide a cheap
+  post-run evidence gate for completed sustained-load artifacts, checking required reports,
+  PostgreSQL metrics, pass/breach status, redaction, and commit metadata before capacity claims
+  are cited.
+  `scripts/Test-PreRelease.ps1` and `scripts/test-pre-release.sh` now include the non-destructive
+  HA soak contract gate by default, and the release/testing docs list it as an always-on validation
+  phase. CI-smoke measured evidence captured under
+  `certification-results/postgres-ha-soak/ha-agent-20260711-01/`: sustained Portal and
+  Orchestrator capacity passed at concurrency 1/10/25 with 0% errors, PostgreSQL metrics were
+  captured, diagnostics were bundled under
+  `.ha-soak-runs/ha-agent-20260711-01/diagnostics/20260711-104207`, and
+  `etl-sql admin ha-soak validate --required-gate All` passed. Representative production-scale
+  counts and checked-in/manual-certification capacity reports remain open.)*
 - [ ] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
   under shared memory and disk budgets, including cancellation at each spill phase.
+  *(Contract progress: `certification-results/ha-large-job-soak-scenarios.json` defines the
+  mixed concurrent workload, shared memory/disk budgets, cleanup invariants, fairness requirement,
+  required telemetry, and cancellation points for scan, spill-write, spill-read, and repartition.
+  `HaLargeJobSoakManifestTests` validates the manifest. `scripts/New-HaLargeJobSoakPlan.ps1`
+  now binds the manifest to a generated topology run and emits non-secret JSON/Markdown run plans
+  for CI-smoke or manual-certification modes; `scripts/Test-HaLargeJobSoakPlan.ps1` validates
+  the plan contract. `etl-sql admin ha-soak large-job-run` now executes the native bounded
+  large-job CI-smoke harness from a generated plan and writes `soak-report.json/.md`, per-scenario
+  `result.json/.md`, and `runner.log` artifacts accepted by the LargeJob evidence gate. CI-smoke
+  measured evidence captured under
+  `certification-results/ha-large-job-soak/ha-agent-20260711-01/` passed with a 60-second
+  per-scenario runner duration, including mixed concurrent spill/sort/join/aggregate cleanup and
+  cancellation cleanup at scan, spill-write, spill-read, and repartition points. Multi-hour
+  manual-certification execution and measured production-scale soak artifacts remain open.)*
 - [ ] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
   orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
   extents, or silently duplicated/lost mutations.
+  *(Contract progress: `certification-results/ha-fault-injection-matrix.json` defines the
+  deterministic fault matrix, run-safety constraints, cleanup invariants, required evidence, and
+  expected recovery behavior for disk pressure, slow disk, corrupt/incomplete extents, worker crash,
+  Portal/Orchestrator node loss, PostgreSQL outage, and temp-root exhaustion.
+  `HaFaultInjectionManifestTests` validates the matrix. `scripts/New-HaSoakEvidencePlan.ps1`
+  now produces a non-secret per-run evidence checklist that ties together topology metadata,
+  sustained workload input, large-job soak contract, and fault matrix.
+  `scripts/New-HaFaultInjectionPlan.ps1` now binds the matrix to a generated topology run and emits
+  non-secret JSON/Markdown run plans with safety constraints, expected artifacts, and diagnostics
+  command references; `scripts/Test-HaFaultInjectionPlan.ps1` validates the plan contract.
+  `etl-sql admin ha-soak fault-run` now executes the native bounded fault-injection CI-smoke
+  harness from a generated plan and writes `fault-report.json/.md`, per-fault
+  `fault-result.json/.md`, `cleanup-invariants.json`, and `runner.log` artifacts accepted by the
+  FaultInjection evidence gate. CI-smoke measured evidence captured under
+  `certification-results/ha-fault-injection/ha-agent-20260711-01/` passed for disk pressure,
+  slow disk, corrupt/incomplete extent, worker crash, node loss, brief PostgreSQL outage, and
+  temp-root exhaustion scenarios. Destructive/manual fault execution against the live HA topology
+  and measured recovery artifacts remain open.)*
 
 ### Phase 7: SME Secret Management & Administration Hardening
 

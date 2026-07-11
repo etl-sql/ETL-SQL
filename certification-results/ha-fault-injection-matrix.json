@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "matrixStatus": "ha-fault-contract",
+  "scope": "Deterministic failure injection and recovery certification",
+  "runSafety": {
+    "isolatedRunRootRequired": true,
+    "disposablePostgresRequired": true,
+    "productionTargetsAllowed": false,
+    "destructiveFilesystemScope": "exact HA soak run directory only",
+    "orchestratorApiAuthenticationRequired": true,
+    "rawSecretLoggingAllowed": false
+  },
+  "commonCleanupInvariants": [
+    "MemoryGrantArbiter reports zero outstanding reservations after failure handling",
+    "All spill writers and readers are disposed",
+    "Run temp root can be deleted after cleanup",
+    "No partial mutation is reported as successful",
+    "No duplicate committed mutation is observed after restart or retry",
+    "Failure report redacts connection strings, API keys, ENC values, and SECRET references"
+  ],
+  "faults": [
+    {
+      "faultId": "DiskLowSpaceBeforeExtentWrite",
+      "state": "Planned",
+      "category": "disk",
+      "injectionPoint": "pre-spill-write-admission",
+      "injectionMethod": "configure isolated spill root with available-space threshold below scenario admission requirement",
+      "expectedResult": "operator fails before writing extents with a sanitized low-space error",
+      "requiredEvidence": [
+        "freeDiskBytesBefore",
+        "admissionRequiredBytes",
+        "exceptionCategory",
+        "spillExtentCountAfterCleanup",
+        "memoryGrantOutstanding"
+      ]
+    },
+    {
+      "faultId": "DiskFullDuringExtentWrite",
+      "state": "Planned",
+      "category": "disk",
+      "injectionPoint": "spill-write",
+      "injectionMethod": "bounded faulting spill writer throws after a configured byte count inside the isolated run root",
+      "expectedResult": "partial extent is deleted or marked unrecoverable; job fails and releases grants/handles",
+      "requiredEvidence": [
+        "bytesWrittenBeforeFault",
+        "partialExtentPath",
+        "partialExtentRemoved",
+        "openHandleCleanup",
+        "memoryGrantOutstanding"
+      ]
+    },
+    {
+      "faultId": "SlowDiskWriteAndRead",
+      "state": "Planned",
+      "category": "disk-latency",
+      "injectionPoint": "spill-write-and-read",
+      "injectionMethod": "delay wrapper around spill writer and reader in the isolated run root",
+      "expectedResult": "throughput drops, adaptive storage-pressure telemetry is visible, and no timeout occurs unless configured",
+      "requiredEvidence": [
+        "configuredDelayMs",
+        "spillWriteLatencyMs",
+        "spillReadLatencyMs",
+        "adaptiveStoragePressure",
+        "rowsProcessed"
+      ]
+    },
+    {
+      "faultId": "CorruptExtentBeforeRead",
+      "state": "Planned",
+      "category": "corruption",
+      "injectionPoint": "pre-spill-read",
+      "injectionMethod": "modify one generated spill extent under the exact run temp root before replay",
+      "expectedResult": "sanitized execution failure; no silent row loss or successful checksum",
+      "requiredEvidence": [
+        "corruptedExtentPath",
+        "checksumBefore",
+        "checksumAfter",
+        "exceptionCategory",
+        "resultMarkedFailed"
+      ]
+    },
+    {
+      "faultId": "IncompleteExtentAfterCrash",
+      "state": "Planned",
+      "category": "crash-recovery",
+      "injectionPoint": "spill-write",
+      "injectionMethod": "terminate worker after extent create and before completion marker or final metadata write",
+      "expectedResult": "restart cleanup removes orphaned temp root or marks persistent session spill unrecoverable",
+      "requiredEvidence": [
+        "killedProcessId",
+        "orphanExtentCountBeforeRestart",
+        "orphanExtentCountAfterCleanup",
+        "restartCleanupDurationMs",
+        "sessionRecoveryState"
+      ]
+    },
+    {
+      "faultId": "WorkerProcessCrashMidJob",
+      "state": "Planned",
+      "category": "crash-recovery",
+      "injectionPoint": "orchestrator-job-execution",
+      "injectionMethod": "kill spawned worker process after job lease acquisition",
+      "expectedResult": "lease expires or fences; job is failed or recoverable and is not double-mutated",
+      "requiredEvidence": [
+        "leaseOwnerBeforeCrash",
+        "leaseOwnerAfterRecovery",
+        "jobFinalState",
+        "duplicateMutationCount",
+        "memoryGrantOutstanding"
+      ]
+    },
+    {
+      "faultId": "PortalNodeLossWithActiveSession",
+      "state": "Planned",
+      "category": "node-loss",
+      "injectionPoint": "portal-node",
+      "injectionMethod": "stop one Portal container while a sticky interactive session is active",
+      "expectedResult": "node-local interactive session loss is explicit; stateless requests continue through healthy nodes",
+      "requiredEvidence": [
+        "affinityCookieName",
+        "lostNodeId",
+        "healthzStatusAfterStop",
+        "statelessRequestSuccess",
+        "interactiveSessionOutcome"
+      ]
+    },
+    {
+      "faultId": "OrchestratorLeaderLossDuringSchedule",
+      "state": "Planned",
+      "category": "node-loss",
+      "injectionPoint": "orchestrator-leader",
+      "injectionMethod": "stop leader/lease owner during a dense schedule window",
+      "expectedResult": "new leader acquires lease and scheduled job is not double-fired",
+      "requiredEvidence": [
+        "leaderBeforeStop",
+        "leaderAfterFailover",
+        "failoverDurationMs",
+        "scheduledFireCount",
+        "duplicateFireCount"
+      ]
+    },
+    {
+      "faultId": "PostgresOutageBrief",
+      "state": "Planned",
+      "category": "database-outage",
+      "injectionPoint": "postgres-service",
+      "injectionMethod": "stop disposable PostgreSQL container for a bounded interval and restart it",
+      "expectedResult": "health probes fail closed, jobs back off, durable state remains consistent after restart",
+      "requiredEvidence": [
+        "outageDurationMs",
+        "portalHealthDuringOutage",
+        "orchestratorHealthDuringOutage",
+        "jobBackoffObserved",
+        "stateConsistencyCheck"
+      ]
+    },
+    {
+      "faultId": "TempRootExhaustion",
+      "state": "Planned",
+      "category": "filesystem",
+      "injectionPoint": "temp-root-admission",
+      "injectionMethod": "set isolated temp-root quota/admission below the expected spill footprint",
+      "expectedResult": "job fails before unbounded spill growth and cleanup leaves no orphaned run root",
+      "requiredEvidence": [
+        "configuredTempRootLimitBytes",
+        "expectedSpillBytes",
+        "admissionFailureObserved",
+        "runRootDeletedAfterCleanup",
+        "memoryGrantOutstanding"
+      ]
+    }
+  ]
+}

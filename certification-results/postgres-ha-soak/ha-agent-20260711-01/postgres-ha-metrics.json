@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "phase": "v0.15.0 Phase 6",
+  "runId": "ha-agent-20260711-01",
+  "capturedAt": "2026-07-11T15:21:08.7101696Z",
+  "topologyMetadataPath": "ha-soak-runs/ha-agent-20260711-01/topology-metadata.json",
+  "note": "Native CLI snapshot. Docker collection is best-effort and non-secret.",
+  "dockerPs": "NAME                                         IMAGE                          COMMAND                  SERVICE        CREATED             STATUS                       PORTS\r\netlsql-ha-agent-20260711-01-loadbalancer-1   haproxy:2.8-alpine             \u0022docker-entrypoint.s\u2026\u0022   loadbalancer   About an hour ago   Up About an hour             0.0.0.0:5700-\u003E5000/tcp, [::]:5700-\u003E5000/tcp, 0.0.0.0:5701-\u003E5001/tcp, [::]:5701-\u003E5001/tcp\r\netlsql-ha-agent-20260711-01-orchestrator-1   etl-sql/orchestrator:latest    \u0022dotnet ETL-SQL-Serv\u2026\u0022   orchestrator   About an hour ago   Up About an hour             5001/tcp\r\netlsql-ha-agent-20260711-01-orchestrator-2   etl-sql/orchestrator:latest    \u0022dotnet ETL-SQL-Serv\u2026\u0022   orchestrator   About an hour ago   Up About an hour             5001/tcp\r\netlsql-ha-agent-20260711-01-portal-1         etl-sql/report-portal:latest   \u0022dotnet ETL-SQL-Port\u2026\u0022   portal         About an hour ago   Up About an hour             5002/tcp\r\netlsql-ha-agent-20260711-01-portal-2         etl-sql/report-portal:latest   \u0022dotnet ETL-SQL-Port\u2026\u0022   portal         About an hour ago   Up About an hour             5002/tcp\r\netlsql-ha-agent-20260711-01-postgres-1       postgres:16-alpine             \u0022docker-entrypoint.s\u2026\u0022   postgres       About an hour ago   Up About an hour (healthy)   0.0.0.0:5732-\u003E5432/tcp, [::]:5732-\u003E5432/tcp\r\n",
+  "nonSecret": true
+}

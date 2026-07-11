@@ -100,6 +100,7 @@ function Get-PlannedPreReleasePhases {
     $phases.Add([ordered]@{ Phase = "Fast lane"; Command = ".\scripts\test-lane.ps1 -Lane fast"; Reason = "Default local correctness lane across engine, language server, and portal." })
     $phases.Add([ordered]@{ Phase = "N->N+1 upgrade-path drill"; Command = "dotnet test ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests"; Reason = "In-place EF migration over a live release-N catalog keeps permissions, jobs, subscriptions, datasets, and audit history intact (release gate)." })
     $phases.Add([ordered]@{ Phase = "Sample scripts"; Command = ".\scripts\Test-AllSamples.ps1"; Reason = "Published samples remain runnable." })
+    $phases.Add([ordered]@{ Phase = "HA soak contract gate"; Command = ".\scripts\Test-HaSoakContracts.ps1"; Reason = "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release." })
 
     if ($IncludeSlt) {
         $phases.Add([ordered]@{ Phase = "SLT lane"; Command = ".\scripts\test-lane.ps1 -Lane slt"; Reason = "SQL logic corpus checks parser/evaluator compatibility." })
@@ -648,6 +649,11 @@ try {
     Invoke-LoggedPhase "Sample scripts" `
         ".\scripts\Test-AllSamples.ps1" `
         { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-AllSamples.ps1" } `
+        $previousPhaseMap $fingerprint $results
+
+    Invoke-LoggedPhase "HA soak contract gate" `
+        ".\scripts\Test-HaSoakContracts.ps1" `
+        { & $PowerShellExe "-NoProfile" "-ExecutionPolicy" "Bypass" "-File" ".\scripts\Test-HaSoakContracts.ps1" } `
         $previousPhaseMap $fingerprint $results
 
     if ($IncludeSlt) {

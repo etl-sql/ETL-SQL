@@ -116,6 +116,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
     print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
+    print_plan_phase "$i" "HA soak contract gate" "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release."; i=$((i + 1))
 
     if [[ "$INCLUDE_SLT" == true ]]; then
         print_plan_phase "$i" "SLT lane" "./scripts/test-lane.sh --lane slt" "SQL logic corpus checks parser/evaluator compatibility."; i=$((i + 1))
@@ -315,9 +316,9 @@ vsce_package_phase() {
 }
 
 # ---------------------------------------------------------------------------
-# PowerShell bridge: the dependency-audit and cert-baseline phases reuse the
+# PowerShell bridge: the dependency-audit, HA soak contract, and cert-baseline phases reuse the
 # canonical PowerShell helpers (scripts/lib/DependencyAudit.ps1,
-# Compare-CertBaseline.ps1, Test-DependencyAudit.ps1) so there is a single
+# Compare-CertBaseline.ps1, Test-DependencyAudit.ps1, Test-HaSoakContracts.ps1) so there is a single
 # source of truth shared with Test-PreRelease.ps1 (no parallel bash port to
 # drift). PowerShell 7+ (pwsh) is cross-platform; these phases require it.
 # ---------------------------------------------------------------------------
@@ -349,6 +350,11 @@ cert_baseline_phase() {
     else
         "$pwsh" -NoProfile -File ./scripts/Compare-CertBaseline.ps1
     fi
+}
+
+ha_soak_contract_phase() {
+    local pwsh; pwsh="$(resolve_pwsh)" || return 1
+    "$pwsh" -NoProfile -File ./scripts/Test-HaSoakContracts.ps1
 }
 
 # ---------------------------------------------------------------------------
@@ -653,6 +659,10 @@ run_phase "N->N+1 upgrade-path drill" \
 run_phase "Sample scripts" \
     "./scripts/test-all-samples.sh" \
     bash "./scripts/test-all-samples.sh"
+
+run_phase "HA soak contract gate" \
+    "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" \
+    ha_soak_contract_phase
 
 if [[ "$INCLUDE_SLT" == true ]]; then
     run_phase "SLT lane" \

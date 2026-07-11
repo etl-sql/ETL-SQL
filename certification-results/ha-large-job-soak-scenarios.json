@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "matrixStatus": "ha-soak-contract",
+  "scope": "Concurrent large-job soak and cancellation certification",
+  "defaultDuration": {
+    "ciSmokeMinutes": 15,
+    "manualCertificationHours": 4
+  },
+  "sharedBudgets": {
+    "memoryBoundMB": 16384,
+    "operatorGrantMB": 4096,
+    "minimumFreeDiskGB": 50,
+    "spillRoot": "isolated run temp root",
+    "adaptiveExecution": "scenario-specific"
+  },
+  "cleanupInvariants": [
+    "MemoryGrantArbiter reports zero outstanding reservations after each job completes, fails, or is cancelled",
+    "No orphan spill extents remain under the run temp root after cleanup",
+    "No leaked file handles prevent deletion of the run temp root",
+    "No job is marked successful after a cancellation or injected crash",
+    "No duplicate committed mutation is observed after retry, restart, or lease reacquisition"
+  ],
+  "scenarios": [
+    {
+      "scenarioId": "MixedScanSpillSortJoinAggregate_Concurrent",
+      "state": "Planned",
+      "purpose": "Run mixed scan/filter/projection, temp spill, external sort, external join, and external aggregate jobs concurrently under shared resource budgets.",
+      "workloads": [
+        "StreamingScanFilterProjection",
+        "TempTableSpillRoundTrip",
+        "ExternalSort",
+        "ExternalEquiJoin",
+        "HighCardinalityExternalAggregate"
+      ],
+      "concurrency": {
+        "ciSmokeJobs": 3,
+        "manualCertificationJobs": 12,
+        "fairnessRequirement": "Every admitted job starts or makes progress within the configured scheduler fairness window."
+      },
+      "requiredTelemetry": [
+        "elapsedMs",
+        "rowsProcessed",
+        "peakProcessWorkingSetMB",
+        "memoryGrantOutstanding",
+        "spillBytes",
+        "spillExtentCount",
+        "openHandleCleanup",
+        "schedulerQueueDepth",
+        "jobStartDelayMs"
+      ],
+      "successCriteria": [
+        "All correctness checks pass for completed jobs",
+        "Peak working set stays within shared memoryBoundMB",
+        "No cleanup invariant fails",
+        "No admitted job starves"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringScan",
+      "state": "Planned",
+      "purpose": "Cancel a large streaming scan/filter/projection job while rows are being consumed.",
+      "cancellationPoint": "scan",
+      "expectedResult": "Prompt cancellation, session remains usable, no leaked grants or temp roots.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "cancelObservedAt",
+        "rowsProcessedBeforeCancel",
+        "memoryGrantOutstanding",
+        "cleanupDurationMs"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringSpillWrite",
+      "state": "Planned",
+      "purpose": "Cancel a temp-table or external-operator job during spill extent write.",
+      "cancellationPoint": "spill-write",
+      "expectedResult": "Partial extent is removed or marked unrecoverable, no file handle leak, no success status.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "spillWriteBytesBeforeCancel",
+        "partialExtentCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringSpillRead",
+      "state": "Planned",
+      "purpose": "Cancel a spill-backed job while replaying extents.",
+      "cancellationPoint": "spill-read",
+      "expectedResult": "Replay stops promptly, extents are cleaned after failure handling, session remains recoverable.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "spillReadBytesBeforeCancel",
+        "remainingExtentCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ]
+    },
+    {
+      "scenarioId": "CancelDuringRepartition",
+      "state": "Planned",
+      "purpose": "Cancel external join or high-cardinality aggregate while repartitioning spill partitions.",
+      "cancellationPoint": "repartition",
+      "expectedResult": "Partition writers/readers close, orphan partitions are removed, no duplicated output mutation.",
+      "requiredTelemetry": [
+        "cancelRequestedAt",
+        "partitionPass",
+        "partitionCount",
+        "orphanPartitionCount",
+        "cleanupDurationMs",
+        "memoryGrantOutstanding"
+      ]
+    }
+  ]
+}

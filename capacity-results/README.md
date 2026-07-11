@@ -6,7 +6,8 @@ Do not treat `workload.example.json` as a baseline. Copy it, replace credentials
 record the reference environment, and run the harness against an isolated non-production deployment.
 The workload templates under [`workloads/`](workloads/) cover cache-cold Portal execution and
 exports, representative Orchestrator row-volume jobs, retry/failure jobs, mocked I/O, `PARALLEL`,
-schedule density, and process-spawning comparisons.
+schedule density, process-spawning comparisons, and the PostgreSQL HA sustained-load
+profile.
 
 ```powershell
 node .\scripts\test-service-capacity.mjs --config .\capacity-results\workload.local.json
@@ -16,9 +17,21 @@ node .\scripts\compare-capacity-results.mjs `
   .\capacity-results\current\capacity-report.json
 ```
 
+For PostgreSQL HA soak runs, first generate a local topology, then materialize the sustained workload from
+that run so generated API keys stay outside source control:
+
+```powershell
+.\scripts\New-PostgresHaSoakTopology.ps1 -RunId ha-soak-local -Start
+.\scripts\New-PostgresHaCapacityWorkload.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local -AdminPassword <portal-admin-password>
+.\scripts\New-HaSoakRunbook.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local
+node .\scripts\test-service-capacity.mjs --config .\.ha-soak-runs\ha-soak-local\postgres-ha-sustained.workload.local.json --out-dir .\certification-results\postgres-ha-soak\ha-soak-local
+.\scripts\Export-PostgresHaMetricsSnapshot.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local -OutputPath .\certification-results\postgres-ha-soak\ha-soak-local\postgres-ha-metrics.json
+.\scripts\Export-HaSoakDiagnostics.ps1 -TopologyRunRoot .\.ha-soak-runs\ha-soak-local
+```
+
 Checked-in baselines should include the JSON report, Markdown report, workload configuration with
-secrets removed, machine specifications, service configuration, and a short interpretation of the
-first sustained breach and recommended operating margin.
+secrets removed, PostgreSQL metrics snapshot, machine specifications, service configuration, and a
+short interpretation of the first sustained breach and recommended operating margin.
 
 The checked-in developer-workstation starter baseline is documented in
 [`reference-local/README.md`](reference-local/README.md).

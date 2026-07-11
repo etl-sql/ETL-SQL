@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "faultId": "PortalNodeLossWithActiveSession",
+  "category": "node-loss",
+  "injectionPoint": "portal-node",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "node-local interactive session loss is explicit; stateless requests continue through healthy nodes",
+  "evidence": {
+    "faultId": "PortalNodeLossWithActiveSession",
+    "category": "node-loss",
+    "injectionMethod": "stop one Portal container while a sticky interactive session is active",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "affinityCookieName": "ETLSQL_PORTAL_AFFINITY",
+    "lostNodeId": "portal-1",
+    "healthzStatusAfterStop": "HealthyDegraded",
+    "statelessRequestSuccess": true,
+    "interactiveSessionOutcome": "NodeLocalSessionLostExplicitly",
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "PortalNodeLossWithActiveSession",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

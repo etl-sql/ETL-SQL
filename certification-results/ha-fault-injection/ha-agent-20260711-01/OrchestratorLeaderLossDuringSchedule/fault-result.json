@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "faultId": "OrchestratorLeaderLossDuringSchedule",
+  "category": "node-loss",
+  "injectionPoint": "orchestrator-leader",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "new leader acquires lease and scheduled job is not double-fired",
+  "evidence": {
+    "faultId": "OrchestratorLeaderLossDuringSchedule",
+    "category": "node-loss",
+    "injectionMethod": "stop leader/lease owner during a dense schedule window",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "leaderBeforeStop": "orch-1",
+    "leaderAfterFailover": "orch-2",
+    "failoverDurationMs": 5000,
+    "scheduledFireCount": 1,
+    "duplicateFireCount": 0,
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "OrchestratorLeaderLossDuringSchedule",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

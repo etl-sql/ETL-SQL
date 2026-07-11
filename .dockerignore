@@ -9,8 +9,11 @@ bin/
 obj/
 TestResults/
 coverage/
+coverage*/
 release-validation/
+release/
 slt_results/
+.ha-soak-runs/
 logs/
 data/**/*.db
 data/**/*.db-shm
@@ -20,6 +23,11 @@ data/**/*.sqlite-shm
 data/**/*.sqlite-wal
 data/datasets/
 data/maps/
+certification-results/postgres-ha-soak/
+certification-results/ha-large-job-soak/
+certification-results/ha-fault-injection/
+**/node_modules/
+**/.vscode-test/
 *.user
 *.suo
 *.sln.dotSettings

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "faultId": "SlowDiskWriteAndRead",
+  "category": "disk-latency",
+  "injectionPoint": "spill-write-and-read",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "throughput drops, adaptive storage-pressure telemetry is visible, and no timeout occurs unless configured",
+  "evidence": {
+    "faultId": "SlowDiskWriteAndRead",
+    "category": "disk-latency",
+    "injectionMethod": "delay wrapper around spill writer and reader in the isolated run root",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "configuredDelayMs": 25,
+    "spillWriteLatencyMs": 25,
+    "spillReadLatencyMs": 25,
+    "adaptiveStoragePressure": true,
+    "rowsProcessed": 2048,
+    "elapsedMs": 0
+  },
+  "cleanupInvariants": {
+    "faultId": "SlowDiskWriteAndRead",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

@@ -191,6 +191,91 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public async Task CliOrchestrator_AdminHaSoakValidateParsesEvidenceOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "ha-soak", "validate",
+                "--run-root", "runs/phase6",
+                "--required-gate", "All",
+                "--required-commit", "abc123",
+                "--allow-dirty",
+                "--markdown-report", "certification-results/phase6/evidence-validation.md"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-ha-soak-validate", capturedContext!.Command);
+            Assert.Equal("runs/phase6", capturedContext.HaSoakRunRoot);
+            Assert.Equal("All", capturedContext.HaSoakRequiredGate);
+            Assert.Equal("abc123", capturedContext.HaSoakRequiredCommit);
+            Assert.True(capturedContext.HaSoakAllowDirty);
+            Assert.Equal("certification-results/phase6/evidence-validation.md", capturedContext.HaSoakMarkdownReport);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminHaSoakLargeJobRunParsesRunnerOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "ha-soak", "large-job-run",
+                "--run-root", "runs/phase6",
+                "--plan", "runs/phase6/ha-large-job-soak-plan.json",
+                "--output-root", "certification-results/ha-large-job-soak/run-1",
+                "--duration-seconds", "2",
+                "--force"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-ha-soak-large-job-run", capturedContext!.Command);
+            Assert.Equal("runs/phase6", capturedContext.HaSoakRunRoot);
+            Assert.Equal("runs/phase6/ha-large-job-soak-plan.json", capturedContext.HaSoakPlanPath);
+            Assert.Equal("certification-results/ha-large-job-soak/run-1", capturedContext.HaSoakOutputRoot);
+            Assert.Equal(2, capturedContext.HaSoakDurationSeconds);
+            Assert.True(capturedContext.HaSoakForce);
+        }
+
+        [Fact]
+        public async Task CliOrchestrator_AdminHaSoakFaultRunParsesRunnerOptions()
+        {
+            CliContext? capturedContext = null;
+            var root = CliOrchestrator.BuildRootCommand(ctx =>
+            {
+                capturedContext = ctx;
+                return Task.FromResult(0);
+            });
+
+            await root.Parse(new[]
+            {
+                "admin", "ha-soak", "fault-run",
+                "--run-root", "runs/phase6",
+                "--plan", "runs/phase6/ha-fault-injection-plan.json",
+                "--output-root", "certification-results/ha-fault-injection/run-1",
+                "--force"
+            }, null).InvokeAsync(new InvocationConfiguration(), default);
+
+            Assert.NotNull(capturedContext);
+            Assert.Equal("admin-ha-soak-fault-run", capturedContext!.Command);
+            Assert.Equal("runs/phase6", capturedContext.HaSoakRunRoot);
+            Assert.Equal("runs/phase6/ha-fault-injection-plan.json", capturedContext.HaSoakPlanPath);
+            Assert.Equal("certification-results/ha-fault-injection/run-1", capturedContext.HaSoakOutputRoot);
+            Assert.True(capturedContext.HaSoakForce);
+        }
+
+        [Fact]
         public async Task CliOrchestrator_EnterpriseEnrollParsesProtectedBootstrapOptions()
         {
             CliContext? capturedContext = null;

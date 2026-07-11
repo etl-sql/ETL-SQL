@@ -149,6 +149,7 @@ etlsql.db
 .etlsql_temp/
 /scratch/
 /tmp/
+.ha-soak-runs/
 
 # More general scratch/diagnostic captures
 *.txt

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "MixedScanSpillSortJoinAggregate_Concurrent",
+  "status": "Passed",
+  "passed": true,
+  "startedAt": "2026-07-11T15:40:30.8210310Z",
+  "completedAt": "2026-07-11T15:41:38.7472271Z",
+  "expectedResult": null,
+  "telemetry": {
+    "rowsProcessed": 161892352,
+    "checksum": 5311374531778,
+    "spillBytes": 1105798528,
+    "spillExtentCount": 79049,
+    "roundsCompleted": 26350,
+    "schedulerQueueDepth": 3,
+    "jobStartDelayMs": 0,
+    "cleanupDurationMs": 7922,
+    "cleanupSucceeded": true,
+    "fairnessObserved": true,
+    "elapsedMs": 67926,
+    "remainingTempFiles": 0,
+    "memoryGrantOutstanding": 0,
+    "openHandleCleanup": true
+  },
+  "issues": [],
+  "nonSecret": true
+}

@@ -191,7 +191,7 @@ public partial class SpillStore : ISpillStore
                         if (queued)
                         {
                             _waitingSpillWrites--;
-                            _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+                            _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
                         }
                         return new SpillWriteSlot(this);
                     }
@@ -200,7 +200,7 @@ public partial class SpillStore : ISpillStore
                     {
                         queued = true;
                         _waitingSpillWrites++;
-                        _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+                        _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
                     }
                 }
 
@@ -214,7 +214,7 @@ public partial class SpillStore : ISpillStore
                 lock (_spillWriteGate)
                 {
                     _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
-                    _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+                    _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
                 }
             }
             throw;
@@ -269,7 +269,7 @@ public partial class SpillStore : ISpillStore
             var elapsed = Stopwatch.StartNew();
             await Inner.WriteRowAsync(row);
             elapsed.Stop();
-            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
@@ -279,7 +279,7 @@ public partial class SpillStore : ISpillStore
             var elapsed = Stopwatch.StartNew();
             await Inner.WriteRowsAsync(rows);
             elapsed.Stop();
-            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
 
         public ValueTask DisposeAsync() => Inner.DisposeAsync();
@@ -302,7 +302,7 @@ public partial class SpillStore : ISpillStore
             var elapsed = Stopwatch.StartNew();
             await columnar.WriteBatchAsync(batch);
             elapsed.Stop();
-            Context.AdaptiveMetrics.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
         }
     }
 

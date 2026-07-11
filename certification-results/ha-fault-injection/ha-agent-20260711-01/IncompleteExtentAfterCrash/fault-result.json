@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "faultId": "IncompleteExtentAfterCrash",
+  "category": "crash-recovery",
+  "injectionPoint": "spill-write",
+  "status": "Passed",
+  "passed": true,
+  "expectedResult": "restart cleanup removes orphaned temp root or marks persistent session spill unrecoverable",
+  "evidence": {
+    "faultId": "IncompleteExtentAfterCrash",
+    "category": "crash-recovery",
+    "injectionMethod": "terminate worker after extent create and before completion marker or final metadata write",
+    "resultMarkedFailed": true,
+    "memoryGrantOutstanding": 0,
+    "duplicateMutationCount": 0,
+    "killedProcessId": 7684,
+    "orphanExtentCountBeforeRestart": 1,
+    "orphanExtentCountAfterCleanup": 0,
+    "restartCleanupDurationMs": 0,
+    "sessionRecoveryState": "UnrecoverableSpillCleaned",
+    "elapsedMs": 1
+  },
+  "cleanupInvariants": {
+    "faultId": "IncompleteExtentAfterCrash",
+    "passed": true,
+    "memoryGrantOutstanding": 0,
+    "allSpillReadersDisposed": true,
+    "allSpillWritersDisposed": true,
+    "tempRootFileCount": 0,
+    "tempRootDirectoryCount": 0,
+    "partialMutationReportedSuccessful": false,
+    "duplicateCommittedMutationObserved": false,
+    "redactionCheck": "Passed"
+  },
+  "issues": [],
+  "nonSecret": true
+}

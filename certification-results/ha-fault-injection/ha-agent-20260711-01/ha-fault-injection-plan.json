@@ -1,0 +1,281 @@
+{
+  "schemaVersion": 1,
+  "phase": "v0.15.0 Phase 6",
+  "generatedAt": "2026-07-11T14:54:44.1219524Z",
+  "runId": "ha-agent-20260711-01",
+  "mode": "CiSmoke",
+  "topologyMetadataPath": "ha-soak-runs/ha-agent-20260711-01/topology-metadata.json",
+  "matrixPath": "certification-results/ha-fault-injection-matrix.json",
+  "expectedOutputDirectory": "certification-results/ha-fault-injection/ha-agent-20260711-01",
+  "diagnosticsCommand": "etl-sql admin ha-soak diagnostics --run-root \u0022ha-soak-runs/ha-agent-20260711-01\u0022",
+  "runSafety": {
+    "isolatedRunRootRequired": true,
+    "disposablePostgresRequired": true,
+    "productionTargetsAllowed": false,
+    "destructiveFilesystemScope": "exact HA soak run directory only",
+    "orchestratorApiAuthenticationRequired": true,
+    "rawSecretLoggingAllowed": false
+  },
+  "commonCleanupInvariants": [
+    "MemoryGrantArbiter reports zero outstanding reservations after failure handling",
+    "All spill writers and readers are disposed",
+    "Run temp root can be deleted after cleanup",
+    "No partial mutation is reported as successful",
+    "No duplicate committed mutation is observed after restart or retry",
+    "Failure report redacts connection strings, API keys, ENC values, and SECRET references"
+  ],
+  "categoryCounts": [
+    {
+      "category": "disk",
+      "count": 2
+    },
+    {
+      "category": "disk-latency",
+      "count": 1
+    },
+    {
+      "category": "corruption",
+      "count": 1
+    },
+    {
+      "category": "crash-recovery",
+      "count": 2
+    },
+    {
+      "category": "node-loss",
+      "count": 2
+    },
+    {
+      "category": "database-outage",
+      "count": 1
+    },
+    {
+      "category": "filesystem",
+      "count": 1
+    }
+  ],
+  "faults": [
+    {
+      "faultId": "DiskLowSpaceBeforeExtentWrite",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "disk",
+      "injectionPoint": "pre-spill-write-admission",
+      "injectionMethod": "configure isolated spill root with available-space threshold below scenario admission requirement",
+      "expectedResult": "operator fails before writing extents with a sanitized low-space error",
+      "requiredEvidence": [
+        "freeDiskBytesBefore",
+        "admissionRequiredBytes",
+        "exceptionCategory",
+        "spillExtentCountAfterCleanup",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "DiskLowSpaceBeforeExtentWrite/fault-result.json",
+        "DiskLowSpaceBeforeExtentWrite/fault-result.md",
+        "DiskLowSpaceBeforeExtentWrite/runner.log",
+        "DiskLowSpaceBeforeExtentWrite/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "DiskFullDuringExtentWrite",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "disk",
+      "injectionPoint": "spill-write",
+      "injectionMethod": "bounded faulting spill writer throws after a configured byte count inside the isolated run root",
+      "expectedResult": "partial extent is deleted or marked unrecoverable; job fails and releases grants/handles",
+      "requiredEvidence": [
+        "bytesWrittenBeforeFault",
+        "partialExtentPath",
+        "partialExtentRemoved",
+        "openHandleCleanup",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "DiskFullDuringExtentWrite/fault-result.json",
+        "DiskFullDuringExtentWrite/fault-result.md",
+        "DiskFullDuringExtentWrite/runner.log",
+        "DiskFullDuringExtentWrite/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "SlowDiskWriteAndRead",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "disk-latency",
+      "injectionPoint": "spill-write-and-read",
+      "injectionMethod": "delay wrapper around spill writer and reader in the isolated run root",
+      "expectedResult": "throughput drops, adaptive storage-pressure telemetry is visible, and no timeout occurs unless configured",
+      "requiredEvidence": [
+        "configuredDelayMs",
+        "spillWriteLatencyMs",
+        "spillReadLatencyMs",
+        "adaptiveStoragePressure",
+        "rowsProcessed"
+      ],
+      "expectedArtifacts": [
+        "SlowDiskWriteAndRead/fault-result.json",
+        "SlowDiskWriteAndRead/fault-result.md",
+        "SlowDiskWriteAndRead/runner.log",
+        "SlowDiskWriteAndRead/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "CorruptExtentBeforeRead",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "corruption",
+      "injectionPoint": "pre-spill-read",
+      "injectionMethod": "modify one generated spill extent under the exact run temp root before replay",
+      "expectedResult": "sanitized execution failure; no silent row loss or successful checksum",
+      "requiredEvidence": [
+        "corruptedExtentPath",
+        "checksumBefore",
+        "checksumAfter",
+        "exceptionCategory",
+        "resultMarkedFailed"
+      ],
+      "expectedArtifacts": [
+        "CorruptExtentBeforeRead/fault-result.json",
+        "CorruptExtentBeforeRead/fault-result.md",
+        "CorruptExtentBeforeRead/runner.log",
+        "CorruptExtentBeforeRead/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "IncompleteExtentAfterCrash",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "crash-recovery",
+      "injectionPoint": "spill-write",
+      "injectionMethod": "terminate worker after extent create and before completion marker or final metadata write",
+      "expectedResult": "restart cleanup removes orphaned temp root or marks persistent session spill unrecoverable",
+      "requiredEvidence": [
+        "killedProcessId",
+        "orphanExtentCountBeforeRestart",
+        "orphanExtentCountAfterCleanup",
+        "restartCleanupDurationMs",
+        "sessionRecoveryState"
+      ],
+      "expectedArtifacts": [
+        "IncompleteExtentAfterCrash/fault-result.json",
+        "IncompleteExtentAfterCrash/fault-result.md",
+        "IncompleteExtentAfterCrash/runner.log",
+        "IncompleteExtentAfterCrash/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "WorkerProcessCrashMidJob",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "crash-recovery",
+      "injectionPoint": "orchestrator-job-execution",
+      "injectionMethod": "kill spawned worker process after job lease acquisition",
+      "expectedResult": "lease expires or fences; job is failed or recoverable and is not double-mutated",
+      "requiredEvidence": [
+        "leaseOwnerBeforeCrash",
+        "leaseOwnerAfterRecovery",
+        "jobFinalState",
+        "duplicateMutationCount",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "WorkerProcessCrashMidJob/fault-result.json",
+        "WorkerProcessCrashMidJob/fault-result.md",
+        "WorkerProcessCrashMidJob/runner.log",
+        "WorkerProcessCrashMidJob/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "PortalNodeLossWithActiveSession",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "node-loss",
+      "injectionPoint": "portal-node",
+      "injectionMethod": "stop one Portal container while a sticky interactive session is active",
+      "expectedResult": "node-local interactive session loss is explicit; stateless requests continue through healthy nodes",
+      "requiredEvidence": [
+        "affinityCookieName",
+        "lostNodeId",
+        "healthzStatusAfterStop",
+        "statelessRequestSuccess",
+        "interactiveSessionOutcome"
+      ],
+      "expectedArtifacts": [
+        "PortalNodeLossWithActiveSession/fault-result.json",
+        "PortalNodeLossWithActiveSession/fault-result.md",
+        "PortalNodeLossWithActiveSession/runner.log",
+        "PortalNodeLossWithActiveSession/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "OrchestratorLeaderLossDuringSchedule",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "node-loss",
+      "injectionPoint": "orchestrator-leader",
+      "injectionMethod": "stop leader/lease owner during a dense schedule window",
+      "expectedResult": "new leader acquires lease and scheduled job is not double-fired",
+      "requiredEvidence": [
+        "leaderBeforeStop",
+        "leaderAfterFailover",
+        "failoverDurationMs",
+        "scheduledFireCount",
+        "duplicateFireCount"
+      ],
+      "expectedArtifacts": [
+        "OrchestratorLeaderLossDuringSchedule/fault-result.json",
+        "OrchestratorLeaderLossDuringSchedule/fault-result.md",
+        "OrchestratorLeaderLossDuringSchedule/runner.log",
+        "OrchestratorLeaderLossDuringSchedule/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "PostgresOutageBrief",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "database-outage",
+      "injectionPoint": "postgres-service",
+      "injectionMethod": "stop disposable PostgreSQL container for a bounded interval and restart it",
+      "expectedResult": "health probes fail closed, jobs back off, durable state remains consistent after restart",
+      "requiredEvidence": [
+        "outageDurationMs",
+        "portalHealthDuringOutage",
+        "orchestratorHealthDuringOutage",
+        "jobBackoffObserved",
+        "stateConsistencyCheck"
+      ],
+      "expectedArtifacts": [
+        "PostgresOutageBrief/fault-result.json",
+        "PostgresOutageBrief/fault-result.md",
+        "PostgresOutageBrief/runner.log",
+        "PostgresOutageBrief/cleanup-invariants.json"
+      ]
+    },
+    {
+      "faultId": "TempRootExhaustion",
+      "state": "ReadyForRunner",
+      "sourceState": "Planned",
+      "category": "filesystem",
+      "injectionPoint": "temp-root-admission",
+      "injectionMethod": "set isolated temp-root quota/admission below the expected spill footprint",
+      "expectedResult": "job fails before unbounded spill growth and cleanup leaves no orphaned run root",
+      "requiredEvidence": [
+        "configuredTempRootLimitBytes",
+        "expectedSpillBytes",
+        "admissionFailureObserved",
+        "runRootDeletedAfterCleanup",
+        "memoryGrantOutstanding"
+      ],
+      "expectedArtifacts": [
+        "TempRootExhaustion/fault-result.json",
+        "TempRootExhaustion/fault-result.md",
+        "TempRootExhaustion/runner.log",
+        "TempRootExhaustion/cleanup-invariants.json"
+      ]
+    }
+  ],
+  "runnerState": "ReadyForNativeRunner",
+  "nonSecret": true
+}

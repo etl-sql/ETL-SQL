@@ -15,11 +15,18 @@ COPY ["src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj", "E
 COPY ["src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj", "ETL-SQL.Analysis/"]
 COPY ["src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj", "ETL-SQL.Reporting/"]
 COPY ["src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj", "ETL-SQL.ReportBuilder/"]
+COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]
+COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
 
 RUN dotnet restore "ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj"
 
 # Copy the rest of the source
 COPY src/ .
+COPY deploy/docker/docker-compose.ha.yml /deploy/docker/docker-compose.ha.yml
+COPY deploy/docker/environment-ha.env.example /deploy/docker/environment-ha.env.example
+COPY capacity-results/workloads/postgres-ha-sustained.workload.json /capacity-results/workloads/postgres-ha-sustained.workload.json
+COPY certification-results/ha-large-job-soak-scenarios.json /certification-results/ha-large-job-soak-scenarios.json
+COPY certification-results/ha-fault-injection-matrix.json /certification-results/ha-fault-injection-matrix.json
 
 WORKDIR "/src/ETL-SQL.Orchestrator.Service"
 RUN dotnet build "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/build

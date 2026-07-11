@@ -163,7 +163,8 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
       }
     },
     "FirstRun": {
-      "AdminUsername": "admin"
+      "AdminUsername": "admin",
+      "MustChangePassword": true
     },
     "Engine": {
       "StartOfWeek": "Monday"
@@ -230,6 +231,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Identity.Ldap.ServicePassword` | *(empty)* | Optional password for the service account. |
 | `Identity.Ldap.RoleMappings` | *(empty)* | Key-value pairs mapping Active Directory groups (full DNs or short CNs) to Portal Roles (`Admin`, `Publisher`, `Viewer`). |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
+| `FirstRun.MustChangePassword` | `true` | Forces the seeded first-run admin to change the initial password before using API routes. Keep enabled for production; disposable automation topologies may set it to `false` only when they generate a strong per-run password. |
 | `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). |
 | `Orchestrator.ApiUrl` | *(empty)* | Base URL of the Orchestrator Service HTTP API. |
 | `Orchestrator.ApiKey` | *(empty)* | Shared secret API key used for authenticating Orchestrator HTTP calls. |
@@ -269,12 +271,13 @@ On first start the portal:
 
 1. Runs any pending EF Core migrations, creating the configured Portal database schema.
 2. Creates the three default roles: `Admin`, `Publisher`, `Viewer`.
-3. If no `admin` user exists, creates one with username `admin` and `MustChangePassword = true`. The
+3. If no `admin` user exists, creates one with username `admin`; by default it sets
+   `MustChangePassword = true`. The
    temporary password comes from `Portal:FirstRun:AdminPassword` (or the `Portal__FirstRun__AdminPassword`
    environment variable); when unset, a random password is generated and written once to the startup log
    under the `Portal.FirstRun` category — there is no well-known default password.
 
-**You must log in as `admin` immediately and change the password.** The portal enforces this — no API calls will succeed until the password has been changed.
+**You must log in as `admin` immediately and change the password.** The portal enforces this by default — no API calls will succeed until the password has been changed. `Portal:FirstRun:MustChangePassword=false` is intended only for disposable automation environments that generate a strong per-run admin password.
 
 ---
 
