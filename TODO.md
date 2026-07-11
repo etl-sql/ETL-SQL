@@ -241,8 +241,8 @@ Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailure
   operator runbook with ordered commands, expected artifacts, and diagnostics instructions so
   long-running scripts can be run manually and diagnosed afterward from captured outputs.
   `etl-sql admin ha-soak ...` now exposes the topology, workload, runbook, evidence, metrics,
-  diagnostics, large-job-plan, and fault-plan workflows as first-class admin CLI commands so
-  operators have a stable front door while the scripts remain the auditable implementation.
+  diagnostics, large-job-plan, and fault-plan workflows as native first-class admin CLI commands so
+  operators have a stable cross-platform front door without requiring PowerShell.
   `scripts/Test-HaSoakEvidence.ps1` and `etl-sql admin ha-soak validate` now provide a cheap
   post-run evidence gate for completed sustained-load artifacts, checking required reports,
   PostgreSQL metrics, pass/breach status, redaction, and commit metadata before capacity claims

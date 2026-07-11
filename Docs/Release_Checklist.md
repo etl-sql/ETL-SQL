@@ -89,9 +89,9 @@ The HA soak contract gate is intentionally short and non-destructive. It validat
 PostgreSQL HA topology, sustained workload materialization, metrics snapshot, diagnostics bundle,
 operator runbook, and large-job/fault plan contracts still generate usable artifacts. The long
 operator-run HA soak evidence remains manual and should be attached only when publishing HA capacity
-or recovery claims. Operators should use `etl-sql admin ha-soak ...` as the stable front door for
-manual HA soak preparation, runbooks, metrics, and diagnostics; the underlying scripts remain the
-release-gate implementation.
+or recovery claims. Operators should use the native `etl-sql admin ha-soak ...` commands as the
+stable cross-platform front door for manual HA soak preparation, runbooks, metrics, and diagnostics;
+script-level helpers remain release-gate contract tests.
 Before publishing PostgreSQL HA capacity observations from an operator run, attach the
 `etl-sql admin ha-soak validate --required-gate Sustained` summary; switch to `--required-gate All`
 only when large-job and fault-injection measured reports are present.

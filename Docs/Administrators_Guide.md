@@ -1223,10 +1223,9 @@ configure load-balancer affinity, and verify `GET /healthz` on each node before 
 
 ### 11.6 PostgreSQL HA soak operations — `etl-sql admin ha-soak`
 
-The HA soak scripts are exposed through the admin CLI so operators do not have to discover individual
-files under `scripts/`. The CLI commands stream the underlying script output to the console; capture
-that transcript when running long soaks so failures can be diagnosed later without monitoring the
-run live.
+The HA soak workflows are native admin CLI commands so operators do not need PowerShell or knowledge
+of the repository's script layout. Capture the command transcript when running long soaks so failures
+can be diagnosed later without monitoring the run live.
 
 ```bash
 # Prepare a disposable topology run root without starting containers
@@ -1249,8 +1248,8 @@ etl-sql admin ha-soak validate --run-root .ha-soak-runs/ha-20260710 --required-g
 
 Use `prepare --start --pull` only when you are ready to start the Docker topology. Generated env
 files and local workload configs may contain disposable credentials or API keys; they belong in the
-ignored run root, not source control. The script names remain documented in `scripts/README.md` for
-developers and release maintainers, but administrators should prefer the `etl-sql admin ha-soak`
-commands as the stable interface. Use `validate --required-gate All` only after large-job and
+ignored run root, not source control. Developers and release maintainers still have script-level
+contract tests in `scripts/README.md`, but administrators should use the `etl-sql admin ha-soak`
+commands as the stable cross-platform interface. Use `validate --required-gate All` only after large-job and
 fault-injection measured reports exist; until those runners are complete, `Sustained` is the
 publishable evidence gate for PostgreSQL HA capacity observations.
