@@ -122,7 +122,7 @@ function _computeLayout(nodes, edges) {
 
 export default {
   id: 'lineage-mockup',
-  title: 'React Flow / Port Lineage Mockup',
+  title: 'Card-based Lineage Mockup',
   subtitle: 'Interactive column-level flow',
   fixtures: [
     { id: 'kitchen', label: 'Kitchen Sink (~106 nodes)' },
