@@ -294,6 +294,30 @@ export const catalogApi = {
     }
 };
 
+// ── Admin — Portal secret store (values are write-only) ───────────────────────
+
+export const secretsApi = {
+    list:      ()            => apiJson('/api/admin/secrets'),
+    set:       (name, value) => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'PUT', body: { value } }),
+    verify:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/verify`, { method: 'POST' }),
+    verifyAll: ()            => apiJson('/api/admin/secrets/verify-all', { method: 'POST' }),
+    disable:   (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}/disable`, { method: 'POST' }),
+    remove:    (name)        => apiJson(`/api/admin/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+};
+
+// ── Admin — shared connection catalog (SHARED:alias) ──────────────────────────
+
+export const connectionsApi = {
+    list:      ()             => apiJson('/api/admin/connections'),
+    detail:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`),
+    set:       (alias, entry) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'PUT', body: entry }),
+    verify:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/verify`, { method: 'POST' }),
+    disable:   (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/disable`, { method: 'POST' }),
+    remove:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'DELETE' }),
+    exportAll: ()             => apiJson('/api/admin/connections/export'),
+    importAll: (entries)      => apiJson('/api/admin/connections/import', { method: 'POST', body: entries }),
+};
+
 // ── Admin — users ──────────────────────────────────────────────────────────────
 
 export const adminApi = {
