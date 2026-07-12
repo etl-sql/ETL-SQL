@@ -1,0 +1,359 @@
+using System.Globalization;
+using System.Text;
+using ETL_SQL.Core.Common;
+using Microsoft.Data.Sqlite;
+
+namespace ETL_SQL.Core.Governance;
+
+public sealed record SecurityEventOutboxOptions
+{
+    public required string DatabasePath { get; init; }
+    public long MaxBytes { get; init; } = 64 * 1024 * 1024;
+    public int MaxPendingEvents { get; init; } = 100_000;
+    public int MaxDeliveryAttempts { get; init; } = 10;
+    public TimeSpan InitialRetryDelay { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromHours(1);
+}
+
+public sealed record SecurityEventOutboxItem(
+    SecurityEvent Event,
+    int Attempts,
+    DateTimeOffset CreatedAtUtc);
+
+public sealed record SecurityEventOutboxHealth(
+    int PendingCount,
+    int FailedCount,
+    long StoredBytes,
+    DateTimeOffset? OldestPendingUtc,
+    DateTimeOffset? LastDeliveredUtc);
+
+public sealed class SecurityEventOutboxFullException(string message) : IOException(message);
+
+/// <summary>
+/// Process-independent SQLite outbox for sanitized security events. A unique event ID provides
+/// idempotent append, and leased claims recover automatically when a process exits mid-delivery.
+/// </summary>
+public sealed class SecurityEventOutbox : ISecurityEventSink
+{
+    private readonly SecurityEventOutboxOptions _options;
+    private readonly string _connectionString;
+    private readonly Func<double> _jitter;
+
+    public SecurityEventOutbox(
+        SecurityEventOutboxOptions options,
+        Func<double>? jitter = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        if (!Path.IsPathFullyQualified(options.DatabasePath))
+            throw new ArgumentException("Security event outbox path must be fully qualified.", nameof(options));
+        if (options.MaxBytes <= 0 || options.MaxPendingEvents <= 0
+            || options.MaxDeliveryAttempts <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "Outbox limits must be positive.");
+        if (options.InitialRetryDelay <= TimeSpan.Zero
+            || options.MaxRetryDelay < options.InitialRetryDelay)
+            throw new ArgumentOutOfRangeException(nameof(options), "Retry delays are invalid.");
+
+        _options = options with { DatabasePath = Path.GetFullPath(options.DatabasePath) };
+        _jitter = jitter ?? Random.Shared.NextDouble;
+        var directory = Path.GetDirectoryName(_options.DatabasePath)
+            ?? throw new ArgumentException("Security event outbox path has no parent directory.", nameof(options));
+        Directory.CreateDirectory(directory);
+        _connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = _options.DatabasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = true
+        }.ToString();
+        Initialize();
+    }
+
+    public void Emit(SecurityEvent securityEvent)
+    {
+        ArgumentNullException.ThrowIfNull(securityEvent);
+        var sanitized = SecurityEventSanitizer.Sanitize(securityEvent);
+        var payload = SecurityEventContract.Serialize(sanitized);
+        var payloadBytes = Encoding.UTF8.GetByteCount(payload);
+        var now = DateTimeOffset.UtcNow;
+
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        if (Exists(connection, transaction, sanitized.EventId))
+        {
+            transaction.Commit();
+            return;
+        }
+
+        var (count, bytes) = CurrentSize(connection, transaction);
+        if (count >= _options.MaxPendingEvents || bytes + payloadBytes > _options.MaxBytes)
+            throw new SecurityEventOutboxFullException(
+                $"Security event outbox reached its configured capacity ({count} events, {bytes} bytes).");
+
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO security_events
+                (event_id, payload_json, payload_bytes, status, attempts, created_utc, updated_utc)
+            VALUES
+                ($eventId, $payload, $payloadBytes, 'Pending', 0, $now, $now);
+            """;
+        command.Parameters.AddWithValue("$eventId", sanitized.EventId.ToString("D"));
+        command.Parameters.AddWithValue("$payload", payload);
+        command.Parameters.AddWithValue("$payloadBytes", payloadBytes);
+        command.Parameters.AddWithValue("$now", Format(now));
+        command.ExecuteNonQuery();
+        transaction.Commit();
+    }
+
+    public IReadOnlyList<SecurityEventOutboxItem> ClaimBatch(
+        int batchSize,
+        DateTimeOffset nowUtc,
+        TimeSpan leaseDuration)
+    {
+        if (batchSize <= 0) throw new ArgumentOutOfRangeException(nameof(batchSize));
+        if (leaseDuration <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+        nowUtc = nowUtc.ToUniversalTime();
+
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        var rows = new List<(string Id, string Payload, int Attempts, string Created)>();
+        using (var select = connection.CreateCommand())
+        {
+            select.Transaction = transaction;
+            select.CommandText = """
+                SELECT event_id, payload_json, attempts, created_utc
+                FROM security_events
+                WHERE status = 'Pending'
+                  AND (next_attempt_utc IS NULL OR next_attempt_utc <= $now)
+                  AND (locked_until_utc IS NULL OR locked_until_utc <= $now)
+                ORDER BY created_utc, event_id
+                LIMIT $batchSize;
+                """;
+            select.Parameters.AddWithValue("$now", Format(nowUtc));
+            select.Parameters.AddWithValue("$batchSize", batchSize);
+            using var reader = select.ExecuteReader();
+            while (reader.Read())
+                rows.Add((reader.GetString(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3)));
+        }
+
+        if (rows.Count > 0)
+        {
+            using var claim = connection.CreateCommand();
+            claim.Transaction = transaction;
+            claim.CommandText = $"""
+                UPDATE security_events
+                SET locked_until_utc = $lockedUntil, updated_utc = $now
+                WHERE event_id IN ({string.Join(",", rows.Select((_, index) => $"$id{index}"))});
+                """;
+            claim.Parameters.AddWithValue("$lockedUntil", Format(nowUtc.Add(leaseDuration)));
+            claim.Parameters.AddWithValue("$now", Format(nowUtc));
+            for (var index = 0; index < rows.Count; index++)
+                claim.Parameters.AddWithValue($"$id{index}", rows[index].Id);
+            claim.ExecuteNonQuery();
+        }
+        transaction.Commit();
+
+        return rows.Select(row => new SecurityEventOutboxItem(
+            SecurityEventContract.Deserialize(row.Payload), row.Attempts, Parse(row.Created))).ToArray();
+    }
+
+    public void MarkDelivered(IEnumerable<Guid> eventIds, DateTimeOffset deliveredAtUtc)
+    {
+        UpdateMany(eventIds, (connection, transaction, ids) =>
+        {
+            using var command = CreateIdCommand(connection, transaction, ids, """
+                UPDATE security_events
+                SET status = 'Delivered', delivered_utc = $now, locked_until_utc = NULL,
+                    next_attempt_utc = NULL, last_error = NULL, updated_utc = $now
+                WHERE event_id IN ({0});
+                """);
+            command.Parameters.AddWithValue("$now", Format(deliveredAtUtc));
+            command.ExecuteNonQuery();
+        });
+    }
+
+    public void MarkDeliveryFailed(
+        IEnumerable<Guid> eventIds,
+        string error,
+        DateTimeOffset failedAtUtc)
+    {
+        var safeError = SecurityEventSanitizer.Sanitize(SecurityEventContract.Create(
+            SecurityEventSeverity.Error, SecurityEventType.PolicyAvailabilityFailure,
+            "outbox", "outbox", "<collector>", SecurityEventDecision.Failed, error)).Reason;
+        UpdateMany(eventIds, (connection, transaction, ids) =>
+        {
+            foreach (var id in ids)
+            {
+                var attempts = GetAttempts(connection, transaction, id) + 1;
+                var terminal = attempts >= _options.MaxDeliveryAttempts;
+                using var command = connection.CreateCommand();
+                command.Transaction = transaction;
+                command.CommandText = """
+                    UPDATE security_events
+                    SET attempts = $attempts, status = $status, next_attempt_utc = $nextAttempt,
+                        locked_until_utc = NULL, last_error = $error, updated_utc = $now
+                    WHERE event_id = $eventId;
+                    """;
+                command.Parameters.AddWithValue("$attempts", attempts);
+                command.Parameters.AddWithValue("$status", terminal ? "Failed" : "Pending");
+                command.Parameters.AddWithValue("$nextAttempt",
+                    terminal ? DBNull.Value : Format(failedAtUtc.Add(RetryDelay(attempts))));
+                command.Parameters.AddWithValue("$error", safeError);
+                command.Parameters.AddWithValue("$now", Format(failedAtUtc));
+                command.Parameters.AddWithValue("$eventId", id);
+                command.ExecuteNonQuery();
+            }
+        });
+    }
+
+    public int PruneDelivered(DateTimeOffset deliveredBeforeUtc)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            DELETE FROM security_events
+            WHERE status = 'Delivered' AND delivered_utc < $cutoff;
+            """;
+        command.Parameters.AddWithValue("$cutoff", Format(deliveredBeforeUtc));
+        var removed = command.ExecuteNonQuery();
+        transaction.Commit();
+        return removed;
+    }
+
+    public SecurityEventOutboxHealth GetHealth()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT
+                SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END),
+                COALESCE(SUM(payload_bytes), 0),
+                MIN(CASE WHEN status = 'Pending' THEN created_utc END),
+                MAX(delivered_utc)
+            FROM security_events;
+            """;
+        using var reader = command.ExecuteReader();
+        reader.Read();
+        return new SecurityEventOutboxHealth(
+            reader.IsDBNull(0) ? 0 : reader.GetInt32(0),
+            reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
+            reader.GetInt64(2),
+            reader.IsDBNull(3) ? null : Parse(reader.GetString(3)),
+            reader.IsDBNull(4) ? null : Parse(reader.GetString(4)));
+    }
+
+    private void Initialize()
+    {
+        using var connection = OpenConnection();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = FULL;
+            CREATE TABLE IF NOT EXISTS security_events (
+                event_id TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL,
+                payload_bytes INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                attempts INTEGER NOT NULL,
+                next_attempt_utc TEXT NULL,
+                locked_until_utc TEXT NULL,
+                last_error TEXT NULL,
+                created_utc TEXT NOT NULL,
+                updated_utc TEXT NOT NULL,
+                delivered_utc TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_security_events_delivery
+                ON security_events(status, next_attempt_utc, locked_until_utc, created_utc);
+            """;
+        command.ExecuteNonQuery();
+    }
+
+    private SqliteConnection OpenConnection()
+    {
+        var connection = new SqliteConnection(_connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA busy_timeout = 5000;";
+        command.ExecuteNonQuery();
+        return connection;
+    }
+
+    private static bool Exists(SqliteConnection connection, SqliteTransaction transaction, Guid eventId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM security_events WHERE event_id = $eventId LIMIT 1;";
+        command.Parameters.AddWithValue("$eventId", eventId.ToString("D"));
+        return command.ExecuteScalar() is not null;
+    }
+
+    private static (int Count, long Bytes) CurrentSize(
+        SqliteConnection connection,
+        SqliteTransaction transaction)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT COUNT(*), COALESCE(SUM(payload_bytes), 0) FROM security_events;";
+        using var reader = command.ExecuteReader();
+        reader.Read();
+        return (reader.GetInt32(0), reader.GetInt64(1));
+    }
+
+    private void UpdateMany(
+        IEnumerable<Guid> eventIds,
+        Action<SqliteConnection, SqliteTransaction, string[]> update)
+    {
+        ArgumentNullException.ThrowIfNull(eventIds);
+        var ids = eventIds.Distinct().Select(id => id.ToString("D")).ToArray();
+        if (ids.Length == 0) return;
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        update(connection, transaction, ids);
+        transaction.Commit();
+    }
+
+    private static SqliteCommand CreateIdCommand(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        IReadOnlyList<string> ids,
+        string commandTemplate)
+    {
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        var parameters = string.Join(",", ids.Select((_, index) => $"$id{index}"));
+        command.CommandText = string.Format(CultureInfo.InvariantCulture, commandTemplate, parameters);
+        for (var index = 0; index < ids.Count; index++)
+            command.Parameters.AddWithValue($"$id{index}", ids[index]);
+        return command;
+    }
+
+    private static int GetAttempts(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string eventId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT attempts FROM security_events WHERE event_id = $eventId;";
+        command.Parameters.AddWithValue("$eventId", eventId);
+        return command.ExecuteScalar() is long attempts ? checked((int)attempts) : 0;
+    }
+
+    private TimeSpan RetryDelay(int attempts)
+    {
+        var exponential = _options.InitialRetryDelay.TotalMilliseconds
+            * Math.Pow(2, Math.Max(0, attempts - 1));
+        var capped = Math.Min(_options.MaxRetryDelay.TotalMilliseconds, exponential);
+        var jitterFactor = 0.8 + Math.Clamp(_jitter(), 0, 1) * 0.4;
+        return TimeSpan.FromMilliseconds(capped * jitterFactor);
+    }
+
+    private static string Format(DateTimeOffset value) =>
+        value.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset Parse(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+}
