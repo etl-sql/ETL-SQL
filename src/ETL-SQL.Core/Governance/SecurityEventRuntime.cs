@@ -62,6 +62,62 @@ public static class SecurityEventRuntime
         Emit(securityEvent);
     }
 
+    public static void EmitPolicyLoadFailure(
+        EnterpriseEnrollmentDocument enrollment,
+        string target,
+        string reason,
+        bool cacheAvailable,
+        string? policyVersion = null)
+    {
+        ArgumentNullException.ThrowIfNull(enrollment);
+        var validationFailure = reason.Contains("signature", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("rollback", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("expired", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("invalid", StringComparison.OrdinalIgnoreCase);
+        var identity = string.IsNullOrWhiteSpace(enrollment.ServiceIdentity)
+            ? "machine"
+            : enrollment.ServiceIdentity;
+        var securityEvent = SecurityEventContract.Create(
+            cacheAvailable ? SecurityEventSeverity.Warning : SecurityEventSeverity.Error,
+            validationFailure
+                ? SecurityEventType.PolicyValidationFailure
+                : SecurityEventType.PolicyAvailabilityFailure,
+            identity,
+            identity,
+            target,
+            cacheAvailable ? SecurityEventDecision.Warning : SecurityEventDecision.Failed,
+            reason) with
+        {
+            HostName = Environment.MachineName,
+            NodeId = enrollment.MachineId,
+            TenantId = enrollment.Tenant,
+            PolicyVersion = policyVersion
+        };
+        Emit(securityEvent);
+    }
+
+    public static void EmitEnrollmentChanged(
+        EnterpriseEnrollmentDocument? enrollment,
+        string reason)
+    {
+        var identity = enrollment?.ServiceIdentity;
+        if (string.IsNullOrWhiteSpace(identity)) identity = Environment.UserName;
+        var securityEvent = SecurityEventContract.Create(
+            SecurityEventSeverity.Information,
+            SecurityEventType.EnrollmentChanged,
+            identity,
+            identity,
+            "<enterprise-enrollment>",
+            SecurityEventDecision.Allowed,
+            reason) with
+        {
+            HostName = Environment.MachineName,
+            NodeId = enrollment?.MachineId,
+            TenantId = enrollment?.Tenant
+        };
+        Emit(securityEvent);
+    }
+
     public static void Emit(SecurityEvent securityEvent)
     {
         ArgumentNullException.ThrowIfNull(securityEvent);

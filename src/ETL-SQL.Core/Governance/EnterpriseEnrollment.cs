@@ -172,6 +172,7 @@ public sealed class EnterpriseEnrollmentStore(
             var cacheDirectory = System.IO.Path.Combine(directory, "cache");
             Directory.CreateDirectory(cacheDirectory);
             _protector.ProtectCacheDirectory(cacheDirectory, document.ServiceIdentity);
+            SecurityEventRuntime.EmitEnrollmentChanged(document, "Machine enrollment created.");
         }
         finally
         {
@@ -188,6 +189,7 @@ public sealed class EnterpriseEnrollmentStore(
         try { existing = LoadRequired(); }
         catch (InvalidOperationException) { /* elevated recovery may remove protected malformed state */ }
         File.Delete(Path);
+        SecurityEventRuntime.EmitEnrollmentChanged(existing, "Machine enrollment removed.");
         return existing;
     }
 

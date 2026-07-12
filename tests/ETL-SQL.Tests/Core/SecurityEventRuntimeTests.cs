@@ -78,6 +78,29 @@ public sealed class SecurityEventRuntimeTests
         Assert.Equal("<path>/payroll.csv", path.SanitizedTarget);
     }
 
+    [Fact]
+    public void EnrollmentChange_EmitsMachineAndTenantProvenance()
+    {
+        var sink = new RecordingSink();
+        using var scope = SecurityEventRuntime.UseSinkForScope(sink);
+        var enrollment = new EnterpriseEnrollmentDocument
+        {
+            Tenant = "corp-production",
+            MachineId = "f6127c5025f74d78ac6b3fe2b8bfbdf8",
+            PolicyEndpoint = "https://policy.example.test/etl-sql",
+            PolicySigningPublicKey = "not-used-by-emission",
+            ServiceIdentity = "service:etl-sql"
+        };
+
+        SecurityEventRuntime.EmitEnrollmentChanged(enrollment, "Machine enrollment created.");
+
+        var securityEvent = Assert.Single(sink.Events);
+        Assert.Equal(SecurityEventType.EnrollmentChanged, securityEvent.Type);
+        Assert.Equal("corp-production", securityEvent.TenantId);
+        Assert.Equal(enrollment.MachineId, securityEvent.NodeId);
+        Assert.Equal("service:etl-sql", securityEvent.EffectiveIdentity);
+    }
+
     private static ExecutionPolicySnapshot Snapshot(string correlationId) => new()
     {
         IsEnrolled = true,

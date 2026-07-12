@@ -272,12 +272,17 @@ public sealed class EnterprisePolicyLoader(
                 var offlineExpiry = cached.CachedAtUtc.AddHours(enrollment.MaxOfflineHours);
                 if (offlineExpiry <= now)
                     throw new InvalidOperationException($"Enterprise policy offline cache expired at {offlineExpiry:O}.");
+                SecurityEventRuntime.EmitPolicyLoadFailure(enrollment, source.Source,
+                    $"Live policy retrieval failed; verified cache is in use. {liveFailure.Message}",
+                    cacheAvailable: true, cached.Envelope.PolicyVersion);
                 return CreateEffective(cached.Envelope, document, "Cached", "Protected cache", now,
                     $"Live retrieval failed: {liveFailure.Message}");
             }
             catch (Exception cacheUseFailure) when (cacheUseFailure is not OperationCanceledException)
             {
                 var message = $"Enterprise policy is unavailable. Live: {liveFailure.Message} Cache: {cacheUseFailure.Message}";
+                SecurityEventRuntime.EmitPolicyLoadFailure(enrollment, source.Source, message,
+                    cacheAvailable: false, cached?.Envelope.PolicyVersion);
                 if (enrollment.FailClosed) throw new InvalidOperationException(message, cacheUseFailure);
                 return new EffectiveEnterprisePolicy(true, false, "Unavailable", null, null, null, null,
                     now, null, new Dictionary<string, string?>(), message);
