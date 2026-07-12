@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -97,6 +98,23 @@ namespace ETL_SQL.Tests.Orchestration
                 capacityMonitor);
         }
 
+        // Scheduler execution is asynchronous; poll for the expected mock interaction instead of a
+        // fixed sleep so these tests are not flaky on slow/loaded CI runners (a 500 ms Task.Delay
+        // could elapse before the scheduler's first loop executed the job). Returns as soon as the
+        // condition holds; a genuinely-never-executed job still fails the subsequent Verify.
+        private static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 10000)
+        {
+            var deadline = Environment.TickCount64 + timeoutMs;
+            while (Environment.TickCount64 < deadline)
+            {
+                if (condition()) return;
+                await Task.Delay(20);
+            }
+        }
+
+        private static bool Invoked<T>(Mock<T> mock, string method) where T : class
+            => mock.Invocations.Any(i => i.Method.Name == method);
+
         [Fact]
         public async Task Job_WithNullNextRun_IsExecuted()
         {
@@ -104,7 +122,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, _, executor) = Build(jobs, new ScriptExecutionResult(true, 5));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(executor, nameof(IScriptExecutor.ExecuteTextAsync)));
             service.Stop();
 
             executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
@@ -118,7 +136,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, _, executor) = Build(jobs, new ScriptExecutionResult(true, 0));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(executor, nameof(IScriptExecutor.ExecuteTextAsync)));
             service.Stop();
 
             executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>(), It.IsAny<string>(), It.IsAny<long>()), Times.AtLeastOnce());
@@ -145,7 +163,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, store, _) = Build(jobs, new ScriptExecutionResult(true, 42));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.LogJobEndAsync)));
             service.Stop();
 
             store.Verify(s => s.LogJobStartAsync("LogJob"), Times.AtLeastOnce());
@@ -159,7 +177,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, store, _) = Build(jobs, new ScriptExecutionResult(false, 0, "Parse error"));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.LogJobEndAsync)));
             service.Stop();
 
             store.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "Parse error", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
@@ -190,7 +208,7 @@ namespace ETL_SQL.Tests.Orchestration
             var service = BuildService(mockStore, mockExecutor);
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(mockStore, nameof(IJobHistoryStore.LogJobEndAsync)));
             service.Stop();
 
             mockStore.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "DB connection lost", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()),
@@ -204,7 +222,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, store, _) = Build(jobs, new ScriptExecutionResult(true, 10));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.LogJobEndAsync)));
             service.Stop();
 
             // Both start and end should be logged
@@ -220,7 +238,7 @@ namespace ETL_SQL.Tests.Orchestration
             var (service, store, _) = Build(jobs, new ScriptExecutionResult(true, 0));
 
             service.Start();
-            await Task.Delay(500);
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.TryUpdateJobLastRunFencedAsync)));
             service.Stop();
 
             store.Verify(s => s.TryUpdateJobLastRunFencedAsync("UpdateJob", It.IsAny<DateTime>(), It.IsAny<DateTime?>(), It.IsAny<long>()),
@@ -268,7 +286,7 @@ namespace ETL_SQL.Tests.Orchestration
                 ]);
 
             service.Start();
-            await Task.Delay(450);
+            await WaitUntilAsync(() => Invoked(store, nameof(IJobHistoryStore.SaveJobAsync)));
             service.Stop();
 
             store.Verify(s => s.SaveJobAsync(
