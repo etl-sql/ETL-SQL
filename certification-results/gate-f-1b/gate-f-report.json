@@ -1,28 +1,978 @@
 {
-  "generatedAt": "2026-07-03T12:14:57.5870178-05:00",
-  "commit": "c398036d4ddcbb24ec29900dafff79fb8dcf63f7",
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-12T12:41:26.0653130-05:00",
+  "capturedAtUtc": "2026-07-12T17:41:26.0653324Z",
+  "commit": {
+    "sha": "786e99007f8293e2429689604e909ca6841227f2",
+    "isDirty": false
+  },
+  "commitSha": "786e99007f8293e2429689604e909ca6841227f2",
+  "sourceFingerprint": "2eddfe3714a8379d7a2f7492363c09aa35abc53f84919b002506fb5d97cda125",
+  "configFingerprint": "d31cfd71ce2f210caf47e048b81d41021639c2d075ec35160ce54ae91ed8e9b8",
   "rows": 1000000000,
   "testsPassed": true,
-  "run": {
-    "startedAt": "2026-07-03T11:58:26.3885051-05:00",
-    "commit": "c398036d4ddcbb24ec29900dafff79fb8dcf63f7",
+  "config": {
     "rows": 1000000000,
     "requestedScenario": "All",
     "memoryBoundMB": 16384.0,
     "memoryGrantMB": 8192,
     "tempBatchRows": 25000,
     "minimumRowsPerSecond": 50000.0,
-    "minimumFreeDiskGB": 25.0,
-    "spillRoot": "C:\\Users\\chuck\\AppData\\Local\\Temp\\",
-    "spillDrive": "C:\\",
-    "spillDriveFreeBytesAtStart": 245051125760,
+    "minimumFreeDiskGB": 25.0
+  },
+  "host": {
     "machineName": "CHUCKPC",
     "operatingSystem": "Microsoft Windows 10.0.26200",
     "processArchitecture": "X64",
     "runtimeVersion": ".NET 10.0.9",
     "logicalProcessorCount": 24,
     "processor": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
-    "gcAvailableMemoryBytes": 33690271744
+    "gcAvailableMemoryBytes": 33690333184
+  },
+  "run": {
+    "schemaVersion": 2,
+    "startedAt": "2026-07-12T12:13:34.2290297-05:00",
+    "capturedAtUtc": "2026-07-12T17:13:34.6959914Z",
+    "commit": {
+      "sha": "786e99007f8293e2429689604e909ca6841227f2",
+      "isDirty": false
+    },
+    "commitSha": "786e99007f8293e2429689604e909ca6841227f2",
+    "sourceFingerprint": "2eddfe3714a8379d7a2f7492363c09aa35abc53f84919b002506fb5d97cda125",
+    "configFingerprint": "d31cfd71ce2f210caf47e048b81d41021639c2d075ec35160ce54ae91ed8e9b8",
+    "config": {
+      "rows": 1000000000,
+      "requestedScenario": "All",
+      "memoryBoundMB": 16384.0,
+      "memoryGrantMB": 8192,
+      "tempBatchRows": 25000,
+      "minimumRowsPerSecond": 50000.0,
+      "minimumFreeDiskGB": 25.0
+    },
+    "rows": 1000000000,
+    "requestedScenario": "All",
+    "spillRoot": "C:\\Users\\chuck\\AppData\\Local\\Temp\\",
+    "spillDrive": "C:\\",
+    "spillDriveFreeBytesAtStart": 292633415680,
+    "host": {
+      "machineName": "CHUCKPC",
+      "operatingSystem": "Microsoft Windows 10.0.26200",
+      "processArchitecture": "X64",
+      "runtimeVersion": ".NET 10.0.9",
+      "logicalProcessorCount": 24,
+      "processor": "Intel64 Family 6 Model 198 Stepping 2, GenuineIntel",
+      "gcAvailableMemoryBytes": 33690333184
+    },
+    "scenarioManifests": {
+      "columnarCore": {
+        "scenarioId": "GateF_NativeScanFilterProjectionAggregate_1B",
+        "operator": "ColumnarScanFilterProjectionAggregate",
+        "state": "Certified",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "columns": [
+            "Id INT",
+            "GroupId INT",
+            "Amount BIGINT"
+          ],
+          "filter": "Id > rows / 2",
+          "groups": 100,
+          "skew": "none"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": null,
+          "spillPath": "none",
+          "adaptiveExecution": "off",
+          "nativePathRequired": true,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "generated formula for selected rows, grouped count, Id sum, and Amount sum",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs"
+        ],
+        "nonGoals": [
+          "row-engine fallback",
+          "high-cardinality grouping",
+          "arbitrary expressions",
+          "provider-backed sources"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "memoryBoundMB",
+          "minimumRowsPerSecond",
+          "batchRows"
+        ]
+      },
+      "tempTableRoundTrip": {
+        "scenarioId": "GateF_TempTableRoundTrip_1B",
+        "operator": "TempTableSpillRoundTrip",
+        "state": "Certified",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "columns": [
+            "grp INT",
+            "val BIGINT"
+          ],
+          "spillThresholdRows": 10000,
+          "skew": "none"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "exact row count and checksum after SELECT INTO temp-table round trip",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "spillBytes",
+          "spillWriteBytes",
+          "spillReadBytes",
+          "spillExtentCount"
+        ],
+        "nonGoals": [
+          "secondary operators downstream of the temp table",
+          "persistent temp-table retention",
+          "provider-backed sources"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "memoryBoundMB",
+          "memoryGrantMB",
+          "tempBatchRows",
+          "minimumRowsPerSecond"
+        ]
+      },
+      "allocProfile": {
+        "scenarioId": "GateF_TempTableAllocProfile_1B",
+        "operator": "TempTableSpillAllocationProfile",
+        "state": "Candidate",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "columns": [
+            "grp INT",
+            "val BIGINT"
+          ],
+          "profile": "allocation, GC, process memory, CPU, and I/O for temp-table round trip",
+          "skew": "none"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "profile run must complete the same temp-table row count and checksum contract",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "bytesAllocatedPerRow",
+          "gcGen2Collections",
+          "physicalReadBytes",
+          "physicalWriteBytes"
+        ],
+        "nonGoals": [
+          "new operator certification",
+          "provider-backed sources"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "memoryGrantMB",
+          "tempBatchRows"
+        ]
+      },
+      "externalSort": {
+        "scenarioId": "ExternalSort_MultiKey_1B",
+        "operator": "ExternalSort",
+        "state": "Candidate",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "columns": [
+            "Id BIGINT",
+            "SortKey INT",
+            "TieBreaker BIGINT",
+            "Payload BIGINT"
+          ],
+          "sortKeys": [
+            "SortKey ASC",
+            "TieBreaker DESC"
+          ],
+          "randomSeed": 15041,
+          "skew": "bounded duplicate sort keys"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "streaming ordered-output validator with row count, first/last key, checksum, and tie-breaker checks",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "sortRunCount",
+          "mergePassCount",
+          "spillBytes",
+          "spillExtentCount"
+        ],
+        "nonGoals": [
+          "Top-N optimized plans",
+          "locale-specific collation",
+          "arbitrary expression sort keys",
+          "downstream operator certification"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "sortKeys",
+          "memoryBoundMB",
+          "memoryGrantMB",
+          "randomSeed"
+        ]
+      },
+      "externalJoin": {
+        "scenarioId": "ExternalEquiJoin_ControlledSkew_1B",
+        "operator": "ExternalEquiJoin",
+        "state": "Candidate",
+        "rows": {
+          "left": 1000000000,
+          "right": 1000000000
+        },
+        "shape": {
+          "columns": [
+            "Id BIGINT",
+            "JoinKey INT",
+            "Payload BIGINT"
+          ],
+          "joinType": "INNER",
+          "keyOverlap": "50 percent",
+          "duplicateFactor": "bounded by generated key space",
+          "randomSeed": 24017,
+          "skew": "controlled hot-key distribution, no adversarial single-key collapse"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "mathematical result-count formula plus checksum over matched generated keys",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "partitionCount",
+          "partitionPassCount",
+          "repartitionPassCount",
+          "spillBytes",
+          "spillExtentCount"
+        ],
+        "nonGoals": [
+          "non-equi joins",
+          "outer joins with high null expansion",
+          "adversarial single-key skew",
+          "provider-backed sources"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "joinType",
+          "keyOverlap",
+          "duplicateFactor",
+          "memoryBoundMB",
+          "memoryGrantMB",
+          "randomSeed"
+        ]
+      },
+      "highCardinalityGrouping": {
+        "scenarioId": "HighCardinalityGrouping_1B",
+        "operator": "ExternalAggregate",
+        "state": "Candidate",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "groups": "min(rows / 10, 1,000,000)",
+          "aggregates": [
+            "COUNT",
+            "SUM",
+            "MIN",
+            "MAX"
+          ],
+          "skew": "uniform generated key distribution"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "generated formulas for group count, total rows, group-id checksum, total sum, global min, and global max",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "groupCount",
+          "partitionCount",
+          "partitionPassCount",
+          "repartitionPassCount",
+          "spillBytes",
+          "spillExtentCount"
+        ],
+        "nonGoals": [
+          "median",
+          "percentile",
+          "GROUPING SETS",
+          "ROLLUP",
+          "CUBE",
+          "adversarial single-key skew"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "groupCount",
+          "memoryBoundMB",
+          "memoryGrantMB"
+        ]
+      },
+      "eligibleWindowRowNumber": {
+        "scenarioId": "EligibleWindowRowNumber_1B",
+        "operator": "ExternalWindow",
+        "state": "Candidate",
+        "rows": {
+          "input": 1000000000
+        },
+        "shape": {
+          "functions": [
+            "ROW_NUMBER"
+          ],
+          "partitioning": "deterministic modulo partitions",
+          "ordering": "OrderId ASC",
+          "skew": "uniform generated partition distribution"
+        },
+        "admission": {
+          "minimumFreeDiskGB": 25.0,
+          "memoryBoundMB": 16384.0,
+          "operatorMemoryGrantMB": 8192,
+          "spillPath": "temp-volume",
+          "adaptiveExecution": "off",
+          "nativePathRequired": false,
+          "releaseBuildRequired": true
+        },
+        "correctnessOracle": "per-partition row counts and sum of ROW_NUMBER sequence values",
+        "telemetryContract": [
+          "elapsedMs",
+          "rowsPerSecond",
+          "peakProcessWorkingSetMB",
+          "allocatedMB",
+          "gcPauseMs",
+          "cpuTimeMs",
+          "partitionCount",
+          "maxPartitionRows",
+          "spillBytes",
+          "spillExtentCount"
+        ],
+        "nonGoals": [
+          "unbounded frames requiring full partition materialization",
+          "RANGE date/interval offsets",
+          "non-deterministic ordering"
+        ],
+        "resumeKeyFields": [
+          "commit",
+          "rows",
+          "partitionCount",
+          "windowFunction",
+          "memoryBoundMB",
+          "memoryGrantMB"
+        ]
+      }
+    },
+    "admission": {
+      "columnarCore": {
+        "scenarioId": "GateF_NativeScanFilterProjectionAggregate_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 0.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": null,
+        "adaptiveExecution": "off"
+      },
+      "tempTableRoundTrip": {
+        "scenarioId": "GateF_TempTableRoundTrip_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      },
+      "allocProfile": {
+        "scenarioId": "GateF_TempTableAllocProfile_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      },
+      "externalSort": {
+        "scenarioId": "ExternalSort_MultiKey_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      },
+      "externalJoin": {
+        "scenarioId": "ExternalEquiJoin_ControlledSkew_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      },
+      "highCardinalityGrouping": {
+        "scenarioId": "HighCardinalityGrouping_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      },
+      "eligibleWindowRowNumber": {
+        "scenarioId": "EligibleWindowRowNumber_1B",
+        "admitted": true,
+        "reason": "admitted",
+        "requiredFreeDiskGB": 25.0,
+        "actualFreeDiskGB": 272.536,
+        "spillDrive": "C:\\",
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "adaptiveExecution": "off"
+      }
+    }
+  },
+  "scenarioManifests": {
+    "columnarCore": {
+      "scenarioId": "GateF_NativeScanFilterProjectionAggregate_1B",
+      "operator": "ColumnarScanFilterProjectionAggregate",
+      "state": "Certified",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id INT",
+          "GroupId INT",
+          "Amount BIGINT"
+        ],
+        "filter": "Id > rows / 2",
+        "groups": 100,
+        "skew": "none"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": null,
+        "spillPath": "none",
+        "adaptiveExecution": "off",
+        "nativePathRequired": true,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "generated formula for selected rows, grouped count, Id sum, and Amount sum",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs"
+      ],
+      "nonGoals": [
+        "row-engine fallback",
+        "high-cardinality grouping",
+        "arbitrary expressions",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "memoryBoundMB",
+        "minimumRowsPerSecond",
+        "batchRows"
+      ]
+    },
+    "tempTableRoundTrip": {
+      "scenarioId": "GateF_TempTableRoundTrip_1B",
+      "operator": "TempTableSpillRoundTrip",
+      "state": "Certified",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "grp INT",
+          "val BIGINT"
+        ],
+        "spillThresholdRows": 10000,
+        "skew": "none"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "exact row count and checksum after SELECT INTO temp-table round trip",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "spillBytes",
+        "spillWriteBytes",
+        "spillReadBytes",
+        "spillExtentCount"
+      ],
+      "nonGoals": [
+        "secondary operators downstream of the temp table",
+        "persistent temp-table retention",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "memoryBoundMB",
+        "memoryGrantMB",
+        "tempBatchRows",
+        "minimumRowsPerSecond"
+      ]
+    },
+    "allocProfile": {
+      "scenarioId": "GateF_TempTableAllocProfile_1B",
+      "operator": "TempTableSpillAllocationProfile",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "grp INT",
+          "val BIGINT"
+        ],
+        "profile": "allocation, GC, process memory, CPU, and I/O for temp-table round trip",
+        "skew": "none"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "profile run must complete the same temp-table row count and checksum contract",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "bytesAllocatedPerRow",
+        "gcGen2Collections",
+        "physicalReadBytes",
+        "physicalWriteBytes"
+      ],
+      "nonGoals": [
+        "new operator certification",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "memoryGrantMB",
+        "tempBatchRows"
+      ]
+    },
+    "externalSort": {
+      "scenarioId": "ExternalSort_MultiKey_1B",
+      "operator": "ExternalSort",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id BIGINT",
+          "SortKey INT",
+          "TieBreaker BIGINT",
+          "Payload BIGINT"
+        ],
+        "sortKeys": [
+          "SortKey ASC",
+          "TieBreaker DESC"
+        ],
+        "randomSeed": 15041,
+        "skew": "bounded duplicate sort keys"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "streaming ordered-output validator with row count, first/last key, checksum, and tie-breaker checks",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "sortRunCount",
+        "mergePassCount",
+        "spillBytes",
+        "spillExtentCount"
+      ],
+      "nonGoals": [
+        "Top-N optimized plans",
+        "locale-specific collation",
+        "arbitrary expression sort keys",
+        "downstream operator certification"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "sortKeys",
+        "memoryBoundMB",
+        "memoryGrantMB",
+        "randomSeed"
+      ]
+    },
+    "externalJoin": {
+      "scenarioId": "ExternalEquiJoin_ControlledSkew_1B",
+      "operator": "ExternalEquiJoin",
+      "state": "Candidate",
+      "rows": {
+        "left": 1000000000,
+        "right": 1000000000
+      },
+      "shape": {
+        "columns": [
+          "Id BIGINT",
+          "JoinKey INT",
+          "Payload BIGINT"
+        ],
+        "joinType": "INNER",
+        "keyOverlap": "50 percent",
+        "duplicateFactor": "bounded by generated key space",
+        "randomSeed": 24017,
+        "skew": "controlled hot-key distribution, no adversarial single-key collapse"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "mathematical result-count formula plus checksum over matched generated keys",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "partitionCount",
+        "partitionPassCount",
+        "repartitionPassCount",
+        "spillBytes",
+        "spillExtentCount"
+      ],
+      "nonGoals": [
+        "non-equi joins",
+        "outer joins with high null expansion",
+        "adversarial single-key skew",
+        "provider-backed sources"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "joinType",
+        "keyOverlap",
+        "duplicateFactor",
+        "memoryBoundMB",
+        "memoryGrantMB",
+        "randomSeed"
+      ]
+    },
+    "highCardinalityGrouping": {
+      "scenarioId": "HighCardinalityGrouping_1B",
+      "operator": "ExternalAggregate",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "groups": "min(rows / 10, 1,000,000)",
+        "aggregates": [
+          "COUNT",
+          "SUM",
+          "MIN",
+          "MAX"
+        ],
+        "skew": "uniform generated key distribution"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "generated formulas for group count, total rows, group-id checksum, total sum, global min, and global max",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "groupCount",
+        "partitionCount",
+        "partitionPassCount",
+        "repartitionPassCount",
+        "spillBytes",
+        "spillExtentCount"
+      ],
+      "nonGoals": [
+        "median",
+        "percentile",
+        "GROUPING SETS",
+        "ROLLUP",
+        "CUBE",
+        "adversarial single-key skew"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "groupCount",
+        "memoryBoundMB",
+        "memoryGrantMB"
+      ]
+    },
+    "eligibleWindowRowNumber": {
+      "scenarioId": "EligibleWindowRowNumber_1B",
+      "operator": "ExternalWindow",
+      "state": "Candidate",
+      "rows": {
+        "input": 1000000000
+      },
+      "shape": {
+        "functions": [
+          "ROW_NUMBER"
+        ],
+        "partitioning": "deterministic modulo partitions",
+        "ordering": "OrderId ASC",
+        "skew": "uniform generated partition distribution"
+      },
+      "admission": {
+        "minimumFreeDiskGB": 25.0,
+        "memoryBoundMB": 16384.0,
+        "operatorMemoryGrantMB": 8192,
+        "spillPath": "temp-volume",
+        "adaptiveExecution": "off",
+        "nativePathRequired": false,
+        "releaseBuildRequired": true
+      },
+      "correctnessOracle": "per-partition row counts and sum of ROW_NUMBER sequence values",
+      "telemetryContract": [
+        "elapsedMs",
+        "rowsPerSecond",
+        "peakProcessWorkingSetMB",
+        "allocatedMB",
+        "gcPauseMs",
+        "cpuTimeMs",
+        "partitionCount",
+        "maxPartitionRows",
+        "spillBytes",
+        "spillExtentCount"
+      ],
+      "nonGoals": [
+        "unbounded frames requiring full partition materialization",
+        "RANGE date/interval offsets",
+        "non-deterministic ordering"
+      ],
+      "resumeKeyFields": [
+        "commit",
+        "rows",
+        "partitionCount",
+        "windowFunction",
+        "memoryBoundMB",
+        "memoryGrantMB"
+      ]
+    }
+  },
+  "admission": {
+    "columnarCore": {
+      "scenarioId": "GateF_NativeScanFilterProjectionAggregate_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 0.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": null,
+      "adaptiveExecution": "off"
+    },
+    "tempTableRoundTrip": {
+      "scenarioId": "GateF_TempTableRoundTrip_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    },
+    "allocProfile": {
+      "scenarioId": "GateF_TempTableAllocProfile_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    },
+    "externalSort": {
+      "scenarioId": "ExternalSort_MultiKey_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    },
+    "externalJoin": {
+      "scenarioId": "ExternalEquiJoin_ControlledSkew_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    },
+    "highCardinalityGrouping": {
+      "scenarioId": "HighCardinalityGrouping_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    },
+    "eligibleWindowRowNumber": {
+      "scenarioId": "EligibleWindowRowNumber_1B",
+      "admitted": true,
+      "reason": "admitted",
+      "requiredFreeDiskGB": 25.0,
+      "actualFreeDiskGB": 272.536,
+      "spillDrive": "C:\\",
+      "memoryBoundMB": 16384.0,
+      "operatorMemoryGrantMB": 8192,
+      "adaptiveExecution": "off"
+    }
   },
   "columnarCore": {
     "scenario": "GateF_NativeScanFilterProjectionAggregate",
@@ -32,63 +982,378 @@
     "checksum": 375000499750000000,
     "groups": 100,
     "rowReadAttempts": 0,
-    "elapsedMs": 20948.812,
-    "rowsPerSecond": 47735404.03,
-    "peakProcessWorkingSetMB": 147,
-    "peakPrivateBytesMB": 81.1,
-    "peakManagedHeapMB": 36.1,
-    "allocatedMB": 14.3,
+    "elapsedMs": 20691.259,
+    "rowsPerSecond": 48329586.9,
+    "peakProcessWorkingSetMB": 149.2,
+    "peakPrivateBytesMB": 82.6,
+    "peakManagedHeapMB": 38.3,
+    "allocatedMB": 13.7,
     "gcGen0Collections": 0,
     "gcGen1Collections": 0,
     "gcGen2Collections": 0,
     "gcPauseMs": 0,
-    "cpuTimeMs": 23031.2,
-    "cpuUtilizationPercent": 4.6,
+    "cpuTimeMs": 22390.6,
+    "cpuUtilizationPercent": 4.5,
     "memoryBoundMB": 16384,
     "minimumRowsPerSecond": 50000,
-    "passed": true,
-    "bands": {
-      "warnPct": 8,
-      "failPct": 15,
-      "minSamples": 1
-    }
+    "planDecisionCount": 1,
+    "planFallbackCount": 0,
+    "planRejectedCount": 0,
+    "planDegradedCount": 0,
+    "planDecisionSummary": "--",
+    "passed": true
   },
   "tempTableRoundTrip": {
     "scenario": "TempTableSpill_1000000000_SELECT_INTO",
     "tier": "Huge",
     "memoryTier": "Stress",
     "rowCount": 1000000000,
-    "elapsedMs": 939028,
-    "rowsPerSecond": 1064931,
+    "elapsedMs": 572960.0,
+    "rowsPerSecond": 1745322.5,
     "spillBytes": 26541416448,
-    "spillWriteBytes": 26541416448,
+    "spillWriteBytes": 26541416448.0,
     "spillReadBytes": 4233251968,
     "spillExtentCount": 1000,
     "partitionPassCount": 0,
     "resultRows": 1000000000,
     "checksum": 1000000000,
-    "peakProcessWorkingSetMB": 551.8,
-    "peakPrivateBytesMB": 550.9,
-    "peakManagedHeapMB": 227.6,
-    "allocatedMB": 1586614.8,
-    "gcGen0Collections": 17682,
-    "gcGen1Collections": 9177,
-    "gcGen2Collections": 3597,
-    "gcPauseMs": 173655.3,
-    "cpuTimeMs": 4385171.9,
-    "cpuUtilizationPercent": 19.5,
+    "startProcessWorkingSetMB": 166.1,
+    "peakProcessWorkingSetMB": 600.1,
+    "workingSetGrowthMB": 434,
+    "peakPrivateBytesMB": 691.1,
+    "peakManagedHeapMB": 281.7,
+    "allocatedMB": 602286.7,
+    "gcGen0Collections": 8468,
+    "gcGen1Collections": 5892,
+    "gcGen2Collections": 3785,
+    "gcPauseMs": 86755.9,
+    "cpuTimeMs": 2409890.6,
+    "cpuUtilizationPercent": 17.5,
     "serverGcEnabled": true,
     "memoryBoundMB": 16384,
     "memoryMetric": "peak process working set",
+    "memoryGateMode": "absolutePeak",
     "minimumRowsPerSecond": 50000,
     "correctnessPassed": true,
     "memoryPassed": true,
     "throughputPassed": true,
+    "planDecisionCount": 1,
+    "planFallbackCount": 1,
+    "planRejectedCount": 0,
+    "planDegradedCount": 0,
+    "planDecisionSummary": "ColumnarProjection:ConnectorCapabilityMissing=1",
     "passed": true,
-    "bands": {
-      "warnPct": 10,
-      "failPct": 20,
-      "minSamples": 1
+    "sampleIndex": 1,
+    "samples": 1,
+    "sampleMetrics": [
+      {
+        "scenario": "TempTableSpill_1000000000_SELECT_INTO",
+        "tier": "Huge",
+        "memoryTier": "Stress",
+        "rowCount": 1000000000,
+        "elapsedMs": 572960,
+        "rowsPerSecond": 1745322.5,
+        "spillBytes": 26541416448,
+        "spillWriteBytes": 26541416448,
+        "spillReadBytes": 4233251968,
+        "spillExtentCount": 1000,
+        "partitionPassCount": 0,
+        "resultRows": 1000000000,
+        "checksum": 1000000000,
+        "startProcessWorkingSetMB": 166.1,
+        "peakProcessWorkingSetMB": 600.1,
+        "workingSetGrowthMB": 434,
+        "peakPrivateBytesMB": 691.1,
+        "peakManagedHeapMB": 281.7,
+        "allocatedMB": 602286.7,
+        "gcGen0Collections": 8468,
+        "gcGen1Collections": 5892,
+        "gcGen2Collections": 3785,
+        "gcPauseMs": 86755.9,
+        "cpuTimeMs": 2409890.6,
+        "cpuUtilizationPercent": 17.5,
+        "serverGcEnabled": true,
+        "memoryBoundMB": 16384,
+        "memoryMetric": "peak process working set",
+        "memoryGateMode": "absolutePeak",
+        "minimumRowsPerSecond": 50000,
+        "correctnessPassed": true,
+        "memoryPassed": true,
+        "throughputPassed": true,
+        "planDecisionCount": 1,
+        "planFallbackCount": 1,
+        "planRejectedCount": 0,
+        "planDegradedCount": 0,
+        "planDecisionSummary": "ColumnarProjection:ConnectorCapabilityMissing=1",
+        "passed": true,
+        "sampleIndex": 1
+      }
+    ],
+    "elapsedMsDistribution": {
+      "samples": 1,
+      "median": 572960.0,
+      "p05": 572960.0,
+      "p95": 572960.0,
+      "min": 572960.0,
+      "max": 572960.0
+    },
+    "rowsPerSecondDistribution": {
+      "samples": 1,
+      "median": 1745322.5,
+      "p05": 1745322.5,
+      "p95": 1745322.5,
+      "min": 1745322.5,
+      "max": 1745322.5
+    },
+    "spillWriteBytesDistribution": {
+      "samples": 1,
+      "median": 26541416448.0,
+      "p05": 26541416448.0,
+      "p95": 26541416448.0,
+      "min": 26541416448.0,
+      "max": 26541416448.0
+    },
+    "peakProcessWorkingSetMBDistribution": {
+      "samples": 1,
+      "median": 600.1,
+      "p05": 600.1,
+      "p95": 600.1,
+      "min": 600.1,
+      "max": 600.1
+    },
+    "peakPrivateBytesMBDistribution": {
+      "samples": 1,
+      "median": 691.1,
+      "p05": 691.1,
+      "p95": 691.1,
+      "min": 691.1,
+      "max": 691.1
+    },
+    "peakManagedHeapMBDistribution": {
+      "samples": 1,
+      "median": 281.7,
+      "p05": 281.7,
+      "p95": 281.7,
+      "min": 281.7,
+      "max": 281.7
+    },
+    "allocatedMBDistribution": {
+      "samples": 1,
+      "median": 602286.7,
+      "p05": 602286.7,
+      "p95": 602286.7,
+      "min": 602286.7,
+      "max": 602286.7
+    },
+    "cpuUtilizationPercentDistribution": {
+      "samples": 1,
+      "median": 17.5,
+      "p05": 17.5,
+      "p95": 17.5,
+      "min": 17.5,
+      "max": 17.5
+    },
+    "gcPauseMsDistribution": {
+      "samples": 1,
+      "median": 86755.9,
+      "p05": 86755.9,
+      "p95": 86755.9,
+      "min": 86755.9,
+      "max": 86755.9
     }
-  }
+  },
+  "allocProfile": {
+    "scenario": "SpillAllocProfile_TempTableRoundTrip",
+    "schema": 1,
+    "rows": 1000000000,
+    "elapsedMs": 1033654.7,
+    "rowsPerSecond": 967441,
+    "spillBytes": 26541416448,
+    "allocation": {
+      "cumulativeBytes": 634956820040,
+      "ratePerSecondBytes": 614283290,
+      "bytesPerRow": 635,
+      "retainedBeforeBytes": 30323496,
+      "retainedAfterBytes": 36731016,
+      "retainedDeltaBytes": 6407520
+    },
+    "gc": {
+      "gen0": 37653,
+      "gen1": 31840,
+      "gen2": 9144,
+      "pauseMs": 345656.2,
+      "peakManagedHeapMB": 131.9
+    },
+    "cpu": {
+      "timeMs": 1219515.6,
+      "utilizationPercent": 4.9
+    },
+    "memory": {
+      "peakWorkingSetMB": 249.8,
+      "peakPrivateBytesMB": 180.2
+    },
+    "io": {
+      "supported": true,
+      "readBytes": 4233259424,
+      "writeBytes": 4233253276,
+      "readOperations": 518357,
+      "writeOperations": 997404
+    },
+    "topAllocations": [
+      {
+        "type": "System.Object[]",
+        "sampledBytes": 138870132664,
+        "ticks": 1303047,
+        "sharePercent": 21.8
+      },
+      {
+        "type": "ETL_SQL.Data.Row",
+        "sampledBytes": 121990231792,
+        "ticks": 1144578,
+        "sharePercent": 19.2
+      },
+      {
+        "type": "System.Byte[]",
+        "sampledBytes": 71716644240,
+        "ticks": 364007,
+        "sharePercent": 11.3
+      },
+      {
+        "type": "System.UInt32[]",
+        "sampledBytes": 67540664976,
+        "ticks": 633568,
+        "sharePercent": 10.6
+      },
+      {
+        "type": "ETL_SQL.Data.Row[]",
+        "sampledBytes": 62295369800,
+        "ticks": 362917,
+        "sharePercent": 9.8
+      },
+      {
+        "type": "System.String[]",
+        "sampledBytes": 61609146720,
+        "ticks": 578155,
+        "sharePercent": 9.7
+      },
+      {
+        "type": "System.Int32",
+        "sampledBytes": 45020465536,
+        "ticks": 422349,
+        "sharePercent": 7.1
+      },
+      {
+        "type": "System.Decimal",
+        "sampledBytes": 32116706336,
+        "ticks": 301336,
+        "sharePercent": 5.1
+      },
+      {
+        "type": "<>c__DisplayClass57_0",
+        "sampledBytes": 30963279376,
+        "ticks": 290571,
+        "sharePercent": 4.9
+      },
+      {
+        "type": "MoreEventInfo",
+        "sampledBytes": 648951104,
+        "ticks": 6091,
+        "sharePercent": 0.1
+      },
+      {
+        "type": "AsyncStateMachineBox`1[System.Threading.Tasks.VoidTaskResult,System.Security.Cryptography.CryptoStream+<WriteAsyncCore>d__53]",
+        "sampledBytes": 549315632,
+        "ticks": 5153,
+        "sharePercent": 0.1
+      },
+      {
+        "type": "System.UInt64",
+        "sampledBytes": 371886216,
+        "ticks": 3490,
+        "sharePercent": 0.1
+      },
+      {
+        "type": "System.UInt32",
+        "sampledBytes": 335255056,
+        "ticks": 3147,
+        "sharePercent": 0.1
+      },
+      {
+        "type": "System.Diagnostics.Tracing.EventWrittenEventArgs",
+        "sampledBytes": 297400576,
+        "ticks": 2792,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.IntPtr",
+        "sampledBytes": 256276600,
+        "ticks": 2406,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.UInt16",
+        "sampledBytes": 244852792,
+        "ticks": 2298,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.String",
+        "sampledBytes": 180443544,
+        "ticks": 1695,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.GCMemoryInfoData",
+        "sampledBytes": 169909496,
+        "ticks": 1594,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.Collections.ObjectModel.ReadOnlyCollection`1[System.Object]",
+        "sampledBytes": 153122832,
+        "ticks": 1438,
+        "sharePercent": 0
+      },
+      {
+        "type": "AsyncStateMachineBox`1[System.Int32,System.Security.Cryptography.CryptoStream+<ReadAsyncCore>d__44]",
+        "sampledBytes": 99049104,
+        "ticks": 932,
+        "sharePercent": 0
+      },
+      {
+        "type": "AsyncStateMachineBox`1[System.Int32,System.Security.Cryptography.CryptoStream+<ReadAsyncInternal>d__37]",
+        "sampledBytes": 77813872,
+        "ticks": 732,
+        "sharePercent": 0
+      },
+      {
+        "type": "AsyncStateMachineBox`1[System.Int32,System.IO.Compression.DeflateStream+<<ReadAsyncMemory>g__Core|55_0>d]",
+        "sampledBytes": 75904024,
+        "ticks": 713,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.Decimal[]",
+        "sampledBytes": 26215576,
+        "ticks": 50,
+        "sharePercent": 0
+      },
+      {
+        "type": "System.Collections.Generic.Dictionary`2[System.Int32,System.Diagnostics.ProcessInfo]",
+        "sampledBytes": 19260992,
+        "ticks": 181,
+        "sharePercent": 0
+      },
+      {
+        "type": "Entry[System.String,System.Int32][]",
+        "sampledBytes": 15986336,
+        "ticks": 150,
+        "sharePercent": 0
+      }
+    ]
+  },
+  "externalSort": null,
+  "externalJoin": null,
+  "highCardinalityGrouping": null,
+  "eligibleWindowRowNumber": null
 }
