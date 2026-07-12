@@ -8,6 +8,9 @@ namespace ETL_SQL.Core.Governance;
 public sealed record SecurityEventTransportOptions
 {
     public required Uri CollectorEndpoint { get; init; }
+    public required string TenantId { get; init; }
+    public required string EnrollmentId { get; init; }
+    public required string MachineId { get; init; }
     public int BatchSize { get; init; } = 100;
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
 }
@@ -46,6 +49,9 @@ public sealed class SecurityEventTransport
                 nameof(options));
         if (options.BatchSize <= 0 || options.LeaseDuration <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(options), "Transport limits must be positive.");
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.TenantId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.EnrollmentId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(options.MachineId);
     }
 
     public async Task<SecurityEventDeliveryResult> DrainOnceAsync(
@@ -63,6 +69,9 @@ public sealed class SecurityEventTransport
             request.Headers.TryAddWithoutValidation("Idempotency-Key", batchId);
             request.Headers.TryAddWithoutValidation("X-ETL-SQL-Security-Event-Schema",
                 SecurityEventContract.CurrentSchemaVersion.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            request.Headers.TryAddWithoutValidation(EnterprisePolicyTransport.TenantHeader, _options.TenantId);
+            request.Headers.TryAddWithoutValidation(EnterprisePolicyTransport.EnrollmentHeader, _options.EnrollmentId);
+            request.Headers.TryAddWithoutValidation(EnterprisePolicyTransport.MachineHeader, _options.MachineId);
             request.Content = JsonContent.Create(new
             {
                 schemaVersion = SecurityEventContract.CurrentSchemaVersion,
@@ -116,4 +125,52 @@ public sealed class SecurityEventTransport
     }
 
     private sealed record CollectorAcknowledgement(Guid[] AcknowledgedEventIds);
+}
+
+public sealed class SecurityEventTransportWorker(
+    SecurityEventTransport transport,
+    TimeSpan interval,
+    TimeProvider? clock = null) : IAsyncDisposable
+{
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly CancellationTokenSource _stopping = new();
+    private Task? _runTask;
+
+    public void Start()
+    {
+        if (interval <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
+        _runTask ??= RunAsync(_stopping.Token);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _stopping.Cancel();
+        if (_runTask is not null)
+        {
+            try { await _runTask.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+        }
+        _stopping.Dispose();
+    }
+
+    private async Task RunAsync(CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await transport.DrainOnceAsync(_clock.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch
+            {
+                // A corrupt/unavailable local outbox must not terminate the process-level worker.
+                // Queue-health diagnostics surface repeated sweep failures in a later phase.
+            }
+            await Task.Delay(interval, _clock, cancellationToken).ConfigureAwait(false);
+        }
+    }
 }

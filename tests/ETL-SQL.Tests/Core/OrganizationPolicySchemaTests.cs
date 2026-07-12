@@ -170,5 +170,56 @@ public class OrganizationPolicySchemaTests
         Assert.Contains(result.Errors, e => e.Contains("requires at least one allowed host"));
     }
 
+    [Fact]
+    public void SecurityEvents_ValidatesHttpsCollectorAndFlattensTransportSettings()
+    {
+        var document = new OrganizationPolicyDocument
+        {
+            SecurityEvents = new SecurityEventPolicySection
+            {
+                CollectorEndpoint = "https://siem.example.test/etl-sql/events",
+                BatchSize = 250,
+                IntervalSeconds = 15,
+                LeaseSeconds = 90
+            }
+        };
+
+        var result = OrganizationPolicySchema.Validate(document);
+        var flat = EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues());
+
+        Assert.True(result.IsValid);
+        Assert.Equal("https://siem.example.test/etl-sql/events",
+            flat["SecurityEvents:CollectorEndpoint"]);
+        Assert.Equal("250", flat["SecurityEvents:BatchSize"]);
+        Assert.Equal("15", flat["SecurityEvents:IntervalSeconds"]);
+        Assert.Equal("90", flat["SecurityEvents:LeaseSeconds"]);
+    }
+
+    [Theory]
+    [InlineData("http://siem.example.test/events", 100, 30, 120)]
+    [InlineData("https://user:password@siem.example.test/events", 100, 30, 120)]
+    [InlineData("https://siem.example.test/events", 0, 30, 120)]
+    [InlineData("https://siem.example.test/events", 100, 0, 120)]
+    [InlineData("https://siem.example.test/events", 100, 30, 1)]
+    public void SecurityEvents_RejectsUnsafeOrInvalidSettings(
+        string endpoint,
+        int batchSize,
+        int intervalSeconds,
+        int leaseSeconds)
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            SecurityEvents = new SecurityEventPolicySection
+            {
+                CollectorEndpoint = endpoint,
+                BatchSize = batchSize,
+                IntervalSeconds = intervalSeconds,
+                LeaseSeconds = leaseSeconds
+            }
+        });
+
+        Assert.False(result.IsValid);
+    }
+
     private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal);
 }

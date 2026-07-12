@@ -238,6 +238,43 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             GovernancePolicyValueKind.Long,
             "Maximum local durable audit outbox size before policy-specific backpressure is applied.",
             minimumValue: 0L);
+
+        yield return new(
+            "SecurityEvents:CollectorEndpoint",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.String,
+            "HTTPS collector endpoint for centrally forwarded security events.");
+
+        yield return new(
+            "SecurityEvents:BatchSize",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum security events sent in one collector request.",
+            defaultValue: 100,
+            minimumValue: 1,
+            maximumValue: 10_000);
+
+        yield return new(
+            "SecurityEvents:IntervalSeconds",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Seconds between security-event collector delivery sweeps.",
+            defaultValue: 30,
+            minimumValue: 1,
+            maximumValue: 3600);
+
+        yield return new(
+            "SecurityEvents:LeaseSeconds",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Seconds a delivery worker owns a claimed security-event batch.",
+            defaultValue: 120,
+            minimumValue: 10,
+            maximumValue: 3600);
     }
 }
 

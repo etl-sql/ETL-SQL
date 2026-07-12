@@ -26,6 +26,9 @@ public sealed class SecurityEventTransportTests : IDisposable
         Assert.Equal(new SecurityEventDeliveryResult(2, 2, 0), result);
         Assert.Equal(SecurityEventTransport.BatchId([first, second]), handler.IdempotencyKey);
         Assert.Equal("1", handler.SchemaVersion);
+        Assert.Equal("corp-production", handler.TenantId);
+        Assert.Equal("enrollment-1", handler.EnrollmentId);
+        Assert.Equal("machine-1", handler.MachineId);
         Assert.Contains(first.ToString(), handler.RequestBody, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, outbox.GetHealth().PendingCount);
         Assert.Equal(Now, outbox.GetHealth().LastDeliveredUtc);
@@ -118,6 +121,9 @@ public sealed class SecurityEventTransportTests : IDisposable
         new(outbox, new HttpClient(handler), new SecurityEventTransportOptions
         {
             CollectorEndpoint = new Uri(endpoint),
+            TenantId = "corp-production",
+            EnrollmentId = "enrollment-1",
+            MachineId = "machine-1",
             BatchSize = 100,
             LeaseDuration = TimeSpan.FromMinutes(1)
         });
@@ -139,6 +145,9 @@ public sealed class SecurityEventTransportTests : IDisposable
         public string? IdempotencyKey => IdempotencyKeys.LastOrDefault();
         public List<string> IdempotencyKeys { get; } = [];
         public string? SchemaVersion { get; private set; }
+        public string? TenantId { get; private set; }
+        public string? EnrollmentId { get; private set; }
+        public string? MachineId { get; private set; }
         public string RequestBody { get; private set; } = string.Empty;
 
         protected override async Task<HttpResponseMessage> SendAsync(
@@ -147,6 +156,9 @@ public sealed class SecurityEventTransportTests : IDisposable
         {
             IdempotencyKeys.Add(request.Headers.GetValues("Idempotency-Key").Single());
             SchemaVersion = request.Headers.GetValues("X-ETL-SQL-Security-Event-Schema").Single();
+            TenantId = request.Headers.GetValues(EnterprisePolicyTransport.TenantHeader).Single();
+            EnrollmentId = request.Headers.GetValues(EnterprisePolicyTransport.EnrollmentHeader).Single();
+            MachineId = request.Headers.GetValues(EnterprisePolicyTransport.MachineHeader).Single();
             RequestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
             return response(request);
         }

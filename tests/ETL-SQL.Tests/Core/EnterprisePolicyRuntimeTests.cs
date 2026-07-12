@@ -139,6 +139,27 @@ public sealed class EnterprisePolicyRuntimeTests
     }
 
     [Fact]
+    public void SecurityEventCollector_RequiresMachineCertificateIdentity()
+    {
+        using var key = RSA.Create(2048);
+        var enrollment = Enrollment(key);
+        var settings = new SecurityEventPolicySection
+        {
+            CollectorEndpoint = "https://siem.example.test/events"
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            EnterprisePolicyRuntime.CreateSecurityEventTransportOptions(enrollment, settings));
+        Assert.Contains("client certificate", error.Message, StringComparison.OrdinalIgnoreCase);
+
+        var options = EnterprisePolicyRuntime.CreateSecurityEventTransportOptions(
+            enrollment with { ClientCertificateThumbprint = new string('A', 40) }, settings);
+        Assert.Equal(enrollment.Tenant, options.TenantId);
+        Assert.Equal(enrollment.EnrollmentId, options.EnrollmentId);
+        Assert.Equal(enrollment.MachineId, options.MachineId);
+    }
+
+    [Fact]
     public void EnterpriseOverlay_HasFinalConfigurationPrecedence()
     {
         var effective = new EffectiveEnterprisePolicy(true, true, "Live", "v1", "test",
