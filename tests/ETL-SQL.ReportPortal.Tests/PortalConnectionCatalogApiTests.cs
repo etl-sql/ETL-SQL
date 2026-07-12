@@ -162,14 +162,20 @@ public class PortalConnectionCatalogApiTests
         // non-member, non-admin identity → denied
         var outsider = new ExecutionIdentity
         {
-            EffectiveUser = "bob", RealUser = "bob", IsAdmin = false, Groups = ["OtherTeam"]
+            EffectiveUser = "bob",
+            RealUser = "bob",
+            IsAdmin = false,
+            Groups = ["OtherTeam"]
         };
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => provider.ResolveAsync("acl_dw", outsider));
 
         // group member (name-based federated identity) → allowed
         var member = new ExecutionIdentity
         {
-            EffectiveUser = "ann", RealUser = "ann", IsAdmin = false, Groups = ["connusers"]
+            EffectiveUser = "ann",
+            RealUser = "ann",
+            IsAdmin = false,
+            Groups = ["connusers"]
         };
         Assert.Equal("sql01", (await provider.ResolveAsync("acl_dw", member)).Options["SERVER"]);
 

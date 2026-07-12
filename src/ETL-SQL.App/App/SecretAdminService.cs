@@ -65,62 +65,62 @@ namespace ETL_SQL.App
                 switch (action)
                 {
                     case "verify-secret":
-                    {
-                        var result = await provider.ResolveAsync(name, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' resolved from provider '{result.Provider}'. Value not shown.", ConsoleColor.Green);
-                        return 0;
-                    }
+                        {
+                            var result = await provider.ResolveAsync(name, cancellationToken);
+                            logger.WriteLine($"Secret '{name}' resolved from provider '{result.Provider}'. Value not shown.", ConsoleColor.Green);
+                            return 0;
+                        }
                     case "set-secret":
                     case "rotate-secret":
-                    {
-                        if (provider is not IWritableSecretProvider writable)
                         {
-                            logger.WriteLine(
-                                $"Provider '{provider.ProviderName}' does not support writes. " +
-                                "Configure Governance:Secrets:Provider=OsSecretStore (with OsStoreRoot) to manage secrets from the CLI.",
-                                ConsoleColor.Red);
-                            return 1;
-                        }
+                            if (provider is not IWritableSecretProvider writable)
+                            {
+                                logger.WriteLine(
+                                    $"Provider '{provider.ProviderName}' does not support writes. " +
+                                    "Configure Governance:Secrets:Provider=OsSecretStore (with OsStoreRoot) to manage secrets from the CLI.",
+                                    ConsoleColor.Red);
+                                return 1;
+                            }
 
-                        if (action == "rotate-secret"
-                            && provider is ISecretLifecycleProvider lifecycleForRotate
-                            && await lifecycleForRotate.GetStatusAsync(name, cancellationToken) == SecretLifecycleStatus.NotFound)
-                        {
-                            logger.WriteLine($"Secret '{name}' does not exist; use set-secret to create it.", ConsoleColor.Red);
-                            return 1;
-                        }
+                            if (action == "rotate-secret"
+                                && provider is ISecretLifecycleProvider lifecycleForRotate
+                                && await lifecycleForRotate.GetStatusAsync(name, cancellationToken) == SecretLifecycleStatus.NotFound)
+                            {
+                                logger.WriteLine($"Secret '{name}' does not exist; use set-secret to create it.", ConsoleColor.Red);
+                                return 1;
+                            }
 
-                        await writable.StoreAsync(name, value!, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' stored in provider '{writable.ProviderName}' (machine scope).", ConsoleColor.Green);
-                        return 0;
-                    }
+                            await writable.StoreAsync(name, value!, cancellationToken);
+                            logger.WriteLine($"Secret '{name}' stored in provider '{writable.ProviderName}' (machine scope).", ConsoleColor.Green);
+                            return 0;
+                        }
                     case "disable-secret":
-                    {
-                        if (provider is not ISecretLifecycleProvider lifecycle)
-                            return LifecycleUnsupported(provider, logger);
+                        {
+                            if (provider is not ISecretLifecycleProvider lifecycle)
+                                return LifecycleUnsupported(provider, logger);
 
-                        await lifecycle.DisableAsync(name, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' disabled. Resolution now fails until it is re-enabled.", ConsoleColor.Green);
-                        return 0;
-                    }
+                            await lifecycle.DisableAsync(name, cancellationToken);
+                            logger.WriteLine($"Secret '{name}' disabled. Resolution now fails until it is re-enabled.", ConsoleColor.Green);
+                            return 0;
+                        }
                     case "enable-secret":
-                    {
-                        if (provider is not ISecretLifecycleProvider lifecycle)
-                            return LifecycleUnsupported(provider, logger);
+                        {
+                            if (provider is not ISecretLifecycleProvider lifecycle)
+                                return LifecycleUnsupported(provider, logger);
 
-                        await lifecycle.EnableAsync(name, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' enabled; the previously stored value resolves again.", ConsoleColor.Green);
-                        return 0;
-                    }
+                            await lifecycle.EnableAsync(name, cancellationToken);
+                            logger.WriteLine($"Secret '{name}' enabled; the previously stored value resolves again.", ConsoleColor.Green);
+                            return 0;
+                        }
                     case "delete-secret":
-                    {
-                        if (provider is not ISecretLifecycleProvider lifecycle)
-                            return LifecycleUnsupported(provider, logger);
+                        {
+                            if (provider is not ISecretLifecycleProvider lifecycle)
+                                return LifecycleUnsupported(provider, logger);
 
-                        await lifecycle.DeleteAsync(name, cancellationToken);
-                        logger.WriteLine($"Secret '{name}' deleted from provider '{lifecycle.ProviderName}'.", ConsoleColor.Green);
-                        return 0;
-                    }
+                            await lifecycle.DeleteAsync(name, cancellationToken);
+                            logger.WriteLine($"Secret '{name}' deleted from provider '{lifecycle.ProviderName}'.", ConsoleColor.Green);
+                            return 0;
+                        }
                     default:
                         logger.WriteLine($"Unknown secret command '{action}'.", ConsoleColor.Red);
                         return 1;

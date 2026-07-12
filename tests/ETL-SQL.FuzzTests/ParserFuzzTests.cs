@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Xunit;
-using Microsoft.Extensions.DependencyInjection;
-using ETL_SQL.Core;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Services;
 using ETL_SQL.Analysis.Linting.Grammar;
+using ETL_SQL.App;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Governance;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
-using ETL_SQL.App;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
 
 namespace ETL_SQL.FuzzTests
 {

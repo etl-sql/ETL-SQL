@@ -836,7 +836,7 @@ namespace ETL_SQL.FuzzTests
                 start--;
             }
             start++; // Move to the first token of the current statement
-            
+
             if (start < tokens.Count)
             {
                 var first = tokens[start].Value;

@@ -1464,7 +1464,7 @@ public static class DefaultGrammar
     {
         var createNode = tree.GetStartNode("CREATE");
         var alterStartNode = tree.GetStartNode("ALTER");
-        
+
         var replaceNode = new StateNode("REPLACE");
         tree.RegisterStartNode("REPLACE", replaceNode);
 
@@ -1487,9 +1487,9 @@ public static class DefaultGrammar
         ));
 
         var ddlKeywords = new[] {
-            "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", 
+            "TABLE", "VIEW", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER",
             "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX", "TAG", "LINEAGE",
-            "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION", "SHARE", "EMBED", "SAVED", "ALERT", 
+            "FOLDER", "USER", "GROUP", "REFRESH", "SUBSCRIPTION", "SHARE", "EMBED", "SAVED", "ALERT",
             "SMTP", "BUTTON", "TEMPLATE", "THEME", "SSH_KEYPAIR", "PGP_KEYPAIR", "SSH_KEY_PAIR", "PGP_KEY_PAIR", "REPORT", "UNIQUE"
         };
 
