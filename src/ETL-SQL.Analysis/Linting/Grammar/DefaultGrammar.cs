@@ -819,7 +819,74 @@ public static class DefaultGrammar
             tree.Root,
             "<next_statement>"
         ));
+
+        // 6. WITH <cte> AS ( <subquery> ) [, <cte> AS ( ... )] <SELECT|INSERT|UPDATE|DELETE|MERGE>
+        // The parser accepts CTEs, so the grammar must too (otherwise completion stops offering valid
+        // next tokens inside/after a WITH). The subquery body is consumed with balanced-paren tracking
+        // via the walker StateBag, then control hands off to the existing DML start nodes.
+        var withStart = new StateNode("WITH");
+        var withName = new StateNode("WITH_NAME");
+        var withAs = new StateNode("WITH_AS");
+        var withBody = new StateNode("WITH_BODY");
+        var withAfter = new StateNode("WITH_AFTER");
+
+        tree.RegisterStartNode("WITH", withStart);
+
+        var withCols = new StateNode("WITH_COLS");
+        var withColsDone = new StateNode("WITH_COLS_DONE");
+
+        withStart.AddTransition(new StateTransition(
+            t => t.Type == TokenType.IDENTIFIER || IsWord(t.Value),
+            withName,
+            "<cte_name>"));
+        withName.AddTransitionTo("AS", withAs, SuggestionType.Keyword);
+
+        // Optional explicit column list: WITH name ( col1, col2 ) AS ( ... )
+        withName.AddTokenTransition(TokenType.LPAREN, withCols, "(");
+        withCols.AddTransition(new StateTransition(
+            t => t.Type != TokenType.RPAREN && t.Type != TokenType.EOF,
+            withCols,
+            "<cte_column>"));
+        withCols.AddTokenTransition(TokenType.RPAREN, withColsDone, ")");
+        withColsDone.AddTransitionTo("AS", withAs, SuggestionType.Keyword);
+
+        // AS -> "(" enters the balanced body at depth 0.
+        withAs.AddTokenTransition(TokenType.LPAREN, withBody, "(",
+            onTransition: (t, w) => w.StateBag["cteDepth"] = 0);
+
+        // Nested "(" deepens; ")" while nested returns a level; ")" at depth 0 closes the CTE.
+        withBody.AddTransition(new StateTransition(
+            t => t.Type == TokenType.LPAREN,
+            withBody,
+            "(",
+            onTransition: (t, w) => w.StateBag["cteDepth"] = GetCteDepth(w) + 1));
+        withBody.AddTransition(new StateTransition(
+            t => t.Type == TokenType.RPAREN,
+            withBody,
+            ")",
+            contextCondition: (t, w) => GetCteDepth(w) > 0,
+            onTransition: (t, w) => w.StateBag["cteDepth"] = GetCteDepth(w) - 1));
+        withBody.AddTransition(new StateTransition(
+            t => t.Type == TokenType.RPAREN,
+            withAfter,
+            ")",
+            contextCondition: (t, w) => GetCteDepth(w) == 0));
+        withBody.AddTransition(new StateTransition(
+            t => t.Type != TokenType.LPAREN && t.Type != TokenType.RPAREN && t.Type != TokenType.EOF,
+            withBody,
+            "<cte_body_token>"));
+
+        // After ")": another CTE (comma) or the main statement.
+        withAfter.AddTokenTransition(TokenType.COMMA, withStart, ",");
+        withAfter.AddTransitionTo("SELECT", selectNode, SuggestionType.Keyword);
+        withAfter.AddTransitionTo("INSERT", insertNode, SuggestionType.Keyword);
+        withAfter.AddTransitionTo("UPDATE", updateNode, SuggestionType.Keyword);
+        withAfter.AddTransitionTo("DELETE", deleteNode, SuggestionType.Keyword);
+        withAfter.AddTransitionTo("MERGE", mergeNode, SuggestionType.Keyword);
     }
+
+    private static int GetCteDepth(TokenWalker walker) =>
+        walker.StateBag.TryGetValue("cteDepth", out var d) && d is int i ? i : 0;
 
     private static bool IsQueryKeyword(string val)
     {

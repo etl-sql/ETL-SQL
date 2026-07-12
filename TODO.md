@@ -33,30 +33,31 @@ Product goal (better VS Code / TUI suggestions):
   Now per-suggestion: expression positions drop statement-structural keywords but keep functions and
   operator/value keywords (`ExpressionKeywords` allowlist). *(Needs UX eyeballing in
   `tools/ui-sandbox`; the allowlist may want widening — CASE/CAST/etc. are covered, exotic ones not.)*
-- [ ] Add grammar-vs-parser conformance tests: over the valid sample/help/SLT corpus assert the
-  grammar tree accepts everything the production parser accepts (recall), and that grammar-accepted
-  sequences parse (precision). Nothing currently measures suggestion precision/recall — the fuzzer
-  does not test this.
-- [ ] Add suggestion golden tests by cursor position for the main authoring workflows:
-  `SELECT` clauses, joins/aliases, CTEs, DML, file operations, `CREATE CONNECTION`, report SQL
-  visuals/pages/datasets, `WINDOW`/`OVER`, `QUALIFY`, control flow, jobs, and portal admin commands.
-  Each case should assert both expected positive suggestions and high-noise negatives. Current tests
-  cover only a few happy paths, so regressions can still make suggestions feel noisy or miss key
-  next tokens.
-- [ ] Make grammar suggestion failures visible in tests. `GrammarLanguageService` currently catches
-  walker/filter errors and returns the base keyword list, and `TokenWalker.GetSuggestions` swallows
-  custom suggestion-provider exceptions. Add a strict/test mode or diagnostics hook so grammar bugs
-  cannot silently degrade back to broad suggestions.
-- [ ] Track grammar coverage for suggestion states, not just parser/fuzzer states: each registered
-  start node and labeled transition should be exercised by at least one suggestion test or corpus
-  acceptance test. This is the bridge from "the grammar exists" to "the editor uses it reliably."
+- [x] Add grammar-vs-parser conformance tests (`GrammarParserConformanceTests`): a curated corpus of
+  complete statements asserts recall (parser-accepted ⟹ grammar-accepted) and precision
+  (parser-rejected ⟹ grammar-rejected). **This found and fixed a real recall gap:** CTEs (`WITH …`,
+  incl. the optional column-list form) were not modeled as a statement start — now added to
+  `DefaultGrammar` with balanced-paren body tracking and handoff to the DML start nodes.
+- [x] Add suggestion golden tests by cursor position (`SuggestionGoldenTests`): SELECT clauses,
+  joins/aliases, FROM, WHERE expression positions, `CREATE`/`CREATE CONNECTION`, `UPDATE … SET`, and
+  after-CTE handoff. Each asserts positive suggestions and high-noise negatives, with strict mode on.
+  *(Report visuals/pages/datasets and portal admin positions remain a future extension.)*
+- [x] Make grammar suggestion failures visible in tests: `GrammarDiagnostics.StrictMode`
+  (`[ThreadStatic]`) makes the `GrammarLanguageService` walker/filter catches and
+  `TokenWalker.GetSuggestions` provider-exception swallow rethrow instead of degrading to the broad
+  list. The golden/coverage tests run with it enabled.
+- [x] Track grammar coverage for suggestion states (`GrammarSuggestionCoverageTests`): asserts every
+  registered start node is reachable from Root, and walks a curated + documentation corpus through the
+  suggestion walker reporting state/labeled-transition coverage (~75% states / ~62% transitions) with
+  regression floors.
 - [x] Replace the string-probe wildcard detection with an explicit `IsWildcard` flag on
   `StateTransition` — set at construction by `AddWildcardTransition`, and for the inline wildcards
   derived from the `Condition` alone (never `ContextCondition`, the old probe's fragility).
   `GrammarLanguageService` now reads `transition.IsWildcard`.
-- [ ] Perf: `RunWalker` re-lexes + re-walks from Root on every keystroke (O(n²) over a typing
-  session) and allocates two probe tokens per transition per call. Cache walker state per
-  statement/line if suggestion latency is flagged.
+- [x] Perf: `RunWalker` now walks only from the last statement terminator (the walker resets to Root
+  at every semicolon, so earlier tokens can't affect the cursor's active states) — behavior-identical,
+  avoids the O(n²)-over-a-typing-session re-walk. The per-transition probe-token allocation is gone
+  too, replaced by the cached `StateTransition.IsWildcard`.
 - [x] Stop swallowing metadata-provider failures silently in `InjectTableSuggestionsAsync` /
   `InjectColumnSuggestionsAsync` (`catch { }`); now logged at error via `context.Logger`.
 
@@ -100,9 +101,10 @@ SQL fuzzer (`ParserFuzzTests` / `GrammarWalkGenerator` / `QueryMinimizer`):
 - [x] Broaden `QueryMinimizer` traversal to `CASE`/unary (`GetSubExpressions` + `ReplaceNode`) and
   strengthen `CorruptQuery` (added duplication, tail-truncation, unbalanced-paren injection).
   *(Residual: `IN`/`CAST`/subquery traversal and bit-flip mutation still open.)*
-- [ ] Add a reduced, deterministic fuzzer smoke lane for CI (fixed seed, low iteration count,
-  grammar coverage output, no generated repro files unless failing) and keep the longer randomized
-  lane opt-in. This gives continuous signal without making normal PR validation noisy.
+- [x] Add a reduced, deterministic fuzzer smoke lane for CI: `test-lane.ps1 -Lane fuzz-smoke` (fixed
+  seed 12345, 2000 iterations, strict-exec on, coverage printed, repros only on failure) is wired into
+  the `fast` lane so every PR gets continuous parser/grammar/execution signal without flakiness. The
+  long randomized `-Lane fuzz` (100k iterations, random seed, strict opt-in) stays out of auto lanes.
 
 ### v0.15.0 completion gates
 

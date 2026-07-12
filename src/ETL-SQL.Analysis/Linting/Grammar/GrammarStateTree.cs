@@ -41,6 +41,9 @@ public class GrammarStateTree
     /// <summary>Registered statement-start nodes (CREATE, SELECT, UPDATE, …).</summary>
     public IReadOnlyCollection<StateNode> StartNodes => _startNodes.Values;
 
+    /// <summary>Registered statement-start keywords (CREATE, SELECT, UPDATE, …).</summary>
+    public IReadOnlyCollection<string> StartKeywords => _startNodes.Keys;
+
     /// <summary>
     /// All reachable states, discovered by breadth-first traversal from <see cref="Root"/> and every
     /// registered start node. Used to compute grammar coverage (reached-vs-total) for the fuzzer.

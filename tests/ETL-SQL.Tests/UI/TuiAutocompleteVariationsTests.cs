@@ -114,16 +114,19 @@ namespace ETL_SQL.Tests.UI
         public async Task KeywordFilter_Or_Matches_Orders()
         {
             // Scenario: SELECT * FROM Or
-            // "Or" matches "ORDER BY" (keyword) but also "Orders" (table)
+            // Right after FROM the grammar expects a table source, so completion offers the matching
+            // tables (Orders / m.Orders) and suppresses keywords that are invalid at a table position
+            // — neither the statement keyword ORDER nor the operator OR can legally follow FROM here.
             var engine = new SuggestionEngine();
             var ctx = CreateContext("CREATE CONNECTION m AS MOCKDB(); SELECT * FROM Or", "Or");
 
             var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
-            // Should have both
-            Assert.Contains(results, s => s.Text.Equals("ORDER", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(results, s => s.Text.Equals("m.Orders", StringComparison.OrdinalIgnoreCase));
             Assert.Contains(results, s => s.Text.Equals("Orders", StringComparison.OrdinalIgnoreCase));
+            // Position-aware narrowing: keywords with no reason to appear at a table position are gone.
+            Assert.DoesNotContain(results, s => s.Type == SuggestionType.Keyword && s.Text.Equals("ORDER", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(results, s => s.Type == SuggestionType.Keyword && s.Text.Equals("OR", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

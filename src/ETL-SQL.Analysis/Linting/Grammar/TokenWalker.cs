@@ -124,7 +124,11 @@ public class TokenWalker
                                 suggestions.Add(new Suggestion(val, transition.SuggestType.Value, Priority: 50));
                             }
                         }
-                        catch { }
+                        catch when (!GrammarDiagnostics.StrictMode)
+                        {
+                            // A misbehaving custom suggestion provider must not break completion in
+                            // production; in strict/test mode it rethrows so the bug is visible.
+                        }
                     }
                     else if (transition.Label != null)
                     {

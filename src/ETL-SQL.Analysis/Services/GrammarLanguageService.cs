@@ -21,6 +21,16 @@ public class GrammarLanguageService : LanguageService
     // …) but keep these so completions like NOT / IN / EXISTS / CASE / CAST still surface.
     // NOTE (see TODO "Grammar-tree suggestions & SQL fuzzer hardening"): this allowlist may need
     // widening after interactive UX verification in tools/ui-sandbox.
+    // Wildcard positions that expect a bare name/identifier (a table, column, connection, variable, or
+    // CTE name) rather than an arbitrary expression. Operator/value keywords are noise at these
+    // positions, so — unlike true expression wildcards — they must not enable expression-keyword
+    // retention. (The actual table/column/etc. candidates are supplied by semantic injection.)
+    private static readonly HashSet<string> NamePlaceholderLabels = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "<table_source>", "<join_table>", "<temp_table>", "<target_table>", "<source_table>", "<table_name>",
+        "<connection_name>", "<connector_type>", "<column_name>", "<variable_name>", "<variable>", "<cte_name>"
+    };
+
     private static readonly HashSet<string> ExpressionKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
         "AND", "OR", "NOT", "LIKE", "ILIKE", "ESCAPE", "IN", "EXISTS", "BETWEEN", "IS", "NULL",
@@ -57,10 +67,15 @@ public class GrammarLanguageService : LanguageService
                 foreach (var transition in state.Transitions)
                 {
                     // A free-form transition (an <expression>/<value> position) means an expression
-                    // is legal here; a specific keyword transition contributes an offered keyword.
+                    // is legal here; a specific keyword transition contributes an offered keyword. A
+                    // name/identifier wildcard (table/column/… position) is neither — it wants a name,
+                    // not operator keywords.
                     if (transition.IsWildcard)
                     {
-                        allowsExpression = true;
+                        if (!NamePlaceholderLabels.Contains(transition.Label ?? string.Empty))
+                        {
+                            allowsExpression = true;
+                        }
                     }
                     else if (transition.Label != null)
                     {
@@ -87,7 +102,7 @@ public class GrammarLanguageService : LanguageService
                 }
             }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!GrammarDiagnostics.StrictMode)
         {
             context.Logger?.Error($"GrammarLanguageService.GetSuggestionsAsync error: {ex.Message}");
         }
@@ -113,7 +128,7 @@ public class GrammarLanguageService : LanguageService
             // 4. Bind and inject semantic suggestions
             await InjectSemanticSuggestionsAsync(results, expectations, context);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (!GrammarDiagnostics.StrictMode)
         {
             context.Logger?.Error($"GrammarLanguageService error: {ex.Message}");
         }
@@ -130,12 +145,26 @@ public class GrammarLanguageService : LanguageService
         }
 
         var tokens = new Lexer(textToTokenize).Tokenize();
-        var walker = new TokenWalker(_grammarTree);
 
-        foreach (var token in tokens)
+        // The walker resets to Root at every semicolon, so only the tokens after the last statement
+        // terminator affect the active states at the cursor. Walking just the current statement gives
+        // identical results while avoiding an O(n) re-walk of the whole document on each keystroke
+        // (which was O(n^2) over a typing session).
+        int start = 0;
+        for (int i = tokens.Count - 1; i >= 0; i--)
         {
-            if (token.Type == TokenType.EOF) break;
-            walker.Consume(token);
+            if (tokens[i].Type == TokenType.SEMICOLON)
+            {
+                start = i + 1;
+                break;
+            }
+        }
+
+        var walker = new TokenWalker(_grammarTree);
+        for (int i = start; i < tokens.Count; i++)
+        {
+            if (tokens[i].Type == TokenType.EOF) break;
+            walker.Consume(tokens[i]);
         }
 
         return walker;
@@ -246,7 +275,7 @@ public class GrammarLanguageService : LanguageService
                     results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 25)));
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!GrammarDiagnostics.StrictMode)
             {
                 context.Logger?.Error($"GrammarLanguageService: table suggestions for '{conn.Name}' failed: {ex.Message}");
             }
@@ -269,7 +298,7 @@ public class GrammarLanguageService : LanguageService
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!GrammarDiagnostics.StrictMode)
             {
                 context.Logger?.Error($"GrammarLanguageService: column suggestions for '{info.TableName}' failed: {ex.Message}");
             }
