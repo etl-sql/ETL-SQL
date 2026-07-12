@@ -122,7 +122,13 @@ const PANEL_HTML = `
     </div>
     <div class="form-group">
       <label for="conn-options">Options — one KEY=VALUE per line (credentials as SECRET:name)</label>
-      <textarea id="conn-options" rows="5" spellcheck="false" placeholder="SERVER=sql01&#10;DATABASE=Sales&#10;PASSWORD=SECRET:sales_db_password"></textarea>
+      <div style="display: flex; gap: 16px; align-items: stretch;">
+        <textarea id="conn-options" rows="7" spellcheck="false" placeholder="SERVER=sql01&#10;DATABASE=Sales&#10;PASSWORD=SECRET:sales_db_password" style="flex: 1; min-width: 0;"></textarea>
+        <div id="conn-help-box" style="flex: 1; min-width: 0; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm); padding: 12px; font-size: 13px; max-height: 148px; overflow-y: auto; background: var(--portal-bg-hover); display: none;">
+          <div id="conn-help-title" style="margin-top: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--portal-text);">Connection Options Help</div>
+          <div id="conn-help-content" style="white-space: pre-wrap; font-family: inherit; line-height: 1.4;">Loading help...</div>
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label for="conn-sensitive">Sensitive metadata fields — one field per line or comma-separated</label>
@@ -139,6 +145,66 @@ const PANEL_HTML = `
 export function createConnectionsAdmin({ host, connectionsApi }) {
   host.innerHTML = PANEL_HTML;
   const $ = (id) => host.querySelector(`#${id}`);
+
+  async function loadConnectorHelp(type) {
+    const helpBox = $('conn-help-box');
+    const helpContent = $('conn-help-content');
+    const helpTitle = $('conn-help-title');
+    
+    if (!type) {
+      helpBox.style.display = 'none';
+      return;
+    }
+    
+    helpTitle.innerHTML = `<strong>${esc(type)} Connection Options</strong>`;
+    helpContent.innerHTML = 'Loading help...';
+    helpBox.style.display = 'block';
+    
+    try {
+      const res = await connectionsApi.getHelp(type);
+      if (res && res.content) {
+        helpContent.innerHTML = renderMarkdown(res.content);
+      } else {
+        helpContent.innerHTML = 'No documentation available for this connector.';
+      }
+    } catch (err) {
+      helpContent.innerHTML = `<span style="color: var(--portal-danger);">Failed to load help: ${esc(err.message || err)}</span>`;
+    }
+  }
+
+  function renderMarkdown(src) {
+    if (!src) return '';
+    let html = String(src).replace(/\\n/g, '\n');
+    
+    // Escape HTML first to prevent XSS
+    html = html
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+
+    // Headings
+    html = html.replace(/^#\s+(.+)$/gm, '<h3 style="margin: 8px 0 4px 0; font-size: 13px; border-bottom: 1px solid var(--portal-border); padding-bottom: 4px; color: var(--portal-accent);">$1</h3>');
+    html = html.replace(/^##\s+(.+)$/gm, '<h4 style="margin: 8px 0 4px 0; font-size: 12px; font-weight: 700;">$1</h4>');
+    html = html.replace(/^###\s+(.+)$/gm, '<h5 style="margin: 6px 0 2px 0; font-size: 11px;">$1</h5>');
+    
+    // Bold, Italic, Code
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+    html = html.replace(/`(.+?)`/g, '<code style="background: var(--portal-bg-hover); padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--portal-accent);">$1</code>');
+    
+    // Lists
+    html = html.replace(/^\s*-\s+(.+)$/gm, '<li style="margin-left: 12px; margin-bottom: 2px; list-style-type: disc;">$1</li>');
+    
+    // Fenced code blocks
+    html = html.replace(/```[^\n]*\n([\s\S]*?)```/g, '<pre style="background: var(--portal-bg-hover); padding: 8px; border-radius: 4px; font-family: monospace; overflow-x: auto; margin: 6px 0; font-size: 12px;">$1</pre>');
+    
+    // Line breaks for remaining text
+    html = html.replace(/\n/g, '<br>');
+    
+    return html;
+  }
 
   function setStatus(text) { $('conn-status').textContent = text || ''; }
   function setError(id, text) {
@@ -223,6 +289,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
     $('conn-target').value = detail.target || '';
     $('conn-options').value = options.map(([k, v]) => `${k}=${v}`).join('\n');
     $('conn-sensitive').value = sensitiveFields.join('\n');
+    loadConnectorHelp(detail.summary.connectorType);
   }
 
   async function showImpact(alias) {
@@ -362,6 +429,11 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       setError('conn-importError', err.message);
     }
   });
+
+  $('conn-type').addEventListener('change', () => {
+    loadConnectorHelp($('conn-type').value);
+  });
+  loadConnectorHelp($('conn-type').value);
 
   return { load };
 }

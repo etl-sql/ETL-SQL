@@ -140,6 +140,17 @@ public class ConnectionsAdminController(
         return NoContent();
     }
 
+    /// <summary>Returns markdown help documentation for a specific connector type.</summary>
+    [HttpGet("help/{connectorType}")]
+    public IActionResult GetConnectorHelp(string connectorType, [FromServices] ETL_SQL.Core.Interfaces.ILanguageHelpRegistry helpRegistry)
+    {
+        var helpText = helpRegistry.GetHelp("CONNECTION", connectorType);
+        if (string.IsNullOrEmpty(helpText))
+            return NotFound(new { error = $"Help documentation for connector type '{connectorType}' not found." });
+
+        return Ok(new { content = helpText });
+    }
+
     /// <summary>What breaks if this entry is disabled or deleted: referencing scripts + recorded consumers.</summary>
     [HttpGet("{alias}/impact")]
     public async Task<IActionResult> Impact(string alias, [FromServices] ReferenceImpactService impact, CancellationToken ct)

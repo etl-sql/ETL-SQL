@@ -320,6 +320,7 @@ export const connectionsApi = {
     exportAll: ()             => apiJson('/api/admin/connections/export'),
     importAll: (entries)      => apiJson('/api/admin/connections/import', { method: 'POST', body: entries }),
     impact:    (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/impact`),
+    getHelp:   (type)         => apiJson(`/api/admin/connections/help/${encodeURIComponent(type)}`),
     listAcl:   (alias)          => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`),
     grantAcl:  (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl`, { method: 'POST', body: { groupId } }),
     revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
