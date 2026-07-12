@@ -53,7 +53,8 @@ public class StateNode
             label,
             suggestType,
             customSuggestionsProvider,
-            onTransition
+            onTransition,
+            isWildcard: true
         ));
         return this;
     }

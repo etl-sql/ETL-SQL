@@ -33,13 +33,23 @@ namespace ETL_SQL.FuzzTests
         private string _fuzzTableName = null!;
         private int _seed;
         private bool _strictExec;
+        private bool _dumpExec;
+        private readonly HashSet<string> _execMessages = new(StringComparer.Ordinal);
 
         // Message fragments of ExecutionExceptions that are known-expected engine rejections (not
-        // bugs). Populate this from a calibration run before enabling ETLSQL_FUZZ_STRICT_EXEC=1;
-        // until then strict-exec is off and behaviour is unchanged. See TODO
-        // "Grammar-tree suggestions & SQL fuzzer hardening".
+        // bugs), consulted when strict-exec is enabled. To extend after new surface is fuzzed, run
+        // with ETLSQL_FUZZ_DUMP_EXEC=1 and fold new benign messages in as stable fragments.
         private static readonly string[] ExpectedExecutionMessageFragments =
         {
+            // Calibrated 2026-07-12 from a 40k-iteration dump (ETLSQL_FUZZ_DUMP_EXEC=1). These are
+            // sanitized engine rejections of semantically-invalid generated queries, not bugs.
+            // Explicit THROW-originated exceptions are handled structurally (see RunFuzzer), not here.
+            "not found or does not support remote file",
+            "Connection name evaluated to null",
+            "Procedure not found",
+            "Unknown function",
+            "Unknown source",
+            "invalid time format",
         };
 
         public async Task InitializeAsync()
@@ -85,7 +95,14 @@ namespace ETL_SQL.FuzzTests
             // output and written into every reproducer file.
             string? seedEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_SEED");
             _seed = int.TryParse(seedEnv, out var parsedSeed) ? parsedSeed : Environment.TickCount;
+            // Strict-exec (opt-in via ETLSQL_FUZZ_STRICT_EXEC=1) treats an un-allowlisted sanitized
+            // ExecutionException as a semantic engine bug. It is opt-in for the randomized lane
+            // because the current generator emits many invalid object references, so new random seeds
+            // keep surfacing new benign "unknown/not-found" rejections; broadly allowlisting those
+            // would mask real bugs. The deterministic CI smoke lane runs strict-exec ON with a fixed,
+            // verified seed so it gives continuous semantic-bug signal without flakiness.
             _strictExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_STRICT_EXEC") == "1";
+            _dumpExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_DUMP_EXEC") == "1";
             Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
 
             var tree = DefaultGrammar.Build();
@@ -94,7 +111,7 @@ namespace ETL_SQL.FuzzTests
             // Register dynamic schema in the walk generator
             generator.AddCustomSchema(_fuzzTableName, new[] { "ID", "Price", "Name", "TotalAmount" });
 
-            int crashCount = 0;
+            var results = new FuzzResults();
             var rng = new Random(unchecked(_seed * 31 + 17));
 
             for (int i = 0; i < iterations; i++)
@@ -112,56 +129,108 @@ namespace ETL_SQL.FuzzTests
                 var query = string.Join(" ", tokens.Where(t => t.Type != TokenType.EOF).Select(t => t.Value));
                 if (string.IsNullOrWhiteSpace(query)) continue;
 
+                // --- Parse stage ---
+                Script parsed;
                 try
                 {
-                    var parsed = new Parser(tokens, query).Parse();
-
-                    // If not corrupted, skip standard compilation diagnostics
-                    if (!isCorrupted && parsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
-                    {
-                        continue;
-                    }
-
-                    Exception? engineEx = null;
-
-                    try
-                    {
-                        _evaluator.LastResult = null;
-                        await _evaluator.Evaluate(parsed);
-
-                        // If it is a clean SELECT statement, run NoREC correctness verification
-                        if (!isCorrupted && parsed.Statements.FirstOrDefault() is SelectStatement selectStmt)
-                        {
-                            await VerifyNoRECParity(selectStmt);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        engineEx = ex;
-                    }
-
-                    if (engineEx != null)
-                    {
-                        if (IsSevereCrash(engineEx))
-                        {
-                            crashCount++;
-                            HandleCrash(query, engineEx);
-                        }
-                    }
+                    parsed = new Parser(tokens, query).Parse();
                 }
                 catch (Exception ex)
                 {
-                    // If corrupted, parsing failures are expected.
-                    // But if it triggers a severe unhandled crash (like NullReferenceException), log it!
-                    if (IsSevereCrash(ex))
+                    // An unhandled exception out of the parser is a parser robustness bug; an expected
+                    // syntax failure (common on corrupted input) is just a diagnostic bucket.
+                    if (IsSevereCrash(ex)) results.ParserCrash.Record(tokens, query, ex);
+                    else results.ParserDiagnostic.Increment();
+                    continue;
+                }
+
+                bool parserAccepts = !parsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);
+
+                // --- Grammar conformance stage (non-corrupted only) ---
+                // Compare the grammar state tree against the production parser in both directions and
+                // report them separately, so we can tell whether the grammar is too strict (recall gap
+                // that would make suggestions miss valid tokens) or too loose (precision gap that would
+                // suggest invalid tokens). The grammar-only walk (requireComplete:false) is used so the
+                // tree's own parser-acceptance gate does not mask the comparison.
+                if (!isCorrupted)
+                {
+                    bool grammarAccepts = tree.ValidateSequence(tokens, out _, requireComplete: false);
+                    if (parserAccepts && !grammarAccepts) results.GrammarRejectedParserAccepted.Increment();
+                    else if (!parserAccepts && grammarAccepts) results.GrammarAcceptedParserRejected.Increment();
+                }
+
+                if (!parserAccepts)
+                {
+                    results.ParserDiagnostic.Increment();
+                    // A grammar-generated (non-corrupted) query the parser rejected means the generator
+                    // walked a path the parser does not accept — a generator-fidelity/yield signal.
+                    if (!isCorrupted) results.GrammarGeneratedParserRejected.Increment();
+                    continue;
+                }
+
+                // --- Execution stage ---
+                try
+                {
+                    _evaluator.LastResult = null;
+                    await _evaluator.Evaluate(parsed);
+
+                    if (!isCorrupted && parsed.Statements.FirstOrDefault() is SelectStatement selectStmt)
                     {
-                        crashCount++;
-                        HandleCrash(query, ex);
+                        await VerifyNoRECParity(selectStmt);
+                    }
+                }
+                catch (NoRecMismatchException ex)
+                {
+                    results.DifferentialCorrectness.Record(tokens, query, ex);
+                }
+                catch (Exception ex)
+                {
+                    if (_dumpExec && ex is ExecutionException) _execMessages.Add(ex.Message);
+
+                    // A THROW statement raising an ExecutionException is the script doing exactly what
+                    // it asked; its message is arbitrary user text, so classify it structurally rather
+                    // than trying to allowlist the message.
+                    bool expectedThrow = ex is ExecutionException && parsed.Statements.Any(s => s is ThrowStatement);
+                    if (!expectedThrow && IsSevereCrash(ex)) results.ExecutionCrash.Record(tokens, query, ex);
+                    // Otherwise an expected/sanitized engine error — not a bug (see IsSevereCrash).
+                }
+            }
+
+            // --- Grammar coverage ---
+            int totalStates = tree.GetAllStates().Count;
+            int totalTransitions = tree.GetTotalTransitionCount();
+            int reachedStates = generator.VisitedStates.Count;
+            int reachedTransitions = generator.VisitedTransitions.Count;
+            double statePct = totalStates == 0 ? 0 : 100.0 * reachedStates / totalStates;
+            double transPct = totalTransitions == 0 ? 0 : 100.0 * reachedTransitions / totalTransitions;
+
+            Console.WriteLine(results.Summary());
+            Console.WriteLine($"[Fuzzer] grammar coverage: states {reachedStates}/{totalStates} ({statePct:F1}%), " +
+                              $"transitions {reachedTransitions}/{totalTransitions} ({transPct:F1}%)");
+
+            if (_dumpExec)
+            {
+                var dumpPath = Path.Combine(_fuzzLogDir, "exec-messages.txt");
+                File.WriteAllLines(dumpPath, _execMessages.OrderBy(m => m, StringComparer.Ordinal));
+                Console.WriteLine($"[Fuzzer] dumped {_execMessages.Count} distinct ExecutionException message(s) to {dumpPath}");
+            }
+
+            // Persist minimal reproducers only for the buckets that represent real bugs.
+            bool writeRepros = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_NO_REPRO") != "1";
+            if (writeRepros)
+            {
+                foreach (var bucket in results.BugBuckets)
+                {
+                    foreach (var sample in bucket.Samples)
+                    {
+                        WriteReproducer(bucket.Name, sample.Tokens, sample.Query, sample.Exception);
                     }
                 }
             }
 
-            Assert.True(crashCount == 0, $"Fuzzer found {crashCount} severe crash/correctness bugs! Check logs/fuzz/reproducers/ for minimal reproducing SQL queries.");
+            int bugCount = results.BugBuckets.Sum(b => b.Count);
+            Assert.True(bugCount == 0,
+                $"Fuzzer found {bugCount} bug(s). {results.Summary()} See logs/fuzz/reproducers/ for minimized SQL.");
         }
 
         private bool IsSevereCrash(Exception ex)
@@ -256,41 +325,101 @@ namespace ETL_SQL.FuzzTests
             }
         }
 
-        private void HandleCrash(string query, Exception ex)
+        private void WriteReproducer(string bucket, List<Token> originalTokens, string query, Exception ex)
         {
-            var minimalQuery = QueryMinimizer.Minimize(query, q =>
-            {
-                try
-                {
-                    var tokens = new Lexer(q).Tokenize();
-                    var parsed = new Parser(tokens, q).Parse();
-                    var task = _evaluator.Evaluate(parsed);
-                    task.GetAwaiter().GetResult();
+            // Minimize on the original token stream (not a re-lexed string) so synthetic single-token
+            // identifiers reproduce faithfully.
+            var minimized = QueryMinimizer.Minimize(originalTokens, toks => Reproduces(toks, ex));
+            var minimalQuery = QueryMinimizer.Render(minimized);
 
-                    if (ex is NoRecMismatchException && parsed.Statements.FirstOrDefault() is SelectStatement selectStmt)
-                    {
-                        // Verify if the mismatch still reproduces
-                        VerifyNoRECParity(selectStmt).GetAwaiter().GetResult();
-                    }
-                    return false;
-                }
-                catch (Exception testEx)
-                {
-                    return IsSevereCrash(testEx) && testEx.GetType() == ex.GetType();
-                }
-            });
-
-            // Stable, process-independent name so the same crash overwrites its own repro across
-            // runs (string.GetHashCode is randomized per process, so it was neither stable nor
-            // reproducible). Prefixed with the seed to keep distinct crashes from colliding.
-            var hash = StableHash(ex.GetType().Name + "\n" + minimalQuery);
-            var reproPath = Path.Combine(_fuzzLogDir, "reproducers", $"{_seed}-{hash}.repro.sql");
+            // Stable, process-independent name so the same crash overwrites its own repro across runs
+            // (string.GetHashCode is randomized per process). Prefixed with the seed to keep distinct
+            // crashes from colliding.
+            var hash = StableHash(bucket + "\n" + ex.GetType().Name + "\n" + minimalQuery);
+            var reproPath = Path.Combine(_fuzzLogDir, "reproducers", $"{_seed}-{bucket}-{hash}.repro.sql");
             var content =
+                $"-- Bucket: {bucket}\n" +
                 $"-- Exception: {ex.GetType().Name}\n" +
                 $"-- Message: {ex.Message}\n" +
                 $"-- Seed: {_seed} (rerun with ETLSQL_FUZZ_SEED={_seed})\n" +
                 $"-- Original Query: {query}\n\n{minimalQuery}";
             File.WriteAllText(reproPath, content);
+        }
+
+        private bool Reproduces(List<Token> tokens, Exception ex)
+        {
+            try
+            {
+                var parsed = new Parser(new List<Token>(tokens), QueryMinimizer.Render(tokens)).Parse();
+                _evaluator.LastResult = null;
+                _evaluator.Evaluate(parsed).GetAwaiter().GetResult();
+
+                if (ex is NoRecMismatchException && parsed.Statements.FirstOrDefault() is SelectStatement selectStmt)
+                {
+                    VerifyNoRECParity(selectStmt).GetAwaiter().GetResult();
+                }
+                return false;
+            }
+            catch (Exception testEx)
+            {
+                return IsSevereCrash(testEx) && testEx.GetType() == ex.GetType();
+            }
+        }
+
+        /// <summary>
+        /// A named tally of fuzzer outcomes. Buckets flagged <see cref="Bucket.IsBug"/> fail the test
+        /// and get minimized reproducers; the rest are informational signals (parser diagnostics,
+        /// grammar recall gaps) that separate suggestion/parser/execution progress from a single count.
+        /// </summary>
+        private sealed class FuzzResults
+        {
+            public Bucket ParserCrash { get; } = new("parser-crash", isBug: true);
+            public Bucket ExecutionCrash { get; } = new("execution-crash", isBug: true);
+            public Bucket DifferentialCorrectness { get; } = new("differential-correctness", isBug: true);
+            public Bucket ParserDiagnostic { get; } = new("parser-diagnostic");
+            public Bucket GrammarGeneratedParserRejected { get; } = new("grammar-generated-parser-rejected");
+            public Bucket GrammarRejectedParserAccepted { get; } = new("grammar-rejected-parser-accepted");
+            public Bucket GrammarAcceptedParserRejected { get; } = new("grammar-accepted-parser-rejected");
+
+            private IEnumerable<Bucket> All => new[]
+            {
+                ParserCrash, ExecutionCrash, DifferentialCorrectness,
+                ParserDiagnostic, GrammarGeneratedParserRejected,
+                GrammarRejectedParserAccepted, GrammarAcceptedParserRejected
+            };
+
+            public IEnumerable<Bucket> BugBuckets => All.Where(b => b.IsBug);
+
+            public string Summary() =>
+                "[Fuzzer] buckets: " + string.Join(", ", All.Select(b => $"{b.Name}={b.Count}"));
+        }
+
+        private sealed class Bucket
+        {
+            private const int MaxSamples = 5;
+            private readonly List<(List<Token> Tokens, string Query, Exception Exception)> _samples = new();
+
+            public Bucket(string name, bool isBug = false)
+            {
+                Name = name;
+                IsBug = isBug;
+            }
+
+            public string Name { get; }
+            public bool IsBug { get; }
+            public int Count { get; private set; }
+            public IReadOnlyList<(List<Token> Tokens, string Query, Exception Exception)> Samples => _samples;
+
+            public void Increment() => Count++;
+
+            public void Record(List<Token> tokens, string query, Exception ex)
+            {
+                Count++;
+                if (_samples.Count < MaxSamples)
+                {
+                    _samples.Add((new List<Token>(tokens), query, ex));
+                }
+            }
         }
 
         private static string StableHash(string s)

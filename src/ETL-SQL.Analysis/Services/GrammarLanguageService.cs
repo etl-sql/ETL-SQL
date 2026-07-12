@@ -56,11 +56,9 @@ public class GrammarLanguageService : LanguageService
             {
                 foreach (var transition in state.Transitions)
                 {
-                    // A transition that accepts both an identifier and a string token is a
-                    // free-form wildcard (an <expression>/<value> position).
-                    var idToken = new Token(TokenType.IDENTIFIER, "___wildcard_test_1___", 0, 0, 0, 0);
-                    var strToken = new Token(TokenType.STRING, "___wildcard_test_2___", 0, 0, 0, 0);
-                    if (transition.Matches(idToken, walker) && transition.Matches(strToken, walker))
+                    // A free-form transition (an <expression>/<value> position) means an expression
+                    // is legal here; a specific keyword transition contributes an offered keyword.
+                    if (transition.IsWildcard)
                     {
                         allowsExpression = true;
                     }

@@ -38,6 +38,47 @@ public class GrammarStateTree
         return null;
     }
 
+    /// <summary>Registered statement-start nodes (CREATE, SELECT, UPDATE, …).</summary>
+    public IReadOnlyCollection<StateNode> StartNodes => _startNodes.Values;
+
+    /// <summary>
+    /// All reachable states, discovered by breadth-first traversal from <see cref="Root"/> and every
+    /// registered start node. Used to compute grammar coverage (reached-vs-total) for the fuzzer.
+    /// </summary>
+    public IReadOnlyCollection<StateNode> GetAllStates()
+    {
+        var visited = new HashSet<StateNode>();
+        var queue = new Queue<StateNode>();
+
+        void Enqueue(StateNode node)
+        {
+            if (visited.Add(node))
+            {
+                queue.Enqueue(node);
+            }
+        }
+
+        Enqueue(Root);
+        foreach (var start in _startNodes.Values)
+        {
+            Enqueue(start);
+        }
+
+        while (queue.Count > 0)
+        {
+            var node = queue.Dequeue();
+            foreach (var transition in node.Transitions)
+            {
+                Enqueue(transition.Target);
+            }
+        }
+
+        return visited;
+    }
+
+    /// <summary>Total number of transitions across all reachable states.</summary>
+    public int GetTotalTransitionCount() => GetAllStates().Sum(s => s.Transitions.Count);
+
     /// <summary>
     /// Validates if a sequence of tokens conforms to the grammar rules defined in the tree.
     /// Supports partial snippets by finding a matching start node for the first non-EOF token.

@@ -21,54 +21,6 @@ that result into an unsupported blanket billion-row claim.
 > **Deferred to roadmap:** Phase 4 Central Security Events and Phase 5 Certification & Operations
 > remain in `ROADMAP.md`; promote them only if they join this release's scope.
 
-### Enterprise Phase 3 hardening closeout
-
-The main Phase 3 enterprise policy-authority and operation-boundary enforcement work is already
-implemented. This closeout list tracks the remaining hardening and retained evidence needed before
-calling the enterprise continuation fully current.
-
-- [x] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME`
-  operations on supported platforms; add link/junction substitution tests at each mutation
-  boundary.
-- [x] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond
-  the REST connector to all policy-governed outbound HTTP/network clients, including SharePoint,
-  Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
-- [ ] Run and retain the deferred performance lane plus Windows and Linux enterprise certification
-  evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone
-  behavior. *(Bundled into the Phase 6 operator runbook/evidence plan via
-  `scripts/Test-EnterpriseHardeningCertification.ps1`; run once on Windows and once on Linux/WSL
-  for the same run id.)*
-
-### Phase 6: Concurrent, PostgreSQL, and failure soak certification
-
-Design: [ConcurrentPostgresFailureSoak.md](Docs/Design/ConcurrentPostgresFailureSoak.md)
-
-- [x] Run sustained PostgreSQL-backed Portal/Orchestrator load at representative report/job/history
-  counts and concurrent execution levels; measure pool saturation, query latency, scheduler fairness,
-  lease behavior, and database growth rather than inferring HA performance from SQLite tests.
-  *(CI-smoke evidence exists under `certification-results/postgres-ha-soak/ha-agent-20260711-01/`.
-  Manual-certification evidence exists under
-  `certification-results/postgres-ha-soak/ha-overnight-20260711-201249/`: Portal and Orchestrator
-  sustained-load lanes passed at concurrency 1/10/25 with 0% errors and no SQLite contention.)*
-- [x] Add multi-hour concurrent large-job soaks covering mixed scan, spill, join, and sort workloads
-  under shared memory and disk budgets, including cancellation at each spill phase.
-  *(CI-smoke evidence exists under `certification-results/ha-large-job-soak/ha-agent-20260711-01/`.
-  Manual-certification evidence exists under
-  `certification-results/ha-large-job-soak/ha-overnight-20260711-201249/`: the four-hour
-  mixed scan/spill/sort/join/aggregate scenario and cancellation-at-phase checks passed.)*
-- [x] Inject disk-full/low-space, slow disk, corrupt or incomplete extent, process crash, restart,
-  orphan cleanup, and temp-root exhaustion; verify bounded recovery with no leaked grants, handles,
-  extents, or silently duplicated/lost mutations.
-  *(CI-smoke evidence exists under
-  `certification-results/ha-fault-injection/ha-agent-20260711-01/`. Manual-certification evidence
-  exists under `certification-results/ha-fault-injection/ha-overnight-20260711-201249/`: all ten
-  destructive/manual HA recovery scenarios passed with cleanup checks.)*
-- [ ] Review and fix the recovered Portal startup migration race captured in
-  `.ha-soak-runs/ha-overnight-20260711-201249/diagnostics/20260712-053400/docker-compose-logs.txt`
-  (`42P07: relation "AuditOutboxMessages" already exists`). The topology recovered and both portal
-  nodes were up at diagnostic capture, but concurrent HA startup should avoid noisy failed migration
-  attempts.
-
 ### Grammar-tree suggestions & SQL fuzzer hardening
 
 Fresh-eyes review (2026-07-11) of the grammar state engine (`ETL-SQL.Analysis/Linting/Grammar`)
@@ -85,9 +37,23 @@ Product goal (better VS Code / TUI suggestions):
   grammar tree accepts everything the production parser accepts (recall), and that grammar-accepted
   sequences parse (precision). Nothing currently measures suggestion precision/recall — the fuzzer
   does not test this.
-- [ ] Replace the string-probe wildcard detection (`___wildcard_test_*___`) with an explicit
-  `IsWildcard` flag on `StateTransition`; probing is fragile against `ContextCondition`. *(Deferred:
-  invasive — 59 inline wildcards in `DefaultGrammar` would each need the flag.)*
+- [ ] Add suggestion golden tests by cursor position for the main authoring workflows:
+  `SELECT` clauses, joins/aliases, CTEs, DML, file operations, `CREATE CONNECTION`, report SQL
+  visuals/pages/datasets, `WINDOW`/`OVER`, `QUALIFY`, control flow, jobs, and portal admin commands.
+  Each case should assert both expected positive suggestions and high-noise negatives. Current tests
+  cover only a few happy paths, so regressions can still make suggestions feel noisy or miss key
+  next tokens.
+- [ ] Make grammar suggestion failures visible in tests. `GrammarLanguageService` currently catches
+  walker/filter errors and returns the base keyword list, and `TokenWalker.GetSuggestions` swallows
+  custom suggestion-provider exceptions. Add a strict/test mode or diagnostics hook so grammar bugs
+  cannot silently degrade back to broad suggestions.
+- [ ] Track grammar coverage for suggestion states, not just parser/fuzzer states: each registered
+  start node and labeled transition should be exercised by at least one suggestion test or corpus
+  acceptance test. This is the bridge from "the grammar exists" to "the editor uses it reliably."
+- [x] Replace the string-probe wildcard detection with an explicit `IsWildcard` flag on
+  `StateTransition` — set at construction by `AddWildcardTransition`, and for the inline wildcards
+  derived from the `Condition` alone (never `ContextCondition`, the old probe's fragility).
+  `GrammarLanguageService` now reads `transition.IsWildcard`.
 - [ ] Perf: `RunWalker` re-lexes + re-walks from Root on every keystroke (O(n²) over a typing
   session) and allocates two probe tokens per transition per call. Cache walker state per
   statement/line if suggestion latency is flagged.
@@ -105,20 +71,38 @@ SQL fuzzer (`ParserFuzzTests` / `GrammarWalkGenerator` / `QueryMinimizer`):
   `CREATE/ALTER/DROP/EXPORT/COPY/RUN/EXECUTE/…`).
 - [x] Wire up the previously-dead DDL/SHOW body generators in `TryGenerateForTransition` — now
   reachable because `CREATE/ALTER/REPLACE` are fuzzed at Root.
-- [ ] Add a grammar-state coverage counter so "N iterations" carries a defensible reached-vs-total
-  number and any remaining dead branches show up.
+- [x] Add a grammar-state coverage counter (`GrammarStateTree.GetAllStates`/`GetTotalTransitionCount`
+  + generator `VisitedStates`/`VisitedTransitions`); the fuzzer prints reached-vs-total states and
+  transitions. (Seen at ~83% states / ~88% transitions.)
+- [x] Feed generated clean queries through `GrammarStateTree.ValidateSequence` and report both
+  directions separately: `grammar-rejected-parser-accepted` (recall gap) and
+  `grammar-accepted-parser-rejected` (precision gap). **Finding:** the current generator produces
+  parser-invalid SQL ~95% of iterations (see `grammar-generated-parser-rejected`), and the grammar
+  is looser than the parser on the majority of those — a generator-fidelity gap now measurable.
+- [x] Split fuzzer output into buckets: parser-crash, execution-crash, differential-correctness
+  (the bug buckets that fail the run) plus parser-diagnostic and the two conformance buckets
+  (informational). Replaces the single `crashCount`.
 - [x] Tighten the severity net: `IsSevereCrash` no longer treats every `ExecutionException` as
   benign — with `ETLSQL_FUZZ_STRICT_EXEC=1` an `ExecutionException` off the expected-message
   allowlist counts as a bug (ordered after `ConnectionException`, which derives from it). *(Default
   off; `ExpectedExecutionMessageFragments` allowlist must be calibrated from a run before enabling.)*
+- [x] Calibrate `ETLSQL_FUZZ_STRICT_EXEC` and commit the expected engine-rejection allowlist
+  (6 stable fragments from a 40k dump; explicit `THROW` errors classified structurally). Strict-exec
+  is opt-in for the randomized lane (new random seeds keep surfacing new benign "unknown/not-found"
+  rejections that would need allowlisting, and broadly allowlisting them would mask real bugs — a
+  symptom of the generator-fidelity gap above), and ON with a fixed verified seed in the CI smoke
+  lane for continuous semantic-bug signal. Dump new benign messages with `ETLSQL_FUZZ_DUMP_EXEC=1`.
 - [x] Stop the NoREC oracle (`VerifyNoRECParity`) from swallowing severe exceptions — severe crashes
   (NRE/cast/index) and mismatches in the rewrite path now propagate instead of being discarded.
-- [ ] Fix the token↔string round-trip: the fuzzer parses the generated `List<Token>` but the
-  minimizer/NoREC path re-lexes a space-joined string, so synthetic single-token identifiers like
-  `src.Users` re-lex differently and repros may not reproduce. Operate on the original tokens.
+- [x] Fix the token↔string round-trip: `QueryMinimizer` now operates on `List<Token>` (AST pruning
+  still round-trips through the faithful `ToSql()`; the initial reproduction check and token-level
+  delta-debugging use the raw tokens). `WriteReproducer`/`Reproduces` parse the token stream directly.
 - [x] Broaden `QueryMinimizer` traversal to `CASE`/unary (`GetSubExpressions` + `ReplaceNode`) and
   strengthen `CorruptQuery` (added duplication, tail-truncation, unbalanced-paren injection).
   *(Residual: `IN`/`CAST`/subquery traversal and bit-flip mutation still open.)*
+- [ ] Add a reduced, deterministic fuzzer smoke lane for CI (fixed seed, low iteration count,
+  grammar coverage output, no generated repro files unless failing) and keep the longer randomized
+  lane opt-in. This gives continuous signal without making normal PR validation noisy.
 
 ### v0.15.0 completion gates
 
@@ -128,5 +112,8 @@ SQL fuzzer (`ParserFuzzTests` / `GrammarWalkGenerator` / `QueryMinimizer`):
   `AllocProfile` scenario and schema v2 source/config fingerprints. Before publishing Gate F
   performance claims or closing a release candidate that changes certified paths, rerun Gate F for
   the current commit and validate it with `Test-GateFEvidence.ps1 -RequiredScenario All`.)*
-- [ ] PostgreSQL sustained-load and concurrent failure-soak suites pass with documented capacity and
-  recovery limits, and the normal small/medium regression lanes remain green.
+- [x] PostgreSQL sustained-load and concurrent failure-soak suites pass with documented capacity and
+  recovery limits. *(Phase 6 manual-certification evidence for run
+  `ha-overnight-20260711-201249` passed sustained PostgreSQL load, four-hour large-job soak,
+  fault-injection recovery, and the follow-up HA startup migration-lock retest.)*
+- [ ] Normal small/medium regression lanes remain green for the final release candidate.

@@ -6,203 +6,61 @@ using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.FuzzTests
 {
+    /// <summary>
+    /// Delta-debugging minimizer that operates on the original <see cref="Token"/> stream rather than
+    /// re-lexing a space-joined string. Re-lexing was lossy: synthetic single-token identifiers the
+    /// generator emits (e.g. an IDENTIFIER whose value is <c>src.Users</c>) re-lex into
+    /// <c>IDENTIFIER DOT IDENTIFIER</c>, so a string round-trip could fail to reproduce the crash.
+    /// AST-level pruning still round-trips through <c>ToSql()</c> (which is well-formed and lexes
+    /// faithfully); only the initial reproduction check and the token-level fallback need the raw
+    /// tokens.
+    /// </summary>
     public class QueryMinimizer
     {
-        public static string Minimize(string originalSql, Func<string, bool> testFunction)
+        public static List<Token> Minimize(List<Token> originalTokens, Func<List<Token>, bool> testFunction)
         {
-            // First verify if the original SQL actually triggers the failure
-            if (!testFunction(originalSql))
+            // Verify the original tokens actually trigger the failure before trying to shrink them.
+            if (!testFunction(originalTokens))
             {
-                return originalSql;
+                return originalTokens;
             }
 
-            string currentSql = originalSql;
+            var current = originalTokens;
             bool progress = true;
 
             while (progress)
             {
                 progress = false;
 
-                // 1. Try parsing current SQL to AST
-                Script? script = null;
-                try
-                {
-                    var tokens = new Lexer(currentSql).Tokenize();
-                    script = new Parser(tokens, currentSql).Parse();
-                }
-                catch
-                {
-                    // If parsing fails, we cannot minimize via AST. Fallback to token-level reduction
-                }
-
+                // 1. AST-level pruning (statement / clause / sub-expression) via faithful ToSql round-trip.
+                var script = TryParse(current);
                 if (script != null && script.Statements.Count > 0)
                 {
-                    // A. Try statement-level pruning (removing statements one by one)
-                    if (script.Statements.Count > 1)
+                    foreach (var candidate in EnumerateReducedScripts(script))
                     {
-                        for (int i = 0; i < script.Statements.Count; i++)
+                        var candidateTokens = Lex(candidate.ToSql());
+                        if (testFunction(candidateTokens))
                         {
-                            var statementsCopy = script.Statements.ToList();
-                            statementsCopy.RemoveAt(i);
-                            var reducedScript = new Script { Statements = statementsCopy };
-                            var candidateSql = reducedScript.ToSql();
-                            if (testFunction(candidateSql))
-                            {
-                                currentSql = candidateSql;
-                                progress = true;
-                                break;
-                            }
-                        }
-                        if (progress) continue;
-                    }
-
-                    // B. Try statement-internal clause pruning
-                    for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
-                    {
-                        var stmt = script.Statements[sIdx];
-                        if (stmt is SelectStatement selectStmt)
-                        {
-                            // Try removing WhereClause
-                            if (selectStmt.WhereClause != null)
-                            {
-                                var candidateStmt = selectStmt with { WhereClause = null };
-                                var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                            }
-
-                            // Try removing HavingClause
-                            if (selectStmt.HavingClause != null)
-                            {
-                                var candidateStmt = selectStmt with { HavingClause = null };
-                                var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                            }
-
-                            // Try removing GroupBy
-                            if (selectStmt.GroupBy != null && selectStmt.GroupBy.Count > 0)
-                            {
-                                var candidateStmt = selectStmt with { GroupBy = null };
-                                var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                            }
-
-                            // Try removing OrderBy
-                            if (selectStmt.OrderBy != null && selectStmt.OrderBy.Count > 0)
-                            {
-                                var candidateStmt = selectStmt with { OrderBy = null };
-                                var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                            }
-
-                            // Try pruning Joins one by one
-                            if (selectStmt.Joins != null && selectStmt.Joins.Count > 0)
-                            {
-                                for (int j = 0; j < selectStmt.Joins.Count; j++)
-                                {
-                                    var joinsCopy = selectStmt.Joins.ToList();
-                                    joinsCopy.RemoveAt(j);
-                                    var candidateStmt = selectStmt with { Joins = joinsCopy };
-                                    var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                    if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                                }
-                                if (progress) break;
-                            }
-
-                            // Try pruning Columns one by one (keeping at least one column)
-                            if (selectStmt.Columns != null && selectStmt.Columns.Count > 1)
-                            {
-                                for (int c = 0; c < selectStmt.Columns.Count; c++)
-                                {
-                                    var columnsCopy = selectStmt.Columns.ToList();
-                                    columnsCopy.RemoveAt(c);
-                                    var candidateStmt = selectStmt with { Columns = columnsCopy };
-                                    var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                    if (testFunction(candidateSql)) { currentSql = candidateSql; progress = true; break; }
-                                }
-                                if (progress) break;
-                            }
-                        }
-                    }
-                    if (progress) continue;
-
-                    // C. Try expression-level pruning (sub-expression reduction)
-                    for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
-                    {
-                        var stmt = script.Statements[sIdx];
-                        if (stmt is SelectStatement selectStmt)
-                        {
-                            var exprList = new List<Expression>();
-                            if (selectStmt.WhereClause != null) exprList.Add(selectStmt.WhereClause);
-                            if (selectStmt.HavingClause != null) exprList.Add(selectStmt.HavingClause);
-                            foreach (var col in selectStmt.Columns)
-                            {
-                                if (col.Expression != null) exprList.Add(col.Expression);
-                            }
-
-                            bool exprPruned = false;
-                            foreach (var rootExpr in exprList)
-                            {
-                                var subExprs = GetSubExpressions(rootExpr).ToList();
-                                foreach (var sub in subExprs)
-                                {
-                                    var replacement = new LiteralExpression(1, TokenType.NUMBER);
-                                    var candidateRoot = ReplaceNode(rootExpr, sub, replacement);
-
-                                    SelectStatement? candidateStmt = null;
-                                    if (rootExpr == selectStmt.WhereClause) candidateStmt = selectStmt with { WhereClause = candidateRoot };
-                                    else if (rootExpr == selectStmt.HavingClause) candidateStmt = selectStmt with { HavingClause = candidateRoot };
-                                    else
-                                    {
-                                        var colsCopy = selectStmt.Columns.ToList();
-                                        int colIdx = colsCopy.FindIndex(c => c.Expression == rootExpr);
-                                        if (colIdx >= 0)
-                                        {
-                                            colsCopy[colIdx] = new SelectColumn(candidateRoot, colsCopy[colIdx].Alias, colsCopy[colIdx].Metadata);
-                                            candidateStmt = selectStmt with { Columns = colsCopy };
-                                        }
-                                    }
-
-                                    if (candidateStmt != null)
-                                    {
-                                        var candidateSql = ReplaceStatement(script, sIdx, candidateStmt).ToSql();
-                                        if (testFunction(candidateSql))
-                                        {
-                                            currentSql = candidateSql;
-                                            progress = true;
-                                            exprPruned = true;
-                                            break;
-                                        }
-                                    }
-                                }
-                                if (exprPruned) break;
-                            }
-                            if (exprPruned) break;
+                            current = candidateTokens;
+                            progress = true;
+                            break;
                         }
                     }
                     if (progress) continue;
                 }
 
-                // 2. Token-level delta-debugging fallback
-                List<Token> tokenList;
-                try
+                // 2. Token-level delta-debugging fallback on the real token stream.
+                var body = current.Where(t => t.Type != TokenType.EOF).ToList();
+                if (body.Count > 3)
                 {
-                    tokenList = new Lexer(currentSql).Tokenize().Where(t => t.Type != TokenType.EOF).ToList();
-                }
-                catch
-                {
-                    break;
-                }
-
-                if (tokenList.Count > 3)
-                {
-                    for (int i = 0; i < tokenList.Count; i++)
+                    for (int i = 0; i < body.Count; i++)
                     {
-                        var tokensCopy = tokenList.ToList();
-                        tokensCopy.RemoveAt(i);
-                        var candidateSql = string.Join(" ", tokensCopy.Select(t => t.Value));
-                        if (testFunction(candidateSql))
+                        var reduced = new List<Token>(body);
+                        reduced.RemoveAt(i);
+                        var reducedTokens = WithEof(reduced);
+                        if (testFunction(reducedTokens))
                         {
-                            currentSql = candidateSql;
+                            current = reducedTokens;
                             progress = true;
                             break;
                         }
@@ -211,7 +69,135 @@ namespace ETL_SQL.FuzzTests
                 }
             }
 
-            return currentSql;
+            return current;
+        }
+
+        /// <summary>Human-readable rendering of a minimized token stream for the reproducer file.</summary>
+        public static string Render(IEnumerable<Token> tokens) =>
+            string.Join(" ", tokens.Where(t => t.Type != TokenType.EOF).Select(t => t.Value));
+
+        private static Script? TryParse(List<Token> tokens)
+        {
+            try
+            {
+                return new Parser(tokens, Render(tokens)).Parse();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static List<Token> Lex(string sql) => new Lexer(sql).Tokenize();
+
+        private static List<Token> WithEof(List<Token> body)
+        {
+            var last = body.Count > 0 ? body[^1] : new Token(TokenType.EOF, string.Empty, 1, 1, 1, 1);
+            var result = new List<Token>(body)
+            {
+                new Token(TokenType.EOF, string.Empty, last.EndLine, last.EndColumn, last.EndLine, last.EndColumn)
+            };
+            return result;
+        }
+
+        /// <summary>
+        /// Yields progressively-reduced copies of <paramref name="script"/>: dropping whole statements,
+        /// then clauses/joins/columns, then sub-expressions. Callers test each candidate and adopt the
+        /// first that still reproduces the failure.
+        /// </summary>
+        private static IEnumerable<Script> EnumerateReducedScripts(Script script)
+        {
+            // A. Statement-level pruning.
+            if (script.Statements.Count > 1)
+            {
+                for (int i = 0; i < script.Statements.Count; i++)
+                {
+                    var copy = script.Statements.ToList();
+                    copy.RemoveAt(i);
+                    yield return new Script { Statements = copy };
+                }
+            }
+
+            // B. Statement-internal clause / join / column pruning.
+            for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
+            {
+                if (script.Statements[sIdx] is not SelectStatement selectStmt) continue;
+
+                if (selectStmt.WhereClause != null)
+                    yield return ReplaceStatement(script, sIdx, selectStmt with { WhereClause = null });
+
+                if (selectStmt.HavingClause != null)
+                    yield return ReplaceStatement(script, sIdx, selectStmt with { HavingClause = null });
+
+                if (selectStmt.GroupBy != null && selectStmt.GroupBy.Count > 0)
+                    yield return ReplaceStatement(script, sIdx, selectStmt with { GroupBy = null });
+
+                if (selectStmt.OrderBy != null && selectStmt.OrderBy.Count > 0)
+                    yield return ReplaceStatement(script, sIdx, selectStmt with { OrderBy = null });
+
+                if (selectStmt.Joins != null && selectStmt.Joins.Count > 0)
+                {
+                    for (int j = 0; j < selectStmt.Joins.Count; j++)
+                    {
+                        var joinsCopy = selectStmt.Joins.ToList();
+                        joinsCopy.RemoveAt(j);
+                        yield return ReplaceStatement(script, sIdx, selectStmt with { Joins = joinsCopy });
+                    }
+                }
+
+                if (selectStmt.Columns != null && selectStmt.Columns.Count > 1)
+                {
+                    for (int c = 0; c < selectStmt.Columns.Count; c++)
+                    {
+                        var columnsCopy = selectStmt.Columns.ToList();
+                        columnsCopy.RemoveAt(c);
+                        yield return ReplaceStatement(script, sIdx, selectStmt with { Columns = columnsCopy });
+                    }
+                }
+            }
+
+            // C. Sub-expression pruning (replace a sub-expression with a literal).
+            for (int sIdx = 0; sIdx < script.Statements.Count; sIdx++)
+            {
+                if (script.Statements[sIdx] is not SelectStatement selectStmt) continue;
+
+                var roots = new List<Expression>();
+                if (selectStmt.WhereClause != null) roots.Add(selectStmt.WhereClause);
+                if (selectStmt.HavingClause != null) roots.Add(selectStmt.HavingClause);
+                foreach (var col in selectStmt.Columns)
+                {
+                    if (col.Expression != null) roots.Add(col.Expression);
+                }
+
+                foreach (var rootExpr in roots)
+                {
+                    foreach (var sub in GetSubExpressions(rootExpr).ToList())
+                    {
+                        var replacement = new LiteralExpression(1, TokenType.NUMBER);
+                        var candidateRoot = ReplaceNode(rootExpr, sub, replacement);
+                        if (candidateRoot == rootExpr) continue;
+
+                        SelectStatement? candidateStmt = null;
+                        if (rootExpr == selectStmt.WhereClause) candidateStmt = selectStmt with { WhereClause = candidateRoot };
+                        else if (rootExpr == selectStmt.HavingClause) candidateStmt = selectStmt with { HavingClause = candidateRoot };
+                        else
+                        {
+                            var colsCopy = selectStmt.Columns.ToList();
+                            int colIdx = colsCopy.FindIndex(c => c.Expression == rootExpr);
+                            if (colIdx >= 0)
+                            {
+                                colsCopy[colIdx] = new SelectColumn(candidateRoot, colsCopy[colIdx].Alias, colsCopy[colIdx].Metadata);
+                                candidateStmt = selectStmt with { Columns = colsCopy };
+                            }
+                        }
+
+                        if (candidateStmt != null)
+                        {
+                            yield return ReplaceStatement(script, sIdx, candidateStmt);
+                        }
+                    }
+                }
+            }
         }
 
         private static Script ReplaceStatement(Script script, int index, Statement newStatement)

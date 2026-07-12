@@ -14,6 +14,12 @@ namespace ETL_SQL.FuzzTests
         private readonly Queue<Token> _tokenQueue = new();
         private int _blockDepth = 0;
 
+        /// <summary>Distinct grammar states the generator has walked into (grammar coverage).</summary>
+        public HashSet<StateNode> VisitedStates { get; } = new();
+
+        /// <summary>Distinct grammar transitions the generator has taken (grammar coverage).</summary>
+        public HashSet<StateTransition> VisitedTransitions { get; } = new();
+
         private readonly List<string> _customTables = new() { "Users", "Products", "Sales", "Employees" };
         private readonly List<string> _customColumns = new() { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
         private static readonly string[] MockVariables = { "@myVar", "@id", "@name", "@price" };
@@ -173,7 +179,9 @@ namespace ETL_SQL.FuzzTests
                 }
 
                 var transition = transitions[_rng.Next(transitions.Count)];
-                
+                VisitedStates.Add(currentState);
+                VisitedTransitions.Add(transition);
+
                 // Try generating tokens for this transition
                 bool generated = TryGenerateForTransition(transition, tokens);
                 if (generated)
@@ -205,6 +213,7 @@ namespace ETL_SQL.FuzzTests
                     {
                         if (TryGenerateForTransition(altTransition, tokens))
                         {
+                            VisitedTransitions.Add(altTransition);
                             if (_tokenQueue.Count > 0)
                             {
                                 var token = _tokenQueue.Dequeue();
