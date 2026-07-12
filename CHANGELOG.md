@@ -12,6 +12,43 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-07-12
+
+### Added
+
+**SQL Logic, Parser & Correctness Fuzzing (Phases 1-4 & Hardening)**
+- Shipped pure in-memory `MOCKDB()` crash-testing fuzz harness, executing up to 1,000,000 queries in under 5 minutes without memory leaks or unhandled parser faults.
+- Added **NoREC (No Relation Query Evaluation)** correctness checks, automatically comparing optimized count queries against unoptimized case-when sum queries on `MOCKDB()` to assert logical execution parity.
+- Added **Token Corruption & Mutation Fuzzing** (5% probability) to ensure the parser recovers cleanly with structured `SyntaxException` warnings rather than unhandled index or reference crashes.
+- Extended fuzzer query walks to support advanced relational syntax: windowing functions (`ROW_NUMBER()`, inline partition/order frames, and named `WINDOW` declarations), filtering clauses (`QUALIFY` and aggregate `FILTER(WHERE...)` clauses), and advanced grouping set combinations (`ROLLUP`, `CUBE`, `GROUPING SETS`, `ALL`).
+- Added diagnostics, concurrency blocks (`PARALLEL BEGIN ... END`), transactional bounds (`COMMIT`/`ROLLBACK`), system options (`SHOW`/`SET`), and global variables (`@@NOW`, `@@TODAY`).
+- Integrated recursive AST expression minimizer (`QueryMinimizer.cs`) to isolate and prune crashing queries to minimal reproduction cases.
+- Configured fuzzer iterations using the `ETLSQL_FUZZ_ITERATIONS` environment variable, defaulting to 500 for check-ins.
+
+**Column-to-Column Interactive Lineage Engine**
+- Built an interactive, high-fidelity Vanilla JS column-to-column lineage graph engine featuring ReactFlow-style visuals, visual mapping ports, midpoint edge badges, and column path isolation.
+- Added cursor-pinned zoom math, floating details sidebar, Ctrl-Click lineage filtering, node filters, PII toggles, inline formulas, and recursive BFS column lineage traces.
+
+**Shared Connection Governance & Secret Hardening (Phase 7)**
+- Added organization-designated sensitive connection metadata and per-connection use ACLs.
+- Added connection catalog with `SHARED:alias` expansion.
+- Shipped Portal secret store (admin API, provider, key-ring checks).
+- Created native admin services (Slice E) and lifecycle CLIs (Slice A) for secrets.
+- Hardened parsing to reject unquoted `SECRET:` or `ENC:` values and lint unresolvable references.
+
+**High Availability (HA) & Soak Certification (Phase 6)**
+- Added native HA large-job soak runner, HA fault-injection runner, and CLI commands.
+- Integrated HA diagnostics bundle and metrics snapshots.
+- Shipped sustained load workload templates, topology harness, and evidence validation gates for pre-release verification.
+
+**Adaptive Execution & Resource Controller (Phase 2)**
+- Integrated adaptive worker admission and concurrency caps for parallel loops.
+- Wired adaptive batch and memory grant setpoints based on resource sampler.
+- Gated spill writes with adaptive concurrency.
+
+**Allocation Budgets & Spill Churn Reduction (Phase 1)**
+- Met Gate F round-trip performance benchmarks: +74% throughput, -63% GC allocations at scale (10M / 50M rows and 1B scale certification).
+
 ## [0.14.0] — 2026-07-05
 
 ### Added
