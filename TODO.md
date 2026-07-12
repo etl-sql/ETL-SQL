@@ -12,7 +12,7 @@ release begins.
 - [x] Define a versioned structured security-event schema with stable event ID, severity/type, timestamp, actor/effective identity, host/node, tenant, script/job/correlation IDs, policy version/hash, sanitized target, decision, and reason.
 - [x] Emit events for override attempts, denied filesystem/network/connector/process/Docker operations, policy signature/expiry/rollback failures, stale or unavailable policy, machine enrollment changes, and repeated resource-limit violations.
 - [x] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
-- [ ] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
+- [x] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
 
 ### Durable delivery and monitoring
 - [ ] Provide a durable local security-event outbox for every executable, with bounded storage, atomic append, retry, batching, deduplication, jittered backoff, and crash recovery.

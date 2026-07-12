@@ -1,4 +1,6 @@
 using System.Runtime.CompilerServices;
+using System.Collections;
+using System.Text.RegularExpressions;
 using System.Threading;
 using ETL_SQL.Core.Common;
 
@@ -241,31 +243,42 @@ public static class SecurityEventRuntime
     }
 }
 
-public static class SecurityEventSanitizer
+public static partial class SecurityEventSanitizer
 {
     public static SecurityEvent Sanitize(SecurityEvent securityEvent)
+        => Sanitize(securityEvent, GetSensitiveEnvironmentValues());
+
+    internal static SecurityEvent Sanitize(
+        SecurityEvent securityEvent,
+        IEnumerable<string> sensitiveEnvironmentValues)
     {
         ArgumentNullException.ThrowIfNull(securityEvent);
+        ArgumentNullException.ThrowIfNull(sensitiveEnvironmentValues);
+        var environmentValues = sensitiveEnvironmentValues
+            .Where(value => !string.IsNullOrWhiteSpace(value) && value.Length >= 4)
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(value => value.Length)
+            .ToArray();
         return securityEvent with
         {
-            ActorIdentity = Redact(securityEvent.ActorIdentity),
-            EffectiveIdentity = Redact(securityEvent.EffectiveIdentity),
-            HostName = RedactNullable(securityEvent.HostName),
-            NodeId = RedactNullable(securityEvent.NodeId),
-            TenantId = RedactNullable(securityEvent.TenantId),
-            ScriptHash = RedactNullable(securityEvent.ScriptHash),
-            JobId = RedactNullable(securityEvent.JobId),
-            CorrelationId = RedactNullable(securityEvent.CorrelationId),
-            PolicyVersion = RedactNullable(securityEvent.PolicyVersion),
-            PolicyHash = RedactNullable(securityEvent.PolicyHash),
-            SanitizedTarget = SanitizeTarget(securityEvent.SanitizedTarget),
-            Reason = Redact(securityEvent.Reason)
+            ActorIdentity = Redact(securityEvent.ActorIdentity, environmentValues),
+            EffectiveIdentity = Redact(securityEvent.EffectiveIdentity, environmentValues),
+            HostName = RedactNullable(securityEvent.HostName, environmentValues),
+            NodeId = RedactNullable(securityEvent.NodeId, environmentValues),
+            TenantId = RedactNullable(securityEvent.TenantId, environmentValues),
+            ScriptHash = RedactNullable(securityEvent.ScriptHash, environmentValues),
+            JobId = RedactNullable(securityEvent.JobId, environmentValues),
+            CorrelationId = RedactNullable(securityEvent.CorrelationId, environmentValues),
+            PolicyVersion = RedactNullable(securityEvent.PolicyVersion, environmentValues),
+            PolicyHash = RedactNullable(securityEvent.PolicyHash, environmentValues),
+            SanitizedTarget = SanitizeTarget(securityEvent.SanitizedTarget, environmentValues),
+            Reason = SanitizeFreeText(securityEvent.Reason, environmentValues)
         };
     }
 
-    private static string SanitizeTarget(string target)
+    private static string SanitizeTarget(string target, IReadOnlyList<string> environmentValues)
     {
-        var redacted = Redact(target);
+        var redacted = Redact(target, environmentValues);
         if (Path.IsPathRooted(redacted))
             return Path.GetFileName(redacted) is { Length: > 0 } name ? $"<path>/{name}" : "<path>";
         if (redacted.Contains("://", StringComparison.Ordinal)
@@ -276,10 +289,51 @@ public static class SecurityEventSanitizer
         return redacted;
     }
 
+    private static string SanitizeFreeText(string value, IReadOnlyList<string> environmentValues)
+    {
+        var redacted = Redact(value, environmentValues);
+        redacted = ConnectionStringPattern().Replace(redacted, "<connection-string>");
+        redacted = UrlQueryPattern().Replace(redacted, match => $"{match.Groups[1].Value}?<query-redacted>");
+        redacted = WindowsPathPattern().Replace(redacted, "<path>");
+        redacted = UnixPathPattern().Replace(redacted, "<path>");
+        return redacted;
+    }
+
     private static bool LooksLikeConnectionString(string value) =>
         value.Contains(';') && value.Split(';', StringSplitOptions.RemoveEmptyEntries)
             .Count(segment => segment.Contains('=')) >= 2;
 
-    private static string Redact(string value) => SecretRedactor.Redact(value) ?? string.Empty;
-    private static string? RedactNullable(string? value) => SecretRedactor.Redact(value);
+    private static string Redact(string value, IReadOnlyList<string> environmentValues)
+    {
+        var redacted = SecretRedactor.Redact(value) ?? string.Empty;
+        foreach (var environmentValue in environmentValues)
+            redacted = redacted.Replace(environmentValue, SecretRedactor.Mask, StringComparison.Ordinal);
+        return redacted;
+    }
+
+    private static string? RedactNullable(string? value, IReadOnlyList<string> environmentValues) =>
+        value is null ? null : Redact(value, environmentValues);
+
+    private static IEnumerable<string> GetSensitiveEnvironmentValues()
+    {
+        foreach (DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            var key = entry.Key?.ToString();
+            var value = entry.Value?.ToString();
+            if (SecretRedactor.IsSensitiveKey(key) && !string.IsNullOrWhiteSpace(value))
+                yield return value;
+        }
+    }
+
+    [GeneratedRegex(@"(?:\b[A-Za-z][A-Za-z0-9_ ]*\s*=\s*[^;\r\n]*;){2,}(?:[A-Za-z][A-Za-z0-9_ ]*\s*=\s*[^;\r\n]*)?", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ConnectionStringPattern();
+
+    [GeneratedRegex("""\b(https?://[^\s?'\"]+)\?[^\s'\"]+""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex UrlQueryPattern();
+
+    [GeneratedRegex("""(?:[A-Za-z]:\\|\\\\)[^\r\n'\"]+""", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex WindowsPathPattern();
+
+    [GeneratedRegex("""(?<![:/A-Za-z0-9])/(?:[^/\s'\"]+/)+[^/\s'\",;:]+""", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex UnixPathPattern();
 }

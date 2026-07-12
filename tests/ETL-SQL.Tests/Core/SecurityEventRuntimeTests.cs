@@ -101,6 +101,54 @@ public sealed class SecurityEventRuntimeTests
         Assert.Equal("service:etl-sql", securityEvent.EffectiveIdentity);
     }
 
+    [Fact]
+    public void Emit_RedactsAdversarialPayloadBeforeSinkBoundary()
+    {
+        const string environmentKey = "ETLSQL_SECURITY_TEST_SECRET";
+        const string environmentSecret = "environment-secret-7d21";
+        var previous = Environment.GetEnvironmentVariable(environmentKey);
+        Environment.SetEnvironmentVariable(environmentKey, environmentSecret);
+        try
+        {
+            var sink = new RecordingSink();
+            using var scope = SecurityEventRuntime.UseSinkForScope(sink);
+            var securityEvent = SecurityEventContract.Create(
+                SecurityEventSeverity.Error,
+                SecurityEventType.OperationDenied,
+                "user:42",
+                "service:runner",
+                "https://api.example.test/private/data?token=query-secret",
+                SecurityEventDecision.Denied,
+                "Request https://api.example.test/v1?token=query-secret failed; " +
+                "Server=db01;Database=Sales;Password=connection-secret; " +
+                $"environment={environmentSecret}; Windows=C:\\private\\payroll.csv; " +
+                "Unix=/srv/private/payroll.csv;\n" +
+                "at Connector.Send in C:\\agent\\src\\Connector.cs:line 42") with
+            {
+                NodeId = $"node-{environmentSecret}"
+            };
+
+            SecurityEventRuntime.Emit(securityEvent);
+
+            var emitted = Assert.Single(sink.Events);
+            var serialized = SecurityEventContract.Serialize(emitted);
+            Assert.Equal("https://api.example.test", emitted.SanitizedTarget);
+            Assert.DoesNotContain("query-secret", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("connection-secret", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain(environmentSecret, serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("C:\\private", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("/srv/private", serialized, StringComparison.Ordinal);
+            Assert.DoesNotContain("C:\\agent", serialized, StringComparison.Ordinal);
+            Assert.Contains("<connection-string>", emitted.Reason, StringComparison.Ordinal);
+            Assert.Contains("?<query-redacted>", emitted.Reason, StringComparison.Ordinal);
+            Assert.Contains("<path>", emitted.Reason, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(environmentKey, previous);
+        }
+    }
+
     private static ExecutionPolicySnapshot Snapshot(string correlationId) => new()
     {
         IsEnrolled = true,
