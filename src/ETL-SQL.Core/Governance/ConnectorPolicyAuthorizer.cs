@@ -6,7 +6,7 @@ namespace ETL_SQL.Core.Governance;
 public sealed class ConnectorPolicyDeniedException(
     OperationPolicyDecision decision,
     Exception? innerException = null)
-    : SecurityException(decision.Reason)
+    : SecurityException(decision.Reason), ISecurityEventEmittedException
 {
     public OperationPolicyDecision Decision { get; } = decision;
     public Exception? AuthorizationFailure { get; } = innerException;

@@ -1343,6 +1343,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             }
             catch (Exception ex)
             {
+                SecurityEventRuntime.EmitUnhandledSecurityDenial(this,
+                    statement.GetType().Name, ex);
                 if (node != null)
                 {
                     node.Status = ExecutionStatus.Faulted;

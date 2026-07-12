@@ -30,7 +30,7 @@ public static class ProcessPolicyRules
         var decision = OperationPolicyDecision.Deny(snapshot, "Process:AllowedDockerImages",
             image, $"permitted images: [{string.Join(", ", allowed)}]",
             $"Enterprise policy denied Docker image '{image}'.");
-        throw new SecurityException(decision.Reason);
+        throw new OperationPolicyDeniedException(decision);
     }
 
     /// <summary>

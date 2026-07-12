@@ -18,11 +18,16 @@ public sealed class MutationGuardrailEnforcementTests : IDisposable
     [Fact]
     public async Task DestructiveOnPersistentTarget_RequiresWhatIf_IsDenied()
     {
+        var eventSink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
         EnterprisePolicyRuntime.SetCurrent(Enrolled(requireWhatIf: true, requireTransaction: false));
 
         var denied = await Assert.ThrowsAnyAsync<Exception>(() =>
             ExecuteAsync("DELETE FROM customers;"));
         Assert.Contains("WHAT IF", denied.ToString(), StringComparison.OrdinalIgnoreCase);
+        var securityEvent = Assert.Single(eventSink.Events);
+        Assert.Equal(SecurityEventType.OperationDenied, securityEvent.Type);
+        Assert.Equal("DELETE:customers", securityEvent.SanitizedTarget);
     }
 
     [Fact]
@@ -82,5 +87,11 @@ public sealed class MutationGuardrailEnforcementTests : IDisposable
             DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
             DateTimeOffset.UtcNow, document,
             EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues()));
+    }
+
+    private sealed class RecordingSecurityEventSink : ISecurityEventSink
+    {
+        public List<SecurityEvent> Events { get; } = [];
+        public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
     }
 }

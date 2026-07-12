@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Threading;
 using ETL_SQL.Core.Common;
 
@@ -12,10 +13,19 @@ public interface ISecurityEventSink
     void Emit(SecurityEvent securityEvent);
 }
 
+public interface ISecurityEventEmittedException;
+
+public sealed class OperationPolicyDeniedException(OperationPolicyDecision decision)
+    : ETL_SQL.Services.SecurityException(decision.Reason), ISecurityEventEmittedException
+{
+    public OperationPolicyDecision Decision { get; } = decision;
+}
+
 public static class SecurityEventRuntime
 {
     private static ISecurityEventSink _sink = NullSecurityEventSink.Instance;
     private static readonly AsyncLocal<ISecurityEventSink?> ScopedSink = new();
+    private static readonly ConditionalWeakTable<Exception, object> EmittedExceptions = new();
 
     public static ISecurityEventSink Sink
     {
@@ -163,6 +173,32 @@ public static class SecurityEventRuntime
         Emit(securityEvent);
     }
 
+    public static void EmitUnhandledSecurityDenial(
+        IExecutionContext context,
+        string target,
+        Exception exception)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(exception);
+        if (exception is not ETL_SQL.Services.SecurityException
+            || exception is ISecurityEventEmittedException)
+            return;
+        lock (EmittedExceptions)
+        {
+            if (EmittedExceptions.TryGetValue(exception, out _)) return;
+            EmittedExceptions.Add(exception, new object());
+        }
+
+        var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
+            EnterprisePolicyRuntime.Current, Environment.UserName,
+            context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
+            "unknown");
+        var decision = new OperationPolicyDecision(false, "Engine:SecurityGuardrail", target,
+            "engine security invariants", exception.Message, snapshot.CorrelationId, snapshot.JobId,
+            snapshot.PolicyVersion, snapshot.PolicyHash);
+        EmitPolicyDenial(snapshot, decision);
+    }
+
     public static void Emit(SecurityEvent securityEvent)
     {
         ArgumentNullException.ThrowIfNull(securityEvent);
@@ -232,7 +268,8 @@ public static class SecurityEventSanitizer
         var redacted = Redact(target);
         if (Path.IsPathRooted(redacted))
             return Path.GetFileName(redacted) is { Length: > 0 } name ? $"<path>/{name}" : "<path>";
-        if (Uri.TryCreate(redacted, UriKind.Absolute, out var uri))
+        if (redacted.Contains("://", StringComparison.Ordinal)
+            && Uri.TryCreate(redacted, UriKind.Absolute, out var uri))
             return $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":{uri.Port}")}";
 
         if (LooksLikeConnectionString(redacted)) return "<connection-string>";

@@ -20,7 +20,7 @@ public sealed record AuthorizedFileSystemPath(
 public sealed class FileSystemPolicyDeniedException(
     OperationPolicyDecision decision,
     Exception? innerException = null)
-    : SecurityException(decision.Reason)
+    : SecurityException(decision.Reason), ISecurityEventEmittedException
 {
     public OperationPolicyDecision Decision { get; } = decision;
     public Exception? AuthorizationFailure { get; } = innerException;
