@@ -1,5 +1,4 @@
 // Story registry. Add a surface by writing a *.story.js module and listing it here.
-import dag from './dag.story.js';
 import scriptEditor from './script-editor.story.js';
 import designer from './designer.story.js';
 import lineageUi from './lineage-ui.story.js';
@@ -11,10 +10,9 @@ import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
 import policyAuthorityAdmin from './policy-authority-admin.story.js';
-import lineageMockup from './lineage-mockup.story.js';
+import lineageDag from './lineage-dag.story.js';
 
 export const stories = [
-  dag,
   scriptEditor,
   designer,
   lineageUi,
@@ -26,5 +24,5 @@ export const stories = [
   secretsAdmin,
   connectionsAdmin,
   policyAuthorityAdmin,
-  lineageMockup
+  lineageDag
 ];

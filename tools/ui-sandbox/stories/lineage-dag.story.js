@@ -121,8 +121,8 @@ function _computeLayout(nodes, edges) {
 }
 
 export default {
-  id: 'lineage-mockup',
-  title: 'Card-based Lineage Mockup',
+  id: 'lineage-dag',
+  title: 'Lineage DAG',
   subtitle: 'Interactive column-level flow',
   fixtures: [
     { id: 'kitchen', label: 'Kitchen Sink (~106 nodes)' },
