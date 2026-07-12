@@ -66,6 +66,21 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       }
       return { created, updated };
     },
+    async getHelp(type) {
+      if (type === 'FLATFILE') {
+        return {
+          content: `# FLATFILE (CSV) Options\n\nConfigure flat file ingestion options:\n- **PATH** — Absolute path to the flat file.\n- **DELIMITER** — Column delimiter character (default: \`,\`).\n- **HEADER** — Set to \`ON\` to use the first line as column header mappings.\n- **SKIP** — Number of rows to skip at the top of the file.\n\nExample:\n\`\`\`\nPATH=C:\\\\data\\\\sales.csv\nDELIMITER=,\nHEADER=ON\n\`\`\``
+        };
+      }
+      if (type === 'MSSQL') {
+        return {
+          content: `# MSSQL Options\n\nMicrosoft SQL Server connection options:\n- **SERVER** — Host name or IP address of the database server.\n- **DATABASE** — Database catalog name.\n- **TRUSTED_CONNECTION** — Set to \`TRUE\` to use Windows authentication.\n- **ENCRYPT** — Set to \`TRUE\` to encrypt the SQL transport channel.\n\nExample:\n\`\`\`\nSERVER=sql-prod-01\nDATABASE=Sales\nENCRYPT=TRUE\n\`\`\``
+        };
+      }
+      return {
+        content: `# ${type} Options\n\nStandard option configuration for the **${type}** connector.\n- Consult the [Documentation Guide](file:///Docs/Reference/Data_Connectors.md) for full parameter schema.\n- Mask sensitive parameters by referencing \`SECRET:secret_name\`.`
+      };
+    },
   };
 }
 
