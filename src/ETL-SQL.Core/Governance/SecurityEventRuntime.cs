@@ -25,6 +25,7 @@ public sealed class OperationPolicyDeniedException(OperationPolicyDecision decis
 
 public static class SecurityEventRuntime
 {
+    private static readonly object SinkSync = new();
     private static ISecurityEventSink _sink = NullSecurityEventSink.Instance;
     private static readonly AsyncLocal<ISecurityEventSink?> ScopedSink = new();
     private static readonly ConditionalWeakTable<Exception, object> EmittedExceptions = new();
@@ -34,6 +35,28 @@ public static class SecurityEventRuntime
         get => Volatile.Read(ref _sink);
         set => Volatile.Write(ref _sink, value ?? throw new ArgumentNullException(nameof(value)));
     }
+
+    public static SecurityEventOutbox ConfigureLocalOutbox(string databasePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
+        var fullPath = Path.GetFullPath(databasePath);
+        lock (SinkSync)
+        {
+            if (_sink is SecurityEventOutbox existing
+                && string.Equals(existing.DatabasePath, fullPath, PathComparison()))
+                return existing;
+            var outbox = new SecurityEventOutbox(new SecurityEventOutboxOptions
+            {
+                DatabasePath = fullPath
+            });
+            Sink = outbox;
+            return outbox;
+        }
+    }
+
+    private static StringComparison PathComparison() => OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 
     /// <summary>
     /// Emits a denial after sanitization. Sink failures are isolated from enforcement: policy has

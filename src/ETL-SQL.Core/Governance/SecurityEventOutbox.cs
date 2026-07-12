@@ -39,6 +39,8 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
     private readonly string _connectionString;
     private readonly Func<double> _jitter;
 
+    public string DatabasePath => _options.DatabasePath;
+
     public SecurityEventOutbox(
         SecurityEventOutboxOptions options,
         Func<double>? jitter = null)

@@ -371,7 +371,13 @@ public static class EnterprisePolicyRuntime
     {
         var store = enrollmentStore ?? new EnterpriseEnrollmentStore();
         var enrollment = EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store);
-        if (enrollment is null) return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        if (enrollment is null)
+        {
+            SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Standalone());
+            return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        }
+
+        SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Enrolled(store.Path));
 
         using var http = CreateHttpClient(enrollment);
         var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
@@ -418,5 +424,24 @@ public static class EnterprisePolicyRuntime
         }
         throw new InvalidOperationException(
             $"Enterprise client certificate '{normalized}' was not found with an accessible private key.");
+    }
+}
+
+public static class SecurityEventOutboxPaths
+{
+    public static string Standalone()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(local))
+            throw new InvalidOperationException("Local application data directory could not be resolved for the security event outbox.");
+        return Path.Combine(local, "ETL-SQL", "Security", "security-events.db");
+    }
+
+    public static string Enrolled(string enrollmentPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(enrollmentPath);
+        var directory = Path.GetDirectoryName(Path.GetFullPath(enrollmentPath))
+            ?? throw new InvalidOperationException("Enterprise enrollment path has no parent directory.");
+        return Path.Combine(directory, "cache", "security-events.db");
     }
 }
