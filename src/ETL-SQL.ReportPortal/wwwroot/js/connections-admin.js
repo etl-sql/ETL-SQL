@@ -126,7 +126,7 @@ const PANEL_HTML = `
         <textarea id="conn-options" rows="7" spellcheck="false" placeholder="SERVER=sql01&#10;DATABASE=Sales&#10;PASSWORD=SECRET:sales_db_password" style="flex: 1; min-width: 0;"></textarea>
         <div id="conn-help-box" style="flex: 1; min-width: 0; border: 1px solid var(--portal-border); border-radius: var(--portal-radius-sm); padding: 12px; font-size: 13px; max-height: 148px; overflow-y: auto; background: var(--portal-bg-hover); display: none;">
           <div id="conn-help-title" style="margin-top: 0; margin-bottom: 6px; font-size: 13px; font-weight: 700; color: var(--portal-text); display: flex; justify-content: space-between; align-items: center;">
-            <span>Connection Options Help</span>
+            <span id="conn-help-title-text">Connection Options Help</span>
             <button class="btn btn-outline btn-sm" id="conn-help-expand-btn" style="padding: 2px 6px; font-size: 11px; cursor: pointer;">⛶ Expand</button>
           </div>
           <div id="conn-help-content" style="white-space: pre-wrap; font-family: inherit; line-height: 1.4;">Loading help...</div>
@@ -168,14 +168,16 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
   async function loadConnectorHelp(type) {
     const helpBox = $('conn-help-box');
     const helpContent = $('conn-help-content');
-    const helpTitle = $('conn-help-title');
+    const helpTitleText = $('conn-help-title-text');
     
     if (!type) {
       helpBox.style.display = 'none';
       return;
     }
     
-    helpTitle.innerHTML = `<strong>${esc(type)} Connection Options</strong>`;
+    if (helpTitleText) {
+      helpTitleText.innerHTML = `<strong>${esc(type)} Connection Options</strong>`;
+    }
     helpContent.innerHTML = 'Loading help...';
     helpBox.style.display = 'block';
     
