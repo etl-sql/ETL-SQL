@@ -123,6 +123,31 @@ public sealed class ColumnarSelectRoutingTests
     }
 
     [Fact]
+    public async Task ColumnarTempDowngradesForAlterTableAndPreservesRows()
+    {
+        var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+        evaluator.UseColumnarTempTables = true;
+        evaluator.IsPersistentSession = false;
+        await evaluator.Evaluate(ParseScript(
+            "CREATE TABLE #native (Id INT, Name VARCHAR(20)); " +
+            "INSERT INTO #native VALUES (1, 'one'), (2, 'two'); " +
+            "ALTER TABLE #native ADD Age INT; " +
+            "UPDATE #native SET Age = 30 WHERE Id = 1; " +
+            "ALTER TABLE #native RENAME COLUMN Age TO Years; " +
+            "ALTER TABLE #native DROP COLUMN Name;"));
+
+        var rowStore = Assert.IsType<InMemoryDataSource>(evaluator.Connections["#native"]);
+        var rows = (await rowStore.ReadBatches().ToListAsync()).SelectMany(batch => batch.Rows)
+            .OrderBy(row => Convert.ToInt32(row["Id"]))
+            .ToList();
+
+        Assert.Equal(new[] { "Id", "Years" }, (await rowStore.GetColumnsAsync()).ToArray());
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(30, Convert.ToInt32(rows[0]["Years"]));
+        Assert.Null(rows[1]["Years"]);
+    }
+
+    [Fact]
     public async Task ReplaceDowngradesWhileUpdateAndDeleteUseColumnarDeltas()
     {
         var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

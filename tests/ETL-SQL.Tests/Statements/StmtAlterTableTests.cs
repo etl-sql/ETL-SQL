@@ -60,6 +60,28 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task AlterTable_DropMiddleColumn_PreservesFollowingColumnValues()
+        {
+            var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
+            evaluator.UseColumnarTempTables = false;
+            var script = @"
+                CREATE TABLE #DropMiddle (Id INT, Name VARCHAR(10), Score INT);
+                INSERT INTO #DropMiddle (Id, Name, Score) VALUES (1, 'Alice', 90), (2, 'Bob', 80);
+                ALTER TABLE #DropMiddle DROP COLUMN Name;
+                SELECT Id, Score FROM #DropMiddle ORDER BY Id;
+            ";
+
+            await evaluator.Evaluate(new Lexer(script).TokenizeToScript());
+            var result = evaluator.LastResult;
+
+            Assert.Equal(2, result.Rows.Count);
+            Assert.Equal(1, Convert.ToInt32(result.Rows[0]["Id"]));
+            Assert.Equal(90, Convert.ToInt32(result.Rows[0]["Score"]));
+            Assert.Equal(2, Convert.ToInt32(result.Rows[1]["Id"]));
+            Assert.Equal(80, Convert.ToInt32(result.Rows[1]["Score"]));
+        }
+
+        [Fact]
         public async Task AlterTable_RenameColumn()
         {
             var evaluator = _serviceProvider.GetRequiredService<Evaluator>();

@@ -4,6 +4,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -33,6 +34,16 @@ public class AlterTableStatementHandler : IStatementHandler
         {
             _logger.WriteLine($"WHAT IF: Would execute ALTER TABLE {stmt.TargetTable.TableName} ({stmt.Action})", ConsoleColor.Yellow);
             return;
+        }
+
+        if (destination is AppendOnlyColumnDataSource)
+        {
+            var connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
+            destination = await TempTableStorageRouter.EnsureMutableAsync(
+                context,
+                connName,
+                destination,
+                "ALTER TABLE");
         }
 
         if (destination is InMemoryDataSource mem)

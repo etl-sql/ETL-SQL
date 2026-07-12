@@ -334,6 +334,35 @@ public class Row
         _dynamicColumns?.Remove(columnName);
     }
 
+    internal void RemoveSchemaSlotAt(int index)
+    {
+        if (_values == null || index < 0 || index >= _values.Length) return;
+
+        var newValues = new object?[_values.Length - 1];
+        if (index > 0)
+            Array.Copy(_values, 0, newValues, 0, index);
+        if (index < _values.Length - 1)
+            Array.Copy(_values, index + 1, newValues, index, _values.Length - index - 1);
+        _values = newValues;
+    }
+
+    internal void RemoveSchemaSlotsAt(IReadOnlyCollection<int> indices)
+    {
+        if (_values == null || indices.Count == 0) return;
+
+        var removeSet = new HashSet<int>(indices.Where(index => index >= 0 && index < _values.Length));
+        if (removeSet.Count == 0) return;
+
+        var newValues = new object?[_values.Length - removeSet.Count];
+        int write = 0;
+        for (int read = 0; read < _values.Length; read++)
+        {
+            if (!removeSet.Contains(read))
+                newValues[write++] = _values[read];
+        }
+        _values = newValues;
+    }
+
     /// <summary>
     /// Returns an enumerable of all column names (both schema-defined and dynamic).
     /// Optimized to avoid creating a full dictionary copy.
@@ -544,11 +573,29 @@ public class DataTable
 
     public void RemoveColumn(string columnName)
     {
+        int removedAt = Schema.GetIndex(columnName);
+        if (removedAt >= 0)
+        {
+            foreach (var row in Rows)
+                row.RemoveSchemaSlotAt(removedAt);
+        }
         Schema.RemoveColumn(columnName);
     }
 
     public void RemoveColumns(IReadOnlyCollection<string> columnNames)
     {
+        if (columnNames.Count > 0)
+        {
+            var removedIndices = columnNames
+                .Select(Schema.GetIndex)
+                .Where(index => index >= 0)
+                .ToArray();
+            if (removedIndices.Length > 0)
+            {
+                foreach (var row in Rows)
+                    row.RemoveSchemaSlotsAt(removedIndices);
+            }
+        }
         Schema.RemoveColumns(columnNames);
     }
 
