@@ -145,9 +145,13 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         var explicitMatch = allowed.Any(pattern =>
             !pattern.Contains('*') && HostMatches(pattern, literal));
         if (NetworkDestinationRules.IsRestrictedRange(literal) && !explicitMatch)
+        {
+            SecurityEventRuntime.EmitNetworkDenial(policy, host,
+                "DNS resolution reached a policy-restricted network address.");
             throw new SecurityException(
                 $"Enterprise policy denied connection to '{host}': it resolved to internal address '{literal}' " +
                 "(DNS rebinding to a loopback/link-local/private range is blocked; list the address explicitly to allow it).");
+        }
     }
 
     private static void EnforceSchemeAndPort(ExecutionPolicySnapshot snapshot, Uri url)

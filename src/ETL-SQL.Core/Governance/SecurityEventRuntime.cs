@@ -118,6 +118,51 @@ public static class SecurityEventRuntime
         Emit(securityEvent);
     }
 
+    public static void EmitOverrideAttempt(
+        ExecutionPolicySnapshot snapshot,
+        string overrideName)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var securityEvent = SecurityEventContract.Create(
+            SecurityEventSeverity.Warning,
+            SecurityEventType.OverrideAttempt,
+            snapshot.Actor,
+            snapshot.Actor,
+            overrideName,
+            SecurityEventDecision.Warning,
+            "A script enabled a local security override.") with
+        {
+            HostName = Environment.MachineName,
+            ScriptHash = snapshot.ScriptHash,
+            JobId = snapshot.JobId,
+            CorrelationId = snapshot.CorrelationId,
+            PolicyVersion = snapshot.PolicyVersion,
+            PolicyHash = snapshot.PolicyHash
+        };
+        Emit(securityEvent);
+    }
+
+    public static void EmitNetworkDenial(
+        EffectiveEnterprisePolicy policy,
+        string host,
+        string reason)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        var securityEvent = SecurityEventContract.Create(
+            SecurityEventSeverity.Error,
+            SecurityEventType.OperationDenied,
+            "machine",
+            "machine",
+            host,
+            SecurityEventDecision.Denied,
+            reason) with
+        {
+            HostName = Environment.MachineName,
+            PolicyVersion = policy.PolicyVersion
+        };
+        Emit(securityEvent);
+    }
+
     public static void Emit(SecurityEvent securityEvent)
     {
         ArgumentNullException.ThrowIfNull(securityEvent);

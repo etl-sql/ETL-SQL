@@ -2,6 +2,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using ETL_SQL.Services;
@@ -15,6 +16,8 @@ namespace ETL_SQL.Tests.Security
         [Fact]
         public async Task TestSetSecurityOverrideParsesAndEvaluates()
         {
+            var eventSink = new RecordingSecurityEventSink();
+            using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
 
@@ -39,6 +42,14 @@ namespace ETL_SQL.Tests.Security
             Assert.True(evaluator.AllowDeepRecursion);
             await Execute(evaluator, "SET ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS OFF;");
             Assert.False(evaluator.AllowDeepRecursion);
+
+            Assert.Equal(3, eventSink.Events.Count);
+            Assert.All(eventSink.Events, securityEvent =>
+            {
+                Assert.Equal(SecurityEventType.OverrideAttempt, securityEvent.Type);
+                Assert.Equal(SecurityEventSeverity.Warning, securityEvent.Severity);
+                Assert.False(string.IsNullOrWhiteSpace(securityEvent.CorrelationId));
+            });
         }
 
         private async Task Execute(Evaluator evaluator, string sql)
@@ -48,6 +59,12 @@ namespace ETL_SQL.Tests.Security
             var parser = new Parser(tokens);
             var script = parser.Parse();
             await evaluator.Evaluate(script);
+        }
+
+        private sealed class RecordingSecurityEventSink : ISecurityEventSink
+        {
+            public List<SecurityEvent> Events { get; } = [];
+            public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
         }
     }
 }
