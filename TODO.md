@@ -80,6 +80,14 @@ SQL fuzzer (`ParserFuzzTests` / `GrammarWalkGenerator` / `QueryMinimizer`):
   `grammar-accepted-parser-rejected` (precision gap). **Finding:** the current generator produces
   parser-invalid SQL ~95% of iterations (see `grammar-generated-parser-rejected`), and the grammar
   is looser than the parser on the majority of those — a generator-fidelity gap now measurable.
+- [x] Add bounded parser-accepted candidate retry before engine execution
+  (`ETLSQL_FUZZ_GENERATION_ATTEMPTS`, default 10). Rejected candidates still feed
+  `parser-diagnostic`, `grammar-generated-parser-rejected`, and grammar/parser precision buckets,
+  but successful retries let each fuzzer iteration spend more time exercising parser-accepted SQL.
+- [x] Improve raw generator fidelity rather than relying on retry: reduce
+  `grammar-generated-parser-rejected` at default settings by teaching the walker parser-valid clause
+  ordering and statement-specific completion rules (especially SELECT suffix order, DDL/report
+  bodies, and expression/operator placement).
 - [x] Split fuzzer output into buckets: parser-crash, execution-crash, differential-correctness
   (the bug buckets that fail the run) plus parser-diagnostic and the two conformance buckets
   (informational). Replaces the single `crashCount`.
