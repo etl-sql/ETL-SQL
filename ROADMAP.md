@@ -23,6 +23,7 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
 - [ ] Add a Portal administrator UI for policy validation, version history, staged publication, activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.
 - [ ] Run and retain the performance lane plus Windows and Linux enterprise certification evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone behavior.
+- [ ] **Canary Policy Rollout:** Implement progressive policy rollouts allowing administrators to target a subset of enrolled machine groups or environments (e.g. a 10% canary nodes pool) to validate new filesystem path and connection restrictions before deploying fleet-wide.
 
 #### Phase 2: Central Security Events
 
