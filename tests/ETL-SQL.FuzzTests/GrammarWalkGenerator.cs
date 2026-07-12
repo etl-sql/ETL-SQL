@@ -12,6 +12,7 @@ namespace ETL_SQL.FuzzTests
         private readonly GrammarStateTree _tree;
         private readonly Random _rng;
         private readonly Queue<Token> _tokenQueue = new();
+        private int _blockDepth = 0;
 
         private static readonly string[] MockTables = { "Users", "Products", "Sales", "Employees" };
         private static readonly string[] MockColumns = { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
@@ -19,7 +20,7 @@ namespace ETL_SQL.FuzzTests
 
         private static readonly HashSet<string> AllowedStatementStarters = new(StringComparer.OrdinalIgnoreCase)
         {
-            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH", "COMMIT", "ROLLBACK"
+            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH", "COMMIT", "ROLLBACK", "PARALLEL", "SHOW"
         };
 
         public GrammarWalkGenerator(GrammarStateTree tree, Random rng)
@@ -33,9 +34,10 @@ namespace ETL_SQL.FuzzTests
             var tokens = new List<Token>();
             var currentState = _tree.Root;
             int stepCount = 0;
-            const int maxSteps = 150; // Increased to support multi-statement scripts
+            const int maxSteps = 250; // Higher limit for multi-statement scripts
 
             _tokenQueue.Clear();
+            _blockDepth = 0;
 
             while (stepCount++ < maxSteps)
             {
@@ -51,9 +53,34 @@ namespace ETL_SQL.FuzzTests
                     break;
                 }
 
+                // If in a block and at Root, allow closing block randomly
+                if (currentState == _tree.Root && _blockDepth > 0 && _rng.Next(10) < 3)
+                {
+                    var endTokens = TokenizeBody("END;");
+                    foreach (var t in endTokens) _tokenQueue.Enqueue(t);
+                    _blockDepth--;
+                    continue;
+                }
+
                 // Escape hatch to end statements and avoid self-loop traps
                 if (currentState != _tree.Root && tokens.Count > 4 && _rng.Next(10) < 3)
                 {
+                    // Inject query suffixes (WINDOW, QUALIFY) before ending SELECT statements
+                    var lastKeyword = GetLastStatementKeyword(tokens, out _);
+                    if (lastKeyword == "SELECT")
+                    {
+                        if (_rng.Next(10) < 3) // 30% chance of appending QUALIFY
+                        {
+                            var qualifyTokens = TokenizeBody("QUALIFY UserID > 5");
+                            tokens.AddRange(qualifyTokens);
+                        }
+                        if (_rng.Next(10) < 3) // 30% chance of appending WINDOW
+                        {
+                            var windowTokens = TokenizeBody("WINDOW w AS (PARTITION BY Department)");
+                            tokens.AddRange(windowTokens);
+                        }
+                    }
+
                     var semi = new Token(TokenType.SEMICOLON, ";", 1, tokens.Count + 1, 1, tokens.Count + 2);
                     tokens.Add(semi);
                     currentState = _tree.Root;
@@ -81,17 +108,23 @@ namespace ETL_SQL.FuzzTests
                 var transition = transitions[_rng.Next(transitions.Count)];
                 
                 // Try generating tokens for this transition
-                bool generated = TryGenerateForTransition(transition);
+                bool generated = TryGenerateForTransition(transition, tokens);
                 if (generated)
                 {
                     if (_tokenQueue.Count > 0)
                     {
                         var token = _tokenQueue.Dequeue();
                         tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+
+                        // Track block depth if we generated BEGIN
+                        if (token.Type == TokenType.BEGIN)
+                        {
+                            _blockDepth++;
+                        }
                     }
                     currentState = transition.Target;
 
-                    if (currentState == _tree.Root && tokens.Count > 12 && _rng.Next(2) == 0)
+                    if (currentState == _tree.Root && tokens.Count > 15 && _rng.Next(2) == 0)
                     {
                         break;
                     }
@@ -103,12 +136,17 @@ namespace ETL_SQL.FuzzTests
                     bool found = false;
                     foreach (var altTransition in shuffledTransitions)
                     {
-                        if (TryGenerateForTransition(altTransition))
+                        if (TryGenerateForTransition(altTransition, tokens))
                         {
                             if (_tokenQueue.Count > 0)
                             {
                                 var token = _tokenQueue.Dequeue();
                                 tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
+
+                                if (token.Type == TokenType.BEGIN)
+                                {
+                                    _blockDepth++;
+                                }
                             }
                             currentState = altTransition.Target;
                             found = true;
@@ -130,11 +168,22 @@ namespace ETL_SQL.FuzzTests
                 tokens.Add(token with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + token.Value.Length });
             }
 
+            // Cleanly close remaining blocks
+            while (_blockDepth > 0)
+            {
+                var endTokens = TokenizeBody("; END;");
+                foreach (var t in endTokens)
+                {
+                    tokens.Add(t with { Line = 1, Column = tokens.Count + 1, EndLine = 1, EndColumn = tokens.Count + 1 + t.Value.Length });
+                }
+                _blockDepth--;
+            }
+
             tokens.Add(new Token(TokenType.EOF, "", 1, tokens.Count + 1, 1, tokens.Count + 1));
             return tokens;
         }
 
-        private bool TryGenerateForTransition(StateTransition transition)
+        private bool TryGenerateForTransition(StateTransition transition, List<Token> tokensSoFar)
         {
             var label = transition.Label;
             if (!string.IsNullOrEmpty(label))
@@ -163,13 +212,105 @@ namespace ETL_SQL.FuzzTests
                     var tok = new Token(TokenType.VARIABLE, val, 0, 0, 0, 0);
                     if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
+                else if (label.Equals("<group_by_token>", StringComparison.OrdinalIgnoreCase))
+                {
+                    int choice = _rng.Next(5);
+                    string groupText = choice switch
+                    {
+                        0 => "ALL",
+                        1 => $"ROLLUP ({MockColumns[_rng.Next(MockColumns.Length)]})",
+                        2 => $"CUBE ({MockColumns[_rng.Next(MockColumns.Length)]}, {MockColumns[_rng.Next(MockColumns.Length)]})",
+                        3 => $"GROUPING SETS (({MockColumns[_rng.Next(MockColumns.Length)]}), ({MockColumns[_rng.Next(MockColumns.Length)]}))",
+                        _ => $"{MockColumns[_rng.Next(MockColumns.Length)]}, {MockColumns[_rng.Next(MockColumns.Length)]}"
+                    };
+                    var groupTokens = TokenizeBody(groupText);
+                    if (groupTokens.Count > 0 && transition.Condition(groupTokens[0]))
+                    {
+                        foreach (var t in groupTokens) _tokenQueue.Enqueue(t);
+                        return true;
+                    }
+                }
+                else if (label.Equals("<order_by_token>", StringComparison.OrdinalIgnoreCase))
+                {
+                    string orderText = _rng.Next(2) switch
+                    {
+                        0 => "1, 2",
+                        _ => $"{MockColumns[_rng.Next(MockColumns.Length)]} ASC, {MockColumns[_rng.Next(MockColumns.Length)]} DESC NULLS LAST"
+                    };
+                    var orderTokens = TokenizeBody(orderText);
+                    if (orderTokens.Count > 0 && transition.Condition(orderTokens[0]))
+                    {
+                        foreach (var t in orderTokens) _tokenQueue.Enqueue(t);
+                        return true;
+                    }
+                }
                 else if (label.Equals("<expression>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<value>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<sets_assignment_token>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<declaration_token>", StringComparison.OrdinalIgnoreCase) ||
                          label.Equals("<expression_token>", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Generate a recursive expression
+                    // Intercept wildcard loops to generate statement-appropriate structures
+                    var lastKeyword = GetLastStatementKeyword(tokensSoFar, out string? ddlType);
+
+                    if (lastKeyword == "CREATE" || lastKeyword == "ALTER" || lastKeyword == "REPLACE")
+                    {
+                        string? ddlBody = ddlType switch
+                        {
+                            "VISUAL" => "AS BAR (X = Region, Y = SUM(Sales)) STYLE (THEME = dark) TOOLTIP = 'Sales'",
+                            "PAGE" => "AS (myVisual) STRUCTURE = 'A' MAP ('A' = myVisual)",
+                            "DATASET" => "AS SELECT * FROM src.Sales ENCRYPT = MACHINE",
+                            "CONTAINER" => "AS BOX (myVisual)",
+                            _ => null
+                        };
+
+                        if (ddlBody != null)
+                        {
+                            var ddlTokens = TokenizeBody(ddlBody);
+                            if (ddlTokens.Count > 0 && transition.Condition(ddlTokens[0]))
+                            {
+                                foreach (var t in ddlTokens) _tokenQueue.Enqueue(t);
+                                return true;
+                            }
+                        }
+                    }
+                    else if (lastKeyword == "SHOW")
+                    {
+                        string showBody = _rng.Next(4) switch
+                        {
+                            0 => "PROFILE",
+                            1 => "VARIABLES",
+                            2 => "CONNECTIONS",
+                            _ => "LOCKS"
+                        };
+                        var showTokens = TokenizeBody(showBody);
+                        if (showTokens.Count > 0 && transition.Condition(showTokens[0]))
+                        {
+                            foreach (var t in showTokens) _tokenQueue.Enqueue(t);
+                            return true;
+                        }
+                    }
+                    else if (lastKeyword == "SET")
+                    {
+                        bool hasVariable = tokensSoFar.Any(t => t.Type == TokenType.VARIABLE);
+                        if (!hasVariable)
+                        {
+                            string setBody = _rng.Next(3) switch
+                            {
+                                0 => "ALLOW_FILE_OPERATIONS = ON",
+                                1 => "WHAT_IF = ON",
+                                _ => "MAX_STRING_RESULT_SIZE = 50000"
+                            };
+                            var setTokens = TokenizeBody(setBody);
+                            if (setTokens.Count > 0 && transition.Condition(setTokens[0]))
+                            {
+                                foreach (var t in setTokens) _tokenQueue.Enqueue(t);
+                                return true;
+                            }
+                        }
+                    }
+
+                    // Default recursive expression
                     var expr = GenerateExpressionTokens(3);
                     if (expr.Count > 0 && transition.Condition(expr[0]))
                     {
@@ -247,14 +388,13 @@ namespace ETL_SQL.FuzzTests
         {
             var exprTokens = new List<Token>();
 
-            // Leaf base case
             if (depth <= 0 || _rng.Next(3) == 0)
             {
                 exprTokens.Add(GenerateLeafToken());
                 return exprTokens;
             }
 
-            int choice = _rng.Next(4);
+            int choice = _rng.Next(5); // 5 choices to support Window Functions
             switch (choice)
             {
                 case 0: // Binary expression: left OP right
@@ -276,6 +416,10 @@ namespace ETL_SQL.FuzzTests
                     exprTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
                     break;
 
+                case 3: // Window Function
+                    exprTokens.AddRange(GenerateWindowFunctionTokens(depth - 1));
+                    break;
+
                 default: // Function call with 2 args: FUNC2(expr, expr)
                     exprTokens.Add(GenerateFunction2Token());
                     exprTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
@@ -289,15 +433,79 @@ namespace ETL_SQL.FuzzTests
             return exprTokens;
         }
 
+        private List<Token> GenerateWindowFunctionTokens(int depth)
+        {
+            // 30% chance of referring to the newly added named window "w"
+            if (_rng.Next(10) < 3)
+            {
+                return TokenizeBody("ROW_NUMBER() OVER w");
+            }
+
+            var winTokens = new List<Token>();
+
+            string func = _rng.Next(4) switch
+            {
+                0 => "ROW_NUMBER",
+                1 => "SUM",
+                2 => "AVG",
+                _ => "COUNT"
+            };
+
+            winTokens.Add(new Token(TokenType.IDENTIFIER, func, 0, 0, 0, 0));
+            winTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
+            if (func != "ROW_NUMBER")
+            {
+                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+            }
+            winTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
+
+            // Append optional aggregate FILTER(WHERE ...) clause
+            if (_rng.Next(3) == 0)
+            {
+                winTokens.AddRange(TokenizeBody($" FILTER(WHERE {MockColumns[_rng.Next(MockColumns.Length)]} > 10)"));
+            }
+
+            winTokens.Add(new Token(TokenType.OVER, "OVER", 0, 0, 0, 0));
+            winTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
+
+            if (_rng.Next(2) == 0)
+            {
+                winTokens.Add(new Token(TokenType.IDENTIFIER, "PARTITION", 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.BY, "BY", 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+            }
+
+            if (_rng.Next(2) == 0)
+            {
+                winTokens.Add(new Token(TokenType.ORDER, "ORDER", 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.BY, "BY", 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+                if (_rng.Next(2) == 0)
+                {
+                    winTokens.Add(new Token(TokenType.DESC, "DESC", 0, 0, 0, 0));
+                }
+            }
+
+            winTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
+            return winTokens;
+        }
+
         private Token GenerateLeafToken()
         {
-            return _rng.Next(5) switch
+            return _rng.Next(6) switch
             {
                 0 => new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0),
                 1 => new Token(TokenType.NUMBER, _rng.Next(1, 100).ToString(), 0, 0, 0, 0),
                 2 => new Token(TokenType.STRING_LITERAL, $"'Val_{_rng.Next(1, 10)}'", 0, 0, 0, 0),
                 3 => new Token(TokenType.TRUE, "TRUE", 0, 0, 0, 0),
-                _ => new Token(TokenType.FALSE, "FALSE", 0, 0, 0, 0)
+                4 => new Token(TokenType.FALSE, "FALSE", 0, 0, 0, 0),
+                _ => new Token(TokenType.IDENTIFIER, _rng.Next(4) switch
+                {
+                    0 => "@@TODAY",
+                    1 => "@@NOW",
+                    2 => "@@MAX_GROUPING_SETS",
+                    _ => "@@SET_CUBE_LIMIT"
+                }, 0, 0, 0, 0)
             };
         }
 
@@ -318,10 +526,11 @@ namespace ETL_SQL.FuzzTests
 
         private Token GenerateFunctionToken()
         {
-            return _rng.Next(2) switch
+            return _rng.Next(3) switch
             {
                 0 => new Token(TokenType.UPPER, "UPPER", 0, 0, 0, 0),
-                _ => new Token(TokenType.LOWER, "LOWER", 0, 0, 0, 0)
+                1 => new Token(TokenType.LOWER, "LOWER", 0, 0, 0, 0),
+                _ => new Token(TokenType.IDENTIFIER, "GROUPING", 0, 0, 0, 0)
             };
         }
 
@@ -351,6 +560,38 @@ namespace ETL_SQL.FuzzTests
             }
 
             return null;
+        }
+
+        private string? GetLastStatementKeyword(List<Token> tokens, out string? ddlType)
+        {
+            ddlType = null;
+            int start = tokens.Count - 1;
+            while (start >= 0 && tokens[start].Type != TokenType.SEMICOLON)
+            {
+                start--;
+            }
+            start++; // Move to the first token of the current statement
+            
+            if (start < tokens.Count)
+            {
+                var first = tokens[start].Value;
+                if (first.Equals("CREATE", StringComparison.OrdinalIgnoreCase) ||
+                    first.Equals("ALTER", StringComparison.OrdinalIgnoreCase) ||
+                    first.Equals("REPLACE", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (start + 1 < tokens.Count)
+                    {
+                        ddlType = tokens[start + 1].Value.ToUpper();
+                    }
+                }
+                return first.ToUpper();
+            }
+            return null;
+        }
+
+        private List<Token> TokenizeBody(string text)
+        {
+            return new Lexer(text).Tokenize().Where(t => t.Type != TokenType.EOF).ToList();
         }
     }
 }
