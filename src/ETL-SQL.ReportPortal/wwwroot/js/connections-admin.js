@@ -79,7 +79,37 @@ const PANEL_HTML = `
       </div>
       <div class="form-group">
         <label for="conn-type">Connector type</label>
-        <input id="conn-type" type="text" placeholder="MSSQL" autocomplete="off">
+        <select id="conn-type">
+          <option value="MSSQL">MSSQL</option>
+          <option value="POSTGRES">POSTGRES</option>
+          <option value="ORACLE">ORACLE</option>
+          <option value="MYSQL">MYSQL</option>
+          <option value="SQLITE">SQLITE</option>
+          <option value="SNOWFLAKE">SNOWFLAKE</option>
+          <option value="BIGQUERY">BIGQUERY</option>
+          <option value="FLATFILE">FLATFILE (CSV)</option>
+          <option value="EXCEL">EXCEL</option>
+          <option value="JSON">JSON</option>
+          <option value="XML">XML</option>
+          <option value="PARQUET">PARQUET</option>
+          <option value="AVRO">AVRO</option>
+          <option value="API">API (REST)</option>
+          <option value="SFTP">SFTP</option>
+          <option value="FTP">FTP</option>
+          <option value="AZURE_BLOB">AZURE_BLOB</option>
+          <option value="S3">S3</option>
+          <option value="SHAREPOINT">SHAREPOINT</option>
+          <option value="ACTIVE_DIRECTORY">ACTIVE_DIRECTORY</option>
+          <option value="SMTP">SMTP (Email)</option>
+          <option value="DIRECTORY">DIRECTORY</option>
+          <option value="REPORTPORTAL">REPORTPORTAL</option>
+          <option value="ORCHESTRATOR">ORCHESTRATOR</option>
+          <option value="MONGODB">MONGODB</option>
+          <option value="KAFKA">KAFKA</option>
+          <option value="NEO4J">NEO4J</option>
+          <option value="ODBC">ODBC</option>
+          <option value="MOCKDB">MOCKDB</option>
+        </select>
       </div>
       <div class="form-group">
         <label for="conn-scope">Environment scope (optional)</label>
