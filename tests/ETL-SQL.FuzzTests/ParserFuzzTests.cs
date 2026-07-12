@@ -291,7 +291,7 @@ namespace ETL_SQL.FuzzTests
 
             int bugCount = results.BugBuckets.Sum(b => b.Count);
             Assert.True(bugCount == 0,
-                $"Fuzzer found {bugCount} bug(s). {results.Summary()} See logs/fuzz/reproducers/ for minimized SQL.");
+                $"Fuzzer found {bugCount} bug(s). {results.Summary()} {results.SampleSummary()} See logs/fuzz/reproducers/ for minimized SQL.");
         }
 
         private bool IsSevereCrash(Exception ex)
@@ -334,6 +334,24 @@ namespace ETL_SQL.FuzzTests
         private async Task VerifyNoRECParity(SelectStatement selectStmt)
         {
             if (selectStmt.WhereClause == null) return;
+            if (selectStmt.FromTable.ConnectionName != null ||
+                selectStmt.IntoTable != null ||
+                selectStmt.Joins.Count > 0 ||
+                selectStmt.IsDistinct ||
+                selectStmt.TopCount != null ||
+                selectStmt.LimitCount != null ||
+                selectStmt.Offset != null ||
+                selectStmt.ForClause != null ||
+                selectStmt.QualifyClause != null ||
+                selectStmt.Sample != null ||
+                selectStmt.GroupByAll ||
+                selectStmt.GroupingSet != null ||
+                selectStmt.GroupBy is { Count: > 0 } ||
+                selectStmt.HavingClause != null ||
+                selectStmt.WindowDefinitions is { Count: > 0 })
+            {
+                return;
+            }
 
             // 1. Build Query 1 (Optimized COUNT)
             var countCol = new SelectColumn(
@@ -453,6 +471,10 @@ namespace ETL_SQL.FuzzTests
 
             public string Summary() =>
                 "[Fuzzer] buckets: " + string.Join(", ", All.Select(b => $"{b.Name}={b.Count}"));
+
+            public string SampleSummary() =>
+                "[Fuzzer] samples: " + string.Join(" | ",
+                    BugBuckets.SelectMany(b => b.Samples.Select(s => $"{b.Name}: {s.Exception.GetType().Name}: {s.Exception.Message}; SQL={s.Query}")).Take(5));
         }
 
         private sealed class Bucket

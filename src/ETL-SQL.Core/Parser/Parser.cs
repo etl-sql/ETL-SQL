@@ -43,6 +43,11 @@ public class Parser : IParser
         TokenType.ENABLE, TokenType.DISABLE, TokenType.TRIGGER, TokenType.EXPORT
     };
 
+    private static readonly HashSet<string> AggregateFunctionNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "COUNT", "SUM", "AVG", "MIN", "MAX"
+    };
+
 
     private static readonly HashSet<TokenType> DataTypeTokens = new()
     {
@@ -404,7 +409,6 @@ public class Parser : IParser
             if (AtClauseEnd()) break; // tolerate a trailing comma
             columns.Add(ParseSelectColumn());
         }
-
         if (Match(TokenType.INTO))
         {
             intoTable = ParseTableReference(allowAlias: false);
@@ -412,9 +416,11 @@ public class Parser : IParser
 
         // Riverside: removed swallowed catch block to expose errors.
         TableReference? fromTable = null;
+        bool hasExplicitFrom = false;
         var preJoins = new List<JoinClause>();
         if (Match(TokenType.FROM))
         {
+            hasExplicitFrom = true;
             bool parenthesizedFrom = false;
             if (Current.Type == TokenType.LPAREN && Peek.Type != TokenType.SELECT && Peek.Type != TokenType.VALUES)
             {
@@ -442,6 +448,10 @@ public class Parser : IParser
         {
             // Internal "Dual" style table for empty FROM
             fromTable = new TableReference("DUAL");
+        }
+        if (!hasExplicitFrom)
+        {
+            RejectBareAggregateIdentifiers(columns);
         }
 
         var joins = preJoins;
@@ -664,6 +674,21 @@ public class Parser : IParser
         }
 
         return selectStmt;
+    }
+
+    private static void RejectBareAggregateIdentifiers(IEnumerable<SelectColumn> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (column.Expression is IdentifierExpression identifier &&
+                AggregateFunctionNames.Contains(identifier.Name))
+            {
+                throw new SyntaxException(
+                    $"Expected '(' after aggregate function '{identifier.Name}'",
+                    identifier.Line,
+                    identifier.Column);
+            }
+        }
     }
 
     private List<NamedWindowDefinition>? ParseWindowDefinitions()

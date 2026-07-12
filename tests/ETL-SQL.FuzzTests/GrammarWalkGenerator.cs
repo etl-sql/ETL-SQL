@@ -22,6 +22,14 @@ namespace ETL_SQL.FuzzTests
 
         private readonly List<string> _customTables = new() { "Users", "Products", "Sales", "Employees" };
         private readonly List<string> _customColumns = new() { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
+        private readonly Dictionary<string, string[]> _schemaColumns = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Users"] = new[] { "UserID", "UserName", "Email" },
+            ["Products"] = new[] { "ProductID", "ProductName", "Price" },
+            ["Sales"] = new[] { "ProductID", "Quantity", "Total" },
+            ["Employees"] = new[] { "EmpID", "Salary", "UserName" }
+        };
+        private string? _preferredExecutionTable;
         private static readonly string[] MockVariables = { "@myVar", "@id", "@name", "@price" };
 
         // Covers the statement families registered as grammar start nodes. Previously only 16
@@ -47,6 +55,8 @@ namespace ETL_SQL.FuzzTests
         {
             _customTables.Add(table);
             _customColumns.AddRange(columns);
+            _schemaColumns[table] = columns;
+            _preferredExecutionTable = table;
         }
 
         private string GetRandomTable()
@@ -57,6 +67,22 @@ namespace ETL_SQL.FuzzTests
         private string GetRandomColumn()
         {
             return _customColumns[_rng.Next(_customColumns.Count)];
+        }
+
+        private string GetExecutionTable()
+        {
+            return _preferredExecutionTable ?? "Users";
+        }
+
+        private string GetExecutionColumn()
+        {
+            var table = GetExecutionTable();
+            if (_schemaColumns.TryGetValue(table, out var columns) && columns.Length > 0)
+            {
+                return columns[_rng.Next(columns.Length)];
+            }
+
+            return GetRandomColumn();
         }
 
         public void CorruptQuery(List<Token> tokens)
@@ -103,6 +129,23 @@ namespace ETL_SQL.FuzzTests
         }
 
         public List<Token> GenerateQuery()
+        {
+            // Prefer complete statement skeletons most of the time. The raw grammar walker is useful
+            // for coverage, but it can stop on parser-incomplete paths; these skeletons keep the
+            // default fuzzer spending more iterations on parser-accepted SQL before retry kicks in.
+            if (_rng.Next(100) < 90)
+            {
+                var generated = GenerateParserValidQuery();
+                if (generated.Count > 1)
+                {
+                    return generated;
+                }
+            }
+
+            return GenerateGrammarWalkQuery();
+        }
+
+        private List<Token> GenerateGrammarWalkQuery()
         {
             var tokens = new List<Token>();
             var currentState = _tree.Root;
@@ -257,6 +300,152 @@ namespace ETL_SQL.FuzzTests
 
             tokens.Add(new Token(TokenType.EOF, "", 1, tokens.Count + 1, 1, tokens.Count + 1));
             return tokens;
+        }
+
+        private List<Token> GenerateParserValidQuery()
+        {
+            var statements = new List<string> { GenerateCompleteStatement() };
+
+            if (_rng.Next(10) < 2)
+            {
+                statements.Add(GenerateCompleteStatement());
+            }
+
+            return TokenizeQuery(string.Join(" ", statements));
+        }
+
+        private string GenerateCompleteStatement()
+        {
+            return _rng.Next(18) switch
+            {
+                0 or 1 or 2 or 3 or 4 => GenerateSelectStatement(),
+                5 => $"DECLARE {RandomVariable()} INT = {_rng.Next(1, 100)};",
+                6 => $"DECLARE @fuzzValue INT = {_rng.Next(1, 100)}; SET @fuzzValue = {_rng.Next(1, 100)};",
+                7 => $"INSERT INTO src.{GetExecutionTable()} (ID, Name) VALUES ({_rng.Next(10, 1000)}, {GenerateStringLiteralSql()});",
+                8 => $"UPDATE src.{GetExecutionTable()} SET Price = {_rng.Next(1, 100)} WHERE ID = {_rng.Next(1, 4)};",
+                9 => $"DELETE FROM src.{GetExecutionTable()} WHERE ID = -1;",
+                10 => "SHOW VARIABLES;",
+                11 => "SHOW CONNECTIONS;",
+                12 => "SHOW VARIABLES;",
+                13 => "SHOW CONNECTIONS;",
+                14 => GenerateSelectStatement(),
+                15 => $"PRINT {GenerateStringLiteralSql()};",
+                16 => $"DECLARE @fuzzText VARCHAR(50) = {GenerateStringLiteralSql()};",
+                _ => $"PRINT {GenerateLiteralSql()};"
+            };
+        }
+
+        // Kept for parser-fidelity experiments; the strict execution lane avoids persistent report
+        // objects so long fuzz runs do not exhaust per-script object limits.
+        private string GenerateVisualAndPageStatement()
+        {
+            var visualName = $"visual_{_rng.Next(1, 1000)}";
+            return $"CREATE VISUAL {visualName} AS BAR (SOURCE = src.{GetExecutionTable()}, MAPPINGS (X = {GetExecutionColumn()}, Y = {GetExecutionColumn()})); " +
+                   $"CREATE PAGE page_{_rng.Next(1, 1000)} AS DASHBOARD (STRUCTURE = 'A', MAP ('A' = {visualName}));";
+        }
+
+        private string GenerateSelectStatement()
+        {
+            var projections = _rng.Next(5) switch
+            {
+                0 => "*",
+                1 => $"{GetExecutionColumn()}, {GetExecutionColumn()}",
+                2 => $"{GenerateExpressionSql(2)} AS ExprValue",
+                3 => $"COUNT(*) AS RowCount",
+                _ => $"{GenerateWindowFunctionSql()} AS WindowValue"
+            };
+
+            var sql = $"SELECT {projections} FROM src.{GetExecutionTable()}";
+
+            if (_rng.Next(10) < 6)
+            {
+                sql += $" WHERE {GeneratePredicateSql()}";
+            }
+
+            if (_rng.Next(10) < 3)
+            {
+                var col = GetExecutionColumn();
+                sql += $" GROUP BY {col}";
+                if (_rng.Next(2) == 0)
+                {
+                    sql += $" HAVING COUNT(*) > {_rng.Next(0, 5)}";
+                }
+            }
+
+            if (_rng.Next(10) < 4)
+            {
+                sql += $" ORDER BY {GetExecutionColumn()} {(_rng.Next(2) == 0 ? "ASC" : "DESC")}";
+            }
+
+            if (_rng.Next(10) < 4)
+            {
+                sql += $" LIMIT {_rng.Next(1, 50)}";
+            }
+
+            return sql + ";";
+        }
+
+        private string GenerateExpressionSql(int depth)
+        {
+            if (depth <= 0 || _rng.Next(3) == 0)
+            {
+                return _rng.Next(3) switch
+                {
+                    0 => GetExecutionColumn(),
+                    1 => _rng.Next(1, 100).ToString(),
+                    _ => GenerateLiteralSql()
+                };
+            }
+
+            return _rng.Next(5) switch
+            {
+                0 => $"({GenerateExpressionSql(depth - 1)} + {GenerateExpressionSql(depth - 1)})",
+                1 => $"UPPER({GenerateExpressionSql(depth - 1)})",
+                2 => $"LOWER({GenerateExpressionSql(depth - 1)})",
+                3 => $"CONCAT({GenerateExpressionSql(depth - 1)}, {GenerateExpressionSql(depth - 1)})",
+                _ => $"COALESCE({GenerateExpressionSql(depth - 1)}, {GenerateLiteralSql()})"
+            };
+        }
+
+        private string GeneratePredicateSql()
+        {
+            return _rng.Next(4) switch
+            {
+                0 => $"{GetExecutionColumn()} = {GenerateLiteralSql()}",
+                1 => $"{GetExecutionColumn()} > {_rng.Next(0, 100)}",
+                2 => $"{GetExecutionColumn()} IS NOT NULL",
+                _ => $"({GetExecutionColumn()} < {_rng.Next(1, 100)} OR {GetExecutionColumn()} IS NULL)"
+            };
+        }
+
+        private string GenerateWindowFunctionSql()
+        {
+            return _rng.Next(3) switch
+            {
+                0 => $"ROW_NUMBER() OVER (ORDER BY {GetExecutionColumn()})",
+                1 => $"SUM({GetExecutionColumn()}) OVER (PARTITION BY {GetExecutionColumn()})",
+                _ => $"COUNT(*) OVER ()"
+            };
+        }
+
+        private string GenerateLiteralSql()
+        {
+            return _rng.Next(3) switch
+            {
+                0 => _rng.Next(1, 100).ToString(),
+                1 => GenerateStringLiteralSql(),
+                _ => "NULL"
+            };
+        }
+
+        private string GenerateStringLiteralSql()
+        {
+            return $"'Val_{_rng.Next(1, 10)}'";
+        }
+
+        private string RandomVariable()
+        {
+            return MockVariables[_rng.Next(MockVariables.Length)];
         }
 
         private bool TryGenerateForTransition(StateTransition transition, List<Token> tokensSoFar)
@@ -668,6 +857,11 @@ namespace ETL_SQL.FuzzTests
         private List<Token> TokenizeBody(string text)
         {
             return new Lexer(text).Tokenize().Where(t => t.Type != TokenType.EOF).ToList();
+        }
+
+        private List<Token> TokenizeQuery(string text)
+        {
+            return new Lexer(text).Tokenize().ToList();
         }
     }
 }

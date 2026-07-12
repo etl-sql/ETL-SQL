@@ -14,6 +14,8 @@ public static class AstSerializer
 
     public static string Format(AstNode node) => node switch
     {
+        Script s => string.Join(Environment.NewLine, s.Statements.Select(stmt => stmt.ToSql())),
+
         // ── Trivial statements ──
         NoOpStatement _ => ";",
         BreakStatement _ => "BREAK;",

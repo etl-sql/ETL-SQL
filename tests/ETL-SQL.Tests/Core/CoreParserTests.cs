@@ -51,6 +51,38 @@ namespace ETL_SQL.Tests.Core
             Assert.NotNull(select.LimitCount);
         }
 
+        [Fact]
+        public void ScriptToSql_SerializesStatementsInsteadOfRecordName()
+        {
+            var source = "SELECT Col1 FROM MyTable WHERE Col1 > 0; SET @v = 10;";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+
+            var sql = script.ToSql();
+
+            Assert.Contains("SELECT Col1 FROM MyTable WHERE", sql);
+            Assert.Contains("Col1 > 0", sql);
+            Assert.Contains("SET @v = 10;", sql);
+            Assert.DoesNotContain("Script", sql);
+        }
+
+        [Fact]
+        public void BareAggregateNameInSelectList_ReportsSyntaxError()
+        {
+            var script = new Parser(new Lexer("SELECT COUNT").Tokenize()).Parse();
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error &&
+                d.Message.Contains("Expected '(' after aggregate function 'COUNT'", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void BareAggregateNameWithFrom_CanBeAColumnName()
+        {
+            var script = new Parser(new Lexer("SELECT COUNT FROM MyTable;").Tokenize()).Parse();
+
+            Assert.DoesNotContain(script.Diagnostics, d => d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+        }
+
         [Theory]
         [InlineData("CREATE CONNECTION db AS MSSQL(SERVER='sql01', PASSWORD=SECRET:db_password);", "SECRET:")]
         [InlineData("CREATE CONNECTION db AS MSSQL(SERVER='sql01', PASSWORD=ENC:AbCd12==);", "ENC:")]
