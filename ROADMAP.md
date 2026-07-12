@@ -11,20 +11,114 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 *Completes the enterprise controls for protected enrollment and authoritative client runtime. Standalone installations remain unenrolled, unrestricted by organization policy, and independent of network services.*
 
 ### Shipped Scope
+- **Machine Enrollment:** Machine-level enrollment, protected bootstrap, trust key, machine identity, and enroll/status/unenroll CLI.
+- **Signed Policy Retrieval:** Tenant-bound RSA-PSS signed policy retrieval, protected cache, rollback/expiry checks, final configuration precedence, diagnostics, dynamic reload, and fail-closed host refresh.
 - **Policy Authority & Operation-Boundary Enforcement:** Administrator policy-authority API and Portal workflow for validating, versioning, publishing, superseding, activating, and rolling back signed organization policies.
 - **Shared Runtime Enforcement:** Filesystem path traversal checks, network/connector destination rules, and process resource boundaries.
 
 ### Future Candidate Phases
 
-#### Phase 1: Central Security Events
-- [ ] **Event contract and emission:** Define structured security-event schema with actor, host, tenant, script/job/correlation IDs, policy hash, decision, and reason.
-- [ ] **Durable delivery and monitoring:** Provide a durable local security-event outbox with bounded storage, delivering events to a SIEM collector using machine identity.
+#### Phase 1: Policy Hardening
+- [ ] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on supported platforms; add link/junction substitution tests at each mutation boundary.
+- [ ] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
+- [ ] Add a Portal administrator UI for policy validation, version history, staged publication, activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.
+- [ ] Run and retain the performance lane plus Windows and Linux enterprise certification evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone behavior.
 
-#### Phase 2: Operations Control Plane
-- [ ] **Central fleet management:** Expand fleet inventory to include node/environment identity, versions, heartbeats, and compliance.
-- [ ] **Upgrade orchestration and compatibility:** Define and automate rolling-upgrade sequences, readiness checks, and compatibility gates.
-- [ ] **Standard observability export:** Add first-class OpenTelemetry metrics and traces.
-- [ ] **Searchable Portal Documentation Hub:** Compile markdown manuals into a searchable static website hosted natively inside the Report Portal.
+#### Phase 2: Central Security Events
+
+##### Event contract and emission
+- [ ] Define a versioned structured security-event schema with stable event ID, severity/type, timestamp, actor/effective identity, host/node, tenant, script/job/correlation IDs, policy version/hash, sanitized target, decision, and reason.
+- [ ] Emit events for override attempts, denied filesystem/network/connector/process/Docker operations, policy signature/expiry/rollback failures, stale or unavailable policy, machine enrollment changes, and repeated resource-limit violations.
+- [ ] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
+- [ ] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
+
+##### Durable delivery and monitoring
+- [ ] Provide a durable local security-event outbox for every executable, with bounded storage, atomic append, retry, batching, deduplication, jittered backoff, and crash recovery.
+- [ ] Deliver to an HTTPS/SIEM collector using machine identity; define acknowledgement and idempotency behavior.
+- [ ] Add Windows Event Log and syslog/structured-file sinks for bootstrap failures that occur before HTTPS delivery is available.
+- [ ] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
+- [ ] Add optional fail-closed thresholds for terminal delivery failure, oldest-event age, pending count, and outbox bytes; standalone mode remains local-only by default.
+- [ ] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
+
+##### Completion gates
+- [ ] Fault-injection tests cover collector outage, duplicate delivery, acknowledgement loss, corrupt outbox state, disk pressure, process crash, redaction, and recovery.
+- [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
+- [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
+
+#### Phase 3: Certification & Operations
+
+##### Certification lanes
+- [ ] Add Windows and Linux enterprise certification lanes for enrollment, signed retrieval, cache/offline operation, dynamic refresh, operation enforcement, and event delivery.
+- [ ] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server, scheduled jobs, spawned runners, and parallel execution.
+- [ ] Run malicious-input and bypass drills covering policy tampering, stale/expired policy, signing-key rotation, machine revocation, path/link races, DNS rebinding, connector aliases, Docker escape-oriented options, and log injection.
+- [ ] Prove standalone regression behavior with no enrollment, no enterprise network calls, and unchanged local workflows.
+
+##### Deployment and recovery
+- [ ] Document policy-authority deployment, signing-key custody/rotation, machine enrollment/revocation, service-identity permissions, staged rollout, emergency policy publication, and unenrollment governance.
+- [ ] Document cache and outbox backup/restore rules; restored machines must not duplicate machine identity or silently reuse credentials in another environment.
+- [ ] Define upgrade ordering and compatibility across bootstrap, envelope, policy, event, and collector schema versions.
+- [ ] Provide outage runbooks for policy authority, certificate expiry, invalid publication, SIEM outage, disk exhaustion, and fail-closed fleet recovery.
+- [ ] Add support-bundle diagnostics that expose versions, hashes, timestamps, and health without policy payload values, trust material, credentials, or sensitive event targets.
+
+#### Phase 4: Operations Control Plane
+
+##### 4.1 Central fleet management
+- [ ] Expand fleet inventory beyond current health aggregation to include node/environment identity, installed version, schema version, enrollment and policy compliance, last policy refresh, signing/client-certificate expiry, configuration drift, storage provider, database provider, and upgrade readiness.
+- [ ] Add fleet search, filtering, grouping, and drill-down without granting the aggregator mutation authority over departmental environments.
+- [ ] Define explicit machine/node registration, retirement, duplicate identity, stale heartbeat, and revoked-node behavior.
+- [ ] Surface unsupported version combinations, missing required capabilities, unhealthy dependencies, and policy divergence as actionable findings.
+
+##### 4.2 Upgrade orchestration and compatibility
+- [ ] Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.
+- [ ] Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.
+- [ ] Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.
+- [ ] Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.
+- [ ] Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.
+
+##### 4.3 Standard observability export
+- [ ] Add first-class OpenTelemetry metrics and traces, plus a Prometheus-compatible metrics endpoint where appropriate.
+- [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode, status, policy version, and workload class while controlling high-cardinality labels.
+- [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC, spill, connector latency, retries, failures, storage growth, database pool health, policy refresh, audit/security backlog, and delivery health.
+- [ ] Correlate metrics and traces with structured logs, audit events, security events, job IDs, script hashes, and request correlation IDs.
+- [ ] Keep observability exporters optional and ensure disabled exporters impose negligible standalone overhead.
+
+##### 4.4 Historical capacity planning and sizing
+- [ ] Retain or export capacity history sufficient to calculate peak and percentile CPU, memory, queue wait, execution duration, concurrency, spill frequency/bytes, connector latency, retry/failure rates, and dataset/snapshot growth.
+- [ ] Add workload breakdowns by environment, node, job, report, dataset, connector, owner, and workload class without exposing sensitive row data.
+- [ ] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
+- [ ] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.
+- [ ] Document benchmark-to-production sizing guidance and clearly state where measured workload history is required instead of synthetic estimates.
+
+##### 4.5 Alerting and service objectives
+- [ ] Define recommended SLIs/SLOs for availability, queue wait, execution success/latency, freshness, policy availability, audit/security delivery, database health, and recovery.
+- [ ] Add configurable alerts for queue age/depth, sustained CPU or memory pressure, repeated spills, failed/retried jobs, stale snapshots/datasets, policy/signature failures, certificate expiry, outbox backlog, disk pressure, storage growth, database connectivity/pool exhaustion, and unhealthy fleet nodes.
+- [ ] Support alert routing through standard observability systems rather than building a proprietary pager; include deduplication, severity, recovery notifications, and runbook links in emitted signals.
+- [ ] Provide baseline thresholds but require administrators to tune them from measured workload and business criticality.
+
+##### 4.6 HA topology and failure certification
+- [ ] Publish supported standalone, departmental, and HA reference topologies with exact requirements for PostgreSQL, load balancing, shared artifact storage, certificates, DNS, service supervision, and network trust boundaries.
+- [ ] Certify node loss, process crash, network partition, PostgreSQL failover, shared-storage outage, duplicate scheduler leadership, orphaned work, and recovery without duplicate or lost mutations.
+- [ ] Document which components ETL-SQL coordinates and which remain responsibilities of PostgreSQL, load balancers, object/file storage, Kubernetes, Windows Services/systemd, or other infrastructure.
+- [ ] Add topology-aware health and readiness checks so load balancers remove unsafe nodes without hiding whole-environment failures.
+
+##### 4.7 Disaster recovery objectives
+- [ ] Define supported RPO/RTO targets for each reference topology and identify the state, artifact, key, certificate, policy, outbox, and external dependency included in each target.
+- [ ] Add scheduled restore drills that verify database consistency, artifact references, encrypted data/key availability, policy enrollment, service accounts, audit/security continuity, and orchestrator recovery.
+- [ ] Prevent cloned restores from silently reusing machine identity or client credentials in another environment; require deliberate re-enrollment and credential rotation.
+- [ ] Produce a machine-readable recovery report with achieved RPO/RTO, missing dependencies, data loss window, and operator actions.
+- [ ] Document regional/site failure, split custody, backup retention, immutable/offline backup, and emergency access procedures.
+
+##### 4.8 Searchable Portal Documentation Hub
+- [ ] Compile the repository's markdown document library (cookbooks, reference guides, manuals) into a unified, searchable static website using a static site generator (e.g., MkDocs or Docusaurus).
+- [ ] Host the compiled documentation site natively inside the Report Portal (e.g. under a `/docs` route) to allow administrators, analysts, and business users to search and navigate documentation in their web browser.
+- [ ] Reconcile the static site's theme and search indices with the Portal's user interface, ensuring sensitive configurations remain excluded from the compiled index.
+
+##### Prioritization gates
+- [ ] Rank each workstream using measured administrative pain, customer deployment scale, security impact, and dependency on external infrastructure.
+- [ ] Preserve scoped read-only fleet aggregation by default; any future remote mutation or upgrade command requires a separate threat model, authorization design, approval workflow, and audit contract.
+- [ ] Complete threat-model and senior security review with all high-severity findings resolved.
+- [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
+- [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
 ---
 
@@ -62,15 +156,23 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 
 - [ ] **Phase 1: Stewardship Catalog**
   - Define governed tag metadata, validation, required scopes, aliases, and deprecation rules.
+  - Add queries and documentation for missing owner, steward, contact, classification, and quality metadata.
 - [ ] **Phase 2: Portal Stewardship Views**
-  - Add searchable tag catalog, sensitive-data inventory, missing-owner views, and stale-lineage views.
+  - Add searchable tag catalog, sensitive-data inventory, missing-owner views, stale-lineage views, and per-steward queues.
 - [ ] **Phase 3: Review, Approval & Certification Workflow**
   - Add review and certification state for datasets, reports, jobs, and key lineage targets.
-  - Require four-eyes approval for configured critical actions.
+  - Require four-eyes approval for configured critical actions, including report publication and production job changes.
+  - Enforce segregation of duties so users cannot approve their own changes.
+  - Re-evaluate pending and approved requests when permissions, ownership, or user status changes.
+  - Audit requests, comments, decisions, certification changes, and rejections while keeping export/import script-first.
 - [ ] **Phase 4: Tag-Driven Policy Enforcement**
   - Extend Governance Core to block or warn based on lineage tags and classification metadata.
 - [ ] **Phase 5: Impact Analysis**
-  - Surface upstream and downstream impact for tables, columns, jobs, scripts, datasets, reports, and owners.
+  - Surface upstream and downstream impact for tables, columns, jobs, scripts, datasets, reports, subscriptions, owners, and stewards.
+- [ ] **Phase 6: Quality & Freshness Stewardship**
+  - Tie `EXPECT` and validation outcomes, freshness, SLAs, and quality trends to lineage targets.
+- [ ] **Phase 7: External Catalog Sync**
+  - Add stable external IDs, conflict rules, and reconciliation reports for external catalog integration.
 
 ---
 
@@ -81,10 +183,11 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 ### Future Candidate Phases
 
 - [ ] **Phase 1: Debug Protocol & Execution Hooks**
-  - Define breakpoints, step over, step into, step out, pause, resume, and variable/temp-table inspection contracts.
+  - Define breakpoints, step over, step into, step out, pause, resume, cancellation, and variable or temp-table inspection contracts.
+  - Ensure debug hooks do not change normal execution semantics.
 - [ ] **Phase 2: CLI/TUI Debug Experience**
   - Add local debugging with breakpoints, current-statement context, variables, temp tables, and recent lineage entries.
 - [ ] **Phase 3: VS Code Debug Adapter**
   - Add a VS Code debug adapter configuration that uses the same engine debug protocol.
 - [ ] **Phase 4: Portal/Orchestrator Guardrails**
-  - Define whether scheduled or Portal jobs can be debugged, attachment rules, and audits.
+  - Define whether scheduled or Portal jobs can be debugged, who can attach, what is redacted, and how sessions are audited.
