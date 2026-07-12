@@ -43,7 +43,7 @@ WORKDIR /app
 # for scheduled report/PDF exports. (The native libSkiaSharp.so itself comes from
 # the SkiaSharp.NativeAssets.Linux package.)
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=publish /app/publish .

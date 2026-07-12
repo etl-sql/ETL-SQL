@@ -162,6 +162,11 @@ certification-results/*.log
 certification-results/*.err
 certification-results/*.out
 certification-results/baseline-*-runs/
+# Local HA/enterprise certification evidence is retained for release packaging, not source control.
+certification-results/enterprise-hardening/
+certification-results/postgres-ha-soak/ha-overnight-*/
+certification-results/ha-large-job-soak/ha-overnight-*/
+certification-results/ha-fault-injection/ha-overnight-*/
 # Gate F keeps one compact, reproducible report; child logs, keys, and status are run-local.
 certification-results/gate-f-1b/*
 !certification-results/gate-f-1b/gate-f-report.json

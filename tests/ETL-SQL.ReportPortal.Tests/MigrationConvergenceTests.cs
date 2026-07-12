@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -116,6 +117,45 @@ public sealed class MigrationConvergenceTests : IDisposable
 
         Assert.Empty(violations);
         Assert.NotEmpty(migrations.Migrations);
+    }
+
+    [Fact]
+    public async Task PortalDatabaseMigrationLock_SerializesConcurrentStartupMigrationWork()
+    {
+        var options = Options("migration-lock.db");
+        await using var firstDb = new PortalDbContext(options);
+        await using var secondDb = new PortalDbContext(options);
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = PortalDatabaseMigrationLock.RunExclusiveAsync(
+            firstDb,
+            NullLogger.Instance,
+            async () =>
+            {
+                firstEntered.SetResult();
+                await releaseFirst.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            });
+
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var second = PortalDatabaseMigrationLock.RunExclusiveAsync(
+            secondDb,
+            NullLogger.Instance,
+            () =>
+            {
+                secondEntered.SetResult();
+                return Task.CompletedTask;
+            });
+
+        var early = await Task.WhenAny(secondEntered.Task, Task.Delay(TimeSpan.FromMilliseconds(250)));
+        Assert.NotSame(secondEntered.Task, early);
+
+        releaseFirst.SetResult();
+
+        await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     private static bool IsRollingContractViolation(MigrationOperation operation, out string reason)

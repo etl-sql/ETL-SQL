@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace ETL_SQL.TUI.UI
@@ -36,21 +38,42 @@ namespace ETL_SQL.TUI.UI
             }
 
             // 3. Dev fallback: walk up to the solution root and `dotnet run` the project.
-            string? dir = Directory.GetCurrentDirectory();
-            while (dir != null)
+            foreach (var start in CandidateRepoSearchRoots())
             {
-                if (Directory.GetFiles(dir, "*.slnx").Length > 0 || Directory.GetFiles(dir, "*.sln").Length > 0)
+                string? dir = start;
+                while (dir != null)
                 {
-                    string project = Path.Combine(dir, "src", "ETL-SQL.ReportPlayer");
-                    if (Directory.Exists(project))
-                        return ("dotnet", new[] { "run", "--project", project, "--" });
+                    if (Directory.GetFiles(dir, "*.slnx").Length > 0 || Directory.GetFiles(dir, "*.sln").Length > 0)
+                    {
+                        string project = Path.Combine(dir, "src", "ETL-SQL.ReportPlayer");
+                        if (Directory.Exists(project))
+                            return ("dotnet", new[] { "run", "--project", project, "--" });
+                    }
+                    var parent = Path.GetDirectoryName(dir);
+                    if (parent == dir) break;
+                    dir = parent;
                 }
-                var parent = Path.GetDirectoryName(dir);
-                if (parent == dir) break;
-                dir = parent;
             }
 
             return null;
+        }
+
+        private static string[] CandidateRepoSearchRoots()
+        {
+            var roots = new List<string>();
+            var explicitRoot = Environment.GetEnvironmentVariable("ETLSQL_REPO_ROOT");
+            if (!string.IsNullOrWhiteSpace(explicitRoot)) roots.Add(explicitRoot);
+            roots.Add(Directory.GetCurrentDirectory());
+            roots.Add(AppContext.BaseDirectory);
+            return roots
+                .Select(root =>
+                {
+                    try { return Path.GetFullPath(root); }
+                    catch { return null; }
+                })
+                .Where(root => !string.IsNullOrWhiteSpace(root))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()!;
         }
 
         public static ProcessStartInfo BuildServeProcess(string exePath, string[] prefixArgs, string scriptFullPath)

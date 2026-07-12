@@ -40,7 +40,7 @@ WORKDIR /app
 # Without these, PDF export fails with
 # "The type initializer for 'SkiaSharp.SKImageInfo' threw an exception".
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=publish /app/publish .

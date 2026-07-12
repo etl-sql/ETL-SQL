@@ -226,6 +226,14 @@ namespace ETL_SQL.Orchestrator.Storage
                     // providers (e.g. PostgreSQL identity columns). CollationDdl (if any) runs first so the
                     // COLLATE NOCASE indexes/queries resolve.
                     schema = schema.Replace("INTEGER PRIMARY KEY AUTOINCREMENT", _dialect.AutoIncrementPrimaryKey);
+                    schema = schema
+                        .Replace("RowsProcessed INTEGER", $"RowsProcessed {_dialect.Int64Type}")
+                        .Replace("TotalRows INTEGER", $"TotalRows {_dialect.Int64Type}")
+                        .Replace("MaxPeakMemoryBytes INTEGER", $"MaxPeakMemoryBytes {_dialect.Int64Type}")
+                        .Replace("StateDiskFreeBytes INTEGER", $"StateDiskFreeBytes {_dialect.Int64Type}")
+                        .Replace("SpillDiskFreeBytes INTEGER", $"SpillDiskFreeBytes {_dialect.Int64Type}")
+                        .Replace("MinStateDiskFreeBytes INTEGER", $"MinStateDiskFreeBytes {_dialect.Int64Type}")
+                        .Replace("MinSpillDiskFreeBytes INTEGER", $"MinSpillDiskFreeBytes {_dialect.Int64Type}");
 
                     await EnsureCollationExistsAsync(connection);
 

@@ -89,6 +89,10 @@ namespace ETL_SQL.FuzzTests
         {
             string? iterEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_ITERATIONS");
             int iterations = int.TryParse(iterEnv, out var parsedIter) ? parsedIter : 500;
+            string? generationAttemptsEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_GENERATION_ATTEMPTS");
+            int generationAttempts = int.TryParse(generationAttemptsEnv, out var parsedGenerationAttempts)
+                ? Math.Max(1, parsedGenerationAttempts)
+                : 10;
 
             // Seed both RNG streams from an overridable seed and record it, so any failure found in
             // CI is reproducible: rerun with ETLSQL_FUZZ_SEED=<seed>. The seed is echoed to test
@@ -103,7 +107,7 @@ namespace ETL_SQL.FuzzTests
             // verified seed so it gives continuous semantic-bug signal without flakiness.
             _strictExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_STRICT_EXEC") == "1";
             _dumpExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_DUMP_EXEC") == "1";
-            Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
+            Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} generationAttempts={generationAttempts} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
 
             var tree = DefaultGrammar.Build();
             var generator = new GrammarWalkGenerator(tree, new Random(_seed));
@@ -117,6 +121,56 @@ namespace ETL_SQL.FuzzTests
             for (int i = 0; i < iterations; i++)
             {
                 var tokens = generator.GenerateQuery();
+                Script? preParsed = null;
+                string query = string.Empty;
+
+                for (int attempt = 1; attempt <= generationAttempts; attempt++)
+                {
+                    query = string.Join(" ", tokens.Where(t => t.Type != TokenType.EOF).Select(t => t.Value));
+                    if (string.IsNullOrWhiteSpace(query)) break;
+
+                    try
+                    {
+                        preParsed = new Parser(tokens, query).Parse();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (IsSevereCrash(ex))
+                        {
+                            results.ParserCrash.Record(tokens, query, ex);
+                            preParsed = null;
+                            break;
+                        }
+
+                        preParsed = null;
+                    }
+
+                    if (preParsed != null &&
+                        !preParsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                    {
+                        break;
+                    }
+
+                    bool grammarAcceptsRejectedCandidate = tree.ValidateSequence(tokens, out _, requireComplete: false);
+                    if (grammarAcceptsRejectedCandidate)
+                    {
+                        results.GrammarAcceptedParserRejected.Increment();
+                    }
+                    results.ParserDiagnostic.Increment();
+                    results.GrammarGeneratedParserRejected.Increment();
+
+                    if (attempt < generationAttempts)
+                    {
+                        tokens = generator.GenerateQuery();
+                    }
+                }
+
+                if (preParsed == null ||
+                    preParsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                {
+                    continue;
+                }
+
                 bool isCorrupted = false;
 
                 // 5% chance of token mutation/corruption to verify parser robustness
@@ -126,22 +180,29 @@ namespace ETL_SQL.FuzzTests
                     isCorrupted = true;
                 }
 
-                var query = string.Join(" ", tokens.Where(t => t.Type != TokenType.EOF).Select(t => t.Value));
+                query = string.Join(" ", tokens.Where(t => t.Type != TokenType.EOF).Select(t => t.Value));
                 if (string.IsNullOrWhiteSpace(query)) continue;
 
                 // --- Parse stage ---
                 Script parsed;
-                try
+                if (isCorrupted)
                 {
-                    parsed = new Parser(tokens, query).Parse();
+                    try
+                    {
+                        parsed = new Parser(tokens, query).Parse();
+                    }
+                    catch (Exception ex)
+                    {
+                        // An unhandled exception out of the parser is a parser robustness bug; an expected
+                        // syntax failure (common on corrupted input) is just a diagnostic bucket.
+                        if (IsSevereCrash(ex)) results.ParserCrash.Record(tokens, query, ex);
+                        else results.ParserDiagnostic.Increment();
+                        continue;
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    // An unhandled exception out of the parser is a parser robustness bug; an expected
-                    // syntax failure (common on corrupted input) is just a diagnostic bucket.
-                    if (IsSevereCrash(ex)) results.ParserCrash.Record(tokens, query, ex);
-                    else results.ParserDiagnostic.Increment();
-                    continue;
+                    parsed = preParsed;
                 }
 
                 bool parserAccepts = !parsed.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error);

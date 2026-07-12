@@ -2,6 +2,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using Xunit;
@@ -79,5 +80,55 @@ public sealed class PortalPostgresProviderTests : IAsyncLifetime
         var account = await db.ServiceAccounts.SingleAsync();
         Assert.Equal(owner.Id, account.OwnerUserId);
         Assert.Equal("portal.read", account.Scopes);
+    }
+
+    [Fact]
+    public async Task PostgresProvider_MigrationLock_SerializesConcurrentMigrationWork()
+    {
+        var config = new PortalConfig
+        {
+            Database = new PortalDatabaseConfig
+            {
+                Provider = "Postgres",
+                ConnectionString = _pg.GetConnectionString()
+            }
+        };
+
+        var builder = new DbContextOptionsBuilder<PortalDbContext>();
+        PortalDatabase.Configure(builder, config);
+
+        await using var firstDb = new PortalDbContext(builder.Options);
+        await using var secondDb = new PortalDbContext(builder.Options);
+        var firstEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var first = PortalDatabaseMigrationLock.RunExclusiveAsync(
+            firstDb,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance,
+            async () =>
+            {
+                firstEntered.SetResult();
+                await releaseFirst.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            });
+
+        await firstEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var second = PortalDatabaseMigrationLock.RunExclusiveAsync(
+            secondDb,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance,
+            () =>
+            {
+                secondEntered.SetResult();
+                return Task.CompletedTask;
+            });
+
+        var early = await Task.WhenAny(secondEntered.Task, Task.Delay(TimeSpan.FromMilliseconds(500)));
+        Assert.NotSame(secondEntered.Task, early);
+
+        releaseFirst.SetResult();
+
+        await secondEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
     }
 }

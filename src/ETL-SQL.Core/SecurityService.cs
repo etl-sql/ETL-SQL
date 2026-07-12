@@ -354,7 +354,14 @@ public partial class SecurityService
         }
 
         // B. Block Critical and Sensitive directories
-        foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
+        foreach (var blocked in CriticalSystemDirectories)
+        {
+            if (IsBlockedDirectoryMatch(normalizedPath, segments, blocked))
+            {
+                throw new SecurityException($"Unauthorized access to protected system/environment directory: {blocked} in path {fullPath}");
+            }
+        }
+        foreach (var blocked in SensitiveDirectories)
         {
             var blockedClean = blocked.Trim('/');
             if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
@@ -391,12 +398,38 @@ public partial class SecurityService
         var normalizedPath = fullPath.Replace('\\', '/');
         var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
+        foreach (var blocked in CriticalSystemDirectories)
+        {
+            if (IsBlockedDirectoryMatch(normalizedPath, segments, blocked)) return true;
+        }
+        foreach (var blocked in SensitiveDirectories)
         {
             var blockedClean = blocked.Trim('/');
             if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
         }
         return false;
+    }
+
+    private static bool IsBlockedDirectoryMatch(string normalizedPath, string[] segments, string blocked)
+    {
+        var blockedClean = blocked.Trim('/');
+        if (blocked.StartsWith("/", StringComparison.Ordinal))
+        {
+            var absoluteBlocked = blocked.TrimEnd('/');
+            var driveRootedBlockedOffset = 3;
+            return string.Equals(normalizedPath, absoluteBlocked, StringComparison.Ordinal)
+                || normalizedPath.StartsWith(absoluteBlocked + "/", StringComparison.Ordinal)
+                || (normalizedPath.Length >= driveRootedBlockedOffset + blockedClean.Length
+                    && normalizedPath.Length >= driveRootedBlockedOffset
+                    && char.IsLetter(normalizedPath[0])
+                    && normalizedPath[1] == ':'
+                    && normalizedPath[2] == '/'
+                    && string.Compare(normalizedPath, driveRootedBlockedOffset, blockedClean, 0, blockedClean.Length, StringComparison.OrdinalIgnoreCase) == 0
+                    && (normalizedPath.Length == driveRootedBlockedOffset + blockedClean.Length
+                        || normalizedPath[driveRootedBlockedOffset + blockedClean.Length] == '/'));
+        }
+
+        return segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -963,7 +996,7 @@ public partial class SecurityService
             // to the current directory on that drive, defeating root-access blocking.
             if (parts.Length == 0) return root;
 
-            var current = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var current = root;
             foreach (var part in parts)
             {
                 current = Path.Combine(current, part);

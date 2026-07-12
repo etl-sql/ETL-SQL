@@ -282,6 +282,8 @@ namespace ETL_SQL.Tests.Orchestration
 
             public string AutoIncrementPrimaryKey => _inner.AutoIncrementPrimaryKey;
 
+            public string Int64Type => _inner.Int64Type;
+
             public string UtcNowSql => $"SELECT '{_utcNow:O}';";
 
             public Task<HashSet<string>> GetColumnNamesAsync(

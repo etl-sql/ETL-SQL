@@ -13,8 +13,10 @@ param(
     [string]$RunId = '',
     [string]$Platform = '',
     [string]$OutDir = '',
+    [string]$ArtifactsPath = '',
     [switch]$SkipPortalTests,
-    [switch]$NoBuild
+    [switch]$NoBuild,
+    [switch]$NoRestore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,24 +40,44 @@ if ([string]::IsNullOrWhiteSpace($Platform)) {
 if ([string]::IsNullOrWhiteSpace($OutDir)) {
     $OutDir = Join-Path $RepoRoot "certification-results/enterprise-hardening/$RunId/$Platform"
 }
+if ([string]::IsNullOrWhiteSpace($ArtifactsPath)) {
+    if ($Platform -in @('linux', 'macos')) {
+        $ArtifactsPath = Join-Path ([System.IO.Path]::GetTempPath()) "etl-sql-enterprise-hardening-$RunId"
+    } else {
+        $ArtifactsPath = Join-Path $OutDir 'dotnet-artifacts'
+    }
+}
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ArtifactsPath | Out-Null
 
 function Invoke-CertCommand {
     param(
         [string]$Name,
         [string[]]$Arguments,
-        [string]$LogName
+        [string]$LogName,
+        [string]$StepArtifactsPath = ''
     )
 
     $logPath = Join-Path $OutDir $LogName
+    if (-not [string]::IsNullOrWhiteSpace($StepArtifactsPath)) {
+        Remove-Item -LiteralPath $StepArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Force -Path $StepArtifactsPath | Out-Null
+    }
     $started = Get-Date
+    $previousRepoRoot = $env:ETLSQL_REPO_ROOT
+    $env:ETLSQL_REPO_ROOT = $RepoRoot.Path
     Push-Location $RepoRoot
     try {
         & dotnet @Arguments *>&1 | Tee-Object -FilePath $logPath
         $exitCode = $LASTEXITCODE
     } finally {
         Pop-Location
+        if ($null -eq $previousRepoRoot) {
+            Remove-Item Env:\ETLSQL_REPO_ROOT -ErrorAction SilentlyContinue
+        } else {
+            $env:ETLSQL_REPO_ROOT = $previousRepoRoot
+        }
     }
 
     [pscustomobject]@{
@@ -95,6 +117,9 @@ try {
     $commit = (& git -C $RepoRoot rev-parse HEAD 2>$null).Trim()
 } catch { }
 
+$engineArtifactsPath = Join-Path $ArtifactsPath 'engine'
+$portalArtifactsPath = Join-Path $ArtifactsPath 'portal'
+
 $testArgsCommon = @(
     'test',
     'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj',
@@ -103,12 +128,24 @@ $testArgsCommon = @(
     '--logger',
     'trx;LogFileName=enterprise-hardening.trx',
     '--results-directory',
-    $OutDir
+    $OutDir,
+    '--artifacts-path',
+    $engineArtifactsPath
 )
-if ($NoBuild) { $testArgsCommon += '--no-build' } else { $testArgsCommon += '--no-restore' }
+if ($Platform -eq 'linux') {
+    $testArgsCommon += @('--runtime', 'linux-x64')
+} elseif ($Platform -eq 'macos') {
+    $testArgsCommon += @('--runtime', 'osx-arm64')
+}
+if ($NoBuild) {
+    $testArgsCommon += '--no-build'
+} elseif ($NoRestore) {
+    $testArgsCommon += '--no-restore'
+}
 
 $steps = New-Object System.Collections.Generic.List[object]
-$steps.Add((Invoke-CertCommand -Name 'Engine and connector enterprise hardening tests' -Arguments $testArgsCommon -LogName 'enterprise-hardening-tests.log')) | Out-Null
+$steps.Add((Invoke-CertCommand -Name 'Engine and connector enterprise hardening tests' -Arguments $testArgsCommon -LogName 'enterprise-hardening-tests.log' -StepArtifactsPath $engineArtifactsPath)) | Out-Null
+Remove-Item -LiteralPath $engineArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
 
 if (-not $SkipPortalTests) {
     $portalArgs = @(
@@ -119,10 +156,23 @@ if (-not $SkipPortalTests) {
         '--logger',
         'trx;LogFileName=enterprise-hardening-portal.trx',
         '--results-directory',
-        $OutDir
+        $OutDir,
+        '--artifacts-path',
+        $portalArtifactsPath,
+        '-p:EnterpriseHardeningCertification=true'
     )
-    if ($NoBuild) { $portalArgs += '--no-build' } else { $portalArgs += '--no-restore' }
-    $steps.Add((Invoke-CertCommand -Name 'Portal enterprise HTTP and policy tests' -Arguments $portalArgs -LogName 'enterprise-hardening-portal-tests.log')) | Out-Null
+    if ($Platform -eq 'linux') {
+        $portalArgs += @('--runtime', 'linux-x64')
+    } elseif ($Platform -eq 'macos') {
+        $portalArgs += @('--runtime', 'osx-arm64')
+    }
+    if ($NoBuild) {
+        $portalArgs += '--no-build'
+    } elseif ($NoRestore) {
+        $portalArgs += '--no-restore'
+    }
+    $steps.Add((Invoke-CertCommand -Name 'Portal enterprise HTTP and policy tests' -Arguments $portalArgs -LogName 'enterprise-hardening-portal-tests.log' -StepArtifactsPath $portalArtifactsPath)) | Out-Null
+    Remove-Item -LiteralPath $portalArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 $stepArray = $steps.ToArray()

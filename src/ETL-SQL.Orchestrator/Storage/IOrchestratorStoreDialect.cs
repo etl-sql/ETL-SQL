@@ -35,6 +35,9 @@ namespace ETL_SQL.Orchestrator.Storage
         /// <summary>Column definition for an auto-incrementing integer primary key (the <c>Id</c> column).</summary>
         string AutoIncrementPrimaryKey { get; }
 
+        /// <summary>Column type for signed 64-bit metric/count values.</summary>
+        string Int64Type { get; }
+
         /// <summary>Provider SQL that returns the current UTC timestamp from the database clock.</summary>
         string UtcNowSql { get; }
 

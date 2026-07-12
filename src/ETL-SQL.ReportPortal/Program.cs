@@ -521,7 +521,9 @@ ETL_SQL.Reporting.EChartsSsrRenderer.OnError = (message, ex) =>
         .CreateLogger("ETL_SQL.Reporting.EChartsSsrRenderer")
         .LogWarning(ex, "{Message}", message);
 
-// Apply EF migrations and enable WAL mode for SQLite on startup.
+// Apply EF migrations and startup catalog maintenance. In HA, the full database-mutating startup
+// block must be serialized, not only EF migrations: first-run seed and reconciliation are also
+// shared-catalog writes.
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -529,13 +531,12 @@ using (var scope = app.Services.CreateScope())
         .CreateLogger("PortalDatabaseMigration");
     try
     {
-        // P1.9: serialize migrations cluster-wide. When several Portal nodes boot together against one
-        // shared database, a leader-elected lock ensures only one applies migrations at a time; the
-        // others wait, then find nothing pending and no-op — preventing concurrent-migration collisions.
-        var lockStore = scope.ServiceProvider.GetRequiredService<ETL_SQL.Core.Data.IClusterLockStore>();
-        var lockOwner = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
-        await ETL_SQL.Orchestrator.Scheduling.ClusterLock.RunExclusiveAsync(
-            lockStore, "portal-db-migration", lockOwner,
+        // HA: serialize startup database writes at the Portal database session boundary. Several
+        // Portal nodes can boot together against one PostgreSQL catalog; a provider-native advisory
+        // lock ensures only one applies DDL, reconciliation, and first-run seed at a time.
+        await PortalDatabaseMigrationLock.RunExclusiveAsync(
+            db,
+            migrationLogger,
             criticalSection: async () =>
             {
                 // Forward-only, automatic on startup/upgrade. Log the applied set so an operator can
@@ -553,10 +554,33 @@ using (var scope = app.Services.CreateScope())
                     await db.Database.MigrateAsync();
                     migrationLogger.LogInformation("Portal database migrations applied successfully.");
                 }
-            },
-            logger: migrationLogger,
-            ttl: TimeSpan.FromMinutes(5),
-            maxWait: TimeSpan.FromMinutes(10));
+
+                if (db.Database.IsSqlite())
+                    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+                await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("PiiColumnEncryptionMaintenance"));
+                await DatasetStorageMaintenance.ReconcileAsync(
+                    db,
+                    portalConfig,
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("DatasetStorageMaintenance"));
+                // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
+                // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
+                // and converge Orchestrator jobs to subscription row state (the source of truth).
+                await SubscriptionScriptMaintenance.ReconcileAsync(
+                    db,
+                    scope.ServiceProvider.GetRequiredService<PortalConfig>(),
+                    scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
+                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("SubscriptionScriptMaintenance"),
+                    scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
+
+                // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
+                // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
+                await SeedFirstRunAsync(scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<PortalConfig>());
+            });
     }
     catch (Exception migrationEx)
     {
@@ -566,31 +590,6 @@ using (var scope = app.Services.CreateScope())
             "backup (rollback is restore-from-backup, not a down-migration) and retry.");
         throw;
     }
-    if (db.Database.IsSqlite())
-        db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
-    await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
-        db,
-        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("PiiColumnEncryptionMaintenance"));
-    await DatasetStorageMaintenance.ReconcileAsync(
-        db,
-        portalConfig,
-        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("DatasetStorageMaintenance"));
-    // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
-    // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
-    // and converge Orchestrator jobs to subscription row state (the source of truth).
-    await SubscriptionScriptMaintenance.ReconcileAsync(
-        db,
-        scope.ServiceProvider.GetRequiredService<PortalConfig>(),
-        scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
-        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-            .CreateLogger("SubscriptionScriptMaintenance"),
-        scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
-
-    // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
-    // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
-    await SeedFirstRunAsync(scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<PortalConfig>());
 }
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Testing"))
