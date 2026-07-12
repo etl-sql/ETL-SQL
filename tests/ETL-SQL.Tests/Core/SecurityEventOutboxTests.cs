@@ -139,6 +139,20 @@ public sealed class SecurityEventOutboxTests : IDisposable
         Assert.Equal(legacyEvent.EventId, claimed.Event.EventId);
     }
 
+    [Fact]
+    public void FilteredEvent_DoesNotReportAsSuccessfulDelivery()
+    {
+        var outbox = CreateOutbox();
+        outbox.Emit(Event(Guid.NewGuid()) with { Severity = SecurityEventSeverity.Information });
+
+        Assert.Equal(1, outbox.ApplyForwardingFilter(
+            SecurityEventSeverity.Warning, DateTimeOffset.UtcNow));
+
+        var health = outbox.GetHealth();
+        Assert.Equal(1, health.FilteredCount);
+        Assert.Null(health.LastDeliveredUtc);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { }

@@ -465,13 +465,17 @@ public static class EnterprisePolicyRuntime
             var settings = policy?.Document?.SecurityEvents;
             if (outbox is null || enrollment is null || settings is null
                 || string.IsNullOrWhiteSpace(settings.CollectorEndpoint))
+            {
+                SecurityEventRuntime.ConfigureCollectorDiagnostics(configured: false);
                 return;
+            }
             var transportOptions = CreateSecurityEventTransportOptions(enrollment, settings);
             var client = CreateHttpClient(enrollment);
             var transport = new SecurityEventTransport(outbox, client, transportOptions);
             var worker = new SecurityEventTransportWorker(transport,
                 TimeSpan.FromSeconds(settings.IntervalSeconds));
             worker.Start();
+            SecurityEventRuntime.ConfigureCollectorDiagnostics(configured: true);
             _securityEventHttp = client;
             _securityEventWorker = worker;
         }

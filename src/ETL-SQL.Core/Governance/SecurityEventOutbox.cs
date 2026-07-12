@@ -23,6 +23,7 @@ public sealed record SecurityEventOutboxItem(
 public sealed record SecurityEventOutboxHealth(
     int PendingCount,
     int FailedCount,
+    int FilteredCount,
     long StoredBytes,
     DateTimeOffset? OldestPendingUtc,
     DateTimeOffset? LastDeliveredUtc);
@@ -256,9 +257,10 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
             SELECT
                 SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END),
                 SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status = 'Filtered' THEN 1 ELSE 0 END),
                 COALESCE(SUM(payload_bytes), 0),
                 MIN(CASE WHEN status = 'Pending' THEN created_utc END),
-                MAX(delivered_utc)
+                MAX(CASE WHEN status = 'Delivered' THEN delivered_utc END)
             FROM security_events;
             """;
         using var reader = command.ExecuteReader();
@@ -266,9 +268,10 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
         return new SecurityEventOutboxHealth(
             reader.IsDBNull(0) ? 0 : reader.GetInt32(0),
             reader.IsDBNull(1) ? 0 : reader.GetInt32(1),
-            reader.GetInt64(2),
-            reader.IsDBNull(3) ? null : Parse(reader.GetString(3)),
-            reader.IsDBNull(4) ? null : Parse(reader.GetString(4)));
+            reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+            reader.GetInt64(3),
+            reader.IsDBNull(4) ? null : Parse(reader.GetString(4)),
+            reader.IsDBNull(5) ? null : Parse(reader.GetString(5)));
     }
 
     private void Initialize()

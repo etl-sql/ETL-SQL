@@ -20,7 +20,7 @@ release begins.
 - [x] Add Windows Event Log and syslog/structured-file sinks for bootstrap failures that occur before HTTPS delivery is available.
 - [x] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
 - [x] Add optional fail-closed thresholds for terminal delivery failure, oldest-event age, pending count, and outbox bytes; standalone mode remains local-only by default.
-- [ ] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
+- [x] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
 
 ### Completion gates
 - [ ] Fault-injection tests cover collector outage, duplicate delivery, acknowledgement loss, corrupt outbox state, disk pressure, process crash, redaction, and recovery.

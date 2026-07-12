@@ -65,6 +65,8 @@ public sealed class SecurityEventTransport
 
         var eventIds = batch.Select(item => item.Event.EventId).ToArray();
         var batchId = BatchId(eventIds);
+        var responseReceived = false;
+        SecurityEventRuntime.RecordCollectorAttempt(nowUtc);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.CollectorEndpoint);
@@ -82,10 +84,12 @@ public sealed class SecurityEventTransport
             }, options: JsonOptions);
 
             using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            responseReceived = true;
             if (!response.IsSuccessStatusCode)
             {
                 var error = $"Collector returned HTTP {(int)response.StatusCode}.";
                 _outbox.MarkDeliveryFailed(eventIds, error, nowUtc);
+                SecurityEventRuntime.RecordCollectorFailure(nowUtc, reachable: true, error);
                 return new(batch.Count, 0, batch.Count, error);
             }
 
@@ -100,8 +104,16 @@ public sealed class SecurityEventTransport
             if (acknowledged.Length > 0)
                 _outbox.MarkDelivered(acknowledged, nowUtc);
             if (unacknowledged.Length > 0)
+            {
                 _outbox.MarkDeliveryFailed(unacknowledged,
                     "Collector response did not acknowledge the event ID.", nowUtc);
+                SecurityEventRuntime.RecordCollectorFailure(nowUtc, reachable: true,
+                    "Collector acknowledgement was incomplete.");
+            }
+            else
+            {
+                SecurityEventRuntime.RecordCollectorSuccess(nowUtc);
+            }
 
             return new(batch.Count, acknowledged.Length, unacknowledged.Length,
                 unacknowledged.Length == 0 ? null : "Collector acknowledgement was incomplete.");
@@ -115,6 +127,7 @@ public sealed class SecurityEventTransport
             var error = ETL_SQL.Core.Common.SecretRedactor.Redact(ex.Message)
                 ?? "Security event collector request failed.";
             _outbox.MarkDeliveryFailed(eventIds, error, nowUtc);
+            SecurityEventRuntime.RecordCollectorFailure(nowUtc, responseReceived, error);
             return new(batch.Count, 0, batch.Count, error);
         }
     }

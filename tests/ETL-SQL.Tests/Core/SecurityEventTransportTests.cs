@@ -32,6 +32,10 @@ public sealed class SecurityEventTransportTests : IDisposable
         Assert.Contains(first.ToString(), handler.RequestBody, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, outbox.GetHealth().PendingCount);
         Assert.Equal(Now, outbox.GetHealth().LastDeliveredUtc);
+        var diagnostics = SecurityEventRuntime.GetDiagnostics();
+        Assert.True(diagnostics.CollectorReachable);
+        Assert.Equal(Now, diagnostics.LastCollectorAttemptUtc);
+        Assert.Equal(Now, diagnostics.LastCollectorSuccessUtc);
     }
 
     [Fact]
@@ -90,6 +94,11 @@ public sealed class SecurityEventTransportTests : IDisposable
         Assert.Equal(1, result.Failed);
         Assert.DoesNotContain("collector-secret", result.Error, StringComparison.Ordinal);
         Assert.Equal(1, outbox.GetHealth().PendingCount);
+        var diagnostics = SecurityEventRuntime.GetDiagnostics();
+        Assert.False(diagnostics.CollectorReachable);
+        Assert.Equal(Now, diagnostics.LastCollectorFailureUtc);
+        Assert.DoesNotContain("collector-secret", diagnostics.LastCollectorError,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -111,6 +120,7 @@ public sealed class SecurityEventTransportTests : IDisposable
         Assert.Contains(warning.ToString(), handler.RequestBody,
             StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, outbox.GetHealth().PendingCount);
+        Assert.Equal(1, outbox.GetHealth().FilteredCount);
         Assert.Equal(2, outbox.PruneDelivered(Now.AddSeconds(1)));
     }
 

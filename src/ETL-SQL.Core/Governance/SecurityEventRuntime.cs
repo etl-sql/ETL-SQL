@@ -29,6 +29,14 @@ public static class SecurityEventRuntime
     private static ISecurityEventSink _sink = NullSecurityEventSink.Instance;
     private static readonly AsyncLocal<ISecurityEventSink?> ScopedSink = new();
     private static readonly ConditionalWeakTable<Exception, object> EmittedExceptions = new();
+    private static readonly object DiagnosticsSync = new();
+    private static long _droppedCount;
+    private static bool _collectorConfigured;
+    private static bool? _collectorReachable;
+    private static DateTimeOffset? _lastCollectorAttemptUtc;
+    private static DateTimeOffset? _lastCollectorSuccessUtc;
+    private static DateTimeOffset? _lastCollectorFailureUtc;
+    private static string? _lastCollectorError;
 
     public static ISecurityEventSink Sink
     {
@@ -236,8 +244,84 @@ public static class SecurityEventRuntime
         }
         catch
         {
+            Interlocked.Increment(ref _droppedCount);
             // Enforcement and local execution remain independent from optional monitoring sinks.
             // Durable fail-closed behavior belongs to the explicit outbox health gate, not here.
+        }
+    }
+
+    public static SecurityEventDiagnostics GetDiagnostics()
+    {
+        SecurityEventOutboxHealth? health = null;
+        var outbox = LocalOutbox;
+        if (outbox is not null)
+        {
+            try { health = outbox.GetHealth(); }
+            catch { /* Diagnostics reports the configured outbox without leaking provider errors. */ }
+        }
+
+        lock (DiagnosticsSync)
+        {
+            return new SecurityEventDiagnostics(
+                OutboxConfigured: outbox is not null,
+                OutboxReadable: health is not null,
+                PendingCount: health?.PendingCount ?? 0,
+                FailedCount: health?.FailedCount ?? 0,
+                FilteredCount: health?.FilteredCount ?? 0,
+                StoredBytes: health?.StoredBytes ?? 0,
+                OldestPendingUtc: health?.OldestPendingUtc,
+                LastDeliveredUtc: health?.LastDeliveredUtc,
+                DroppedCount: Interlocked.Read(ref _droppedCount),
+                CollectorConfigured: _collectorConfigured,
+                CollectorReachable: _collectorReachable,
+                LastCollectorAttemptUtc: _lastCollectorAttemptUtc,
+                LastCollectorSuccessUtc: _lastCollectorSuccessUtc,
+                LastCollectorFailureUtc: _lastCollectorFailureUtc,
+                LastCollectorError: _lastCollectorError);
+        }
+    }
+
+    public static void ConfigureCollectorDiagnostics(bool configured)
+    {
+        lock (DiagnosticsSync)
+        {
+            _collectorConfigured = configured;
+            if (!configured)
+            {
+                _collectorReachable = null;
+                _lastCollectorError = null;
+            }
+        }
+    }
+
+    public static void RecordCollectorAttempt(DateTimeOffset attemptedAtUtc)
+    {
+        lock (DiagnosticsSync)
+            _lastCollectorAttemptUtc = attemptedAtUtc.ToUniversalTime();
+    }
+
+    public static void RecordCollectorSuccess(DateTimeOffset succeededAtUtc)
+    {
+        lock (DiagnosticsSync)
+        {
+            _collectorReachable = true;
+            _lastCollectorSuccessUtc = succeededAtUtc.ToUniversalTime();
+            _lastCollectorError = null;
+        }
+    }
+
+    public static void RecordCollectorFailure(
+        DateTimeOffset failedAtUtc,
+        bool reachable,
+        string error)
+    {
+        lock (DiagnosticsSync)
+        {
+            _collectorReachable = reachable;
+            _lastCollectorFailureUtc = failedAtUtc.ToUniversalTime();
+            _lastCollectorError = SecurityEventSanitizer.Sanitize(SecurityEventContract.Create(
+                SecurityEventSeverity.Error, SecurityEventType.PolicyAvailabilityFailure,
+                "collector", "collector", "<collector>", SecurityEventDecision.Failed, error)).Reason;
         }
     }
 
@@ -267,6 +351,23 @@ public static class SecurityEventRuntime
         public void Emit(SecurityEvent securityEvent) { }
     }
 }
+
+public sealed record SecurityEventDiagnostics(
+    bool OutboxConfigured,
+    bool OutboxReadable,
+    int PendingCount,
+    int FailedCount,
+    int FilteredCount,
+    long StoredBytes,
+    DateTimeOffset? OldestPendingUtc,
+    DateTimeOffset? LastDeliveredUtc,
+    long DroppedCount,
+    bool CollectorConfigured,
+    bool? CollectorReachable,
+    DateTimeOffset? LastCollectorAttemptUtc,
+    DateTimeOffset? LastCollectorSuccessUtc,
+    DateTimeOffset? LastCollectorFailureUtc,
+    string? LastCollectorError);
 
 public static partial class SecurityEventSanitizer
 {

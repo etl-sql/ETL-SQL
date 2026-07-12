@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -85,6 +86,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         machine = Environment.MachineName,
                         pid = Environment.ProcessId,
                         startedUtc,
+                        securityEvents = SecurityEventRuntime.GetDiagnostics(),
                         capacity = new
                         {
                             capacity.WorkingSetBytes,

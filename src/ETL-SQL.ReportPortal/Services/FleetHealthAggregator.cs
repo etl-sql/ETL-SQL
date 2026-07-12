@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -14,7 +15,8 @@ public sealed record FleetEnvironmentStatus(
     int AuditOutboxPending,
     int AuditOutboxFailed,
     string Storage,
-    DateTime CapturedAtUtc);
+    DateTime CapturedAtUtc,
+    SecurityEventDiagnostics? SecurityEvents = null);
 
 /// <summary>One environment the aggregator polls: its label, base URL, and a scoped FleetReader
 /// bearer token. The token authorizes only <c>GET /api/fleet/status</c> in that environment.</summary>

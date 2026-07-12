@@ -31,6 +31,7 @@ public sealed class SecurityEventRuntimeTests
     [Fact]
     public void Deny_RemainsDeniedWhenMonitoringSinkFails()
     {
+        var droppedBefore = SecurityEventRuntime.GetDiagnostics().DroppedCount;
         using var scope = SecurityEventRuntime.UseSinkForScope(new ThrowingSink());
         var snapshot = Snapshot("corr-failure");
 
@@ -38,6 +39,7 @@ public sealed class SecurityEventRuntimeTests
             "C:\\private\\payroll.csv", "approved roots", "Outside approved root.");
 
         Assert.False(decision.IsAllowed);
+        Assert.True(SecurityEventRuntime.GetDiagnostics().DroppedCount > droppedBefore);
     }
 
     [Fact]
