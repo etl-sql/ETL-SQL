@@ -16,9 +16,13 @@
       4. Resolve release notes (-NotesFile, release-notes-vX.Y.Z.md, or the CHANGELOG section).
       5. Stale ref guard: no remote/local tag vX.Y.Z; delete a fully-merged stale local branch.
       6. Push the branch; wait for CI to go green for the pushed commit.
-      7. Create + push the annotated tag (full ref to avoid ambiguity).
+      7. Create + push the release tag (full ref to avoid ambiguity). Signed (-s) when -SignTag is
+         passed; annotated (-a) otherwise.
       8. Wait for the draft release; apply the curated notes.
       9. Watch the Release workflow to completion; verify expected assets are attached.
+      9b. (opt-in, -PruneMergedBranches) after a verified release: prune stale remote-tracking refs,
+          safe-delete LOCAL branches already merged into $Branch, and LIST merged remote branches
+          for a reviewed manual delete. Never touches main / dev / release/*.
      10. Print a summary + the post-release manual checklist.
 
     Re-runnable: each mutating step is skipped when already satisfied, so a failed run can be
@@ -29,6 +33,9 @@
 
 .EXAMPLE
     .\scripts\Invoke-Release.ps1 -Version 0.12.0 -DryRun
+
+.EXAMPLE
+    .\scripts\Invoke-Release.ps1 -Version 0.12.0 -PruneMergedBranches
 
 .EXAMPLE
     .\scripts\Invoke-Release.ps1 -Version 0.12.0 -NotesFile .\release-notes-v0.12.0.md
@@ -47,6 +54,8 @@ param(
     [switch]$Force,
     [switch]$SkipPreReleaseGate,
     [switch]$SkipCiWait,
+    [switch]$PruneMergedBranches,
+    [switch]$SignTag,
     [int]$CiTimeoutMinutes = 30,
     [int]$ReleaseTimeoutMinutes = 45
 )
@@ -294,7 +303,11 @@ if ($LASTEXITCODE -eq 0 -and $existingTagSha) {
     else { Fail "tag $Tag exists at a different commit ($($existingTagSha.Substring(0,8))). Delete it before releasing." }
 }
 else {
-    Invoke-Native { git tag -a $Tag -m "ETL-SQL $Tag" $localSha } "git tag -a $Tag $($localSha.Substring(0,8))" -Mutating | Out-Null
+    # Sign only when explicitly requested. A configured signing key is not enough: machines often
+    # have stale git signing config without an available private key or agent, and release tagging
+    # should not fail unexpectedly.
+    $tagFlag = if ($SignTag) { "-s" } else { "-a" }
+    Invoke-Native { git tag $tagFlag $Tag -m "ETL-SQL $Tag" $localSha } "git tag $tagFlag $Tag $($localSha.Substring(0,8))" -Mutating | Out-Null
 }
 Invoke-Native { git push $Remote "refs/tags/$Tag" } "git push $Remote refs/tags/$Tag" -Mutating | Out-Null
 if (-not $DryRun) { Write-Ok "tag $Tag pushed (Release workflow triggered)" }
@@ -398,6 +411,55 @@ else {
     }
     finally {
         Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# ---- 9c. optional: prune merged branches (opt-in) ------------------------
+# Sweep up the sprint's branches so they don't pile up release over release. Non-destructive by
+# default: prunes stale remote-tracking refs, safe-deletes LOCAL branches already merged into
+# $Branch ('git branch -d' refuses unmerged), and only PRINTS the delete command for merged REMOTE
+# branches (deleting a shared ref stays a deliberate, reviewed action). Protected from deletion:
+# the release branch itself, main, dev, and anything under release/.
+if ($PruneMergedBranches) {
+    Write-Step "Prune merged branches"
+    if (-not $releaseOk -and -not $DryRun) {
+        Write-WarnLine "release not verified; skipping branch prune"
+    }
+    else {
+        $protectedBranches = @($Branch, 'main', 'dev')
+        function Test-BranchProtected {
+            param([string]$Name)
+            if ($protectedBranches -contains $Name) { return $true }
+            if ($Name -like 'release/*') { return $true }
+            return $false
+        }
+
+        # Prune remote-tracking refs whose remote branch is already gone (safe: touches only refs).
+        Invoke-Native { git remote prune $Remote } "git remote prune $Remote" -Mutating | Out-Null
+        if (-not $DryRun) { Write-Ok "pruned stale remote-tracking refs for $Remote" }
+
+        # Local branches fully merged into $Branch.
+        $localMerged = @(& git branch --merged $Branch --format '%(refname:short)') |
+            Where-Object { $_ -and -not (Test-BranchProtected $_) }
+        if ($localMerged.Count -gt 0) {
+            foreach ($b in $localMerged) {
+                Invoke-Native { git branch -d $b } "delete local merged branch '$b'" -Mutating | Out-Null
+                if (-not $DryRun) { Write-Ok "deleted local branch '$b'" }
+            }
+        }
+        else { Write-Info "no local merged branches to delete" }
+
+        # Remote branches merged into $Remote/$Branch — listed only (deletion is a reviewed step).
+        $remoteMerged = @(& git branch -r --merged "$Remote/$Branch" --format '%(refname:short)') |
+            Where-Object { $_ -and $_ -notlike '*/HEAD' } |
+            ForEach-Object { $_ -replace "^$([regex]::Escape($Remote))/", '' } |
+            Where-Object { -not (Test-BranchProtected $_) } |
+            Select-Object -Unique
+        if ($remoteMerged.Count -gt 0) {
+            Write-WarnLine "remote branches merged into $Branch (review, then delete):"
+            foreach ($b in $remoteMerged) { Write-Info "git push $Remote --delete $b" }
+        }
+        else { Write-Info "no remote merged branches to review" }
     }
 }
 

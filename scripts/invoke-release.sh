@@ -19,6 +19,10 @@
 #   --force                    override fingerprint mismatch / existing tag guards
 #   --skip-prerelease-gate     do not require a Passed Test-PreRelease state
 #   --skip-ci-wait             do not wait for CI before tagging
+#   --prune-merged-branches    after a verified release: prune stale remote-tracking refs,
+#                              safe-delete LOCAL branches merged into --branch, list merged remote
+#                              branches (never touches main / dev / release/*)
+#   --sign-tag                 sign the release tag (git tag -s)
 #   --ci-timeout-minutes N     (default: 30)
 #   --release-timeout-minutes N (default: 45)
 #   -h, --help                 show this help
@@ -33,6 +37,8 @@ DRY_RUN=0
 FORCE=0
 SKIP_GATE=0
 SKIP_CI=0
+PRUNE=0
+SIGN_TAG=0
 CI_TIMEOUT=30
 REL_TIMEOUT=45
 
@@ -48,6 +54,8 @@ while [ $# -gt 0 ]; do
     --force) FORCE=1; shift ;;
     --skip-prerelease-gate) SKIP_GATE=1; shift ;;
     --skip-ci-wait) SKIP_CI=1; shift ;;
+    --prune-merged-branches) PRUNE=1; shift ;;
+    --sign-tag) SIGN_TAG=1; shift ;;
     --ci-timeout-minutes) CI_TIMEOUT="$2"; shift 2 ;;
     --release-timeout-minutes) REL_TIMEOUT="$2"; shift 2 ;;
     -h|--help) usage 0 ;;
@@ -248,7 +256,11 @@ if EXIST_SHA="$(git rev-list -n 1 "$TAG" 2>/dev/null)"; then
   if [ "$EXIST_SHA" = "$LOCAL_SHA" ]; then info "tag $TAG already at release commit; not recreating"
   else die "tag $TAG exists at a different commit ${EXIST_SHA:0:8}. Delete it before releasing."; fi
 else
-  mut "git tag -a $TAG ${LOCAL_SHA:0:8}" git tag -a "$TAG" -m "ETL-SQL $TAG" "$LOCAL_SHA"
+  # Sign only when explicitly requested. A configured signing key is not enough: machines often
+  # have stale git signing config without an available private key or agent, and release tagging
+  # should not fail unexpectedly.
+  if [ "$SIGN_TAG" -eq 1 ]; then TAG_FLAG="-s"; else TAG_FLAG="-a"; fi
+  mut "git tag $TAG_FLAG $TAG ${LOCAL_SHA:0:8}" git tag "$TAG_FLAG" "$TAG" -m "ETL-SQL $TAG" "$LOCAL_SHA"
 fi
 mut "git push $REMOTE refs/tags/$TAG" git push "$REMOTE" "refs/tags/$TAG"
 [ "$DRY_RUN" -eq 1 ] || ok "tag $TAG pushed (Release workflow triggered)"
@@ -338,6 +350,55 @@ else
     || die "failed to upload sha256sums.txt + sbom.json."
   rm -rf "$WORK"; trap - EXIT
   ok "attached sha256sums.txt + sbom.json"
+fi
+
+# ---- 9c. optional: prune merged branches (opt-in) ------------------------
+# Sweep up the sprint's branches so they don't pile up release over release. Non-destructive by
+# default: prunes stale remote-tracking refs, safe-deletes LOCAL branches already merged into
+# $BRANCH ('git branch -d' refuses unmerged), and only PRINTS the delete command for merged REMOTE
+# branches (deleting a shared ref stays a deliberate, reviewed action). Protected: the release
+# branch itself, main, dev, and anything under release/.
+if [ "$PRUNE" -eq 1 ]; then
+  step "Prune merged branches"
+  if [ "$RELEASE_OK" -ne 1 ] && [ "$DRY_RUN" -ne 1 ]; then
+    warn "release not verified; skipping branch prune"
+  else
+    is_protected() { # name -> 0 (true) if protected
+      case "$1" in
+        "$BRANCH" | main | dev) return 0 ;;
+        release/*) return 0 ;;
+        *) return 1 ;;
+      esac
+    }
+
+    mut "git remote prune $REMOTE" git remote prune "$REMOTE"
+    [ "$DRY_RUN" -eq 1 ] || ok "pruned stale remote-tracking refs for $REMOTE"
+
+    ANY_LOCAL=0
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
+      is_protected "$b" && continue
+      mut "delete local merged branch '$b'" git branch -d "$b"
+      [ "$DRY_RUN" -eq 1 ] || ok "deleted local branch '$b'"
+      ANY_LOCAL=1
+    done <<EOF
+$(git branch --merged "$BRANCH" --format '%(refname:short)')
+EOF
+    [ "$ANY_LOCAL" -eq 1 ] || info "no local merged branches to delete"
+
+    ANY_REMOTE=0
+    while IFS= read -r rb; do
+      [ -n "$rb" ] || continue
+      case "$rb" in */HEAD) continue ;; esac
+      b="${rb#"$REMOTE"/}"
+      is_protected "$b" && continue
+      if [ "$ANY_REMOTE" -eq 0 ]; then warn "remote branches merged into $BRANCH (review, then delete):"; ANY_REMOTE=1; fi
+      info "git push $REMOTE --delete $b"
+    done <<EOF
+$(git branch -r --merged "$REMOTE/$BRANCH" --format '%(refname:short)')
+EOF
+    [ "$ANY_REMOTE" -eq 1 ] || info "no remote merged branches to review"
+  fi
 fi
 
 [ -n "$TEMP_NOTES" ] && rm -f "$TEMP_NOTES" || true

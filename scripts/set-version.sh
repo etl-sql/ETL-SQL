@@ -150,6 +150,11 @@ update_file "Docs/FAQ.md" \
     "(current release baseline is \*\*v)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
     "\1${VERSION}\2"
 
+# Release checklist target-version pointer
+update_file "Docs/Release_Checklist.md" \
+    "(current target: \*\*)[0-9]+\.[0-9]+\.[0-9]+(\*\*)" \
+    "\1${VERSION}\2"
+
 update_file "Docs/Migration_Guide.md" \
     "(ETL-SQL Migration Guide \(v)[0-9]+\.[0-9]+\.[0-9]+(\))" \
     "\1${VERSION}\2"

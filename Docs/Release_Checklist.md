@@ -12,7 +12,7 @@ A physical, copy-pasteable checklist for cutting a release. It wraps the real sc
 > are driven by `scripts/Invoke-Release.ps1` (POSIX: `scripts/invoke-release.sh`); run it with
 > `-DryRun` first, and `-Force` to continue a partial release.
 
-Replace `x.y.z` with the target version (current target: **0.13.0**) throughout.
+Replace `x.y.z` with the target version (current target: **0.15.0**) throughout.
 
 ---
 
@@ -137,6 +137,10 @@ it (`Set-Version.ps1` cannot find every hardcoded copy).
 - [ ] Windows MSI built (WiX 3.14 `candle`/`light` on PATH) — `build_msi.ps1`.
 - [ ] Linux/Mac packages built on (or via WSL/native host) as applicable.
 - [ ] Spot-check a built binary launches: `dotnet ETL-SQL.dll --version` (or run an MSI install in a VM).
+- [ ] **In-place upgrade check** (MSI): install the *previous* released MSI, then install this
+      version's MSI over it. Confirm it **upgrades** (not a side-by-side second install), preserves
+      config/data, and removes the prior version. WiX major-upgrade regressions are otherwise silent —
+      the gate's N→N+1 drill only covers the data/engine layer, not the installer.
 
 ## Phase 5 — Tag & publish
 
@@ -150,6 +154,12 @@ it (`Set-Version.ps1` cannot find every hardcoded copy).
 - [ ] Create/curate the GitHub Release: paste the CHANGELOG section; attach `sha256sums.txt`
       and `sbom.json` (per `Release_Workflows.md`, these verification assets must be on the draft).
 - [ ] Verify published asset checksums match `sha256sums.txt`.
+- [ ] Confirm the `Attest build provenance` job (`release.yml`) succeeded and spot-verify one
+      published artifact's provenance (keyless SLSA attestation — the authenticity leg alongside
+      the checksums):
+      ```powershell
+      gh attestation verify ETL-SQL-vx.y.z-win-x64.zip --repo <owner>/<repo>
+      ```
 
 ## Phase 6 — Post-release
 
@@ -157,6 +167,45 @@ it (`Set-Version.ps1` cannot find every hardcoded copy).
 - [ ] Open a fresh `## [Unreleased]` section in `CHANGELOG.md`.
 - [ ] Move any deferred work back to `ROADMAP.md` / `TODO.md`.
 - [ ] Announce / update any deployment runbooks if operational behavior changed.
+- [ ] **Clean up branches merged this release** so they don't accumulate release over release.
+      Run only after the release branch's PR is merged to `main` (so "merged into `main`" is a safe
+      deletion predicate). `Invoke-Release.ps1 -PruneMergedBranches` (or `--prune-merged-branches`)
+      automates the safe parts: it prunes stale remote-tracking refs and safe-deletes **local**
+      branches already merged into `main` (`git branch -d` refuses unmerged), never touching
+      `main` / `dev` / `release/*`. It only **lists** the delete command for merged **remote**
+      branches — deleting a shared ref stays a deliberate, reviewed action. To do it by hand:
+      ```powershell
+      # Prune remote-tracking refs whose remote branch is already gone
+      git fetch --prune
+
+      # Local branches already merged into main (review, then delete the safe ones)
+      git branch --merged main | Where-Object { $_ -notmatch '^\*|\bmain\b|\bdev\b|release/' }
+      git branch -d feature/whatever
+
+      # Merged remote branches — delete each after confirming its PR landed
+      git branch -r --merged origin/main
+      git push origin --delete feature/whatever
+      ```
+
+## Phase 7 — If the release is bad (rollback / hotfix)
+
+A published release can't be un-shipped, and you should **not** delete the tag or force-push over it —
+downstream checkouts, checksums, and the provenance attestation all reference that exact commit.
+Stop the bleeding, then fix forward.
+
+- [ ] **Contain.** Mark the GitHub Release as pre-release so it stops surfacing as "Latest," and/or
+      remove the affected assets so new downloads stop:
+      ```powershell
+      gh release edit vx.y.z --prerelease
+      gh release delete-asset vx.y.z <asset-name>   # or all assets if the build is unsafe
+      ```
+- [ ] **Communicate.** Add a bold notice to the release notes pointing at the fix. If it is a security
+      issue, open a **GitHub Security Advisory (GHSA)** rather than only a CHANGELOG line.
+- [ ] **Fix forward — never re-use a released version number.** Branch a hotfix off the release branch
+      (or the tag), land the fix, and cut **x.y.(z+1)** through this checklist from Phase 1. Immutable
+      versions keep checksums, SBOM, and provenance honest.
+- [ ] **Backfill the record.** Note the yanked version and the reason in `CHANGELOG.md` so the history
+      stays auditable.
 
 ---
 

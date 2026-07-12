@@ -121,6 +121,11 @@ Update-File "Docs/FAQ.md" `
     '(current release baseline is \*\*v)\d+\.\d+\.\d+(\*\*)' `
     "`${1}$Version`${2}"
 
+# Release checklist target-version pointer
+Update-File "Docs/Release_Checklist.md" `
+    '(current target: \*\*)\d+\.\d+\.\d+(\*\*)' `
+    "`${1}$Version`${2}"
+
 Update-File "Docs/Migration_Guide.md" `
     '(ETL-SQL Migration Guide \(v)\d+\.\d+\.\d+(\))' `
     "`${1}$Version`${2}"

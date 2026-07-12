@@ -208,10 +208,37 @@ jobs:
         shell: bash
         run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
-  # 5. Publish GitHub Release
+  # 5. Build-provenance attestation (SLSA) for the release artifacts while the release is still draft.
+  # Free and keyless (Sigstore via GitHub OIDC) — no code-signing cert required. Binds each
+  # artifact's SHA-256 digest to this workflow run so downloaders can verify origin:
+  #   gh attestation verify <file> --repo <owner>/<repo>
+  # This is the authenticity leg of the supply chain (SBOM = contents, sha256sums = integrity).
+  attest-provenance:
+    name: Attest build provenance
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write       # mint the OIDC token that signs the attestation
+      attestations: write   # write the attestation to the repository
+      contents: read
+    steps:
+      - name: Download published release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
+            --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
+            --pattern '*.dmg' --pattern '*.vsix'
+      - name: Attest published artifacts
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'dist/*'
+
+  # 6. Publish GitHub Release only after every build artifact has provenance.
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: attest-provenance
     runs-on: ubuntu-latest
     steps:
       - name: Publish draft release
