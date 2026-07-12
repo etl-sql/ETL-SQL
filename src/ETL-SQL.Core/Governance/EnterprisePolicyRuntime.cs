@@ -373,24 +373,37 @@ public static class EnterprisePolicyRuntime
         CancellationToken cancellationToken = default)
     {
         var store = enrollmentStore ?? new EnterpriseEnrollmentStore();
-        var enrollment = EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store);
-        if (enrollment is null)
+        try
         {
-            SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Standalone());
+            var enrollment = EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store);
+            if (enrollment is null)
+            {
+                SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Standalone());
+                await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
+                return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            }
+
+            var outbox = SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Enrolled(store.Path));
             await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
-            return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+
+            using var http = CreateHttpClient(enrollment);
+            var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
+            var cachePath = Path.Combine(Path.GetDirectoryName(store.Path)!, "cache", "policy-cache.json");
+            var loader = new EnterprisePolicyLoader(source, new FileEnterprisePolicyCacheStore(cachePath));
+            var effective = SetCurrent(await loader.LoadAsync(enrollment, cancellationToken).ConfigureAwait(false));
+            await ReplaceSecurityEventTransportAsync(outbox, enrollment, effective).ConfigureAwait(false);
+            return effective;
         }
-
-        var outbox = SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Enrolled(store.Path));
-        await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
-
-        using var http = CreateHttpClient(enrollment);
-        var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
-        var cachePath = Path.Combine(Path.GetDirectoryName(store.Path)!, "cache", "policy-cache.json");
-        var loader = new EnterprisePolicyLoader(source, new FileEnterprisePolicyCacheStore(cachePath));
-        var effective = SetCurrent(await loader.LoadAsync(enrollment, cancellationToken).ConfigureAwait(false));
-        await ReplaceSecurityEventTransportAsync(outbox, enrollment, effective).ConfigureAwait(false);
-        return effective;
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            BootstrapSecurityEventReporter.CreateDefault(SecurityEventOutboxPaths.Bootstrap())
+                .Report("enterprise-policy-startup", ex);
+            throw;
+        }
     }
 
     public static EffectiveEnterprisePolicy SetCurrent(EffectiveEnterprisePolicy policy)
@@ -507,5 +520,12 @@ public static class SecurityEventOutboxPaths
         var directory = Path.GetDirectoryName(Path.GetFullPath(enrollmentPath))
             ?? throw new InvalidOperationException("Enterprise enrollment path has no parent directory.");
         return Path.Combine(directory, "cache", "security-events.db");
+    }
+
+    public static string Bootstrap()
+    {
+        var directory = Path.GetDirectoryName(Standalone())
+            ?? throw new InvalidOperationException("Standalone security-event path has no parent directory.");
+        return Path.Combine(directory, "bootstrap-security-events.jsonl");
     }
 }
