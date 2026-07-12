@@ -33,6 +33,7 @@ class Element {
     this.clientHeight = tagName === 'div' ? 600 : 130;
     this._text = '';
     this.value = '';
+    this.dataset = {};
   }
 
   appendChild(child) {
@@ -53,6 +54,7 @@ class Element {
   getBoundingClientRect() { return { left: 0, top: 0, width: this.clientWidth, height: this.clientHeight }; }
   getContext() { return fakeCanvasContext(); }
   querySelector() { return null; }
+  querySelectorAll() { return []; }
   closest() { return null; }
 
   set innerHTML(_) { this.children = []; this._text = ''; }
@@ -92,6 +94,11 @@ function makeChart() {
 
 globalThis.document = {
   createElement(tag) { return new Element(tag); },
+  createElementNS(_ns, tag) { return new Element(tag); },
+  createTextNode(text) { return new TextNode(String(text ?? '')); },
+  getElementById() { return null; },
+  addEventListener() {},
+  removeEventListener() {},
 };
 
 globalThis.window = {
@@ -100,6 +107,10 @@ globalThis.window = {
 
 globalThis.clearTimeout = clearTimeout;
 globalThis.setTimeout = setTimeout;
+// Connection drawing is scheduled via rAF; the assertions check card/detail text, not drawn
+// SVG edges, so a no-op keeps the render synchronous and avoids post-assertion async throws.
+globalThis.requestAnimationFrame = () => 0;
+globalThis.cancelAnimationFrame = () => {};
 
 const sourcePath = path.resolve('src/ETL-SQL.ReportRuntime/Resources/Shared/designer/designer.js');
 const tempModule = path.join(os.tmpdir(), `etl-sql-designer-${Date.now()}.mjs`);
@@ -184,16 +195,19 @@ try {
   const dag = renderDag(root, graph, { theme: 'portal' });
   dag.showDetail('vis:salesBar');
 
+  // The Card-based lineage designer renders the node detail panel as Title / Type / Metadata
+  // (scalar meta) / Columns / Mappings. Visual node: BAR type, YAXIS->total mapping.
   const text = root.textContent;
-  const expected = ['Fields', 'total', '#sales', '&sales_snap', 'SUM(Amount)', 'edw.Sales', 'Sales amount from catalog', 'pii'];
+  const expected = ['BAR · salesBar', 'Type: visual', 'Metadata', 'visualType', 'BAR', 'Mappings', 'YAXIS', 'total'];
   const missing = expected.filter(x => !text.includes(x));
   if (missing.length) {
     throw new Error(`Lineage detail panel missing: ${missing.join(', ')}\nRendered text:\n${text}`);
   }
 
+  // Table node: Type: table, its column list, and no visual mappings.
   dag.showDetail('table:edw.Sales');
   const tableText = root.textContent;
-  for (const expectedText of ['Columns (1)', 'Amount', 'db_type', 'Sales amount from catalog']) {
+  for (const expectedText of ['edw.Sales', 'Type: table', 'Columns', 'Amount', 'No visual mappings captured.']) {
     if (!tableText.includes(expectedText)) {
       throw new Error(`Table detail panel missing: ${expectedText}\nRendered text:\n${tableText}`);
     }
