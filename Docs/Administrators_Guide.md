@@ -475,6 +475,12 @@ Portal service identity permission to use its private key. An unset thumbprint d
 a deterministic configuration error. Install and grant a replacement certificate before changing the
 thumbprint, and retain the former public key until enrolled clients trust the replacement.
 
+Portal administrators manage the authority from **Admin -> Policy Authority**. The tab validates
+policy JSON, publishes active or staged versions, activates staged versions, republishes emergency
+rollback versions, registers enrolled machines, revokes machine identities, and shows signing-key
+status. The same operations are available through `api/admin/policy-authority/*`; the UI and API
+never receive or return private-key material.
+
 On every normal process startup, an enrolled installation requests a signed policy envelope from the configured
 HTTPS endpoint. The request carries `X-ETL-SQL-Tenant`, `X-ETL-SQL-Enrollment`, and `X-ETL-SQL-Machine` headers
 and presents the enrolled client certificate when configured. The server must return JSON in this form:

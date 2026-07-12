@@ -1,5 +1,4 @@
 using System;
-using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -159,7 +158,7 @@ namespace ETL_SQL.App
                 VaultBearerToken = configuration?["Governance:Secrets:VaultBearerToken"]
                     ?? configuration?["Secrets:VaultBearerToken"]
             };
-            return new SecretProviderFactory(new HttpClient()).Create(options);
+            return new SecretProviderFactory(PolicyBoundHttp.CreateClient()).Create(options);
         }
 
         private static string? AcquireValue(CliContext ctx, ILogger logger)

@@ -12,6 +12,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Engine.Services;
@@ -45,7 +46,7 @@ namespace ETL_SQL.Connectors.Orchestrator
             _baseUrl = baseUrl.TrimEnd('/');
             _apiKey = apiKey;
             _logger = logger;
-            _http = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
+            _http = PolicyBoundHttp.CreateClient(baseAddress: new Uri(_baseUrl + "/"));
             if (!string.IsNullOrWhiteSpace(apiKey))
                 _http.DefaultRequestHeaders.Add("X-Orchestrator-Key", apiKey);
             Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

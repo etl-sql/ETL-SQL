@@ -40,9 +40,11 @@ try {
     $runbook = $runbookText | ConvertFrom-Json
     Assert-True ($runbook.runId -eq 'ha-soak-runbook-test') 'Expected run id in runbook.'
     Assert-True ($runbook.mode -eq 'CiSmoke') 'Expected CI smoke mode.'
-    Assert-True (@($runbook.steps).Count -eq 9) 'Expected ordered operator steps.'
+    Assert-True (@($runbook.steps).Count -eq 11) 'Expected ordered operator steps.'
     Assert-True (($runbook.steps | Where-Object { $_.name -eq 'Collect diagnostics' }).command.Contains('Export-HaSoakDiagnostics.ps1')) 'Expected diagnostics step.'
     Assert-True (($runbook.steps | Where-Object { $_.name -eq 'Run sustained service capacity workload' }).command.Contains('test-service-capacity.mjs')) 'Expected sustained workload command.'
+    Assert-True (($runbook.steps | Where-Object { $_.name -eq 'Run enterprise hardening certification' }).command.Contains('Test-EnterpriseHardeningCertification.ps1')) 'Expected enterprise hardening command.'
+    Assert-True (($runbook.steps | Where-Object { $_.name -eq 'Validate current Gate F evidence' }).command.Contains('Test-GateFEvidence.ps1')) 'Expected Gate F validation command.'
     Assert-True ($runbook.diagnostics.expectedArtifacts -contains 'docker-compose-logs.txt') 'Expected Docker logs in diagnostics artifacts.'
     Assert-True (-not $runbookText.Contains('PG_PASSWORD=')) 'Runbook must not include raw PostgreSQL password.'
     Assert-True (-not $runbookText.Contains('ORCH_API_KEY=')) 'Runbook must not include raw Orchestrator API key.'

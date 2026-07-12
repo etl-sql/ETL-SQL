@@ -37,12 +37,14 @@ try {
     $plan = $planText | ConvertFrom-Json
 
     Assert-True ($plan.runId -eq 'ha-soak-plan-test') 'Expected run id in evidence plan.'
-    Assert-True (@($plan.gates).Count -eq 3) 'Expected three HA soak evidence gates.'
+    Assert-True (@($plan.gates).Count -eq 5) 'Expected HA soak plus enterprise evidence gates.'
     Assert-True ($plan.nonSecret -eq $true) 'Expected plan to be marked non-secret.'
     Assert-True (-not $planText.Contains('ORCH_API_KEY=')) 'Evidence plan must not contain raw Orchestrator key.'
     Assert-True (-not $planText.Contains('PORTAL_JWT_SECRET=')) 'Evidence plan must not contain raw Portal JWT secret.'
     Assert-True (($plan.gates | Where-Object { $_.gateId -eq 'sustained-postgres-ha-load' }).state -eq 'Ready') 'Expected sustained gate to be ready.'
     Assert-True (($plan.gates | Where-Object { $_.gateId -eq 'fault-injection' }).faultCount -ge 10) 'Expected fault matrix count.'
+    Assert-True (($plan.gates | Where-Object { $_.gateId -eq 'enterprise-hardening' }).command.Contains('Test-EnterpriseHardeningCertification.ps1')) 'Expected enterprise hardening gate.'
+    Assert-True (($plan.gates | Where-Object { $_.gateId -eq 'gate-f-current-evidence' }).command.Contains('Test-GateFEvidence.ps1')) 'Expected Gate F evidence gate.'
 
     Write-Host 'HA soak evidence plan self-test passed.'
 }

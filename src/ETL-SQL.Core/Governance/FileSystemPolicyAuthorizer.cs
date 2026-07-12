@@ -86,6 +86,79 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
             failIfExists ? FileMode.CreateNew : FileMode.OpenOrCreate,
             FileAccess.ReadWrite, FileShare.None, truncate);
 
+    public bool DeleteValidatedFile(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized,
+        bool ifExists = false)
+    {
+        if (!File.Exists(authorized.CanonicalPath))
+        {
+            return false;
+        }
+
+        ValidateExistingFileHandle(context, authorized);
+        ValidateCanonicalPathStillMatches(context, authorized);
+        File.Delete(authorized.CanonicalPath);
+        return true;
+    }
+
+    public void MoveValidatedFile(
+        IExecutionContext context,
+        AuthorizedFileSystemPath source,
+        AuthorizedFileSystemPath destination,
+        bool overwrite)
+    {
+        ValidateExistingFileHandle(context, source);
+        ValidateCanonicalPathStillMatches(context, source);
+        ValidateCanonicalPathStillMatches(context, destination);
+
+        if (File.Exists(destination.CanonicalPath))
+        {
+            if (!overwrite)
+                throw new IOException($"Destination file already exists: {destination.CanonicalPath}");
+
+            DeleteValidatedFile(context, destination);
+        }
+
+        File.Move(source.CanonicalPath, destination.CanonicalPath);
+    }
+
+    public bool DeleteValidatedDirectory(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized,
+        bool recursive,
+        bool ifExists = false)
+    {
+        if (!Directory.Exists(authorized.CanonicalPath))
+        {
+            return false;
+        }
+
+        ValidateCanonicalPathStillMatches(context, authorized);
+        Directory.Delete(authorized.CanonicalPath, recursive);
+        return true;
+    }
+
+    public void MoveValidatedDirectory(
+        IExecutionContext context,
+        AuthorizedFileSystemPath source,
+        AuthorizedFileSystemPath destination,
+        bool overwrite)
+    {
+        ValidateCanonicalPathStillMatches(context, source);
+        ValidateCanonicalPathStillMatches(context, destination);
+
+        if (Directory.Exists(destination.CanonicalPath))
+        {
+            if (!overwrite)
+                throw new IOException($"Destination directory already exists: {destination.CanonicalPath}");
+
+            DeleteValidatedDirectory(context, destination, recursive: true);
+        }
+
+        Directory.Move(source.CanonicalPath, destination.CanonicalPath);
+    }
+
     private FileStream OpenValidatedCore(
         IExecutionContext context,
         AuthorizedFileSystemPath authorized,
@@ -115,6 +188,46 @@ public sealed class FileSystemPolicyAuthorizer(SecurityService securityService)
         {
             stream.Dispose();
             throw;
+        }
+    }
+
+    private void ValidateExistingFileHandle(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized)
+    {
+        using var stream = OpenValidatedCore(context, authorized, FileMode.Open,
+            FileAccess.Read, FileShare.None, truncate: false);
+    }
+
+    private void ValidateCanonicalPathStillMatches(
+        IExecutionContext context,
+        AuthorizedFileSystemPath authorized)
+    {
+        string resolved;
+        try
+        {
+            RejectNonCanonicalWindowsForms(authorized.CanonicalPath);
+            resolved = SecurityService.ResolvePathSymlinks(Path.GetFullPath(authorized.CanonicalPath));
+            RejectNonCanonicalWindowsForms(resolved);
+        }
+        catch (SecurityException ex)
+        {
+            var snapshot = RefreshSnapshotAtBoundary(context);
+            throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+                PolicyKey(authorized.Access),
+                Sanitize(authorized.CanonicalPath, authorized.CanonicalPath),
+                EffectiveConstraint(snapshot, authorized.Access),
+                ex.Message), ex);
+        }
+
+        if (!FileHandleFinalPath.Matches(resolved, authorized.CanonicalPath))
+        {
+            var snapshot = RefreshSnapshotAtBoundary(context);
+            throw new FileSystemPolicyDeniedException(OperationPolicyDecision.Deny(snapshot,
+                PolicyKey(authorized.Access),
+                Sanitize(authorized.CanonicalPath, authorized.CanonicalPath),
+                EffectiveConstraint(snapshot, authorized.Access),
+                "The path resolved to a different canonical target than the authorized target (possible link substitution)."));
         }
     }
 

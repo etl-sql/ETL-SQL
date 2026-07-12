@@ -18,9 +18,26 @@ that result into an unsupported blanket billion-row claim.
 > `release/v0.15.0` when the feature's tests are green, and merge `release/v0.15.0` → `main` only
 > at release. `main` stays at the last shipped release (v0.14.0).
 >
-> **Deferred to roadmap:** the enterprise-security continuation (deferred Phase 3 hardening,
-> Phase 4 Central Security Events, Phase 5 Certification & Operations) remains in `ROADMAP.md`;
-> promote it only if it joins this release's scope.
+> **Deferred to roadmap:** Phase 4 Central Security Events and Phase 5 Certification & Operations
+> remain in `ROADMAP.md`; promote them only if they join this release's scope.
+
+### Enterprise Phase 3 hardening closeout
+
+The main Phase 3 enterprise policy-authority and operation-boundary enforcement work is already
+implemented. This closeout list tracks the remaining hardening and retained evidence needed before
+calling the enterprise continuation fully current.
+
+- [x] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME`
+  operations on supported platforms; add link/junction substitution tests at each mutation
+  boundary.
+- [x] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond
+  the REST connector to all policy-governed outbound HTTP/network clients, including SharePoint,
+  Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
+- [ ] Run and retain the deferred performance lane plus Windows and Linux enterprise certification
+  evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone
+  behavior. *(Bundled into the Phase 6 operator runbook/evidence plan via
+  `scripts/Test-EnterpriseHardeningCertification.ps1`; run once on Windows and once on Linux/WSL
+  for the same run id.)*
 
 ### Phase 6: Concurrent, PostgreSQL, and failure soak certification
 

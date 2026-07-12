@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors
@@ -39,7 +40,7 @@ namespace ETL_SQL.Connectors
         public SharePointConnector()
         {
             _logger = NullLogger.Instance;
-            _httpClient = new HttpClient();
+            _httpClient = PolicyBoundHttp.CreateClient();
         }
 
         public SharePointConnector(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null, HttpMessageHandler? handler = null)
@@ -63,7 +64,7 @@ namespace ETL_SQL.Connectors
             // Security Hardening: Validate site host against egress policy
             if (!string.IsNullOrEmpty(_siteUrl) && Uri.TryCreate(_siteUrl, UriKind.Absolute, out var uri))
             {
-                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, uri.Host);
+                ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context, uri);
             }
 
             // Setup HTTP client based on authentication mode
@@ -73,10 +74,10 @@ namespace ETL_SQL.Connectors
             }
             else
             {
-                var clientHandler = new HttpClientHandler();
+                NetworkCredential? credentials = null;
                 if (_authMode == "INTEGRATED")
                 {
-                    clientHandler.UseDefaultCredentials = true;
+                    credentials = CredentialCache.DefaultNetworkCredentials;
                 }
                 else if (_authMode == "AD_WINDOWS")
                 {
@@ -84,10 +85,10 @@ namespace ETL_SQL.Connectors
                     string pass = DecryptIfNeeded(_options.GetValueOrDefault("PASSWORD", ""));
                     string domain = _options.GetValueOrDefault("DOMAIN", "");
 
-                    clientHandler.Credentials = new NetworkCredential(user, pass, domain);
+                    credentials = new NetworkCredential(user, pass, domain);
                 }
 
-                _httpClient = new HttpClient(clientHandler);
+                _httpClient = PolicyBoundHttp.CreateClient(h => h.Credentials = credentials);
             }
         }
 
@@ -98,7 +99,7 @@ namespace ETL_SQL.Connectors
                 return "SharePoint REST API Connector v1.0 (Offline - Invalid Site URL)";
             }
 
-            ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseHost(context, uri.Host);
+            ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context, uri);
 
             try
             {
@@ -222,7 +223,7 @@ namespace ETL_SQL.Connectors
             var siteUri = new Uri(_siteUrl);
             string scope = $"https://{siteUri.Host}/.default";
 
-            using var tokenClient = new HttpClient();
+            using var tokenClient = PolicyBoundHttp.CreateClient();
             var dict = new Dictionary<string, string>
             {
                 { "grant_type", "client_credentials" },
@@ -231,7 +232,11 @@ namespace ETL_SQL.Connectors
                 { "scope", scope }
             };
 
-            var req = new HttpRequestMessage(HttpMethod.Post, $"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token")
+            var tokenUri = new Uri($"https://login.microsoftonline.com/{tenantId}/oauth2/v2.0/token");
+            if (_context != null)
+                ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(_context, tokenUri);
+
+            var req = new HttpRequestMessage(HttpMethod.Post, tokenUri)
             {
                 Content = new FormUrlEncodedContent(dict)
             };

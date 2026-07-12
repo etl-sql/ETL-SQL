@@ -237,6 +237,15 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
             ConnectorPolicyAuthorizer.EnforceResolvedAddress("localhost", System.Net.IPAddress.Loopback)));
     }
 
+    [Fact]
+    public void PolicyBoundHttp_CreateHandler_DisablesRedirectsAndAmbientProxy()
+    {
+        using var handler = PolicyBoundHttp.CreateHandler();
+
+        Assert.False(handler.AllowAutoRedirect);
+        Assert.False(handler.UseProxy);
+    }
+
     private static Exception? Unwrap(Exception? ex)
     {
         while (ex is not null)

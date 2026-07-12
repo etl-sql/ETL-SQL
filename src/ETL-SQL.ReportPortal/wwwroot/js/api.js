@@ -325,6 +325,30 @@ export const connectionsApi = {
     revokeAcl: (alias, groupId) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/acl/${groupId}`, { method: 'DELETE' }),
 };
 
+// ── Admin — enterprise policy authority ───────────────────────────────────────
+
+export const policyAuthorityApi = {
+    status:   () => apiJson('/api/admin/policy-authority/status'),
+    validate: (policyJson) => apiJson('/api/admin/policy-authority/validate', { method: 'POST', body: { policyJson } }),
+    versions: (tenant, environment) =>
+        apiJson(`/api/admin/policy-authority/versions?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
+    active: (tenant, environment) =>
+        apiJson(`/api/admin/policy-authority/active?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
+    publish: (body) => apiJson('/api/admin/policy-authority/publish', { method: 'POST', body }),
+    activate: (tenant, environment, policyVersion) =>
+        apiJson('/api/admin/policy-authority/activate', { method: 'POST', body: { tenant, environment, policyVersion } }),
+    rollback: (body) => apiJson('/api/admin/policy-authority/rollback', { method: 'POST', body }),
+    machines: (tenant = '', environment = '') => {
+        const p = new URLSearchParams();
+        if (tenant) p.set('tenant', tenant);
+        if (environment) p.set('environment', environment);
+        return apiJson(`/api/admin/policy-authority/machines${p.toString() ? `?${p}` : ''}`);
+    },
+    registerMachine: (body) => apiJson('/api/admin/policy-authority/machines', { method: 'POST', body }),
+    revokeMachine: (machineId, reason) =>
+        apiJson(`/api/admin/policy-authority/machines/${encodeURIComponent(machineId)}/revoke`, { method: 'POST', body: { reason } }),
+};
+
 // ── Admin — users ──────────────────────────────────────────────────────────────
 
 export const adminApi = {

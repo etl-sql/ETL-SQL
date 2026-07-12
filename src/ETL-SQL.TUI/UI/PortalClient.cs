@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -13,7 +14,8 @@ namespace ETL_SQL.TUI.UI
     /// </summary>
     public sealed class PortalClient
     {
-        private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
+        private static readonly HttpClient Http = PolicyBoundHttp.CreateClient(
+            timeout: TimeSpan.FromSeconds(30));
 
         public async Task<string?> LoginAsync(string url, string username, string password)
         {

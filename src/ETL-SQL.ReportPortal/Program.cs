@@ -75,7 +75,8 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.ISecretProvider>(sp =>
         return new ETL_SQL.ReportPortal.Services.PortalStoreSecretProvider(
             sp.GetRequiredService<IServiceScopeFactory>());
 
-    return new ETL_SQL.Core.Governance.SecretProviderFactory(new HttpClient()).Create(options);
+    return new ETL_SQL.Core.Governance.SecretProviderFactory(
+        ETL_SQL.Core.Governance.PolicyBoundHttp.CreateClient()).Create(options);
 });
 
 // Same resolve-time dispatch for the connection catalog: the Portal-backed catalog only exists
@@ -338,7 +339,8 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(Math.Max(1, portalConfig.Audit.TransportTimeoutSeconds));
-});
+})
+    .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
 // Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
@@ -373,18 +375,21 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.R
 // ── Federated OIDC login (Portal:Identity:Oidc) ───────────────────────────────
 // Discovery is a singleton so its ConfigurationManager caches the well-known doc/JWKS across
 // requests; the auth service and provisioning bridge mint the portal's own JWT/refresh session.
-builder.Services.AddHttpClient("oidc-discovery", c => c.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddHttpClient("oidc-discovery", c => c.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.IOidcDiscoveryProvider>(sp =>
     new ETL_SQL.ReportPortal.Services.OidcDiscoveryProvider(
         portalConfig, sp.GetRequiredService<IHttpClientFactory>().CreateClient("oidc-discovery")));
 builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.IOidcAuthenticationService,
-    ETL_SQL.ReportPortal.Services.OidcAuthenticationService>();
+    ETL_SQL.ReportPortal.Services.OidcAuthenticationService>()
+    .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OidcUserProvisioningService>();
 
 // Read-only fleet health aggregation (P2.2): fans out to each environment's GET /api/fleet/status
 // with a scoped FleetReader token. Registered so an aggregator host can resolve it.
 builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.FleetHealthAggregator>(client =>
-    client.Timeout = TimeSpan.FromSeconds(10));
+    client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorApiKeyProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
@@ -398,7 +403,8 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.OrchestratorProxySe
 {
     client.Timeout = TimeSpan.FromSeconds(10);
     // No base address — OrchestratorProxyService builds absolute URIs from OrchestratorSettingsService.
-});
+})
+    .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 
 // ── Orchestrator Channel ──────────────────────────────────────────────────────
 if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
@@ -408,7 +414,8 @@ if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
         client.BaseAddress = new Uri(portalConfig.Orchestrator.ApiUrl);
         if (!string.IsNullOrWhiteSpace(portalConfig.Orchestrator.ApiKey))
             client.DefaultRequestHeaders.Add("X-Orchestrator-Key", portalConfig.Orchestrator.ApiKey);
-    });
+    })
+        .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 }
 else
 {

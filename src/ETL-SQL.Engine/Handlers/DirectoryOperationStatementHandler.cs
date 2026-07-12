@@ -74,7 +74,8 @@ public class DirectoryOperationStatementHandler : IStatementHandler
         string pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
         string path = context.ResolvePath(pathVal);
 
-        string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+        string? destVal = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "" : null;
+        string? dest = destVal != null ? context.ResolvePath(destVal) : null;
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         var sourceAccess = stmt.Type is DirectoryOpType.Delete or DirectoryOpType.DeleteContents
             or DirectoryOpType.Move or DirectoryOpType.Rename
@@ -82,7 +83,7 @@ public class DirectoryOperationStatementHandler : IStatementHandler
             : FileSystemAccessKind.Read;
         path = pathAuthorizer.Authorize(context, path, sourceAccess,
             validateFileType: stmt.Type == DirectoryOpType.Decompress).CanonicalPath;
-        if (dest != null)
+        if (dest != null && stmt.Type != DirectoryOpType.Rename)
         {
             var destinationAccess = stmt.Type == DirectoryOpType.Decompress
                 ? FileSystemAccessKind.Extract
@@ -143,14 +144,14 @@ public class DirectoryOperationStatementHandler : IStatementHandler
                     _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Delete:
-                    path = pathAuthorizer.Authorize(context, path, FileSystemAccessKind.Delete,
-                        validateFileType: false).CanonicalPath;
+                    var deletePath = pathAuthorizer.Authorize(context, path, FileSystemAccessKind.Delete,
+                        validateFileType: false);
                     // Security Hardening: Block deleting directories containing scripts (or with script extensions)
-                    context.SecurityService.ValidateWriteAccess(path);
+                    context.SecurityService.ValidateWriteAccess(deletePath.CanonicalPath);
 
-                    if (Directory.Exists(path))
+                    if (pathAuthorizer.DeleteValidatedDirectory(context, deletePath, recursive: true, stmt.IfExists))
                     {
-                        Directory.Delete(path, true);
+                        path = deletePath.CanonicalPath;
                         _logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
                     }
                     else if (stmt.IfExists)
@@ -163,22 +164,25 @@ public class DirectoryOperationStatementHandler : IStatementHandler
                     if (dest != null)
                     {
                         var target = dest;
-                        if (stmt.Type == DirectoryOpType.Rename)
+                        if (stmt.Type == DirectoryOpType.Rename && destVal != null)
                         {
                             var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
-                            target = System.IO.Path.Combine(parent, dest);
+                            target = destVal.Contains('/') || destVal.Contains('\\')
+                                ? context.ResolvePath(destVal)
+                                : System.IO.Path.Combine(parent, destVal);
                         }
+                        var moveSource = pathAuthorizer.Authorize(context, path, FileSystemAccessKind.Move,
+                            validateFileType: false);
+                        var moveDest = pathAuthorizer.Authorize(context, target, FileSystemAccessKind.Move,
+                            validateFileType: false);
 
                         // Security Hardening: Validate the target path
-                        context.SecurityService.ValidatePath(target);
-                        context.SecurityService.ValidateWriteAccess(target);
+                        context.SecurityService.ValidatePath(moveDest.CanonicalPath);
+                        context.SecurityService.ValidateWriteAccess(moveDest.CanonicalPath);
 
-                        if (Directory.Exists(target))
-                        {
-                            if (overwrite) Directory.Delete(target, true);
-                            else throw new ExecutionException($"Destination directory already exists and OVERWRITE is OFF: {target}");
-                        }
-                        Directory.Move(path, target);
+                        pathAuthorizer.MoveValidatedDirectory(context, moveSource, moveDest, overwrite);
+                        path = moveSource.CanonicalPath;
+                        dest = moveDest.CanonicalPath;
                     }
                     break;
                 case DirectoryOpType.Copy:

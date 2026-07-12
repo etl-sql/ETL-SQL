@@ -12,7 +12,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$TopologyRunRoot,
 
-    [ValidateSet('Sustained', 'LargeJob', 'FaultInjection', 'All')]
+    [ValidateSet('Sustained', 'LargeJob', 'FaultInjection', 'EnterpriseHardening', 'GateF', 'All')]
     [string]$RequiredGate = 'Sustained',
 
     [string]$RequiredCommit = '',
@@ -130,6 +130,18 @@ function Test-GenericPassedReport {
     }
 }
 
+function Test-EnterpriseHardeningEvidence {
+    param([string]$Path)
+    $summary = Read-Json $Path 'enterprise hardening summary'
+    if ($null -eq $summary) { return }
+    if ([string]$summary.status -ne 'Passed') {
+        Add-Issue 'Error' 'failed-report' "Enterprise hardening certification status is $($summary.status)."
+    }
+    if (-not $summary.PSObject.Properties['platform'] -or [string]::IsNullOrWhiteSpace([string]$summary.platform)) {
+        Add-Issue 'Error' 'missing-platform' 'Enterprise hardening summary does not identify the platform.'
+    }
+}
+
 function Write-MarkdownSummary {
     param([object]$Summary, [string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return }
@@ -178,6 +190,8 @@ $runId = if ($metadata -and $metadata.PSObject.Properties['runId']) { [string]$m
 $sustainedDir = Join-Path $EvidenceRoot "certification-results/postgres-ha-soak/$runId"
 $largeJobDir = Join-Path $EvidenceRoot "certification-results/ha-large-job-soak/$runId"
 $faultDir = Join-Path $EvidenceRoot "certification-results/ha-fault-injection/$runId"
+$enterpriseDir = Join-Path $EvidenceRoot "certification-results/enterprise-hardening/$runId"
+$gateFDir = Join-Path $EvidenceRoot "certification-results/gate-f-1b"
 
 if ($RequiredGate -in @('Sustained', 'All')) {
     $capacityJson = Join-Path $sustainedDir 'capacity-report.json'
@@ -202,6 +216,26 @@ if ($RequiredGate -in @('FaultInjection', 'All')) {
     Assert-File (Join-Path $faultDir 'ha-fault-injection-plan.md') 'fault-injection plan Markdown' | Out-Null
     Test-GenericPassedReport (Join-Path $faultDir 'fault-report.json') 'fault-injection report'
     Assert-File (Join-Path $faultDir 'fault-report.md') 'fault-injection Markdown report' | Out-Null
+}
+
+if ($RequiredGate -in @('EnterpriseHardening', 'All')) {
+    if (-not (Test-Path -LiteralPath $enterpriseDir -PathType Container)) {
+        Add-Issue 'Error' 'missing-artifact' "Enterprise hardening evidence directory not found: $enterpriseDir"
+    } else {
+        $summaries = @(Get-ChildItem -LiteralPath $enterpriseDir -Recurse -Filter 'enterprise-hardening-summary.json' -File)
+        if ($summaries.Count -eq 0) {
+            Add-Issue 'Error' 'missing-artifact' "No enterprise hardening summary found under: $enterpriseDir"
+        }
+        foreach ($summaryFile in $summaries) {
+            Test-EnterpriseHardeningEvidence $summaryFile.FullName
+            Assert-File ([IO.Path]::ChangeExtension($summaryFile.FullName, '.md')) 'enterprise hardening Markdown summary' | Out-Null
+        }
+    }
+}
+
+if ($RequiredGate -in @('GateF', 'All')) {
+    Read-Json (Join-Path $gateFDir 'gate-f-report.json') 'Gate F report' | Out-Null
+    Assert-File (Join-Path $gateFDir 'gate-f-evidence-validation.md') 'Gate F evidence validation Markdown' | Out-Null
 }
 
 $checkedArtifactArray = $checkedArtifacts.ToArray()

@@ -104,14 +104,15 @@ public class FileOperationStatementHandler : IStatementHandler
 
         string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
         string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
-        string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+        string? destVal = stmt.Destination != null ? (await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "" : null;
+        string? dest = destVal != null ? context.ResolvePath(destVal) : null;
         var pathAuthorizer = new FileSystemPolicyAuthorizer(context.SecurityService);
         var sourceAccess = stmt.Type is FileOpType.Delete or FileOpType.Move or FileOpType.Rename
             ? FileSystemAccessKind.Move
             : FileSystemAccessKind.Read;
         source = pathAuthorizer.Authorize(context, source, sourceAccess,
             validateFileType: stmt.Type != FileOpType.Compress || !Directory.Exists(source)).CanonicalPath;
-        if (dest != null)
+        if (dest != null && stmt.Type != FileOpType.Rename)
         {
             var destinationAccess = stmt.Type == FileOpType.Decompress
                 ? FileSystemAccessKind.Extract
@@ -159,14 +160,14 @@ public class FileOperationStatementHandler : IStatementHandler
             switch (stmt.Type)
             {
                 case FileOpType.Delete:
-                    source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete).CanonicalPath;
+                    var deleteSource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Delete);
                     // Security Hardening: Block deleting script files and dangerous file types
-                    context.SecurityService.ValidateWriteAccess(source);
-                    context.SecurityService.ValidateFileType(source);
+                    context.SecurityService.ValidateWriteAccess(deleteSource.CanonicalPath);
+                    context.SecurityService.ValidateFileType(deleteSource.CanonicalPath);
 
-                    if (File.Exists(source))
+                    if (pathAuthorizer.DeleteValidatedFile(context, deleteSource, stmt.IfExists))
                     {
-                        File.Delete(source);
+                        source = deleteSource.CanonicalPath;
                         context.Log($"File deleted: {source}", ConsoleColor.Green);
                     }
                     else if (stmt.IfExists)
@@ -210,37 +211,34 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Move:
                     if (dest != null)
                     {
-                        source = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Move).CanonicalPath;
-                        dest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Move).CanonicalPath;
+                        var moveSource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Move);
+                        var moveDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Move);
                         // Security Hardening: Block writing to script files and dangerous types
-                        context.SecurityService.ValidateWriteAccess(dest);
-                        context.SecurityService.ValidateFileType(dest);
+                        context.SecurityService.ValidateWriteAccess(moveDest.CanonicalPath);
+                        context.SecurityService.ValidateFileType(moveDest.CanonicalPath);
 
-                        if (File.Exists(dest))
-                        {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                        }
-                        File.Move(source, dest);
+                        pathAuthorizer.MoveValidatedFile(context, moveSource, moveDest, overwrite);
+                        source = moveSource.CanonicalPath;
+                        dest = moveDest.CanonicalPath;
                     }
                     break;
                 case FileOpType.Rename:
-                    if (dest != null)
+                    if (destVal != null)
                     {
-                        var fileName = Path.GetFileName(source);
                         var dir = Path.GetDirectoryName(source) ?? "";
-                        var newPath = Path.Combine(dir, dest);
+                        var newPath = destVal.Contains('/') || destVal.Contains('\\')
+                            ? context.ResolvePath(destVal)
+                            : Path.Combine(dir, destVal);
+                        var renameSource = pathAuthorizer.Authorize(context, source, FileSystemAccessKind.Move);
+                        var renameDest = pathAuthorizer.Authorize(context, newPath, FileSystemAccessKind.Move);
 
                         // Security Hardening: Validate the constructed rename path
-                        context.SecurityService.ValidatePath(newPath);
-                        context.SecurityService.ValidateWriteAccess(newPath);
+                        context.SecurityService.ValidatePath(renameDest.CanonicalPath);
+                        context.SecurityService.ValidateWriteAccess(renameDest.CanonicalPath);
+                        context.SecurityService.ValidateFileType(renameDest.CanonicalPath);
 
-                        if (File.Exists(newPath))
-                        {
-                            if (overwrite) File.Delete(newPath);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {newPath}");
-                        }
-                        File.Move(source, newPath);
+                        pathAuthorizer.MoveValidatedFile(context, renameSource, renameDest, overwrite);
+                        dest = renameDest.CanonicalPath;
                     }
                     else
                     {

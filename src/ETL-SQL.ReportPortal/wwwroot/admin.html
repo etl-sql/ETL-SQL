@@ -48,6 +48,7 @@
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-datasets" aria-controls="panel-datasets" data-tab="datasets">Shared Datasets</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-secrets" aria-controls="panel-secrets" data-tab="secrets">Secrets</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-connections" aria-controls="panel-connections" data-tab="connections">Connections</button>
+        <button class="admin-tab" role="tab" aria-selected="false" id="tab-policy" aria-controls="panel-policy" data-tab="policy">Policy Authority</button>
         <button class="admin-tab" role="tab" aria-selected="false" id="tab-settings" aria-controls="panel-settings" data-tab="settings">Settings</button>
       </div>
 
@@ -375,6 +376,9 @@
       <!-- Shared Connections panel — content rendered by js/connections-admin.js -->
       <div class="admin-panel" id="panel-connections" role="tabpanel" aria-labelledby="tab-connections" tabindex="0"></div>
 
+      <!-- Policy Authority panel — content rendered by js/policy-authority-admin.js -->
+      <div class="admin-panel" id="panel-policy" role="tabpanel" aria-labelledby="tab-policy" tabindex="0"></div>
+
       <!-- ── Settings panel ──────────────────────────────────────────────── -->
       <div class="admin-panel" id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" tabindex="0">
         <div class="card">
@@ -519,7 +523,7 @@
 
 <script src="/js/echarts.min.js?v=0.14.0"></script>
 <script type="module">
-import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi } from '/js/api.js?v=0.14.0';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi, catalogApi, secretsApi, connectionsApi, policyAuthorityApi } from '/js/api.js?v=0.14.0';
 import { populateFolderSelects, createFolderInline } from '/js/publish-folders.js?v=0.14.0';
 import { renderSubscriptionHistory } from '/js/subscription-history-ui.js?v=0.14.0';
 import { bindSelection, catalogQuery, headerSelectionCell, renderCatalogPager, selectedIds, selectionCell } from '/js/admin-catalog-ui.js?v=0.14.0';
@@ -528,6 +532,7 @@ import { renderDag } from '/designer/designer.js?v=0.14.0';
 import { createDatasetsAdmin } from '/js/datasets-admin.js?v=0.14.0';
 import { createSecretsAdmin } from '/js/secrets-admin.js?v=0.14.0';
 import { createConnectionsAdmin } from '/js/connections-admin.js?v=0.14.0';
+import { createPolicyAuthorityAdmin } from '/js/policy-authority-admin.js?v=0.14.0';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 applyPortalBranding();
@@ -549,7 +554,7 @@ try {
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, settings: null };
+const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, secrets: null, connections: null, policy: null, settings: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => {
@@ -568,7 +573,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: mountDatasets, secrets: mountSecrets, connections: mountConnections, settings: loadSettings };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: mountDatasets, secrets: mountSecrets, connections: mountConnections, policy: mountPolicyAuthority, settings: loadSettings };
 // Load the initial tab (users)
 panels.users = true;
 initModalA11y();
@@ -1685,6 +1690,17 @@ function mountConnections() {
     connectionsAdmin = createConnectionsAdmin({ host: document.getElementById('panel-connections'), connectionsApi });
   }
   connectionsAdmin.load();
+}
+
+let policyAuthorityAdmin = null;
+function mountPolicyAuthority() {
+  if (!policyAuthorityAdmin) {
+    policyAuthorityAdmin = createPolicyAuthorityAdmin({
+      host: document.getElementById('panel-policy'),
+      policyAuthorityApi,
+    });
+  }
+  policyAuthorityAdmin.load();
 }
 
 // ── Settings ───────────────────────────────────────────────────────────────────

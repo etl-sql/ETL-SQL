@@ -229,6 +229,153 @@ public sealed class FileSystemPolicyAuthorizerTests
     }
 
     [Fact]
+    public void DeleteValidatedFile_DetectsJunctionSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_delete_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_delete_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sub = Path.Combine(root, "sub");
+            Directory.CreateDirectory(sub);
+            var canonical = Path.Combine(sub, "swap.txt");
+            File.WriteAllText(canonical, "authorized");
+            var authorized = authorizer.Authorize(context.Object, canonical, FileSystemAccessKind.Delete,
+                validateFileType: false);
+
+            var outsideTarget = Path.Combine(outside, "swap.txt");
+            File.WriteAllText(outsideTarget, "protected");
+            Directory.Delete(sub, recursive: true);
+            CreateDirectoryLink(sub, outside);
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.DeleteValidatedFile(context.Object, authorized));
+            Assert.Contains("final path", denied.Decision.Reason);
+            Assert.Equal("protected", File.ReadAllText(outsideTarget));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void MoveValidatedFile_DetectsJunctionSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_move_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_move_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sub = Path.Combine(root, "sub");
+            Directory.CreateDirectory(sub);
+            var canonical = Path.Combine(sub, "move.txt");
+            var destinationPath = Path.Combine(root, "moved.txt");
+            File.WriteAllText(canonical, "authorized");
+            var source = authorizer.Authorize(context.Object, canonical, FileSystemAccessKind.Move,
+                validateFileType: false);
+            var destination = authorizer.Authorize(context.Object, destinationPath, FileSystemAccessKind.Move,
+                validateFileType: false);
+
+            var outsideTarget = Path.Combine(outside, "move.txt");
+            File.WriteAllText(outsideTarget, "protected");
+            Directory.Delete(sub, recursive: true);
+            CreateDirectoryLink(sub, outside);
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.MoveValidatedFile(context.Object, source, destination, overwrite: true));
+            Assert.Contains("final path", denied.Decision.Reason);
+            Assert.Equal("protected", File.ReadAllText(outsideTarget));
+            Assert.False(File.Exists(destinationPath));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void MoveValidatedDirectory_DetectsJunctionSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_dir_move_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_dir_move_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sub = Path.Combine(root, "sub");
+            var canonical = Path.Combine(sub, "victim");
+            Directory.CreateDirectory(canonical);
+            File.WriteAllText(Path.Combine(canonical, "data.txt"), "authorized");
+            var source = authorizer.Authorize(context.Object, canonical, FileSystemAccessKind.Move,
+                validateFileType: false);
+            var destinationPath = Path.Combine(root, "moved-victim");
+            var destination = authorizer.Authorize(context.Object, destinationPath, FileSystemAccessKind.Move,
+                validateFileType: false);
+
+            var outsideVictim = Path.Combine(outside, "victim");
+            Directory.CreateDirectory(outsideVictim);
+            File.WriteAllText(Path.Combine(outsideVictim, "data.txt"), "protected");
+            Directory.Delete(sub, recursive: true);
+            CreateDirectoryLink(sub, outside);
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.MoveValidatedDirectory(context.Object, source, destination, overwrite: true));
+            Assert.Contains("canonical target", denied.Decision.Reason);
+            Assert.True(Directory.Exists(outsideVictim));
+            Assert.False(Directory.Exists(destinationPath));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void SafeZipExtractor_RejectsTraversalBeforeWritingEntry()
     {
         var root = Path.Combine(Path.GetTempPath(), $"policy_zip_{Guid.NewGuid():N}");
@@ -294,5 +441,21 @@ public sealed class FileSystemPolicyAuthorizerTests
             DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
             DateTimeOffset.UtcNow, document,
             EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues()));
+    }
+
+    private static void CreateDirectoryLink(string linkPath, string targetPath)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            using var mklink = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                "cmd.exe", $"/c mklink /J \"{linkPath}\" \"{targetPath}\"")
+            { UseShellExecute = false, CreateNoWindow = true });
+            mklink!.WaitForExit();
+            Assert.Equal(0, mklink.ExitCode);
+        }
+        else
+        {
+            Directory.CreateSymbolicLink(linkPath, targetPath);
+        }
     }
 }

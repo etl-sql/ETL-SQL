@@ -95,6 +95,7 @@ $workloadLabel = if ([string]::IsNullOrWhiteSpace($SustainedWorkloadPath)) { $nu
 $sustainedOutDir = "certification-results/postgres-ha-soak/$($metadata.runId)"
 $soakOutDir = "certification-results/ha-large-job-soak/$($metadata.runId)"
 $faultOutDir = "certification-results/ha-fault-injection/$($metadata.runId)"
+$enterpriseOutDir = "certification-results/enterprise-hardening/$($metadata.runId)"
 
 $steps = @()
 $steps += [ordered]@{
@@ -150,12 +151,24 @@ $steps += [ordered]@{
 }
 $steps += [ordered]@{
     order = 8
+    name = 'Run enterprise hardening certification'
+    command = "scripts/Test-EnterpriseHardeningCertification.ps1 -RunId $($metadata.runId)"
+    expectedArtifacts = @("$enterpriseOutDir/<platform>/enterprise-hardening-summary.json", "$enterpriseOutDir/<platform>/enterprise-hardening-summary.md", "$enterpriseOutDir/<platform>/*.trx")
+}
+$steps += [ordered]@{
+    order = 9
+    name = 'Validate current Gate F evidence'
+    command = "scripts/Test-GateFEvidence.ps1 -RequiredScenario All -MarkdownReport `"certification-results/gate-f-1b/gate-f-evidence-validation.md`""
+    expectedArtifacts = @('certification-results/gate-f-1b/gate-f-evidence-validation.md')
+}
+$steps += [ordered]@{
+    order = 10
     name = 'Collect diagnostics'
     command = "scripts/Export-HaSoakDiagnostics.ps1 -TopologyRunRoot $runLabel"
     expectedArtifacts = @("$runLabel/diagnostics/<timestamp>/diagnostic-summary.json", "$runLabel/diagnostics/<timestamp>/docker-compose-logs.txt")
 }
 $steps += [ordered]@{
-    order = 9
+    order = 11
     name = 'Stop topology'
     command = $metadata.commands.stop
     expectedArtifacts = @('docker compose down output')
@@ -173,6 +186,7 @@ $runbook = [ordered]@{
         sustainedLoad = $sustainedOutDir
         largeJobSoak = $soakOutDir
         faultInjection = $faultOutDir
+        enterpriseHardening = $enterpriseOutDir
     }
     diagnostics = [ordered]@{
         command = "scripts/Export-HaSoakDiagnostics.ps1 -TopologyRunRoot $runLabel"

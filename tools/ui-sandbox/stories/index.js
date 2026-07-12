@@ -10,6 +10,7 @@ import adminCatalog from './admin-catalog.story.js';
 import vscodeWebviews from './vscode-webviews.story.js';
 import secretsAdmin from './secrets-admin.story.js';
 import connectionsAdmin from './connections-admin.story.js';
+import policyAuthorityAdmin from './policy-authority-admin.story.js';
 import lineageMockup from './lineage-mockup.story.js';
 
 export const stories = [
@@ -24,5 +25,6 @@ export const stories = [
   vscodeWebviews,
   secretsAdmin,
   connectionsAdmin,
+  policyAuthorityAdmin,
   lineageMockup
 ];

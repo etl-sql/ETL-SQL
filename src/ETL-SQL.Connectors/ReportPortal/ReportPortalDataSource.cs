@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Connectors.ReportPortal
@@ -47,7 +48,7 @@ namespace ETL_SQL.Connectors.ReportPortal
             _username = username;
             _password = password;
             _logger = logger;
-            _http = new HttpClient { BaseAddress = new Uri(_baseUrl + "/") };
+            _http = PolicyBoundHttp.CreateClient(baseAddress: new Uri(_baseUrl + "/"));
             Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["HOST"] = baseUrl,

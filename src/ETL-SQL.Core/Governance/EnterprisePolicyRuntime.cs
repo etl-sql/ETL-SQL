@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http.Headers;
+using System.Net.Security;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
@@ -383,10 +384,13 @@ public static class EnterprisePolicyRuntime
 
     private static HttpClient CreateHttpClient(EnterpriseEnrollmentDocument enrollment)
     {
-        var handler = new HttpClientHandler();
+        var sslOptions = new SslClientAuthenticationOptions();
         if (!string.IsNullOrWhiteSpace(enrollment.ClientCertificateThumbprint))
-            handler.ClientCertificates.Add(FindCertificate(enrollment.ClientCertificateThumbprint));
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+            sslOptions.ClientCertificates = new X509CertificateCollection
+            {
+                FindCertificate(enrollment.ClientCertificateThumbprint)
+            };
+        return PolicyBoundHttp.CreateClient(sslOptions: sslOptions, timeout: TimeSpan.FromSeconds(15));
     }
 
     private static X509Certificate2 FindCertificate(string thumbprint)

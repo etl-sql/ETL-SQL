@@ -5,7 +5,6 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Sockets;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +12,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 using ETL_SQL.Services;
 
@@ -34,40 +34,7 @@ namespace ETL_SQL.Connectors.Rest
         // UseProxy is disabled so an ambient system proxy cannot route around the egress controls
         // (proxy-bypass hardening), and a ConnectCallback re-validates the DNS-resolved address at
         // connect time (DNS-rebinding hardening) before pinning the socket to the validated IPs.
-        private static readonly HttpClient _httpClient = new HttpClient(new SocketsHttpHandler
-        {
-            AllowAutoRedirect = false,
-            UseProxy = false,
-            ConnectCallback = ConnectValidatedAsync
-        });
-
-        private static async ValueTask<Stream> ConnectValidatedAsync(
-            SocketsHttpConnectionContext context, CancellationToken cancellationToken)
-        {
-            var host = context.DnsEndPoint.Host;
-            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
-            if (addresses.Length == 0)
-                throw new SocketException((int)SocketError.HostNotFound);
-
-            // Validate every address the host resolved to before connecting; if any is a denied
-            // internal address the whole connection is refused (an attacker controls which IP a
-            // rebinding name returns, so a single internal candidate is fatal). We then connect to the
-            // exact validated set — no second DNS lookup — so the socket cannot rebind to a fresh IP.
-            foreach (var address in addresses)
-                ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceResolvedAddress(host, address);
-
-            var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
-            try
-            {
-                await socket.ConnectAsync(addresses, context.DnsEndPoint.Port, cancellationToken).ConfigureAwait(false);
-                return new NetworkStream(socket, ownsSocket: true);
-            }
-            catch
-            {
-                socket.Dispose();
-                throw;
-            }
-        }
+        private static readonly HttpClient _httpClient = PolicyBoundHttp.CreateClient();
         private const int DefaultMaxRedirects = 5;
 
         private string? _cachedToken;

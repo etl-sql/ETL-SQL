@@ -11,6 +11,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Governance;
 
 namespace ETL_SQL.Reporting
 {
@@ -132,7 +133,7 @@ namespace ETL_SQL.Reporting
 
         private static async Task<string> WaitForPageWebSocketAsync(int port, CancellationToken ct)
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var client = PolicyBoundHttp.CreateClient(timeout: TimeSpan.FromSeconds(2));
             var endpoint = $"http://127.0.0.1:{port}/json/list";
 
             while (!ct.IsCancellationRequested)

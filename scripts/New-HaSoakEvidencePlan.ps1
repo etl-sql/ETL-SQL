@@ -78,6 +78,7 @@ $runLabel = Get-RelativeLabel $runRoot.Path
 $sustainedOutDir = "certification-results/postgres-ha-soak/$($metadata.runId)"
 $soakOutDir = "certification-results/ha-large-job-soak/$($metadata.runId)"
 $faultOutDir = "certification-results/ha-fault-injection/$($metadata.runId)"
+$enterpriseOutDir = "certification-results/enterprise-hardening/$($metadata.runId)"
 
 $plan = [ordered]@{
     schemaVersion = 1
@@ -154,6 +155,33 @@ $plan = [ordered]@{
                 'fault-report.md',
                 'per-fault cleanup invariant results',
                 'redaction proof'
+            )
+        },
+        [ordered]@{
+            gateId = 'enterprise-hardening'
+            state = 'Ready'
+            input = 'tests/ETL-SQL.Tests and tests/ETL-SQL.ReportPortal.Tests enterprise hardening slices'
+            expectedOutputDirectory = $enterpriseOutDir
+            command = "scripts/Test-EnterpriseHardeningCertification.ps1 -RunId $($metadata.runId)"
+            requiredEvidence = @(
+                '<platform>/enterprise-hardening-summary.json',
+                '<platform>/enterprise-hardening-summary.md',
+                '<platform>/enterprise-hardening.trx',
+                '<platform>/enterprise-hardening-portal.trx',
+                'Windows evidence',
+                'Linux or WSL evidence'
+            )
+        },
+        [ordered]@{
+            gateId = 'gate-f-current-evidence'
+            state = 'Ready'
+            input = 'certification-results/gate-f-1b/gate-f-report.json'
+            expectedOutputDirectory = 'certification-results/gate-f-1b'
+            command = "scripts/Test-GateFEvidence.ps1 -RequiredScenario All -MarkdownReport `"certification-results/gate-f-1b/gate-f-evidence-validation.md`""
+            requiredEvidence = @(
+                'gate-f-report.json',
+                'gate-f-evidence-validation.md',
+                'current commit/source fingerprint validation or documented rerun requirement'
             )
         }
     )

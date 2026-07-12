@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Lineage
@@ -19,7 +20,7 @@ namespace ETL_SQL.Engine.Lineage
     /// </summary>
     public static class OpenLineageExporter
     {
-        private static readonly HttpClient _http = new();
+        private static readonly HttpClient _http = PolicyBoundHttp.CreateClient();
 
         public static Task ExportToFileAsync(
             ILineageTracker tracker,

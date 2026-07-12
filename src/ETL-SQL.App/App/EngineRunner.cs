@@ -14,6 +14,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Reporting;
@@ -1385,7 +1386,7 @@ CREATE PAGE Main AS DASHBOARD (
 
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                using var client = PolicyBoundHttp.CreateClient(timeout: TimeSpan.FromSeconds(3));
                 using var response = await client.GetAsync(url);
                 var status = (int)response.StatusCode;
                 return status < 500
