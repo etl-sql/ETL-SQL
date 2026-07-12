@@ -94,13 +94,14 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO security_events
-                (event_id, payload_json, payload_bytes, status, attempts, created_utc, updated_utc)
+                (event_id, payload_json, payload_bytes, severity, status, attempts, created_utc, updated_utc)
             VALUES
-                ($eventId, $payload, $payloadBytes, 'Pending', 0, $now, $now);
+                ($eventId, $payload, $payloadBytes, $severity, 'Pending', 0, $now, $now);
             """;
         command.Parameters.AddWithValue("$eventId", sanitized.EventId.ToString("D"));
         command.Parameters.AddWithValue("$payload", payload);
         command.Parameters.AddWithValue("$payloadBytes", payloadBytes);
+        command.Parameters.AddWithValue("$severity", (int)sanitized.Severity);
         command.Parameters.AddWithValue("$now", Format(now));
         command.ExecuteNonQuery();
         transaction.Commit();
@@ -215,12 +216,36 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
         command.Transaction = transaction;
         command.CommandText = """
             DELETE FROM security_events
-            WHERE status = 'Delivered' AND delivered_utc < $cutoff;
+            WHERE status IN ('Delivered', 'Filtered') AND delivered_utc < $cutoff;
             """;
         command.Parameters.AddWithValue("$cutoff", Format(deliveredBeforeUtc));
         var removed = command.ExecuteNonQuery();
         transaction.Commit();
         return removed;
+    }
+
+    public int ApplyForwardingFilter(
+        SecurityEventSeverity minimumSeverity,
+        DateTimeOffset filteredAtUtc)
+    {
+        filteredAtUtc = filteredAtUtc.ToUniversalTime();
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE security_events
+            SET status = 'Filtered', delivered_utc = $now, locked_until_utc = NULL,
+                next_attempt_utc = NULL, last_error = NULL, updated_utc = $now
+            WHERE status = 'Pending'
+              AND severity < $minimumSeverity
+              AND (locked_until_utc IS NULL OR locked_until_utc <= $now);
+            """;
+        command.Parameters.AddWithValue("$minimumSeverity", (int)minimumSeverity);
+        command.Parameters.AddWithValue("$now", Format(filteredAtUtc));
+        var filtered = command.ExecuteNonQuery();
+        transaction.Commit();
+        return filtered;
     }
 
     public SecurityEventOutboxHealth GetHealth()
@@ -257,6 +282,7 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
                 event_id TEXT PRIMARY KEY,
                 payload_json TEXT NOT NULL,
                 payload_bytes INTEGER NOT NULL,
+                severity INTEGER NOT NULL,
                 status TEXT NOT NULL,
                 attempts INTEGER NOT NULL,
                 next_attempt_utc TEXT NULL,
@@ -270,6 +296,47 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
                 ON security_events(status, next_attempt_utc, locked_until_utc, created_utc);
             """;
         command.ExecuteNonQuery();
+
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "PRAGMA table_info(security_events);";
+        using var reader = columns.ExecuteReader();
+        var hasSeverity = false;
+        while (reader.Read())
+            hasSeverity |= string.Equals(reader.GetString(1), "severity", StringComparison.OrdinalIgnoreCase);
+        reader.Close();
+        if (!hasSeverity)
+        {
+            using var transaction = connection.BeginTransaction(deferred: false);
+            using var migrate = connection.CreateCommand();
+            migrate.Transaction = transaction;
+            migrate.CommandText =
+                "ALTER TABLE security_events ADD COLUMN severity INTEGER NOT NULL DEFAULT 0;";
+            migrate.ExecuteNonQuery();
+
+            using var existing = connection.CreateCommand();
+            existing.Transaction = transaction;
+            existing.CommandText = "SELECT event_id, payload_json FROM security_events;";
+            using var existingReader = existing.ExecuteReader();
+            var severities = new List<(string EventId, SecurityEventSeverity Severity)>();
+            while (existingReader.Read())
+            {
+                var securityEvent = SecurityEventContract.Deserialize(existingReader.GetString(1));
+                severities.Add((existingReader.GetString(0), securityEvent.Severity));
+            }
+            existingReader.Close();
+
+            foreach (var (eventId, severity) in severities)
+            {
+                using var update = connection.CreateCommand();
+                update.Transaction = transaction;
+                update.CommandText =
+                    "UPDATE security_events SET severity = $severity WHERE event_id = $eventId;";
+                update.Parameters.AddWithValue("$severity", (int)severity);
+                update.Parameters.AddWithValue("$eventId", eventId);
+                update.ExecuteNonQuery();
+            }
+            transaction.Commit();
+        }
     }
 
     private SqliteConnection OpenConnection()

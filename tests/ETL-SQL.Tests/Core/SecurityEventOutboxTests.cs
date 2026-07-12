@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Governance;
+using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Tests.Core;
 
@@ -97,6 +98,45 @@ public sealed class SecurityEventOutboxTests : IDisposable
         Assert.Equal(now, health.LastDeliveredUtc);
         Assert.Equal(1, outbox.PruneDelivered(now.AddSeconds(1)));
         Assert.Equal(0, outbox.GetHealth().StoredBytes);
+    }
+
+    [Fact]
+    public void ExistingOutboxSchema_IsMigratedBeforeSeverityFiltering()
+    {
+        Directory.CreateDirectory(_root);
+        var databasePath = Path.Combine(_root, "security-events.db");
+        var legacyEvent = Event(Guid.NewGuid());
+        var legacyPayload = SecurityEventContract.Serialize(legacyEvent);
+        using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE security_events (
+                    event_id TEXT PRIMARY KEY, payload_json TEXT NOT NULL,
+                    payload_bytes INTEGER NOT NULL, status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL, next_attempt_utc TEXT NULL,
+                    locked_until_utc TEXT NULL, last_error TEXT NULL,
+                    created_utc TEXT NOT NULL, updated_utc TEXT NOT NULL,
+                    delivered_utc TEXT NULL);
+                INSERT INTO security_events
+                    (event_id, payload_json, payload_bytes, status, attempts, created_utc, updated_utc)
+                VALUES ($eventId, $payload, $payloadBytes, 'Pending', 0, $now, $now);
+                """;
+            command.Parameters.AddWithValue("$eventId", legacyEvent.EventId.ToString("D"));
+            command.Parameters.AddWithValue("$payload", legacyPayload);
+            command.Parameters.AddWithValue("$payloadBytes", System.Text.Encoding.UTF8.GetByteCount(legacyPayload));
+            command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
+            command.ExecuteNonQuery();
+        }
+
+        var outbox = CreateOutbox();
+
+        Assert.Equal(0, outbox.ApplyForwardingFilter(
+            SecurityEventSeverity.Warning, DateTimeOffset.UtcNow));
+        var claimed = Assert.Single(outbox.ClaimBatch(10, DateTimeOffset.UtcNow.AddMinutes(1),
+            TimeSpan.FromMinutes(1)));
+        Assert.Equal(legacyEvent.EventId, claimed.Event.EventId);
     }
 
     public void Dispose()

@@ -93,6 +93,28 @@ public sealed class SecurityEventTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task DrainOnce_ForwardsOnlyEventsMeetingSignedSeverityThreshold()
+    {
+        var information = Guid.NewGuid();
+        var warning = Guid.NewGuid();
+        var outbox = CreateOutbox();
+        outbox.Emit(Event(information, SecurityEventSeverity.Information));
+        outbox.Emit(Event(warning, SecurityEventSeverity.Warning));
+        var handler = new RecordingHandler(_ => Ack(warning));
+        var transport = CreateTransport(outbox, handler);
+
+        var result = await transport.DrainOnceAsync(Now);
+
+        Assert.Equal(new SecurityEventDeliveryResult(1, 1, 0), result);
+        Assert.DoesNotContain(information.ToString(), handler.RequestBody,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(warning.ToString(), handler.RequestBody,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, outbox.GetHealth().PendingCount);
+        Assert.Equal(2, outbox.PruneDelivered(Now.AddSeconds(1)));
+    }
+
+    [Fact]
     public void Constructor_RejectsNonHttpsOrCredentialBearingCollector()
     {
         var outbox = CreateOutbox();
@@ -136,8 +158,10 @@ public sealed class SecurityEventTransportTests : IDisposable
         }), Encoding.UTF8, "application/json")
     };
 
-    private static SecurityEvent Event(Guid id) => SecurityEventContract.Create(
-        SecurityEventSeverity.Error, SecurityEventType.OperationDenied,
+    private static SecurityEvent Event(
+        Guid id,
+        SecurityEventSeverity severity = SecurityEventSeverity.Error) => SecurityEventContract.Create(
+        severity, SecurityEventType.OperationDenied,
         "user", "service", "<target>", SecurityEventDecision.Denied, "Denied.", eventId: id);
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> response) : HttpMessageHandler

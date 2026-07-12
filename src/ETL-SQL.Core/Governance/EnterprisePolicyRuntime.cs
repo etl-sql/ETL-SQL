@@ -499,7 +499,8 @@ public static class EnterprisePolicyRuntime
             EnrollmentId = enrollment.EnrollmentId,
             MachineId = enrollment.MachineId,
             BatchSize = settings.BatchSize,
-            LeaseDuration = TimeSpan.FromSeconds(settings.LeaseSeconds)
+            LeaseDuration = TimeSpan.FromSeconds(settings.LeaseSeconds),
+            MinimumSeverity = settings.MinimumForwardedSeverity
         };
     }
 }

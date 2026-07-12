@@ -180,7 +180,8 @@ public class OrganizationPolicySchemaTests
                 CollectorEndpoint = "https://siem.example.test/etl-sql/events",
                 BatchSize = 250,
                 IntervalSeconds = 15,
-                LeaseSeconds = 90
+                LeaseSeconds = 90,
+                MinimumForwardedSeverity = SecurityEventSeverity.Error
             }
         };
 
@@ -193,6 +194,7 @@ public class OrganizationPolicySchemaTests
         Assert.Equal("250", flat["SecurityEvents:BatchSize"]);
         Assert.Equal("15", flat["SecurityEvents:IntervalSeconds"]);
         Assert.Equal("90", flat["SecurityEvents:LeaseSeconds"]);
+        Assert.Equal("Error", flat["SecurityEvents:MinimumForwardedSeverity"]);
     }
 
     [Theory]

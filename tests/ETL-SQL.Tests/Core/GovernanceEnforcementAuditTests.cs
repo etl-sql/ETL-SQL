@@ -53,6 +53,7 @@ public sealed class GovernanceEnforcementAuditTests
             ["SecurityEvents:BatchSize"] = (Boundary.EnterpriseSnapshot, "SecurityEventTransport.ClaimBatch"),
             ["SecurityEvents:IntervalSeconds"] = (Boundary.EnterpriseSnapshot, "SecurityEventTransportWorker delivery loop"),
             ["SecurityEvents:LeaseSeconds"] = (Boundary.EnterpriseSnapshot, "SecurityEventTransport.ClaimBatch lease"),
+            ["SecurityEvents:MinimumForwardedSeverity"] = (Boundary.EnterpriseSnapshot, "SecurityEventOutbox.ApplyForwardingFilter"),
             ["Engine:AllowPlaintextSecrets"] = (Boundary.ConfigPrecedence, "SetAllowPlaintextSecretsStatementHandler + secret-persistence guard"),
             ["Engine:NoSaveSensitive"] = (Boundary.ConfigPrecedence, "SetSavePolicyStatementHandlers + connection/secret save path"),
             ["Engine:NoSaveConnection"] = (Boundary.ConfigPrecedence, "SetSavePolicyStatementHandlers + connection save path"),

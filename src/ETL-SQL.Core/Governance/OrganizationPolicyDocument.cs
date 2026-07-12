@@ -73,6 +73,7 @@ public sealed record OrganizationPolicyDocument
         values["SecurityEvents:BatchSize"] = SecurityEvents.BatchSize;
         values["SecurityEvents:IntervalSeconds"] = SecurityEvents.IntervalSeconds;
         values["SecurityEvents:LeaseSeconds"] = SecurityEvents.LeaseSeconds;
+        values["SecurityEvents:MinimumForwardedSeverity"] = SecurityEvents.MinimumForwardedSeverity.ToString();
 
         return values;
     }
@@ -175,6 +176,7 @@ public sealed record SecurityEventPolicySection
     public int BatchSize { get; init; } = 100;
     public int IntervalSeconds { get; init; } = 30;
     public int LeaseSeconds { get; init; } = 120;
+    public SecurityEventSeverity MinimumForwardedSeverity { get; init; } = SecurityEventSeverity.Warning;
 }
 
 public sealed record OrganizationPolicyValidationResult(

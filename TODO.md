@@ -18,7 +18,7 @@ release begins.
 - [x] Provide a durable local security-event outbox for every executable, with bounded storage, atomic append, retry, batching, deduplication, jittered backoff, and crash recovery.
 - [x] Deliver to an HTTPS/SIEM collector using machine identity; define acknowledgement and idempotency behavior.
 - [x] Add Windows Event Log and syslog/structured-file sinks for bootstrap failures that occur before HTTPS delivery is available.
-- [ ] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
+- [x] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
 - [ ] Add optional fail-closed thresholds for terminal delivery failure, oldest-event age, pending count, and outbox bytes; standalone mode remains local-only by default.
 - [ ] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
 

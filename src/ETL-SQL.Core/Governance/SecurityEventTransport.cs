@@ -13,6 +13,7 @@ public sealed record SecurityEventTransportOptions
     public required string MachineId { get; init; }
     public int BatchSize { get; init; } = 100;
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
+    public SecurityEventSeverity MinimumSeverity { get; init; } = SecurityEventSeverity.Warning;
 }
 
 public sealed record SecurityEventDeliveryResult(
@@ -58,6 +59,7 @@ public sealed class SecurityEventTransport
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken = default)
     {
+        _outbox.ApplyForwardingFilter(_options.MinimumSeverity, nowUtc);
         var batch = _outbox.ClaimBatch(_options.BatchSize, nowUtc, _options.LeaseDuration);
         if (batch.Count == 0) return new(0, 0, 0);
 

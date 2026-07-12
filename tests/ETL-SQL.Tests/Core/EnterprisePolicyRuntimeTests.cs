@@ -145,7 +145,8 @@ public sealed class EnterprisePolicyRuntimeTests
         var enrollment = Enrollment(key);
         var settings = new SecurityEventPolicySection
         {
-            CollectorEndpoint = "https://siem.example.test/events"
+            CollectorEndpoint = "https://siem.example.test/events",
+            MinimumForwardedSeverity = SecurityEventSeverity.Critical
         };
 
         var error = Assert.Throws<InvalidOperationException>(() =>
@@ -157,6 +158,7 @@ public sealed class EnterprisePolicyRuntimeTests
         Assert.Equal(enrollment.Tenant, options.TenantId);
         Assert.Equal(enrollment.EnrollmentId, options.EnrollmentId);
         Assert.Equal(enrollment.MachineId, options.MachineId);
+        Assert.Equal(SecurityEventSeverity.Critical, options.MinimumSeverity);
     }
 
     [Fact]

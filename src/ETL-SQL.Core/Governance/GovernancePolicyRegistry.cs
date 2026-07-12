@@ -275,6 +275,15 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             defaultValue: 120,
             minimumValue: 10,
             maximumValue: 3600);
+
+        yield return new(
+            "SecurityEvents:MinimumForwardedSeverity",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Locked,
+            GovernancePolicyValueKind.Enum,
+            "Minimum security-event severity forwarded to the central collector.",
+            defaultValue: "Warning",
+            allowedValues: ["Information", "Warning", "Error", "Critical"]);
     }
 }
 
