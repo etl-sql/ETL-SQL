@@ -172,6 +172,7 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
   - Surface upstream and downstream impact for tables, columns, jobs, scripts, datasets, reports, subscriptions, owners, and stewards.
 - [ ] **Phase 6: Quality & Freshness Stewardship**
   - Tie `EXPECT` and validation outcomes, freshness, SLAs, and quality trends to lineage targets.
+  - **Quality Gate Attestation:** Expose quality-gate expectation run results directly on visual report cards and designer views in the Report Portal as dynamic "Verified Data" attestation badges.
 - [ ] **Phase 7: External Catalog Sync**
   - Add stable external IDs, conflict rules, and reconciliation reports for external catalog integration.
 
