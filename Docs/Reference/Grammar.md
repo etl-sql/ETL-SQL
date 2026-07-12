@@ -1105,6 +1105,7 @@ FROM <source> [AS alias]
 [WHERE <condition>]
 [GROUP BY ALL | <columns | positions> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
+[WINDOW <name> AS (<window_spec>) [, ...]]
 [QUALIFY <condition>]
 [PIVOT  (<agg> FOR <col> IN (<vals>)) AS <alias>]
 [UNPIVOT (<val_col> FOR <name_col> IN (<cols>)) AS <alias>]
@@ -1473,6 +1474,26 @@ FOR XML PATH, ROOT('Employees'), ELEMENTS;
 ### 5.11 Window Functions
 Window functions compute a value across a set of rows related to the current row without collapsing them into a single group. They appear in the `SELECT` column list and require an `OVER` clause.
 
+`OVER` accepts either an inline specification or a named window declared by the query-level `WINDOW` clause:
+
+```sql
+<function>(...) OVER (
+    [<base_window_name>]
+    [PARTITION BY <expr> [, ...]]
+    [ORDER BY <expr> [ASC|DESC] [, ...]]
+    [ROWS | RANGE | GROUPS <frame_bound>]
+)
+
+<function>(...) OVER <window_name>
+
+WINDOW <window_name> AS (
+    [<base_window_name>]
+    [PARTITION BY <expr> [, ...]]
+    [ORDER BY <expr> [ASC|DESC] [, ...]]
+    [ROWS | RANGE | GROUPS <frame_bound>]
+)
+```
+
 ```sql
 SELECT
     id,
@@ -1504,6 +1525,18 @@ SELECT
                         EXCLUDE CURRENT ROW) AS peer_group_total
 
 FROM #sales;
+```
+
+Named windows keep repeated partitioning and ordering definitions in one place:
+
+```sql
+SELECT
+    region,
+    month,
+    SUM(amount) OVER regional_months AS running_total,
+    AVG(amount) OVER (regional_months ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS rolling_avg
+FROM #sales
+WINDOW regional_months AS (PARTITION BY region ORDER BY month);
 ```
 
 ### 5.10.1 `FILTER` â€” Conditional Aggregation

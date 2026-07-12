@@ -523,10 +523,19 @@ public class Parser : IParser
             havingClause = ParseExpression();
         }
 
+        var windowDefinitions = ParseWindowDefinitions();
+
         Expression? qualifyClause = null;
         if (Match(TokenType.QUALIFY))
         {
             qualifyClause = ParseExpression();
+        }
+
+        var trailingWindowDefinitions = ParseWindowDefinitions();
+        if (trailingWindowDefinitions != null)
+        {
+            windowDefinitions ??= new List<NamedWindowDefinition>();
+            windowDefinitions.AddRange(trailingWindowDefinitions);
         }
 
         List<OrderByClause>? orderBy = null;
@@ -635,11 +644,14 @@ public class Parser : IParser
             Offset = offset,
             GroupingSet = groupingSet,
             QualifyClause = qualifyClause,
+            WindowDefinitions = windowDefinitions,
             GroupByAll = isGroupByAll,
             OrderByAll = orderByAll,
             OrderByAllDescending = orderByAllDesc,
             Sample = sample
         };
+
+        ResolveNamedWindows(selectStmt);
 
         if (Match(TokenType.FOR))
         {
@@ -652,6 +664,182 @@ public class Parser : IParser
         }
 
         return selectStmt;
+    }
+
+    private List<NamedWindowDefinition>? ParseWindowDefinitions()
+    {
+        if (!Match(TokenType.WINDOW)) return null;
+
+        var windows = new List<NamedWindowDefinition>();
+        do
+        {
+            var nameToken = ConsumeIdentifier("Expected window name after WINDOW");
+            Consume(TokenType.AS, "Expected AS after window name");
+            Consume(TokenType.LPAREN, "Expected '(' after AS in WINDOW clause");
+            var clause = _expressionParser.ParseWindowSpecificationBody(nameToken);
+            Consume(TokenType.RPAREN, "Expected ')' to close WINDOW definition");
+            windows.Add(new NamedWindowDefinition(nameToken.Value, clause)
+            {
+                Line = nameToken.Line,
+                Column = nameToken.Column,
+                EndLine = LastTokenEndLine,
+                EndColumn = LastTokenEndColumn
+            });
+        }
+        while (Match(TokenType.COMMA));
+
+        return windows;
+    }
+
+    private void ResolveNamedWindows(SelectStatement select)
+    {
+        var definitions = new Dictionary<string, WindowClause>(StringComparer.OrdinalIgnoreCase);
+        if (select.WindowDefinitions != null)
+        {
+            foreach (var definition in select.WindowDefinitions)
+            {
+                if (!definitions.TryAdd(definition.Name, definition.Clause))
+                    throw new SyntaxException($"Duplicate WINDOW definition '{definition.Name}'.", definition.Line, definition.Column);
+            }
+        }
+        var resolving = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolved = new Dictionary<string, WindowClause>(StringComparer.OrdinalIgnoreCase);
+
+        WindowClause ResolveDefinition(string name, AstNode location)
+        {
+            if (resolved.TryGetValue(name, out var cached)) return cached;
+            if (!definitions.TryGetValue(name, out var clause))
+                throw new SyntaxException($"Unknown window name '{name}'.", location.Line, location.Column);
+            if (!resolving.Add(name))
+                throw new SyntaxException($"Circular WINDOW reference involving '{name}'.", location.Line, location.Column);
+
+            var merged = ResolveWindowClause(clause);
+            resolving.Remove(name);
+            resolved[name] = merged;
+            return merged;
+        }
+
+        WindowClause ResolveWindowClause(WindowClause clause)
+        {
+            if (string.IsNullOrWhiteSpace(clause.BaseName)) return clause;
+            var baseClause = ResolveDefinition(clause.BaseName!, clause);
+            return new WindowClause(
+                clause.PartitionBy.Count > 0 ? clause.PartitionBy : baseClause.PartitionBy,
+                clause.OrderBy.Count > 0 ? clause.OrderBy : baseClause.OrderBy,
+                clause.Frame ?? baseClause.Frame)
+            {
+                Line = clause.Line,
+                Column = clause.Column,
+                EndLine = clause.EndLine,
+                EndColumn = clause.EndColumn
+            };
+        }
+
+        void ResolveExpression(Expression? expression)
+        {
+            if (expression == null) return;
+
+            switch (expression)
+            {
+                case FunctionCallExpression function:
+                    foreach (var argument in function.Arguments) ResolveExpression(argument);
+                    ResolveExpression(function.Filter);
+                    if (function.WithinGroupOrderBy != null)
+                    {
+                        foreach (var order in function.WithinGroupOrderBy) ResolveExpression(order.Expression);
+                    }
+                    if (!string.IsNullOrWhiteSpace(function.WindowName))
+                    {
+                        function.Window = ResolveDefinition(function.WindowName!, function);
+                        function.WindowName = null;
+                    }
+                    else if (function.Window != null)
+                    {
+                        ResolveWindowExpressions(function.Window);
+                        function.Window = ResolveWindowClause(function.Window);
+                    }
+                    break;
+                case UnaryExpression unary:
+                    ResolveExpression(unary.Expression);
+                    break;
+                case BinaryExpression binary:
+                    ResolveExpression(binary.Left);
+                    ResolveExpression(binary.Right);
+                    break;
+                case MemberAccessExpression member:
+                    ResolveExpression(member.Expression);
+                    break;
+                case SubqueryExpression:
+                    break;
+                case ListExpression list:
+                    foreach (var item in list.Items) ResolveExpression(item);
+                    break;
+                case StarExpression star:
+                    foreach (var replace in star.Replace) ResolveExpression(replace.Value);
+                    break;
+                case IsNullExpression isNull:
+                    ResolveExpression(isNull.Expression);
+                    break;
+                case IsDistinctFromExpression distinct:
+                    ResolveExpression(distinct.Left);
+                    ResolveExpression(distinct.Right);
+                    break;
+                case InExpression inExpression:
+                    ResolveExpression(inExpression.Left);
+                    ResolveExpression(inExpression.Right);
+                    break;
+                case BetweenExpression between:
+                    ResolveExpression(between.Left);
+                    ResolveExpression(between.Start);
+                    ResolveExpression(between.End);
+                    break;
+                case LikeExpression like:
+                    ResolveExpression(like.Left);
+                    ResolveExpression(like.Pattern);
+                    ResolveExpression(like.EscapeChar);
+                    break;
+                case CaseExpression caseExpression:
+                    ResolveExpression(caseExpression.InputExpression);
+                    foreach (var when in caseExpression.WhenClauses)
+                    {
+                        ResolveExpression(when.Condition);
+                        ResolveExpression(when.Result);
+                    }
+                    ResolveExpression(caseExpression.ElseResult);
+                    break;
+                case AtTimeZoneExpression atTimeZone:
+                    ResolveExpression(atTimeZone.Left);
+                    ResolveExpression(atTimeZone.TimeZone);
+                    break;
+            }
+        }
+
+        void ResolveWindowExpressions(WindowClause window)
+        {
+            foreach (var partition in window.PartitionBy) ResolveExpression(partition);
+            foreach (var order in window.OrderBy) ResolveExpression(order.Expression);
+            ResolveExpression(window.Frame?.StartValue);
+            ResolveExpression(window.Frame?.EndValue);
+        }
+
+        foreach (var definition in select.WindowDefinitions ?? Enumerable.Empty<NamedWindowDefinition>())
+        {
+            ResolveWindowExpressions(definition.Clause);
+            ResolveDefinition(definition.Name, definition);
+        }
+
+        foreach (var column in select.Columns) ResolveExpression(column.Expression);
+        ResolveExpression(select.WhereClause);
+        if (select.GroupBy != null)
+        {
+            foreach (var group in select.GroupBy) ResolveExpression(group);
+        }
+        ResolveExpression(select.HavingClause);
+        ResolveExpression(select.QualifyClause);
+        if (select.OrderBy != null)
+        {
+            foreach (var order in select.OrderBy) ResolveExpression(order.Expression);
+        }
     }
 
     /// <summary>
@@ -1508,7 +1696,7 @@ public class Parser : IParser
 
     /// <summary>True when the current token closes a comma-separated clause list (used to tolerate trailing commas).</summary>
     private bool AtClauseEnd() => Current.Type is TokenType.FROM or TokenType.INTO or TokenType.WHERE
-        or TokenType.GROUP or TokenType.HAVING or TokenType.QUALIFY or TokenType.ORDER
+        or TokenType.GROUP or TokenType.HAVING or TokenType.QUALIFY or TokenType.WINDOW or TokenType.ORDER
         or TokenType.LIMIT or TokenType.OFFSET or TokenType.FETCH or TokenType.FOR
         or TokenType.UNION or TokenType.EXCEPT or TokenType.INTERSECT
         or TokenType.RPAREN or TokenType.SEMICOLON or TokenType.EOF;

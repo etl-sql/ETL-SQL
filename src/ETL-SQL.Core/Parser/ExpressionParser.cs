@@ -617,68 +617,20 @@ public partial class ExpressionParser
 
                 if (_parser.Match(TokenType.OVER))
                 {
-                    _parser.Consume(TokenType.LPAREN, "Expected '(' after OVER");
-                    var partitionBy = new List<Expression>();
-                    if (_parser.Match(TokenType.PARTITION))
+                    if (_parser.Current.Type == TokenType.LPAREN)
                     {
-                        _parser.Consume(TokenType.BY, "Expected 'BY' after 'PARTITION'");
-                        partitionBy.Add(_parser.ParseExpression());
-                        while (_parser.Match(TokenType.COMMA))
-                        {
-                            partitionBy.Add(_parser.ParseExpression());
-                        }
+                        _parser.Advance();
+                        funcCall.Window = ParseWindowSpecificationBody(t);
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' to close OVER clause");
                     }
-
-                    var orderBy = new List<OrderByClause>();
-                    if (_parser.Match(TokenType.ORDER))
+                    else if (_parser.IsIdentifier(_parser.Current))
                     {
-                        _parser.Consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
-                        do
-                        {
-                            var orderExpr = _parser.ParseExpression();
-                            bool descending = false;
-                            if (_parser.Match(TokenType.DESC)) descending = true;
-                            else _parser.Match(TokenType.ASC);
-                            orderBy.Add(new OrderByClause(orderExpr, descending));
-                        } while (_parser.Match(TokenType.COMMA));
+                        funcCall.WindowName = _parser.Advance().Value;
                     }
-
-                    // Parse Framing
-                    WindowFrame? frame = null;
-                    if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE) || _parser.Match(TokenType.GROUPS))
+                    else
                     {
-                        var frameType = _parser.Previous.Type switch
-                        {
-                            TokenType.ROWS => WindowFrameType.ROWS,
-                            TokenType.GROUPS => WindowFrameType.GROUPS,
-                            _ => WindowFrameType.RANGE
-                        };
-                        if (_parser.Match(TokenType.BETWEEN))
-                        {
-                            var startBound = ParseFrameBound();
-                            _parser.Consume(TokenType.AND, "Expected 'AND' in BETWEEN frame");
-                            var endBound = ParseFrameBound();
-                            frame = new WindowFrame(frameType, startBound.Type, startBound.Value, endBound.Type, endBound.Value);
-                        }
-                        else
-                        {
-                            var bound = ParseFrameBound();
-                            frame = new WindowFrame(frameType, bound.Type, bound.Value);
-                        }
-
-                        if (_parser.Match(TokenType.EXCLUDE))
-                        {
-                            frame = frame with { Exclusion = ParseFrameExclusion() };
-                        }
+                        throw new SyntaxException("Expected window name or '(' after OVER", _parser.Current.Line, _parser.Current.Column);
                     }
-                    else if (orderBy.Count > 0)
-                    {
-                        // Standard SQL behavior: default frame for ORDER BY is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                        frame = new WindowFrame(WindowFrameType.RANGE, WindowFrameBoundType.UNBOUNDED_PRECEDING, null, WindowFrameBoundType.CURRENT_ROW, null);
-                    }
-
-                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close OVER clause");
-                    funcCall.Window = new WindowClause(partitionBy, orderBy, frame) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
 
                 if (_parser.Match(TokenType.WITHIN))
@@ -798,6 +750,87 @@ public partial class ExpressionParser
         }
 
         throw new SyntaxException($"Expected expression primary but got {_parser.Current.Type} ('{_parser.Current.Value}')", _parser.Current.Line, _parser.Current.Column);
+    }
+
+    public WindowClause ParseWindowSpecificationBody(Token startToken)
+    {
+        string? baseName = null;
+        if (_parser.IsIdentifier(_parser.Current)
+            && _parser.Current.Type is not TokenType.PARTITION
+            && _parser.Current.Type is not TokenType.ORDER
+            && _parser.Current.Type is not TokenType.ROWS
+            && _parser.Current.Type is not TokenType.RANGE
+            && _parser.Current.Type is not TokenType.GROUPS)
+        {
+            baseName = _parser.Advance().Value;
+        }
+
+        var partitionBy = new List<Expression>();
+        if (_parser.Match(TokenType.PARTITION))
+        {
+            _parser.Consume(TokenType.BY, "Expected 'BY' after 'PARTITION'");
+            partitionBy.Add(_parser.ParseExpression());
+            while (_parser.Match(TokenType.COMMA))
+            {
+                partitionBy.Add(_parser.ParseExpression());
+            }
+        }
+
+        var orderBy = new List<OrderByClause>();
+        if (_parser.Match(TokenType.ORDER))
+        {
+            _parser.Consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
+            do
+            {
+                var orderExpr = _parser.ParseExpression();
+                bool descending = false;
+                if (_parser.Match(TokenType.DESC)) descending = true;
+                else _parser.Match(TokenType.ASC);
+                orderBy.Add(new OrderByClause(orderExpr, descending));
+            } while (_parser.Match(TokenType.COMMA));
+        }
+
+        WindowFrame? frame = null;
+        if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE) || _parser.Match(TokenType.GROUPS))
+        {
+            var frameType = _parser.Previous.Type switch
+            {
+                TokenType.ROWS => WindowFrameType.ROWS,
+                TokenType.GROUPS => WindowFrameType.GROUPS,
+                _ => WindowFrameType.RANGE
+            };
+            if (_parser.Match(TokenType.BETWEEN))
+            {
+                var startBound = ParseFrameBound();
+                _parser.Consume(TokenType.AND, "Expected 'AND' in BETWEEN frame");
+                var endBound = ParseFrameBound();
+                frame = new WindowFrame(frameType, startBound.Type, startBound.Value, endBound.Type, endBound.Value);
+            }
+            else
+            {
+                var bound = ParseFrameBound();
+                frame = new WindowFrame(frameType, bound.Type, bound.Value);
+            }
+
+            if (_parser.Match(TokenType.EXCLUDE))
+            {
+                frame = frame with { Exclusion = ParseFrameExclusion() };
+            }
+        }
+        else if (orderBy.Count > 0)
+        {
+            // Standard SQL behavior: default frame for ORDER BY is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            frame = new WindowFrame(WindowFrameType.RANGE, WindowFrameBoundType.UNBOUNDED_PRECEDING, null, WindowFrameBoundType.CURRENT_ROW, null);
+        }
+
+        return new WindowClause(partitionBy, orderBy, frame)
+        {
+            BaseName = baseName,
+            Line = startToken.Line,
+            Column = startToken.Column,
+            EndLine = _parser.LastTokenEndLine,
+            EndColumn = _parser.LastTokenEndColumn
+        };
     }
 
     private SubstringExpression ParseSubstring()

@@ -390,6 +390,57 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(300m, res.Rows[3]["FilteredSum"]); // 200
         }
 
+        [Fact]
+        public async Task NamedWindowClauseResolvesToInlineWindow()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #NW (Region VARCHAR, Month INT, Amount INT); " +
+                                  "INSERT INTO #NW VALUES ('East', 1, 10), ('East', 2, 20), ('West', 1, 100), ('West', 2, 150);"));
+
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Region, Month, SUM(Amount) OVER regional_order AS RunningTotal " +
+                "FROM #NW " +
+                "WINDOW regional_order AS (PARTITION BY Region ORDER BY Month) " +
+                "ORDER BY Region, Month;")
+                .Statements[0]).FirstAsync();
+
+            Assert.Equal(new[] { "East", "East", "West", "West" }, res.Rows.Select(r => r["Region"]?.ToString()).ToArray());
+            Assert.Equal(new decimal[] { 10, 30, 100, 250 }, res.Rows.Select(r => Convert.ToDecimal(r["RunningTotal"])).ToArray());
+        }
+
+        [Fact]
+        public async Task DerivedNamedWindowClauseCanAddFrame()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #NWF (Month INT, Amount INT); " +
+                                  "INSERT INTO #NWF VALUES (1, 10), (2, 20), (3, 40);"));
+
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Month, SUM(Amount) OVER (ordered_months ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) AS RollingTotal " +
+                "FROM #NWF " +
+                "WINDOW ordered_months AS (ORDER BY Month) " +
+                "ORDER BY Month;")
+                .Statements[0]).FirstAsync();
+
+            Assert.Equal(new decimal[] { 10, 30, 60 }, res.Rows.Select(r => Convert.ToDecimal(r["RollingTotal"])).ToArray());
+        }
+
+        [Fact]
+        public void UnknownNamedWindowAddsSyntaxDiagnostic()
+        {
+            var script = Parse("SELECT ROW_NUMBER() OVER missing_window AS RN FROM #T WINDOW existing_window AS (ORDER BY ID);");
+
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("Unknown window name 'missing_window'", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void NamedWindowWithoutDefinitionAddsSyntaxDiagnostic()
+        {
+            var script = Parse("SELECT ROW_NUMBER() OVER missing_window AS RN FROM #T;");
+
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("Unknown window name 'missing_window'", StringComparison.OrdinalIgnoreCase));
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

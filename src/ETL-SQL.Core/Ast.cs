@@ -337,6 +337,7 @@ public sealed record SelectStatement : Statement
     public Expression? Offset { get; init; }
     public ForClause? ForClause { get; init; }
     public Expression? QualifyClause { get; init; }
+    public List<NamedWindowDefinition>? WindowDefinitions { get; init; }
     public bool IsRecursive { get; init; }
     /// <summary>True for <c>GROUP BY ALL</c>. The engine expands this to every non-aggregate, non-window
     /// SELECT expression before execution, after which <see cref="GroupBy"/> holds the concrete list.</summary>
@@ -374,6 +375,8 @@ public sealed record SelectStatement : Statement
 }
 
 public enum GroupingSetType { None, GroupingSets, Rollup, Cube }
+
+public sealed record NamedWindowDefinition(string Name, WindowClause Clause) : AstNode;
 
 /// <summary>
 /// Represents GROUP BY GROUPING SETS(...), ROLLUP(...), or CUBE(...).
@@ -1655,6 +1658,7 @@ public record FunctionCallExpression : Expression
     public List<Expression> Arguments { get; }
     public bool IsDistinct { get; set; }
     public WindowClause? Window { get; set; }
+    public string? WindowName { get; set; }
     public List<OrderByClause>? WithinGroupOrderBy { get; set; }
     public Expression? Filter { get; set; }
     public JsonTableSpec? JsonTable { get; set; }
@@ -2087,6 +2091,7 @@ public sealed record WindowFrame : AstNode
 
 public sealed record WindowClause : AstNode
 {
+    public string? BaseName { get; init; }
     public List<Expression> PartitionBy { get; }
     public List<OrderByClause> OrderBy { get; }
     public WindowFrame? Frame { get; set; }

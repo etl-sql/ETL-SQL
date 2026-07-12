@@ -9,7 +9,7 @@ public static class LanguageMetadata
 {
     public static readonly HashSet<string> DmlKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "ORDER", "ASC", "DESC",
+        "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "WINDOW", "ORDER", "ASC", "DESC",
         "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET", "REPLACE",
         "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "FIRST", "NEXT", "ONLY", "AS",
         "ROLLUP", "CUBE", "GROUPING"
@@ -63,7 +63,7 @@ public static class LanguageMetadata
         "WAIT", "WAITFOR", "DELAY", "UNTIL",
         "WITH", "RECURSIVE", "HASH", "LOOP",
         "IDENTITY", "DEFAULT", "RANGE", "GROUPS", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT", "EXCLUDE", "NO", "OTHERS",
-        "OVER", "PARTITION", "PATH", "ROOT", "AUTO", "RAW", "EXPLICIT", "ELEMENTS",
+        "OVER", "PARTITION", "WINDOW", "PATH", "ROOT", "AUTO", "RAW", "EXPLICIT", "ELEMENTS",
         "EXPLAIN", "DESCRIBE", "SAMPLE", "REPEATABLE", "SEMI", "ANTI", "WITHIN", "AT", "TIME", "ZONE", "COPY", "MOVE", "DELETE", "COMPRESS", "DECOMPRESS",
         "RENAME", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "DELETE_FILE", "COMPRESS_FILE", "DECOMPRESS_FILE", "ENCRYPT_FILE", "DECRYPT_FILE", "CLOSE",
         "CREATE_DIRECTORY", "DELETE_DIRECTORY", "RENAME_DIRECTORY", "MOVE_DIRECTORY", "COPY_DIRECTORY", "DELETE_DIRECTORY_CONTENTS",

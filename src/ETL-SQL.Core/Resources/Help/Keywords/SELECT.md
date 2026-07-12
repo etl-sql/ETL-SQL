@@ -1,46 +1,44 @@
-SELECT retrieves rows from a connection, #temp table, or inline expression. The optional INTO clause writes results to a #temp table or variable instead of returning them to the caller.
-
-Syntax:
-  SELECT [TOP n] <column_list>
-    [INTO #table | @variable]
-    FROM <source>
-    [JOIN <source> ON <condition>]
-    [WHERE <condition>]
-    [GROUP BY <cols>]
-    [HAVING <condition>]
-    [ORDER BY <cols> [ASC | DESC]]
-    [OFFSET n ROWS FETCH NEXT n ROWS ONLY];
-
-Sources:
-- **#temp_table** — in-memory working set
-- **connection.schema.table** — qualified remote table
-- **(subquery)** — inline subquery
+# SELECT
+SELECT retrieves rows from a connection, `#temp` table, subquery, or inline expression. Use `INTO` to write results to a `#temp` table or variable instead of returning them to the caller.
 
 ```sql
--- Load from a remote connection
+SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
+  <column_list>
+  [INTO #table | @variable]
+  FROM <source>
+  [JOIN <source> ON <condition>]
+  [WHERE <condition>]
+  [GROUP BY <cols>]
+  [HAVING <condition>]
+  [WINDOW <name> AS (<window_spec>) [, ...]]
+  [QUALIFY <condition>]
+  [ORDER BY <cols> [ASC | DESC]]
+  [OFFSET n ROWS]
+  [FETCH NEXT n ROWS ONLY]
+  [LIMIT n];
+```
+
+- **`#temp_table`** — In-memory engine working set.
+- **`connection.schema.table`** — Qualified remote table.
+- **`(subquery)`** — Inline subquery.
+- **`WINDOW name AS (...)`** — Reusable named window specification for `OVER name` or `OVER (name ...)`.
+
+```sql
 SELECT order_id, customer, amount
   INTO #orders
   FROM SalesDB.dbo.Orders
   WHERE order_date >= @start;
+```
 
--- Aggregate into a scalar variable
-DECLARE @total DECIMAL;
-SELECT SUM(amount) INTO @total FROM #orders;
-
--- Window function
+```sql
 SELECT
-    customer,
-    amount,
-    RANK() OVER (PARTITION BY region ORDER BY amount DESC) AS rnk
-  INTO #ranked
-  FROM #orders;
-
--- Pagination with OFFSET/FETCH
-SELECT name, score
-  INTO #page3
-  FROM #results
-  ORDER BY score DESC
-  OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY;
+  customer,
+  amount,
+  RANK() OVER regional_amounts AS rnk
+INTO #ranked
+FROM #orders
+WINDOW regional_amounts AS (PARTITION BY region ORDER BY amount DESC)
+QUALIFY rnk <= 10;
 ```
 
 References:

@@ -279,6 +279,10 @@ public static class AstSerializer
                            ? $" GROUP BY {string.Join(", ", s.GroupBy.Select(g => g.ToSql()))}"
                            : "";
         var having = s.HavingClause != null ? $" HAVING {s.HavingClause.ToSql()}" : "";
+        var window = s.WindowDefinitions != null && s.WindowDefinitions.Count > 0
+            ? $" WINDOW {string.Join(", ", s.WindowDefinitions.Select(w => $"{w.Name} AS ({w.Clause.ToSql()})"))}"
+            : "";
+        var qualify = s.QualifyClause != null ? $" QUALIFY {s.QualifyClause.ToSql()}" : "";
         var order = s.OrderByAll ? $" ORDER BY ALL{(s.OrderByAllDescending ? " DESC" : "")}"
                      : s.OrderBy != null && s.OrderBy.Count > 0
                            ? $" ORDER BY {string.Join(", ", s.OrderBy.Select(o => o.ToSql()))}" : "";
@@ -288,7 +292,7 @@ public static class AstSerializer
         var sample = s.Sample != null
             ? $" USING SAMPLE {s.Sample.Count}{(s.Sample.IsPercent ? " PERCENT" : " ROWS")}" + (s.Sample.Seed.HasValue ? $" REPEATABLE ({s.Sample.Seed})" : "")
             : "";
-        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{order}{limit}{offset}{sample}{forCl};";
+        return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{window}{qualify}{order}{limit}{offset}{sample}{forCl};";
     }
 
     private static string FormatSetOperation(SetOperationStatement s)
@@ -761,6 +765,8 @@ public static class AstSerializer
             sql += $" FILTER (WHERE {e.Filter.ToSql()})";
         if (e.Window != null)
             sql += $" OVER ({e.Window.ToSql()})";
+        else if (!string.IsNullOrWhiteSpace(e.WindowName))
+            sql += $" OVER {e.WindowName}";
         return sql;
     }
 
@@ -890,6 +896,7 @@ public static class AstSerializer
     private static string FormatWindowClause(WindowClause n)
     {
         var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(n.BaseName)) parts.Add(n.BaseName!);
         if (n.PartitionBy.Count > 0)
             parts.Add("PARTITION BY " + string.Join(", ", n.PartitionBy.Select(p => p.ToSql())));
         if (n.OrderBy.Count > 0)
