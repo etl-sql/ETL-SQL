@@ -1,6 +1,6 @@
 # ETL-SQL Performance Reference
 
-**Applies to ETL-SQL 0.14.0**
+**Applies to ETL-SQL 0.15.0**
 
 This document explains when the engine spills to disk, what each threshold controls, how to tune them, and what to expect from large-workload performance.
 

@@ -1,6 +1,6 @@
 # ETL-SQL Orchestrator Architecture & Engineering Reference
 
-**Applies to ETL-SQL 0.14.0**
+**Applies to ETL-SQL 0.15.0**
 
 This document describes the internal mechanics of the `ETL-SQL.Orchestrator` project — the layer responsible for scheduling, executing, tracking, and governing ETL-SQL scripts in both interactive (TUI/IDE) and unattended (background job) contexts. It is the primary reference for engineers who need to understand how scripts move from a `CREATE JOB` statement to a completed run entry in the `SHOW JOB HISTORY` table.
 
