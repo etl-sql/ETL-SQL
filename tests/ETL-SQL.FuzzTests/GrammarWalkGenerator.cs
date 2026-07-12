@@ -14,8 +14,8 @@ namespace ETL_SQL.FuzzTests
         private readonly Queue<Token> _tokenQueue = new();
         private int _blockDepth = 0;
 
-        private static readonly string[] MockTables = { "Users", "Products", "Sales", "Employees" };
-        private static readonly string[] MockColumns = { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
+        private readonly List<string> _customTables = new() { "Users", "Products", "Sales", "Employees" };
+        private readonly List<string> _customColumns = new() { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
         private static readonly string[] MockVariables = { "@myVar", "@id", "@name", "@price" };
 
         private static readonly HashSet<string> AllowedStatementStarters = new(StringComparer.OrdinalIgnoreCase)
@@ -27,6 +27,46 @@ namespace ETL_SQL.FuzzTests
         {
             _tree = tree;
             _rng = rng;
+        }
+
+        public void AddCustomSchema(string table, string[] columns)
+        {
+            _customTables.Add(table);
+            _customColumns.AddRange(columns);
+        }
+
+        private string GetRandomTable()
+        {
+            return _customTables[_rng.Next(_customTables.Count)];
+        }
+
+        private string GetRandomColumn()
+        {
+            return _customColumns[_rng.Next(_customColumns.Count)];
+        }
+
+        public void CorruptQuery(List<Token> tokens)
+        {
+            if (tokens.Count <= 2) return;
+            int idx = _rng.Next(tokens.Count - 1); // Avoid EOF
+            int action = _rng.Next(2);
+            if (action == 0)
+            {
+                tokens.RemoveAt(idx);
+            }
+            else
+            {
+                var original = tokens[idx];
+                var corruptToken = _rng.Next(5) switch
+                {
+                    0 => new Token(TokenType.LPAREN, "(", original.Line, original.Column, original.EndLine, original.EndColumn),
+                    1 => new Token(TokenType.RPAREN, ")", original.Line, original.Column, original.EndLine, original.EndColumn),
+                    2 => new Token(TokenType.PLUS, "+", original.Line, original.Column, original.EndLine, original.EndColumn),
+                    3 => new Token(TokenType.EQUALS, "=", original.Line, original.Column, original.EndLine, original.EndColumn),
+                    _ => new Token(TokenType.IDENTIFIER, "CorruptCol", original.Line, original.Column, original.EndLine, original.EndColumn)
+                };
+                tokens[idx] = corruptToken;
+            }
         }
 
         public List<Token> GenerateQuery()
@@ -191,13 +231,13 @@ namespace ETL_SQL.FuzzTests
                 if (label.Equals("<table_source>", StringComparison.OrdinalIgnoreCase) ||
                     label.Equals("<join_table>", StringComparison.OrdinalIgnoreCase))
                 {
-                    var table = "src." + MockTables[_rng.Next(MockTables.Length)];
+                    var table = "src." + GetRandomTable();
                     var tok = new Token(TokenType.IDENTIFIER, table, 0, 0, 0, 0);
                     if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
                 else if (label.Equals("<column_name>", StringComparison.OrdinalIgnoreCase))
                 {
-                    var col = MockColumns[_rng.Next(MockColumns.Length)];
+                    var col = GetRandomColumn();
                     var tok = new Token(TokenType.IDENTIFIER, col, 0, 0, 0, 0);
                     if (transition.Condition(tok)) { _tokenQueue.Enqueue(tok); return true; }
                 }
@@ -218,10 +258,10 @@ namespace ETL_SQL.FuzzTests
                     string groupText = choice switch
                     {
                         0 => "ALL",
-                        1 => $"ROLLUP ({MockColumns[_rng.Next(MockColumns.Length)]})",
-                        2 => $"CUBE ({MockColumns[_rng.Next(MockColumns.Length)]}, {MockColumns[_rng.Next(MockColumns.Length)]})",
-                        3 => $"GROUPING SETS (({MockColumns[_rng.Next(MockColumns.Length)]}), ({MockColumns[_rng.Next(MockColumns.Length)]}))",
-                        _ => $"{MockColumns[_rng.Next(MockColumns.Length)]}, {MockColumns[_rng.Next(MockColumns.Length)]}"
+                        1 => $"ROLLUP ({GetRandomColumn()})",
+                        2 => $"CUBE ({GetRandomColumn()}, {GetRandomColumn()})",
+                        3 => $"GROUPING SETS (({GetRandomColumn()}), ({GetRandomColumn()}))",
+                        _ => $"{GetRandomColumn()}, {GetRandomColumn()}"
                     };
                     var groupTokens = TokenizeBody(groupText);
                     if (groupTokens.Count > 0 && transition.Condition(groupTokens[0]))
@@ -235,7 +275,7 @@ namespace ETL_SQL.FuzzTests
                     string orderText = _rng.Next(2) switch
                     {
                         0 => "1, 2",
-                        _ => $"{MockColumns[_rng.Next(MockColumns.Length)]} ASC, {MockColumns[_rng.Next(MockColumns.Length)]} DESC NULLS LAST"
+                        _ => $"{GetRandomColumn()} ASC, {GetRandomColumn()} DESC NULLS LAST"
                     };
                     var orderTokens = TokenizeBody(orderText);
                     if (orderTokens.Count > 0 && transition.Condition(orderTokens[0]))
@@ -342,8 +382,8 @@ namespace ETL_SQL.FuzzTests
             {
                 var tok = transition.SuggestType.Value switch
                 {
-                    SuggestionType.Table => new Token(TokenType.IDENTIFIER, "src." + MockTables[_rng.Next(MockTables.Length)], 0, 0, 0, 0),
-                    SuggestionType.Column => new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0),
+                    SuggestionType.Table => new Token(TokenType.IDENTIFIER, "src." + GetRandomTable(), 0, 0, 0, 0),
+                    SuggestionType.Column => new Token(TokenType.IDENTIFIER, GetRandomColumn(), 0, 0, 0, 0),
                     SuggestionType.Connection => new Token(TokenType.IDENTIFIER, "src", 0, 0, 0, 0),
                     SuggestionType.Variable => new Token(TokenType.VARIABLE, MockVariables[_rng.Next(MockVariables.Length)], 0, 0, 0, 0),
                     SuggestionType.OptionName => new Token(TokenType.IDENTIFIER, "ENCRYPT", 0, 0, 0, 0),
@@ -435,7 +475,7 @@ namespace ETL_SQL.FuzzTests
 
         private List<Token> GenerateWindowFunctionTokens(int depth)
         {
-            // 30% chance of referring to the newly added named window "w"
+            // 30% chance of referring to named window "w"
             if (_rng.Next(10) < 3)
             {
                 return TokenizeBody("ROW_NUMBER() OVER w");
@@ -455,14 +495,14 @@ namespace ETL_SQL.FuzzTests
             winTokens.Add(new Token(TokenType.LPAREN, "(", 0, 0, 0, 0));
             if (func != "ROW_NUMBER")
             {
-                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.IDENTIFIER, GetRandomColumn(), 0, 0, 0, 0));
             }
             winTokens.Add(new Token(TokenType.RPAREN, ")", 0, 0, 0, 0));
 
             // Append optional aggregate FILTER(WHERE ...) clause
             if (_rng.Next(3) == 0)
             {
-                winTokens.AddRange(TokenizeBody($" FILTER(WHERE {MockColumns[_rng.Next(MockColumns.Length)]} > 10)"));
+                winTokens.AddRange(TokenizeBody($" FILTER(WHERE {GetRandomColumn()} > 10)"));
             }
 
             winTokens.Add(new Token(TokenType.OVER, "OVER", 0, 0, 0, 0));
@@ -472,14 +512,14 @@ namespace ETL_SQL.FuzzTests
             {
                 winTokens.Add(new Token(TokenType.IDENTIFIER, "PARTITION", 0, 0, 0, 0));
                 winTokens.Add(new Token(TokenType.BY, "BY", 0, 0, 0, 0));
-                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.IDENTIFIER, GetRandomColumn(), 0, 0, 0, 0));
             }
 
             if (_rng.Next(2) == 0)
             {
                 winTokens.Add(new Token(TokenType.ORDER, "ORDER", 0, 0, 0, 0));
                 winTokens.Add(new Token(TokenType.BY, "BY", 0, 0, 0, 0));
-                winTokens.Add(new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0));
+                winTokens.Add(new Token(TokenType.IDENTIFIER, GetRandomColumn(), 0, 0, 0, 0));
                 if (_rng.Next(2) == 0)
                 {
                     winTokens.Add(new Token(TokenType.DESC, "DESC", 0, 0, 0, 0));
@@ -494,7 +534,7 @@ namespace ETL_SQL.FuzzTests
         {
             return _rng.Next(6) switch
             {
-                0 => new Token(TokenType.IDENTIFIER, MockColumns[_rng.Next(MockColumns.Length)], 0, 0, 0, 0),
+                0 => new Token(TokenType.IDENTIFIER, GetRandomColumn(), 0, 0, 0, 0),
                 1 => new Token(TokenType.NUMBER, _rng.Next(1, 100).ToString(), 0, 0, 0, 0),
                 2 => new Token(TokenType.STRING_LITERAL, $"'Val_{_rng.Next(1, 10)}'", 0, 0, 0, 0),
                 3 => new Token(TokenType.TRUE, "TRUE", 0, 0, 0, 0),
