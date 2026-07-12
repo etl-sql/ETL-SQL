@@ -72,7 +72,8 @@ namespace ETL_SQL.FuzzTests
             // Register dynamic schema in the walk generator
             generator.AddCustomSchema(_fuzzTableName, new[] { "ID", "Price", "Name", "TotalAmount" });
 
-            int iterations = 500;
+            string? iterEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_ITERATIONS");
+            int iterations = int.TryParse(iterEnv, out var parsedIter) ? parsedIter : 500;
             int crashCount = 0;
             var rng = new Random();
 
