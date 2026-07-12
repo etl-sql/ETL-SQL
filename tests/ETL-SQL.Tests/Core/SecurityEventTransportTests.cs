@@ -102,6 +102,29 @@ public sealed class SecurityEventTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task DrainOnce_RecoversAfterCollectorOutageWithoutLosingEvent()
+    {
+        var eventId = Guid.NewGuid();
+        var outbox = CreateOutbox();
+        outbox.Emit(Event(eventId));
+        var attempts = 0;
+        var handler = new RecordingHandler(_ => ++attempts == 1
+            ? throw new HttpRequestException("simulated outage")
+            : Ack(eventId));
+        var transport = CreateTransport(outbox, handler);
+
+        var failed = await transport.DrainOnceAsync(Now);
+        var recovered = await transport.DrainOnceAsync(Now.AddSeconds(30));
+
+        Assert.Equal(1, failed.Failed);
+        Assert.Equal(1, recovered.Delivered);
+        Assert.Equal(2, handler.IdempotencyKeys.Count);
+        Assert.Equal(handler.IdempotencyKeys[0], handler.IdempotencyKeys[1]);
+        Assert.Equal(0, outbox.GetHealth().PendingCount);
+        Assert.True(SecurityEventRuntime.GetDiagnostics().CollectorReachable);
+    }
+
+    [Fact]
     public async Task DrainOnce_ForwardsOnlyEventsMeetingSignedSeverityThreshold()
     {
         var information = Guid.NewGuid();

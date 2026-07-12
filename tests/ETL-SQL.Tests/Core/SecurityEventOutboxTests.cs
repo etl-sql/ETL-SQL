@@ -44,6 +44,17 @@ public sealed class SecurityEventOutboxTests : IDisposable
     }
 
     [Fact]
+    public void Emit_RejectsAtomicallyWhenPayloadExceedsByteCapacity()
+    {
+        var outbox = CreateOutbox(maxBytes: 1);
+
+        Assert.Throws<SecurityEventOutboxFullException>(() =>
+            outbox.Emit(Event(Guid.NewGuid())));
+        Assert.Equal(0, outbox.GetHealth().PendingCount);
+        Assert.Equal(0, outbox.GetHealth().StoredBytes);
+    }
+
+    [Fact]
     public void ClaimBatch_ExcludesActiveLeaseAndRecoversExpiredLeaseAfterReopen()
     {
         var now = new DateTimeOffset(2026, 7, 12, 18, 0, 0, TimeSpan.Zero);
@@ -153,6 +164,32 @@ public sealed class SecurityEventOutboxTests : IDisposable
         Assert.Null(health.LastDeliveredUtc);
     }
 
+    [Fact]
+    public void ClaimBatch_QuarantinesCorruptPayloadAndContinuesWithValidEvents()
+    {
+        var corruptId = Guid.NewGuid();
+        var validId = Guid.NewGuid();
+        var outbox = CreateOutbox();
+        outbox.Emit(Event(corruptId));
+        outbox.Emit(Event(validId));
+        using (var connection = new SqliteConnection($"Data Source={outbox.DatabasePath}"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                "UPDATE security_events SET payload_json = '{invalid' WHERE event_id = $eventId;";
+            command.Parameters.AddWithValue("$eventId", corruptId.ToString("D"));
+            command.ExecuteNonQuery();
+        }
+
+        var claimed = outbox.ClaimBatch(10, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+
+        Assert.Equal(validId, Assert.Single(claimed).Event.EventId);
+        var health = outbox.GetHealth();
+        Assert.Equal(1, health.FailedCount);
+        Assert.Equal(1, health.PendingCount);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_root, recursive: true); } catch { }
@@ -161,11 +198,12 @@ public sealed class SecurityEventOutboxTests : IDisposable
     private SecurityEventOutbox CreateOutbox(
         int maxEvents = 100,
         int maxAttempts = 3,
-        TimeSpan? retryDelay = null) =>
+        TimeSpan? retryDelay = null,
+        long maxBytes = 1024 * 1024) =>
         new(new SecurityEventOutboxOptions
         {
             DatabasePath = Path.Combine(_root, "security-events.db"),
-            MaxBytes = 1024 * 1024,
+            MaxBytes = maxBytes,
             MaxPendingEvents = maxEvents,
             MaxDeliveryAttempts = maxAttempts,
             InitialRetryDelay = retryDelay ?? TimeSpan.FromSeconds(30),

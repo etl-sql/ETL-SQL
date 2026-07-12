@@ -156,8 +156,20 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
         }
         transaction.Commit();
 
-        return rows.Select(row => new SecurityEventOutboxItem(
-            SecurityEventContract.Deserialize(row.Payload), row.Attempts, Parse(row.Created))).ToArray();
+        var claimed = new List<SecurityEventOutboxItem>(rows.Count);
+        foreach (var row in rows)
+        {
+            try
+            {
+                claimed.Add(new SecurityEventOutboxItem(
+                    SecurityEventContract.Deserialize(row.Payload), row.Attempts, Parse(row.Created)));
+            }
+            catch
+            {
+                MarkCorrupt(row.Id, nowUtc);
+            }
+        }
+        return claimed;
     }
 
     public void MarkDelivered(IEnumerable<Guid> eventIds, DateTimeOffset deliveredAtUtc)
@@ -411,6 +423,26 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
         command.CommandText = "SELECT attempts FROM security_events WHERE event_id = $eventId;";
         command.Parameters.AddWithValue("$eventId", eventId);
         return command.ExecuteScalar() is long attempts ? checked((int)attempts) : 0;
+    }
+
+    private void MarkCorrupt(string eventId, DateTimeOffset failedAtUtc)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction(deferred: false);
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE security_events
+            SET status = 'Failed', attempts = $attempts, next_attempt_utc = NULL,
+                locked_until_utc = NULL, last_error = $error, updated_utc = $now
+            WHERE event_id = $eventId;
+            """;
+        command.Parameters.AddWithValue("$attempts", _options.MaxDeliveryAttempts);
+        command.Parameters.AddWithValue("$error", "Stored security event payload is invalid.");
+        command.Parameters.AddWithValue("$now", Format(failedAtUtc));
+        command.Parameters.AddWithValue("$eventId", eventId);
+        command.ExecuteNonQuery();
+        transaction.Commit();
     }
 
     private TimeSpan RetryDelay(int attempts)
