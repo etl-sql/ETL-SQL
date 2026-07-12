@@ -18,9 +18,17 @@ namespace ETL_SQL.FuzzTests
         private readonly List<string> _customColumns = new() { "UserID", "UserName", "Email", "ProductID", "Price", "Quantity", "Total", "EmpID", "Salary", "ProductName" };
         private static readonly string[] MockVariables = { "@myVar", "@id", "@name", "@price" };
 
+        // Covers the statement families registered as grammar start nodes. Previously only 16
+        // starters were fuzzed, which left ~half the language (CREATE/ALTER/DROP/EXPORT/COPY/RUN/
+        // EXECUTE/…) untouched at the top level and left the DDL body generators in
+        // TryGenerateForTransition (the lastKeyword == "CREATE" branch, SHOW bodies) as dead code.
         private static readonly HashSet<string> AllowedStatementStarters = new(StringComparer.OrdinalIgnoreCase)
         {
-            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN", "IF", "WHILE", "FOR", "FOREACH", "COMMIT", "ROLLBACK", "PARALLEL", "SHOW"
+            "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "BEGIN",
+            "IF", "WHILE", "FOR", "FOREACH", "COMMIT", "ROLLBACK", "PARALLEL", "SHOW",
+            "CREATE", "ALTER", "DROP", "REPLACE", "EXPORT", "COPY", "MOVE", "RUN",
+            "EXECUTE", "EXEC", "TRUNCATE", "PRINT", "THROW", "TAG",
+            "ENCRYPT", "DECRYPT", "COMPRESS", "WAITFOR", "SEND", "RECEIVE"
         };
 
         public GrammarWalkGenerator(GrammarStateTree tree, Random rng)
@@ -48,24 +56,43 @@ namespace ETL_SQL.FuzzTests
         public void CorruptQuery(List<Token> tokens)
         {
             if (tokens.Count <= 2) return;
-            int idx = _rng.Next(tokens.Count - 1); // Avoid EOF
-            int action = _rng.Next(2);
-            if (action == 0)
+            int idx = _rng.Next(tokens.Count - 1); // Avoid the trailing EOF
+            var original = tokens[idx];
+
+            switch (_rng.Next(5))
             {
-                tokens.RemoveAt(idx);
-            }
-            else
-            {
-                var original = tokens[idx];
-                var corruptToken = _rng.Next(5) switch
-                {
-                    0 => new Token(TokenType.LPAREN, "(", original.Line, original.Column, original.EndLine, original.EndColumn),
-                    1 => new Token(TokenType.RPAREN, ")", original.Line, original.Column, original.EndLine, original.EndColumn),
-                    2 => new Token(TokenType.PLUS, "+", original.Line, original.Column, original.EndLine, original.EndColumn),
-                    3 => new Token(TokenType.EQUALS, "=", original.Line, original.Column, original.EndLine, original.EndColumn),
-                    _ => new Token(TokenType.IDENTIFIER, "CorruptCol", original.Line, original.Column, original.EndLine, original.EndColumn)
-                };
-                tokens[idx] = corruptToken;
+                case 0: // Delete a token
+                    tokens.RemoveAt(idx);
+                    break;
+
+                case 1: // Replace with a random structural/operator token
+                    tokens[idx] = _rng.Next(5) switch
+                    {
+                        0 => new Token(TokenType.LPAREN, "(", original.Line, original.Column, original.EndLine, original.EndColumn),
+                        1 => new Token(TokenType.RPAREN, ")", original.Line, original.Column, original.EndLine, original.EndColumn),
+                        2 => new Token(TokenType.PLUS, "+", original.Line, original.Column, original.EndLine, original.EndColumn),
+                        3 => new Token(TokenType.EQUALS, "=", original.Line, original.Column, original.EndLine, original.EndColumn),
+                        _ => new Token(TokenType.IDENTIFIER, "CorruptCol", original.Line, original.Column, original.EndLine, original.EndColumn)
+                    };
+                    break;
+
+                case 2: // Duplicate a token
+                    tokens.Insert(idx, original);
+                    break;
+
+                case 3: // Truncate the tail (drop everything after idx, keeping the trailing EOF)
+                    if (idx + 1 < tokens.Count - 1)
+                    {
+                        tokens.RemoveRange(idx + 1, tokens.Count - 1 - (idx + 1));
+                    }
+                    break;
+
+                default: // Inject an unbalanced parenthesis
+                    var paren = _rng.Next(2) == 0
+                        ? new Token(TokenType.LPAREN, "(", original.Line, original.Column, original.EndLine, original.EndColumn)
+                        : new Token(TokenType.RPAREN, ")", original.Line, original.Column, original.EndLine, original.EndColumn);
+                    tokens.Insert(idx, paren);
+                    break;
             }
         }
 

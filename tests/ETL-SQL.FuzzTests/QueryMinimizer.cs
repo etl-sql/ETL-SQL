@@ -238,6 +238,31 @@ namespace ETL_SQL.FuzzTests
                     foreach (var sub in GetSubExpressions(arg)) yield return sub;
                 }
             }
+            else if (expr is UnaryExpression unary)
+            {
+                yield return unary.Expression;
+                foreach (var sub in GetSubExpressions(unary.Expression)) yield return sub;
+            }
+            else if (expr is CaseExpression caseExpr)
+            {
+                if (caseExpr.InputExpression != null)
+                {
+                    yield return caseExpr.InputExpression;
+                    foreach (var sub in GetSubExpressions(caseExpr.InputExpression)) yield return sub;
+                }
+                foreach (var (cond, res) in caseExpr.WhenClauses)
+                {
+                    yield return cond;
+                    foreach (var sub in GetSubExpressions(cond)) yield return sub;
+                    yield return res;
+                    foreach (var sub in GetSubExpressions(res)) yield return sub;
+                }
+                if (caseExpr.ElseResult != null)
+                {
+                    yield return caseExpr.ElseResult;
+                    foreach (var sub in GetSubExpressions(caseExpr.ElseResult)) yield return sub;
+                }
+            }
         }
 
         private static Expression ReplaceNode(Expression current, Expression target, Expression replacement)
@@ -280,6 +305,57 @@ namespace ETL_SQL.FuzzTests
                         Column = func.Column,
                         EndLine = func.EndLine,
                         EndColumn = func.EndColumn
+                    };
+                }
+            }
+            else if (current is UnaryExpression unary)
+            {
+                var newInner = ReplaceNode(unary.Expression, target, replacement);
+                if (newInner != unary.Expression)
+                {
+                    return new UnaryExpression(unary.Operator, newInner)
+                    {
+                        Line = unary.Line,
+                        Column = unary.Column,
+                        EndLine = unary.EndLine,
+                        EndColumn = unary.EndColumn
+                    };
+                }
+            }
+            else if (current is CaseExpression caseExpr)
+            {
+                bool changed = false;
+                var newInput = caseExpr.InputExpression;
+                if (caseExpr.InputExpression != null)
+                {
+                    newInput = ReplaceNode(caseExpr.InputExpression, target, replacement);
+                    if (newInput != caseExpr.InputExpression) changed = true;
+                }
+
+                var newWhens = new List<(Expression, Expression)>();
+                foreach (var (cond, res) in caseExpr.WhenClauses)
+                {
+                    var nc = ReplaceNode(cond, target, replacement);
+                    var nr = ReplaceNode(res, target, replacement);
+                    if (nc != cond || nr != res) changed = true;
+                    newWhens.Add((nc, nr));
+                }
+
+                var newElse = caseExpr.ElseResult;
+                if (caseExpr.ElseResult != null)
+                {
+                    newElse = ReplaceNode(caseExpr.ElseResult, target, replacement);
+                    if (newElse != caseExpr.ElseResult) changed = true;
+                }
+
+                if (changed)
+                {
+                    return new CaseExpression(newWhens, newElse, newInput)
+                    {
+                        Line = caseExpr.Line,
+                        Column = caseExpr.Column,
+                        EndLine = caseExpr.EndLine,
+                        EndColumn = caseExpr.EndColumn
                     };
                 }
             }

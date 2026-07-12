@@ -16,6 +16,18 @@ public class GrammarLanguageService : LanguageService
         "<table_source>", "<join_table>", "<temp_table>", "<target_table>", "<source_table>", "<table_name>"
     };
 
+    // Keywords that remain legal inside a free-form expression/value position. When the cursor
+    // is at an expression spot we drop statement-structural keywords (FROM, WHERE, INSERT, JOIN,
+    // …) but keep these so completions like NOT / IN / EXISTS / CASE / CAST still surface.
+    // NOTE (see TODO "Grammar-tree suggestions & SQL fuzzer hardening"): this allowlist may need
+    // widening after interactive UX verification in tools/ui-sandbox.
+    private static readonly HashSet<string> ExpressionKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "AND", "OR", "NOT", "LIKE", "ILIKE", "ESCAPE", "IN", "EXISTS", "BETWEEN", "IS", "NULL",
+        "CASE", "WHEN", "THEN", "ELSE", "END", "CAST", "CONVERT", "DISTINCT",
+        "TRUE", "FALSE", "INTERVAL", "OVER", "PARTITION", "NULLS", "ASC", "DESC"
+    };
+
     private readonly GrammarStateTree _grammarTree;
 
     public GrammarLanguageService(IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null, Core.Functions.IFunctionRegistry? functionRegistry = null)
@@ -32,45 +44,50 @@ public class GrammarLanguageService : LanguageService
         {
             var walker = RunWalker(context);
 
-            // Check if strict (no wildcards match in any active state)
-            bool strict = true;
+            // Collect the keywords grammatically offered at the cursor and detect whether a
+            // free-form expression/identifier is also legal here. Unlike the previous
+            // all-or-nothing gate (where a single wildcard transition disabled ALL keyword
+            // narrowing, dumping the full alphabetical list in every expression position), the
+            // decision below is per-suggestion: expression positions still drop irrelevant
+            // statement keywords while retaining functions and operator/value keywords.
+            var offeredKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            bool allowsExpression = false;
             foreach (var state in walker.ActiveStates)
             {
                 foreach (var transition in state.Transitions)
                 {
-                    // Check if wildcard: matches both an identifier and a string token
-                    var token1 = new Token(TokenType.IDENTIFIER, "___wildcard_test_1___", 0, 0, 0, 0);
-                    var token2 = new Token(TokenType.STRING, "___wildcard_test_2___", 0, 0, 0, 0);
-                    if (transition.Matches(token1, walker) && transition.Matches(token2, walker))
+                    // A transition that accepts both an identifier and a string token is a
+                    // free-form wildcard (an <expression>/<value> position).
+                    var idToken = new Token(TokenType.IDENTIFIER, "___wildcard_test_1___", 0, 0, 0, 0);
+                    var strToken = new Token(TokenType.STRING, "___wildcard_test_2___", 0, 0, 0, 0);
+                    if (transition.Matches(idToken, walker) && transition.Matches(strToken, walker))
                     {
-                        strict = false;
-                        break;
+                        allowsExpression = true;
+                    }
+                    else if (transition.Label != null)
+                    {
+                        offeredKeywords.Add(transition.Label);
                     }
                 }
-                if (!strict) break;
             }
 
-            if (strict)
+            suggestions = suggestions.Where(s =>
             {
-                var activeLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var state in walker.ActiveStates)
+                // Always keep session/system tags and non-keyword categories (tables, columns,
+                // variables, connections, snippets) — those are narrowed by semantic injection.
+                if (s.Text.StartsWith("@")) return true;
+                switch (s.Type)
                 {
-                    foreach (var transition in state.Transitions)
-                    {
-                        if (transition.Label != null)
-                        {
-                            activeLabels.Add(transition.Label);
-                        }
-                    }
+                    case SuggestionType.Keyword:
+                        return offeredKeywords.Contains(s.Text) ||
+                               (allowsExpression && ExpressionKeywords.Contains(s.Text));
+                    case SuggestionType.Function:
+                        // Functions belong wherever an expression is legal.
+                        return allowsExpression || offeredKeywords.Contains(s.Text);
+                    default:
+                        return true;
                 }
-
-                // Filter keywords and functions (keeping standard tags starting with @)
-                suggestions = suggestions.Where(s =>
-                    (s.Type != SuggestionType.Keyword && s.Type != SuggestionType.Function) ||
-                    s.Text.StartsWith("@") ||
-                    activeLabels.Contains(s.Text)
-                ).ToList();
-            }
+            }).ToList();
         }
         catch (Exception ex)
         {
@@ -231,7 +248,10 @@ public class GrammarLanguageService : LanguageService
                     results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 25)));
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                context.Logger?.Error($"GrammarLanguageService: table suggestions for '{conn.Name}' failed: {ex.Message}");
+            }
         }
     }
 
@@ -251,7 +271,10 @@ public class GrammarLanguageService : LanguageService
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                context.Logger?.Error($"GrammarLanguageService: column suggestions for '{info.TableName}' failed: {ex.Message}");
+            }
         }
     }
 }

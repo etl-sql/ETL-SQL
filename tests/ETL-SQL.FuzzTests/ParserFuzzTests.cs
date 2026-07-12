@@ -24,12 +24,23 @@ namespace ETL_SQL.FuzzTests
         public NoRecMismatchException(string message) : base(message) { }
     }
 
+    [Trait("Category", "Fuzz")]
     public class ParserFuzzTests : IAsyncLifetime
     {
         private IServiceProvider _serviceProvider = null!;
         private Evaluator _evaluator = null!;
         private string _fuzzLogDir = null!;
         private string _fuzzTableName = null!;
+        private int _seed;
+        private bool _strictExec;
+
+        // Message fragments of ExecutionExceptions that are known-expected engine rejections (not
+        // bugs). Populate this from a calibration run before enabling ETLSQL_FUZZ_STRICT_EXEC=1;
+        // until then strict-exec is off and behaviour is unchanged. See TODO
+        // "Grammar-tree suggestions & SQL fuzzer hardening".
+        private static readonly string[] ExpectedExecutionMessageFragments =
+        {
+        };
 
         public async Task InitializeAsync()
         {
@@ -66,16 +77,25 @@ namespace ETL_SQL.FuzzTests
         [Fact]
         public async Task RunFuzzer()
         {
+            string? iterEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_ITERATIONS");
+            int iterations = int.TryParse(iterEnv, out var parsedIter) ? parsedIter : 500;
+
+            // Seed both RNG streams from an overridable seed and record it, so any failure found in
+            // CI is reproducible: rerun with ETLSQL_FUZZ_SEED=<seed>. The seed is echoed to test
+            // output and written into every reproducer file.
+            string? seedEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_SEED");
+            _seed = int.TryParse(seedEnv, out var parsedSeed) ? parsedSeed : Environment.TickCount;
+            _strictExec = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_STRICT_EXEC") == "1";
+            Console.WriteLine($"[Fuzzer] seed={_seed} iterations={iterations} strictExec={_strictExec} (rerun with ETLSQL_FUZZ_SEED={_seed})");
+
             var tree = DefaultGrammar.Build();
-            var generator = new GrammarWalkGenerator(tree, new Random());
-            
+            var generator = new GrammarWalkGenerator(tree, new Random(_seed));
+
             // Register dynamic schema in the walk generator
             generator.AddCustomSchema(_fuzzTableName, new[] { "ID", "Price", "Name", "TotalAmount" });
 
-            string? iterEnv = Environment.GetEnvironmentVariable("ETLSQL_FUZZ_ITERATIONS");
-            int iterations = int.TryParse(iterEnv, out var parsedIter) ? parsedIter : 500;
             int crashCount = 0;
-            var rng = new Random();
+            var rng = new Random(unchecked(_seed * 31 + 17));
 
             for (int i = 0; i < iterations; i++)
             {
@@ -151,9 +171,26 @@ namespace ETL_SQL.FuzzTests
                 return true;
             }
 
-            // Expected exceptions are not severe crashes
-            if (ex is SyntaxException || ex is ConnectionException || ex is ExecutionException || ex is DivideByZeroException || ex is OverflowException)
+            // Always-expected exceptions are never severe. ConnectionException derives from
+            // ExecutionException, so it must be matched here — before the generic
+            // ExecutionException handling below — to stay benign even under strict-exec.
+            if (ex is SyntaxException || ex is ConnectionException || ex is DivideByZeroException || ex is OverflowException)
             {
+                return false;
+            }
+
+            // ExecutionException is the engine's sanitized wrapper for real failures, so treating
+            // it as always-benign hides genuine bugs. With ETLSQL_FUZZ_STRICT_EXEC=1, any
+            // ExecutionException whose message is not on the expected-rejection allowlist counts as
+            // a bug. Off by default (allowlist not yet calibrated) so CI behaviour is unchanged.
+            if (ex is ExecutionException)
+            {
+                if (_strictExec &&
+                    !ExpectedExecutionMessageFragments.Any(f =>
+                        ex.Message.Contains(f, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
                 return false;
             }
 
@@ -210,9 +247,12 @@ namespace ETL_SQL.FuzzTests
                     throw new NoRecMismatchException($"NoREC correctness mismatch! Optimized: {val1}, Unoptimized: {val2}. Query1: {sql1}, Query2: {sql2}");
                 }
             }
-            catch (Exception ex) when (!(ex is NoRecMismatchException))
+            catch (Exception ex) when (!(ex is NoRecMismatchException) && !IsSevereCrash(ex))
             {
-                // Ignore general evaluation errors inside generated NoREC queries (expected database exceptions)
+                // Ignore expected evaluation errors inside generated NoREC queries (semantically
+                // invalid rewrites, sanitized database exceptions). Severe crashes (NRE, cast,
+                // index) and mismatches fall through and propagate so the differential rewrite
+                // path cannot silently hide engine bugs.
             }
         }
 
@@ -240,10 +280,30 @@ namespace ETL_SQL.FuzzTests
                 }
             });
 
-            var hash = ex.StackTrace?.GetHashCode().ToString("X") ?? Guid.NewGuid().ToString("N").Substring(0, 8);
-            var reproPath = Path.Combine(_fuzzLogDir, "reproducers", $"{hash}.repro.sql");
-            var content = $"-- Exception: {ex.GetType().Name}\n-- Message: {ex.Message}\n-- Original Query: {query}\n\n{minimalQuery}";
+            // Stable, process-independent name so the same crash overwrites its own repro across
+            // runs (string.GetHashCode is randomized per process, so it was neither stable nor
+            // reproducible). Prefixed with the seed to keep distinct crashes from colliding.
+            var hash = StableHash(ex.GetType().Name + "\n" + minimalQuery);
+            var reproPath = Path.Combine(_fuzzLogDir, "reproducers", $"{_seed}-{hash}.repro.sql");
+            var content =
+                $"-- Exception: {ex.GetType().Name}\n" +
+                $"-- Message: {ex.Message}\n" +
+                $"-- Seed: {_seed} (rerun with ETLSQL_FUZZ_SEED={_seed})\n" +
+                $"-- Original Query: {query}\n\n{minimalQuery}";
             File.WriteAllText(reproPath, content);
+        }
+
+        private static string StableHash(string s)
+        {
+            unchecked
+            {
+                uint h = 2166136261;
+                foreach (char c in s)
+                {
+                    h = (h ^ c) * 16777619;
+                }
+                return h.ToString("X8");
+            }
         }
     }
 }
