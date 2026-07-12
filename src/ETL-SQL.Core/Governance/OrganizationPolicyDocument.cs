@@ -74,6 +74,14 @@ public sealed record OrganizationPolicyDocument
         values["SecurityEvents:IntervalSeconds"] = SecurityEvents.IntervalSeconds;
         values["SecurityEvents:LeaseSeconds"] = SecurityEvents.LeaseSeconds;
         values["SecurityEvents:MinimumForwardedSeverity"] = SecurityEvents.MinimumForwardedSeverity.ToString();
+        if (SecurityEvents.FailClosedMaxTerminalFailures.HasValue)
+            values["SecurityEvents:FailClosedMaxTerminalFailures"] = SecurityEvents.FailClosedMaxTerminalFailures.Value;
+        if (SecurityEvents.FailClosedMaxOldestEventSeconds.HasValue)
+            values["SecurityEvents:FailClosedMaxOldestEventSeconds"] = SecurityEvents.FailClosedMaxOldestEventSeconds.Value;
+        if (SecurityEvents.FailClosedMaxPendingEvents.HasValue)
+            values["SecurityEvents:FailClosedMaxPendingEvents"] = SecurityEvents.FailClosedMaxPendingEvents.Value;
+        if (SecurityEvents.FailClosedMaxOutboxBytes.HasValue)
+            values["SecurityEvents:FailClosedMaxOutboxBytes"] = SecurityEvents.FailClosedMaxOutboxBytes.Value;
 
         return values;
     }
@@ -177,6 +185,10 @@ public sealed record SecurityEventPolicySection
     public int IntervalSeconds { get; init; } = 30;
     public int LeaseSeconds { get; init; } = 120;
     public SecurityEventSeverity MinimumForwardedSeverity { get; init; } = SecurityEventSeverity.Warning;
+    public int? FailClosedMaxTerminalFailures { get; init; }
+    public int? FailClosedMaxOldestEventSeconds { get; init; }
+    public int? FailClosedMaxPendingEvents { get; init; }
+    public long? FailClosedMaxOutboxBytes { get; init; }
 }
 
 public sealed record OrganizationPolicyValidationResult(
@@ -381,6 +393,14 @@ public static class OrganizationPolicySchema
             errors.Add("Security event interval seconds must be between 1 and 3600.");
         if (securityEvents.LeaseSeconds is < 10 or > 3600)
             errors.Add("Security event lease seconds must be between 10 and 3600.");
+        if (securityEvents.FailClosedMaxTerminalFailures is < 1)
+            errors.Add("Security event fail-closed terminal failure limit must be at least 1.");
+        if (securityEvents.FailClosedMaxOldestEventSeconds is < 1)
+            errors.Add("Security event fail-closed oldest event seconds must be at least 1.");
+        if (securityEvents.FailClosedMaxPendingEvents is < 1)
+            errors.Add("Security event fail-closed pending event limit must be at least 1.");
+        if (securityEvents.FailClosedMaxOutboxBytes is < 1)
+            errors.Add("Security event fail-closed outbox byte limit must be at least 1.");
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

@@ -284,6 +284,38 @@ public sealed class GovernancePolicyRegistry : IGovernancePolicyRegistry
             "Minimum security-event severity forwarded to the central collector.",
             defaultValue: "Warning",
             allowedValues: ["Information", "Warning", "Error", "Critical"]);
+
+        yield return new(
+            "SecurityEvents:FailClosedMaxTerminalFailures",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Terminal security-event delivery failures allowed before execution is blocked.",
+            minimumValue: 1);
+
+        yield return new(
+            "SecurityEvents:FailClosedMaxOldestEventSeconds",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Maximum age of an undelivered security event before execution is blocked.",
+            minimumValue: 1);
+
+        yield return new(
+            "SecurityEvents:FailClosedMaxPendingEvents",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Integer,
+            "Pending security-event backlog allowed before execution is blocked.",
+            minimumValue: 1);
+
+        yield return new(
+            "SecurityEvents:FailClosedMaxOutboxBytes",
+            GovernancePolicyScope.Audit,
+            GovernancePolicyClassification.Constrained,
+            GovernancePolicyValueKind.Long,
+            "Maximum durable security-event outbox size before execution is blocked.",
+            minimumValue: 1L);
     }
 }
 

@@ -36,6 +36,8 @@ public static class SecurityEventRuntime
         set => Volatile.Write(ref _sink, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
+    public static SecurityEventOutbox? LocalOutbox => Sink as SecurityEventOutbox;
+
     public static SecurityEventOutbox ConfigureLocalOutbox(string databasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);

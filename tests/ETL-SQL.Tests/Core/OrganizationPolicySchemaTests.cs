@@ -181,7 +181,11 @@ public class OrganizationPolicySchemaTests
                 BatchSize = 250,
                 IntervalSeconds = 15,
                 LeaseSeconds = 90,
-                MinimumForwardedSeverity = SecurityEventSeverity.Error
+                MinimumForwardedSeverity = SecurityEventSeverity.Error,
+                FailClosedMaxTerminalFailures = 2,
+                FailClosedMaxOldestEventSeconds = 300,
+                FailClosedMaxPendingEvents = 1_000,
+                FailClosedMaxOutboxBytes = 64 * 1024 * 1024
             }
         };
 
@@ -195,6 +199,10 @@ public class OrganizationPolicySchemaTests
         Assert.Equal("15", flat["SecurityEvents:IntervalSeconds"]);
         Assert.Equal("90", flat["SecurityEvents:LeaseSeconds"]);
         Assert.Equal("Error", flat["SecurityEvents:MinimumForwardedSeverity"]);
+        Assert.Equal("2", flat["SecurityEvents:FailClosedMaxTerminalFailures"]);
+        Assert.Equal("300", flat["SecurityEvents:FailClosedMaxOldestEventSeconds"]);
+        Assert.Equal("1000", flat["SecurityEvents:FailClosedMaxPendingEvents"]);
+        Assert.Equal("67108864", flat["SecurityEvents:FailClosedMaxOutboxBytes"]);
     }
 
     [Theory]
@@ -221,6 +229,25 @@ public class OrganizationPolicySchemaTests
         });
 
         Assert.False(result.IsValid);
+    }
+
+    [Fact]
+    public void SecurityEvents_RejectsNonPositiveFailClosedThresholds()
+    {
+        var result = OrganizationPolicySchema.Validate(new OrganizationPolicyDocument
+        {
+            SecurityEvents = new SecurityEventPolicySection
+            {
+                FailClosedMaxTerminalFailures = 0,
+                FailClosedMaxOldestEventSeconds = 0,
+                FailClosedMaxPendingEvents = 0,
+                FailClosedMaxOutboxBytes = 0
+            }
+        });
+
+        Assert.False(result.IsValid);
+        Assert.Equal(4, result.Errors.Count(error =>
+            error.Contains("fail-closed", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static string Escape(string value) => value.Replace("\\", "\\\\", StringComparison.Ordinal);
