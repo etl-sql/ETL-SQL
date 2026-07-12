@@ -11,7 +11,7 @@ release begins.
 ### Event contract and emission
 - [x] Define a versioned structured security-event schema with stable event ID, severity/type, timestamp, actor/effective identity, host/node, tenant, script/job/correlation IDs, policy version/hash, sanitized target, decision, and reason.
 - [ ] Emit events for override attempts, denied filesystem/network/connector/process/Docker operations, policy signature/expiry/rollback failures, stale or unavailable policy, machine enrollment changes, and repeated resource-limit violations.
-- [ ] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
+- [x] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
 - [ ] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
 
 ### Durable delivery and monitoring
