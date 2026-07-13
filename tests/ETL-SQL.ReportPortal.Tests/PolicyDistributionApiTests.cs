@@ -190,6 +190,50 @@ public class PolicyDistributionApiTests
             (await MachineGet(client, "acme", enrollmentId, machineId)).StatusCode);
     }
 
+    [Fact]
+    public async Task CanaryCohortMember_ReceivesCanary_WhileTheRestOfTheFleetStaysOnActive()
+    {
+        using var factory = new DistributionPortalFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        // m1 is labelled into the canary group; m2 is not.
+        var (m1, e1) = (Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"));
+        var (m2, e2) = (Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"));
+        await RegisterMachineAsync(client, adminToken, m1, e1, "acme", "prod", canaryGroup: "ring0");
+        await RegisterMachineAsync(client, adminToken, m2, e2, "acme", "prod");
+
+        await PublishAsync(client, adminToken, "1.0.0");
+        await PublishCanaryViaServiceAsync(factory, "1.1.0-canary", CanaryCohort.ForGroup("ring0"));
+
+        // The group member gets the canary; the unlabelled machine stays on the fleet-wide active.
+        Assert.Equal("1.1.0-canary", await RetrievedVersionAsync(client, "acme", e1, m1));
+        Assert.Equal("1.0.0", await RetrievedVersionAsync(client, "acme", e2, m2));
+    }
+
+    [Fact]
+    public async Task PercentageCanaryAt100_ReachesTheMachine_ThenHaltRevertsIt()
+    {
+        using var factory = new DistributionPortalFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+
+        var (machineId, enrollmentId) = (Guid.NewGuid().ToString("N"), Guid.NewGuid().ToString("N"));
+        await RegisterMachineAsync(client, adminToken, machineId, enrollmentId, "acme", "prod");
+        await PublishAsync(client, adminToken, "1.0.0");
+
+        // A 100% canary includes every machine regardless of group label.
+        await PublishCanaryViaServiceAsync(factory, "1.1.0-canary", CanaryCohort.ForPercentage(100));
+        Assert.Equal("1.1.0-canary", await RetrievedVersionAsync(client, "acme", enrollmentId, machineId));
+
+        // Halting re-issues the active document (later issuance) so the cohort machine reverts off the
+        // canary on its next poll — it no longer receives 1.1.0-canary.
+        await HaltCanaryViaServiceAsync(factory, "1.1.0-canary");
+        var reverted = await RetrievedVersionAsync(client, "acme", enrollmentId, machineId);
+        Assert.NotEqual("1.1.0-canary", reverted);
+        Assert.StartsWith("1.0.0", reverted); // re-issued from the 1.0.0 active document
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private static X509Certificate2 CreateSelfSignedCertificate(string subject)
@@ -217,7 +261,7 @@ public class PolicyDistributionApiTests
 
     private static async Task RegisterMachineAsync(
         HttpClient client, string adminToken, string machineId, string enrollmentId,
-        string tenant, string environment, string? thumbprint = null)
+        string tenant, string environment, string? thumbprint = null, string? canaryGroup = null)
     {
         var response = await AuthPost(client, adminToken, "/api/admin/policy-authority/machines", new
         {
@@ -225,9 +269,40 @@ public class PolicyDistributionApiTests
             enrollmentId,
             tenant,
             environment,
-            clientCertificateThumbprint = thumbprint
+            clientCertificateThumbprint = thumbprint,
+            canaryGroup
         });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task<string> RetrievedVersionAsync(
+        HttpClient client, string tenant, string enrollmentId, string machineId)
+    {
+        var response = await MachineGet(client, tenant, enrollmentId, machineId);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var envelope = JsonSerializer.Deserialize<SignedOrganizationPolicyEnvelope>(
+            await response.Content.ReadAsStringAsync(), Json);
+        return envelope!.PolicyVersion;
+    }
+
+    private static async Task PublishCanaryViaServiceAsync(
+        PortalWebFactory factory, string version, CanaryCohort cohort)
+    {
+        using var scope = factory.Services.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<PolicyAuthorityService>();
+        var doc = new OrganizationPolicyDocument
+        {
+            Filesystem = new FilesystemPolicySection { ApprovedRoots = [Path.GetTempPath().TrimEnd('\\', '/')] }
+        };
+        await svc.PublishCanaryAsync(doc, "acme", "prod", version, "admin", null,
+            DateTimeOffset.UtcNow.AddDays(30), cohort);
+    }
+
+    private static async Task HaltCanaryViaServiceAsync(PortalWebFactory factory, string version)
+    {
+        using var scope = factory.Services.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<PolicyAuthorityService>();
+        await svc.HaltCanaryAsync("acme", "prod", version, "admin", null);
     }
 
     private static async Task PublishAsync(HttpClient client, string adminToken, string version)

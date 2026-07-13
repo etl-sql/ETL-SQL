@@ -207,6 +207,8 @@ public class PolicyAuthorityController(
         existing.Tenant = request.Tenant;
         existing.Environment = request.Environment;
         existing.ClientCertificateThumbprint = thumbprint;
+        existing.CanaryGroup = string.IsNullOrWhiteSpace(request.CanaryGroup)
+            ? null : request.CanaryGroup.Trim();
         existing.Revoked = false;
         existing.RevokedAtUtc = null;
         existing.RevokedReason = null;
@@ -217,7 +219,8 @@ public class PolicyAuthorityController(
         await audit.LogAsync(CurrentUserId, "REGISTER_POLICY_MACHINE", "PolicyMachine",
             request.MachineId,
             $"Tenant={request.Tenant}; Environment={request.Environment}; " +
-            $"ClientCertRequired={thumbprint is not null}; ReRegistered={reRegistered}");
+            $"ClientCertRequired={thumbprint is not null}; CanaryGroup={existing.CanaryGroup ?? "none"}; " +
+            $"ReRegistered={reRegistered}");
         return Ok(PolicyMachineDto.From(existing));
     }
 

@@ -28,7 +28,8 @@ public record PolicyMachineRegisterRequest(
     string EnrollmentId,
     string Tenant,
     string Environment,
-    string? ClientCertificateThumbprint);
+    string? ClientCertificateThumbprint,
+    string? CanaryGroup = null);
 
 public record PolicyMachineRevokeRequest(string? Reason);
 
@@ -42,12 +43,13 @@ public record PolicyMachineDto(
     DateTimeOffset? RevokedAtUtc,
     string? RevokedReason,
     DateTimeOffset RegisteredAtUtc,
-    DateTimeOffset? LastSeenAtUtc)
+    DateTimeOffset? LastSeenAtUtc,
+    string? CanaryGroup)
 {
     public static PolicyMachineDto From(ETL_SQL.ReportPortal.Data.PolicyMachineEntity m) => new(
         m.MachineId, m.EnrollmentId, m.Tenant, m.Environment,
         !string.IsNullOrWhiteSpace(m.ClientCertificateThumbprint),
-        m.Revoked, m.RevokedAtUtc, m.RevokedReason, m.RegisteredAtUtc, m.LastSeenAtUtc);
+        m.Revoked, m.RevokedAtUtc, m.RevokedReason, m.RegisteredAtUtc, m.LastSeenAtUtc, m.CanaryGroup);
 }
 
 public record PolicyVersionDto(
@@ -61,9 +63,12 @@ public record PolicyVersionDto(
     string? Reviewer,
     string? SupersededVersion,
     string RolloutState,
-    DateTimeOffset PublishedAtUtc)
+    DateTimeOffset PublishedAtUtc,
+    string? CanaryGroup,
+    int? CanaryPercentage)
 {
     public static PolicyVersionDto From(PublishedPolicyVersion v) => new(
         v.Tenant, v.Environment, v.PolicyVersion, v.PolicyHash, v.IssuedAtUtc, v.ExpiresAtUtc,
-        v.Author, v.Reviewer, v.SupersededVersion, v.RolloutState.ToString(), v.PublishedAtUtc);
+        v.Author, v.Reviewer, v.SupersededVersion, v.RolloutState.ToString(), v.PublishedAtUtc,
+        v.Canary?.Group, v.Canary?.Percentage);
 }

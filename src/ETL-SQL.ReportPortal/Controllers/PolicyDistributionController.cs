@@ -61,15 +61,22 @@ public class PolicyDistributionController(
         }
 
         // The response is bound to the registered tenant/environment, never to caller-supplied values.
-        var active = await authority.GetActiveVersionAsync(machine.Tenant, machine.Environment, cancellationToken);
-        if (active is null)
-            return NotFound(new { error = $"No active policy is published for this machine's tenant/environment." });
+        // A machine in the current canary cohort receives the canary version; everyone else stays on the
+        // fleet-wide active version. Cohort membership is decided from the machine's own registered
+        // identity and group label, never from caller-supplied values.
+        var canary = await authority.GetCanaryVersionAsync(machine.Tenant, machine.Environment, cancellationToken);
+        var served = canary?.Canary is not null
+            && canary.Canary.Includes(machine.MachineId, machine.CanaryGroup)
+                ? canary
+                : await authority.GetActiveVersionAsync(machine.Tenant, machine.Environment, cancellationToken);
+        if (served is null)
+            return NotFound(new { error = "No active policy is published for this machine's tenant/environment." });
 
         machine.LastSeenAtUtc = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
 
         // Serve the stored envelope verbatim — re-serializing could disturb the signed payload.
-        return Content(active.SignedEnvelopeJson, "application/json");
+        return Content(served.SignedEnvelopeJson, "application/json");
     }
 
     /// <summary>Prefers the TLS-negotiated certificate; falls back to a base64-DER forwarding header
