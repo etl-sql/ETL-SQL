@@ -53,6 +53,18 @@ Each platform writes TRX files, command logs, `enterprise-hardening-summary.json
 `enterprise-certification-windows` or `enterprise-certification-linux` artifact. A passing Windows
 run is not a substitute for Linux evidence, or vice versa.
 
+The bypass portion of the lane retains direct evidence for each required threat class:
+
+| Threat | Primary certification evidence |
+| :--- | :--- |
+| Policy tampering, expiry, rollback, and signing-key rotation | `EnterprisePolicyRuntimeTests`, `PolicyAuthorityServiceTests` |
+| Machine revocation and identity reassignment | `PolicyDistributionApiTests` |
+| Path/link substitution races | `FileSystemPolicyAuthorizerTests`, `StmtFileSystemTests` |
+| DNS rebinding, redirects, and ambient proxy bypass | `ConnectorPolicyEnforcementTests`, `RestApiTests` |
+| Connector aliases | `ConnectorPolicyEnforcementTests` |
+| Docker escape-oriented runtime options | `ProcessPolicyRulesTests`, `ResourceCeilingEnforcementTests` |
+| Log injection and secret/path disclosure | `SecurityEventRuntimeTests`, `SecurityEventOutboxTests` |
+
 ## Testing-Foundation Maintenance
 
 Keep this list small and actionable. The one-time lane/scenario/SLT cleanup is complete as of 2026-06-01. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.

@@ -31,9 +31,10 @@ public sealed class EnterprisePolicyRuntimeTests
     }
 
     [Fact]
-    public void SignatureVerification_RejectsTamperingAndTenantMismatch()
+    public void SignatureVerification_RejectsTamperingTenantMismatchAndRotatedKey()
     {
         using var key = RSA.Create(2048);
+        using var rotatedKey = RSA.Create(2048);
         var enrollment = Enrollment(key);
         var envelope = Envelope(key, Policy(), "v1");
 
@@ -42,6 +43,8 @@ public sealed class EnterprisePolicyRuntimeTests
             enrollment, Now));
         Assert.Throws<InvalidOperationException>(() => EnterprisePolicySignature.VerifyAndParse(
             envelope with { Tenant = "another-tenant" }, enrollment, Now));
+        Assert.Throws<InvalidOperationException>(() => EnterprisePolicySignature.VerifyAndParse(
+            Envelope(rotatedKey, Policy(), "rotated-key"), enrollment, Now));
     }
 
     [Fact]

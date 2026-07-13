@@ -434,7 +434,7 @@ public static partial class SecurityEventSanitizer
         var redacted = SecretRedactor.Redact(value) ?? string.Empty;
         foreach (var environmentValue in environmentValues)
             redacted = redacted.Replace(environmentValue, SecretRedactor.Mask, StringComparison.Ordinal);
-        return redacted;
+        return LogSanitizer.Clean(redacted) ?? string.Empty;
     }
 
     private static string? RedactNullable(string? value, IReadOnlyList<string> environmentValues) =>

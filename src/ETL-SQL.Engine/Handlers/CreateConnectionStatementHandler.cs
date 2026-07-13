@@ -171,9 +171,10 @@ public class CreateConnectionStatementHandler(
             }
 
             // Security Hardening: authorize connector type + destination host before the data
-            // source is created (i.e. before any DNS resolution / connection attempt).
+            // source is created (i.e. before any DNS resolution / connection attempt). Enforce
+            // the canonical connector name so aliases cannot bypass or unexpectedly fail policy.
             new ConnectorPolicyAuthorizer(context.SecurityService).Authorize(
-                context, connectionType ?? string.Empty, connector.GetHost(target, options), target);
+                context, connector.Name, connector.GetHost(target, options), target);
 
             ds = connector.CreateDataSource(context, target, options, templateSchema);
         }

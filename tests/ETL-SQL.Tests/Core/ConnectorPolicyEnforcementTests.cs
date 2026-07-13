@@ -28,6 +28,17 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
     }
 
     [Fact]
+    public async Task ConnectorAlias_IsAuthorizedByCanonicalType()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedTypes: ["SQLITE"]));
+
+        var error = await Record.ExceptionAsync(() => ExecuteAsync(
+            "CREATE CONNECTION aliasdb AS SQLITE3(DATABASE = ':memory:', TABLE = 'sqlite_master');"));
+
+        Assert.Null(error);
+    }
+
+    [Fact]
     public async Task DestinationHost_EnterpriseAllowlistDeniesUnlistedHost()
     {
         EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["db.corp.internal"]));

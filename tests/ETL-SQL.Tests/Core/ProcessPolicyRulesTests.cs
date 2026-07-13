@@ -1,4 +1,6 @@
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Tests.Core;
 
@@ -18,5 +20,16 @@ public sealed class ProcessPolicyRulesTests
     public void DockerImageMatches_HandlesTagsPortsAndWildcards(string pattern, string image, bool expected)
     {
         Assert.Equal(expected, ProcessPolicyRules.DockerImageMatches(pattern, image));
+    }
+
+    [Theory]
+    [InlineData("USE DOCKER('postgres:15', '--privileged');")]
+    [InlineData("USE DOCKER('postgres:15') WITH (NETWORK = 'host');")]
+    [InlineData("USE DOCKER('postgres:15') AS pg WITH (VOLUME = '/:/host');")]
+    public void DockerGrammar_RejectsEscapeOrientedRuntimeOptions(string sql)
+    {
+        var script = new Parser(new Lexer(sql).Tokenize(), sql).Parse();
+
+        Assert.Contains(script.Diagnostics, diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
     }
 }

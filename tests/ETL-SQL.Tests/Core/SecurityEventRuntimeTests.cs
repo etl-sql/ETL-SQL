@@ -105,6 +105,42 @@ public sealed class SecurityEventRuntimeTests
     }
 
     [Fact]
+    public void Sanitizer_RemovesLogForgingCharactersFromEveryTextField()
+    {
+        var adversarial = SecurityEventContract.Create(SecurityEventSeverity.Error,
+            SecurityEventType.OperationDenied, "operator\r\nFORGED actor", "effective\nFORGED identity",
+            "target\r\nFORGED target", SecurityEventDecision.Denied, "Denied.\r\nFORGED success") with
+        {
+            HostName = "host\r\nFORGED host",
+            NodeId = "node\nFORGED node",
+            TenantId = "tenant\rFORGED tenant",
+            ScriptHash = "hash\nFORGED hash",
+            JobId = "job\r\nFORGED job",
+            CorrelationId = "correlation\nFORGED correlation",
+            PolicyVersion = "v1\rFORGED version",
+            PolicyHash = "policy-hash\nFORGED hash"
+        };
+
+        var sanitized = SecurityEventSanitizer.Sanitize(adversarial);
+        var serialized = SecurityEventContract.Serialize(sanitized);
+
+        var fields = new[]
+        {
+            sanitized.ActorIdentity, sanitized.EffectiveIdentity, sanitized.HostName,
+            sanitized.NodeId, sanitized.TenantId, sanitized.ScriptHash, sanitized.JobId,
+            sanitized.CorrelationId, sanitized.PolicyVersion, sanitized.PolicyHash,
+            sanitized.SanitizedTarget, sanitized.Reason
+        };
+        Assert.All(fields, field =>
+        {
+            Assert.DoesNotContain('\r', field ?? string.Empty);
+            Assert.DoesNotContain('\n', field ?? string.Empty);
+        });
+        Assert.DoesNotContain("\\r", serialized, StringComparison.Ordinal);
+        Assert.DoesNotContain("\\n", serialized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void EnrollmentChange_EmitsMachineAndTenantProvenance()
     {
         var sink = new RecordingSink();
