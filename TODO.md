@@ -104,3 +104,65 @@ runners.
       draft is invisible with `contents: read` — that was the original "release not found"), attests
       them, and `publish-release` needs `attest-provenance`. A provenance failure fails the workflow
       and leaves the release a **draft**, so no artifact is ever public without provenance.
+
+---
+
+## Enterprise Policy Hardening
+
+Brought in from `ROADMAP.md` → *Enterprise Policy Enforcement & Monitoring → Phase 1: Policy
+Hardening*. **Verified against the code 2026-07-13:** three of the four roadmap bullets already
+shipped opportunistically, so this phase is now weighted toward **canary policy rollout** plus a
+couple of close-out/audit tasks. Per-bullet status is annotated below. Once this phase is committed,
+mark the corresponding shipped roadmap lines done (or move them to `CHANGELOG.md`).
+
+### Race-resistant filesystem mutation — close residual gaps
+Already shipped: `FileHandleFinalPath` (Win `GetFinalPathNameByHandle` / Linux `/proc/self/fd`) +
+`FileSystemPolicyAuthorizer.{Delete,Move}Validated{File,Directory}` perform a handle-based final-path
+re-check between authorize and mutate; `FileOperationStatementHandler` routes local DELETE/MOVE/RENAME
+through them; link/junction substitution tests live in `FileSystemPolicyAuthorizerTests` and
+`HardeningSecurityTests`.
+- [ ] Route the overwrite path that still calls raw `File.Delete(dest)` (in `FileOperationStatementHandler`,
+      the pre-move/rename overwrite branch) and any recursive `Directory.Delete` through the validated
+      authorizer, so no mutation boundary bypasses the link-race re-check.
+- [ ] Add link/junction substitution tests at the remaining boundaries (directory move/delete and
+      overwrite-on-move), and assert the documented best-effort behavior on platforms where the OS
+      returns no handle final path (`Resolve` → `null`).
+- [ ] Document the remote-filesystem (`IRemoteFileSystem`: SFTP/FTP/S3/Azure) mutation stance —
+      handle-based re-check is local-only; state explicitly that remote delete/move/rename rely on the
+      provider and are outside the OS-handle guarantee.
+
+### Extend connect-time egress controls beyond REST — audit remaining clients
+Already shipped: `PolicyBoundHttp.CreateHandler/CreateClient` enforces no-proxy, no-auto-redirect, and
+connect-time DNS re-pin (`ConnectorPolicyAuthorizer.EnforceResolvedAddress`), and is wired into the
+SharePoint, Report Portal, Orchestrator, OpenLineage, TUI `PortalClient`, remote policy runtime, secret
+admin, and browser PDF export paths.
+- [ ] Audit every remaining production `new HttpClient` / `HttpClientHandler` (discovery, health/probe,
+      vault, OIDC metadata/JWKS) and migrate any raw client to `PolicyBoundHttp`; add a guard test that
+      fails when a production HTTP client is constructed outside the policy-bound factory.
+- [ ] Add redirect re-authorization coverage: assert a 3xx to a policy-denied host is re-validated and
+      refused (not silently followed) across at least the Portal, Orchestrator, and SharePoint clients.
+
+### Portal administrator UI for policy lifecycle — SHIPPED (verify only)
+`policy-authority-admin.js` + `PolicyAuthorityController` already cover validation, staged publication,
+activation, rollback, version history, machine enrollment inventory, machine revocation, and
+signing-key status — the roadmap bullet verbatim.
+- [ ] Confirm Portal WebApplicationFactory coverage (`Category=Portal`) exercises the activate/rollback
+      and machine-revoke mutation paths and their authority gate + audit emission; add cases if missing.
+      No new UI work expected — mark the roadmap bullet shipped if coverage holds.
+
+### Canary policy rollout — new work (the real remaining Phase 1 bite)
+Today only `RolloutState` (Staged/Active/RolledBack) exists; there is **no** machine-group/cohort/ring
+targeting. This is greenfield.
+- [ ] Data model + migration (dual provider: `.Data` SQLite + `.Migrations.Postgres`) for machine
+      groups / environment cohorts, and a cohort/percentage selector attached to a published policy
+      version. Keep the migration additive (rolling-expand safe).
+- [ ] Retrieval honors cohort assignment: canary machines receive the new version while the rest of the
+      fleet stays on the prior active version; non-canary and unenrolled/standalone nodes are unaffected.
+      Preserve the existing signature/rollback/expiry checks per cohort.
+- [ ] Promote / halt / rollback controls for a canary, with the same signing and rollback guarantees as
+      fleet-wide activation; surface cohort membership + rollout progress in the existing policy-authority
+      admin UI.
+- [ ] Certification: prove a canary cohort validates new filesystem-path and connection restrictions
+      before fleet-wide activation; standalone regression proves unenrolled nodes are untouched.
+- [ ] Governance: emit audit + security events for cohort create/assign/promote/halt; ensure the canary
+      selector cannot be used to silently exempt machines from policy.
