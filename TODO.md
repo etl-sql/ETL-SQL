@@ -67,15 +67,18 @@ Findings surfaced during the v0.15.0 release. Full detail in
       waits are annotated `// flaky-delay-ok: <reason>`; new un-annotated violations fail CI.
 
 ### Restore the 70% coverage gate
-- [ ] `ci.yml`'s coverage threshold was temporarily lowered **70.0 → 69.5** to ship v0.15.0 (it landed
-      at 69.8%). **Coverage analysis (2026-07-13):** the v0.15.0 headline feature (`Core.Adaptive.*`)
-      is already well-covered (mostly 100%; controller/advisor 100%). The gap is **infrastructure**
-      that isn't cheaply unit-tested: Postgres migrations (0%, by design), connectors needing live DBs
-      (`MySqlSyntax`, `Neo4jDataSource`), and `App.*` runners (`WarmJobRunner`,
-      `EnterpriseEnrollmentManager`, `DatabaseMigrationService`). To restore 70.0: add focused tests
-      for the App runners (mockable) and/or bring the least-covered connector logic under test in the
-      CI fast-lane scope, verify CI ≥ 70.0, then set the threshold back. (Match CI's coverage scope —
-      a local run that excludes Portal reports ~50%, not comparable.)
+`ci.yml`'s threshold was lowered **70.0 → 69.5** to ship v0.15.0 (landed at 69.8%). **Analysis
+(2026-07-13):** the v0.15.0 headline feature (`Core.Adaptive.*`) is already well-covered (mostly
+100%). The gap is infrastructure: Postgres migrations (0%, by design), some connectors, and `App.*`
+runners.
+- [x] Added `MySqlSyntaxTests` (pure dialect vocabulary — was 0%). A genuine down-payment / pattern
+      for the pure-logic connector classes.
+- [ ] `App.*` runners (`WarmJobRunner`, `EnterpriseEnrollmentManager`, `DatabaseMigrationService`) are
+      the biggest untested chunk but hardcode elevation checks + stores + file I/O — meaningful tests
+      need a testability seam (inject the store / elevation predicate) first, not error-path-only tests.
+- [ ] Iterate CI-in-the-loop: add tests → push → read the CI coverage % (the authoritative scope;
+      a local run excluding Portal reports ~50%, not comparable) → repeat until ≥ 70.0, then restore
+      the `ci.yml` threshold to **70.0**.
 
 ### Scale-cert performance re-validation
 - [x] Re-validated on a quiescent machine (5-sample median): **CONFIRMED regression**, not load noise.
