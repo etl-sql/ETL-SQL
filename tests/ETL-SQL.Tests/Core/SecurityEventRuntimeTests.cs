@@ -128,6 +128,24 @@ public sealed class SecurityEventRuntimeTests
     }
 
     [Fact]
+    public void StandaloneOutboxPath_RejectsRelativeOverride()
+    {
+        var variable = SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable;
+        var previous = Environment.GetEnvironmentVariable(variable);
+        Environment.SetEnvironmentVariable(variable, "relative/security-events.db");
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(
+                SecurityEventOutboxPaths.Standalone);
+            Assert.Contains("absolute path", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [Fact]
     public void Emit_RedactsAdversarialPayloadBeforeSinkBoundary()
     {
         const string environmentKey = "ETLSQL_SECURITY_TEST_SECRET";

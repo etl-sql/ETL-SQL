@@ -580,6 +580,10 @@ write only to their local outbox and make no enterprise network calls. A severit
 rows from forwarding without changing local enforcement. Because the filter is authoritative policy, changing it
 requires publishing a newly signed policy.
 
+Standalone hosts use the OS local-application-data directory by default. Containers and certification harnesses
+may set `ETLSQL_SECURITY_EVENT_OUTBOX_PATH` to an absolute path on a persistent writable volume. This override is
+ignored for enrolled machines; their outbox remains beside the protected enrollment state.
+
 Each request contains enrollment headers, an `Idempotency-Key` for the batch, schema header
 `X-ETL-SQL-Security-Event-Schema: 1`, and this JSON envelope:
 

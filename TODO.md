@@ -29,6 +29,17 @@ release begins.
 
 ---
 
+## Enterprise Certification & Operations
+
+### Cross-platform policy and monitoring lane
+- [x] Add Windows and Linux CI certification lanes for enrollment, signed retrieval, cache/offline
+      operation, dynamic refresh, operation enforcement, and security-event delivery.
+- [x] Retain per-platform TRX, command logs, and machine-readable/Markdown summaries as CI artifacts.
+- [ ] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server,
+      scheduled jobs, spawned runners, and parallel execution.
+
+---
+
 ## v0.15.0 Release Debt (deferred to ship, fix in v0.16.0)
 
 Findings surfaced during the v0.15.0 release. Full detail in

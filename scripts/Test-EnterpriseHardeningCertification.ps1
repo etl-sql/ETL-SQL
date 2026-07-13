@@ -3,10 +3,11 @@
     Runs the enterprise hardening certification slice and writes retained evidence.
 
 .DESCRIPTION
-    This is the short, repeatable evidence lane for Phase 3 enterprise hardening closeout. It
-    exercises path/link race guards, DNS rebinding and redirect controls, connector aliases,
-    standalone behavior, remote policy/vault recovery, and portal HTTP transport paths. Run it on
-    Windows and Linux/WSL before publishing the release evidence.
+    This is the short, repeatable evidence lane for enterprise policy and monitoring closeout. It
+    exercises enrollment, signed retrieval and cache recovery, operation boundaries, security-event
+    delivery, path/link race guards, DNS rebinding and redirect controls, connector aliases,
+    standalone behavior, remote policy/vault recovery, and Portal HTTP transport paths. Run it on
+    Windows and Linux before publishing the release evidence.
 #>
 [CmdletBinding()]
 param(
@@ -50,34 +51,38 @@ if ([string]::IsNullOrWhiteSpace($ArtifactsPath)) {
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ArtifactsPath | Out-Null
+$OutDir = (Resolve-Path -LiteralPath $OutDir).Path
+$ArtifactsPath = (Resolve-Path -LiteralPath $ArtifactsPath).Path
 
 function Invoke-CertCommand {
     param(
         [string]$Name,
         [string[]]$Arguments,
         [string]$LogName,
+        [string]$ExpectedResultPath,
         [string]$StepArtifactsPath = ''
     )
 
     $logPath = Join-Path $OutDir $LogName
+    Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $ExpectedResultPath -Force -ErrorAction SilentlyContinue
     if (-not [string]::IsNullOrWhiteSpace($StepArtifactsPath)) {
         Remove-Item -LiteralPath $StepArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Force -Path $StepArtifactsPath | Out-Null
     }
     $started = Get-Date
-    $previousRepoRoot = $env:ETLSQL_REPO_ROOT
-    $env:ETLSQL_REPO_ROOT = $RepoRoot.Path
     Push-Location $RepoRoot
     try {
-        & dotnet @Arguments *>&1 | Tee-Object -FilePath $logPath
+        & dotnet @Arguments *>&1 | Tee-Object -FilePath $logPath | Out-Host
         $exitCode = $LASTEXITCODE
     } finally {
         Pop-Location
-        if ($null -eq $previousRepoRoot) {
-            Remove-Item Env:\ETLSQL_REPO_ROOT -ErrorAction SilentlyContinue
-        } else {
-            $env:ETLSQL_REPO_ROOT = $previousRepoRoot
-        }
+    }
+
+    if (-not (Test-Path -LiteralPath $ExpectedResultPath)) {
+        $message = "Certification step '$Name' produced no TRX result at '$ExpectedResultPath'."
+        Add-Content -LiteralPath $logPath -Value $message -Encoding UTF8
+        if ($exitCode -eq 0) { $exitCode = 1 }
     }
 
     [pscustomobject]@{
@@ -124,13 +129,11 @@ $testArgsCommon = @(
     'test',
     'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj',
     '--filter',
-    'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~StmtFileSystemTests|FullyQualifiedName~OpenLineageExportTests|FullyQualifiedName~ReportLauncherTests',
+    'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests',
     '--logger',
     'trx;LogFileName=enterprise-hardening.trx',
     '--results-directory',
-    $OutDir,
-    '--artifacts-path',
-    $engineArtifactsPath
+    $OutDir
 )
 if ($Platform -eq 'linux') {
     $testArgsCommon += @('--runtime', 'linux-x64')
@@ -141,10 +144,13 @@ if ($NoBuild) {
     $testArgsCommon += '--no-build'
 } elseif ($NoRestore) {
     $testArgsCommon += '--no-restore'
+} else {
+    $testArgsCommon += @('--artifacts-path', $engineArtifactsPath)
 }
 
 $steps = New-Object System.Collections.Generic.List[object]
-$steps.Add((Invoke-CertCommand -Name 'Engine and connector enterprise hardening tests' -Arguments $testArgsCommon -LogName 'enterprise-hardening-tests.log' -StepArtifactsPath $engineArtifactsPath)) | Out-Null
+$engineResultPath = Join-Path $OutDir 'enterprise-hardening.trx'
+$steps.Add((Invoke-CertCommand -Name 'Engine and connector enterprise hardening tests' -Arguments $testArgsCommon -LogName 'enterprise-hardening-tests.log' -ExpectedResultPath $engineResultPath -StepArtifactsPath $(if ($NoBuild -or $NoRestore) { '' } else { $engineArtifactsPath }))) | Out-Null
 Remove-Item -LiteralPath $engineArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
 
 if (-not $SkipPortalTests) {
@@ -152,14 +158,11 @@ if (-not $SkipPortalTests) {
         'test',
         'tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj',
         '--filter',
-        'FullyQualifiedName~AuditOutboxTransportTests|FullyQualifiedName~OidcAuthTests|FullyQualifiedName~PolicyDistributionApiTests|FullyQualifiedName~AdminServicesTests',
+        'FullyQualifiedName~AuditOutboxTransportTests|FullyQualifiedName~OidcAuthTests|FullyQualifiedName~PolicyDistributionApiTests|FullyQualifiedName~PolicyAuthorityApiTests|FullyQualifiedName~GovernanceRecoveryCertificationTests|FullyQualifiedName~FleetContainmentTests|FullyQualifiedName~FleetHealthAggregatorTests|FullyQualifiedName~AdminServicesTests',
         '--logger',
         'trx;LogFileName=enterprise-hardening-portal.trx',
         '--results-directory',
-        $OutDir,
-        '--artifacts-path',
-        $portalArtifactsPath,
-        '-p:EnterpriseHardeningCertification=true'
+        $OutDir
     )
     if ($Platform -eq 'linux') {
         $portalArgs += @('--runtime', 'linux-x64')
@@ -170,8 +173,19 @@ if (-not $SkipPortalTests) {
         $portalArgs += '--no-build'
     } elseif ($NoRestore) {
         $portalArgs += '--no-restore'
+    } else {
+        $portalArgs += @('--artifacts-path', $portalArtifactsPath)
     }
-    $steps.Add((Invoke-CertCommand -Name 'Portal enterprise HTTP and policy tests' -Arguments $portalArgs -LogName 'enterprise-hardening-portal-tests.log' -StepArtifactsPath $portalArtifactsPath)) | Out-Null
+    $portalResultPath = Join-Path $OutDir 'enterprise-hardening-portal.trx'
+    $outboxVariable = 'ETLSQL_SECURITY_EVENT_OUTBOX_PATH'
+    $previousOutboxPath = [Environment]::GetEnvironmentVariable($outboxVariable)
+    [Environment]::SetEnvironmentVariable($outboxVariable,
+        (Join-Path $OutDir "portal-standalone-security-events-$Platform.db"))
+    try {
+        $steps.Add((Invoke-CertCommand -Name 'Portal enterprise HTTP and policy tests' -Arguments $portalArgs -LogName 'enterprise-hardening-portal-tests.log' -ExpectedResultPath $portalResultPath -StepArtifactsPath $(if ($NoBuild -or $NoRestore) { '' } else { $portalArtifactsPath }))) | Out-Null
+    } finally {
+        [Environment]::SetEnvironmentVariable($outboxVariable, $previousOutboxPath)
+    }
     Remove-Item -LiteralPath $portalArtifactsPath -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -179,7 +193,7 @@ $stepArray = $steps.ToArray()
 $status = if (@($stepArray | Where-Object { -not $_.passed }).Count -eq 0) { 'Passed' } else { 'Failed' }
 $summary = [pscustomobject]@{
     schemaVersion = 1
-    phase = 'v0.15.0 Enterprise Phase 3 hardening closeout'
+    phase = 'v0.16.0 enterprise policy and monitoring certification'
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     runId = $RunId
     platform = $Platform

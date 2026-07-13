@@ -511,8 +511,21 @@ public static class EnterprisePolicyRuntime
 
 public static class SecurityEventOutboxPaths
 {
+    public const string StandaloneOverrideEnvironmentVariable =
+        "ETLSQL_SECURITY_EVENT_OUTBOX_PATH";
+
     public static string Standalone()
     {
+        var configured = Environment.GetEnvironmentVariable(
+            StandaloneOverrideEnvironmentVariable);
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (!Path.IsPathFullyQualified(configured))
+                throw new InvalidOperationException(
+                    $"{StandaloneOverrideEnvironmentVariable} must be an absolute path.");
+            return Path.GetFullPath(configured);
+        }
+
         var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (string.IsNullOrWhiteSpace(local))
             throw new InvalidOperationException("Local application data directory could not be resolved for the security event outbox.");

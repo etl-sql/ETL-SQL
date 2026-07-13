@@ -34,6 +34,24 @@ The integration-folder audit is complete as of 2026-06-01. Metadata-only connect
 
 Result on 2026-06-01: engine test project 3,015 passed; language server 71 passed; report portal 70 passed; lineage UI smoke passed.
 
+## Enterprise Certification Lane
+
+CI runs `Test-EnterpriseHardeningCertification.ps1` on `windows-latest` and `ubuntu-latest`. The
+lane certifies enrollment, signed policy retrieval and cache recovery, dynamic policy refresh,
+operation-boundary enforcement, standalone behavior, and durable security-event delivery. It also
+keeps the existing path/link, DNS/redirect, connector-alias, vault-recovery, and Portal policy API
+coverage in the same evidence set.
+
+```powershell
+.\scripts\Test-EnterpriseHardeningCertification.ps1
+```
+
+Each platform writes TRX files, command logs, `enterprise-hardening-summary.json`, and
+`enterprise-hardening-summary.md` under
+`certification-results/enterprise-hardening/<run-id>/<platform>`. CI retains that directory as the
+`enterprise-certification-windows` or `enterprise-certification-linux` artifact. A passing Windows
+run is not a substitute for Linux evidence, or vice versa.
+
 ## Testing-Foundation Maintenance
 
 Keep this list small and actionable. The one-time lane/scenario/SLT cleanup is complete as of 2026-06-01. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.
