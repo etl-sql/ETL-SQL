@@ -89,6 +89,43 @@ const PANEL_HTML = `
   <div class="card">
     <div class="card-header">
       <div>
+        <span class="section-kicker">Progressive rollout</span>
+        <h3>Publish canary</h3>
+      </div>
+    </div>
+    <p class="form-hint">Publishes the <strong>Policy JSON</strong> and <strong>Expires at</strong> above to a
+      cohort only — the fleet stays on the active version until you promote. Halting reverts the cohort.</p>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="pa-canaryVersion">Canary version</label>
+        <input id="pa-canaryVersion" type="text" placeholder="2026.07.11.1-canary" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="pa-cohortType">Cohort</label>
+        <select id="pa-cohortType">
+          <option value="percentage">Percentage of fleet</option>
+          <option value="group">Named machine group</option>
+        </select>
+      </div>
+      <div class="form-group" id="pa-percentageGroup">
+        <label for="pa-canaryPercentage">Percentage (1–100)</label>
+        <input id="pa-canaryPercentage" type="number" min="1" max="100" value="10">
+      </div>
+      <div class="form-group" id="pa-groupGroup" style="display:none">
+        <label for="pa-canaryGroup">Group name</label>
+        <input id="pa-canaryGroup" type="text" placeholder="ring0" autocomplete="off">
+      </div>
+    </div>
+    <div id="pa-canaryError" class="error-msg"></div>
+    <div class="form-actions">
+      <button class="btn btn-primary btn-sm" id="pa-publishCanaryBtn">Publish canary</button>
+      <span id="pa-canaryResult" class="form-hint"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div>
         <span class="section-kicker">Version history</span>
         <h3>Policies for <span id="pa-scopeLabel"></span></h3>
       </div>
@@ -179,17 +216,20 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
       }
       $('pa-versionWrap').innerHTML = `
         <table class="data-table">
-          <thead><tr><th>Version</th><th>State</th><th>Hash</th><th>Issued</th><th>Expires</th><th>Author</th><th></th></tr></thead>
+          <thead><tr><th>Version</th><th>State</th><th>Cohort</th><th>Hash</th><th>Issued</th><th>Expires</th><th>Author</th><th></th></tr></thead>
           <tbody>${versions.map((v) => `
             <tr data-version="${escAttr(v.policyVersion)}">
               <td><code>${esc(v.policyVersion)}</code></td>
               <td>${stateChip(v.rolloutState)}</td>
+              <td>${cohortLabel(v)}</td>
               <td><code>${esc(String(v.policyHash || '').slice(0, 12))}</code></td>
               <td>${esc(formatDate(v.issuedAtUtc))}</td>
               <td>${esc(formatDate(v.expiresAtUtc))}</td>
               <td>${esc(v.author || '-')}</td>
               <td class="table-actions">
                 ${v.rolloutState === 'Staged' ? '<button class="btn btn-outline btn-sm" data-pa-act="activate">Activate</button>' : ''}
+                ${v.rolloutState === 'Canary' ? '<button class="btn btn-primary btn-sm" data-pa-act="promote">Promote</button>' : ''}
+                ${v.rolloutState === 'Canary' ? '<button class="btn btn-danger-soft btn-sm" data-pa-act="halt">Halt</button>' : ''}
                 <button class="btn btn-outline btn-sm" data-pa-act="rollback">Rollback to</button>
               </td>
             </tr>`).join('')}</tbody>
@@ -202,8 +242,16 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
   function stateChip(state) {
     if (state === 'Active') return '<span class="chip chip-active">Active</span>';
     if (state === 'Staged') return '<span class="badge badge-warn">Staged</span>';
+    if (state === 'Canary') return '<span class="badge badge-warn">Canary</span>';
     if (state === 'RolledBack') return '<span class="chip chip-inactive">Rolled back</span>';
     return `<span class="form-hint">${esc(state)}</span>`;
+  }
+
+  // Escaped; group names are operator-supplied. Only Canary versions carry a cohort.
+  function cohortLabel(v) {
+    if (v.canaryGroup) return `<span class="chip">group: ${esc(v.canaryGroup)}</span>`;
+    if (v.canaryPercentage != null) return `<span class="chip">${esc(String(v.canaryPercentage))}%</span>`;
+    return '<span class="form-hint">—</span>';
   }
 
   async function loadMachines() {
@@ -248,6 +296,36 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
   $('pa-loadVersionsBtn').addEventListener('click', () => loadVersions().catch((err) => setError('pa-error', err.message)));
   $('pa-loadMachinesBtn').addEventListener('click', () => loadMachines().catch((err) => setError('pa-machineError', err.message)));
   $('pa-validateBtn').addEventListener('click', () => validatePolicy().catch((err) => setError('pa-error', err.message)));
+
+  $('pa-cohortType').addEventListener('change', () => {
+    const byGroup = $('pa-cohortType').value === 'group';
+    $('pa-groupGroup').style.display = byGroup ? '' : 'none';
+    $('pa-percentageGroup').style.display = byGroup ? 'none' : '';
+  });
+
+  $('pa-publishCanaryBtn').addEventListener('click', async () => {
+    setError('pa-canaryError', '');
+    try {
+      const { tenant, environment } = requireScope();
+      const expiresAtUtc = toIsoFromLocal($('pa-expires').value);
+      if (!expiresAtUtc) throw new Error('Set "Expires at" above before publishing a canary.');
+      const byGroup = $('pa-cohortType').value === 'group';
+      const published = await policyAuthorityApi.publishCanary({
+        tenant,
+        environment,
+        policyVersion: $('pa-canaryVersion').value.trim(),
+        policyJson: $('pa-policyJson').value,
+        reviewer: $('pa-reviewer').value.trim() || null,
+        expiresAtUtc,
+        canaryGroup: byGroup ? ($('pa-canaryGroup').value.trim() || null) : null,
+        canaryPercentage: byGroup ? null : Number($('pa-canaryPercentage').value)
+      });
+      $('pa-canaryResult').innerHTML = `<span class="chip chip-active">Canary ${esc(published.policyVersion)} published</span>`;
+      await loadVersions();
+    } catch (err) {
+      setError('pa-canaryError', err.message);
+    }
+  });
 
   $('pa-publishBtn').addEventListener('click', async () => {
     setError('pa-error', '');
@@ -299,6 +377,16 @@ export function createPolicyAuthorityAdmin({ host, policyAuthorityApi }) {
       if (btn.dataset.paAct === 'activate') {
         const version = btn.closest('tr')?.dataset.version;
         await policyAuthorityApi.activate(tenant, environment, version);
+        await loadVersions();
+      } else if (btn.dataset.paAct === 'promote') {
+        const version = btn.closest('tr')?.dataset.version;
+        if (!window.confirm(`Promote canary ${version} to the whole fleet?`)) return;
+        await policyAuthorityApi.promoteCanary(tenant, environment, version);
+        await loadVersions();
+      } else if (btn.dataset.paAct === 'halt') {
+        const version = btn.closest('tr')?.dataset.version;
+        if (!window.confirm(`Halt canary ${version} and revert its machines to the active policy?`)) return;
+        await policyAuthorityApi.haltCanary(tenant, environment, version, $('pa-reviewer').value.trim() || null);
         await loadVersions();
       } else if (btn.dataset.paAct === 'rollback') {
         const targetPolicyVersion = btn.closest('tr')?.dataset.version;

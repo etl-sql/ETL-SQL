@@ -21,6 +21,13 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       issuedAtUtc: '2026-07-11T11:30:00Z', expiresAtUtc: '2026-08-12T11:30:00Z',
       author: 'admin', reviewer: null, rolloutState: 'Staged',
     },
+    {
+      tenant: 'acme', environment: 'prod', policyVersion: '2026.07.12.2-canary',
+      policyHash: 'ccddeeff00112233445566778899aabbccddeeff',
+      issuedAtUtc: '2026-07-12T08:00:00Z', expiresAtUtc: '2026-08-12T08:00:00Z',
+      author: 'admin', reviewer: 'steward', rolloutState: 'Canary',
+      canaryGroup: null, canaryPercentage: 10,
+    },
   ];
   let machines = empty ? [] : [
     {
@@ -83,6 +90,45 @@ function makeFakeApi({ configured = true, empty = false } = {}) {
       versions.push(row);
       return row;
     },
+    async canary(tenant, environment) {
+      const c = versions.find((v) => v.tenant === tenant && v.environment === environment && v.rolloutState === 'Canary');
+      if (!c) throw err('No canary in progress for this scope.');
+      return c;
+    },
+    async publishCanary(body) {
+      if (!configured) throw err('Policy authority signing certificate is not configured.');
+      if (!body.policyVersion) throw err('Canary version is required.');
+      if (versions.some((v) => v.rolloutState === 'Canary')) throw err('A canary is already in progress; promote or halt it first.');
+      const row = {
+        tenant: body.tenant, environment: body.environment, policyVersion: body.policyVersion,
+        policyHash: Math.random().toString(16).slice(2).padEnd(40, '0').slice(0, 40),
+        issuedAtUtc: new Date().toISOString(), expiresAtUtc: body.expiresAtUtc,
+        author: 'admin', reviewer: body.reviewer, rolloutState: 'Canary',
+        canaryGroup: body.canaryGroup ?? null, canaryPercentage: body.canaryPercentage ?? null,
+      };
+      versions.push(row);
+      return row;
+    },
+    async promoteCanary(tenant, environment, policyVersion) {
+      versions = versions.map((v) => v.tenant === tenant && v.environment === environment
+        ? { ...v, rolloutState: v.policyVersion === policyVersion ? 'Active' : (v.rolloutState === 'Active' ? 'Superseded' : v.rolloutState) }
+        : v);
+      return versions.find((v) => v.policyVersion === policyVersion);
+    },
+    async haltCanary(tenant, environment, policyVersion) {
+      const active = versions.find((v) => v.rolloutState === 'Active');
+      versions = versions.map((v) => v.policyVersion === policyVersion ? { ...v, rolloutState: 'RolledBack' } : v);
+      versions = versions.map((v) => v.rolloutState === 'Active' ? { ...v, rolloutState: 'Superseded' } : v);
+      const row = {
+        ...(active || { tenant, environment, author: 'admin', expiresAtUtc: new Date().toISOString() }),
+        policyVersion: `${active ? active.policyVersion : '1.0.0'}+halt`,
+        policyHash: Math.random().toString(16).slice(2).padEnd(40, '0').slice(0, 40),
+        issuedAtUtc: new Date().toISOString(), rolloutState: 'Active',
+        canaryGroup: null, canaryPercentage: null,
+      };
+      versions.push(row);
+      return row;
+    },
     async machines(tenant, environment) {
       return machines.filter((m) => (!tenant || m.tenant === tenant) && (!environment || m.environment === environment));
     },
@@ -124,7 +170,7 @@ export default {
     });
     const surface = createPolicyAuthorityAdmin({ host: stage, policyAuthorityApi });
     await surface.load();
-    ctx.stat('createPolicyAuthorityAdmin() - publish, activate, rollback, machine revocation');
+    ctx.stat('createPolicyAuthorityAdmin() - publish, activate, rollback, canary promote/halt, machine revocation');
     return { dispose() {}, resize() {} };
   },
 };

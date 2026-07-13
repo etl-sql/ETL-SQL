@@ -339,6 +339,13 @@ export const policyAuthorityApi = {
     activate: (tenant, environment, policyVersion) =>
         apiJson('/api/admin/policy-authority/activate', { method: 'POST', body: { tenant, environment, policyVersion } }),
     rollback: (body) => apiJson('/api/admin/policy-authority/rollback', { method: 'POST', body }),
+    canary: (tenant, environment) =>
+        apiJson(`/api/admin/policy-authority/canary?tenant=${encodeURIComponent(tenant)}&environment=${encodeURIComponent(environment)}`),
+    publishCanary: (body) => apiJson('/api/admin/policy-authority/publish-canary', { method: 'POST', body }),
+    promoteCanary: (tenant, environment, policyVersion) =>
+        apiJson('/api/admin/policy-authority/promote-canary', { method: 'POST', body: { tenant, environment, policyVersion } }),
+    haltCanary: (tenant, environment, policyVersion, reviewer) =>
+        apiJson('/api/admin/policy-authority/halt-canary', { method: 'POST', body: { tenant, environment, policyVersion, reviewer } }),
     machines: (tenant = '', environment = '') => {
         const p = new URLSearchParams();
         if (tenant) p.set('tenant', tenant);

@@ -23,6 +23,21 @@ public record PolicyRollbackRequest(
     string? Reviewer,
     DateTimeOffset ExpiresAtUtc);
 
+public record PolicyCanaryPublishRequest(
+    string Tenant,
+    string Environment,
+    string PolicyVersion,
+    string PolicyJson,
+    string? Reviewer,
+    DateTimeOffset ExpiresAtUtc,
+    string? CanaryGroup,
+    int? CanaryPercentage);
+
+public record PolicyCanaryPromoteRequest(string Tenant, string Environment, string PolicyVersion);
+
+public record PolicyCanaryHaltRequest(
+    string Tenant, string Environment, string PolicyVersion, string? Reviewer);
+
 public record PolicyMachineRegisterRequest(
     string MachineId,
     string EnrollmentId,

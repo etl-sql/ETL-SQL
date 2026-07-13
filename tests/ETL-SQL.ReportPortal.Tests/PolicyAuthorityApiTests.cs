@@ -241,6 +241,97 @@ public class PolicyAuthorityApiTests
         }
     }
 
+    [Fact]
+    public async Task CanaryLifecycle_PublishPromoteHalt_ThroughTheAdminApi()
+    {
+        using var factory = new SigningPortalFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var expires = DateTimeOffset.UtcNow.AddDays(30);
+
+        await PublishAsync(client, adminToken, "1.0.0", DocJson(), staged: false, expires);
+
+        // Publish a 25% canary; the fleet active stays on 1.0.0 and the cohort surfaces on the version.
+        var canary = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
+        {
+            tenant = "acme", environment = "prod", policyVersion = "1.1.0-canary",
+            policyJson = DocJson(withExtensions: true), reviewer = "bob",
+            expiresAtUtc = expires, canaryPercentage = 25
+        });
+        Assert.Equal(HttpStatusCode.OK, canary.StatusCode);
+        var canaryDto = await canary.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("Canary", canaryDto!["rolloutState"]!.GetValue<string>());
+        Assert.Equal(25, canaryDto["canaryPercentage"]!.GetValue<int>());
+
+        var active = await (await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/active?tenant=acme&environment=prod"))
+            .Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("1.0.0", active!["version"]!["policyVersion"]!.GetValue<string>());
+
+        // GET canary surfaces the in-progress version; a second canary and an invalid cohort are refused.
+        var getCanary = await (await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/canary?tenant=acme&environment=prod"))
+            .Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("1.1.0-canary", getCanary!["policyVersion"]!.GetValue<string>());
+
+        var second = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
+        {
+            tenant = "acme", environment = "prod", policyVersion = "1.2.0-canary",
+            policyJson = DocJson(), expiresAtUtc = expires, canaryPercentage = 50
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
+
+        var bothSelectors = await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
+        {
+            tenant = "acme", environment = "prod", policyVersion = "1.3.0-canary",
+            policyJson = DocJson(), expiresAtUtc = expires, canaryGroup = "ring0", canaryPercentage = 50
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, bothSelectors.StatusCode);
+
+        // Promote the canary to the whole fleet; no canary remains in progress.
+        var promote = await AuthPost(client, adminToken, "/api/admin/policy-authority/promote-canary",
+            new { tenant = "acme", environment = "prod", policyVersion = "1.1.0-canary" });
+        Assert.Equal(HttpStatusCode.OK, promote.StatusCode);
+        active = await (await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/active?tenant=acme&environment=prod"))
+            .Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("1.1.0-canary", active!["version"]!["policyVersion"]!.GetValue<string>());
+        Assert.Equal(HttpStatusCode.NotFound, (await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/canary?tenant=acme&environment=prod")).StatusCode);
+
+        // Publish a group canary and halt it; halt re-issues the active document as a fresh active.
+        await AuthPost(client, adminToken, "/api/admin/policy-authority/publish-canary", new
+        {
+            tenant = "acme", environment = "prod", policyVersion = "1.4.0-canary",
+            policyJson = DocJson(), expiresAtUtc = expires, canaryGroup = "ring0"
+        });
+        var halt = await AuthPost(client, adminToken, "/api/admin/policy-authority/halt-canary",
+            new { tenant = "acme", environment = "prod", policyVersion = "1.4.0-canary", reviewer = "bob" });
+        Assert.Equal(HttpStatusCode.OK, halt.StatusCode);
+        Assert.Equal("Active",
+            (await halt.Content.ReadFromJsonAsync<JsonObject>(Json))!["rolloutState"]!.GetValue<string>());
+
+        var versions = await (await AuthGet(client, adminToken,
+            "/api/admin/policy-authority/versions?tenant=acme&environment=prod"))
+            .Content.ReadFromJsonAsync<JsonArray>(Json);
+        var states = versions!.ToDictionary(
+            v => v!["policyVersion"]!.GetValue<string>(),
+            v => v!["rolloutState"]!.GetValue<string>());
+        Assert.Equal("Superseded", states["1.0.0"]);
+        Assert.Equal("RolledBack", states["1.4.0-canary"]);
+        Assert.Contains(states, kv => kv.Value == "Active"); // the re-issued active
+
+        // Every cohort operation leaves a durable audit record.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var actions = await db.AuditLogs
+            .Where(a => a.ResourceType == "OrganizationPolicy" && a.ResourceId == "acme/prod")
+            .Select(a => a.Action).ToListAsync();
+        Assert.Contains("PUBLISH_CANARY_POLICY", actions);
+        Assert.Contains("PROMOTE_CANARY_POLICY", actions);
+        Assert.Contains("HALT_CANARY_POLICY", actions);
+    }
+
     private static async Task<JsonObject> PublishAsync(
         HttpClient client, string adminToken, string version, string policyJson,
         bool staged, DateTimeOffset expires)

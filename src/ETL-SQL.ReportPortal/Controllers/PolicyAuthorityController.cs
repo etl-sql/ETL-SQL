@@ -266,4 +266,113 @@ public class PolicyAuthorityController(
             return BadRequest(new { error = ex.Message });
         }
     }
+
+    // ── Canary rollout ─────────────────────────────────────────────────────────
+    // A canary is published alongside the active version and served only to its cohort. Promotion
+    // makes it fleet-wide; halting rolls it back and re-issues the active document so the cohort reverts.
+
+    [HttpGet("canary")]
+    public async Task<IActionResult> GetCanary(
+        [FromQuery] string tenant, [FromQuery] string environment, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(tenant) || string.IsNullOrWhiteSpace(environment))
+            return BadRequest(new { error = "tenant and environment are required." });
+        var canary = await authority.GetCanaryVersionAsync(tenant, environment, cancellationToken);
+        if (canary is null)
+            return NotFound(new { error = $"No canary in progress for {tenant}/{environment}." });
+        return Ok(PolicyVersionDto.From(canary));
+    }
+
+    [HttpPost("publish-canary")]
+    public async Task<IActionResult> PublishCanary(
+        [FromBody] PolicyCanaryPublishRequest request, CancellationToken cancellationToken)
+    {
+        OrganizationPolicyDocument document;
+        try
+        {
+            document = OrganizationPolicySchema.ParseJson(request.PolicyJson);
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        CanaryCohort cohort;
+        try
+        {
+            cohort = BuildCohort(request.CanaryGroup, request.CanaryPercentage);
+        }
+        catch (Exception ex) when (ex is PolicyAuthorityException or ArgumentException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+
+        try
+        {
+            var version = await authority.PublishCanaryAsync(
+                document, request.Tenant, request.Environment, request.PolicyVersion,
+                CurrentUserName, request.Reviewer, request.ExpiresAtUtc, cohort, cancellationToken);
+            await audit.LogAsync(CurrentUserId, "PUBLISH_CANARY_POLICY", "OrganizationPolicy",
+                $"{request.Tenant}/{request.Environment}",
+                $"Version={version.PolicyVersion}; Cohort={CohortLabel(cohort)}; Hash={version.PolicyHash}");
+            return Ok(PolicyVersionDto.From(version));
+        }
+        catch (Exception ex) when (ex is PolicyAuthorityException or ArgumentException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("promote-canary")]
+    public async Task<IActionResult> PromoteCanary(
+        [FromBody] PolicyCanaryPromoteRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var version = await authority.PromoteCanaryAsync(
+                request.Tenant, request.Environment, request.PolicyVersion, cancellationToken);
+            await audit.LogAsync(CurrentUserId, "PROMOTE_CANARY_POLICY", "OrganizationPolicy",
+                $"{request.Tenant}/{request.Environment}",
+                $"Version={version.PolicyVersion}; PromotedToFleetWide=true");
+            return Ok(PolicyVersionDto.From(version));
+        }
+        catch (Exception ex) when (ex is PolicyAuthorityException or ArgumentException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPost("halt-canary")]
+    public async Task<IActionResult> HaltCanary(
+        [FromBody] PolicyCanaryHaltRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var reissued = await authority.HaltCanaryAsync(
+                request.Tenant, request.Environment, request.PolicyVersion,
+                CurrentUserName, request.Reviewer, cancellationToken);
+            await audit.LogAsync(CurrentUserId, "HALT_CANARY_POLICY", "OrganizationPolicy",
+                $"{request.Tenant}/{request.Environment}",
+                $"HaltedVersion={request.PolicyVersion}; ReissuedActive={reissued.PolicyVersion}");
+            return Ok(PolicyVersionDto.From(reissued));
+        }
+        catch (Exception ex) when (ex is PolicyAuthorityException or ArgumentException)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>Builds a cohort from the request's group/percentage, requiring exactly one.</summary>
+    private static CanaryCohort BuildCohort(string? group, int? percentage)
+    {
+        var hasGroup = !string.IsNullOrWhiteSpace(group);
+        if (hasGroup == percentage.HasValue)
+            throw new PolicyAuthorityException("Specify exactly one of canary group or percentage.");
+        var cohort = hasGroup ? CanaryCohort.ForGroup(group!) : CanaryCohort.ForPercentage(percentage!.Value);
+        cohort.Validate();
+        return cohort;
+    }
+
+    private static string CohortLabel(CanaryCohort cohort) =>
+        cohort.Group is not null ? $"group:{cohort.Group}" : $"{cohort.Percentage}%";
 }
