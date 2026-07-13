@@ -208,15 +208,17 @@ jobs:
         shell: bash
         run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
-  # 6. Build-provenance attestation (SLSA), best-effort AFTER publish so `gh release download` can
-  # fetch the now-published (non-draft) release assets. Free/keyless (Sigstore via GitHub OIDC) — no
-  # code-signing cert. continue-on-error: a provenance hiccup must never leave the release unpublished.
+  # 6. Build-provenance attestation (SLSA), AFTER publish so `gh release download` can fetch the
+  # release assets. Free/keyless (Sigstore via GitHub OIDC) — no code-signing cert. NOT
+  # continue-on-error: a provenance failure fails the workflow (visible) rather than silently
+  # shipping a release without provenance.
+  # SECURITY TODO(v0.16.0): move to gold-standard PRE-publish attestation — attest the build jobs'
+  # upload-artifact outputs and keep the release a draft until provenance succeeds, so artifacts are
+  # never public without provenance. Tracked in Docs/Operations/v0.15.0-flaky-tests.md.
   #   verify: gh attestation verify <file> --repo <owner>/<repo>
-  # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
     needs: publish-release
-    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
