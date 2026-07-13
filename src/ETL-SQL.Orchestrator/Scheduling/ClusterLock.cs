@@ -60,10 +60,42 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 renewCts.Cancel();
                 try { await renewal; } catch { /* renewal cancellation is expected */ }
-                try { await store.ReleaseLockAsync(lockName, owner); }
-                catch (Exception ex) { logger.LogWarning(ex, "Failed to release cluster lock '{Lock}' (it will age out).", lockName); }
-                logger.LogInformation("Released cluster lock '{Lock}'.", lockName);
+                await ReleaseWithRetryAsync(store, lockName, owner, logger);
             }
+        }
+
+        private static async Task ReleaseWithRetryAsync(
+            IClusterLockStore store,
+            string lockName,
+            string owner,
+            ILogger logger)
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(10);
+            Exception? lastError = null;
+            do
+            {
+                try
+                {
+                    await store.ReleaseLockAsync(lockName, owner);
+                    if (!string.Equals(await store.GetLockHolderAsync(lockName), owner,
+                            StringComparison.Ordinal))
+                    {
+                        logger.LogInformation("Released cluster lock '{Lock}'.", lockName);
+                        return;
+                    }
+                    lastError = null;
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100));
+            }
+            while (DateTime.UtcNow < deadline);
+
+            logger.LogWarning(lastError,
+                "Failed to release cluster lock '{Lock}' after retries; it will age out.", lockName);
         }
 
         private static async Task RenewLoopAsync(
