@@ -76,10 +76,14 @@ Findings surfaced during the v0.15.0 release. Full detail in
 - [x] Re-validated on a quiescent machine (5-sample median): **CONFIRMED regression**, not load noise.
       `ExternalSort_50000_DESC` +30.5% elapsed (462→603 ms), `ExternalAggregate_100000_10grps` GC pause
       +48.6% (14.6→21.7 ms) vs the 2026-07-05 baseline. Detail in `Docs/Operations/v0.15.0-performance-results.md`.
-- [ ] **Fix the ExternalSort/spill regression.** Bisect the external-sort / spill path across the
-      v0.15.0 range to pin the cause (starting suspects: `SpillStore` +236 lines, external-operator
-      instrumentation), optimize, then re-bless `certification-results/baseline-smoke.json` from the
-      recovered numbers. Do NOT bless the current (regressed) numbers.
+- [x] **Fixed the ExternalSort/spill regression.** The bisect isolated two spill hot-path costs:
+      adaptive latency instrumentation ran per row even with adaptive execution disabled, and
+      schema-backed rows carrying stable operator markers (`_SYS_SK_*`, `__SET_IDX`) fell back to a
+      per-row dictionary snapshot. Spill writes now use allocation-free leases, collect adaptive
+      latency only when active, cache stable dynamic layouts, and bulk-write sort runs. A full
+      5-sample smoke matrix passes all 13 scenarios; sort recovered 603->550 ms (below the 25% fail
+      band) and aggregate GC pause recovered 21.7->0 ms median. The known-good baseline remains
+      unchanged so the residual +19% sort warning stays visible.
 
 ### Release provenance — gold-standard pre-publish attestation (SECURITY)
 - [x] `release.yml` now attests **before** publish and gates it: `attest-provenance` needs the build

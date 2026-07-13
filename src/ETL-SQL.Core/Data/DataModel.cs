@@ -287,6 +287,21 @@ public class Row
     /// <summary>True when the row carries dynamic (non-schema) column entries.</summary>
     public bool HasDynamicColumns => _dynamicColumns is { Count: > 0 };
 
+    /// <summary>Checks dynamic column names and order without materializing the row as a dictionary.</summary>
+    public bool HasDynamicColumnLayout(IReadOnlyList<string> columnNames)
+    {
+        if ((_dynamicColumns?.Count ?? 0) != columnNames.Count) return false;
+        if (_dynamicColumns == null) return true;
+
+        int index = 0;
+        foreach (var name in _dynamicColumns.Keys)
+        {
+            if (!string.Equals(name, columnNames[index++], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+        return true;
+    }
+
     public bool HasColumn(string columnName)
     {
         if (_schema != null && _schema.Contains(columnName)) return true;

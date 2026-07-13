@@ -174,9 +174,28 @@ public partial class SpillStore : ISpillStore
         return await Task.FromResult(writer);
     }
 
-    private async Task<IDisposable> AcquireWriteSlotAsync(CancellationToken cancellationToken)
+    private ValueTask<SpillWriteSlot> AcquireWriteSlotAsync(CancellationToken cancellationToken)
     {
-        var queued = false;
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (_spillWriteGate)
+        {
+            var limit = Math.Max(1, _context.EffectiveSpillWriteConcurrency);
+            if (_activeSpillWrites < limit)
+            {
+                _activeSpillWrites++;
+                return ValueTask.FromResult(new SpillWriteSlot(this));
+            }
+
+            _waitingSpillWrites++;
+            if (_context.AdaptiveExecutionEnabled)
+                _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
+        }
+
+        return WaitForWriteSlotAsync(cancellationToken);
+    }
+
+    private async ValueTask<SpillWriteSlot> WaitForWriteSlotAsync(CancellationToken cancellationToken)
+    {
         try
         {
             while (true)
@@ -188,19 +207,10 @@ public partial class SpillStore : ISpillStore
                     if (_activeSpillWrites < limit)
                     {
                         _activeSpillWrites++;
-                        if (queued)
-                        {
-                            _waitingSpillWrites--;
-                            _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
-                        }
+                        _waitingSpillWrites--;
+                        if (_context.AdaptiveExecutionEnabled)
+                            _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
                         return new SpillWriteSlot(this);
-                    }
-
-                    if (!queued)
-                    {
-                        queued = true;
-                        _waitingSpillWrites++;
-                        _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
                     }
                 }
 
@@ -209,13 +219,11 @@ public partial class SpillStore : ISpillStore
         }
         catch
         {
-            if (queued)
+            lock (_spillWriteGate)
             {
-                lock (_spillWriteGate)
-                {
-                    _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
-                    _context.AdaptiveMetrics?.ReportQueueDepth(_waitingSpillWrites);
-                }
+                _waitingSpillWrites = Math.Max(0, _waitingSpillWrites - 1);
+                if (_context.AdaptiveExecutionEnabled)
+                    _context.AdaptiveMetrics.ReportQueueDepth(_waitingSpillWrites);
             }
             throw;
         }
@@ -230,9 +238,9 @@ public partial class SpillStore : ISpillStore
         }
     }
 
-    private sealed class SpillWriteSlot : IDisposable
+    private readonly struct SpillWriteSlot : IDisposable
     {
-        private SpillStore? _owner;
+        private readonly SpillStore _owner;
 
         public SpillWriteSlot(SpillStore owner)
         {
@@ -241,8 +249,7 @@ public partial class SpillStore : ISpillStore
 
         public void Dispose()
         {
-            var owner = Interlocked.Exchange(ref _owner, null);
-            owner?.ReleaseWriteSlot();
+            _owner.ReleaseWriteSlot();
         }
     }
 
@@ -265,21 +272,27 @@ public partial class SpillStore : ISpillStore
         public async Task WriteRowAsync(Row row)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var before = Inner.BytesWritten;
-            var elapsed = Stopwatch.StartNew();
+            var collectMetrics = Context.AdaptiveExecutionEnabled;
+            var before = collectMetrics ? Inner.BytesWritten : 0;
+            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
             await Inner.WriteRowAsync(row);
-            elapsed.Stop();
-            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            if (collectMetrics)
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    Inner.BytesWritten - before,
+                    Stopwatch.GetElapsedTime(started));
         }
 
         public async Task WriteRowsAsync(IEnumerable<Row> rows)
         {
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var before = Inner.BytesWritten;
-            var elapsed = Stopwatch.StartNew();
+            var collectMetrics = Context.AdaptiveExecutionEnabled;
+            var before = collectMetrics ? Inner.BytesWritten : 0;
+            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
             await Inner.WriteRowsAsync(rows);
-            elapsed.Stop();
-            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            if (collectMetrics)
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    Inner.BytesWritten - before,
+                    Stopwatch.GetElapsedTime(started));
         }
 
         public ValueTask DisposeAsync() => Inner.DisposeAsync();
@@ -298,11 +311,14 @@ public partial class SpillStore : ISpillStore
                 throw new NotSupportedException("The underlying spill writer does not support columnar batches.");
 
             using var slot = await Store.AcquireWriteSlotAsync(Context.CancellationToken);
-            var before = Inner.BytesWritten;
-            var elapsed = Stopwatch.StartNew();
+            var collectMetrics = Context.AdaptiveExecutionEnabled;
+            var before = collectMetrics ? Inner.BytesWritten : 0;
+            var started = collectMetrics ? Stopwatch.GetTimestamp() : 0;
             await columnar.WriteBatchAsync(batch);
-            elapsed.Stop();
-            Context.AdaptiveMetrics?.ReportSpillWrite(Inner.BytesWritten - before, elapsed.Elapsed);
+            if (collectMetrics)
+                Context.AdaptiveMetrics.ReportSpillWrite(
+                    Inner.BytesWritten - before,
+                    Stopwatch.GetElapsedTime(started));
         }
     }
 
@@ -667,38 +683,48 @@ public partial class SpillStore : ISpillStore
                 await FlushBatchAsync();
         }
 
-        // Snapshot plan, rebuilt only when the incoming rows' schema instance changes (rows in one
-        // spill partition share a schema): the expanded schema carries canonical columns plus alias
-        // names as real columns so qualified names survive the Arrow round-trip, and the alias map
-        // records which canonical slot each alias mirrors.
+        // Snapshot plan, rebuilt when the incoming schema or dynamic-column layout changes. The
+        // expanded schema carries canonical columns, aliases, and stable operator marker columns so
+        // qualified names survive Arrow without falling back to a dictionary copy per row.
         private ETL_SQL.Data.TableSchema? _snapshotSourceSchema;
         private ETL_SQL.Data.TableSchema? _snapshotExpandedSchema;
         private int[] _snapshotAliasSources = System.Array.Empty<int>();
+        private string[] _snapshotDynamicNames = System.Array.Empty<string>();
 
         private Row SnapshotRow(Row row)
         {
             var schema = row.Schema;
-            // Schemaless rows and rows carrying dynamic extras take the legacy dictionary copy —
-            // cold once readback rehydrates schema-backed rows.
-            if (schema == null || row.HasDynamicColumns) return SnapshotRowDynamic(row);
+            if (schema == null) return SnapshotRowDynamic(row);
 
-            if (!ReferenceEquals(schema, _snapshotSourceSchema))
+            if (!ReferenceEquals(schema, _snapshotSourceSchema) || !HasSameDynamicLayout(row, schema))
             {
-                var names = new List<string>(schema.ColumnCount);
+                var names = new List<string>(row.ColumnCount);
                 var aliasSources = new List<int>();
-                var seenAliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (int i = 0; i < schema.ColumnCount; i++) names.Add(schema.GetName(i));
+                var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < schema.ColumnCount; i++)
+                {
+                    var name = schema.GetName(i);
+                    names.Add(name);
+                    seenNames.Add(name);
+                }
                 for (int i = 0; i < schema.ColumnCount; i++)
                 {
                     foreach (var alias in schema.EnumerateAliasesOf(schema.GetName(i)))
                     {
-                        if (!seenAliases.Add(alias)) continue; // duplicate canonical names re-enumerate aliases
+                        if (!seenNames.Add(alias)) continue; // duplicate canonical names re-enumerate aliases
                         names.Add(alias);
                         aliasSources.Add(i);
                     }
                 }
+
+                var dynamicNames = row.GetColumnNames()
+                    .Skip(schema.ColumnCount)
+                    .Where(seenNames.Add)
+                    .ToArray();
+                names.AddRange(dynamicNames);
                 _snapshotExpandedSchema = new ETL_SQL.Data.TableSchema(names);
                 _snapshotAliasSources = aliasSources.ToArray();
+                _snapshotDynamicNames = dynamicNames;
                 _snapshotSourceSchema = schema;
             }
 
@@ -706,12 +732,22 @@ public partial class SpillStore : ISpillStore
             // per-row dictionaries — this was ~20% of the Gate F round-trip's total allocation
             // (a dynamic-dictionary copy per spilled row; see certification-results/spill-alloc-profile).
             int canonical = schema.ColumnCount;
-            var values = new object?[canonical + _snapshotAliasSources.Length];
+            var values = new object?[canonical + _snapshotAliasSources.Length + _snapshotDynamicNames.Length];
             for (int i = 0; i < canonical; i++) values[i] = row[i];
             for (int i = 0; i < _snapshotAliasSources.Length; i++)
                 values[canonical + i] = row[_snapshotAliasSources[i]];
+            int dynamicOffset = canonical + _snapshotAliasSources.Length;
+            for (int i = 0; i < _snapshotDynamicNames.Length; i++)
+            {
+                row.TryGetValue(_snapshotDynamicNames[i], out var value);
+                values[dynamicOffset + i] = value;
+            }
             return new Row(_snapshotExpandedSchema!, values);
         }
+
+        private bool HasSameDynamicLayout(Row row, ETL_SQL.Data.TableSchema schema)
+            => row.ColumnCount - schema.ColumnCount == _snapshotDynamicNames.Length
+                && row.HasDynamicColumnLayout(_snapshotDynamicNames);
 
         private static Row SnapshotRowDynamic(Row row)
         {

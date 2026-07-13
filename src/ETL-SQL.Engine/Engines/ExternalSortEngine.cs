@@ -313,19 +313,31 @@ public class ExternalSortEngine
         string[] keyColumnNames)
     {
         await using var writer = await _context.SpillStore.CreateWriterAsync(chunkName);
-        foreach (var entry in chunk)
+        await writer.WriteRowsAsync(StampSortKeys(chunk, keyColumnNames));
+    }
+
+    private static IEnumerable<Row> StampSortKeys(
+        IEnumerable<(Row Row, object?[] Keys)> rows,
+        string[] keyColumnNames)
+    {
+        foreach (var entry in rows)
         {
             // Stamp each key into its own dedicated column before writing the row.
             // These sentinel columns are stripped by ExtractAndStripKeys on the read path.
             for (int k = 0; k < keyColumnNames.Length; k++)
                 entry.Row[keyColumnNames[k]] = entry.Keys[k];
 
-            await writer.WriteRowAsync(entry.Row);
-
-            // Clean up the sentinel columns immediately so the in-memory Row objects
-            // don't accumulate extra columns if the chunk gets reused by the caller.
-            for (int k = 0; k < keyColumnNames.Length; k++)
-                entry.Row.RemoveColumn(keyColumnNames[k]);
+            try
+            {
+                yield return entry.Row;
+            }
+            finally
+            {
+                // The spill writer snapshots each yielded row before advancing the iterator.
+                // Remove sentinels as soon as it advances, including when a write fails.
+                for (int k = 0; k < keyColumnNames.Length; k++)
+                    entry.Row.RemoveColumn(keyColumnNames[k]);
+            }
         }
     }
 

@@ -154,6 +154,57 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        public async Task ArrowWriter_PreservesStableDynamicColumnsOnSchemaBackedRows()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+            var schema = new TableSchema(new[] { "Id", "Value" });
+
+            await using (var writer = await store.CreateWriterAsync("dynamic_markers"))
+            {
+                for (int i = 0; i < 100; i++)
+                {
+                    var row = new Row(schema);
+                    row["Id"] = i;
+                    row["Value"] = $"value-{i}";
+                    row["__PARTITION"] = i % 4;
+                    await writer.WriteRowAsync(row);
+                }
+            }
+
+            await using var reader = await store.CreateReaderAsync("dynamic_markers");
+            int expected = 0;
+            await foreach (var row in reader.AsEnumerableAsync())
+            {
+                Assert.Equal(expected, Convert.ToInt32(row["Id"]));
+                Assert.Equal($"value-{expected}", row["Value"]);
+                Assert.Equal(expected % 4, Convert.ToInt32(row["__PARTITION"]));
+                expected++;
+            }
+            Assert.Equal(100, expected);
+        }
+
+        [Fact]
+        public async Task SpillLatencyMetrics_AreCollectedOnlyForAdaptiveExecution()
+        {
+            var e = NewEvaluator();
+            e.SpillEncryptionEnabled = false;
+            e.SpillCompressionEnabled = false;
+            using var store = new SpillStore(e);
+
+            await using (var writer = await store.CreateWriterAsync("static_metrics"))
+                await writer.WriteRowAsync(new Row { ["Id"] = 1 });
+            Assert.Equal(0, e.AdaptiveMetrics.SpillWriteLatencyMsPerMB);
+
+            e.AdaptiveExecutionEnabled = true;
+            await using (var writer = await store.CreateWriterAsync("adaptive_metrics"))
+                await writer.WriteRowAsync(new Row { ["Id"] = 2 });
+            Assert.True(e.AdaptiveMetrics.SpillWriteLatencyMsPerMB > 0);
+        }
+
+        [Fact]
         public async Task ArrowRowSpillPreservesDateTimeOffset()
         {
             var e = NewEvaluator();
