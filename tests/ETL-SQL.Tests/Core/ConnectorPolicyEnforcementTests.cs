@@ -196,6 +196,8 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
     [Fact]
     public void EnforceResolvedAddress_DeniesRebindToInternalIp_UnderHostAllowlist()
     {
+        var eventSink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
         // DNS-rebinding defense: a name that passed the name-based allowlist ("*") must still be
         // denied at connect time if it resolved to a loopback/internal address.
         EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy(allowedHosts: ["*"]));
@@ -212,6 +214,16 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         // A public resolved address is permitted under "*".
         Assert.Null(Record.Exception(() =>
             ConnectorPolicyAuthorizer.EnforceResolvedAddress("api.example.com", System.Net.IPAddress.Parse("93.184.216.34"))));
+
+        Assert.Equal(3, eventSink.Events.Count);
+        Assert.All(eventSink.Events, securityEvent =>
+        {
+            Assert.Equal(SecurityEventType.OperationDenied, securityEvent.Type);
+            Assert.Equal("api.example.com", securityEvent.SanitizedTarget);
+            Assert.DoesNotContain("127.0.0.1", securityEvent.Reason, StringComparison.Ordinal);
+            Assert.DoesNotContain("169.254.169.254", securityEvent.Reason, StringComparison.Ordinal);
+            Assert.DoesNotContain("10.0.0.5", securityEvent.Reason, StringComparison.Ordinal);
+        });
     }
 
     [Fact]
@@ -289,5 +301,11 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
             DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1),
             DateTimeOffset.UtcNow, document,
             EnterprisePolicyConfiguration.Flatten(document.ToPolicyValues()));
+    }
+
+    private sealed class RecordingSecurityEventSink : ISecurityEventSink
+    {
+        public List<SecurityEvent> Events { get; } = [];
+        public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
     }
 }

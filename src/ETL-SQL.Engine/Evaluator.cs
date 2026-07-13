@@ -932,6 +932,7 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             // Enterprise execution-mode gates — applied before any statement executes.
             Core.Governance.OperationPolicyBoundary.EnforceAllowedExecutionMode(ExecutionPolicy);
             Core.Governance.OperationPolicyBoundary.EnforceRemoteExecutionMode(ExecutionPolicy);
+            Core.Governance.SecurityEventHealthGate.EnsureExecutionAllowed(ExecutionPolicy);
             BindGovernedThresholdCeilings();
 
             foreach (var rs in LastResultSets) rs.Clear();
@@ -1343,6 +1344,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
             }
             catch (Exception ex)
             {
+                SecurityEventRuntime.EmitUnhandledSecurityDenial(this,
+                    statement.GetType().Name, ex);
                 if (node != null)
                 {
                     node.Status = ExecutionStatus.Faulted;

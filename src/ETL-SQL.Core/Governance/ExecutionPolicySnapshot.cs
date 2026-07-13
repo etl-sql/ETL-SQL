@@ -120,8 +120,12 @@ public sealed record OperationPolicyDecision(
         string policyKey,
         string requestedTarget,
         string effectiveConstraint,
-        string reason) =>
-        Create(false, snapshot, policyKey, requestedTarget, effectiveConstraint, reason);
+        string reason)
+    {
+        var decision = Create(false, snapshot, policyKey, requestedTarget, effectiveConstraint, reason);
+        SecurityEventRuntime.EmitPolicyDenial(snapshot, decision);
+        return decision;
+    }
 
     private static OperationPolicyDecision Create(
         bool allowed,

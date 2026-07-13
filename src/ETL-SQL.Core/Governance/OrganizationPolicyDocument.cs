@@ -31,6 +31,7 @@ public sealed record OrganizationPolicyDocument
     public ProcessPolicySection Process { get; init; } = new();
     public RemoteExecutionPolicySection RemoteExecution { get; init; } = new();
     public MutationGuardrailPolicySection MutationGuardrails { get; init; } = new();
+    public SecurityEventPolicySection SecurityEvents { get; init; } = new();
 
     public IReadOnlyDictionary<string, object> ToPolicyValues()
     {
@@ -67,6 +68,20 @@ public sealed record OrganizationPolicyDocument
         values["Security:RequireWhatIfForDestructiveStatements"] = MutationGuardrails.RequireWhatIfForDestructiveStatements;
         values["Security:RequireTransactionForMutations"] = MutationGuardrails.RequireTransactionForMutations;
         values["Audit:RemoteDeliveryRequired"] = MutationGuardrails.RequireRemoteAuditForMutations;
+        if (!string.IsNullOrWhiteSpace(SecurityEvents.CollectorEndpoint))
+            values["SecurityEvents:CollectorEndpoint"] = SecurityEvents.CollectorEndpoint;
+        values["SecurityEvents:BatchSize"] = SecurityEvents.BatchSize;
+        values["SecurityEvents:IntervalSeconds"] = SecurityEvents.IntervalSeconds;
+        values["SecurityEvents:LeaseSeconds"] = SecurityEvents.LeaseSeconds;
+        values["SecurityEvents:MinimumForwardedSeverity"] = SecurityEvents.MinimumForwardedSeverity.ToString();
+        if (SecurityEvents.FailClosedMaxTerminalFailures.HasValue)
+            values["SecurityEvents:FailClosedMaxTerminalFailures"] = SecurityEvents.FailClosedMaxTerminalFailures.Value;
+        if (SecurityEvents.FailClosedMaxOldestEventSeconds.HasValue)
+            values["SecurityEvents:FailClosedMaxOldestEventSeconds"] = SecurityEvents.FailClosedMaxOldestEventSeconds.Value;
+        if (SecurityEvents.FailClosedMaxPendingEvents.HasValue)
+            values["SecurityEvents:FailClosedMaxPendingEvents"] = SecurityEvents.FailClosedMaxPendingEvents.Value;
+        if (SecurityEvents.FailClosedMaxOutboxBytes.HasValue)
+            values["SecurityEvents:FailClosedMaxOutboxBytes"] = SecurityEvents.FailClosedMaxOutboxBytes.Value;
 
         return values;
     }
@@ -163,6 +178,19 @@ public sealed record MutationGuardrailPolicySection
     public bool RequireRemoteAuditForMutations { get; init; }
 }
 
+public sealed record SecurityEventPolicySection
+{
+    public string? CollectorEndpoint { get; init; }
+    public int BatchSize { get; init; } = 100;
+    public int IntervalSeconds { get; init; } = 30;
+    public int LeaseSeconds { get; init; } = 120;
+    public SecurityEventSeverity MinimumForwardedSeverity { get; init; } = SecurityEventSeverity.Warning;
+    public int? FailClosedMaxTerminalFailures { get; init; }
+    public int? FailClosedMaxOldestEventSeconds { get; init; }
+    public int? FailClosedMaxPendingEvents { get; init; }
+    public long? FailClosedMaxOutboxBytes { get; init; }
+}
+
 public sealed record OrganizationPolicyValidationResult(
     bool IsValid,
     IReadOnlyList<string> Errors)
@@ -214,6 +242,7 @@ public static class OrganizationPolicySchema
         ValidateDockerImages(document.Process.AllowedDockerImages, errors);
         ValidateExecution(document.Execution, errors);
         ValidateRemoteExecution(document.RemoteExecution, errors);
+        ValidateSecurityEvents(document.SecurityEvents, errors);
 
         return errors.Count == 0
             ? OrganizationPolicyValidationResult.Success
@@ -349,6 +378,29 @@ public static class OrganizationPolicySchema
             errors.Add("Remote execution mode AllowedHosts requires at least one allowed host.");
         if (remote.Mode == RemoteExecutionMode.Disabled && remote.AllowedHosts.Count > 0)
             errors.Add("Remote execution allowed hosts must be empty when remote execution is Disabled.");
+    }
+
+    private static void ValidateSecurityEvents(SecurityEventPolicySection securityEvents, List<string> errors)
+    {
+        if (!string.IsNullOrWhiteSpace(securityEvents.CollectorEndpoint)
+            && (!Uri.TryCreate(securityEvents.CollectorEndpoint, UriKind.Absolute, out var endpoint)
+                || endpoint.Scheme != Uri.UriSchemeHttps
+                || !string.IsNullOrEmpty(endpoint.UserInfo)))
+            errors.Add("Security event collector endpoint must be an absolute HTTPS URI without embedded credentials.");
+        if (securityEvents.BatchSize is < 1 or > 10_000)
+            errors.Add("Security event batch size must be between 1 and 10000.");
+        if (securityEvents.IntervalSeconds is < 1 or > 3600)
+            errors.Add("Security event interval seconds must be between 1 and 3600.");
+        if (securityEvents.LeaseSeconds is < 10 or > 3600)
+            errors.Add("Security event lease seconds must be between 10 and 3600.");
+        if (securityEvents.FailClosedMaxTerminalFailures is < 1)
+            errors.Add("Security event fail-closed terminal failure limit must be at least 1.");
+        if (securityEvents.FailClosedMaxOldestEventSeconds is < 1)
+            errors.Add("Security event fail-closed oldest event seconds must be at least 1.");
+        if (securityEvents.FailClosedMaxPendingEvents is < 1)
+            errors.Add("Security event fail-closed pending event limit must be at least 1.");
+        if (securityEvents.FailClosedMaxOutboxBytes is < 1)
+            errors.Add("Security event fail-closed outbox byte limit must be at least 1.");
     }
 
     private static JsonSerializerOptions CreateJsonOptions()

@@ -32,6 +32,7 @@ public sealed class FleetContainmentTests : IClassFixture<PortalWebFactory>
         var status = await res.Content.ReadFromJsonAsync<FleetEnvironmentStatus>();
         Assert.NotNull(status);
         Assert.False(string.IsNullOrEmpty(status!.Status));
+        Assert.NotNull(status.SecurityEvents);
     }
 
     [Fact]

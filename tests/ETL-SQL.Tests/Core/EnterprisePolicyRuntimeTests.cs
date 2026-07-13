@@ -47,6 +47,8 @@ public sealed class EnterprisePolicyRuntimeTests
     [Fact]
     public async Task LiveFailure_UsesVerifiedFreshCache()
     {
+        var eventSink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
         using var key = RSA.Create(2048);
         var enrollment = Enrollment(key);
         var cachedEnvelope = Envelope(key, Policy(maxParallel: 3), "cached-v1");
@@ -62,11 +64,19 @@ public sealed class EnterprisePolicyRuntimeTests
         Assert.Equal("cached-v1", effective.PolicyVersion);
         Assert.Equal("3", effective.ConfigurationValues["Security:MaxParallelDegree"]);
         Assert.Contains("Live retrieval failed", effective.Error);
+        var securityEvent = Assert.Single(eventSink.Events);
+        Assert.Equal(SecurityEventType.PolicyAvailabilityFailure, securityEvent.Type);
+        Assert.Equal(SecurityEventSeverity.Warning, securityEvent.Severity);
+        Assert.Equal(SecurityEventDecision.Warning, securityEvent.Decision);
+        Assert.Equal("corp-production", securityEvent.TenantId);
+        Assert.Equal("cached-v1", securityEvent.PolicyVersion);
     }
 
     [Fact]
     public async Task ExpiredOfflineCache_FailsClosed()
     {
+        var eventSink = new RecordingSecurityEventSink();
+        using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
         using var key = RSA.Create(2048);
         var enrollment = Enrollment(key) with { MaxOfflineHours = 2 };
         var cache = new MemoryCache
@@ -78,6 +88,10 @@ public sealed class EnterprisePolicyRuntimeTests
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => loader.LoadAsync(enrollment));
 
         Assert.Contains("offline cache expired", error.ToString(), StringComparison.OrdinalIgnoreCase);
+        var securityEvent = Assert.Single(eventSink.Events);
+        Assert.Equal(SecurityEventType.PolicyValidationFailure, securityEvent.Type);
+        Assert.Equal(SecurityEventSeverity.Error, securityEvent.Severity);
+        Assert.Equal(SecurityEventDecision.Failed, securityEvent.Decision);
     }
 
     [Fact]
@@ -122,6 +136,29 @@ public sealed class EnterprisePolicyRuntimeTests
 
         Assert.Throws<InvalidOperationException>(() =>
             EnterprisePolicySignature.VerifyAndParse(envelope, enrollment, Now));
+    }
+
+    [Fact]
+    public void SecurityEventCollector_RequiresMachineCertificateIdentity()
+    {
+        using var key = RSA.Create(2048);
+        var enrollment = Enrollment(key);
+        var settings = new SecurityEventPolicySection
+        {
+            CollectorEndpoint = "https://siem.example.test/events",
+            MinimumForwardedSeverity = SecurityEventSeverity.Critical
+        };
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            EnterprisePolicyRuntime.CreateSecurityEventTransportOptions(enrollment, settings));
+        Assert.Contains("client certificate", error.Message, StringComparison.OrdinalIgnoreCase);
+
+        var options = EnterprisePolicyRuntime.CreateSecurityEventTransportOptions(
+            enrollment with { ClientCertificateThumbprint = new string('A', 40) }, settings);
+        Assert.Equal(enrollment.Tenant, options.TenantId);
+        Assert.Equal(enrollment.EnrollmentId, options.EnrollmentId);
+        Assert.Equal(enrollment.MachineId, options.MachineId);
+        Assert.Equal(SecurityEventSeverity.Critical, options.MinimumSeverity);
     }
 
     [Fact]
@@ -349,5 +386,11 @@ public sealed class EnterprisePolicyRuntimeTests
                 Headers[header.Key] = string.Join(",", header.Value);
             return Task.FromResult(response);
         }
+    }
+
+    private sealed class RecordingSecurityEventSink : ISecurityEventSink
+    {
+        public List<SecurityEvent> Events { get; } = [];
+        public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
     }
 }

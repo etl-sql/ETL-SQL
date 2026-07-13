@@ -25,27 +25,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Run and retain the performance lane plus Windows and Linux enterprise certification evidence, including path/link races, DNS rebinding, redirects, connector aliases, and standalone behavior.
 - [ ] **Canary Policy Rollout:** Implement progressive policy rollouts allowing administrators to target a subset of enrolled machine groups or environments (e.g. a 10% canary nodes pool) to validate new filesystem path and connection restrictions before deploying fleet-wide.
 
-#### Phase 2: Central Security Events
-
-##### Event contract and emission
-- [ ] Define a versioned structured security-event schema with stable event ID, severity/type, timestamp, actor/effective identity, host/node, tenant, script/job/correlation IDs, policy version/hash, sanitized target, decision, and reason.
-- [ ] Emit events for override attempts, denied filesystem/network/connector/process/Docker operations, policy signature/expiry/rollback failures, stale or unavailable policy, machine enrollment changes, and repeated resource-limit violations.
-- [ ] Separate security events from ordinary diagnostic logs and existing governance audit records while preserving correlation between all three.
-- [ ] Redact credentials, query parameters, connection strings, environment values, filesystem data, and exception details before persistence or transport.
-
-##### Durable delivery and monitoring
-- [ ] Provide a durable local security-event outbox for every executable, with bounded storage, atomic append, retry, batching, deduplication, jittered backoff, and crash recovery.
-- [ ] Deliver to an HTTPS/SIEM collector using machine identity; define acknowledgement and idempotency behavior.
-- [ ] Add Windows Event Log and syslog/structured-file sinks for bootstrap failures that occur before HTTPS delivery is available.
-- [ ] Support policy-controlled severity filters so enterprises can forward security warnings/denials without centrally shipping all diagnostic logs.
-- [ ] Add optional fail-closed thresholds for terminal delivery failure, oldest-event age, pending count, and outbox bytes; standalone mode remains local-only by default.
-- [ ] Expose queue health, last delivery, failures, drops, and collector reachability through diagnostics and fleet status.
-
-##### Completion gates
-- [ ] Fault-injection tests cover collector outage, duplicate delivery, acknowledgement loss, corrupt outbox state, disk pressure, process crash, redaction, and recovery.
-- [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
-- [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
-
 #### Phase 3: Certification & Operations
 
 ##### Certification lanes

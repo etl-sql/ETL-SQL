@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers;
@@ -56,6 +57,15 @@ public class SetSecurityOverrideStatementHandler(ILogger logger) : IStatementHan
 
         string state = stmt.Enabled ? "ON" : "OFF";
         if (stmt.Override == SecurityOverride.FileTypeExtension) state = "ADDED";
+
+        if (stmt.Enabled || stmt.Override == SecurityOverride.FileTypeExtension)
+        {
+            var snapshot = context.ExecutionPolicy ?? ExecutionPolicySnapshot.Capture(
+                EnterprisePolicyRuntime.Current, Environment.UserName,
+                context.InteractiveMode ? ScriptExecutionMode.Interactive : ScriptExecutionMode.Batch,
+                "unknown");
+            SecurityEventRuntime.EmitOverrideAttempt(snapshot, overrideName);
+        }
 
         // Mandatory audit log for security overrides
         _logger.WriteLine($"Audit: Security override {overrideName} turned {state} by script.", ConsoleColor.Yellow);

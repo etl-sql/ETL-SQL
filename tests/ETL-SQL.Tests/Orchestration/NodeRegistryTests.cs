@@ -149,6 +149,10 @@ namespace ETL_SQL.Tests.Orchestration
                 Assert.Equal("Portal", node!.Role);
                 using var metadata = JsonDocument.Parse(node.Metadata!);
                 Assert.True(metadata.RootElement.TryGetProperty("capacity", out var capacity));
+                Assert.True(metadata.RootElement.TryGetProperty("securityEvents", out var securityEvents));
+                Assert.True(securityEvents.TryGetProperty("PendingCount", out _));
+                Assert.True(securityEvents.TryGetProperty("OutboxReadable", out _));
+                Assert.True(securityEvents.TryGetProperty("CollectorReachable", out _));
                 Assert.True(capacity.TryGetProperty("MemoryLoadPercent", out _));
                 Assert.True(capacity.TryGetProperty("ProcessCpuPercent", out _));
                 Assert.True(capacity.TryGetProperty("IsOverloaded", out _));

@@ -27,8 +27,10 @@ public static class ProcessPolicyRules
 
         if (allowed.Any(pattern => DockerImageMatches(pattern, image))) return;
 
-        throw new SecurityException(
-            $"Enterprise policy denied Docker image '{image}'; permitted images: [{string.Join(", ", allowed)}].");
+        var decision = OperationPolicyDecision.Deny(snapshot, "Process:AllowedDockerImages",
+            image, $"permitted images: [{string.Join(", ", allowed)}]",
+            $"Enterprise policy denied Docker image '{image}'.");
+        throw new OperationPolicyDeniedException(decision);
     }
 
     /// <summary>

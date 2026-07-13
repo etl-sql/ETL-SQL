@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Storage;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -44,7 +45,8 @@ public sealed class FleetStatusController(
             AuditOutboxPending: outboxPending,
             AuditOutboxFailed: outboxFailed,
             Storage: storage,
-            CapturedAtUtc: DateTime.UtcNow));
+            CapturedAtUtc: DateTime.UtcNow,
+            SecurityEvents: SecurityEventRuntime.GetDiagnostics()));
     }
 
     private async Task<string> ProbeStorageAsync(CancellationToken ct)

@@ -43,6 +43,17 @@ public sealed class EnterpriseEnrollmentTests : IDisposable
         var removed = store.Unenroll();
         Assert.Equal(enrollment.EnrollmentId, removed!.EnrollmentId);
         Assert.Null(EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store));
+
+        var outboxPath = SecurityEventOutboxPaths.Enrolled(store.Path);
+        Assert.True(File.Exists(outboxPath));
+        var outbox = new SecurityEventOutbox(new SecurityEventOutboxOptions
+        {
+            DatabasePath = outboxPath
+        });
+        var events = outbox.ClaimBatch(10, DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1));
+        Assert.Collection(events,
+            item => Assert.Equal("Machine enrollment created.", item.Event.Reason),
+            item => Assert.Equal("Machine enrollment removed.", item.Event.Reason));
     }
 
     [Theory]

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 using ETL_SQL.Engine;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,8 @@ namespace ETL_SQL.Tests.Hardening.Hardening
         [Fact]
         public async Task TestRootPathValidation_Throws()
         {
+            var eventSink = new RecordingSecurityEventSink();
+            using var eventScope = SecurityEventRuntime.UseSinkForScope(eventSink);
             var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
             var original = eval.SecurityService.IsTestMode;
             eval.SecurityService.IsTestMode = false;
@@ -29,11 +32,20 @@ namespace ETL_SQL.Tests.Hardening.Hardening
                 var script = TestHelpers.Parse(sql);
                 var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
                 Assert.Contains("Unauthorized access to root directory", ex.Message);
+                var securityEvent = Assert.Single(eventSink.Events);
+                Assert.Equal(SecurityEventType.OperationDenied, securityEvent.Type);
+                Assert.Equal("FileOperationStatement", securityEvent.SanitizedTarget);
             }
             finally
             {
                 eval.SecurityService.IsTestMode = original;
             }
+        }
+
+        private sealed class RecordingSecurityEventSink : ISecurityEventSink
+        {
+            public List<SecurityEvent> Events { get; } = [];
+            public void Emit(SecurityEvent securityEvent) => Events.Add(securityEvent);
         }
 
         [Fact]

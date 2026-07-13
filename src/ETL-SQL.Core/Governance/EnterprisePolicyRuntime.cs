@@ -272,12 +272,17 @@ public sealed class EnterprisePolicyLoader(
                 var offlineExpiry = cached.CachedAtUtc.AddHours(enrollment.MaxOfflineHours);
                 if (offlineExpiry <= now)
                     throw new InvalidOperationException($"Enterprise policy offline cache expired at {offlineExpiry:O}.");
+                SecurityEventRuntime.EmitPolicyLoadFailure(enrollment, source.Source,
+                    $"Live policy retrieval failed; verified cache is in use. {liveFailure.Message}",
+                    cacheAvailable: true, cached.Envelope.PolicyVersion);
                 return CreateEffective(cached.Envelope, document, "Cached", "Protected cache", now,
                     $"Live retrieval failed: {liveFailure.Message}");
             }
             catch (Exception cacheUseFailure) when (cacheUseFailure is not OperationCanceledException)
             {
                 var message = $"Enterprise policy is unavailable. Live: {liveFailure.Message} Cache: {cacheUseFailure.Message}";
+                SecurityEventRuntime.EmitPolicyLoadFailure(enrollment, source.Source, message,
+                    cacheAvailable: false, cached?.Envelope.PolicyVersion);
                 if (enrollment.FailClosed) throw new InvalidOperationException(message, cacheUseFailure);
                 return new EffectiveEnterprisePolicy(true, false, "Unavailable", null, null, null, null,
                     now, null, new Dictionary<string, string?>(), message);
@@ -356,7 +361,10 @@ internal sealed class EnterprisePolicyConfigurationProvider : ConfigurationProvi
 public static class EnterprisePolicyRuntime
 {
     private static readonly object Sync = new();
+    private static readonly SemaphoreSlim TransportSync = new(1, 1);
     private static EffectiveEnterprisePolicy _current = EffectiveEnterprisePolicy.Standalone;
+    private static SecurityEventTransportWorker? _securityEventWorker;
+    private static HttpClient? _securityEventHttp;
     public static EffectiveEnterprisePolicy Current { get { lock (Sync) return _current; } }
     public static event Action<EffectiveEnterprisePolicy>? PolicyChanged;
 
@@ -365,14 +373,37 @@ public static class EnterprisePolicyRuntime
         CancellationToken cancellationToken = default)
     {
         var store = enrollmentStore ?? new EnterpriseEnrollmentStore();
-        var enrollment = EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store);
-        if (enrollment is null) return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        try
+        {
+            var enrollment = EnterpriseEnrollmentRuntime.ValidateBeforeStartup(store);
+            if (enrollment is null)
+            {
+                SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Standalone());
+                await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
+                return SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            }
 
-        using var http = CreateHttpClient(enrollment);
-        var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
-        var cachePath = Path.Combine(Path.GetDirectoryName(store.Path)!, "cache", "policy-cache.json");
-        var loader = new EnterprisePolicyLoader(source, new FileEnterprisePolicyCacheStore(cachePath));
-        return SetCurrent(await loader.LoadAsync(enrollment, cancellationToken).ConfigureAwait(false));
+            var outbox = SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Enrolled(store.Path));
+            await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
+
+            using var http = CreateHttpClient(enrollment);
+            var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
+            var cachePath = Path.Combine(Path.GetDirectoryName(store.Path)!, "cache", "policy-cache.json");
+            var loader = new EnterprisePolicyLoader(source, new FileEnterprisePolicyCacheStore(cachePath));
+            var effective = SetCurrent(await loader.LoadAsync(enrollment, cancellationToken).ConfigureAwait(false));
+            await ReplaceSecurityEventTransportAsync(outbox, enrollment, effective).ConfigureAwait(false);
+            return effective;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            BootstrapSecurityEventReporter.CreateDefault(SecurityEventOutboxPaths.Bootstrap())
+                .Report("enterprise-policy-startup", ex);
+            throw;
+        }
     }
 
     public static EffectiveEnterprisePolicy SetCurrent(EffectiveEnterprisePolicy policy)
@@ -413,5 +444,93 @@ public static class EnterprisePolicyRuntime
         }
         throw new InvalidOperationException(
             $"Enterprise client certificate '{normalized}' was not found with an accessible private key.");
+    }
+
+    private static async Task ReplaceSecurityEventTransportAsync(
+        SecurityEventOutbox? outbox,
+        EnterpriseEnrollmentDocument? enrollment,
+        EffectiveEnterprisePolicy? policy)
+    {
+        await TransportSync.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (_securityEventWorker is not null)
+            {
+                await _securityEventWorker.DisposeAsync().ConfigureAwait(false);
+                _securityEventWorker = null;
+            }
+            _securityEventHttp?.Dispose();
+            _securityEventHttp = null;
+
+            var settings = policy?.Document?.SecurityEvents;
+            if (outbox is null || enrollment is null || settings is null
+                || string.IsNullOrWhiteSpace(settings.CollectorEndpoint))
+            {
+                SecurityEventRuntime.ConfigureCollectorDiagnostics(configured: false);
+                return;
+            }
+            var transportOptions = CreateSecurityEventTransportOptions(enrollment, settings);
+            var client = CreateHttpClient(enrollment);
+            var transport = new SecurityEventTransport(outbox, client, transportOptions);
+            var worker = new SecurityEventTransportWorker(transport,
+                TimeSpan.FromSeconds(settings.IntervalSeconds));
+            worker.Start();
+            SecurityEventRuntime.ConfigureCollectorDiagnostics(configured: true);
+            _securityEventHttp = client;
+            _securityEventWorker = worker;
+        }
+        finally
+        {
+            TransportSync.Release();
+        }
+    }
+
+    internal static SecurityEventTransportOptions CreateSecurityEventTransportOptions(
+        EnterpriseEnrollmentDocument enrollment,
+        SecurityEventPolicySection settings)
+    {
+        ArgumentNullException.ThrowIfNull(enrollment);
+        ArgumentNullException.ThrowIfNull(settings);
+        if (string.IsNullOrWhiteSpace(enrollment.ClientCertificateThumbprint))
+            throw new InvalidOperationException(
+                "Security event collector delivery requires an enrolled client certificate.");
+        if (string.IsNullOrWhiteSpace(settings.CollectorEndpoint))
+            throw new InvalidOperationException("Security event collector endpoint is not configured.");
+        return new SecurityEventTransportOptions
+        {
+            CollectorEndpoint = new Uri(settings.CollectorEndpoint),
+            TenantId = enrollment.Tenant,
+            EnrollmentId = enrollment.EnrollmentId,
+            MachineId = enrollment.MachineId,
+            BatchSize = settings.BatchSize,
+            LeaseDuration = TimeSpan.FromSeconds(settings.LeaseSeconds),
+            MinimumSeverity = settings.MinimumForwardedSeverity
+        };
+    }
+}
+
+public static class SecurityEventOutboxPaths
+{
+    public static string Standalone()
+    {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(local))
+            throw new InvalidOperationException("Local application data directory could not be resolved for the security event outbox.");
+        return Path.Combine(local, "ETL-SQL", "Security", "security-events.db");
+    }
+
+    public static string Enrolled(string enrollmentPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(enrollmentPath);
+        var directory = Path.GetDirectoryName(Path.GetFullPath(enrollmentPath))
+            ?? throw new InvalidOperationException("Enterprise enrollment path has no parent directory.");
+        return Path.Combine(directory, "cache", "security-events.db");
+    }
+
+    public static string Bootstrap()
+    {
+        var directory = Path.GetDirectoryName(Standalone())
+            ?? throw new InvalidOperationException("Standalone security-event path has no parent directory.");
+        return Path.Combine(directory, "bootstrap-security-events.jsonl");
     }
 }

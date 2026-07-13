@@ -28,12 +28,12 @@ public static class MutationGuardrailPolicy
 
         if (IsDestructive(statement)
             && GovernedFlag(snapshot, "Security:RequireWhatIfForDestructiveStatements"))
-            throw new SecurityException(
+            throw Denied(snapshot, "Security:RequireWhatIfForDestructiveStatements", statement, target,
                 $"Enterprise policy requires WHAT IF for destructive statements; run {StatementKind(statement)} on '{target}' under WHAT IF.");
 
         if (GovernedFlag(snapshot, "Security:RequireTransactionForMutations")
             && context.TranCount == 0)
-            throw new SecurityException(
+            throw Denied(snapshot, "Security:RequireTransactionForMutations", statement, target,
                 $"Enterprise policy requires mutations to run within a transaction; {StatementKind(statement)} on '{target}' has no open transaction.");
     }
 
@@ -65,4 +65,13 @@ public static class MutationGuardrailPolicy
     private static bool GovernedFlag(ExecutionPolicySnapshot snapshot, string key) =>
         snapshot.GovernedValues.TryGetValue(key, out var raw)
         && bool.TryParse(raw, out var flag) && flag;
+
+    private static OperationPolicyDeniedException Denied(
+        ExecutionPolicySnapshot snapshot,
+        string policyKey,
+        Statement statement,
+        string target,
+        string reason) =>
+        new(OperationPolicyDecision.Deny(snapshot, policyKey,
+            $"{StatementKind(statement)}:{target}", "required mutation guardrail", reason));
 }
