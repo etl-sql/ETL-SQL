@@ -31,12 +31,17 @@ release begins.
 
 ## Enterprise Certification & Operations
 
-### Cross-platform policy and monitoring lane
+### Certification lanes
 - [x] Add Windows and Linux CI certification lanes for enrollment, signed retrieval, cache/offline
       operation, dynamic refresh, operation enforcement, and security-event delivery.
 - [x] Retain per-platform TRX, command logs, and machine-readable/Markdown summaries as CI artifacts.
 - [ ] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server,
       scheduled jobs, spawned runners, and parallel execution.
+- [ ] Run malicious-input and bypass drills covering policy tampering, stale/expired policy,
+      signing-key rotation, machine revocation, path/link races, DNS rebinding, connector aliases,
+      Docker escape-oriented options, and log injection.
+- [ ] Prove standalone regression behavior with no enrollment, no enterprise network calls, and
+      unchanged local workflows.
 
 ---
 
