@@ -19,10 +19,10 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 ### Future Candidate Phases
 
 #### Phase 1: Policy Hardening
-- [ ] Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on supported platforms; add link/junction substitution tests at each mutation boundary.
-- [ ] Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.
-- [ ] Add a Portal administrator UI for policy validation, version history, staged publication, activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.
-- [ ] **Canary Policy Rollout:** Implement progressive policy rollouts allowing administrators to target a subset of enrolled machine groups or environments (e.g. a 10% canary nodes pool) to validate new filesystem path and connection restrictions before deploying fleet-wide.
+- [x] ~~Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on supported platforms; add link/junction substitution tests at each mutation boundary.~~ Shipped (`FileHandleFinalPath` + `FileSystemPolicyAuthorizer` handle-based re-check; substitution tests). Residual close-out tracked in `TODO.md`.
+- [x] ~~Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.~~ Shipped (`PolicyBoundHttp` adopted across those clients). Remaining client audit tracked in `TODO.md`.
+- [x] ~~Add a Portal administrator UI for policy validation, version history, staged publication, activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.~~ Shipped (`policy-authority-admin.js` + `PolicyAuthorityController`).
+- [x] **Canary Policy Rollout:** Shipped in v0.16.0 (`feat/canary-policy-rollout`). Percentage-of-fleet or named-group cohorts served alongside the fleet active version, with promote/halt (halt re-issues the active document so the cohort reverts), admin API + Portal UI, and audit. Progressive rollouts let administrators validate new filesystem-path and connection restrictions on a subset before deploying fleet-wide.
 
 #### Phase 3: Certification & Operations
 

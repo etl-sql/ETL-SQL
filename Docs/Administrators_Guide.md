@@ -481,6 +481,38 @@ rollback versions, registers enrolled machines, revokes machine identities, and 
 status. The same operations are available through `api/admin/policy-authority/*`; the UI and API
 never receive or return private-key material.
 
+##### Canary (progressive) policy rollout
+
+Before a policy change goes fleet-wide, you can validate it on a subset of enrolled machines. A
+**canary** version is published alongside — not over — the active version: only machines in its
+cohort receive it, while the rest of the tenant/environment keeps running the active version
+unchanged. Use it to confirm new filesystem-path or connection restrictions on a small pool before
+committing the fleet.
+
+A cohort targets machines one of two ways (exactly one per canary):
+
+- **Percentage of fleet** (1–100) — machines are selected by a stable, deterministic hash of their
+  machine identity. The assignment does not change between polls, and ramping the percentage up only
+  *adds* machines (a node in the cohort at 10% stays in at 25%), so you can widen a canary gradually.
+- **Named machine group** — machines you have labelled with that group at registration (the optional
+  **Canary group** field on *Register machine*).
+
+From **Admin -> Policy Authority -> Publish canary**, set the *Canary version* and cohort, then
+publish (the canary reuses the *Policy JSON* and *Expires at* from the publish form above). The
+canary appears in the version history with a **Canary** state and its cohort; each canary row offers:
+
+- **Promote** — makes the canary the fleet-wide active version, superseding the previous active.
+- **Halt** — rolls the canary back and reverts its machines. Because clients reject an envelope
+  issued *before* the one they hold, halting re-issues the current active document as a fresh active
+  version (a later issuance), which the cohort machines accept on their next five-minute refresh.
+
+Only one canary can be in progress per tenant/environment at a time; promote or halt it before
+starting another. Canaries are signed, versioned, and rollback-protected exactly like fleet-wide
+versions, and every publish/promote/halt is recorded in the mutation audit trail
+(`PUBLISH_CANARY_POLICY`, `PROMOTE_CANARY_POLICY`, `HALT_CANARY_POLICY`) — a canary cannot silently
+move machines onto a different policy. Standalone (unenrolled) installations never contact the policy
+authority and are unaffected by any canary.
+
 On every normal process startup, an enrolled installation requests a signed policy envelope from the configured
 HTTPS endpoint. The request carries `X-ETL-SQL-Tenant`, `X-ETL-SQL-Enrollment`, and `X-ETL-SQL-Machine` headers
 and presents the enrolled client certificate when configured. The server must return JSON in this form:

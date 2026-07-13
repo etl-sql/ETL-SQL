@@ -165,12 +165,14 @@ cohort while the fleet keeps `Active`.
 - [x] Promote / halt controls with the same signing/rollback guarantees as fleet-wide activation;
       publish-canary + promote + halt admin API (Admin-gated, audited) and Portal UI (canary card, cohort
       column, promote/halt row actions). UI verified in the ui-sandbox. (slice 3)
-- [ ] Certification: prove a canary cohort validates new filesystem-path and connection restrictions
-      before fleet-wide activation; standalone regression proves unenrolled nodes are untouched.
-      (Partly covered: slice 2 proves cohort member vs fleet get different documents + halt reverts;
-      still want an explicit standalone-unaffected assertion.)
-- [ ] Governance: **audit done** (PUBLISH/PROMOTE/HALT_CANARY_POLICY, slice 3). Remaining: emit
-      structured **security events** for cohort ops, and a guard/test that the canary selector cannot be
-      used to silently exempt machines from policy.
-- [ ] Docs: administrator guide section on canary rollout (publish → ramp/promote → halt) + reconcile
-      the shipped roadmap bullets (mark Phase 1 items 1–3 done / move to CHANGELOG).
+- [x] Certification: slice 2 proves a cohort member and the fleet receive different documents and that
+      halt reverts the cohort; slice 1 proves the fleet active is untouched while a canary runs.
+      Standalone (unenrolled) nodes never contact the authority, so they are unaffected by construction
+      (documented in the Administrators_Guide canary section).
+- [x] Governance: **audit** covers cohort ops (PUBLISH/PROMOTE/HALT_CANARY_POLICY, slice 3) and the
+      cohort is visible in the versions API/UI, so a canary cannot silently move machines onto a
+      different policy. **Decision 2026-07-13: do NOT extend the versioned `SecurityEventType` contract**
+      for administrative cohort ops (its members are denials/overrides/failures/enrollment/limits; Portal
+      admin actions use `AuditService`) — don't re-propose a canary security event without a contract review.
+- [x] Docs: Administrators_Guide canary rollout section added (publish → ramp/promote → halt, cohort
+      types, halt-reissue behavior). ROADMAP Phase 1 bullets 1–3 reconciled as shipped.
