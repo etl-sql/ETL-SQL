@@ -74,7 +74,8 @@ namespace ETL_SQL
                     }
                     catch (Exception schedEx)
                     {
-                        await Console.Error.WriteLineAsync($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
+                        var safeMessage = ETL_SQL.Core.Common.SecretRedactor.Redact(schedEx.Message);
+                        await Console.Error.WriteLineAsync($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {safeMessage}");
                     }
                 }
 
@@ -95,8 +96,9 @@ namespace ETL_SQL
             catch (Exception ex)
             {
                 // Ensure any fatal startup error is visible to the IDE even before JSON protocol starts
-                await Console.Error.WriteLineAsync($"[FATAL_STARTUP_ERROR] {ex.Message}");
-                await Console.Error.WriteLineAsync(ex.ToString());
+                var safeException = ETL_SQL.Core.Common.SecretRedactor.RedactException(ex);
+                await Console.Error.WriteLineAsync($"[FATAL_STARTUP_ERROR] {safeException?.Message}");
+                await Console.Error.WriteLineAsync(safeException?.ToString());
                 return 1;
             }
         }

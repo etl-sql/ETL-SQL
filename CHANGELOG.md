@@ -24,6 +24,12 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added retained malicious-input and policy-bypass drills; canonicalized connector aliases before policy enforcement and stripped log-forging characters from security events.
 - Certified unenrolled standalone startup with no enterprise HTTP clients or remote event collector, unchanged local configuration, and unrestricted local workflows.
 
+### Fixed
+
+- Serialized enterprise policy initialization and ignored stale policy notifications so runtime configuration and security-event transport cannot regress during concurrent refreshes; disposed configuration roots now release their policy subscriptions.
+- Restored true Release builds for `ETL-SQL.Analysis`, redacted fatal CLI/TUI startup exceptions, and passed report-launch arguments without string concatenation.
+- Restored the repository format gate by correcting import ordering in enterprise security and fleet-policy files.
+
 ## [0.15.0] — 2026-07-12
 
 ### Added

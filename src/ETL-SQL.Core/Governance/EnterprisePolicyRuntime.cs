@@ -339,8 +339,11 @@ internal sealed class EnterprisePolicyConfigurationSource(EffectiveEnterprisePol
         new EnterprisePolicyConfigurationProvider(initial);
 }
 
-internal sealed class EnterprisePolicyConfigurationProvider : ConfigurationProvider
+internal sealed class EnterprisePolicyConfigurationProvider : ConfigurationProvider, IDisposable
 {
+    private readonly object _providerSync = new();
+    private bool _disposed;
+
     public EnterprisePolicyConfigurationProvider(EffectiveEnterprisePolicy initial)
     {
         Replace(initial);
@@ -349,18 +352,36 @@ internal sealed class EnterprisePolicyConfigurationProvider : ConfigurationProvi
 
     private void ReplaceAndReload(EffectiveEnterprisePolicy policy)
     {
-        Replace(policy);
-        OnReload();
+        EnterprisePolicyRuntime.ApplyIfCurrent(policy, () =>
+        {
+            lock (_providerSync)
+            {
+                if (_disposed) return;
+                Replace(policy);
+                OnReload();
+            }
+        });
     }
 
     private void Replace(EffectiveEnterprisePolicy policy) => Data = policy.IsAvailable
         ? new Dictionary<string, string?>(policy.ConfigurationValues, StringComparer.OrdinalIgnoreCase)
         : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+    public void Dispose()
+    {
+        lock (_providerSync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            EnterprisePolicyRuntime.PolicyChanged -= ReplaceAndReload;
+        }
+    }
 }
 
 public static class EnterprisePolicyRuntime
 {
     private static readonly object Sync = new();
+    private static readonly SemaphoreSlim InitializationSync = new(1, 1);
     private static readonly SemaphoreSlim TransportSync = new(1, 1);
     private static EffectiveEnterprisePolicy _current = EffectiveEnterprisePolicy.Standalone;
     private static SecurityEventTransportWorker? _securityEventWorker;
@@ -380,6 +401,23 @@ public static class EnterprisePolicyRuntime
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(policyHttpClientFactory);
+        await InitializationSync.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await InitializeFromMachineCoreAsync(
+                enrollmentStore, policyHttpClientFactory, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            InitializationSync.Release();
+        }
+    }
+
+    private static async Task<EffectiveEnterprisePolicy> InitializeFromMachineCoreAsync(
+        EnterpriseEnrollmentStore? enrollmentStore,
+        Func<EnterpriseEnrollmentDocument, HttpClient> policyHttpClientFactory,
+        CancellationToken cancellationToken)
+    {
         var store = enrollmentStore ?? new EnterpriseEnrollmentStore();
         try
         {
@@ -419,6 +457,16 @@ public static class EnterprisePolicyRuntime
         lock (Sync) _current = policy;
         PolicyChanged?.Invoke(policy);
         return policy;
+    }
+
+    internal static void ApplyIfCurrent(EffectiveEnterprisePolicy policy, Action apply)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(apply);
+        lock (Sync)
+        {
+            if (ReferenceEquals(_current, policy)) apply();
+        }
     }
 
     private static HttpClient CreateHttpClient(EnterpriseEnrollmentDocument enrollment)

@@ -30,8 +30,9 @@ namespace ETL_SQL.TUI
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[FATAL] {ex.Message}");
-                Console.Error.WriteLine(ex.ToString());
+                var safeException = ETL_SQL.Core.Common.SecretRedactor.RedactException(ex);
+                Console.Error.WriteLine($"[FATAL] {safeException?.Message}");
+                Console.Error.WriteLine(safeException?.ToString());
                 return 1;
             }
         }

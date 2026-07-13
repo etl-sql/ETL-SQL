@@ -1562,28 +1562,7 @@ CREATE PAGE Main AS DASHBOARD (
             }
 
             var (exe, prefixArgs) = FindReportPlayer();
-
-            // Build the argument list passed to the ReportPlayer process
-            var rpArgs = new List<string>(prefixArgs);
-            if (ctx.ScriptFile != null)
-                rpArgs.Add($"\"{ctx.ScriptFile.FullName}\"");
-            if (!string.IsNullOrWhiteSpace(ctx.ServeManifest))
-            {
-                rpArgs.Add("--manifest");
-                rpArgs.Add($"\"{Path.GetFullPath(ctx.ServeManifest)}\"");
-            }
-            if (ctx.ServePort.HasValue)
-            {
-                rpArgs.Add("--port");
-                rpArgs.Add(ctx.ServePort.Value.ToString());
-            }
-            if (ctx.ServeNoBrowser)
-                rpArgs.Add("--no-browser");
-
-            var psi = new ProcessStartInfo(exe, string.Join(" ", rpArgs))
-            {
-                UseShellExecute = false,
-            };
+            var psi = BuildReportPlayerStartInfo(exe, prefixArgs, ctx);
 
             logger.WriteLine($"Starting report preview server...", ConsoleColor.Cyan);
 
@@ -1603,6 +1582,30 @@ CREATE PAGE Main AS DASHBOARD (
 
             await proc.WaitForExitAsync();
             return proc.ExitCode;
+        }
+
+        internal static ProcessStartInfo BuildReportPlayerStartInfo(
+            string exe,
+            IEnumerable<string> prefixArgs,
+            CliContext ctx)
+        {
+            var psi = new ProcessStartInfo(exe) { UseShellExecute = false };
+            foreach (var arg in prefixArgs) psi.ArgumentList.Add(arg);
+            if (ctx.ScriptFile != null)
+                psi.ArgumentList.Add(ctx.ScriptFile.FullName);
+            if (!string.IsNullOrWhiteSpace(ctx.ServeManifest))
+            {
+                psi.ArgumentList.Add("--manifest");
+                psi.ArgumentList.Add(Path.GetFullPath(ctx.ServeManifest));
+            }
+            if (ctx.ServePort.HasValue)
+            {
+                psi.ArgumentList.Add("--port");
+                psi.ArgumentList.Add(ctx.ServePort.Value.ToString());
+            }
+            if (ctx.ServeNoBrowser)
+                psi.ArgumentList.Add("--no-browser");
+            return psi;
         }
 
         private static (string exe, string[] prefixArgs) FindReportPlayer()
@@ -1628,7 +1631,7 @@ CREATE PAGE Main AS DASHBOARD (
                 {
                     var projectPath = Path.Combine(dir, "src", "ETL-SQL.ReportPlayer");
                     if (Directory.Exists(projectPath))
-                        return ("dotnet", new[] { "run", "--project", $"\"{projectPath}\"", "--" });
+                        return ("dotnet", new[] { "run", "--project", projectPath, "--" });
                 }
                 var parent = Path.GetDirectoryName(dir);
                 if (parent == null || parent == dir) break;

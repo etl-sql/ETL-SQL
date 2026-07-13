@@ -6,6 +6,7 @@
     <File Path="NuGet.Config" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj" />
     <Project Path="src/ETL-SQL.App/ETL-SQL.App.csproj" />
     <Project Path="src/ETL-SQL.Core/ETL-SQL.Core.csproj" />
     <Project Path="src/ETL-SQL.Engine/ETL-SQL.Engine.csproj" />

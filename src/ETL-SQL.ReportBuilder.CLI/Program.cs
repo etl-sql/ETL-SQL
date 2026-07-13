@@ -353,12 +353,22 @@ namespace ETL_SQL.ReportBuilder.CLI
                 return 1;
             }
 
-            // Build the argument string to forward to ReportPlayer
-            string playerArg = multiMode
-                ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\" --no-browser"
-                : $"\"{Path.GetFullPath(scriptPath!)}\" --no-browser";
-
-            if (portArg.HasValue) playerArg += $" --port {portArg.Value}";
+            var playerArgs = new List<string>();
+            if (multiMode)
+            {
+                playerArgs.Add("--manifest");
+                playerArgs.Add(Path.GetFullPath(manifestPath!));
+            }
+            else
+            {
+                playerArgs.Add(Path.GetFullPath(scriptPath!));
+            }
+            playerArgs.Add("--no-browser");
+            if (portArg.HasValue)
+            {
+                playerArgs.Add("--port");
+                playerArgs.Add(portArg.Value.ToString());
+            }
 
             // Resolve the ReportPlayer project (development mode or production publish)
             var selfDir = AppContext.BaseDirectory;
@@ -368,26 +378,28 @@ namespace ETL_SQL.ReportBuilder.CLI
             var fallbackDll = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
 
             string exe;
-            string exeArgs;
+            var exeArgs = new List<string>();
             if (File.Exists(playerDll))
             {
                 exe = "dotnet";
-                exeArgs = $"\"{playerDll}\" {playerArg}";
+                exeArgs.Add(playerDll);
+                exeArgs.AddRange(playerArgs);
             }
             else if (File.Exists(playerExe))
             {
                 exe = playerExe;
-                exeArgs = playerArg;
+                exeArgs.AddRange(playerArgs);
             }
             else if (File.Exists(fallbackDll))
             {
                 exe = "dotnet";
-                exeArgs = $"\"{fallbackDll}\" {playerArg}";
+                exeArgs.Add(fallbackDll);
+                exeArgs.AddRange(playerArgs);
             }
             else if (File.Exists(fallbackExe))
             {
                 exe = fallbackExe;
-                exeArgs = playerArg;
+                exeArgs.AddRange(playerArgs);
             }
             else
             {
@@ -399,7 +411,8 @@ namespace ETL_SQL.ReportBuilder.CLI
                     return 1;
                 }
                 exe = "dotnet";
-                exeArgs = $"run --project \"{projectDir}\" -- {playerArg}";
+                exeArgs.AddRange(["run", "--project", projectDir, "--"]);
+                exeArgs.AddRange(playerArgs);
             }
 
             if (multiMode)
@@ -412,12 +425,13 @@ namespace ETL_SQL.ReportBuilder.CLI
                 Console.WriteLine($"Starting ReportPlayer for: {scriptPath}");
             }
 
-            var psi = new ProcessStartInfo(exe, exeArgs)
+            var psi = new ProcessStartInfo(exe)
             {
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            foreach (var arg in exeArgs) psi.ArgumentList.Add(arg);
 
             using var proc = new Process { StartInfo = psi };
 

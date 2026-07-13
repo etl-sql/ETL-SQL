@@ -180,6 +180,7 @@ public sealed class EnterprisePolicyRuntimeTests
             .Build();
 
         Assert.Equal(4, configuration.GetValue<int>("Security:MaxParallelDegree"));
+        (configuration as IDisposable)?.Dispose();
     }
 
     [Fact]
@@ -192,6 +193,65 @@ public sealed class EnterprisePolicyRuntimeTests
             EnterprisePolicyRuntime.SetCurrent(Effective(maxParallel: 2, version: "v2"));
 
             Assert.Equal(2, configuration.GetValue<int>("Security:MaxParallelDegree"));
+        }
+        finally
+        {
+            (configuration as IDisposable)?.Dispose();
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        }
+    }
+
+    [Fact]
+    public async Task EnterpriseOverlay_IgnoresOutOfOrderPolicyNotifications()
+    {
+        var initial = Effective(maxParallel: 8, version: "initial");
+        var delayed = Effective(maxParallel: 4, version: "delayed");
+        var current = Effective(maxParallel: 2, version: "current");
+        using var delayedEntered = new ManualResetEventSlim();
+        using var releaseDelayed = new ManualResetEventSlim();
+
+        void DelayFirstNotification(EffectiveEnterprisePolicy policy)
+        {
+            if (!ReferenceEquals(policy, delayed)) return;
+            delayedEntered.Set();
+            Assert.True(releaseDelayed.Wait(TimeSpan.FromSeconds(10)));
+        }
+
+        EnterprisePolicyRuntime.PolicyChanged += DelayFirstNotification;
+        var configuration = new ConfigurationBuilder().AddEnterprisePolicy(initial).Build();
+        try
+        {
+            var delayedPublish = Task.Run(() => EnterprisePolicyRuntime.SetCurrent(delayed));
+            Assert.True(delayedEntered.Wait(TimeSpan.FromSeconds(10)));
+
+            EnterprisePolicyRuntime.SetCurrent(current);
+            releaseDelayed.Set();
+            await delayedPublish;
+
+            Assert.Same(current, EnterprisePolicyRuntime.Current);
+            Assert.Equal(2, configuration.GetValue<int>("Security:MaxParallelDegree"));
+        }
+        finally
+        {
+            releaseDelayed.Set();
+            EnterprisePolicyRuntime.PolicyChanged -= DelayFirstNotification;
+            (configuration as IDisposable)?.Dispose();
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+        }
+    }
+
+    [Fact]
+    public void EnterpriseOverlay_UnsubscribesWhenConfigurationIsDisposed()
+    {
+        var initial = Effective(maxParallel: 4, version: "v1");
+        var configuration = new ConfigurationBuilder().AddEnterprisePolicy(initial).Build();
+        Assert.IsAssignableFrom<IDisposable>(configuration).Dispose();
+
+        try
+        {
+            EnterprisePolicyRuntime.SetCurrent(Effective(maxParallel: 2, version: "v2"));
+
+            Assert.Equal(4, configuration.GetValue<int>("Security:MaxParallelDegree"));
         }
         finally
         {

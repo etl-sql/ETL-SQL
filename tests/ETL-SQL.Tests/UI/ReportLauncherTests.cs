@@ -1,4 +1,5 @@
 using System.Linq;
+using ETL_SQL.App;
 using ETL_SQL.TUI.UI;
 using Xunit;
 
@@ -35,6 +36,29 @@ namespace ETL_SQL.Tests.UI
         {
             var psi = ReportLauncher.BuildManifestProcess("ETL-SQL.ReportPlayer.exe", System.Array.Empty<string>(), "C:\\r\\.etlsql-reports.json");
             Assert.Equal(new[] { "--manifest", "C:\\r\\.etlsql-reports.json", "--no-browser" }, psi.ArgumentList.ToArray());
+        }
+
+        [Fact]
+        public void EngineServeProcess_PreservesEachArgumentBoundary()
+        {
+            var script = new System.IO.FileInfo(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "reports with spaces", "sales.rptsql"));
+            var ctx = new CliContext
+            {
+                ScriptFile = script,
+                ServePort = 8123,
+                ServeNoBrowser = true
+            };
+
+            var psi = EngineRunner.BuildReportPlayerStartInfo(
+                "dotnet", new[] { "run", "--project", "project with spaces", "--" }, ctx);
+
+            Assert.Equal(new[]
+            {
+                "run", "--project", "project with spaces", "--", script.FullName,
+                "--port", "8123", "--no-browser"
+            }, psi.ArgumentList.ToArray());
+            Assert.False(psi.UseShellExecute);
         }
 
         [Fact]
