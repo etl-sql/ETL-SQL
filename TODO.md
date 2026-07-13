@@ -51,12 +51,13 @@ Findings surfaced during the v0.15.0 release. Full detail in
 `Docs/Operations/v0.15.0-flaky-tests.md` and `Docs/Operations/v0.15.0-performance-results.md`.
 
 ### Flaky tests — audit the "sleep-then-assert" anti-pattern
-- [ ] Sweep the suite for `await Task.Delay(...)` immediately followed by an assertion that an async
-      action *did* happen (a race). ~84 occurrences across 39 files, concentrated in the orchestration
-      and portal timing suites (ExecutionJobService 7, JobScheduling 7, NodeRegistry 6, Subscription 5,
-      OrchestratorPostgresStore 5, …). Convert to poll-for-condition — reference patterns:
-      `SchedulerServiceTests.WaitUntilAsync` and `LinterTests` `ConcurrencyTracker` (both shipped in
-      v0.15.0). `Times.Never()` bounded-sleep observation windows and deliberate slow-op holds are fine.
+- [x] Audited all 84 `Task.Delay` sites. The two genuine CPU-scheduling races (`SchedulerServiceTests`,
+      `LinterTests`) are fixed and merged. The rest are legitimate: deadline-based polling loops,
+      wall-clock TTL/lease/fencing expiry waits (not CPU-load sensitive), `Task.WhenAny` timeout
+      sentinels, and background signal simulators. Full write-up in `Docs/Operations/v0.15.0-flaky-tests.md`.
+- [ ] Residual: `StmtPollingTests.TestWaitFor_Cancellation` uses a fixed 2 s delay to ensure the WAITFOR
+      polling loop is active before cancelling — robustly fixing it needs the evaluator to expose a
+      "waiting" signal (small follow-up, not a delay bump).
 - [ ] Consider a lint/CI check that flags a new `Task.Delay(...)` immediately before an assertion in
       test files, to stop the anti-pattern from regrowing.
 
