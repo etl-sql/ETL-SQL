@@ -371,7 +371,15 @@ public static class EnterprisePolicyRuntime
     public static async Task<EffectiveEnterprisePolicy> InitializeFromMachineAsync(
         EnterpriseEnrollmentStore? enrollmentStore = null,
         CancellationToken cancellationToken = default)
+        => await InitializeFromMachineAsync(
+            enrollmentStore, CreateHttpClient, cancellationToken).ConfigureAwait(false);
+
+    internal static async Task<EffectiveEnterprisePolicy> InitializeFromMachineAsync(
+        EnterpriseEnrollmentStore? enrollmentStore,
+        Func<EnterpriseEnrollmentDocument, HttpClient> policyHttpClientFactory,
+        CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(policyHttpClientFactory);
         var store = enrollmentStore ?? new EnterpriseEnrollmentStore();
         try
         {
@@ -386,7 +394,7 @@ public static class EnterprisePolicyRuntime
             var outbox = SecurityEventRuntime.ConfigureLocalOutbox(SecurityEventOutboxPaths.Enrolled(store.Path));
             await ReplaceSecurityEventTransportAsync(null, null, null).ConfigureAwait(false);
 
-            using var http = CreateHttpClient(enrollment);
+            using var http = policyHttpClientFactory(enrollment);
             var source = new HttpsSignedEnterprisePolicySource(http, new Uri(enrollment.PolicyEndpoint));
             var cachePath = Path.Combine(Path.GetDirectoryName(store.Path)!, "cache", "policy-cache.json");
             var loader = new EnterprisePolicyLoader(source, new FileEnterprisePolicyCacheStore(cachePath));

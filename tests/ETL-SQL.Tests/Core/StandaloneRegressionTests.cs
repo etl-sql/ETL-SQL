@@ -2,6 +2,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Core;
@@ -27,6 +28,62 @@ public sealed class StandaloneRegressionTests : IDisposable
         Assert.Null(policy.Document);            // no signed organization document
         Assert.Null(policy.PolicyVersion);
         Assert.Empty(policy.ConfigurationValues); // no governed values imposed
+    }
+
+    [Fact]
+    public async Task MissingEnrollment_StartsWithoutEnterpriseNetworkClientsOrCollector()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"etl-sql-standalone-{Guid.NewGuid():N}");
+        var enrollmentStore = new EnterpriseEnrollmentStore(Path.Combine(root, "enrollment.json"));
+        var previousOutboxPath = Environment.GetEnvironmentVariable(
+            SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable);
+        var previousSink = SecurityEventRuntime.Sink;
+        var enterpriseClientCreations = 0;
+
+        Directory.CreateDirectory(root);
+        Environment.SetEnvironmentVariable(
+            SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable,
+            Path.Combine(root, "security-events.db"));
+        try
+        {
+            var policy = await EnterprisePolicyRuntime.InitializeFromMachineAsync(
+                enrollmentStore,
+                _ =>
+                {
+                    enterpriseClientCreations++;
+                    throw new InvalidOperationException("Standalone startup attempted enterprise networking.");
+                });
+
+            var diagnostics = SecurityEventRuntime.GetDiagnostics();
+            Assert.False(policy.IsEnrolled);
+            Assert.Equal(0, enterpriseClientCreations);
+            Assert.False(diagnostics.CollectorConfigured);
+            Assert.Null(diagnostics.CollectorReachable);
+        }
+        finally
+        {
+            SecurityEventRuntime.Sink = previousSink;
+            Environment.SetEnvironmentVariable(
+                SecurityEventOutboxPaths.StandaloneOverrideEnvironmentVariable,
+                previousOutboxPath);
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void Standalone_EnterpriseOverlayPreservesLocalConfiguration()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Security:MaxParallelDegree"] = "37",
+                ["LocalWorkflow:Mode"] = "unchanged"
+            })
+            .AddEnterprisePolicy(EffectiveEnterprisePolicy.Standalone)
+            .Build();
+
+        Assert.Equal(37, configuration.GetValue<int>("Security:MaxParallelDegree"));
+        Assert.Equal("unchanged", configuration["LocalWorkflow:Mode"]);
     }
 
     [Fact]

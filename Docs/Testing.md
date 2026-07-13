@@ -65,6 +65,11 @@ The bypass portion of the lane retains direct evidence for each required threat 
 | Docker escape-oriented runtime options | `ProcessPolicyRulesTests`, `ResourceCeilingEnforcementTests` |
 | Log injection and secret/path disclosure | `SecurityEventRuntimeTests`, `SecurityEventOutboxTests` |
 
+`StandaloneRegressionTests` is the retained unenrolled-mode proof. It verifies that startup with
+no enrollment constructs no enterprise HTTP client, configures no remote security-event collector,
+preserves local configuration values, and continues to execute local workflows without organization
+policy restrictions.
+
 ## Testing-Foundation Maintenance
 
 Keep this list small and actionable. The one-time lane/scenario/SLT cleanup is complete as of 2026-06-01. When adding a new release claim, add evidence in one of the existing layers instead of creating a fourth testing style.

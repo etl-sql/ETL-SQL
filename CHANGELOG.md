@@ -22,6 +22,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added retained-evidence Windows and Linux enterprise certification lanes covering policy lifecycle, enforcement boundaries, standalone behavior, and security-event delivery.
 - Certified enterprise policy bootstrap across Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server, scheduled jobs, spawned runners, and parallel execution; corrected Report Player policy configuration ordering.
 - Added retained malicious-input and policy-bypass drills; canonicalized connector aliases before policy enforcement and stripped log-forging characters from security events.
+- Certified unenrolled standalone startup with no enterprise HTTP clients or remote event collector, unchanged local configuration, and unrestricted local workflows.
 
 ## [0.15.0] — 2026-07-12
 
