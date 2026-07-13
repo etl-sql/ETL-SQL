@@ -151,18 +151,26 @@ signing-key status — the roadmap bullet verbatim.
       No new UI work expected — mark the roadmap bullet shipped if coverage holds.
 
 ### Canary policy rollout — new work (the real remaining Phase 1 bite)
-Today only `RolloutState` (Staged/Active/RolledBack) exists; there is **no** machine-group/cohort/ring
-targeting. This is greenfield.
-- [ ] Data model + migration (dual provider: `.Data` SQLite + `.Migrations.Postgres`) for machine
-      groups / environment cohorts, and a cohort/percentage selector attached to a published policy
-      version. Keep the migration additive (rolling-expand safe).
-- [ ] Retrieval honors cohort assignment: canary machines receive the new version while the rest of the
-      fleet stays on the prior active version; non-canary and unenrolled/standalone nodes are unaffected.
-      Preserve the existing signature/rollback/expiry checks per cohort.
-- [ ] Promote / halt / rollback controls for a canary, with the same signing and rollback guarantees as
-      fleet-wide activation; surface cohort membership + rollout progress in the existing policy-authority
-      admin UI.
+Building on branch `feat/canary-policy-rollout`. `PolicyRolloutState.Canary` + `CanaryCohort`
+(named group OR deterministic/stable/ramp-monotonic percentage) added; a canary is served only to its
+cohort while the fleet keeps `Active`.
+- [x] Data model + migration (dual provider: `.Data` SQLite + `.Migrations.Postgres`) for machine
+      groups (`PolicyMachineEntity.CanaryGroup`) and a cohort/percentage selector on the published
+      version (`PolicyVersions.CanaryGroup/CanaryPercentage`). Additive/rolling-expand safe; convergence
+      green. (slice 1)
+- [x] Retrieval honors cohort assignment: `PolicyDistributionController` serves the canary to a machine
+      whose registered identity/group is in the cohort; everyone else stays on active. Membership decided
+      from the machine's own registration, never caller-supplied. Halt re-issues the active doc with a
+      fresh (later) issuance so cohort machines actually revert (client rejects older issuance). (slice 2)
+- [x] Promote / halt controls with the same signing/rollback guarantees as fleet-wide activation;
+      publish-canary + promote + halt admin API (Admin-gated, audited) and Portal UI (canary card, cohort
+      column, promote/halt row actions). UI verified in the ui-sandbox. (slice 3)
 - [ ] Certification: prove a canary cohort validates new filesystem-path and connection restrictions
       before fleet-wide activation; standalone regression proves unenrolled nodes are untouched.
-- [ ] Governance: emit audit + security events for cohort create/assign/promote/halt; ensure the canary
-      selector cannot be used to silently exempt machines from policy.
+      (Partly covered: slice 2 proves cohort member vs fleet get different documents + halt reverts;
+      still want an explicit standalone-unaffected assertion.)
+- [ ] Governance: **audit done** (PUBLISH/PROMOTE/HALT_CANARY_POLICY, slice 3). Remaining: emit
+      structured **security events** for cohort ops, and a guard/test that the canary selector cannot be
+      used to silently exempt machines from policy.
+- [ ] Docs: administrator guide section on canary rollout (publish → ramp/promote → halt) + reconcile
+      the shipped roadmap bullets (mark Phase 1 items 1–3 done / move to CHANGELOG).
