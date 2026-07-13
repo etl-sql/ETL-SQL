@@ -17,6 +17,45 @@ if (!(Test-Path $ReleaseRoot)) {
     New-Item -ItemType Directory -Path $ReleaseRoot | Out-Null
 }
 
+function Remove-VsixDevArtifacts {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $relativePaths = @(
+        "coverage",
+        "logs",
+        "out\test",
+        "test_output.txt"
+    )
+
+    foreach ($relativePath in $relativePaths) {
+        $path = Join-Path $Root $relativePath
+        if (Test-Path -LiteralPath $path) {
+            Remove-Item -LiteralPath $path -Recurse -Force
+        }
+    }
+}
+
+function Assert-VsixPayload {
+    param([Parameter(Mandatory = $true)][string]$VsixPath)
+
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path -LiteralPath $VsixPath))
+    try {
+        $forbidden = $zip.Entries | Where-Object {
+            $_.FullName -match '^extension/(coverage|logs|out/test)/' -or
+            $_.FullName -eq 'extension/test_output.txt' -or
+            $_.FullName -match '^extension/bin/runtimes/' -or
+            $_.FullName -match '^extension/runtimes/'
+        } | Select-Object -ExpandProperty FullName
+
+        if ($forbidden.Count -gt 0) {
+            throw "VSIX contains forbidden payload entries: $($forbidden -join ', ')"
+        }
+    } finally {
+        $zip.Dispose()
+    }
+}
+
 Push-Location $ExtensionDir
 
 # 1. Install Extension Dependencies
@@ -55,7 +94,9 @@ dotnet publish (Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPlayer\ETL-SQL.Rep
 
 # 4. Package VSIX
 Write-Host "Packaging VSIX..." -ForegroundColor Gray
+Remove-VsixDevArtifacts -Root $ExtensionDir
 npx @vscode/vsce package --out $ReleaseRoot --no-git-tag-version $Version --allow-missing-repository
+Assert-VsixPayload -VsixPath (Join-Path $ReleaseRoot "etl-sql-vscode-$Version.vsix")
 
 Pop-Location
 

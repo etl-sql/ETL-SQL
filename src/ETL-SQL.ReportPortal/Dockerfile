@@ -18,18 +18,20 @@ COPY ["src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj", "ETL-SQL.ReportH
 COPY ["src/ETL-SQL.ReportPlayer/ETL-SQL.ReportPlayer.csproj", "ETL-SQL.ReportPlayer/"]
 COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]
 COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
+COPY ["src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj", "ETL-SQL.ReportPortal.Data/"]
+COPY ["src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj", "ETL-SQL.ReportPortal.Migrations.Postgres/"]
 COPY ["src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj", "ETL-SQL.ReportPortal/"]
 
-RUN dotnet restore "ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj"
+RUN dotnet restore "ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj" -r linux-x64
 
 # Copy the rest of the source
 COPY src/ .
 
 WORKDIR "/src/ETL-SQL.ReportPortal"
-RUN dotnet build "ETL-SQL.ReportPortal.csproj" -c Release -o /app/build
+RUN dotnet build "ETL-SQL.ReportPortal.csproj" -c Release -r linux-x64 --no-restore -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "ETL-SQL.ReportPortal.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ETL-SQL.ReportPortal.csproj" -c Release -r linux-x64 --self-contained false --no-restore -o /app/publish /p:UseAppHost=false /p:PublishSingleFile=false /p:PublishReadyToRun=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app

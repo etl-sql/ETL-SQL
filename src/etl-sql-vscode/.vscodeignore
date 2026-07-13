@@ -28,6 +28,10 @@ ui/index.html
 # Dev/test artifacts that must not ship in the VSIX
 coverage/**
 logs/**
+out/test/**
 test_output.txt
 vitest.config.js
+eslint.config.js
+*.vsix
+etl-sql-vscode-*.vsix
 **/*.log

@@ -18,7 +18,8 @@ COPY ["src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj", "ETL-SQL.ReportB
 COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]
 COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
 
-RUN dotnet restore "ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj"
+RUN dotnet restore "ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" -r linux-x64
+RUN dotnet restore "ETL-SQL.App/ETL-SQL.App.csproj" -r linux-x64
 
 # Copy the rest of the source
 COPY src/ .
@@ -29,12 +30,12 @@ COPY certification-results/ha-large-job-soak-scenarios.json /certification-resul
 COPY certification-results/ha-fault-injection-matrix.json /certification-results/ha-fault-injection-matrix.json
 
 WORKDIR "/src/ETL-SQL.Orchestrator.Service"
-RUN dotnet build "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/build
+RUN dotnet build "ETL-SQL.Orchestrator.Service.csproj" -c Release -r linux-x64 --no-restore -o /app/build
 
 FROM build AS publish
-RUN dotnet publish "ETL-SQL.Orchestrator.Service.csproj" -c Release -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "ETL-SQL.Orchestrator.Service.csproj" -c Release -r linux-x64 --self-contained false --no-restore -o /app/publish /p:UseAppHost=false /p:PublishSingleFile=false /p:PublishReadyToRun=false
 WORKDIR "/src/ETL-SQL.App"
-RUN dotnet publish "ETL-SQL.App.csproj" -c Release -o /app/publish /p:UseAppHost=true
+RUN dotnet publish "ETL-SQL.App.csproj" -c Release -r linux-x64 --self-contained false --no-restore -o /app/publish /p:UseAppHost=true /p:PublishSingleFile=false /p:PublishReadyToRun=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
