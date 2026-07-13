@@ -67,12 +67,13 @@ Findings surfaced during the v0.15.0 release. Full detail in
       least-covered new v0.15.0 code and restore the threshold to **70.0**.
 
 ### Scale-cert performance re-validation
-- [ ] Smoke/standard scale certification was skipped (`-SkipScale`) for the v0.15.0 gate: the
-      single-sample micro-benchmarks tripped their 25% bands unpredictably under concurrent machine
-      load (the failing scenario moved run-to-run on identical code; peak-working-set inflated across
-      unrelated scenarios). Re-run **multi-sample median on a quiescent machine**; if `ExternalSort` /
-      `ExternalAggregate` are genuinely regressed vs the 2026-07-05 baseline, bisect and fix, then
-      re-bless `certification-results/baseline-smoke.json` from the clean run.
+- [x] Re-validated on a quiescent machine (5-sample median): **CONFIRMED regression**, not load noise.
+      `ExternalSort_50000_DESC` +30.5% elapsed (462→603 ms), `ExternalAggregate_100000_10grps` GC pause
+      +48.6% (14.6→21.7 ms) vs the 2026-07-05 baseline. Detail in `Docs/Operations/v0.15.0-performance-results.md`.
+- [ ] **Fix the ExternalSort/spill regression.** Bisect the external-sort / spill path across the
+      v0.15.0 range to pin the cause (starting suspects: `SpillStore` +236 lines, external-operator
+      instrumentation), optimize, then re-bless `certification-results/baseline-smoke.json` from the
+      recovered numbers. Do NOT bless the current (regressed) numbers.
 
 ### Release provenance — gold-standard pre-publish attestation (SECURITY)
 - [x] `release.yml` now attests **before** publish and gates it: `attest-provenance` needs the build
