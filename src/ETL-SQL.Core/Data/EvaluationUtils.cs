@@ -98,27 +98,27 @@ public static class EvaluationUtils
             return a is byte[]? 1 : -1;
         }
 
-        string sa = a?.ToString() ?? "";
-        string sb = b?.ToString() ?? "";
+        // Fast path: same runtime type that compares identically to the decimal round-trip below
+        // (integers and decimals — runtime numerics are decimal). The sort/merge and aggregate hot
+        // paths call this O(n log n) times, so skipping the two ToString allocations + two
+        // decimal.Parse per comparison is significant. double/float and string are intentionally
+        // excluded so their existing (string/decimal-parse) semantics are preserved.
+        if (a is decimal ma && b is decimal mb) return ma.CompareTo(mb);
+        if (a is long la && b is long lb) return la.CompareTo(lb);
+        if (a is int ia && b is int ib) return ia.CompareTo(ib);
 
-        decimal da, db;
-        try
-        {
-            // Attempt to parse as decimal for precision, allow scientific notation
-            da = decimal.Parse(a?.ToString() ?? "0", System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
-            db = decimal.Parse(b?.ToString() ?? "0", System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
+        // Numeric comparison via decimal (handles mixed numeric types and numeric-looking strings).
+        // TryParse instead of Parse-in-try/catch avoids throwing and catching a FormatException on
+        // every non-numeric comparison (e.g. a plain string sort) — an expensive per-call cost.
+        if (decimal.TryParse(a?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da)
+            && decimal.TryParse(b?.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db))
             return da.CompareTo(db);
-        }
-        catch
-        {
-            // Fallback to date or string comparison
-        }
 
         if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb))
             return dta.CompareTo(dtb);
 
         var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        return string.Compare(sa, sb, comparison);
+        return string.Compare(a?.ToString() ?? "", b?.ToString() ?? "", comparison);
     }
 
     public static bool TryToDateTime(object? val, out DateTime dt)
