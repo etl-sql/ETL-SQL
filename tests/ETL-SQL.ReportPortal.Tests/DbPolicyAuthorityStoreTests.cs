@@ -57,4 +57,37 @@ public sealed class DbPolicyAuthorityStoreTests : IDisposable
         Assert.Single(rows, r => r.RolloutState == nameof(PolicyRolloutState.Active)); // one active
         Assert.Single(rows, r => r.RolloutState == nameof(PolicyRolloutState.Superseded));
     }
+
+    [Fact]
+    public async Task Canary_CohortPersists_AndPromoteHaltRoundTripThroughTheDatabase()
+    {
+        await using var db = await NewDbAsync();
+        using var signer = new RsaPolicyEnvelopeSigner(RSA.Create(2048));
+        var svc = new PolicyAuthorityService(new DbPolicyAuthorityStore(db), signer);
+
+        await svc.PublishAsync(Doc(), "acme", "prod", "1.0.0", "alice", null, DateTimeOffset.UtcNow.AddDays(30));
+        await svc.PublishCanaryAsync(Doc(), "acme", "prod", "1.1.0-canary", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30), CanaryCohort.ForPercentage(25));
+
+        // The cohort survives the EF round-trip, and the canary does not become the fleet active.
+        var canary = await svc.GetCanaryVersionAsync("acme", "prod");
+        Assert.Equal(25, canary!.Canary!.Percentage);
+        Assert.Equal("1.0.0", (await svc.GetActiveVersionAsync("acme", "prod"))!.PolicyVersion);
+        var canaryRow = await db.PolicyVersions.SingleAsync(x => x.PolicyVersion == "1.1.0-canary");
+        Assert.Equal(25, canaryRow.CanaryPercentage);
+        Assert.Null(canaryRow.CanaryGroup);
+
+        // Promote makes it fleet-wide; a fresh canary can then be halted back through the DB store.
+        await svc.PromoteCanaryAsync("acme", "prod", "1.1.0-canary");
+        Assert.Equal("1.1.0-canary", (await svc.GetActiveVersionAsync("acme", "prod"))!.PolicyVersion);
+        Assert.Null(await svc.GetCanaryVersionAsync("acme", "prod"));
+
+        await svc.PublishCanaryAsync(Doc(), "acme", "prod", "1.2.0-canary", "alice", null,
+            DateTimeOffset.UtcNow.AddDays(30), CanaryCohort.ForGroup("ring0"));
+        await svc.HaltCanaryAsync("acme", "prod", "1.2.0-canary", "carol", null);
+        Assert.Null(await svc.GetCanaryVersionAsync("acme", "prod"));
+        var halted = await db.PolicyVersions.SingleAsync(x => x.PolicyVersion == "1.2.0-canary");
+        Assert.Equal(nameof(PolicyRolloutState.RolledBack), halted.RolloutState);
+        Assert.Equal("ring0", halted.CanaryGroup);
+    }
 }

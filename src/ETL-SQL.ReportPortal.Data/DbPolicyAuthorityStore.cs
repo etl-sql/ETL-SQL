@@ -24,6 +24,18 @@ public sealed class DbPolicyAuthorityStore(PortalDbContext db) : IPolicyAuthorit
         return row is null ? null : ToDomain(row);
     }
 
+    public async Task<PublishedPolicyVersion?> GetCanaryAsync(
+        string tenant, string environment, CancellationToken ct = default)
+    {
+        var row = await db.PolicyVersions
+            .Where(x => x.Tenant == tenant && x.Environment == environment
+                && x.RolloutState == nameof(PolicyRolloutState.Canary))
+            .OrderByDescending(x => x.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+        return row is null ? null : ToDomain(row);
+    }
+
     public async Task<IReadOnlyList<PublishedPolicyVersion>> ListAsync(
         string tenant, string environment, CancellationToken ct = default)
     {
@@ -50,7 +62,9 @@ public sealed class DbPolicyAuthorityStore(PortalDbContext db) : IPolicyAuthorit
             SupersededVersion = version.SupersededVersion,
             RolloutState = version.RolloutState.ToString(),
             SignedEnvelopeJson = version.SignedEnvelopeJson,
-            PublishedAtUtc = version.PublishedAtUtc
+            PublishedAtUtc = version.PublishedAtUtc,
+            CanaryGroup = version.Canary?.Group,
+            CanaryPercentage = version.Canary?.Percentage
         });
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
@@ -71,5 +85,10 @@ public sealed class DbPolicyAuthorityStore(PortalDbContext db) : IPolicyAuthorit
     private static PublishedPolicyVersion ToDomain(PolicyVersionEntity x) => new(
         x.Tenant, x.Environment, x.PolicyVersion, x.PolicyHash, x.IssuedAtUtc, x.ExpiresAtUtc,
         x.Author, x.Reviewer, x.SupersededVersion,
-        Enum.Parse<PolicyRolloutState>(x.RolloutState), x.SignedEnvelopeJson, x.PublishedAtUtc);
+        Enum.Parse<PolicyRolloutState>(x.RolloutState), x.SignedEnvelopeJson, x.PublishedAtUtc)
+    {
+        Canary = x.CanaryGroup is null && x.CanaryPercentage is null
+            ? null
+            : new CanaryCohort { Group = x.CanaryGroup, Percentage = x.CanaryPercentage }
+    };
 }

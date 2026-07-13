@@ -516,6 +516,13 @@ public class PolicyVersionEntity
     public string RolloutState { get; set; } = "Active";
     public string SignedEnvelopeJson { get; set; } = "{}";
     public DateTimeOffset PublishedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>Set only for a Canary version: the named machine group it targets. Mutually exclusive
+    /// with <see cref="CanaryPercentage"/>.</summary>
+    public string? CanaryGroup { get; set; }
+    /// <summary>Set only for a Canary version: the percentage (1–100) of the fleet it targets by stable
+    /// machine-identity hash. Mutually exclusive with <see cref="CanaryGroup"/>.</summary>
+    public int? CanaryPercentage { get; set; }
 }
 
 /// <summary>
@@ -539,6 +546,9 @@ public class PolicyMachineEntity
     public string? RevokedReason { get; set; }
     public DateTimeOffset RegisteredAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? LastSeenAtUtc { get; set; }
+    /// <summary>Optional canary group label. A canary version targeting this group name is served to
+    /// this machine while the rest of the fleet stays on the active version.</summary>
+    public string? CanaryGroup { get; set; }
 }
 
 // ── Dataset Refresh Jobs ──────────────────────────────────────────────────────

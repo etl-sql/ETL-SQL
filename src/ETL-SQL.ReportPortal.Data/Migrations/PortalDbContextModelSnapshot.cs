@@ -415,6 +415,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CanaryGroup")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("ClientCertificateThumbprint")
                         .HasColumnType("TEXT");
 
@@ -468,6 +471,12 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<string>("Author")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("CanaryGroup")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("CanaryPercentage")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Environment")
                         .IsRequired()
@@ -1946,6 +1955,11 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Navigation("FolderAcls");
 
                     b.Navigation("UserGroups");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalSharedConnection", b =>
+                {
+                    b.Navigation("Acls");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.PortalUser", b =>

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -11,7 +12,73 @@ public enum PolicyRolloutState
     Staged,
     Active,
     Superseded,
-    RolledBack
+    RolledBack,
+
+    /// <summary>A canary version: served only to machines in its <see cref="CanaryCohort"/> while the
+    /// rest of the tenant/environment keeps running the <see cref="Active"/> version. Promotion turns
+    /// it into the fleet-wide active version; halting rolls it back and reverts its machines.</summary>
+    Canary
+}
+
+/// <summary>
+/// Targets a canary policy version at a subset of a tenant/environment's enrolled machines: either a
+/// named machine <see cref="Group"/> or a <see cref="Percentage"/> of the fleet chosen by a stable,
+/// deterministic hash of the machine identity. Exactly one selector is set. Percentage membership is
+/// stable across polls and monotonic as the percentage ramps up — a machine that is in at N% stays in
+/// at any M% ≥ N — so a canary machine never flaps back to the fleet-wide version on its own.
+/// </summary>
+public sealed record CanaryCohort
+{
+    public string? Group { get; init; }
+    public int? Percentage { get; init; }
+
+    public static CanaryCohort ForGroup(string group)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(group);
+        return new CanaryCohort { Group = group.Trim() };
+    }
+
+    public static CanaryCohort ForPercentage(int percentage)
+    {
+        if (percentage is < 1 or > 100)
+            throw new ArgumentOutOfRangeException(
+                nameof(percentage), percentage, "Canary percentage must be between 1 and 100.");
+        return new CanaryCohort { Percentage = percentage };
+    }
+
+    /// <summary>Rejects a cohort that does not name exactly one selector, or an out-of-range percentage.</summary>
+    public void Validate()
+    {
+        var hasGroup = !string.IsNullOrWhiteSpace(Group);
+        var hasPercentage = Percentage is not null;
+        if (hasGroup == hasPercentage)
+            throw new PolicyAuthorityException(
+                "A canary cohort must set exactly one of group or percentage.");
+        if (hasPercentage && Percentage is < 1 or > 100)
+            throw new PolicyAuthorityException("Canary percentage must be between 1 and 100.");
+    }
+
+    /// <summary>True when the given machine belongs to this cohort. Group cohorts match the machine's
+    /// assigned group label (case-insensitive); percentage cohorts match when the machine's stable
+    /// bucket (0–99) is below the target percentage.</summary>
+    public bool Includes(string machineId, string? machineGroup)
+    {
+        if (!string.IsNullOrWhiteSpace(Group))
+            return !string.IsNullOrWhiteSpace(machineGroup)
+                && string.Equals(machineGroup, Group, StringComparison.OrdinalIgnoreCase);
+        if (Percentage is not null)
+            return Bucket(machineId) < Percentage.Value;
+        return false;
+    }
+
+    /// <summary>Deterministic 0–99 bucket from the machine identity. Uses the leading bytes of a
+    /// SHA-256 digest so the assignment is stable, uniform, and independent of enrollment order.</summary>
+    internal static int Bucket(string machineId)
+    {
+        Span<byte> hash = stackalloc byte[32];
+        SHA256.HashData(Encoding.UTF8.GetBytes(machineId ?? ""), hash);
+        return (int)(BinaryPrimitives.ReadUInt64BigEndian(hash) % 100);
+    }
 }
 
 /// <summary>
@@ -31,7 +98,12 @@ public sealed record PublishedPolicyVersion(
     string? SupersededVersion,
     PolicyRolloutState RolloutState,
     string SignedEnvelopeJson,
-    DateTimeOffset PublishedAtUtc);
+    DateTimeOffset PublishedAtUtc)
+{
+    /// <summary>Set only when <see cref="RolloutState"/> is <see cref="PolicyRolloutState.Canary"/>:
+    /// the subset of machines this version targets. Null for fleet-wide versions.</summary>
+    public CanaryCohort? Canary { get; init; }
+}
 
 /// <summary>
 /// Signs policy envelopes using a key held by reference in an external key store (OS store / HSM).
@@ -121,6 +193,8 @@ public sealed class DisabledPolicyEnvelopeSigner : IPolicyEnvelopeSigner
 public interface IPolicyAuthorityStore
 {
     Task<PublishedPolicyVersion?> GetActiveAsync(string tenant, string environment, CancellationToken ct = default);
+    /// <summary>The in-progress canary version for a tenant/environment, or null when none is running.</summary>
+    Task<PublishedPolicyVersion?> GetCanaryAsync(string tenant, string environment, CancellationToken ct = default);
     Task<IReadOnlyList<PublishedPolicyVersion>> ListAsync(string tenant, string environment, CancellationToken ct = default);
     Task AppendAsync(PublishedPolicyVersion version, CancellationToken ct = default);
     Task SetRolloutStateAsync(string tenant, string environment, string policyVersion, PolicyRolloutState state, CancellationToken ct = default);
@@ -177,17 +251,7 @@ public sealed class PolicyAuthorityService(
         // one, so a client that rejects older issuance times always accepts the newer version.
         var issuedAt = active is null ? now : Later(now, active.IssuedAtUtc.AddMilliseconds(1));
 
-        var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(OrganizationPolicySchema.Serialize(document)));
-        var envelope = new SignedOrganizationPolicyEnvelope
-        {
-            Tenant = tenant,
-            PolicyVersion = policyVersion,
-            IssuedAtUtc = issuedAt,
-            ExpiresAtUtc = expiresAtUtc,
-            PolicyPayload = payload,
-            Signature = "" // set below
-        };
-        envelope = envelope with { Signature = signer.Sign(envelope) };
+        var envelope = BuildSignedEnvelope(document, tenant, policyVersion, issuedAt, expiresAtUtc);
 
         var version = new PublishedPolicyVersion(
             tenant, environment, policyVersion,
@@ -246,6 +310,150 @@ public sealed class PolicyAuthorityService(
         string tenant, string environment, CancellationToken ct = default) =>
         store.GetActiveAsync(tenant, environment, ct);
 
+    public Task<PublishedPolicyVersion?> GetCanaryVersionAsync(
+        string tenant, string environment, CancellationToken ct = default) =>
+        store.GetCanaryAsync(tenant, environment, ct);
+
+    // ── Canary rollout ────────────────────────────────────────────────────────
+    // A canary version is published alongside — not over — the active version and served only to its
+    // cohort. The active version is never superseded by a canary, so the fleet is unaffected until the
+    // canary is promoted. Halt reverts the cohort by re-issuing the active document (see HaltCanaryAsync).
+
+    /// <summary>
+    /// Publishes a new version targeted at a canary <paramref name="cohort"/> while the fleet stays on
+    /// the current active version. Requires an existing active baseline to revert to and refuses to
+    /// start a second canary while one is already in progress. Issues strictly later than the active
+    /// version so cohort machines accept it and a later promote keeps issuance moving forward.
+    /// </summary>
+    public async Task<PublishedPolicyVersion> PublishCanaryAsync(
+        OrganizationPolicyDocument document,
+        string tenant,
+        string environment,
+        string policyVersion,
+        string author,
+        string? reviewer,
+        DateTimeOffset expiresAtUtc,
+        CanaryCohort cohort,
+        CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(tenant);
+        ArgumentException.ThrowIfNullOrWhiteSpace(environment);
+        ArgumentException.ThrowIfNullOrWhiteSpace(policyVersion);
+        ArgumentException.ThrowIfNullOrWhiteSpace(author);
+        ArgumentNullException.ThrowIfNull(cohort);
+        cohort.Validate();
+
+        var validation = OrganizationPolicySchema.Validate(document);
+        if (!validation.IsValid)
+            throw new PolicyAuthorityException("Invalid policy document: " + string.Join("; ", validation.Errors));
+
+        var now = _clock();
+        if (expiresAtUtc <= now)
+            throw new PolicyAuthorityException("Policy expiry must be in the future.");
+
+        var existing = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
+        if (existing.Any(v => string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal)))
+            throw new PolicyAuthorityException($"Policy version '{policyVersion}' already exists for {tenant}/{environment}.");
+        if (existing.Any(v => v.RolloutState == PolicyRolloutState.Canary))
+            throw new PolicyAuthorityException(
+                $"A canary is already in progress for {tenant}/{environment}; promote or halt it before starting another.");
+
+        var active = existing.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active)
+            ?? throw new PolicyAuthorityException(
+                $"A canary needs an active fleet-wide policy to fall back to; publish an active version for {tenant}/{environment} first.");
+
+        var issuedAt = Later(now, active.IssuedAtUtc.AddMilliseconds(1));
+        var envelope = BuildSignedEnvelope(document, tenant, policyVersion, issuedAt, expiresAtUtc);
+        var version = new PublishedPolicyVersion(
+            tenant, environment, policyVersion, ComputeHash(document), issuedAt, expiresAtUtc,
+            author, reviewer, active.PolicyVersion, PolicyRolloutState.Canary,
+            JsonSerializer.Serialize(envelope, JsonOptions), now)
+        {
+            Canary = cohort
+        };
+
+        // Deliberately do NOT supersede the active version: the fleet keeps running it.
+        await store.AppendAsync(version, ct).ConfigureAwait(false);
+        return version;
+    }
+
+    /// <summary>
+    /// Promotes a canary to the fleet-wide active version, superseding the previous active. The canary
+    /// already issued later than that active version at publish time, so clients accept it fleet-wide.
+    /// </summary>
+    public async Task<PublishedPolicyVersion> PromoteCanaryAsync(
+        string tenant, string environment, string policyVersion, CancellationToken ct = default)
+    {
+        var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
+        var canary = versions.FirstOrDefault(v =>
+            string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal))
+            ?? throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' was not found for {tenant}/{environment}.");
+        if (canary.RolloutState != PolicyRolloutState.Canary)
+            throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' is {canary.RolloutState}; only a canary version can be promoted.");
+
+        var active = versions.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active);
+        if (active is not null && canary.IssuedAtUtc <= active.IssuedAtUtc)
+            throw new PolicyAuthorityException(
+                $"Canary '{policyVersion}' was issued before the current active version '{active.PolicyVersion}' " +
+                "and would be rejected by clients; halt it and start a fresh canary.");
+
+        // Activate first so retrieval never sees a gap with no active policy.
+        await store.SetRolloutStateAsync(tenant, environment, policyVersion,
+            PolicyRolloutState.Active, ct).ConfigureAwait(false);
+        if (active is not null)
+            await store.SetRolloutStateAsync(tenant, environment, active.PolicyVersion,
+                PolicyRolloutState.Superseded, ct).ConfigureAwait(false);
+        return canary with { RolloutState = PolicyRolloutState.Active };
+    }
+
+    /// <summary>
+    /// Halts a canary and reverts its cohort. Cohort machines hold an envelope issued later than the
+    /// fleet active and would reject an older issuance (client rollback protection), so this re-issues
+    /// the active document as a fresh active version issued later than the canary — halted machines
+    /// then revert on their next poll. The canary is recorded as <see cref="PolicyRolloutState.RolledBack"/>.
+    /// </summary>
+    public async Task<PublishedPolicyVersion> HaltCanaryAsync(
+        string tenant, string environment, string policyVersion,
+        string author, string? reviewer, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(author);
+        var versions = await store.ListAsync(tenant, environment, ct).ConfigureAwait(false);
+        var canary = versions.FirstOrDefault(v =>
+            string.Equals(v.PolicyVersion, policyVersion, StringComparison.Ordinal))
+            ?? throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' was not found for {tenant}/{environment}.");
+        if (canary.RolloutState != PolicyRolloutState.Canary)
+            throw new PolicyAuthorityException(
+                $"Policy version '{policyVersion}' is {canary.RolloutState}; only a canary version can be halted.");
+
+        var active = versions.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active)
+            ?? throw new PolicyAuthorityException(
+                $"No active fleet-wide policy exists for {tenant}/{environment} to revert canary machines to.");
+
+        var now = _clock();
+        if (active.ExpiresAtUtc <= now)
+            throw new PolicyAuthorityException(
+                $"The active policy for {tenant}/{environment} has expired; publish a fresh active version before halting the canary.");
+
+        var issuedAt = Later(now, canary.IssuedAtUtc.AddMilliseconds(1));
+        var reissuedVersion = $"{active.PolicyVersion}+halt.{now.UtcDateTime:yyyyMMddHHmmssfff}";
+        var document = ReadDocument(active);
+        var envelope = BuildSignedEnvelope(document, tenant, reissuedVersion, issuedAt, active.ExpiresAtUtc);
+        var republished = new PublishedPolicyVersion(
+            tenant, environment, reissuedVersion, ComputeHash(document), issuedAt, active.ExpiresAtUtc,
+            author, reviewer, active.PolicyVersion, PolicyRolloutState.Active,
+            JsonSerializer.Serialize(envelope, JsonOptions), now);
+
+        await store.AppendAsync(republished, ct).ConfigureAwait(false);
+        await store.SetRolloutStateAsync(tenant, environment, active.PolicyVersion,
+            PolicyRolloutState.Superseded, ct).ConfigureAwait(false);
+        await store.SetRolloutStateAsync(tenant, environment, policyVersion,
+            PolicyRolloutState.RolledBack, ct).ConfigureAwait(false);
+        return republished;
+    }
+
     /// <summary>Returns the active signed envelope for a tenant/environment, for a machine to retrieve.</summary>
     public async Task<SignedOrganizationPolicyEnvelope?> RetrieveActiveEnvelopeAsync(
         string tenant, string environment, CancellationToken ct = default)
@@ -270,10 +478,7 @@ public sealed class PolicyAuthorityService(
             string.Equals(v.PolicyVersion, targetPolicyVersion, StringComparison.Ordinal))
             ?? throw new PolicyAuthorityException($"Rollback target '{targetPolicyVersion}' not found.");
 
-        var envelope = JsonSerializer.Deserialize<SignedOrganizationPolicyEnvelope>(target.SignedEnvelopeJson, JsonOptions)
-            ?? throw new PolicyAuthorityException("Rollback target envelope could not be read.");
-        var document = OrganizationPolicySchema.ParseJson(
-            Encoding.UTF8.GetString(Convert.FromBase64String(envelope.PolicyPayload)));
+        var document = ReadDocument(target);
 
         var abandoned = versions.FirstOrDefault(v => v.RolloutState == PolicyRolloutState.Active);
         var republished = await PublishAsync(document, tenant, environment, newPolicyVersion,
@@ -284,6 +489,31 @@ public sealed class PolicyAuthorityService(
             await store.SetRolloutStateAsync(tenant, environment, abandoned.PolicyVersion,
                 PolicyRolloutState.RolledBack, ct).ConfigureAwait(false);
         return republished with { RolloutState = PolicyRolloutState.Active };
+    }
+
+    private SignedOrganizationPolicyEnvelope BuildSignedEnvelope(
+        OrganizationPolicyDocument document, string tenant, string policyVersion,
+        DateTimeOffset issuedAt, DateTimeOffset expiresAtUtc)
+    {
+        var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(OrganizationPolicySchema.Serialize(document)));
+        var envelope = new SignedOrganizationPolicyEnvelope
+        {
+            Tenant = tenant,
+            PolicyVersion = policyVersion,
+            IssuedAtUtc = issuedAt,
+            ExpiresAtUtc = expiresAtUtc,
+            PolicyPayload = payload,
+            Signature = "" // set below
+        };
+        return envelope with { Signature = signer.Sign(envelope) };
+    }
+
+    private static OrganizationPolicyDocument ReadDocument(PublishedPolicyVersion version)
+    {
+        var envelope = JsonSerializer.Deserialize<SignedOrganizationPolicyEnvelope>(version.SignedEnvelopeJson, JsonOptions)
+            ?? throw new PolicyAuthorityException("Stored policy envelope could not be read.");
+        return OrganizationPolicySchema.ParseJson(
+            Encoding.UTF8.GetString(Convert.FromBase64String(envelope.PolicyPayload)));
     }
 
     private static DateTimeOffset Later(DateTimeOffset a, DateTimeOffset b) => a >= b ? a : b;
@@ -305,6 +535,13 @@ public sealed class InMemoryPolicyAuthorityStore : IPolicyAuthorityStore
         var list = _versions.GetValueOrDefault(Key(tenant, environment));
         lock (Gate(tenant, environment))
             return Task.FromResult(list?.LastOrDefault(v => v.RolloutState == PolicyRolloutState.Active));
+    }
+
+    public Task<PublishedPolicyVersion?> GetCanaryAsync(string tenant, string environment, CancellationToken ct = default)
+    {
+        var list = _versions.GetValueOrDefault(Key(tenant, environment));
+        lock (Gate(tenant, environment))
+            return Task.FromResult(list?.LastOrDefault(v => v.RolloutState == PolicyRolloutState.Canary));
     }
 
     public Task<IReadOnlyList<PublishedPolicyVersion>> ListAsync(string tenant, string environment, CancellationToken ct = default)
