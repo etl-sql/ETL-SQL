@@ -74,9 +74,8 @@ Findings surfaced during the v0.15.0 release. Full detail in
       re-bless `certification-results/baseline-smoke.json` from the clean run.
 
 ### Release provenance — gold-standard pre-publish attestation (SECURITY)
-- [ ] v0.15.0 shipped **without** SLSA provenance: the `attest-provenance` job ran before publish and
-      failed downloading a still-draft release, and (being a dependency of publish) skipped publishing.
-      Interim fix reordered it after publish and removed `continue-on-error` so failures are visible.
-      **Proper fix:** attest the build jobs' `upload-artifact` outputs *before* publish and keep the
-      release a **draft** until provenance succeeds (artifacts never public without provenance); a small
-      finalize job then flips `--draft=false`. Flagged by the commit security review.
+- [x] `release.yml` now attests **before** publish and gates it: `attest-provenance` needs the build
+      jobs, downloads the still-**draft** release assets (the job carries `contents: write` since a
+      draft is invisible with `contents: read` — that was the original "release not found"), attests
+      them, and `publish-release` needs `attest-provenance`. A provenance failure fails the workflow
+      and leaves the release a **draft**, so no artifact is ever public without provenance.

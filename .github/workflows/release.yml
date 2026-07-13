@@ -208,24 +208,22 @@ jobs:
         shell: bash
         run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
-  # 6. Build-provenance attestation (SLSA), AFTER publish so `gh release download` can fetch the
-  # release assets. Free/keyless (Sigstore via GitHub OIDC) — no code-signing cert. NOT
-  # continue-on-error: a provenance failure fails the workflow (visible) rather than silently
-  # shipping a release without provenance.
-  # SECURITY TODO(v0.16.0): move to gold-standard PRE-publish attestation — attest the build jobs'
-  # upload-artifact outputs and keep the release a draft until provenance succeeds, so artifacts are
-  # never public without provenance. Tracked in Docs/Operations/v0.15.0-flaky-tests.md.
+  # 5. Build-provenance attestation (SLSA) — runs BEFORE publish and gates it, so no artifact is ever
+  # public without provenance. Downloads the still-draft release assets (a draft is invisible with
+  # contents: read, so this job needs contents: write) and attests them; a provenance failure fails
+  # the workflow and leaves the release a draft. Free/keyless (Sigstore via GitHub OIDC) — no cert.
   #   verify: gh attestation verify <file> --repo <owner>/<repo>
+  # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    needs: publish-release
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
       attestations: write   # write the attestation to the repository
-      contents: read
+      contents: write       # required to read/download the still-draft release
     steps:
-      - name: Download published release assets
+      - name: Download draft release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -233,16 +231,16 @@ jobs:
           gh release download "$TAG_NAME" --repo "$GITHUB_REPOSITORY" --dir dist \
             --pattern '*.zip' --pattern '*.msi' --pattern '*.deb' \
             --pattern '*.dmg' --pattern '*.vsix'
-      - name: Attest published artifacts
+      - name: Attest draft artifacts
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: 'dist/*'
 
-  # 5. Publish the GitHub Release (un-draft) once every platform build has uploaded its artifacts.
-  # Provenance is attached afterward and is best-effort, so it never blocks publishing.
+  # 6. Publish the GitHub Release (un-draft) only after provenance is attached, so the artifacts are
+  # never public without provenance.
   publish-release:
     name: Publish GitHub Release
-    needs: [build-windows, build-linux, build-macos]
+    needs: attest-provenance
     runs-on: ubuntu-latest
     steps:
       - name: Publish draft release
