@@ -12,6 +12,14 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+**Central Security Events**
+- Added a versioned, vendor-neutral security-event contract with correlated policy denials, lifecycle failures, override attempts, enrollment changes, and resource-limit violations across every host.
+- Added a bounded durable local outbox, acknowledgement-based HTTPS delivery using enrolled machine identity, signed-policy severity filtering, bootstrap OS/file sinks, delivery diagnostics, and optional fail-closed health thresholds.
+- Added fault-injection coverage for collector and acknowledgement failures, corrupt state, storage pressure, crash recovery, redaction, and enforcement independence from monitoring availability.
+- Documented the collector protocol and example Splunk CIM, Elastic ECS, and Microsoft Sentinel ASIM field mappings.
+
 ## [0.15.0] — 2026-07-12
 
 ### Added

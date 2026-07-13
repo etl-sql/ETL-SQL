@@ -24,8 +24,8 @@ release begins.
 
 ### Completion gates
 - [x] Fault-injection tests cover collector outage, duplicate delivery, acknowledgement loss, corrupt outbox state, disk pressure, process crash, redaction, and recovery.
-- [ ] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
-- [ ] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
+- [x] A denial is blocked first and then reported; no enforcement decision depends on successful remote logging unless fail-closed monitoring is explicitly enabled.
+- [x] Documentation includes example mappings for common SIEM products without coupling the core event contract to one vendor.
 
 ---
 

@@ -43,6 +43,30 @@ public sealed class SecurityEventRuntimeTests
     }
 
     [Fact]
+    public void EnforcementBoundary_RemainsBlockedWhenMonitoringSinkFails()
+    {
+        var droppedBefore = SecurityEventRuntime.GetDiagnostics().DroppedCount;
+        using var scope = SecurityEventRuntime.UseSinkForScope(new ThrowingSink());
+        var snapshot = Snapshot("corr-boundary") with
+        {
+            ExecutionMode = ScriptExecutionMode.Remote,
+            GovernedValues = new Dictionary<string, string?>
+            {
+                ["Security:RemoteExecutionMode"] = "Disabled"
+            }
+        };
+
+        var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+            OperationPolicyBoundary.EnforceRemoteExecutionMode(snapshot));
+
+        Assert.False(denied.Decision.IsAllowed);
+        Assert.Equal("corr-boundary", denied.Decision.CorrelationId);
+        Assert.Contains("remote execution", denied.Decision.Reason,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(SecurityEventRuntime.GetDiagnostics().DroppedCount > droppedBefore);
+    }
+
+    [Fact]
     public void Deny_ClassifiesPolicyAvailabilityAndResourceLimitEvents()
     {
         var sink = new RecordingSink();
