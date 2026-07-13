@@ -28,16 +28,18 @@ namespace ETL_SQL.Tests.Analysis
         [Fact]
         public async Task Linter_AnalyzeAsync_RunsIndependentRulesConcurrently()
         {
+            // Deterministic concurrency check: both rules record their in-flight overlap via a shared
+            // tracker, so the linter dispatching them concurrently is proven by max-observed == 2 — no
+            // wall-clock threshold that flakes when a loaded CI thread pool is slow to grant threads.
+            var tracker = new ConcurrencyTracker();
             var linter = new Linter();
-            linter.AddRule(new DelayedLintRule("first", 150));
-            linter.AddRule(new DelayedLintRule("second", 150));
+            linter.AddRule(new DelayedLintRule("first", 100, tracker));
+            linter.AddRule(new DelayedLintRule("second", 100, tracker));
 
-            var startedAt = DateTimeOffset.UtcNow;
             var results = await linter.AnalyzeAsync(Parse("SELECT 1;"), new DefaultLintContext());
-            var elapsed = DateTimeOffset.UtcNow - startedAt;
 
             Assert.Equal(2, results.Count);
-            Assert.True(elapsed < TimeSpan.FromMilliseconds(275), $"Lint rules did not run concurrently. Elapsed: {elapsed.TotalMilliseconds}ms");
+            Assert.True(tracker.Max == 2, $"Lint rules did not run concurrently. Max in-flight: {tracker.Max}");
         }
 
         [Fact]
@@ -471,11 +473,13 @@ CREATE PAGE Overview AS DASHBOARD (
     {
         private readonly string _name;
         private readonly int _delayMs;
+        private readonly ConcurrencyTracker? _tracker;
 
-        public DelayedLintRule(string name, int delayMs)
+        public DelayedLintRule(string name, int delayMs, ConcurrencyTracker? tracker = null)
         {
             _name = name;
             _delayMs = delayMs;
+            _tracker = tracker;
         }
 
         public string Name => _name;
@@ -483,9 +487,37 @@ CREATE PAGE Overview AS DASHBOARD (
 
         public async Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
-            await Task.Delay(_delayMs);
+            _tracker?.Enter();
+            try
+            {
+                await Task.Delay(_delayMs);
+            }
+            finally
+            {
+                _tracker?.Exit();
+            }
             return new[] { new LintResult { RuleName = Name, Severity = LintSeverity.Info, Message = Name } };
         }
+    }
+
+    // Records the maximum number of rules observed running at the same time, so a concurrency test can
+    // assert overlap deterministically instead of via a wall-clock elapsed-time threshold.
+    internal sealed class ConcurrencyTracker
+    {
+        private int _current;
+        private int _max;
+
+        public int Max => System.Threading.Volatile.Read(ref _max);
+
+        public void Enter()
+        {
+            var current = System.Threading.Interlocked.Increment(ref _current);
+            int observed;
+            while (current > (observed = System.Threading.Volatile.Read(ref _max)))
+                System.Threading.Interlocked.CompareExchange(ref _max, current, observed);
+        }
+
+        public void Exit() => System.Threading.Interlocked.Decrement(ref _current);
     }
 
     internal sealed class ThrowingLintRule : ILintRule
