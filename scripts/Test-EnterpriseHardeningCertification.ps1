@@ -4,10 +4,11 @@
 
 .DESCRIPTION
     This is the short, repeatable evidence lane for enterprise policy and monitoring closeout. It
-    exercises enrollment, signed retrieval and cache recovery, operation boundaries, security-event
-    delivery, path/link race guards, DNS rebinding and redirect controls, connector aliases,
-    standalone behavior, remote policy/vault recovery, and Portal HTTP transport paths. Run it on
-    Windows and Linux before publishing the release evidence.
+    exercises enrollment, signed retrieval and cache recovery, executable host bootstrap, scheduled
+    and spawned runners, parallel policy propagation, operation boundaries, security-event delivery,
+    path/link race guards, DNS rebinding and redirect controls, connector aliases, standalone
+    behavior, remote policy/vault recovery, and Portal HTTP transport paths. Run it on Windows and
+    Linux before publishing the release evidence.
 #>
 [CmdletBinding()]
 param(
@@ -129,7 +130,7 @@ $testArgsCommon = @(
     'test',
     'tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj',
     '--filter',
-    'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests',
+    'FullyQualifiedName~ConnectorPolicyEnforcementTests|FullyQualifiedName~RestApiTests|FullyQualifiedName~SharePointAndADConnectorTests|FullyQualifiedName~SecretProviderTests|FullyQualifiedName~OrganizationPolicySourceTests|FullyQualifiedName~OrganizationPolicyCacheTests|FullyQualifiedName~OrganizationPolicySchemaTests|FullyQualifiedName~GovernanceRecoveryTests|FullyQualifiedName~GovernanceEnforcementAuditTests|FullyQualifiedName~EnterpriseEnrollmentTests|FullyQualifiedName~EnterprisePolicyRuntimeTests|FullyQualifiedName~EnterpriseHostCertificationTests|FullyQualifiedName~ExecutionSnapshotPropagationTests|FullyQualifiedName~ProcessJobExecutorChaosTests|FullyQualifiedName~PolicyRefreshBypassTests|FullyQualifiedName~FileSystemPolicyAuthorizerTests|FullyQualifiedName~FileSystemPolicyEnforcementTests|FullyQualifiedName~FileConnectorWriteBoundaryTests|FullyQualifiedName~MutationGuardrailEnforcementTests|FullyQualifiedName~ResourceCeilingEnforcementTests|FullyQualifiedName~StandaloneRegressionTests|FullyQualifiedName~SecurityEventContractTests|FullyQualifiedName~SecurityEventRuntimeTests|FullyQualifiedName~SecurityEventOutboxTests|FullyQualifiedName~SecurityEventTransportTests|FullyQualifiedName~SecurityEventHealthGateTests|FullyQualifiedName~BootstrapSecurityEventSinkTests|FullyQualifiedName~StmtFileSystemTests',
     '--logger',
     'trx;LogFileName=enterprise-hardening.trx',
     '--results-directory',

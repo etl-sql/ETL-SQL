@@ -38,6 +38,7 @@ Result on 2026-06-01: engine test project 3,015 passed; language server 71 passe
 
 CI runs `Test-EnterpriseHardeningCertification.ps1` on `windows-latest` and `ubuntu-latest`. The
 lane certifies enrollment, signed policy retrieval and cache recovery, dynamic policy refresh,
+executable host bootstrap, scheduled and spawned runners, parallel policy propagation,
 operation-boundary enforcement, standalone behavior, and durable security-event delivery. It also
 keeps the existing path/link, DNS/redirect, connector-alias, vault-recovery, and Portal policy API
 coverage in the same evidence set.

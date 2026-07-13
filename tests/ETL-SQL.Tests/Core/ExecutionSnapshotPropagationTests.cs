@@ -2,6 +2,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
+using ETL_SQL.Orchestrator.Execution;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Core;
@@ -93,6 +94,21 @@ public sealed class ExecutionSnapshotPropagationTests : IDisposable
 
         Assert.Equal(expected, evaluator.ExecutionPolicy!.ExecutionMode);
         Assert.Equal(jobName, evaluator.ExecutionPolicy!.JobId);
+    }
+
+    [Fact]
+    public async Task ScheduledExecutionSession_CapturesEnterprisePolicyAndJobIdentity()
+    {
+        EnterprisePolicyRuntime.SetCurrent(EnrolledPolicy("v1"));
+        await using var session = ETL_SQL.Program.ServiceProvider.GetRequiredService<ExecutionSession>();
+
+        var result = await session.ExecuteAsync("DECLARE @x INT = 1;", jobName: "nightly-load");
+
+        Assert.True(result.Success, string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+        var snapshot = Assert.IsType<ExecutionPolicySnapshot>(session.LastEvaluator?.ExecutionPolicy);
+        Assert.Equal("v1", snapshot.PolicyVersion);
+        Assert.Equal(ScriptExecutionMode.Scheduled, snapshot.ExecutionMode);
+        Assert.Equal("nightly-load", snapshot.JobId);
     }
 
     private static Evaluator NewEvaluator() =>

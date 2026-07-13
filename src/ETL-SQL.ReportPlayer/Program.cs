@@ -76,6 +76,7 @@ var builder = WebApplication.CreateBuilder(new WebApplicationOptions
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+builder.Configuration.AddEnterprisePolicy();
 
 // Resolve port: CLI arg > appsettings > default 0 (ephemeral). Port 0 = OS-assigned dynamic port.
 int port = portArg ?? builder.Configuration.GetValue<int>("ReportPlayer:Port", 0);
@@ -149,7 +150,6 @@ app.MapGet("/third-party-notices", async (HttpContext ctx) =>
         ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
         : Results.Text(await File.ReadAllTextAsync(noticesPath, ctx.RequestAborted), "text/markdown; charset=utf-8");
 });
-builder.Configuration.AddEnterprisePolicy();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-report routes

@@ -35,7 +35,7 @@ release begins.
 - [x] Add Windows and Linux CI certification lanes for enrollment, signed retrieval, cache/offline
       operation, dynamic refresh, operation enforcement, and security-event delivery.
 - [x] Retain per-platform TRX, command logs, and machine-readable/Markdown summaries as CI artifacts.
-- [ ] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server,
+- [x] Certify Portal, Orchestrator, CLI, TUI, Report Player, Report Builder, Language Server,
       scheduled jobs, spawned runners, and parallel execution.
 - [ ] Run malicious-input and bypass drills covering policy tampering, stale/expired policy,
       signing-key rotation, machine revocation, path/link races, DNS rebinding, redirect
