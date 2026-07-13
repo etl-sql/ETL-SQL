@@ -55,9 +55,12 @@ Findings surfaced during the v0.15.0 release. Full detail in
       `LinterTests`) are fixed and merged. The rest are legitimate: deadline-based polling loops,
       wall-clock TTL/lease/fencing expiry waits (not CPU-load sensitive), `Task.WhenAny` timeout
       sentinels, and background signal simulators. Full write-up in `Docs/Operations/v0.15.0-flaky-tests.md`.
-- [ ] Residual: `StmtPollingTests.TestWaitFor_Cancellation` uses a fixed 2 s delay to ensure the WAITFOR
-      polling loop is active before cancelling — robustly fixing it needs the evaluator to expose a
-      "waiting" signal (small follow-up, not a delay bump).
+- [x] Fixed `StmtPollingTests.TestWaitFor_Cancellation` (test-only). The real issue was the exact-type
+      assertion: cancellation surfaces as `TaskCanceledException` (loop `Task.Delay`) or the base
+      `OperationCanceledException` (loop token check) depending on where it lands. Switched to
+      `Assert.ThrowsAnyAsync<OperationCanceledException>`, which accepts either and removes the timing
+      dependency — the 2 s delay drops to 100 ms and no evaluator "waiting" signal is needed. Verified
+      green across 3 consecutive runs.
 - [x] Added `scripts/check-flaky-test-delays.mjs` — flags `await Task.Delay(<literal>)` that is the
       sole sync before a positive assertion (excludes polling loops, `Task.WhenAny` sentinels, and
       negative/absence assertions). Wired as a blocking CI step. The 8 current wall-clock TTL/timing

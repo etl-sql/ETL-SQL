@@ -89,11 +89,14 @@ namespace ETL_SQL.Tests.Statements
 
             var evalTask = eval.Evaluate(Parse(sql), cts.Token);
 
-            await Task.Delay(2000); // Increase wait to 2s to ensure polling logic has started (TQ-7)
+            await Task.Delay(100); // let the WAITFOR loop start; timing is not load-critical (see below)
             cts.Cancel();
 
-            // The task should return or throw TaskCanceledException (which inherits from OperationCanceledException)
-            await Assert.ThrowsAsync<TaskCanceledException>(async () => await evalTask);
+            // Cancellation surfaces as TaskCanceledException (from the loop's cancellable Task.Delay) or
+            // the base OperationCanceledException (from the loop's ThrowIfCancellationRequested), depending
+            // on where the cancel lands. ThrowsAny accepts either, so this no longer needs a precise 2 s
+            // wait and cannot flake on a slow/loaded runner.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await evalTask);
         }
     }
 }
