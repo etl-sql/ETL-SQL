@@ -208,14 +208,15 @@ jobs:
         shell: bash
         run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
-  # 5. Build-provenance attestation (SLSA) for the release artifacts while the release is still draft.
-  # Free and keyless (Sigstore via GitHub OIDC) — no code-signing cert required. Binds each
-  # artifact's SHA-256 digest to this workflow run so downloaders can verify origin:
-  #   gh attestation verify <file> --repo <owner>/<repo>
-  # This is the authenticity leg of the supply chain (SBOM = contents, sha256sums = integrity).
+  # 6. Build-provenance attestation (SLSA), best-effort AFTER publish so `gh release download` can
+  # fetch the now-published (non-draft) release assets. Free/keyless (Sigstore via GitHub OIDC) — no
+  # code-signing cert. continue-on-error: a provenance hiccup must never leave the release unpublished.
+  #   verify: gh attestation verify <file> --repo <owner>/<repo>
+  # (SBOM = contents, sha256sums = integrity, provenance = authenticity.)
   attest-provenance:
     name: Attest build provenance
-    needs: [build-windows, build-linux, build-macos]
+    needs: publish-release
+    continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
@@ -235,10 +236,11 @@ jobs:
         with:
           subject-path: 'dist/*'
 
-  # 6. Publish GitHub Release only after every build artifact has provenance.
+  # 5. Publish the GitHub Release (un-draft) once every platform build has uploaded its artifacts.
+  # Provenance is attached afterward and is best-effort, so it never blocks publishing.
   publish-release:
     name: Publish GitHub Release
-    needs: attest-provenance
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Publish draft release
