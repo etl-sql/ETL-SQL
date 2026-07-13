@@ -34,11 +34,15 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
                   ┌───────────────────────┐           ┌──────────────────────┐
                   │  MarkdownRenderer     │           │  ReportPlayer        │
                   │  → .report.md         │           │  (ASP.NET Kestrel)   │
-                  │  → .snapshot.json     │           │  http://localhost:5200│
+                  │  → .etlsnap           │           │  http://localhost:5200│
                   └───────────────────────┘           └──────────────────────┘
 ```
 
-A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serializable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
+A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `.etlsnap` package — an encrypted zip file containing the layout JSON (`layout.json`) and high-performance Arrow IPC files (`.arrow`) for large visuals. This is consumed by the Report Portal and local viewers to serve data instantly.
+
+### The Report Designer (Visual WYSIWYG)
+
+For developers who prefer a visual approach to layouts, ETL-SQL includes a **Report Designer** integrated directly into the Report Portal (under `/designer`) and as a webview panel in the VS Code extension. The designer allows you to drag-and-drop visuals onto a 12-column grid, bind them to datasets, and configure styles. Behind the scenes, the designer parses and generates standard, clean `.rptsql` source code, ensuring that your reports remain fully source-controlled and git-diffable.
 
 ### The Three-Tier Logic Model
 
@@ -110,7 +114,7 @@ CREATE PAGE Main AS DASHBOARD (
 Save as `report.rptsql`, then:
 
 ```sh
-etl-sql-report build report.rptsql        # → report.report.md + report.snapshot.json
+etl-sql-report build report.rptsql        # → report.report.md + report.etlsnap
 etl-sql-report serve report.rptsql        # → opens http://localhost:5200
 ```
 
@@ -2201,7 +2205,7 @@ etl-sql-report build report.rptsql --format pdf
 | `<script>.report.md` | GitHub Flavored Markdown document. Default when `--format md`. |
 | `<script>.report.json` | Raw manifest JSON. Default when `--format json`. |
 | `<script>.report.pdf` | Static PDF export via PDFsharp/MigraDoc. Charts render from ECharts/SVG, tables are capped for readability. Default when `--format pdf`. |
-| `<script>.snapshot.json` | Snapshot of all visual data rows and metadata. Always written alongside the report. |
+| `<script>.etlsnap` | Encrypted snapshot package (ZIP structure containing layout JSON and Arrow IPC tables). Always written alongside the report. |
 
 ### PDF Export Modes
 
@@ -2246,7 +2250,7 @@ Re-evaluates the script and updates the snapshot without writing a new report do
 etl-sql-report refresh report.rptsql
 ```
 
-The snapshot is stored alongside the script as `<script>.snapshot.json`. The ReportPlayer considers the snapshot stale if the script file has been modified since the snapshot was built, or if the TTL (default 24 h) has elapsed.
+The snapshot is stored alongside the script as `<script>.etlsnap`. The ReportPlayer considers the snapshot stale if the script file has been modified since the snapshot was built, or if the TTL (default 24 h) has elapsed.
 
 ### serve
 
