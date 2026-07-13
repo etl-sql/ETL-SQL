@@ -63,8 +63,14 @@ Findings surfaced during the v0.15.0 release. Full detail in
 
 ### Restore the 70% coverage gate
 - [ ] `ci.yml`'s coverage threshold was temporarily lowered **70.0 → 69.5** to ship v0.15.0 (it landed
-      at 69.8% as the release's large new surface outpaced tests). Add targeted tests for the
-      least-covered new v0.15.0 code and restore the threshold to **70.0**.
+      at 69.8%). **Coverage analysis (2026-07-13):** the v0.15.0 headline feature (`Core.Adaptive.*`)
+      is already well-covered (mostly 100%; controller/advisor 100%). The gap is **infrastructure**
+      that isn't cheaply unit-tested: Postgres migrations (0%, by design), connectors needing live DBs
+      (`MySqlSyntax`, `Neo4jDataSource`), and `App.*` runners (`WarmJobRunner`,
+      `EnterpriseEnrollmentManager`, `DatabaseMigrationService`). To restore 70.0: add focused tests
+      for the App runners (mockable) and/or bring the least-covered connector logic under test in the
+      CI fast-lane scope, verify CI ≥ 70.0, then set the threshold back. (Match CI's coverage scope —
+      a local run that excludes Portal reports ~50%, not comparable.)
 
 ### Scale-cert performance re-validation
 - [x] Re-validated on a quiescent machine (5-sample median): **CONFIRMED regression**, not load noise.
