@@ -208,14 +208,17 @@ jobs:
         shell: bash
         run: echo "::warning title=macOS Intel build skipped::osx-x64 publish failed; release ${TAG_NAME} shipped arm64 only (no Intel VSIX/ZIP, no DMG)."
 
-  # 5. Build-provenance attestation (SLSA) for the release artifacts while the release is still draft.
-  # Free and keyless (Sigstore via GitHub OIDC) — no code-signing cert required. Binds each
-  # artifact's SHA-256 digest to this workflow run so downloaders can verify origin:
-  #   gh attestation verify <file> --repo <owner>/<repo>
-  # This is the authenticity leg of the supply chain (SBOM = contents, sha256sums = integrity).
+  # 6. Build-provenance attestation (SLSA), AFTER publish so `gh release download` can fetch the
+  # release assets. Free/keyless (Sigstore via GitHub OIDC) — no code-signing cert. NOT
+  # continue-on-error: a provenance failure fails the workflow (visible) rather than silently
+  # shipping a release without provenance.
+  # SECURITY TODO(v0.16.0): move to gold-standard PRE-publish attestation — attest the build jobs'
+  # upload-artifact outputs and keep the release a draft until provenance succeeds, so artifacts are
+  # never public without provenance. Tracked in Docs/Operations/v0.15.0-flaky-tests.md.
+  #   verify: gh attestation verify <file> --repo <owner>/<repo>
   attest-provenance:
     name: Attest build provenance
-    needs: [build-windows, build-linux, build-macos]
+    needs: publish-release
     runs-on: ubuntu-latest
     permissions:
       id-token: write       # mint the OIDC token that signs the attestation
@@ -235,10 +238,11 @@ jobs:
         with:
           subject-path: 'dist/*'
 
-  # 6. Publish GitHub Release only after every build artifact has provenance.
+  # 5. Publish the GitHub Release (un-draft) once every platform build has uploaded its artifacts.
+  # Provenance is attached afterward and is best-effort, so it never blocks publishing.
   publish-release:
     name: Publish GitHub Release
-    needs: attest-provenance
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
     steps:
       - name: Publish draft release

@@ -3,10 +3,12 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using Xunit;
 
 namespace ETL_SQL.Tests.Orchestration
@@ -100,6 +102,27 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal(5, runs);          // every node ran the (idempotent) section
             Assert.Equal(1, maxConcurrent); // but never two at once
             Assert.Null(await _store.GetLockHolderAsync("boot-migration")); // released at the end
+        }
+
+        [Fact]
+        public async Task RunExclusive_RetriesTransientReleaseFailure()
+        {
+            var releaseAttempts = 0;
+            var store = new Mock<IClusterLockStore>();
+            store.Setup(s => s.TryAcquireLockAsync("migration", "node-a", It.IsAny<TimeSpan>()))
+                .ReturnsAsync(true);
+            store.Setup(s => s.ReleaseLockAsync("migration", "node-a"))
+                .Returns(() => ++releaseAttempts == 1
+                    ? Task.FromException(new IOException("database is locked"))
+                    : Task.CompletedTask);
+            store.Setup(s => s.GetLockHolderAsync("migration"))
+                .ReturnsAsync((string?)null);
+
+            await ClusterLock.RunExclusiveAsync(
+                store.Object, "migration", "node-a", () => Task.CompletedTask,
+                NullLogger.Instance, ttl: TimeSpan.FromSeconds(30));
+
+            Assert.Equal(2, releaseAttempts);
         }
 
         [Fact]
