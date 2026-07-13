@@ -370,7 +370,7 @@ public class ExecutionJobServiceTests : IDisposable
         var staleToken = await store.AcquireJobLeaseAsync(
             "partition-job", "node-a", TimeSpan.FromMilliseconds(40));
         Assert.NotNull(staleToken);
-        await Task.Delay(120);
+        await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the 40 ms lease to expire
         var freshToken = await store.AcquireJobLeaseAsync(
             "partition-job", "node-b", TimeSpan.FromMinutes(5));
         Assert.NotNull(freshToken);

@@ -58,8 +58,10 @@ Findings surfaced during the v0.15.0 release. Full detail in
 - [ ] Residual: `StmtPollingTests.TestWaitFor_Cancellation` uses a fixed 2 s delay to ensure the WAITFOR
       polling loop is active before cancelling — robustly fixing it needs the evaluator to expose a
       "waiting" signal (small follow-up, not a delay bump).
-- [ ] Consider a lint/CI check that flags a new `Task.Delay(...)` immediately before an assertion in
-      test files, to stop the anti-pattern from regrowing.
+- [x] Added `scripts/check-flaky-test-delays.mjs` — flags `await Task.Delay(<literal>)` that is the
+      sole sync before a positive assertion (excludes polling loops, `Task.WhenAny` sentinels, and
+      negative/absence assertions). Wired as a blocking CI step. The 8 current wall-clock TTL/timing
+      waits are annotated `// flaky-delay-ok: <reason>`; new un-annotated violations fail CI.
 
 ### Restore the 70% coverage gate
 - [ ] `ci.yml`'s coverage threshold was temporarily lowered **70.0 → 69.5** to ship v0.15.0 (it landed

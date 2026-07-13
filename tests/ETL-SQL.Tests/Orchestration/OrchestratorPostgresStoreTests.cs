@@ -157,7 +157,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             var stale = await store.AcquireJobLeaseAsync("fence-job", "owner-A", TimeSpan.FromMilliseconds(40));
             Assert.NotNull(stale);
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the lease TTL to expire
             var fresh = await store.AcquireJobLeaseAsync("fence-job", "owner-B", TimeSpan.FromMinutes(5));
             Assert.True(fresh!.Value > stale!.Value);
 
@@ -181,7 +181,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // Expiry-based steal.
             Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-A", TimeSpan.FromMilliseconds(40)));
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the lease TTL to expire
             Assert.True(await store.TryAcquireLockAsync("ttl-lock", "node-B", TimeSpan.FromMinutes(5)));
         }
 
@@ -212,7 +212,7 @@ namespace ETL_SQL.Tests.Orchestration
 
             // TTL expiry + prune behave the same on Postgres (ISO-8601 string comparison).
             await store.RegisterOrRenewNodeAsync("pg-ttl", "Orchestrator", TimeSpan.FromMilliseconds(40));
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the lease TTL to expire
             Assert.DoesNotContain(await store.GetLiveNodesAsync(), n => n.NodeId == "pg-ttl");
             Assert.True(await store.PruneExpiredNodesAsync() >= 1);
         }

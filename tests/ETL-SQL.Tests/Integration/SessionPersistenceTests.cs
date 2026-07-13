@@ -160,7 +160,7 @@ namespace ETL_SQL.Tests.Integration.Integration
                 DROP CONNECTION m;
             ");
             Assert.Equal(0, code9);
-            await Task.Delay(1000); // Allow OS to release ports
+            await Task.Delay(1000); // flaky-delay-ok: wall-clock wait for the OS to release ports
 
             // 10th run: #emp should still survive!
             AnsiConsole.MarkupLine("  - Step 10: Verify #emp survives Docker closure");

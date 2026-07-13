@@ -45,7 +45,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.True(await _store.ValidateFenceTokenAsync("j", t1!.Value));
 
             // After expiry a new owner acquires and the token strictly increases.
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the fencing-token lease TTL to expire
             var t2 = await _store.AcquireJobLeaseAsync("j", "owner-B", TimeSpan.FromMinutes(5));
             Assert.NotNull(t2);
             Assert.True(t2!.Value > t1.Value);
@@ -60,7 +60,7 @@ namespace ETL_SQL.Tests.Orchestration
             var stale = await _store.AcquireJobLeaseAsync("j", "owner-A", TimeSpan.FromMilliseconds(40));
             Assert.NotNull(stale);
 
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the fencing-token lease TTL to expire
             var fresh = await _store.AcquireJobLeaseAsync("j", "owner-B", TimeSpan.FromMinutes(5));
             Assert.NotNull(fresh);
 
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Orchestration
             await _store.SaveJobAsync(Job("j"));
 
             var staleToken = await _store.AcquireJobLeaseAsync("j", "owner-A", TimeSpan.FromMilliseconds(40));
-            await Task.Delay(120);
+            await Task.Delay(120); // flaky-delay-ok: wall-clock wait for the fencing-token lease TTL to expire
             var freshToken = await _store.AcquireJobLeaseAsync("j", "owner-B", TimeSpan.FromMinutes(5));
 
             var nextRun = DateTime.UtcNow.AddHours(1);

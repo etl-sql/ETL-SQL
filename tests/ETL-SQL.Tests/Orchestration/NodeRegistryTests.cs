@@ -53,7 +53,7 @@ namespace ETL_SQL.Tests.Orchestration
             var firstSeen = node.FirstSeenUtc;
 
             // A renewal pushes the heartbeat/expiry forward but preserves the original first-seen time.
-            await Task.Delay(20);
+            await Task.Delay(20); // flaky-delay-ok: wall-clock gap so the re-registration timestamp differs
             await store.RegisterOrRenewNodeAsync("node-A", "Portal", TimeSpan.FromMinutes(5));
             var renewed = Assert.Single(await store.GetLiveNodesAsync());
             Assert.Equal(firstSeen, renewed.FirstSeenUtc);
@@ -171,7 +171,7 @@ namespace ETL_SQL.Tests.Orchestration
             var store = await NewStoreAsync();
             // A node that died without deregistering, already past its TTL.
             await store.RegisterOrRenewNodeAsync("dead-node", "Orchestrator", TimeSpan.FromMilliseconds(20));
-            await Task.Delay(60);
+            await Task.Delay(60); // flaky-delay-ok: wall-clock wait; the stale node row persists in all-nodes
             Assert.Contains(await store.GetAllNodesAsync(), n => n.NodeId == "dead-node");
 
             var service = new NodeHeartbeatService(

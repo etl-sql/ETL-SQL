@@ -41,6 +41,9 @@ jobs:
         shell: pwsh
         run: node .\scripts\sync-assets.js -Check
 
+      - name: Check for flaky sleep-then-assert test delays
+        run: node scripts/check-flaky-test-delays.mjs
+
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 

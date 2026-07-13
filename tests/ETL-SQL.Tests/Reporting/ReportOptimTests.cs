@@ -42,7 +42,7 @@ CREATE PAGE Main AS DASHBOARD (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' 
                 var builtAt1 = manifest1.BuiltAt;
 
                 // 3. Update parameter
-                await Task.Delay(100); // Ensure timestamp change
+                await Task.Delay(100); // flaky-delay-ok: wall-clock wait so the file timestamp changes
                 var manifest2 = await service.SetParameterAsync("Cat", "B");
 
                 // 4. Verify results
