@@ -92,6 +92,11 @@ runners.
       5-sample smoke matrix passes all 13 scenarios; sort recovered 603->550 ms (below the 25% fail
       band) and aggregate GC pause recovered 21.7->0 ms median. The known-good baseline remains
       unchanged so the residual +19% sort warning stays visible.
+- [x] **Residual sort gap resolved** via a `CompareConstants` hot-path optimization (same-type fast
+      path + `TryParse` instead of `Parse`-in-`try/catch`, eliminating 4 `ToString` + 2 `decimal.Parse`
+      + a per-call exception per comparison). `ExternalSort_50000_DESC` **550 -> 212 ms** — now ~2.2x
+      *faster* than the 462 ms baseline, so the scale-cert gate is reliably green with margin.
+      Validated: scale cert 13/13, full fast lane green, no failing regressions.
 
 ### Release provenance — gold-standard pre-publish attestation (SECURITY)
 - [x] `release.yml` now attests **before** publish and gates it: `attest-provenance` needs the build
