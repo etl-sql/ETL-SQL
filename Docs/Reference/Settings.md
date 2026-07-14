@@ -205,8 +205,8 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 | `Portal:Storage:KeyRingPath` | string | `null` | — | Folder storing Data Protection decryption keys (must be shared in HA). |
 | `Portal:Modules:Reporting` | boolean | `true` | — | Enables the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
 | `Portal:Modules:Designer` | boolean | `true` | — | Enables the browser report designer entry page and API routes. Disabled routes return 404. |
-| `Portal:Modules:ConnectionCatalog` | boolean | `true` | — | Enables the shared connection catalog and diagnostics module flag. Route fencing lands in a later modularization slice. |
-| `Portal:Modules:SecretStore` | boolean | `true` | — | Enables the Portal-managed secret store module flag. Route fencing lands in a later modularization slice. |
+| `Portal:Modules:ConnectionCatalog` | boolean | `true` | — | Enables the shared connection catalog and diagnostics API routes. Disabled routes return 404. |
+| `Portal:Modules:SecretStore` | boolean | `true` | — | Enables the Portal-managed secret store API routes and secret resolution surface. Disabled routes return 404. |
 | `Portal:Modules:Scheduling` | boolean | `true` | — | Enables scheduled refresh/orchestrator poller work when Reporting is also enabled. |
 | `Portal:Modules:Operations` | boolean | `true` | — | Enables operational digest and native admin digest worker loops. Route fencing lands in a later modularization slice. |
 | `Portal:Modules:Documentation` | boolean | `true` | — | Enables Portal-hosted documentation surfaces module flag. Route fencing lands in a later modularization slice. |
@@ -222,9 +222,16 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 - `Documentation` (default: `true`): Portal-hosted documentation surfaces.
 
 These flags are the shared configuration contract for Portal modularization. Reporting and Designer
-currently fence their frontend entry pages and API routes. Reporting, Scheduling, and Operations also
-fence their owned background worker loops; security, identity, audit, database migration, and node
-heartbeat services remain active because they protect the host itself.
+fence their frontend entry pages and API routes; ConnectionCatalog and SecretStore fence their admin
+API routes. Reporting, Scheduling, and Operations also fence their owned background worker loops.
+Security, identity, audit, database migration, and node heartbeat services remain active because they
+protect the host itself.
+
+Certified topology profiles include:
+- **Gateway node**: `Reporting=false`, `Designer=false`, `Scheduling=false`, `Operations=false`,
+  `ConnectionCatalog=true`, `SecretStore=true`.
+- **Reporting node**: `Reporting=true`, `Designer=false`, `Scheduling=false`, `Operations=false`,
+  `ConnectionCatalog=false`, `SecretStore=false`.
 
 ### Portal Resource Controls (`Portal:Resources`)
 - `MaxConcurrentReportExecutions` (default: `4`): Max total active queries allowed.

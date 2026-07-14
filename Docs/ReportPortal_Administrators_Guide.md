@@ -201,11 +201,18 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Storage.KeyRingPath` | `.portal-keys` beside the database | Data Protection key-ring path. In HA, every Portal node must share the same path. |
 | `Modules.Reporting` | `true` | Feature flag for the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
 | `Modules.Designer` | `true` | Feature flag for the browser report designer entry page and design-time APIs. Disabled routes return 404. |
-| `Modules.ConnectionCatalog` | `true` | Feature flag for shared connection catalog APIs and diagnostics. Route fencing is a later modularization slice. |
-| `Modules.SecretStore` | `true` | Feature flag for Portal-managed secret vault APIs and secret resolution. Route fencing is a later modularization slice. |
+| `Modules.ConnectionCatalog` | `true` | Feature flag for shared connection catalog APIs and diagnostics. Disabled routes return 404. |
+| `Modules.SecretStore` | `true` | Feature flag for Portal-managed secret vault APIs and secret resolution. Disabled routes return 404. |
 | `Modules.Scheduling` | `true` | Feature flag for refresh scheduling and orchestrator polling when Reporting is also enabled. |
 | `Modules.Operations` | `true` | Feature flag for operational digest and native admin digest worker loops. Route fencing is a later modularization slice. |
 | `Modules.Documentation` | `true` | Feature flag for Portal-hosted documentation surfaces. Route fencing is a later modularization slice. |
+
+Certified module profiles include a gateway node (`Reporting=false`, `Designer=false`,
+`Scheduling=false`, `Operations=false`, `ConnectionCatalog=true`, `SecretStore=true`) and a
+reporting node (`Reporting=true`, `Designer=false`, `Scheduling=false`, `Operations=false`,
+`ConnectionCatalog=false`, `SecretStore=false`). Security, identity, audit, database migration, and
+node heartbeat services remain active in both profiles.
+
 | `Resources.MaxConcurrentReportExecutions` | `4` | How many report execution jobs can run simultaneously. |
 | `Resources.MaxConcurrentExecutionsPerUser` | `2` | Workload fairness: the most of the shared execution slots a single non-administrator may hold at once, so one user flooding the queue cannot starve everyone else. Keep it below `MaxConcurrentReportExecutions`; administrators are exempt. |
 | `Resources.MaxConcurrentExecutionsPerGroup` | `0` | Optional per-group execution quota. `0` disables the group gate; administrators are exempt. |

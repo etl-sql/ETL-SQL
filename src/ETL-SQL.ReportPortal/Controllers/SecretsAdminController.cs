@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/admin/secrets")]
 [Authorize(Roles = "Admin")]
+[RequirePortalModule("SecretStore")]
 public class SecretsAdminController(PortalSecretStoreService store, AuditService audit) : ControllerBase
 {
     public sealed record SetSecretRequest(string Value);

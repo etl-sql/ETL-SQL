@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,6 +17,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/admin/connections")]
 [Authorize(Roles = "Admin")]
+[RequirePortalModule("ConnectionCatalog")]
 public class ConnectionsAdminController(
     PortalConnectionCatalogService catalog,
     AuditService audit,

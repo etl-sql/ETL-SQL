@@ -56,11 +56,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
-#### Phase 5: Report Portal Modularization (Bites)
-- [ ] **Multi-Topology Certification:** Certify varied deployment profiles (e.g., a pure "Secret Store & Connection Catalog" gateway node vs. a pure "BI Report Player" viewing node) sharing a single code executable.
-
----
-
 ## Adaptive Execution & Extended Large-Data Certification
 
 *Improves streaming scan, filter, projection, low-cardinality aggregation, and spill-backed `#temp` staging efficiency and concurrency under bounded-memory behavior.*
