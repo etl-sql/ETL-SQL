@@ -286,7 +286,7 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 
 #### Phase 1: Visual Diagnostics & Intelligent Code Generation
 - [ ] **VS Code Visual Flow (DAG) Webview:** Port the Orchestrator's AST-to-DAG visual rendering engine into a VS Code extension panel. Developers can click "Show Visual Flow" to generate a read-only, interactive diagram of their ETL-SQL pipeline (representing data flowing from flat files, through temp tables and queries, to database targets), replicating the visual flow benefits of SSIS.
-- [ ] **Smart Snippets (Schema-Aware Code Generator):** Extend the Language Server's autocomplete functionality to auto-generate complex query boilerplate. When a developer triggers a smart snippet (e.g., `/merge <src> <dest>` or `/upsert <src> <dest>`), the editor launches a schema-mapping wizard:
+- [ ] **Smart Snippets (Schema-Aware Code Generator):** Extend the Language Server's autocomplete functionality to auto-generate complex query boilerplate. See the detailed design spec in [SmartSnippetsSpec.md](Docs/Design/SmartSnippetsSpec.md). When a developer triggers a smart snippet (e.g., `/merge <src> <dest>` or `/upsert <src> <dest>`), the editor launches a schema-mapping wizard:
   - **Key Auto-Detection:** Automatically parse schemas and pre-select primary keys, or prompt the user to choose custom unique matching keys.
   - **Fuzzy-String Alignment:** Resolve column mismatches by suggesting alignment (e.g., `src.FullName` -> `dest.Name`) using string-similarity algorithms, with inline approve/change overrides.
   - **Type Coercion & Audit Presets:** Automatically insert type casts (e.g., `CAST(S.col AS INT)`) for mismatched types, and auto-map audit columns (`UpdatedAt` -> `GETDATE()`) without user input.
