@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -7,7 +8,19 @@ public static class PortalObservability
 {
     public const string ServiceName = "ETL-SQL.ReportPortal";
     public const string ActivitySourceName = "ETL-SQL.ReportPortal";
+    public const string MeterName = "ETL-SQL.ReportPortal";
     public static readonly ActivitySource ActivitySource = new(ActivitySourceName);
+    public static readonly Meter Meter = new(MeterName);
+    private static readonly Counter<long> ExecutionCompletedCounter =
+        Meter.CreateCounter<long>("etlsql.portal.execution.completed");
+    private static readonly Histogram<double> ExecutionDurationMs =
+        Meter.CreateHistogram<double>("etlsql.portal.execution.duration_ms");
+    private static readonly Histogram<long> ExecutionRowsProcessed =
+        Meter.CreateHistogram<long>("etlsql.portal.execution.rows_processed");
+    private static readonly Histogram<long> ExecutionPeakMemoryBytes =
+        Meter.CreateHistogram<long>("etlsql.portal.execution.peak_memory_bytes");
+    private static readonly Histogram<double> ExecutionCpuTimeSeconds =
+        Meter.CreateHistogram<double>("etlsql.portal.execution.cpu_time_seconds");
 
     public static class Tags
     {
@@ -45,20 +58,42 @@ public static class PortalObservability
         return activity;
     }
 
-    public static void CompleteExecutionJobActivity(Activity? activity, ExecutionJob job, string? scriptHash = null)
+    public static void CompleteExecutionJobActivity(
+        Activity? activity,
+        ExecutionJob job,
+        string? workloadKind = null,
+        string? scriptHash = null)
     {
-        if (activity is null)
-            return;
+        var status = job.Status.ToString();
+        if (activity is not null)
+        {
+            activity.SetTag(Tags.Status, status);
+            activity.SetTag(Tags.RowsProcessed, job.RowsProcessed);
+            activity.SetTag(Tags.PeakMemoryBytes, job.PeakMemoryBytes);
+            activity.SetTag(Tags.CpuTimeSeconds, job.CpuTimeSeconds);
+            if (!string.IsNullOrWhiteSpace(scriptHash))
+                activity.SetTag(Tags.ScriptHash, scriptHash);
 
-        activity.SetTag(Tags.Status, job.Status.ToString());
-        activity.SetTag(Tags.RowsProcessed, job.RowsProcessed);
-        activity.SetTag(Tags.PeakMemoryBytes, job.PeakMemoryBytes);
-        activity.SetTag(Tags.CpuTimeSeconds, job.CpuTimeSeconds);
-        if (!string.IsNullOrWhiteSpace(scriptHash))
-            activity.SetTag(Tags.ScriptHash, scriptHash);
+            activity.SetStatus(job.Status == JobStatus.Failed
+                ? ActivityStatusCode.Error
+                : ActivityStatusCode.Ok);
+        }
 
-        activity.SetStatus(job.Status == JobStatus.Failed
-            ? ActivityStatusCode.Error
-            : ActivityStatusCode.Ok);
+        var tags = new TagList
+        {
+            { Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { Tags.Component, "portal" },
+            { Tags.Status, status },
+            { Tags.ExecutionMode, job.TrustedDatasetExecution ? "trusted-dataset" : "portal" }
+        };
+        if (!string.IsNullOrWhiteSpace(workloadKind))
+            tags.Add(Tags.WorkloadKind, workloadKind);
+
+        ExecutionCompletedCounter.Add(1, tags);
+        if (job.StartedAt is not null && job.CompletedAt is not null)
+            ExecutionDurationMs.Record(Math.Max(0, (job.CompletedAt.Value - job.StartedAt.Value).TotalMilliseconds), tags);
+        ExecutionRowsProcessed.Record(Math.Max(0, job.RowsProcessed), tags);
+        ExecutionPeakMemoryBytes.Record(Math.Max(0, job.PeakMemoryBytes), tags);
+        ExecutionCpuTimeSeconds.Record(Math.Max(0, job.CpuTimeSeconds), tags);
     }
 }

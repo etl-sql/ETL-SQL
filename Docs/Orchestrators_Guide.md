@@ -1111,6 +1111,13 @@ These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventi
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with
 underscores.
 
+Ad-hoc jobs submitted through `POST /jobs` also emit `System.Diagnostics.ActivitySource` spans from
+`ETL-SQL.Orchestrator.Service` and `System.Diagnostics.Metrics` instruments from the same-named
+meter. The `orchestrator.job` span carries job id, request correlation id, environment, node,
+component, workload kind, execution mode, status, rows, peak memory, and CPU time for trace
+correlation. Metrics cover completed job count, duration, rows processed, peak memory, and CPU time
+with low-cardinality tags only: environment, component, workload kind, execution mode, and status.
+
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
 job logs, and external monitoring traces can be joined during incident review.

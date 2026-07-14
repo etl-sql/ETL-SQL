@@ -831,6 +831,12 @@ peak memory, CPU time, script hash, and request correlation id. These dimensions
 OpenTelemetry collectors or .NET listeners; avoid adding report names, usernames, local paths,
 parameter values, SQL text, or connection metadata as tags.
 
+The same service exposes first-class `System.Diagnostics.Metrics` instruments from meter
+`ETL-SQL.ReportPortal` for terminal execution count, duration, rows processed, peak memory, and CPU
+time. Metric tags intentionally stay low-cardinality: environment, component, workload kind,
+execution mode, and terminal status. Job id, report id, user id, and script hash remain trace-only
+correlation fields.
+
 Metric labels and trace tags use the shared `ETL_SQL.Core.Observability.ObservabilityConventions`
 names. Prometheus labels are the same names without the `etlsql.` prefix and with dots converted to
 underscores, for example `etlsql.environment` becomes `environment` and `etlsql.workload.kind`

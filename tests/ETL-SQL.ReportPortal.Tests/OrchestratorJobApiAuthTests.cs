@@ -1,8 +1,13 @@
 using System;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Observability;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator.Service;
 using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests;
@@ -108,6 +113,57 @@ public class OrchestratorJobApiAuthTests : IDisposable
     }
 
     [Fact]
+    public void OrchestratorObservability_EmitsAdHocJobSpanAndMetrics()
+    {
+        var stoppedActivities = new List<Activity>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == OrchestratorObservability.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => stoppedActivities.Add(activity)
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Meter.Name == OrchestratorObservability.MeterName)
+                    l.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.Start();
+
+        var activity = OrchestratorObservability.StartAdHocJobActivity("job-observe", "corr-observe");
+        OrchestratorObservability.CompleteAdHocJobActivity(
+            activity,
+            "job-observe",
+            JobRunStatus.Completed,
+            durationMs: 25,
+            rowsProcessed: 12,
+            peakMemoryBytes: 4096,
+            cpuTimeSeconds: 0.5);
+        activity?.Dispose();
+
+        var span = Assert.Single(stoppedActivities);
+        Assert.Equal("orchestrator.job", span.OperationName);
+        Assert.Equal("job-observe", Tag(span, ObservabilityConventions.Tags.JobId));
+        Assert.Equal("corr-observe", Tag(span, ObservabilityConventions.Tags.CorrelationId));
+        Assert.Equal("Completed", Tag(span, ObservabilityConventions.Tags.Status));
+        Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.job.completed"
+            && HasTag(m.Tags, ObservabilityConventions.Tags.Component, "orchestrator")
+            && HasTag(m.Tags, ObservabilityConventions.Tags.Status, "Completed")
+            && HasTag(m.Tags, ObservabilityConventions.Tags.WorkloadKind, "ad-hoc"));
+        Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.job.rows_processed" && m.Value == 12);
+        Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ObservabilityConventions.Tags.JobId));
+    }
+
+    [Fact]
     [Trait("CompatBreak", "0.12")]
     public async Task ScheduledJobUpdate_RequiresVersion_AndReturnsCurrentStateOnConflict()
     {
@@ -155,4 +211,18 @@ public class OrchestratorJobApiAuthTests : IDisposable
         Assert.Equal(2, conflictBody!["current"]!["version"]!.GetValue<long>());
         Assert.Equal(2, conflictBody["current"]!["interval"]!.GetValue<int>());
     }
+
+    private static string? Tag(Activity activity, string key) =>
+        activity.Tags.FirstOrDefault(t => t.Key == key).Value;
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 }

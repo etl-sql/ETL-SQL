@@ -94,7 +94,7 @@ namespace ETL_SQL.Orchestrator.Service
 
                 var jobId = Guid.NewGuid().ToString("N")[..8];
                 var cts = new CancellationTokenSource();
-                var entry = new JobEntry(jobId, cts);
+                var entry = new JobEntry(jobId, cts, ctx.TraceIdentifier);
                 _jobs[jobId] = entry;
 
                 logger.LogInformation("Job {JobId} submitted (label={Label})", jobId, ETL_SQL.Core.Common.LogSanitizer.Clean(request.Label));
@@ -604,6 +604,7 @@ namespace ETL_SQL.Orchestrator.Service
         {
             entry.Status = JobRunStatus.Running;
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var activity = OrchestratorObservability.StartAdHocJobActivity(entry.JobId, entry.CorrelationId);
 
             using var scope = scopeFactory.CreateScope();
             var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
@@ -671,6 +672,14 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 sw.Stop();
                 entry.ExecutionTimeMs = sw.ElapsedMilliseconds;
+                OrchestratorObservability.CompleteAdHocJobActivity(
+                    activity,
+                    entry.JobId,
+                    entry.Status,
+                    entry.ExecutionTimeMs,
+                    entry.RowsProcessed,
+                    entry.PeakMemoryBytes,
+                    entry.CpuTimeSeconds);
             }
         }
 
@@ -709,10 +718,11 @@ namespace ETL_SQL.Orchestrator.Service
             string? Password = null
         );
 
-        private sealed class JobEntry(string jobId, CancellationTokenSource cts)
+        private sealed class JobEntry(string jobId, CancellationTokenSource cts, string? correlationId)
         {
             public string JobId { get; } = jobId;
             public CancellationTokenSource Cts { get; } = cts;
+            public string? CorrelationId { get; } = correlationId;
             public JobRunStatus Status { get; set; } = JobRunStatus.Queued;
             public long RowsProcessed { get; set; }
             public long ExecutionTimeMs { get; set; }

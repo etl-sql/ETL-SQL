@@ -240,8 +240,12 @@ Operations Control Plane → 4.1 Central fleet management*.
 - [x] Standardize low-cardinality observability tag/label names in
       `ETL_SQL.Core.Observability.ObservabilityConventions` and use them from Portal and
       Orchestrator metrics/traces.
-- [ ] Add first-class OpenTelemetry metrics and traces without imposing standalone overhead when
-      exporters are disabled.
+- [x] Add first-class Portal and Orchestrator `ActivitySource`/`Meter` instrumentation for execution
+      traces, terminal execution counts, duration, rows, peak memory, and CPU time without adding
+      exporter packages or standalone collector overhead.
+- [ ] Extend first-class OpenTelemetry metrics/traces to engine, dataset, connector, policy-refresh,
+      and background-service workloads without imposing standalone overhead when exporters are
+      disabled.
 - [ ] Apply the shared dimensions to remaining engine, dataset, connector, policy, and workload-class
       metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,

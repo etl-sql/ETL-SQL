@@ -350,7 +350,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
-            PortalObservability.CompleteExecutionJobActivity(activity, job);
+            PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString());
             _log.LogWarning("Execution job {JobId} cancelled while queued for an execution slot", job.Id);
             return;
         }
@@ -548,7 +548,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.ManifestPath = manifestPath;
             job.CompletedAt = DateTime.UtcNow;
             await PersistJobAsync(job);
-            PortalObservability.CompleteExecutionJobActivity(activity, job, runTimeHash);
+            PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString(), scriptHash: runTimeHash);
             _log.LogInformation("Execution job {JobId} completed", job.Id);
 
         }
@@ -561,7 +561,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.Status = JobStatus.Cancelled;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
-            PortalObservability.CompleteExecutionJobActivity(activity, job);
+            PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString());
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
         }
         catch (Exception ex)
@@ -571,7 +571,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.Status = JobStatus.Failed;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
-            PortalObservability.CompleteExecutionJobActivity(activity, job);
+            PortalObservability.CompleteExecutionJobActivity(activity, job, workloadKind: workloadKind.ToString());
             _log.LogError("Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
                 job.Id, job.Error, SecretRedactor.Redact(ex.StackTrace));
         }

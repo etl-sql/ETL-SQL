@@ -1,3 +1,4 @@
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Nodes;
@@ -230,6 +231,46 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.DoesNotContain("ConnectionString", body);
     }
 
+    [Fact]
+    public void PortalObservability_EmitsLowCardinalityExecutionMetrics()
+    {
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var listener = new MeterListener
+        {
+            InstrumentPublished = (instrument, l) =>
+            {
+                if (instrument.Meter.Name == PortalObservability.MeterName)
+                    l.EnableMeasurementEvents(instrument);
+            }
+        };
+        listener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        listener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        listener.Start();
+
+        var job = new ExecutionJob("job-metrics", ReportId: 42, UserId: 7)
+        {
+            Status = JobStatus.Completed,
+            StartedAt = DateTime.UtcNow.AddMilliseconds(-250),
+            CompletedAt = DateTime.UtcNow,
+            RowsProcessed = 123,
+            PeakMemoryBytes = 456,
+            CpuTimeSeconds = 0.25
+        };
+
+        PortalObservability.CompleteExecutionJobActivity(null, job, workloadKind: "Interactive");
+
+        Assert.Contains(measurements, m => m.Name == "etlsql.portal.execution.completed"
+            && HasTag(m.Tags, PortalObservability.Tags.Component, "portal")
+            && HasTag(m.Tags, PortalObservability.Tags.Status, "Completed")
+            && HasTag(m.Tags, PortalObservability.Tags.WorkloadKind, "Interactive"));
+        Assert.Contains(measurements, m => m.Name == "etlsql.portal.execution.rows_processed" && m.Value == 123);
+        Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(PortalObservability.Tags.JobId));
+        Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(PortalObservability.Tags.ReportId));
+        Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(PortalObservability.Tags.UserId));
+    }
+
     /// <summary>
     /// Portal-wide log hygiene: even when a downstream error echoes the SMTP credential, the
     /// delivery executor sanitizes it before it reaches the log, the persisted failure detail, or
@@ -324,6 +365,17 @@ public sealed class OperationalObservabilityTests : IDisposable
             public void Dispose() { }
         }
     }
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 
     private static async Task<string> GetAdminTokenAsync(HttpClient client)
     {
