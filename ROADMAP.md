@@ -18,46 +18,9 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ### Future Candidate Phases
 
-#### Phase 1: Policy Hardening
-- [x] ~~Complete handle-based or equivalent race-resistant `DELETE`, `MOVE`, and `RENAME` operations on supported platforms; add link/junction substitution tests at each mutation boundary.~~ Shipped (`FileHandleFinalPath` + `FileSystemPolicyAuthorizer` handle-based re-check; substitution tests). Residual close-out tracked in `TODO.md`.
-- [x] ~~Extend connect-time DNS re-pin, redirect re-authorization, and proxy-bypass controls beyond the REST connector to every policy-governed outbound HTTP/network client, including SharePoint, Report Portal, Orchestrator, remote policy/vault access, discovery, and probe paths.~~ Shipped (`PolicyBoundHttp` adopted across those clients). Remaining client audit tracked in `TODO.md`.
-- [x] ~~Add a Portal administrator UI for policy validation, version history, staged publication, activation, rollback, machine revocation, and signing-key status on top of the shipped authority API.~~ Shipped (`policy-authority-admin.js` + `PolicyAuthorityController`).
-- [x] **Canary Policy Rollout:** Shipped in v0.16.0 (`feat/canary-policy-rollout`). Percentage-of-fleet or named-group cohorts served alongside the fleet active version, with promote/halt (halt re-issues the active document so the cohort reverts), admin API + Portal UI, and audit. Progressive rollouts let administrators validate new filesystem-path and connection restrictions on a subset before deploying fleet-wide.
-
-#### Phase 3: Certification & Operations
-
-##### Deployment and recovery
-- [x] ~~Document policy-authority deployment, signing-key custody/rotation, machine enrollment/revocation, service-identity permissions, staged rollout, emergency policy publication, and unenrollment governance.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Document cache and outbox backup/restore rules; restored machines must not duplicate machine identity or silently reuse credentials in another environment.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Define upgrade ordering and compatibility across bootstrap, envelope, policy, event, and collector schema versions.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Provide outage runbooks for policy authority, certificate expiry, invalid publication, SIEM outage, disk exhaustion, and fail-closed fleet recovery.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Add support-bundle diagnostics that expose versions, hashes, timestamps, and health without policy payload values, trust material, credentials, or sensitive event targets.~~ Moved to `TODO.md` for v0.16.0 execution.
-
 #### Phase 4: Operations Control Plane
 
-##### 4.1 Central fleet management
-- [x] ~~Expand fleet inventory beyond current health aggregation to include node/environment identity, installed version, schema version, enrollment and policy compliance, last policy refresh, signing/client-certificate expiry, configuration drift, storage provider, database provider, and upgrade readiness.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Add fleet search, filtering, grouping, and drill-down without granting the aggregator mutation authority over departmental environments.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Define explicit machine/node registration, retirement, duplicate identity, stale heartbeat, and revoked-node behavior.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Surface unsupported version combinations, missing required capabilities, unhealthy dependencies, and policy divergence as actionable findings.~~ Moved to `TODO.md` for v0.16.0 execution.
-
-##### 4.2 Upgrade orchestration and compatibility
-- [x] ~~Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.~~ Moved to `TODO.md` for v0.16.0 execution.
-
-##### 4.3 Standard observability export
-- [ ] Add first-class OpenTelemetry metrics and traces, plus a Prometheus-compatible metrics endpoint where appropriate.
-- [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode, status, policy version, and workload class while controlling high-cardinality labels.
-- [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC, spill, connector latency, retries, failures, storage growth, database pool health, policy refresh, audit/security backlog, and delivery health.
-- [ ] Correlate metrics and traces with structured logs, audit events, security events, job IDs, script hashes, and request correlation IDs.
-- [ ] Keep observability exporters optional and ensure disabled exporters impose negligible standalone overhead.
-
 ##### 4.4 Historical capacity planning and sizing
-- [x] ~~Retain or export capacity history sufficient to calculate peak and percentile CPU, memory, queue wait, execution duration, concurrency, spill frequency/bytes, connector latency, retry/failure rates, and dataset/snapshot growth.~~ Moved to `TODO.md` for v0.16.0 execution.
-- [x] ~~Add workload breakdowns by environment, node, job, report, dataset, connector, owner, and workload class without exposing sensitive row data.~~ Moved to `TODO.md` for v0.16.0 execution.
 - [ ] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
 - [ ] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.
 - [ ] Document benchmark-to-production sizing guidance and clearly state where measured workload history is required instead of synthetic estimates.
