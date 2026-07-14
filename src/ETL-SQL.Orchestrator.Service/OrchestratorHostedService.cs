@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Scheduling;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,15 +26,62 @@ namespace ETL_SQL.Orchestrator.Service
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var activity = BackgroundServiceObservability.StartRun(
+                "orchestrator", "orchestrator-host", "start");
+            var status = "success";
             _logger.LogInformation("Orchestrator hosted service starting.");
-            _scheduler.Start();
+            try
+            {
+                _scheduler.Start();
+            }
+            catch
+            {
+                status = "failure";
+                throw;
+            }
+            finally
+            {
+                sw.Stop();
+                BackgroundServiceObservability.CompleteRun(
+                    activity,
+                    "orchestrator",
+                    "orchestrator-host",
+                    "start",
+                    status,
+                    sw.ElapsedMilliseconds);
+            }
+
             return Task.CompletedTask;
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var activity = BackgroundServiceObservability.StartRun(
+                "orchestrator", "orchestrator-host", "stop");
+            var status = "success";
             _logger.LogInformation("Orchestrator hosted service stopping.");
-            await _scheduler.StopAsync(cancellationToken);
+            try
+            {
+                await _scheduler.StopAsync(cancellationToken);
+            }
+            catch
+            {
+                status = "failure";
+                throw;
+            }
+            finally
+            {
+                sw.Stop();
+                BackgroundServiceObservability.CompleteRun(
+                    activity,
+                    "orchestrator",
+                    "orchestrator-host",
+                    "stop",
+                    status,
+                    sw.ElapsedMilliseconds);
+            }
         }
     }
 }

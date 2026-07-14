@@ -274,7 +274,9 @@ Operations Control Plane → 4.1 Central fleet management*.
       migrated counts on spans and no manifest paths, artifact keys, report names, or payload values.
 - [x] Extend first-class OpenTelemetry metrics/traces to Portal startup validators and session-cache
       lifecycle/eviction with no secret values, validation messages, paths, user ids, or session keys in labels.
-- [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
+- [x] Extend first-class OpenTelemetry metrics/traces to Orchestrator host start/stop with no
+      scheduler configuration values or database paths in labels.
+- [x] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class
       metrics while continuing to control high-cardinality labels.

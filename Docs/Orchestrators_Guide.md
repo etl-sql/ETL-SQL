@@ -1166,6 +1166,9 @@ snapshot artifact keys, report names, and manifest payload values.
 Portal startup validators for JWT secrets, dataset at-rest keys, OIDC configuration, and session-cache
 lifecycle emit background-service spans/metrics with bounded service/operation/status labels only.
 Secret values, validation messages, script paths, report ids, user ids, and session keys are omitted.
+The Orchestrator host start/stop wrapper emits the same background-service span/metric contract with
+component, service, operation, and status labels only; scheduler configuration and database paths are
+not exported as labels.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
