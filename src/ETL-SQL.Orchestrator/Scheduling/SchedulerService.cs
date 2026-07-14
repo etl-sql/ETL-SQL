@@ -379,9 +379,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     {
                         long blockedId = 0;
                         try { blockedId = await _store.LogJobStartAsync(job.Name); } catch { }
+                        var blockedSw = System.Diagnostics.Stopwatch.StartNew();
+                        using var blockedActivity = SchedulerObservability.StartScheduledJobActivity(blockedId, currentHash, attempt: 0);
                         if (blockedId > 0)
                             await _store.LogJobEndAsync(blockedId, "BLOCKED", mismatchMsg,
                                 scriptHashAtRunTime: currentHash, hashMatched: false);
+                        blockedSw.Stop();
+                        SchedulerObservability.CompleteScheduledJobActivity(
+                            blockedActivity, "BLOCKED", blockedSw.ElapsedMilliseconds, 0, 0, 0);
                         var blockedNextRun = CalculateNextRun(job);
                         try { await _store.TryUpdateJobLastRunFencedAsync(job.Name, DateTime.Now, blockedNextRun, fenceToken); } catch { }
                         return;
@@ -421,6 +426,12 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
                     }
 
+                    var attemptSw = System.Diagnostics.Stopwatch.StartNew();
+                    using var attemptActivity = SchedulerObservability.StartScheduledJobActivity(historyId, currentHash, attempt);
+                    var attemptStatus = "FAILURE";
+                    long attemptRows = 0;
+                    long attemptPeakMemory = 0;
+                    double attemptCpuSeconds = 0;
                     try
                     {
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
@@ -438,6 +449,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         {
                             _logger.LogInformation("Job {JobName} finished successfully on attempt {Attempt}. (RAM: {Mem} bytes, CPU: {Cpu}s)",
                                 job.Name, attempt, lastResult.PeakMemoryBytes, lastResult.CpuTimeSeconds);
+                            attemptStatus = "SUCCESS";
+                            attemptRows = lastResult.RowsProcessed;
+                            attemptPeakMemory = lastResult.PeakMemoryBytes;
+                            attemptCpuSeconds = lastResult.CpuTimeSeconds;
 
                             if (historyId > 0)
                                 await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed,
@@ -451,6 +466,10 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             var safeError = SecretRedactor.Redact(lastResult.ErrorMessage);
                             _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}",
                                 job.Name, attempt, maxAttempts, safeError);
+                            attemptStatus = "FAILURE";
+                            attemptRows = lastResult.RowsProcessed;
+                            attemptPeakMemory = lastResult.PeakMemoryBytes;
+                            attemptCpuSeconds = lastResult.CpuTimeSeconds;
 
                             if (historyId > 0)
                                 await _store.LogJobEndAsync(historyId, "FAILURE", safeError,
@@ -467,6 +486,17 @@ namespace ETL_SQL.Orchestrator.Scheduling
                                 scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                         }
                         lastResult = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message));
+                    }
+                    finally
+                    {
+                        attemptSw.Stop();
+                        SchedulerObservability.CompleteScheduledJobActivity(
+                            attemptActivity,
+                            attemptStatus,
+                            attemptSw.ElapsedMilliseconds,
+                            attemptRows,
+                            attemptPeakMemory,
+                            attemptCpuSeconds);
                     }
 
                     if (attempt < maxAttempts)

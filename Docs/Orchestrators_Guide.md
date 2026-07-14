@@ -1117,6 +1117,10 @@ meter. The `orchestrator.job` span carries job id, request correlation id, envir
 component, workload kind, execution mode, status, rows, peak memory, and CPU time for trace
 correlation. Metrics cover completed job count, duration, rows processed, peak memory, and CPU time
 with low-cardinality tags only: environment, component, workload kind, execution mode, and status.
+Scheduled and manually triggered persisted jobs emit the same pattern from `ETL-SQL.Orchestrator`:
+the `orchestrator.scheduled_job` span carries the durable history id as `etlsql.job.id`, script
+hash, attempt number, status, rows, peak memory, and CPU time, while metrics keep job id and script
+hash out of labels.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
