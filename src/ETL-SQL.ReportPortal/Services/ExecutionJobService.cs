@@ -305,6 +305,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
         var timeout = TimeSpan.FromSeconds(_config.Resources.ExecutionTimeoutSeconds);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
+        using var activity = PortalObservability.StartExecutionJobActivity(job, workloadKind.ToString());
 
         // Workload fairness (P2.6): a non-admin holds at most MaxConcurrentExecutionsPerUser of the
         // shared slots. Acquire the per-user slot FIRST and without holding a global permit, so a
@@ -349,6 +350,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
+            PortalObservability.CompleteExecutionJobActivity(activity, job);
             _log.LogWarning("Execution job {JobId} cancelled while queued for an execution slot", job.Id);
             return;
         }
@@ -391,6 +393,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             {
                 runTimeHash = "sha256:" + Convert.ToHexString(
                     SHA256.HashData(System.IO.File.ReadAllBytes(scriptPath))).ToLowerInvariant();
+                activity?.SetTag(PortalObservability.Tags.ScriptHash, runTimeHash);
             }
 
             if (_channel is HttpJobChannelClient)
@@ -545,6 +548,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.ManifestPath = manifestPath;
             job.CompletedAt = DateTime.UtcNow;
             await PersistJobAsync(job);
+            PortalObservability.CompleteExecutionJobActivity(activity, job, runTimeHash);
             _log.LogInformation("Execution job {JobId} completed", job.Id);
 
         }
@@ -557,6 +561,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.Status = JobStatus.Cancelled;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
+            PortalObservability.CompleteExecutionJobActivity(activity, job);
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
         }
         catch (Exception ex)
@@ -566,6 +571,7 @@ public class ExecutionJobService : IHostedService, INodeLeaseLossHandler, IDispo
             job.Status = JobStatus.Failed;
             await PersistJobAsync(job);
             await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
+            PortalObservability.CompleteExecutionJobActivity(activity, job);
             _log.LogError("Execution job {JobId} failed: {Message}. StackTrace: {Stack}",
                 job.Id, job.Error, SecretRedactor.Redact(ex.StackTrace));
         }

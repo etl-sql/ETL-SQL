@@ -821,6 +821,13 @@ usernames, connection strings, credentials, local filesystem paths, policy paylo
 configuration values. Treat `/metrics` as an operations endpoint and expose it only on a trusted
 management network or behind your standard monitoring ingress controls.
 
+Portal execution jobs also emit `System.Diagnostics.ActivitySource` spans from
+`ETL-SQL.ReportPortal`. The `portal.execution_job` span uses bounded dimensions for environment,
+component, job id, report id, user id, workload kind, execution mode, terminal status, row count,
+peak memory, CPU time, script hash, and request correlation id. These dimensions are intended for
+OpenTelemetry collectors or .NET listeners; avoid adding report names, usernames, local paths,
+parameter values, SQL text, or connection metadata as tags.
+
 ### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.

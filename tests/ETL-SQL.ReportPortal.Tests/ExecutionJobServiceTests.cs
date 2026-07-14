@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net.Http.Json;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
@@ -403,6 +405,8 @@ public class ExecutionJobServiceTests : IDisposable
         await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Metrics';");
         var (config, provider) = CreatePersistentServices();
         await using var services = provider;
+        var activities = new ConcurrentBag<Activity>();
+        using var listener = CapturePortalActivities(activities);
 
         int reportId;
         await using (var scope = services.CreateAsyncScope())
@@ -434,7 +438,11 @@ public class ExecutionJobServiceTests : IDisposable
             artifacts: new InMemoryArtifactStorage(),
             capacityMonitor: new MutableCapacityMonitor(isOverloaded: false));
 
-        var jobId = await service.EnqueueExecutionAsync(reportId, userId: 7, scriptPath);
+        var jobId = await service.EnqueueExecutionAsync(
+            reportId,
+            userId: 7,
+            scriptPath,
+            correlationId: "corr-observe-1");
         await WaitForTerminalAsync(service, jobId);
 
         var job = await service.GetAsync(jobId);
@@ -451,7 +459,33 @@ public class ExecutionJobServiceTests : IDisposable
         Assert.Equal(1234, stored.RowsProcessed);
         Assert.Equal(987654321, stored.PeakMemoryBytes);
         Assert.Equal(12.5, stored.CpuTimeSeconds);
+
+        var activity = Assert.Single(activities, value => value.DisplayName == "portal.execution_job");
+        Assert.Equal("corr-observe-1", Tag(activity, PortalObservability.Tags.CorrelationId));
+        Assert.Equal(jobId, Tag(activity, PortalObservability.Tags.JobId));
+        Assert.Equal(reportId.ToString(), Tag(activity, PortalObservability.Tags.ReportId));
+        Assert.Equal("7", Tag(activity, PortalObservability.Tags.UserId));
+        Assert.Equal("Interactive", Tag(activity, PortalObservability.Tags.WorkloadKind));
+        Assert.Equal("Completed", Tag(activity, PortalObservability.Tags.Status));
+        Assert.Equal("1234", Tag(activity, PortalObservability.Tags.RowsProcessed));
+        Assert.Equal("987654321", Tag(activity, PortalObservability.Tags.PeakMemoryBytes));
+        Assert.StartsWith("sha256:", Tag(activity, PortalObservability.Tags.ScriptHash));
     }
+
+    private static ActivityListener CapturePortalActivities(ConcurrentBag<Activity> activities)
+    {
+        var listener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == PortalObservability.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => activities.Add(activity)
+        };
+        ActivitySource.AddActivityListener(listener);
+        return listener;
+    }
+
+    private static string Tag(Activity activity, string key) =>
+        activity.TagObjects.Single(tag => tag.Key == key).Value?.ToString() ?? "";
 
     private (PortalConfig Config, ServiceProvider Provider) CreatePersistentServices()
     {

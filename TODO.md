@@ -231,6 +231,8 @@ Operations Control Plane → 4.1 Central fleet management*.
 ### Standard observability export
 - [x] Add a Prometheus-compatible Portal `/metrics` endpoint backed by the existing non-secret
       operational snapshot, with stable `environment`, `node`, and `component` labels.
+- [x] Add Portal execution-job `ActivitySource` spans with standardized bounded dimensions and
+      correlation/script-hash context for OpenTelemetry collectors or .NET listeners.
 - [ ] Add first-class OpenTelemetry metrics and traces without imposing standalone overhead when
       exporters are disabled.
 - [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode,
