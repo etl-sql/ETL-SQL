@@ -43,7 +43,9 @@ namespace ETL_SQL.Orchestrator.Execution
             var runAt = DateTime.UtcNow;
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var workloadKind = string.IsNullOrWhiteSpace(jobName) ? "script" : "job";
-            var scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
+            var scriptHash = EngineExecutionObservability.IsTracingEnabled
+                ? "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant()
+                : null;
             using var activity = EngineExecutionObservability.StartExecutionActivity(scriptHash, jobName, CurrentCorrelationId());
 
             try

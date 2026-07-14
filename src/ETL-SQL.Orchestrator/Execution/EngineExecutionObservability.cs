@@ -27,7 +27,9 @@ internal static class EngineExecutionObservability
     private static readonly Histogram<long> ExecutionSpillReadBytes =
         Meter.CreateHistogram<long>("etlsql.engine.execution.spill_read_bytes");
 
-    public static Activity? StartExecutionActivity(string scriptHash, string? jobName, string? correlationId = null)
+    public static bool IsTracingEnabled => ActivitySource.HasListeners();
+
+    public static Activity? StartExecutionActivity(string? scriptHash, string? jobName, string? correlationId = null)
     {
         var activity = ActivitySource.StartActivity("engine.execution", ActivityKind.Internal);
         if (activity is null)
@@ -38,7 +40,8 @@ internal static class EngineExecutionObservability
         activity.SetTag(ObservabilityConventions.Tags.Component, "engine");
         activity.SetTag(ObservabilityConventions.Tags.ExecutionMode, "engine");
         activity.SetTag(ObservabilityConventions.Tags.WorkloadKind, string.IsNullOrWhiteSpace(jobName) ? "script" : "job");
-        activity.SetTag(ObservabilityConventions.Tags.ScriptHash, scriptHash);
+        if (!string.IsNullOrWhiteSpace(scriptHash))
+            activity.SetTag(ObservabilityConventions.Tags.ScriptHash, scriptHash);
         if (!string.IsNullOrWhiteSpace(jobName))
             activity.SetTag(ObservabilityConventions.Tags.JobId, jobName);
         if (!string.IsNullOrWhiteSpace(correlationId))

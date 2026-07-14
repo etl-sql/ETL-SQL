@@ -1118,6 +1118,11 @@ These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventi
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with
 underscores.
 
+The built-in observability emits `System.Diagnostics` spans and metrics only. ETL-SQL does not install
+or start an OpenTelemetry exporter or collector by default; attach your own listener/exporter in the
+host when central telemetry is required. Trace-only expensive context, such as in-process script hashes
+and policy hashes, is computed only when a trace listener is active.
+
 Ad-hoc jobs submitted through `POST /jobs` also emit `System.Diagnostics.ActivitySource` spans from
 `ETL-SQL.Orchestrator.Service` and `System.Diagnostics.Metrics` instruments from the same-named
 meter. The `orchestrator.job` span carries job id, request correlation id, environment, node,

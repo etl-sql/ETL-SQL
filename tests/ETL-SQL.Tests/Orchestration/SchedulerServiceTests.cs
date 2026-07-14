@@ -307,6 +307,56 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public void EngineExecutionObservability_AllowsHashlessSpanWhenTracingContextHasNoScriptHash()
+        {
+            var stoppedActivities = new List<Activity>();
+            using var activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == EngineExecutionObservability.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStopped = activity => stoppedActivities.Add(activity)
+            };
+            ActivitySource.AddActivityListener(activityListener);
+
+            var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+            using var meterListener = new MeterListener
+            {
+                InstrumentPublished = (instrument, listener) =>
+                {
+                    if (instrument.Meter.Name == EngineExecutionObservability.MeterName)
+                        listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.Start();
+
+            var activity = EngineExecutionObservability.StartExecutionActivity(null, null);
+            EngineExecutionObservability.CompleteExecutionActivity(
+                activity,
+                "success",
+                "script",
+                durationMs: 1,
+                rowsProcessed: 0,
+                peakMemoryBytes: 0,
+                cpuTimeSeconds: 0,
+                spillBytes: 0,
+                spillReadBytes: 0);
+            activity?.Dispose();
+
+            var span = Assert.Single(stoppedActivities);
+            Assert.Equal("engine.execution", span.OperationName);
+            Assert.Null(Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
+            Assert.Null(Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
+            Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "script"));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
+        }
+
+        [Fact]
         public async Task Job_WithNullNextRun_IsExecuted()
         {
             var jobs = new[] { new JobDefinition("TestJob", "SELECT 1;", 1, "HOUR", null, null, null) };

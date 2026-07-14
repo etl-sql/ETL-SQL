@@ -34,16 +34,15 @@ internal static class PolicyRefreshObservability
     public static void CompleteRefreshActivity(Activity? activity, EffectiveEnterprisePolicy? policy,
         string status, long durationMs)
     {
-        var policyHash = policy is null
-            ? null
-            : ExecutionPolicySnapshot.Capture(policy, "orchestrator", ScriptExecutionMode.Batch, "policy-refresh")
-                .PolicyHash;
-
         if (activity is not null)
         {
             activity.SetTag(ObservabilityConventions.Tags.Status, status);
             if (!string.IsNullOrWhiteSpace(policy?.PolicyVersion))
                 activity.SetTag(ObservabilityConventions.Tags.PolicyVersion, policy.PolicyVersion);
+            var policyHash = policy is null
+                ? null
+                : ExecutionPolicySnapshot.Capture(policy, "orchestrator", ScriptExecutionMode.Batch, "policy-refresh")
+                    .PolicyHash;
             if (!string.IsNullOrWhiteSpace(policyHash))
                 activity.SetTag(ObservabilityConventions.Tags.PolicyHash, policyHash);
             activity.SetStatus(status is "success" ? ActivityStatusCode.Ok : ActivityStatusCode.Error);

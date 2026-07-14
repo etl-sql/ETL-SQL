@@ -297,5 +297,5 @@ Operations Control Plane → 4.1 Central fleet management*.
       `X-Correlation-ID` so logs, audit rows, spans, and client reports can be joined.
 - [x] Extend correlation coverage to remaining engine and background-service
       metrics/traces with job IDs, script hashes, policy version/hash, and request correlation IDs.
-- [ ] Keep observability exporters optional and ensure disabled exporters impose negligible
+- [x] Keep observability exporters optional and ensure disabled exporters impose negligible
       standalone overhead.
