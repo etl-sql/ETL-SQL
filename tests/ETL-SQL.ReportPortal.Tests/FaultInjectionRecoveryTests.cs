@@ -1,8 +1,11 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Scheduling;
@@ -138,6 +141,30 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
     [Fact]
     public async Task OrchestratorPoller_DegradesWhenOrchestratorDbUnreadable()
     {
+        var stoppedActivities = new List<Activity>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == BackgroundServiceObservability.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => stoppedActivities.Add(activity)
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == BackgroundServiceObservability.MeterName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.Start();
+
         using var factory = new PortalWebFactory();
         _ = factory.CreateClient(); // build the host, apply migrations
 
@@ -153,6 +180,20 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
             factory.Services, new OrchestratorDbLocator(degradedConfig));
         var ex = await Record.ExceptionAsync(() => poller.PollAsync(CancellationToken.None));
         Assert.Null(ex);
+
+        Assert.Contains(stoppedActivities, activity =>
+            activity.OperationName == "background_service.run"
+            && Tag(activity, ObservabilityConventions.Tags.Component) == "portal"
+            && Tag(activity, ObservabilityConventions.Tags.WorkloadKind) == "background"
+            && Tag(activity, ObservabilityConventions.Tags.ServiceName) == "orchestrator-poller"
+            && Tag(activity, BackgroundServiceObservability.OperationTag) == "poll"
+            && Tag(activity, ObservabilityConventions.Tags.Status) == "degraded");
+        Assert.Contains(measurements, measurement => measurement.Name == "etlsql.background_service.run.completed"
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.ServiceName, "orchestrator-poller")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "degraded"));
+        Assert.DoesNotContain(measurements, measurement => measurement.Tags.Any(tag =>
+            tag.Value is string value
+            && value.Contains(corruptOrchDb, StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>
@@ -582,4 +623,21 @@ public sealed class FaultInjectionRecoveryTests : IDisposable
 
         Assert.Fail($"Job {jobId} did not reach a terminal state within 10s.");
     }
+
+    private static string? Tag(Activity activity, string key)
+    {
+        var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+        return value?.ToString();
+    }
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 }

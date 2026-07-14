@@ -1142,6 +1142,9 @@ same-named meter for native failure-digest, backup-report, and capacity-report r
 use stable service name, operation, workload kind, status, environment, node, and component labels;
 they do not include notification recipients, SMTP aliases, message bodies, run details, paths, or
 error text.
+The Portal orchestrator poller uses the same background-service meter/source for each poll cycle,
+with statuses for degraded, idle, success, and failure. Poller labels intentionally omit
+Orchestrator database paths, job names, subscription ids, report script paths, and error text.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

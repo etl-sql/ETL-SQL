@@ -1,4 +1,5 @@
 using ETL_SQL.Common;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
@@ -34,12 +35,15 @@ public class OrchestratorPollerService(
 
     internal async Task PollAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "orchestrator-poller", "poll");
         var orchDbPath = dbLocator.Resolve();
 
         if (storeFactory.Provider == DatabaseProvider.Sqlite
             && (orchDbPath is null || !File.Exists(orchDbPath)))
         {
             log.LogDebug("OrchestratorPoller: Orchestrator DB not found at {Path} — degraded mode", orchDbPath);
+            CompletePoll(activity, sw, "degraded");
             return;
         }
 
@@ -67,17 +71,20 @@ public class OrchestratorPollerService(
         catch (Exception ex)
         {
             log.LogWarning("OrchestratorPoller: Orchestrator DB query failed — {Message}", ex.Message);
+            CompletePoll(activity, sw, "degraded");
             return;
         }
 
         if (!completions.Any())
         {
             _lastPollTime = pollUpperBound;
+            CompletePoll(activity, sw, "idle");
             return;
         }
 
         log.LogInformation("OrchestratorPoller: {Count} job completion(s) detected", completions.Count);
 
+        var failed = false;
         foreach (var (jobName, endTime) in completions)
         {
             try
@@ -123,9 +130,12 @@ public class OrchestratorPollerService(
             {
                 log.LogError(ex,
                     "OrchestratorPoller: error processing completion for job {JobName}", jobName);
+                failed = true;
                 break;
             }
         }
+
+        CompletePoll(activity, sw, failed ? "failure" : "success");
     }
 
     private async Task ProcessSubscriptionCompletionAsync(
@@ -155,4 +165,15 @@ public class OrchestratorPollerService(
             subscriptionId, result.Outcome);
     }
 
+    private static void CompletePoll(System.Diagnostics.Activity? activity, System.Diagnostics.Stopwatch sw, string status)
+    {
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "orchestrator-poller",
+            "poll",
+            status,
+            sw.ElapsedMilliseconds);
+    }
 }
