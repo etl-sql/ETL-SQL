@@ -370,7 +370,10 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalog
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReferenceImpactService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();
-builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
+builder.Services.AddScoped<IDatasetRegistry>(sp =>
+    ETL_SQL.Core.Observability.DatasetObservability.Instrument(
+        sp.GetRequiredService<ETL_SQL.ReportPortal.Services.DatasetRegistryService>()));
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
 

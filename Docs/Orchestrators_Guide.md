@@ -1133,6 +1133,10 @@ Registered connectors emit spans from `ETL-SQL.Connectors` and metrics from the 
 version, catalog, and data-source creation operations. Connector telemetry uses connector type,
 operation, status, environment, and component labels only; it intentionally omits connection strings,
 hosts, table names, SQL text, paths, and credentials.
+Dataset registry operations emit spans from `ETL-SQL.Datasets` and metrics from the same-named meter
+for register, lookup, list, authorization, refresh-job registration, audit, delete, and path-build
+operations. Dataset ids are trace-only; metrics use operation, status, environment, and component
+labels and omit dataset names, caller permission strings, paths, and credentials.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

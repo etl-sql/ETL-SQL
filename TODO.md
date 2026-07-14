@@ -254,17 +254,20 @@ Operations Control Plane → 4.1 Central fleet management*.
 - [x] Extend first-class OpenTelemetry metrics/traces to connector version/catalog/data-source
       operations with connector type and operation status labels, without emitting connection
       strings, hosts, table names, or credentials.
-- [ ] Extend first-class OpenTelemetry metrics/traces to dataset and remaining background-service
-      workloads without imposing standalone overhead when exporters are disabled.
-- [ ] Apply the shared dimensions to remaining engine, dataset, connector, policy, and workload-class
+- [x] Extend first-class OpenTelemetry metrics/traces to dataset registry operations with dataset id
+      only on traces and low-cardinality operation/status metrics.
+- [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
+      without imposing standalone overhead when exporters are disabled.
+- [ ] Apply the shared dimensions to remaining engine and workload-class
       metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       retries, failures, storage growth, database pool health, and any remaining
-      dataset/background-service health not already covered by Portal, Orchestrator, engine spill,
-      connector latency, policy refresh, audit/security backlog, and delivery health metrics.
+      background-service health not already covered by Portal, Orchestrator, engine spill,
+      connector latency, dataset operations, policy refresh, audit/security backlog, and delivery
+      health metrics.
 - [x] Scope Portal and Orchestrator request logs with request correlation id and trace id, and emit
       `X-Correlation-ID` so logs, audit rows, spans, and client reports can be joined.
-- [ ] Extend correlation coverage to remaining engine, connector, dataset, and background-service
+- [ ] Extend correlation coverage to remaining engine and background-service
       metrics/traces with job IDs, script hashes, policy version/hash, and request correlation IDs.
 - [ ] Keep observability exporters optional and ensure disabled exporters impose negligible
       standalone overhead.
