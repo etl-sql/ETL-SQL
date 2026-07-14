@@ -1106,6 +1106,10 @@ The Orchestrator Service exposes three unauthenticated operations endpoints:
 `component="orchestrator"`. It does not emit job names, script paths, script text, parameters,
 connection metadata, credentials, or error details. Expose it only on a trusted management network or
 behind your standard monitoring ingress controls.
+In addition to live active/queued/max/available-slot gauges, the endpoint exports one-hour completed
+job count, failed/interrupted count, average execution duration, rows processed, peak memory, CPU time,
+and latest local-node host headroom samples for memory, CPU, state-disk free bytes, and spill-disk
+free bytes when host metrics are available.
 
 These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventions` contract used by
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with

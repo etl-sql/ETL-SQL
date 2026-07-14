@@ -79,11 +79,19 @@ namespace ETL_SQL.Orchestrator.Service
                 });
             }).WithName("getMetrics");
 
-            app.MapGet("/metrics/prometheus", (SchedulerService scheduler, ChildProcessTracker tracker) =>
+            app.MapGet("/metrics/prometheus", async (
+                SchedulerService scheduler,
+                ChildProcessTracker tracker,
+                IJobHistoryStore historyStore,
+                IServiceProvider services) =>
             {
                 var m = scheduler.GetMetrics();
                 return Results.Text(
-                    BuildPrometheusMetrics(m, tracker.ActiveCount),
+                    await BuildPrometheusMetricsAsync(
+                        m,
+                        tracker.ActiveCount,
+                        historyStore,
+                        services.GetService<IHostMetricsStore>()),
                     "text/plain; version=0.0.4; charset=utf-8");
             }).WithName("getPrometheusMetrics");
 
@@ -551,7 +559,11 @@ namespace ETL_SQL.Orchestrator.Service
                 : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
         }
 
-        private static string BuildPrometheusMetrics(JobThrottleMetrics metrics, int activeProcesses)
+        private static async Task<string> BuildPrometheusMetricsAsync(
+            JobThrottleMetrics metrics,
+            int activeProcesses,
+            IJobHistoryStore historyStore,
+            IHostMetricsStore? hostMetricsStore)
         {
             var labels = new Dictionary<string, string>
             {
@@ -560,6 +572,30 @@ namespace ETL_SQL.Orchestrator.Service
                 [ObservabilityConventions.PrometheusLabel(ObservabilityConventions.Tags.Node)] = Environment.MachineName,
                 [ObservabilityConventions.PrometheusLabel(ObservabilityConventions.Tags.Component)] = "orchestrator"
             };
+
+            var now = DateTime.UtcNow;
+            var windowStart = now.AddHours(-1);
+            var completed = (await historyStore.GetCompletedHistoryAsync(windowStart, now, limit: 10000))
+                .Where(entry => entry.EndTime is not null)
+                .ToList();
+            var failed = completed.Count(entry =>
+                string.Equals(entry.Status, "FAILED", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(entry.Status, "INTERRUPTED", StringComparison.OrdinalIgnoreCase));
+            var avgDurationMs = completed.Count == 0
+                ? 0
+                : completed.Average(entry => Math.Max(0, (entry.EndTime!.Value - entry.StartTime).TotalMilliseconds));
+            var rowsProcessed = completed.Sum(entry => Math.Max(0, entry.RowsProcessed));
+            var peakMemoryBytes = completed.Count == 0
+                ? 0
+                : completed.Max(entry => Math.Max(0, entry.PeakMemoryBytes));
+            var cpuTimeSeconds = completed.Sum(entry => Math.Max(0, entry.CpuTimeSeconds));
+
+            HostMetricSample? host = null;
+            if (hostMetricsStore is not null)
+            {
+                host = (await hostMetricsStore.GetHostMetricsAsync(Environment.MachineName, windowStart, limit: 1))
+                    .FirstOrDefault();
+            }
 
             var sb = new StringBuilder();
             AppendGauge(sb, "etlsql_orchestrator_jobs_active",
@@ -572,6 +608,34 @@ namespace ETL_SQL.Orchestrator.Service
                 "Available Orchestrator execution slots.", metrics.AvailableSlots, labels);
             AppendGauge(sb, "etlsql_orchestrator_processes_active",
                 "Currently active child processes.", activeProcesses, labels);
+            AppendGauge(sb, "etlsql_orchestrator_jobs_completed_1h",
+                "Orchestrator jobs completed in the last hour.", completed.Count, labels);
+            AppendGauge(sb, "etlsql_orchestrator_jobs_failed_1h",
+                "Orchestrator jobs failed or interrupted in the last hour.", failed, labels);
+            AppendGauge(sb, "etlsql_orchestrator_job_duration_average_ms_1h",
+                "Average Orchestrator job execution duration in milliseconds over the last hour.", avgDurationMs, labels);
+            AppendGauge(sb, "etlsql_orchestrator_rows_processed_1h",
+                "Rows processed by Orchestrator jobs completed in the last hour.", rowsProcessed, labels);
+            AppendGauge(sb, "etlsql_orchestrator_peak_memory_bytes_1h",
+                "Maximum peak memory reported by Orchestrator jobs completed in the last hour.", peakMemoryBytes, labels);
+            AppendGauge(sb, "etlsql_orchestrator_cpu_time_seconds_1h",
+                "Total CPU time reported by Orchestrator jobs completed in the last hour.", cpuTimeSeconds, labels);
+            if (host is not null)
+            {
+                AppendGauge(sb, "etlsql_orchestrator_memory_load_percent",
+                    "Latest sampled Orchestrator node memory load percentage.", host.MemoryLoadPercent, labels);
+                AppendGauge(sb, "etlsql_orchestrator_process_cpu_percent",
+                    "Latest sampled Orchestrator process CPU percentage.", host.ProcessCpuPercent, labels);
+                if (host.HostCpuPercent is double hostCpuPercent)
+                {
+                    AppendGauge(sb, "etlsql_orchestrator_host_cpu_percent",
+                        "Latest sampled Orchestrator host CPU percentage.", hostCpuPercent, labels);
+                }
+                AppendGauge(sb, "etlsql_orchestrator_state_disk_free_bytes",
+                    "Latest sampled free bytes for Orchestrator state storage.", host.StateDiskFreeBytes, labels);
+                AppendGauge(sb, "etlsql_orchestrator_spill_disk_free_bytes",
+                    "Latest sampled free bytes for Orchestrator spill storage.", host.SpillDiskFreeBytes, labels);
+            }
             return sb.ToString();
         }
 

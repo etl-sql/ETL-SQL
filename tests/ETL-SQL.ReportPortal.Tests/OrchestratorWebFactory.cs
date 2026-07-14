@@ -56,12 +56,14 @@ public class OrchestratorWebFactory : WebApplicationFactory<OrchestratorMarker>
         {
             services.RemoveAll<SQLiteJobHistoryStore>();
             services.RemoveAll<IJobHistoryStore>();
+            services.RemoveAll<IHostMetricsStore>();
             services.RemoveAll<IBundleStore>();
             services.RemoveAll<ILineageCatalogStore>();
 
             var testStore = new SQLiteJobHistoryStore(orchDbPath);
             services.AddSingleton(testStore);
             services.AddSingleton<IJobHistoryStore>(testStore);
+            services.AddSingleton<IHostMetricsStore>(testStore);
             services.AddSingleton<IBundleStore>(testStore);
             services.AddSingleton<ILineageCatalogStore>(testStore);
         });

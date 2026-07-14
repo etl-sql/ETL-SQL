@@ -5,9 +5,11 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Service;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ETL_SQL.ReportPortal.Tests;
@@ -102,6 +104,30 @@ public class OrchestratorJobApiAuthTests : IDisposable
     public async Task PrometheusMetrics_UsesTextFormat()
     {
         var client = _factory.CreateClient();
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var history = scope.ServiceProvider.GetRequiredService<IJobHistoryStore>();
+            var hostMetrics = scope.ServiceProvider.GetRequiredService<IHostMetricsStore>();
+            await history.InitializeAsync();
+            var started = DateTime.UtcNow.AddMinutes(-10);
+            var entryId = await history.LogJobStartAsync("secret-job-name");
+            await history.LogJobEndAsync(
+                entryId,
+                "FAILED",
+                "secret failure should not be in labels",
+                rowsProcessed: 123,
+                peakMemoryBytes: 456,
+                cpuTimeSeconds: 1.5);
+            await hostMetrics.AppendHostMetricAsync(new HostMetricSample(
+                Environment.MachineName,
+                started,
+                MemoryLoadPercent: 55.5,
+                ProcessCpuPercent: 12.5,
+                HostCpuPercent: 33.5,
+                StateDiskFreeBytes: 1000,
+                SpillDiskFreeBytes: 2000));
+        }
+
         using var req = Request(HttpMethod.Get, "/metrics/prometheus", apiKey: null);
         var res = await client.SendAsync(req);
 
@@ -109,7 +135,16 @@ public class OrchestratorJobApiAuthTests : IDisposable
         Assert.StartsWith("text/plain", res.Content.Headers.ContentType?.MediaType);
         var body = await res.Content.ReadAsStringAsync();
         Assert.Contains("# HELP etlsql_orchestrator_jobs_active", body);
+        Assert.Contains("# HELP etlsql_orchestrator_jobs_completed_1h", body);
+        Assert.Contains("etlsql_orchestrator_jobs_completed_1h", body);
+        Assert.Contains("etlsql_orchestrator_jobs_failed_1h", body);
+        Assert.Contains("etlsql_orchestrator_rows_processed_1h", body);
+        Assert.Contains("etlsql_orchestrator_memory_load_percent", body);
+        Assert.Contains("etlsql_orchestrator_state_disk_free_bytes", body);
         Assert.Contains("component=\"orchestrator\"", body);
+        Assert.Contains($"node=\"{Environment.MachineName}\"", body);
+        Assert.DoesNotContain("secret-job-name", body);
+        Assert.DoesNotContain("secret failure", body);
     }
 
     [Fact]

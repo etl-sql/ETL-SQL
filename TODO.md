@@ -280,6 +280,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       without imposing standalone overhead when exporters are disabled.
 - [x] Apply the shared dimensions to remaining engine and workload-class
       metrics while continuing to control high-cardinality labels.
+- [x] Expand Orchestrator `/metrics/prometheus` with one-hour completion/failure/latency/rows/CPU/
+      memory gauges plus latest local-node host headroom without job names, paths, scripts, or errors.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       retries, failures, storage growth, database pool health, and any remaining
       background-service health not already covered by Portal, Orchestrator, engine spill,
