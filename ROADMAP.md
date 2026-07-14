@@ -295,3 +295,7 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
   - **Virtual Cell Slicing:** The Language Server segments flat scripts into execution blocks bounded by top-level labels, rendering CodeLens controls (`[Run Cell]` / `[Run Below]`) in the editor.
   - **Checkpoint Bootstrapping:** Support initializing a REPL session directly from an `.etlsnap` package, allowing developers to debug-resume failed production pipelines from any label checkpoint.
   - **Stateless JIT Pre-Scanning:** Implement a pre-scan pass to parse and evaluate declarations (`DECLARE` and `CREATE CONNECTION`) prior to running a target cell, ensuring a valid runtime environment on cold starts.
+- [ ] **First-Class Portal Script Editor:** Upgrade the Portal's script editor from a basic text area to a high-fidelity development interface for SaaS/large-farm environments. See the detailed design spec in [PortalEditorStrategy.md](Docs/Design/PortalEditorStrategy.md). This includes:
+  - **Monaco Editor Integration:** Replace CodeMirror with the Monaco Editor in the Report Portal to provide standard IDE editor behaviors.
+  - **LSP WebSockets Bridge:** Implement a JSON-RPC WebSocket proxy connecting the Monaco frontend to the server-side C# Language Server (`ETL-SQL.LanguageServer`) for real-time schema autocomplete, lints, and hover tooltips.
+  - **SaaS Resource & Security Throttling:** Enforce strict sandboxed execution limits (e.g. maximum 15-second timeouts, mandatory `TOP 100` constraints on interactive runs) and full `AuditLog` security compliance.
