@@ -17,6 +17,7 @@
 //   detail(alias)     -> { summary: {...as list row}, target, options: {KEY: value}, sensitiveFields: [] }
 //   set(alias, entry) -> {}   entry = { connectorType, target, options, environmentScope, sensitiveFields }
 //   verify(alias)     -> { alias, status: 'ok', secretReferences } (throws .status 404/409 otherwise)
+//   test(alias)       -> { alias, succeeded, steps: [{ layer, status, detail, remedy }] } (409 if disabled)
 //   disable(alias)    -> {}
 //   remove(alias)     -> {}
 //   exportAll()       -> [entry...]
@@ -273,6 +274,7 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
                   <button class="btn btn-outline btn-sm" data-act="detail">Detail</button>
                   <button class="btn btn-outline btn-sm" data-act="impact">Impact</button>
                   <button class="btn btn-outline btn-sm" data-act="verify">Verify</button>
+                  <button class="btn btn-outline btn-sm" data-act="test">Test</button>
                   ${c.disabled
                     ? '<button class="btn btn-outline btn-sm" data-act="enable">Enable</button>'
                     : '<button class="btn btn-outline btn-sm" data-act="disable">Disable</button>'}
@@ -339,6 +341,49 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
       </table>`;
   }
 
+  function diagStatusBadge(status) {
+    const s = String(status || '').toLowerCase();
+    if (s === 'ok') return '<span class="badge badge-ok">OK</span>';
+    if (s === 'failed') return '<span class="badge badge-error">FAIL</span>';
+    if (s === 'denied') return '<span class="badge badge-error">DENIED</span>';
+    return '<span class="badge">—</span>';
+  }
+
+  function renderDiagnostic(report) {
+    const steps = report.steps || [];
+    const summary = report.succeeded
+      ? '<div class="form-hint">All attempted checks passed.</div>'
+      : '<div class="form-hint">One or more checks did not pass — see the remedies below.</div>';
+    if (!steps.length) return `${summary}<div class="empty-state">No diagnostic steps returned.</div>`;
+    return `
+      ${summary}
+      <table class="data-table">
+        <thead><tr><th>Layer</th><th>Status</th><th>Detail</th><th>Remedy</th></tr></thead>
+        <tbody>${steps.map((s) => `
+          <tr>
+            <td><code>${esc(s.layer)}</code></td>
+            <td>${diagStatusBadge(s.status)}</td>
+            <td>${esc(s.detail)}</td>
+            <td>${s.remedy ? esc(s.remedy) : '—'}</td>
+          </tr>`).join('')}</tbody>
+      </table>`;
+  }
+
+  async function showDiagnostic(alias) {
+    $('conn-detailAlias').textContent = `${alias} — connection test`;
+    $('conn-detailBody').innerHTML = '<div class="form-hint">Running DNS → TCP → TLS diagnostic…</div>';
+    $('conn-detailCard').style.display = '';
+    try {
+      const report = await connectionsApi.test(alias);
+      $('conn-detailBody').innerHTML = renderDiagnostic(report);
+    } catch (err) {
+      const msg = err.body?.status === 'disabled'
+        ? 'This connection is disabled — enable it before testing.'
+        : err.message;
+      $('conn-detailBody').innerHTML = `<div class="error-msg show">${esc(msg)}</div>`;
+    }
+  }
+
   host.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-act]');
     if (!btn) return;
@@ -360,6 +405,8 @@ export function createConnectionsAdmin({ host, connectionsApi }) {
           const status = err.body?.status || (err.status === 404 ? 'missing' : 'error');
           row.querySelector('.conn-row-status').innerHTML = `<span class="badge badge-error">${esc(status)}</span>`;
         }
+      } else if (btn.dataset.act === 'test') {
+        await showDiagnostic(alias);
       } else if (btn.dataset.act === 'disable') {
         if (!window.confirm(`Disable shared connection '${alias}'? SHARED:${alias} will fail until it is re-enabled.`)) return;
         await connectionsApi.disable(alias);

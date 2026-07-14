@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Connectors.Shared;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Data;
 using MySqlConnector;
 
@@ -11,7 +13,7 @@ namespace ETL_SQL.Connectors.MySql
     /// <summary>
     /// Connector for MySQL and MariaDB databases using the MySqlConnector client.
     /// </summary>
-    public class MySqlConnector : IConnector
+    public class MySqlConnector : IConnector, IConnectionDiagnosticAuthProbe
     {
         public string Name => "MYSQL";
         public IReadOnlyList<string> Aliases => new[] { "MARIADB" };
@@ -124,5 +126,34 @@ namespace ETL_SQL.Connectors.MySql
 
         public ICatalogMetadataProvider? GetCatalogProvider(string connectionString)
             => new MySqlCatalogProvider(connectionString);
+
+        public async Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+            ConnectionDiagnosticAuthContext context,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var connectionString = BuildDiagnosticConnectionString(context.Target, context.Options);
+                await using var conn = new MySqlConnection(connectionString);
+                await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+                return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MySQL authentication succeeded.")];
+            }
+            catch (Exception ex) when (ex is MySqlException or InvalidOperationException or TimeoutException)
+            {
+                return
+                [
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Failed,
+                        "MySQL authentication failed.",
+                        "Verify HOST/SERVER, DATABASE, USER/PASSWORD, SSL_MODE, account status, and server authentication plugin policy.")
+                ];
+            }
+        }
+
+        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        {
+            if (options is { Count: > 0 } && (options.ContainsKey("HOST") || options.ContainsKey("SERVER") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+                return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
+            return target;
+        }
     }
 }

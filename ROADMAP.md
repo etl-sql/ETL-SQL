@@ -91,7 +91,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ### Future Candidate Phases
 - [ ] **Catalog approval workflow (optional):** Propose-and-approve workflow on shared connection creation/update/deletion for organizations that need four-eyes control.
-- [ ] **Connection Diagnostic Engine (`TEST CONNECTION`):** A first-party `TEST CONNECTION <alias>` statement that actively tests DNS resolution, TCP handshake, port reachability, host-key validation, and credential authentication, outputting a clear, plain-English troubleshooting report.
   - *Scope notes:* active probing is an SSRF/port-scan primitive if ungoverned — it **must** run through the same egress governance (`ConnectorPolicyAuthorizer` / `NetworkDestinationRules`) and connection-use ACLs as a real connection, so a script cannot scan the internal network.
   - Layer the checks (DNS → TCP → TLS → auth), stop at the first failure with a specific remedy, and never echo secret values in the report.
   - Expose both as the scriptable statement and a Portal button over one shared, governed diagnostic core.

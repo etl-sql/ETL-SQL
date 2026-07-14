@@ -38,6 +38,26 @@ public sealed record DiagnosticReport(string Connection, string ConnectorType, I
     public bool Succeeded => Steps.All(s => s.Status is DiagnosticStatus.Ok or DiagnosticStatus.Skipped);
 }
 
+/// <summary>Connector-specific context for credential/host-key diagnostics.</summary>
+public sealed record ConnectionDiagnosticAuthContext(
+    string Alias,
+    string ConnectorType,
+    string Target,
+    IReadOnlyDictionary<string, string>? Options,
+    int ProbeTimeoutSeconds);
+
+/// <summary>
+/// Optional connector capability used by <see cref="ConnectionDiagnosticEngine"/> after DNS/TCP/TLS
+/// succeeds. Implementations may open a real provider session, validate an SSH host key, or otherwise
+/// verify authentication without returning secret values in report details.
+/// </summary>
+public interface IConnectionDiagnosticAuthProbe
+{
+    Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+        ConnectionDiagnosticAuthContext context,
+        CancellationToken cancellationToken = default);
+}
+
 /// <summary>
 /// Governed, layered connection diagnostic used by the <c>TEST CONNECTION</c> statement (and, later,
 /// the Portal "Test connection" button — this is the one shared core). Actively probes a catalog
@@ -89,21 +109,60 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
         if (!context.Connections.TryGetValue(alias, out var dataSource) || dataSource is null)
             throw new ExecutionException($"Connection '{alias}' not found.");
 
-        var connectorType = dataSource.ConnectorType;
+        ExecutionPolicySnapshot snapshot;
+        try
+        {
+            snapshot = OperationPolicyBoundary.Refresh(context, "<connection-diagnostic>");
+        }
+        catch (SecurityException ex)
+        {
+            // Stale/expired enterprise policy — report as a governance denial rather than throwing.
+            return new DiagnosticReport(alias, dataSource.ConnectorType, new[]
+            {
+                new DiagnosticStep("POLICY", DiagnosticStatus.Denied, Sanitize(ex.Message),
+                    "This connection's destination is not permitted by the active security policy. Ask an administrator to authorize the host/connector, or correct the connection target.")
+            });
+        }
+
+        return await DiagnoseAsync(alias, dataSource.ConnectorType, dataSource.Path, dataSource.Options,
+            context.SecurityService, snapshot, probeTimeoutSeconds, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Context-free diagnostic core shared by the <c>TEST CONNECTION</c> statement and the Portal
+    /// "Test connection" surface. The caller supplies the connection definition (connector type,
+    /// target, options), a <see cref="SecurityService"/> for host validation, and a policy snapshot
+    /// (e.g. <c>ExecutionPolicySnapshot.Capture(EnterprisePolicyRuntime.Current, …)</c>). Governance
+    /// runs before any network I/O; the report never contains secret values.
+    /// </summary>
+    public async Task<DiagnosticReport> DiagnoseAsync(
+        string alias,
+        string connectorType,
+        string? target,
+        IReadOnlyDictionary<string, string>? options,
+        SecurityService security,
+        ExecutionPolicySnapshot snapshot,
+        int probeTimeoutSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(security);
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var opts = options is null
+            ? null
+            : new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase);
+        var effectiveTarget = target ?? string.Empty;
         var connector = _connectorRegistry.GetConnector(connectorType);
-        var target = dataSource.Path;
-        var options = dataSource.Options;
-        var host = connector?.GetHost(target, options);
+        var host = connector?.GetHost(effectiveTarget, opts);
 
         var steps = new List<DiagnosticStep>();
 
-        // 1. Governance gate — before any DNS resolution or socket connect. Re-authorizes the
-        //    connector type + destination host against current policy (which may have tightened
-        //    since the connection was created).
+        // 1. Governance gate — before any DNS resolution or socket connect. Authorizes the connector
+        //    type + destination host against the supplied policy snapshot.
         try
         {
-            new ConnectorPolicyAuthorizer(context.SecurityService)
-                .Authorize(context, connector?.Name ?? connectorType, host, target);
+            new ConnectorPolicyAuthorizer(security)
+                .Authorize(snapshot, connector?.Name ?? connectorType, host, target);
         }
         catch (SecurityException ex)
         {
@@ -115,7 +174,7 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
         steps.Add(new DiagnosticStep("POLICY", DiagnosticStatus.Ok, "Destination permitted by active security policy."));
 
         // 2. Non-network connectors have nothing to probe.
-        var endpoint = ResolveEndpoint(connector, target, options, host);
+        var endpoint = ResolveEndpoint(connector, effectiveTarget, opts, host);
         if (connector is { IsFileBased: true } || string.IsNullOrWhiteSpace(host))
         {
             steps.Add(new DiagnosticStep("NETWORK", DiagnosticStatus.Skipped,
@@ -221,10 +280,39 @@ public sealed class ConnectionDiagnosticEngine(IConnectorRegistry connectorRegis
             steps.Add(new DiagnosticStep("TLS", DiagnosticStatus.Skipped, "Connector does not expect transport TLS on this port."));
         }
 
-        // 6. Credential authentication is not probed in this release (Increment 2).
-        steps.Add(new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
-            "Credential authentication was not probed.",
-            "Run a query against the connection to confirm the credentials are accepted."));
+        // 6. Connector-specific authentication / host-key probe.
+        if (connector is IConnectionDiagnosticAuthProbe authProbe)
+        {
+            IReadOnlyList<DiagnosticStep> authSteps;
+            try
+            {
+                authSteps = await authProbe.DiagnoseAuthenticationAsync(
+                    new ConnectionDiagnosticAuthContext(
+                        alias,
+                        connector.Name,
+                        effectiveTarget,
+                        opts,
+                        probeTimeoutSeconds),
+                    cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                authSteps =
+                [
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Failed,
+                        $"Credential authentication failed for '{connector.Name}'.",
+                        "Verify the username, password/key material, account status, and authentication mode.")
+                ];
+            }
+
+            steps.AddRange(authSteps.Select(s => s with { Detail = Sanitize(s.Detail), Remedy = s.Remedy is null ? null : Sanitize(s.Remedy) }));
+        }
+        else
+        {
+            steps.Add(new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
+                "Credential authentication is not supported by this connector diagnostic.",
+                "Run a query or connector-specific operation to confirm the credentials are accepted."));
+        }
 
         return new DiagnosticReport(alias, connectorType, steps);
     }

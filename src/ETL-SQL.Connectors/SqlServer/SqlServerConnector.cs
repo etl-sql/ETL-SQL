@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Data;
 using Microsoft.Data.SqlClient;
@@ -11,7 +13,7 @@ namespace ETL_SQL.Connectors.SqlServer
     /// <summary>
     /// Connector for Microsoft SQL Server databases using Microsoft.Data.SqlClient.
     /// </summary>
-    public class SqlServerConnector : IConnector
+    public class SqlServerConnector : IConnector, IConnectionDiagnosticAuthProbe
     {
         public string Name => "MSSQL";
         public IReadOnlyList<string> Aliases => new[] { "SQLSERVER" };
@@ -111,5 +113,34 @@ namespace ETL_SQL.Connectors.SqlServer
 
         public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider(string connectionString)
             => new SqlServerCatalogProvider(connectionString);
+
+        public async Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+            ConnectionDiagnosticAuthContext context,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var connectionString = BuildDiagnosticConnectionString(context.Target, context.Options);
+                await using var conn = new SqlConnection(connectionString);
+                await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+                return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "MSSQL authentication succeeded.")];
+            }
+            catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException)
+            {
+                return
+                [
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Failed,
+                        "MSSQL authentication failed.",
+                        "Verify SERVER, DATABASE, USER/PASSWORD or TRUSTED_CONNECTION, account status, and SQL Server login policy.")
+                ];
+            }
+        }
+
+        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        {
+            if (options is { Count: > 0 } && (options.ContainsKey("SERVER") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+                return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
+            return target;
+        }
     }
 }

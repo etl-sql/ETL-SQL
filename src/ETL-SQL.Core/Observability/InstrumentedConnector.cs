@@ -1,10 +1,11 @@
 using System.Diagnostics;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Observability;
 
-internal sealed class InstrumentedConnector(IConnector inner) : IConnector
+internal sealed class InstrumentedConnector(IConnector inner) : IConnector, IConnectionDiagnosticAuthProbe
 {
     public string Name => inner.Name;
     public IReadOnlyList<string> Aliases => inner.Aliases;
@@ -54,6 +55,23 @@ internal sealed class InstrumentedConnector(IConnector inner) : IConnector
 
     public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) =>
         ObserveAsync("procedures", () => inner.GetProceduresAsync(context, connectionString));
+
+    public Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+        ConnectionDiagnosticAuthContext context,
+        CancellationToken cancellationToken = default)
+    {
+        if (inner is not IConnectionDiagnosticAuthProbe probe)
+        {
+            return Task.FromResult<IReadOnlyList<DiagnosticStep>>(
+            [
+                new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
+                    "Credential authentication is not supported by this connector diagnostic.",
+                    "Run a query or connector-specific operation to confirm the credentials are accepted.")
+            ]);
+        }
+
+        return ObserveAsync("diagnostic_auth", () => probe.DiagnoseAuthenticationAsync(context, cancellationToken));
+    }
 
     private T Observe<T>(string operation, Func<T> action)
     {

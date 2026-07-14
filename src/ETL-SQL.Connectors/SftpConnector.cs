@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Connectors.Shared;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
@@ -13,7 +15,7 @@ using Renci.SshNet.Common;
 
 namespace ETL_SQL.Connectors
 {
-    public class SftpConnector : IRemoteFileSystem, IDataSource, IConnector
+    public class SftpConnector : IRemoteFileSystem, IDataSource, IConnector, IConnectionDiagnosticAuthProbe
     {
         private SftpClient? _client;
         private int _disposed;
@@ -26,6 +28,7 @@ namespace ETL_SQL.Connectors
         private readonly int _timeoutSeconds = 30;
         private readonly string? _hostKeyFingerprint;
         private readonly bool _atomicUpload;
+        private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
         private readonly Func<string, string, string?, string?, string?, Task<SftpClient>>? _clientFactory;
@@ -103,6 +106,7 @@ namespace ETL_SQL.Connectors
             _timeoutSeconds = timeoutSeconds;
             _hostKeyFingerprint = string.IsNullOrWhiteSpace(hostKeyFingerprint) ? null : hostKeyFingerprint.Trim();
             _atomicUpload = atomicUpload;
+            _options = BuildOptions(host, port, username, password, _keyFilePath, passphrase, timeoutSeconds, hostKeyFingerprint, atomicUpload);
             _logger = context?.Logger ?? NullLogger.Instance;
             _clientFactory = (h, u, p, k, pp) => Task.Run(() => clientFactory(h, u, p, k, pp));
 
@@ -132,7 +136,7 @@ namespace ETL_SQL.Connectors
         }
 
         public string Path => _port == 22 ? $"sftp://{_host}" : $"sftp://{_host}:{_port}";
-        public Dictionary<string, string>? Options => null;
+        public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "SFTP";
 
         public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
@@ -569,7 +573,209 @@ namespace ETL_SQL.Connectors
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
+            if (Uri.TryCreate(connectionString, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+                return uri.Host;
             return connectionString;
+        }
+
+        public async Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+            ConnectionDiagnosticAuthContext context,
+            CancellationToken cancellationToken = default)
+        {
+            var options = new Dictionary<string, string>(
+                context.Options ?? new Dictionary<string, string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var endpoint = ParseEndpoint(context.Target, options);
+            var user = GetOption(options, "USER", "USERNAME");
+            var password = GetOption(options, "PASSWORD");
+            var keyFile = GetOption(options, "KEYFILE", "KEY_FILE");
+            var passphrase = GetOption(options, "PASSPHRASE");
+            var pin = GetOption(options, "HOST_KEY_FINGERPRINT");
+
+            if (string.IsNullOrWhiteSpace(endpoint.Host) || string.IsNullOrWhiteSpace(user))
+            {
+                return
+                [
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
+                        "SFTP authentication was not attempted because HOST or USER is missing.",
+                        "Add HOST and USER options, plus either PASSWORD or KEYFILE.")
+                ];
+            }
+
+            if (string.IsNullOrWhiteSpace(password) && string.IsNullOrWhiteSpace(keyFile))
+            {
+                return
+                [
+                    new DiagnosticStep("HOST_KEY", DiagnosticStatus.Skipped,
+                        "SFTP host-key validation was not attempted because no credential method is configured.",
+                        "Add PASSWORD or KEYFILE, and pin HOST_KEY_FINGERPRINT for vendor/outbound SFTP."),
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
+                        "SFTP authentication was not attempted because no credential method is configured.",
+                        "Add PASSWORD or KEYFILE.")
+                ];
+            }
+
+            string? observedSha256 = null;
+            byte[]? observedMd5 = null;
+            var hostKeyMismatch = false;
+            var hostKeyObserved = false;
+
+            try
+            {
+                using var client = CreateDiagnosticClient(endpoint.Host, endpoint.Port, user, password, keyFile, passphrase, context.ProbeTimeoutSeconds);
+                client.HostKeyReceived += (_, e) =>
+                {
+                    hostKeyObserved = true;
+                    observedSha256 = e.FingerPrintSHA256;
+                    observedMd5 = e.FingerPrint;
+                    if (!string.IsNullOrWhiteSpace(pin) && !FingerprintMatches(pin, observedSha256, observedMd5))
+                    {
+                        hostKeyMismatch = true;
+                        e.CanTrust = false;
+                    }
+                };
+
+                var timeout = TimeSpan.FromSeconds(context.ProbeTimeoutSeconds > 0 ? context.ProbeTimeoutSeconds : 5);
+                await Task.Run(client.Connect, cancellationToken).WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+                client.Disconnect();
+            }
+            catch (Exception ex) when (hostKeyMismatch && ex is not OperationCanceledException)
+            {
+                return
+                [
+                    new DiagnosticStep("HOST_KEY", DiagnosticStatus.Failed,
+                        "SFTP server host key did not match HOST_KEY_FINGERPRINT.",
+                        "Verify the server fingerprint out-of-band and update HOST_KEY_FINGERPRINT only if the change is expected."),
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Skipped,
+                        "SFTP authentication was not attempted because host-key validation failed.",
+                        "Fix the host-key pin before testing credentials.")
+                ];
+            }
+            catch (Exception ex) when (ex is SshAuthenticationException or SshConnectionException or SshException
+                                          or SocketException or TimeoutException or InvalidOperationException
+                                          or System.IO.IOException)
+            {
+                var hostKeyStep = BuildHostKeyStep(pin, hostKeyObserved, observedSha256, observedMd5);
+                return
+                [
+                    hostKeyStep,
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Failed,
+                        "SFTP authentication failed.",
+                        "Verify USER, PASSWORD or KEYFILE/PASSPHRASE, account status, and server authentication policy.")
+                ];
+            }
+
+            return
+            [
+                BuildHostKeyStep(pin, hostKeyObserved, observedSha256, observedMd5),
+                new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "SFTP authentication succeeded.")
+            ];
+        }
+
+        private static SftpClient CreateDiagnosticClient(
+            string host,
+            int port,
+            string user,
+            string? password,
+            string? keyFile,
+            string? passphrase,
+            int timeoutSeconds)
+        {
+            AuthenticationMethod auth = !string.IsNullOrWhiteSpace(keyFile)
+                ? new PrivateKeyAuthenticationMethod(user, new PrivateKeyFile(keyFile, passphrase))
+                : new PasswordAuthenticationMethod(user, password ?? string.Empty);
+            var info = new Renci.SshNet.ConnectionInfo(host, port, user, auth)
+            {
+                Timeout = TimeSpan.FromSeconds(timeoutSeconds > 0 ? timeoutSeconds : 5)
+            };
+            return new SftpClient(info);
+        }
+
+        private static DiagnosticStep BuildHostKeyStep(string? pin, bool observed, string? sha256, byte[]? md5)
+        {
+            if (!observed)
+            {
+                return new DiagnosticStep("HOST_KEY", DiagnosticStatus.Skipped,
+                    "SFTP host key was not observed before the connection ended.",
+                    "Retry when the server is reachable; pin HOST_KEY_FINGERPRINT for vendor/outbound SFTP.");
+            }
+
+            if (string.IsNullOrWhiteSpace(pin))
+            {
+                var fingerprint = !string.IsNullOrWhiteSpace(sha256)
+                    ? $"SHA256:{sha256.TrimEnd('=')}"
+                    : md5 is { Length: > 0 } ? "MD5:" + string.Join(":", md5.Select(b => b.ToString("x2"))) : "(unavailable)";
+                return new DiagnosticStep("HOST_KEY", DiagnosticStatus.Skipped,
+                    $"SFTP host key was observed ({fingerprint}) but no HOST_KEY_FINGERPRINT is pinned.",
+                    "Pin HOST_KEY_FINGERPRINT after verifying the fingerprint out-of-band.");
+            }
+
+            return new DiagnosticStep("HOST_KEY", DiagnosticStatus.Ok,
+                "SFTP server host key matches HOST_KEY_FINGERPRINT.");
+        }
+
+        private static (string Host, int Port) ParseEndpoint(string target, IReadOnlyDictionary<string, string> options)
+        {
+            var host = GetOption(options, "HOST") ?? target;
+            var port = 22;
+            if (int.TryParse(GetOption(options, "PORT"), out var parsedPort) && parsedPort is > 0 and <= 65535)
+                port = parsedPort;
+
+            if (Uri.TryCreate(host, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host))
+            {
+                host = uri.Host;
+                if (!options.ContainsKey("PORT") && !uri.IsDefaultPort)
+                    port = uri.Port;
+            }
+            else
+            {
+                var colon = host.LastIndexOf(':');
+                if (colon > 0 && colon == host.IndexOf(':') && int.TryParse(host[(colon + 1)..], out var inlinePort))
+                {
+                    host = host[..colon];
+                    if (!options.ContainsKey("PORT"))
+                        port = inlinePort;
+                }
+            }
+
+            return (host, port);
+        }
+
+        private static string? GetOption(IReadOnlyDictionary<string, string> options, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                if (options.TryGetValue(name, out var value) && !string.IsNullOrWhiteSpace(value))
+                    return value;
+            }
+
+            return null;
+        }
+
+        private static Dictionary<string, string> BuildOptions(
+            string host,
+            int port,
+            string username,
+            string? password,
+            string? keyFilePath,
+            string? passphrase,
+            int timeoutSeconds,
+            string? hostKeyFingerprint,
+            bool atomicUpload)
+        {
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HOST"] = host,
+                ["PORT"] = port.ToString(),
+                ["USER"] = username,
+                ["TIMEOUT_SECONDS"] = timeoutSeconds.ToString(),
+                ["ATOMIC_UPLOAD"] = atomicUpload.ToString()
+            };
+            if (!string.IsNullOrEmpty(password)) options["PASSWORD"] = password;
+            if (!string.IsNullOrEmpty(keyFilePath)) options["KEYFILE"] = keyFilePath;
+            if (!string.IsNullOrEmpty(passphrase)) options["PASSPHRASE"] = passphrase;
+            if (!string.IsNullOrEmpty(hostKeyFingerprint)) options["HOST_KEY_FINGERPRINT"] = hostKeyFingerprint;
+            return options;
         }
 
         internal static string NormalizeRemotePath(string path) =>

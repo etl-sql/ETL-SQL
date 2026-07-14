@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Data;
 using Npgsql;
 
@@ -10,7 +12,7 @@ namespace ETL_SQL.Connectors.Postgres
     /// <summary>
     /// Connector for PostgreSQL databases using the Npgsql client.
     /// </summary>
-    public class PostgresConnector : IConnector
+    public class PostgresConnector : IConnector, IConnectionDiagnosticAuthProbe
     {
         public string Name => "POSTGRES";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
@@ -103,5 +105,34 @@ namespace ETL_SQL.Connectors.Postgres
 
         public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider(string connectionString)
             => new PostgresCatalogProvider(connectionString);
+
+        public async Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+            ConnectionDiagnosticAuthContext context,
+            CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                var connectionString = BuildDiagnosticConnectionString(context.Target, context.Options);
+                await using var conn = new NpgsqlConnection(connectionString);
+                await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+                return [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "Postgres authentication succeeded.")];
+            }
+            catch (Exception ex) when (ex is NpgsqlException or InvalidOperationException or TimeoutException)
+            {
+                return
+                [
+                    new DiagnosticStep("AUTH", DiagnosticStatus.Failed,
+                        "Postgres authentication failed.",
+                        "Verify HOST, DATABASE, USER/PASSWORD, SSL_MODE, account status, and pg_hba.conf policy.")
+                ];
+            }
+        }
+
+        private string BuildDiagnosticConnectionString(string target, IReadOnlyDictionary<string, string>? options)
+        {
+            if (options is { Count: > 0 } && (options.ContainsKey("HOST") || options.ContainsKey("DATABASE") || options.ContainsKey("USER")))
+                return BuildConnectionString(new Dictionary<string, string>(options, StringComparer.OrdinalIgnoreCase));
+            return target;
+        }
     }
 }

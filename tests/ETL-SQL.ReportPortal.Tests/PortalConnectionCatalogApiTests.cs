@@ -368,6 +368,62 @@ public class PortalConnectionCatalogApiTests
         Assert.Contains("********", body);
     }
 
+    [Fact]
+    public async Task Test_ProbesConnectionThroughSharedCoreWithAuditAndNoSecretLeak()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PortalSecretStoreService>()
+                .StoreAsync("probe_db_password", "p@ss-should-not-leak");
+        }
+
+        // unknown alias → 404
+        var missing = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/nope/test", null);
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+
+        // catalog an entry pointing at an unresolvable host (.invalid never resolves) so the probe
+        // completes deterministically without external network access.
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/probe_dw", new
+            {
+                connectorType = "MSSQL",
+                options = new Dictionary<string, string>
+                {
+                    ["SERVER"] = "no-such-host.invalid.example",
+                    ["PORT"] = "1433",
+                    ["PASSWORD"] = "SECRET:probe_db_password",
+                },
+                environmentScope = "Prod",
+            })).StatusCode);
+
+        var test = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/probe_dw/test", null);
+        Assert.Equal(HttpStatusCode.OK, test.StatusCode);
+        var body = await test.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Equal("probe_dw", body!["alias"]!.GetValue<string>());
+        Assert.False(body["succeeded"]!.GetValue<bool>());
+        var steps = body["steps"]!.AsArray();
+        Assert.NotEmpty(steps);
+        Assert.Contains(steps, s => s!["layer"]!.GetValue<string>() == "POLICY");
+        // The resolved secret value is never fetched by a DNS/TCP probe and must never surface.
+        Assert.DoesNotContain("p@ss-should-not-leak", await test.Content.ReadAsStringAsync());
+
+        // disabled → 409
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/probe_dw/disable", null)).StatusCode);
+        var disabled = await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/probe_dw/test", null);
+        Assert.Equal(HttpStatusCode.Conflict, disabled.StatusCode);
+
+        using var auditScope = factory.Services.CreateScope();
+        var actions = await auditScope.ServiceProvider.GetRequiredService<PortalDbContext>()
+            .AuditLogs.Where(a => a.ResourceType == "PortalSharedConnection" && a.ResourceId == "probe_dw")
+            .Select(a => a.Action).ToListAsync();
+        Assert.Contains("SHARED_CONNECTION_TEST", actions);
+    }
+
     private sealed class CatalogFactory : PortalWebFactory
     {
         protected override void CustomizeConfiguration(Dictionary<string, string?> settings)

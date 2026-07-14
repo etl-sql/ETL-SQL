@@ -314,6 +314,7 @@ export const connectionsApi = {
     detail:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`),
     set:       (alias, entry) => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'PUT', body: entry }),
     verify:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/verify`, { method: 'POST' }),
+    test:      (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/test`, { method: 'POST' }),
     disable:   (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/disable`, { method: 'POST' }),
     enable:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}/enable`, { method: 'POST' }),
     remove:    (alias)        => apiJson(`/api/admin/connections/${encodeURIComponent(alias)}`, { method: 'DELETE' }),

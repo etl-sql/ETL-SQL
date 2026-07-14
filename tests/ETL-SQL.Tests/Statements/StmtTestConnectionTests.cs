@@ -1,8 +1,12 @@
 using System.Linq;
+using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Diagnostics;
+using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -85,6 +89,80 @@ namespace ETL_SQL.Tests.Statements
 
                 Assert.Equal("OK", status.GetValueOrDefault("DNS"));
                 Assert.Equal("OK", status.GetValueOrDefault("TCP"));
+                Assert.Equal("FAILED", status.GetValueOrDefault("AUTH"));
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+
+        [Fact]
+        public async Task PortalCoreEntryPoint_ReachableTcp_ReportsDnsAndTcpOk()
+        {
+            // Exercises the context-free overload the Portal "Test connection" button uses:
+            // connection details in, governed DNS+TCP probe out, no IExecutionContext.
+            var provider = ETL_SQL.Program.ServiceProvider;
+            var registry = provider.GetRequiredService<ETL_SQL.Data.IConnectorRegistry>();
+            var security = ((IExecutionContext)provider.GetRequiredService<Evaluator>()).SecurityService;
+            var engine = new ETL_SQL.Core.Diagnostics.ConnectionDiagnosticEngine(registry);
+
+            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+                var snapshot = ETL_SQL.Core.Governance.ExecutionPolicySnapshot.Capture(
+                    ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current, "unit",
+                    ETL_SQL.Core.Governance.ScriptExecutionMode.Batch, "unit-test");
+                var options = new System.Collections.Generic.Dictionary<string, string>
+                {
+                    ["SERVER"] = "127.0.0.1",
+                    ["PORT"] = port.ToString(),
+                };
+
+                var report = await engine.DiagnoseAsync(
+                    "probe", "MSSQL", "Server=127.0.0.1", options, security, snapshot, 5, default);
+
+                var status = report.Steps.ToDictionary(s => s.Layer, s => s.Status);
+                Assert.Equal(ETL_SQL.Core.Diagnostics.DiagnosticStatus.Ok, status.GetValueOrDefault("DNS"));
+                Assert.Equal(ETL_SQL.Core.Diagnostics.DiagnosticStatus.Ok, status.GetValueOrDefault("TCP"));
+                Assert.Equal(ETL_SQL.Core.Diagnostics.DiagnosticStatus.Failed, status.GetValueOrDefault("AUTH"));
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+
+        [Fact]
+        public async Task AuthProbeConnector_AddsAuthOkWithoutLeakingSecret()
+        {
+            var registry = new TestConnectorRegistry(new AuthProbeConnector());
+            var security = ((IExecutionContext)ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>()).SecurityService;
+            var engine = new ConnectionDiagnosticEngine(registry);
+            var snapshot = ETL_SQL.Core.Governance.ExecutionPolicySnapshot.Capture(
+                ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current, "unit",
+                ETL_SQL.Core.Governance.ScriptExecutionMode.Batch, "unit-test");
+
+            using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            listener.Start();
+            try
+            {
+                var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+                var report = await engine.DiagnoseAsync(
+                    "probe", "AUTHMOCK", "127.0.0.1",
+                    new Dictionary<string, string>
+                    {
+                        ["HOST"] = "127.0.0.1",
+                        ["PORT"] = port.ToString(),
+                        ["PASSWORD"] = "super-secret-value"
+                    },
+                    security, snapshot, 5, default);
+
+                var auth = report.Steps.Single(s => s.Layer == "AUTH");
+                Assert.Equal(DiagnosticStatus.Ok, auth.Status);
+                Assert.DoesNotContain("super-secret-value", string.Join(" ", report.Steps.Select(s => s.Detail + " " + s.Remedy)));
             }
             finally
             {
@@ -109,6 +187,42 @@ namespace ETL_SQL.Tests.Statements
 
             var network = table.Rows.Single(r => (string?)r["Layer"] == "NETWORK");
             Assert.Equal("SKIPPED", network["Status"]);
+        }
+
+        private sealed class AuthProbeConnector : IConnector, IConnectionDiagnosticAuthProbe
+        {
+            public string Name => "AUTHMOCK";
+            public IReadOnlyList<string> Aliases => [];
+            public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("authmock");
+            public HashSet<string> GetSupportedFunctions() => [];
+            public HashSet<string> GetSupportedKeywords() => [];
+            public Dictionary<string, string[]> GetSupportedOptions() => [];
+            public Dictionary<string, string[]> GetOptionValues() => [];
+            public string GetHelp() => "Auth probe mock.";
+            public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) =>
+                throw new System.NotSupportedException();
+            public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+            public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => options?.GetValueOrDefault("HOST") ?? connectionString;
+
+            public Task<IReadOnlyList<DiagnosticStep>> DiagnoseAuthenticationAsync(
+                ConnectionDiagnosticAuthContext context,
+                CancellationToken cancellationToken = default) =>
+                Task.FromResult<IReadOnlyList<DiagnosticStep>>(
+                    [new DiagnosticStep("AUTH", DiagnosticStatus.Ok, "Mock authentication succeeded.")]);
+        }
+
+        private sealed class TestConnectorRegistry(IConnector connector) : IConnectorRegistry
+        {
+            public void Register(IConnector connector) { }
+            public IConnector? GetConnector(string name) =>
+                string.Equals(name, connector.Name, System.StringComparison.OrdinalIgnoreCase) ? connector : null;
+            public IEnumerable<string> GetRegisteredNames() => [connector.Name];
+            public HashSet<string> GetAllConnectorKeywords() => [];
+            public HashSet<string> GetAllConnectorFunctions() => [];
+            public Dictionary<string, string[]> GetAllConnectorOptionValues() => [];
         }
     }
 }

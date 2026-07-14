@@ -36,6 +36,34 @@ function makeFakeApi(seed, { unresolvable = [] } = {}) {
       const refs = Object.values(e.options).filter((v) => /^SECRET:/i.test(v)).length;
       return { alias, status: 'ok', secretReferences: refs };
     },
+    async test(alias) {
+      const e = entries.find((x) => x.alias === alias);
+      if (!e) throw err(404, { error: `Shared connection '${alias}' does not exist.` });
+      if (e.disabled) throw err(409, { status: 'disabled' });
+      const policyOk = { layer: 'POLICY', status: 'ok', detail: 'Destination permitted by active security policy.', remedy: null };
+      if (unresolvable.includes(alias)) {
+        return { alias, succeeded: false, steps: [
+          policyOk,
+          { layer: 'DNS', status: 'failed', detail: `Could not resolve host 'sql01'.`, remedy: 'Verify the hostname is resolvable from this machine (DNS / hosts file / VPN).' },
+          { layer: 'TCP', status: 'skipped', detail: 'Not attempted — DNS resolution did not succeed.', remedy: null },
+          { layer: 'TLS', status: 'skipped', detail: 'Not attempted — an earlier layer did not succeed.', remedy: null },
+          { layer: 'AUTH', status: 'skipped', detail: 'Not attempted — an earlier layer did not succeed.', remedy: null },
+        ] };
+      }
+      if (e.connectorType === 'MSSQL') {
+        return { alias, succeeded: true, steps: [
+          policyOk,
+          { layer: 'DNS', status: 'ok', detail: `'sql01' resolved to 10.2.4.9.`, remedy: null },
+          { layer: 'TCP', status: 'ok', detail: 'Port 1433 on sql01 is reachable.', remedy: null },
+          { layer: 'TLS', status: 'skipped', detail: 'Connector does not expect transport TLS on this port.', remedy: null },
+          { layer: 'AUTH', status: 'skipped', detail: 'Credential authentication was not probed.', remedy: 'Run a query against the connection to confirm the credentials are accepted.' },
+        ] };
+      }
+      return { alias, succeeded: true, steps: [
+        policyOk,
+        { layer: 'NETWORK', status: 'skipped', detail: `'${e.connectorType}' is a local/file connector — no network diagnostics apply.`, remedy: null },
+      ] };
+    },
     async disable(alias) { entries.find((x) => x.alias === alias).disabled = true; return {}; },
     async enable(alias) { entries.find((x) => x.alias === alias).disabled = false; return {}; },
     async impact(alias) {

@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using ETL_SQL.Core.Diagnostics;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -17,7 +19,10 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class ConnectionsAdminController(
     PortalConnectionCatalogService catalog,
     AuditService audit,
-    ISecretProvider secrets) : ControllerBase
+    ISecretProvider secrets,
+    ConnectionDiagnosticEngine diagnostics,
+    ETL_SQL.Services.SecurityService security,
+    IConfiguration config) : ControllerBase
 {
     public sealed record SetConnectionRequest(
         string ConnectorType,
@@ -101,6 +106,82 @@ public class ConnectionsAdminController(
 
         await audit.LogAsync(CurrentUserId, "SHARED_CONNECTION_VERIFY", "PortalSharedConnection", alias, $"Outcome={outcome}");
         return result;
+    }
+
+    /// <summary>
+    /// Actively diagnoses reachability of a catalog connection through the shared, governed
+    /// <see cref="ConnectionDiagnosticEngine"/> (DNS → TCP → TLS) — the same core the scriptable
+    /// TEST CONNECTION statement uses. Probing runs through the connector/host egress policy and
+    /// DNS-rebind checks; the report never contains secret values. Admin-only surface.
+    /// </summary>
+    [HttpPost("{alias}/test")]
+    public async Task<IActionResult> Test(string alias, CancellationToken ct)
+    {
+        var status = await catalog.GetStatusAsync(alias, ct);
+        if (status == SecretLifecycleStatus.NotFound)
+            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
+        if (status == SecretLifecycleStatus.Disabled)
+            return Conflict(new { alias, status = "disabled" });
+
+        var entry = (await catalog.ExportAsync(ct))
+            .FirstOrDefault(e => string.Equals(e.Alias, alias, StringComparison.OrdinalIgnoreCase));
+        if (entry is null)
+            return NotFound(new { error = $"Shared connection '{alias}' does not exist." });
+
+        var snapshot = ExecutionPolicySnapshot.Capture(
+            EnterprisePolicyRuntime.Current, Environment.UserName,
+            ScriptExecutionMode.Batch, "portal-connection-test");
+        var timeoutSeconds = config.GetValue<int?>("Engine:Diagnostics:ProbeTimeoutSeconds") ?? 5;
+
+        DiagnosticReport report;
+        try
+        {
+            var target = await ResolveSecretReferenceAsync(entry.Target, ct);
+            var options = await ResolveSecretReferencesAsync(entry.Options, ct);
+            report = await diagnostics.DiagnoseAsync(
+                alias, entry.ConnectorType, target, options,
+                security, snapshot, timeoutSeconds, ct);
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            await audit.LogAsync(CurrentUserId, "SHARED_CONNECTION_TEST", "PortalSharedConnection", alias, "Outcome=unresolvable");
+            return Conflict(new { alias, status = "unresolvable", error = ex.Message });
+        }
+
+        var outcome = report.Steps.Any(s => s.Status == DiagnosticStatus.Denied) ? "denied"
+            : report.Succeeded ? "ok" : "failed";
+        await audit.LogAsync(CurrentUserId, "SHARED_CONNECTION_TEST", "PortalSharedConnection", alias, $"Outcome={outcome}");
+
+        return Ok(new
+        {
+            alias,
+            succeeded = report.Succeeded,
+            steps = report.Steps.Select(s => new
+            {
+                layer = s.Layer,
+                status = s.Status.ToString().ToLowerInvariant(),
+                detail = s.Detail,
+                remedy = s.Remedy,
+            }),
+        });
+    }
+
+    private async Task<Dictionary<string, string>> ResolveSecretReferencesAsync(
+        IReadOnlyDictionary<string, string> values,
+        CancellationToken ct)
+    {
+        var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in values)
+            resolved[key] = await ResolveSecretReferenceAsync(value, ct) ?? string.Empty;
+        return resolved;
+    }
+
+    private async Task<string?> ResolveSecretReferenceAsync(string? value, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !value.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase))
+            return value;
+        var name = value["SECRET:".Length..].Trim();
+        return (await secrets.ResolveAsync(name, ct)).Value;
     }
 
     [HttpPost("{alias}/disable")]

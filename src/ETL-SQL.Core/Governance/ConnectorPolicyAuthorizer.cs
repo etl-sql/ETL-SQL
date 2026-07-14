@@ -28,8 +28,21 @@ public sealed partial class ConnectorPolicyAuthorizer(SecurityService securitySe
         string connectorType,
         string? host,
         string? target)
+        => Authorize(OperationPolicyBoundary.Refresh(context, "<connector-operation>"), connectorType, host, target);
+
+    /// <summary>
+    /// Context-free destination authorization for callers that have no <see cref="IExecutionContext"/>
+    /// (e.g. the Portal connection-test surface). The caller supplies a policy snapshot — typically
+    /// <c>ExecutionPolicySnapshot.Capture(EnterprisePolicyRuntime.Current, …)</c> — and host validation
+    /// runs against this authorizer's <see cref="SecurityService"/>. Enforces the same connector-type,
+    /// host allowlist, internal-range, scheme, and port rules as the context overload.
+    /// </summary>
+    public OperationPolicyDecision Authorize(
+        ExecutionPolicySnapshot snapshot,
+        string connectorType,
+        string? host,
+        string? target)
     {
-        var snapshot = OperationPolicyBoundary.Refresh(context, "<connector-operation>");
         try
         {
             RejectEmbeddedCredentials(target);

@@ -65,6 +65,10 @@ builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
 builder.Services.AddEtlSqlEngine(builder.Configuration);
 
+// Shared connection-diagnostic core behind the admin "Test connection" button. Stateless; depends
+// only on the IConnectorRegistry registered by AddEtlSqlEngine.
+builder.Services.AddSingleton<ETL_SQL.Core.Diagnostics.ConnectionDiagnosticEngine>();
+
 // The database-backed secret store only exists inside the Portal host, so this overrides the
 // factory-based ISecretProvider from AddEtlSqlEngine (last registration wins). The provider kind
 // is read at resolve time because test hosts layer configuration in after Program.cs runs.
