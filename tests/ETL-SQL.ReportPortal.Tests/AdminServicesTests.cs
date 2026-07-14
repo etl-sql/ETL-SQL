@@ -133,7 +133,29 @@ public class AdminServicesTests
     {
         using var factory = new AdminServicesFactory();
         var jobHistory = factory.Services.GetRequiredService<IJobHistoryStore>();
+        var hostMetrics = factory.Services.GetRequiredService<IHostMetricsStore>();
         await jobHistory.InitializeAsync();
+        var mb = 1024 * 1024L;
+        await hostMetrics.AppendHostMetricAsync(new HostMetricSample(
+            "node-a",
+            DateTime.UtcNow.AddMinutes(-10),
+            MemoryLoadPercent: 40,
+            ProcessCpuPercent: 10,
+            HostCpuPercent: 20,
+            StateDiskFreeBytes: 900 * mb,
+            SpillDiskFreeBytes: 800 * mb));
+        await hostMetrics.AppendHostMetricAsync(new HostMetricSample(
+            "node-a",
+            DateTime.UtcNow.AddMinutes(-5),
+            MemoryLoadPercent: 80,
+            ProcessCpuPercent: 30,
+            HostCpuPercent: 60,
+            StateDiskFreeBytes: 700 * mb,
+            SpillDiskFreeBytes: 650 * mb));
+        var firstRun = await jobHistory.LogJobStartAsync("capacity-job");
+        await jobHistory.LogJobEndAsync(firstRun, "SUCCESS", rowsProcessed: 10, peakMemoryBytes: 256 * mb, cpuTimeSeconds: 1.5);
+        var failedRun = await jobHistory.LogJobStartAsync("capacity-job");
+        await jobHistory.LogJobEndAsync(failedRun, "FAILURE", "boom", rowsProcessed: 0, peakMemoryBytes: 512 * mb, cpuTimeSeconds: 2.5);
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -151,6 +173,11 @@ public class AdminServicesTests
 
         Assert.Equal("Sent", run.Outcome);
         Assert.Contains("capacity report", factory.Sender.Sent[^1].Subject);
+        Assert.Contains("memory max/p95", factory.Sender.Sent[^1].Body);
+        Assert.Contains("CPU max/p95", factory.Sender.Sent[^1].Body);
+        Assert.Contains("2 run(s), 1 non-success (50.0%)", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Execution p95:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("JobHistoryDaily and HostMetricsDaily", factory.Sender.Sent[^1].Body);
 
         using (var scope = factory.Services.CreateScope())
         {

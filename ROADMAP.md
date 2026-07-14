@@ -56,7 +56,7 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Keep observability exporters optional and ensure disabled exporters impose negligible standalone overhead.
 
 ##### 4.4 Historical capacity planning and sizing
-- [ ] Retain or export capacity history sufficient to calculate peak and percentile CPU, memory, queue wait, execution duration, concurrency, spill frequency/bytes, connector latency, retry/failure rates, and dataset/snapshot growth.
+- [x] ~~Retain or export capacity history sufficient to calculate peak and percentile CPU, memory, queue wait, execution duration, concurrency, spill frequency/bytes, connector latency, retry/failure rates, and dataset/snapshot growth.~~ Moved to `TODO.md` for v0.16.0 execution.
 - [ ] Add workload breakdowns by environment, node, job, report, dataset, connector, owner, and workload class without exposing sensitive row data.
 - [ ] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
 - [ ] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.

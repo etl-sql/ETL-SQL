@@ -299,3 +299,11 @@ Operations Control Plane → 4.1 Central fleet management*.
       metrics/traces with job IDs, script hashes, policy version/hash, and request correlation IDs.
 - [x] Keep observability exporters optional and ensure disabled exporters impose negligible
       standalone overhead.
+
+### Historical capacity planning and sizing
+- [x] Retain or export capacity history sufficient to calculate peak and percentile CPU, memory,
+      queue wait, execution duration, concurrency, spill frequency/bytes, connector latency,
+      retry/failure rates, and dataset/snapshot growth. The native capacity report now summarizes
+      retained host/job history with peak and p95 CPU, memory, execution duration, and failure-rate
+      signals; high-cardinality or stream-only signals remain exported through the standard metrics
+      surface.

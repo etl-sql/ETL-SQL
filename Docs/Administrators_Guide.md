@@ -1506,8 +1506,10 @@ this server," the orchestrator now also captures **host** metrics — memory loa
 CPU %, and free disk on the state and spill volumes — sampled every node heartbeat into a `HostMetrics`
 time series (retained per `Orchestrator:HostMetricsRetentionDays`, rolled up daily for long-term trend).
 Read the recent window with `SHOW HOST METRICS [nodeId] [INTO #t]`, and use
-`samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. OS-level
-monitoring remains a good independent cross-check.
+`samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. The
+native Portal capacity report adds retained-history summaries for max/p95 host CPU and memory,
+scheduled-job failure rate, and p95 execution duration, peak memory, and CPU time. OS-level monitoring
+remains a good independent cross-check.
 
 ---
 
