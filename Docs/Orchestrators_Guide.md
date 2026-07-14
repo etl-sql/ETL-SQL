@@ -1148,6 +1148,9 @@ Orchestrator database paths, job names, subscription ids, report script paths, a
 Operational metrics digest sends also use `ETL-SQL.BackgroundServices`, with sent, skipped, and
 failed statuses. Digest telemetry omits recipients, SMTP aliases, alert text, metric snapshot
 content, message bodies, and delivery errors from labels.
+Refresh-token maintenance emits purge-cycle spans and metrics from `ETL-SQL.BackgroundServices`.
+The span carries the deleted-row count, while metrics keep only service name, operation, status,
+workload kind, environment, node, and component labels and never include token hashes or usernames.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

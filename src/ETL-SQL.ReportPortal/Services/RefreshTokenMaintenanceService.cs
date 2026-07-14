@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -50,9 +51,39 @@ public sealed class RefreshTokenMaintenanceService(
     }
 
     /// <summary>Deletes every refresh token past its expiry, revoked or not.</summary>
-    internal static Task<int> PurgeExpiredAsync(
-        PortalDbContext db, DateTime utcNow, CancellationToken ct = default) =>
-        db.RefreshTokens
-            .Where(t => t.ExpiresAt <= utcNow)
-            .ExecuteDeleteAsync(ct);
+    internal static async Task<int> PurgeExpiredAsync(
+        PortalDbContext db, DateTime utcNow, CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun(
+            "portal", "refresh-token-maintenance", "purge_expired");
+        try
+        {
+            var removed = await db.RefreshTokens
+                .Where(t => t.ExpiresAt <= utcNow)
+                .ExecuteDeleteAsync(ct);
+            sw.Stop();
+            BackgroundServiceObservability.SetRowsProcessed(activity, removed);
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                "portal",
+                "refresh-token-maintenance",
+                "purge_expired",
+                "success",
+                sw.ElapsedMilliseconds);
+            return removed;
+        }
+        catch
+        {
+            sw.Stop();
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                "portal",
+                "refresh-token-maintenance",
+                "purge_expired",
+                "failure",
+                sw.ElapsedMilliseconds);
+            throw;
+        }
+    }
 }

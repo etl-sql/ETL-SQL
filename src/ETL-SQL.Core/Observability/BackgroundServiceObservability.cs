@@ -60,4 +60,10 @@ public static class BackgroundServiceObservability
         RunDurationMs.Record(Math.Max(0, durationMs), tags);
         RunAttempts.Record(Math.Max(0, attempts), tags);
     }
+
+    public static void SetRowsProcessed(Activity? activity, long rowsProcessed)
+    {
+        if (activity is not null)
+            activity.SetTag(ObservabilityConventions.Tags.RowsProcessed, Math.Max(0, rowsProcessed));
+    }
 }
