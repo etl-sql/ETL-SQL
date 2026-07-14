@@ -203,7 +203,26 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 | `Portal:DatasetRootPath` | string | `./data/datasets` | — | Folder storing shared dataset Parquet archives. |
 | `Portal:Storage:Provider` | string | `Local` | — | Shared file system provider (`Local` or `Smb` / UNC). |
 | `Portal:Storage:KeyRingPath` | string | `null` | — | Folder storing Data Protection decryption keys (must be shared in HA). |
+| `Portal:Modules:Reporting` | boolean | `true` | — | Enables the report catalog, report player, datasets, and subscriptions module flag. Route fencing lands in the modularization follow-up. |
+| `Portal:Modules:Designer` | boolean | `true` | — | Enables the browser report designer module flag. Route fencing lands in the modularization follow-up. |
+| `Portal:Modules:ConnectionCatalog` | boolean | `true` | — | Enables the shared connection catalog and diagnostics module flag. Route fencing lands in the modularization follow-up. |
+| `Portal:Modules:SecretStore` | boolean | `true` | — | Enables the Portal-managed secret store module flag. Route fencing lands in the modularization follow-up. |
+| `Portal:Modules:Scheduling` | boolean | `true` | — | Enables scheduled refresh/orchestrator work module flag. Worker fencing lands in the modularization follow-up. |
+| `Portal:Modules:Operations` | boolean | `true` | — | Enables operational health, fleet, audit, and telemetry module flag. Route fencing lands in the modularization follow-up. |
+| `Portal:Modules:Documentation` | boolean | `true` | — | Enables Portal-hosted documentation surfaces module flag. Route fencing lands in the modularization follow-up. |
 | `Portal:MaxPreviewRows` | integer | `50000` | — | Maximum preview lines displayed in GUI tables. |
+
+### Portal Modules (`Portal:Modules`)
+- `Reporting` (default: `true`): Report catalog, report player, datasets, and subscriptions.
+- `Designer` (default: `true`): Browser report designer and design-time APIs.
+- `ConnectionCatalog` (default: `true`): Shared connection catalog APIs and diagnostics.
+- `SecretStore` (default: `true`): Portal-managed secret vault APIs and secret resolution.
+- `Scheduling` (default: `true`): Refresh scheduling, orchestrator polling, and scheduled work.
+- `Operations` (default: `true`): Operational health, fleet status, audit, and administrative telemetry.
+- `Documentation` (default: `true`): Portal-hosted documentation surfaces.
+
+These flags are the shared configuration contract for Portal modularization. Current builds expose the
+configuration to Portal services; conditional route and worker fencing are separate follow-up phases.
 
 ### Portal Resource Controls (`Portal:Resources`)
 - `MaxConcurrentReportExecutions` (default: `4`): Max total active queries allowed.

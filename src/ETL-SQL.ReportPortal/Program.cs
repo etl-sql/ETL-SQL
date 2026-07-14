@@ -99,6 +99,7 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
 });
 builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
     ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
+builder.Services.AddSingleton<PortalModuleRegistry>();
 
 // Cluster node heartbeat (P1.7): register this Portal node in the shared node registry so the
 // cluster has a live view of all Portal/Orchestrator nodes over shared state.

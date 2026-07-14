@@ -23,9 +23,25 @@ public class PortalConfig
     public PortalRateLimitConfig RateLimit { get; set; } = new();
     public AuditConfig Audit { get; set; } = new();
     public PortalStorageConfig Storage { get; set; } = new();
+    public PortalModuleConfig Modules { get; set; } = new();
     public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
     public AdminServicesConfig AdminServices { get; set; } = new();
+}
+
+/// <summary>
+/// Feature flags for functional layers inside the Report Portal binary. Defaults preserve the
+/// existing all-in-one Portal behavior; route and worker fences consume these values as they land.
+/// </summary>
+public class PortalModuleConfig
+{
+    public bool Reporting { get; set; } = true;
+    public bool Designer { get; set; } = true;
+    public bool ConnectionCatalog { get; set; } = true;
+    public bool SecretStore { get; set; } = true;
+    public bool Scheduling { get; set; } = true;
+    public bool Operations { get; set; } = true;
+    public bool Documentation { get; set; } = true;
 }
 
 /// <summary>

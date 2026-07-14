@@ -57,7 +57,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
 #### Phase 5: Report Portal Modularization (Bites)
-- [ ] **Module Feature-Flag Configuration:** Implement dynamic configuration toggles (e.g. `Portal:Modules:Reporting = true/false`) in `appsettings.json` to selectively enable or disable functional layers of the Portal binary.
 - [ ] **Conditional Route Registration:** Dynamically unregister API controllers and frontend routes for disabled modules (e.g. disabling Visual Reporting completely hides reporting menus and returns 404/403 for `/api/reports` and `/api/designer` endpoints).
 - [ ] **Fenced Background Services:** Conditionally disable background workers, schedulers, and node-heartbeat capacities associated with disabled modules to reduce memory footprints and security surface areas.
 - [ ] **Multi-Topology Certification:** Certify varied deployment profiles (e.g., a pure "Secret Store & Connection Catalog" gateway node vs. a pure "BI Report Player" viewing node) sharing a single code executable.
@@ -91,9 +90,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ### Future Candidate Phases
 - [ ] **Catalog approval workflow (optional):** Propose-and-approve workflow on shared connection creation/update/deletion for organizations that need four-eyes control.
-  - *Scope notes:* active probing is an SSRF/port-scan primitive if ungoverned — it **must** run through the same egress governance (`ConnectorPolicyAuthorizer` / `NetworkDestinationRules`) and connection-use ACLs as a real connection, so a script cannot scan the internal network.
-  - Layer the checks (DNS → TCP → TLS → auth), stop at the first failure with a specific remedy, and never echo secret values in the report.
-  - Expose both as the scriptable statement and a Portal button over one shared, governed diagnostic core.
 - [ ] **SSH & PGP Key Management Portal** *(candidate — may not make the cut; requires a threat model first)*: a Portal dashboard for administrators to generate, rotate, and bind PGP/SSH key pairs to connection catalog entries.
   - *Scope notes / risk:* this is the highest-risk item in the DX/governance backlog. A web "export private key" button directly contradicts the zero-trust posture (the secret vault never releases material; the policy authority never exports private keys).
   - Keep private keys in the vault / OS store and **never render them in the browser**; public-key export is fine; **private-key export must be disallowed or a separate, four-eyes-gated, audited operation**. Align with the shipped DPAPI-M secret store. Do not start design until the threat model is complete.
