@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/datasets")]
 [Authorize]
+[RequirePortalModule("Reporting")]
 public class DatasetController(
     PortalDbContext db,
     IDatasetRegistry registry,

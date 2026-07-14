@@ -7,6 +7,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -20,6 +21,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api")]
 [Authorize]
+[RequirePortalModule("Reporting")]
 public class ReportsController : ControllerBase
 {
     private static readonly TimeSpan DefaultAnonymousAccessLifetime = TimeSpan.FromDays(7);

@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/designer")]
 [Authorize(Roles = "Admin,Publisher")]
+[RequirePortalModule("Designer")]
 public class DesignerController : ControllerBase
 {
     private const int GridCols = 12;

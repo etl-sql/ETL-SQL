@@ -4,6 +4,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -14,6 +15,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 
 [ApiController]
 [Authorize]
+[RequirePortalModule("Reporting")]
 public class SubscriptionsController(
     PortalDbContext db,
     PortalConfig config,

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,6 +12,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/catalog")]
 [Authorize]
+[RequirePortalModule("Reporting")]
 public class CatalogController(PortalDbContext db, ILineageCatalogStore lineageCatalog) : ControllerBase
 {
     private int CurrentUserId =>

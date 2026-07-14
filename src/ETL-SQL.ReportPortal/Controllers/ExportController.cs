@@ -5,6 +5,7 @@ using System.Text.Json;
 using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,6 +16,7 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api/reports/{id:int}/export")]
 [Authorize]
+[RequirePortalModule("Reporting")]
 public class ExportController(
     PortalDbContext db,
     PortalConfig portalConfig,

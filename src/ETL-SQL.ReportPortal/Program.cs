@@ -700,6 +700,26 @@ var staticFileOptions = new StaticFileOptions();
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
 provider.Mappings[".geojson"] = "application/geo+json";
 staticFileOptions.ContentTypeProvider = provider;
+app.Use(async (context, next) =>
+{
+    if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+    {
+        var modules = context.RequestServices.GetRequiredService<PortalModuleRegistry>();
+        var path = context.Request.Path.Value ?? string.Empty;
+        var isReportEntry = string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(path, "/index.html", StringComparison.OrdinalIgnoreCase);
+        var isDesignerEntry = string.Equals(path, "/designer.html", StringComparison.OrdinalIgnoreCase);
+
+        if ((isReportEntry && !modules.IsEnabled("Reporting"))
+            || (isDesignerEntry && !modules.IsEnabled("Designer")))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+    }
+
+    await next();
+});
 app.UseStaticFiles(staticFileOptions);
 app.UseRouting();
 app.UseRateLimiter();
