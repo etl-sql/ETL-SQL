@@ -334,35 +334,22 @@ function renderDesigner(stage, ctx) {
       reportName: window.__INIT__.reportName,
       apiBase: '',
       host: 'vscode',
-      authFetch: window.__vscodeFetch,
-      onSaveScript: window.__vscodeSave,
-      onCancel: () => console.log('vscode.cancel')
-    });
-  </script>
-</body>
-</html>`;
-  const iframe = makeFrame(html);
-  stage.replaceChildren(iframe);
-  ctx.stat('report designer · 2 pages, 8 visuals, 2 datasets + vscode API shim');
-  return { dispose() { iframe.remove(); }, resize() {} };
-}
-
-function renderVisualFlow(stage, ctx) {
+      authFetch: window.function renderVisualFlow(stage, ctx) {
   const graph = {
     nodes: [
-      { id: 'conn:src_sales', label: 'src_sales (CSV)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {} } },
+      { id: 'conn:src_sales', label: 'src_sales (CSV File)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {} } },
       { id: 'conn:src_crm', label: 'src_crm.dbo.Customers (MSSQL)', type: 'table', meta: { columns: ['CustomerId', 'CustomerName', 'Region'], columnLineage: {} } },
-      { id: 'table:#temp_sales', label: '#temp_sales (Temp)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {
+      { id: 'table:#temp_sales', label: '#temp_sales (Temp Table)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {
         OrderId: { sources: [{ table: 'src_sales', column: 'OrderId' }], transform: 'PASS' },
         CustomerId: { sources: [{ table: 'src_sales', column: 'CustomerId' }], transform: 'PASS' },
         Amount: { sources: [{ table: 'src_sales', column: 'Amount' }], transform: 'PASS' },
       } } },
-      { id: 'table:#temp_customers', label: '#temp_customers (Temp)', type: 'table', meta: { columns: ['CustomerId', 'CustomerName', 'Region'], columnLineage: {
+      { id: 'table:#temp_customers', label: '#temp_customers (Temp Table)', type: 'table', meta: { columns: ['CustomerId', 'CustomerName', 'Region'], columnLineage: {
         CustomerId: { sources: [{ table: 'src_crm', column: 'CustomerId' }], transform: 'PASS' },
         CustomerName: { sources: [{ table: 'src_crm', column: 'CustomerName' }], transform: 'PASS' },
         Region: { sources: [{ table: 'src_crm', column: 'Region' }], transform: 'PASS' },
       } } },
-      { id: 'table:#temp_enriched', label: '#temp_enriched (Temp)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'CustomerName', 'Region', 'Amount'], columnLineage: {
+      { id: 'table:#temp_enriched', label: '#temp_enriched (Temp Table)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'CustomerName', 'Region', 'Amount'], columnLineage: {
         OrderId: { sources: [{ table: '#temp_sales', column: 'OrderId' }], transform: 'PASS' },
         CustomerId: { sources: [{ table: '#temp_sales', column: 'CustomerId' }], transform: 'PASS' },
         CustomerName: { sources: [{ table: '#temp_customers', column: 'CustomerName' }], transform: 'PASS' },
@@ -379,11 +366,11 @@ function renderVisualFlow(stage, ctx) {
       } } }
     ],
     edges: [
-      { source: 'conn:src_sales', target: 'table:#temp_sales', label: 'SELECT INTO' },
-      { source: 'conn:src_crm', target: 'table:#temp_customers', label: 'SELECT INTO' },
-      { source: 'table:#temp_sales', target: 'table:#temp_enriched', label: 'JOIN' },
-      { source: 'table:#temp_customers', target: 'table:#temp_enriched', label: 'JOIN' },
-      { source: 'table:#temp_enriched', target: 'table:dest_db', label: 'MERGE' }
+      { source: 'conn:src_sales', target: 'table:#temp_sales', label: 'SELECT INTO (SALES)' },
+      { source: 'conn:src_crm', target: 'table:#temp_customers', label: 'SELECT INTO (CRM)' },
+      { source: 'table:#temp_sales', target: 'table:#temp_enriched', label: 'JOIN (SALES)' },
+      { source: 'table:#temp_customers', target: 'table:#temp_enriched', label: 'JOIN (CRM)' },
+      { source: 'table:#temp_enriched', target: 'table:dest_db', label: 'MERGE (DEST)' }
     ]
   };
 
@@ -405,7 +392,7 @@ function renderVisualFlow(stage, ctx) {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     #dagRoot {
-      height: calc(100% - 35px);
+      height: calc(100% - 75px);
       width: 100%;
       position: relative;
     }
@@ -436,6 +423,113 @@ function renderVisualFlow(stage, ctx) {
       color: #858585;
       font-size: 11px;
     }
+    
+    /* Toolbar styles */
+    .vscode-toolbar {
+      height: 40px;
+      padding: 0 16px;
+      background-color: #2d2d2d;
+      border-bottom: 1px solid #3c3c3c;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      user-select: none;
+    }
+    .vscode-btn {
+      background-color: #0e639c;
+      color: #ffffff;
+      border: none;
+      padding: 4px 12px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 600;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .vscode-btn:hover {
+      background-color: #1177bb;
+    }
+    .vscode-btn:disabled {
+      background-color: #3c3c3c;
+      color: #777777;
+      cursor: not-allowed;
+    }
+    .vscode-btn.secondary {
+      background-color: #3c3c3c;
+      color: #cccccc;
+    }
+    .vscode-btn.secondary:hover {
+      background-color: #4c4c4c;
+    }
+    .vscode-status {
+      font-size: 11px;
+      color: #aaaaaa;
+      margin-left: auto;
+      font-family: monospace;
+    }
+    
+    /* SSIS Execution visual overrides */
+    .etlsql-dag-card {
+      transition: border-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+      background-color: #181818 !important;
+    }
+    
+    /* Waiting status - dashed border, translucent */
+    .etlsql-dag-card.status-waiting {
+      border: 1px dashed #4e4e4e !important;
+      opacity: 0.5;
+    }
+    
+    /* Running status - yellow border, pulsing glow */
+    .etlsql-dag-card.status-running {
+      border: 1.5px solid #eab308 !important;
+      box-shadow: 0 0 12px rgba(234, 179, 8, 0.4);
+      opacity: 1;
+      animation: ssis-pulse 1.5s infinite alternate;
+    }
+    
+    /* Completed status - green border, slight green gradient */
+    .etlsql-dag-card.status-completed {
+      border: 1.5px solid #22c55e !important;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.2);
+      opacity: 1;
+      background: linear-gradient(180deg, #181818 0%, #112815 100%) !important;
+    }
+    
+    @keyframes ssis-pulse {
+      from { box-shadow: 0 0 4px rgba(234, 179, 8, 0.2); }
+      to { box-shadow: 0 0 16px rgba(234, 179, 8, 0.6); }
+    }
+    
+    /* Icon styling */
+    .status-icon {
+      font-size: 11px;
+      font-weight: bold;
+      margin-left: 6px;
+      display: inline-block;
+    }
+    .status-icon.running {
+      animation: ssis-spin 1.2s linear infinite;
+      color: #eab308;
+    }
+    .status-icon.completed {
+      color: #22c55e;
+    }
+    
+    @keyframes ssis-spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Edge badges transitions */
+    .etlsql-dag-edge-badge {
+      font-family: monospace;
+      font-size: 10px !important;
+      font-weight: bold;
+      transition: color 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
+    }
   </style>
   <title>VS Code Visual Flow</title>
 </head>
@@ -448,7 +542,15 @@ function renderVisualFlow(stage, ctx) {
       <span>Auto-refresh: On Save</span>
     </div>
   </div>
+  
+  <div class="vscode-toolbar">
+    <button id="runBtn" class="vscode-btn">▶ Run Pipeline</button>
+    <button id="resetBtn" class="vscode-btn secondary">↻ Reset</button>
+    <span id="runStatus" class="vscode-status">Status: Ready</span>
+  </div>
+  
   <div id="dagRoot"></div>
+  
   <script type="module">
     import { renderDag } from '/src/etl-sql-vscode/media/designer/designer.js';
     
@@ -467,13 +569,162 @@ function renderVisualFlow(stage, ctx) {
         });
       }
     });
+
+    // ── Pipeline Animation Engine ─────────────────────────────────────────────
+    let animInterval = null;
+    
+    function resetPipeline() {
+      clearInterval(animInterval);
+      document.getElementById('runStatus').textContent = 'Status: Ready';
+      document.getElementById('runStatus').style.color = '#aaaaaa';
+      document.getElementById('runBtn').disabled = false;
+      
+      // Reset all cards to waiting status
+      const cards = document.querySelectorAll('.etlsql-dag-card');
+      cards.forEach(card => {
+        card.className = 'etlsql-dag-card status-waiting';
+        const icon = card.querySelector('.status-icon');
+        if (icon) icon.remove();
+      });
+      
+      // Reset all edge badges to their original label texts
+      const badges = document.querySelectorAll('.etlsql-dag-edge-badge');
+      badges.forEach(b => {
+        if (!b.dataset.original) b.dataset.original = b.textContent;
+        b.textContent = b.dataset.original;
+        b.style.color = '#93c5fd';
+        b.style.borderColor = '#3b82f6';
+        b.style.backgroundColor = '#1e293b';
+      });
+    }
+
+    function runPipeline() {
+      resetPipeline();
+      document.getElementById('runBtn').disabled = true;
+      document.getElementById('runStatus').textContent = 'Status: Running...';
+      document.getElementById('runStatus').style.color = '#eab308';
+      
+      let t = 0;
+      const TICK_MS = 50;
+      
+      animInterval = setInterval(() => {
+        t += TICK_MS;
+        const sec = t / 1000;
+        
+        // ── Phase 1: Ingestion / Extraction (0s to 2s) ──
+        if (sec > 0 && sec <= 2) {
+          setCardStatus('conn:src_sales', 'running', '↻');
+          setCardStatus('conn:src_crm', 'running', '↻');
+          
+          const pct = sec / 2;
+          const salesRows = Math.floor(12300 * pct);
+          const crmRows = Math.floor(4500 * pct);
+          
+          updateEdgeBadge('(SALES)', \`\${salesRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+          updateEdgeBadge('(CRM)', \`\${crmRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+        }
+        
+        // ── Phase 2: Ingestion Complete, Join Staging (2s to 4s) ──
+        if (sec > 2 && sec <= 4) {
+          setCardStatus('conn:src_sales', 'completed', '✔️');
+          setCardStatus('conn:src_crm', 'completed', '✔️');
+          setCardStatus('table:#temp_sales', 'completed', '✔️');
+          setCardStatus('table:#temp_customers', 'completed', '✔️');
+          
+          updateEdgeBadge('(SALES)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          updateEdgeBadge('(CRM)', '4,500 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          
+          // Join node is running
+          setCardStatus('table:#temp_enriched', 'running', '↻');
+          const pct = (sec - 2) / 2;
+          const joinRows = Math.floor(12300 * pct);
+          
+          updateEdgeBadge('JOIN (SALES)', \`\${joinRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+          updateEdgeBadge('JOIN (CRM)', \`\${joinRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+        }
+        
+        // ── Phase 3: Enrichment Complete, Load Merging (4s to 6s) ──
+        if (sec > 4 && sec <= 6) {
+          setCardStatus('table:#temp_enriched', 'completed', '✔️');
+          updateEdgeBadge('JOIN (SALES)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          updateEdgeBadge('JOIN (CRM)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          
+          // Target merge node is running
+          setCardStatus('table:dest_db', 'running', '↻');
+          const pct = (sec - 4) / 2;
+          const loadRows = Math.floor(12300 * pct);
+          
+          updateEdgeBadge('(DEST)', \`\${loadRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+        }
+        
+        // ── Phase 4: Execution Complete (6s+) ──
+        if (sec > 6) {
+          clearInterval(animInterval);
+          setCardStatus('table:dest_db', 'completed', '✔️');
+          updateEdgeBadge('(DEST)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          
+          document.getElementById('runStatus').textContent = 'Status: Success (6.2s) - 12,300 rows loaded';
+          document.getElementById('runStatus').style.color = '#22c55e';
+          document.getElementById('runBtn').disabled = false;
+        }
+      }, TICK_MS);
+    }
+    
+    function setCardStatus(id, status, iconText) {
+      const card = document.getElementById(\`node__\${id}\`);
+      if (!card) return;
+      
+      card.className = \`etlsql-dag-card status-\${status}\`;
+      
+      const header = card.querySelector('.etlsql-dag-card-header');
+      if (header) {
+        let icon = header.querySelector('.status-icon');
+        if (!icon) {
+          icon = document.createElement('span');
+          header.appendChild(icon);
+        }
+        icon.className = \`status-icon \${status === 'running' ? 'running' : ''}\`;
+        icon.textContent = iconText;
+        if (status === 'completed') {
+          icon.style.color = '#22c55e';
+        } else if (status === 'running') {
+          icon.style.color = '#eab308';
+        }
+      }
+    }
+    
+    function updateEdgeBadge(keyword, text, color, bgColor) {
+      const badges = document.querySelectorAll('.etlsql-dag-edge-badge');
+      for (const b of badges) {
+        const currentText = b.textContent;
+        const originalText = b.dataset.original || currentText;
+        
+        if (currentText.includes(keyword) || originalText.includes(keyword)) {
+          b.textContent = text;
+          if (color) {
+            b.style.color = color;
+            b.style.borderColor = color;
+          }
+          if (bgColor) {
+            b.style.backgroundColor = bgColor;
+          }
+          break;
+        }
+      }
+    }
+
+    // Attach listeners
+    document.getElementById('runBtn').addEventListener('click', runPipeline);
+    document.getElementById('resetBtn').addEventListener('click', resetPipeline);
+    
+    // Initialize
+    setTimeout(resetPipeline, 100);
   </script>
 </body>
 </html>`;
 
   const iframe = makeFrame(html);
   
-  // Setup listener to print a message in the sandbox status line when a card is clicked
   const onMessage = (e) => {
     if (e.data && e.data.__fromWebview) {
       const msg = e.data.__fromWebview;
