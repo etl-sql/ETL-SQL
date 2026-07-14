@@ -115,14 +115,32 @@ chunk so we are not rebuilding what already ships.
 
 ### Phase B — Schema-aware autocomplete
 
-- [ ] **B1 — Cached schema snapshot service.** `GET /api/designer/schema?connection=<ref>` returns
-  `{ tables:[{ name, columns:[{name,type}] }] }` for a connection the caller is **authorized to use**
-  (connection-use ACL check first). Introspect via the connector; cache per connection with a TTL and
-  explicit invalidate. *Reuse:* connection catalog + ACLs; the existing schema-suggestion metadata
+- [ ] **B1 — Shared, cached schema snapshot service.** `GET /api/designer/schema?connection=<ref>`
+  returns `{ tables:[{ name, columns:[{name,type}] }] }` for a connection the caller is **authorized to
+  use**. Schema is a property of the *connection/database, not the user*, so it is introspected **once
+  per connection and cached server-side, then served to every editor session** — the VS Code/TUI
+  local-cache model lifted to a shared server cache, instead of re-pulling per user or per keystroke.
+  Design rules:
+  - **The cache is shared; authorization is not.** Key the cache by the connection's *catalog identity*
+    (never a user-supplied name), but run the connection-use ACL check on **every** request before
+    serving from the warm cache. A user who cannot use a connection must never receive its schema.
+  - **Staleness = TTL + explicit invalidate, stale-while-revalidate.** Re-pull on a TTL (minutes–hours;
+    schema changes rarely), invalidate on connection edit, and expose an admin "refresh schema" action.
+    Serve the cached snapshot immediately and refresh in the background when past TTL so no single user
+    eats the full introspection latency. Slightly-stale autocomplete is low-harm (a brand-new column is
+    briefly not suggested) — the same behavior as the local caches today.
+  - **Cache location follows HA.** Start with a **per-node in-memory** cache (each portal node
+    introspects once; trivial duplication, harmless cross-node window). Promote to a **shared
+    DB-backed snapshot** (Postgres, fitting the existing database-backed-state pattern) only if
+    introspection cost or cross-node drift becomes a real problem.
+
+  *Reuse:* connection catalog + ACLs; the existing schema-suggestion metadata
   (`SuggestionType.Table/Column`).
 - [ ] **B2 — Stateless completion endpoint + CM source.** `POST /api/designer/complete { script, line,
   column, connectionRef }` runs the existing completion/suggestion engine server-side (position in the
-  request, no synced document) and returns `CompletionItem[]`. Wire CodeMirror `@codemirror/autocomplete`
+  request, no synced document) and returns `CompletionItem[]`. It is a **pure function over the B1
+  cached snapshot** + parse position — it never introspects the database live on a completion request.
+  Wire CodeMirror `@codemirror/autocomplete`
   as an async source that is context-aware (after `FROM`/`JOIN` → tables; after `alias.` → columns;
   otherwise keywords/functions). *Reuse:* `CompletionProvider` logic from `ETL-SQL.LanguageServer`,
   refactored into an `ETL-SQL.Analysis` service callable without an LSP session.
