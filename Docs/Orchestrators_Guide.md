@@ -1163,6 +1163,9 @@ machine names, heartbeat metadata JSON, capacity values, and lease-loss reasons.
 Portal snapshot startup migration emits background-service spans/metrics with success, skipped,
 cancelled, or failure status. Migrated snapshot counts are trace-only; labels omit manifest paths,
 snapshot artifact keys, report names, and manifest payload values.
+Portal startup validators for JWT secrets, dataset at-rest keys, OIDC configuration, and session-cache
+lifecycle emit background-service spans/metrics with bounded service/operation/status labels only.
+Secret values, validation messages, script paths, report ids, user ids, and session keys are omitted.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

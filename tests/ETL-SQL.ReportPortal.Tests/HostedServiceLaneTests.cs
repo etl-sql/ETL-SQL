@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +28,7 @@ public sealed class HostedServiceLaneTests
     [Fact]
     public async Task ValidConfiguration_AllHostedServicesStart_HostStaysHealthy()
     {
+        using var telemetry = new BackgroundTelemetryCapture();
         using var factory = new HostedPortalFactory();
         var client = factory.CreateClient();
 
@@ -37,6 +41,13 @@ public sealed class HostedServiceLaneTests
         Assert.True(second.IsSuccessStatusCode, $"post-loop /health returned {(int)second.StatusCode}");
         Assert.False(WaitForStop(factory.Services, TimeSpan.Zero),
             "host unexpectedly began shutting down");
+        AssertServiceRun(telemetry, "jwt-secret-validation", "startup_validation", "success");
+        AssertServiceRun(telemetry, "dataset-key-validation", "startup_validation", "success");
+        AssertServiceRun(telemetry, "oidc-config-validation", "startup_validation", "skipped");
+        AssertServiceRun(telemetry, "session-cache", "start", "success");
+        Assert.DoesNotContain(telemetry.Measurements, measurement => measurement.Tags.Any(tag =>
+            tag.Value is string value
+            && value.Contains("SuperSecret", StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>A JWT secret under 32 characters is fatal: the started host shuts itself down.</summary>
@@ -187,4 +198,107 @@ public sealed class HostedServiceLaneTests
                 "expected the still-live token to survive the purge");
         }
     }
+
+    private static void AssertServiceRun(
+        BackgroundTelemetryCapture telemetry,
+        string serviceName,
+        string operation,
+        string status)
+    {
+        Assert.Contains(telemetry.Activities, activity =>
+            activity.OperationName == "background_service.run"
+            && Tag(activity, ObservabilityConventions.Tags.ServiceName) == serviceName
+            && Tag(activity, BackgroundServiceObservability.OperationTag) == operation
+            && Tag(activity, ObservabilityConventions.Tags.Status) == status);
+        Assert.Contains(telemetry.Measurements, measurement =>
+            measurement.Name == "etlsql.background_service.run.completed"
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.ServiceName, serviceName)
+            && HasTag(measurement.Tags, BackgroundServiceObservability.OperationTag, operation)
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, status));
+    }
+
+    private sealed class BackgroundTelemetryCapture : IDisposable
+    {
+        private readonly object _gate = new();
+        private readonly ActivityListener _activityListener;
+        private readonly MeterListener _meterListener;
+        private readonly List<Activity> _activities = [];
+        private readonly List<(string Name, double Value, Dictionary<string, object?> Tags)> _measurements = [];
+
+        public IReadOnlyList<Activity> Activities
+        {
+            get
+            {
+                lock (_gate)
+                    return _activities.ToList();
+            }
+        }
+
+        public IReadOnlyList<(string Name, double Value, Dictionary<string, object?> Tags)> Measurements
+        {
+            get
+            {
+                lock (_gate)
+                    return _measurements.ToList();
+            }
+        }
+
+        public BackgroundTelemetryCapture()
+        {
+            _activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == BackgroundServiceObservability.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStopped = activity =>
+                {
+                    lock (_gate)
+                        _activities.Add(activity);
+                }
+            };
+            ActivitySource.AddActivityListener(_activityListener);
+
+            _meterListener = new MeterListener
+            {
+                InstrumentPublished = (instrument, listener) =>
+                {
+                    if (instrument.Meter.Name == BackgroundServiceObservability.MeterName)
+                        listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            _meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            {
+                lock (_gate)
+                    _measurements.Add((instrument.Name, value, ToDictionary(tags)));
+            });
+            _meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            {
+                lock (_gate)
+                    _measurements.Add((instrument.Name, value, ToDictionary(tags)));
+            });
+            _meterListener.Start();
+        }
+
+        public void Dispose()
+        {
+            _activityListener.Dispose();
+            _meterListener.Dispose();
+        }
+    }
+
+    private static string? Tag(Activity activity, string key)
+    {
+        var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+        return value?.ToString();
+    }
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 }

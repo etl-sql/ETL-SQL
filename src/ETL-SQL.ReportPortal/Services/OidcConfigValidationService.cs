@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Observability;
 using Microsoft.Extensions.Hosting;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -15,17 +16,25 @@ public sealed class OidcConfigValidationService(PortalConfig config, IHostApplic
 {
     public Task StartAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun(
+            "portal", "oidc-config-validation", "startup_validation");
         var oidc = config.Identity.Oidc;
         if (!oidc.Enabled)
+        {
+            CompleteValidation(activity, sw, "skipped");
             return Task.CompletedTask; // OIDC off: nothing to validate, Local/LDAP unchanged
+        }
 
         foreach (var error in Validate(oidc))
         {
             Console.Error.WriteLine("FATAL: " + error);
             lifetime.StopApplication();
+            CompleteValidation(activity, sw, "failure");
             return Task.CompletedTask;
         }
 
+        CompleteValidation(activity, sw, "success");
         return Task.CompletedTask;
     }
 
@@ -63,5 +72,18 @@ public sealed class OidcConfigValidationService(PortalConfig config, IHostApplic
 
         if (oidc.ClockSkewSeconds < 0)
             yield return "Portal:Identity:Oidc:ClockSkewSeconds must be zero or greater.";
+    }
+
+    private static void CompleteValidation(System.Diagnostics.Activity? activity, System.Diagnostics.Stopwatch sw,
+        string status)
+    {
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "oidc-config-validation",
+            "startup_validation",
+            status,
+            sw.ElapsedMilliseconds);
     }
 }

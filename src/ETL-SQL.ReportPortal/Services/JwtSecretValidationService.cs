@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Observability;
 using Microsoft.Extensions.Hosting;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -20,17 +21,23 @@ public class JwtSecretValidationService(PortalConfig config, IHostApplicationLif
 
     public Task StartAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun(
+            "portal", "jwt-secret-validation", "startup_validation");
         var secrets = new[] { config.Jwt.Secret }.Concat(config.Jwt.PreviousSecrets ?? []).ToArray();
         var secret = secrets[0];
+        var status = "success";
 
         if ((config.Jwt.PreviousSecrets?.Length ?? 0) > 1)
         {
+            status = "failure";
             Console.Error.WriteLine(
                 "FATAL: Portal:Jwt:PreviousSecrets supports exactly one temporary previous key.");
             lifetime.StopApplication();
         }
         else if (string.IsNullOrWhiteSpace(secret) || secret.Length < 32)
         {
+            status = "failure";
             Console.Error.WriteLine(
                 "FATAL: Portal:Jwt:Secret is missing or fewer than 32 characters. " +
                 "Generate a strong secret with: GENERATE JWT_SECRET " +
@@ -41,12 +48,21 @@ public class JwtSecretValidationService(PortalConfig config, IHostApplicationLif
                      !string.IsNullOrWhiteSpace(candidate)
                      && (candidate.Length < 32 || KnownInsecureSecrets.Contains(candidate))))
         {
+            status = "failure";
             Console.Error.WriteLine(
                 "FATAL: A current or previous Portal JWT secret is fewer than 32 characters " +
                 "or is a known insecure default. Generate strong secrets with GENERATE JWT_SECRET.");
             lifetime.StopApplication();
         }
 
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "jwt-secret-validation",
+            "startup_validation",
+            status,
+            sw.ElapsedMilliseconds);
         return Task.CompletedTask;
     }
 

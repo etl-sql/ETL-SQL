@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportHosting;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -106,14 +107,34 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 
     public Task StartAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "session-cache", "start");
         // Evict idle sessions every minute
-        _evictionTimer = new Timer(_ => Evict(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        _evictionTimer = new Timer(_ => EvictScheduled(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "session-cache",
+            "start",
+            "success",
+            sw.ElapsedMilliseconds);
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "session-cache", "stop");
         _evictionTimer?.Change(Timeout.Infinite, 0);
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "session-cache",
+            "stop",
+            "success",
+            sw.ElapsedMilliseconds);
         return Task.CompletedTask;
     }
 
@@ -139,16 +160,50 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 
     // ── Eviction ──────────────────────────────────────────────────────────────
 
-    private void Evict()
+    private void EvictScheduled()
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "session-cache", "evict_idle");
+        var status = "success";
+        var removed = 0;
+        try
+        {
+            removed = Evict();
+        }
+        catch
+        {
+            status = "failure";
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            BackgroundServiceObservability.SetRowsProcessed(activity, removed);
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                "portal",
+                "session-cache",
+                "evict_idle",
+                status,
+                sw.ElapsedMilliseconds);
+        }
+    }
+
+    private int Evict()
     {
         var maxSize = _config.Resources.SessionCacheMaxSize;
         var ttl = TimeSpan.FromMinutes(_config.Resources.SessionCacheTtlMinutes);
         var now = DateTime.UtcNow;
+        var removed = 0;
 
         // First remove idle sessions beyond TTL
         foreach (var (key, entry) in _sessions)
             if (now - entry.LastAccess > ttl)
-                if (_sessions.TryRemove(key, out var e)) _ = e.Service.DisposeAsync();
+                if (_sessions.TryRemove(key, out var e))
+                {
+                    removed++;
+                    _ = e.Service.DisposeAsync();
+                }
 
         // Then trim to max size by evicting oldest
         if (_sessions.Count > maxSize)
@@ -159,9 +214,15 @@ public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
                 .Select(kv => kv.Key);
 
             foreach (var key in evict)
-                if (_sessions.TryRemove(key, out var e)) _ = e.Service.DisposeAsync();
+                if (_sessions.TryRemove(key, out var e))
+                {
+                    removed++;
+                    _ = e.Service.DisposeAsync();
+                }
 
             _log.LogDebug("SessionCache evicted to {Size} entries", _sessions.Count);
         }
+
+        return removed;
     }
 }

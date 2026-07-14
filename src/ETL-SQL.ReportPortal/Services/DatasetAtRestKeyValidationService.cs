@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Observability;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -16,7 +17,16 @@ public class DatasetAtRestKeyValidationService(
 {
     public Task StartAsync(CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun(
+            "portal", "dataset-key-validation", "startup_validation");
         var result = DatasetAtRestKeyValidator.Validate(config.Dataset);
+        var status = result.Severity switch
+        {
+            DatasetAtRestKeyValidator.Severity.Fatal => "failure",
+            DatasetAtRestKeyValidator.Severity.Warn => "warning",
+            _ => "success"
+        };
 
         switch (result.Severity)
         {
@@ -29,6 +39,14 @@ public class DatasetAtRestKeyValidationService(
                 break;
         }
 
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "dataset-key-validation",
+            "startup_validation",
+            status,
+            sw.ElapsedMilliseconds);
         return Task.CompletedTask;
     }
 
