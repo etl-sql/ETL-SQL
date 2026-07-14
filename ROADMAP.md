@@ -6,22 +6,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ---
 
-## Adaptive Execution & Extended Large-Data Certification
-
-*Improves streaming scan, filter, projection, low-cardinality aggregation, and spill-backed `#temp` staging efficiency and concurrency under bounded-memory behavior.*
-
-### Shipped Scope
-- **Allocation Budgets:** Budgeting memory and garbage collection targets at scale (10M / 50M rows and 1B scale certification).
-- **Adaptive Execution Controller:** Adaptive worker admission, concurrency caps, batch/memory grant setpoints, and spill writes.
-
-### Future Candidate Phases
-- [ ] **Schema-Resilient Flat File Modes:** Extend the `FLATFILE` (CSV/Excel) connectors with runtime resilience options such as `IGNORE_EXTRA_COLUMNS = ON`, `NULL_MISSING_COLUMNS = ON`, and `MAP_BY_HEADER_NAME = ON` to gracefully handle vendor structure drift without throwing validation crashes.
-  - *Scope notes:* `MAP_BY_HEADER_NAME` shifts column binding from positional to name-based — define behavior for missing, duplicate, reordered, and renamed headers explicitly; prefer a small set of strictness *levels* over independent booleans that can contradict one another (name-mapping implies tolerating reorder).
-  - Resilience must not become invisible data loss: pair silent `NULL_MISSING_COLUMNS` / coercion with a diagnostic and a rejected/coerced **row count**, and consider an optional bad-row quarantine sink.
-  - Define the interaction with the linter's `SchemaValidationRule` and with `EXPECT` (warn vs. error vs. accept).
-
----
-
 ## Shared Connection & Secret Governance
 
 *Features per-connection use ACLs, connection/secret impact inventories, and sensitive metadata classification.*
