@@ -1508,8 +1508,10 @@ time series (retained per `Orchestrator:HostMetricsRetentionDays`, rolled up dai
 Read the recent window with `SHOW HOST METRICS [nodeId] [INTO #t]`, and use
 `samples/admin_operations/capacity_report.etlsql` to email a daily per-node/free-disk summary. The
 native Portal capacity report adds retained-history summaries for max/p95 host CPU and memory,
-scheduled-job failure rate, and p95 execution duration, peak memory, and CPU time. OS-level monitoring
-remains a good independent cross-check.
+scheduled-job failure rate, and p95 execution duration, peak memory, and CPU time. It also adds
+identifier-only workload breakdowns for scheduled jobs and Portal executions by workload kind, report
+id, and owner id; it does not include report names, SQL text, paths, error details, or row data.
+OS-level monitoring remains a good independent cross-check.
 
 ---
 

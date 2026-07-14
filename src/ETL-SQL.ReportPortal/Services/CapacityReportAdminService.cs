@@ -1,5 +1,7 @@
 using System.Text;
 using ETL_SQL.Core.Data;
+using ETL_SQL.ReportPortal.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -56,6 +58,53 @@ public sealed class CapacityReportAdminService(
         var p95PeakMemoryMB = Percentile(history.Select(h => h.PeakMemoryBytes / (1024.0 * 1024.0)), 0.95);
         var p95CpuSeconds = Percentile(history.Select(h => h.CpuTimeSeconds), 0.95);
         var failureRate = history.Count == 0 ? 0 : failures * 100.0 / history.Count;
+        var scheduledJobBreakdown = history
+            .GroupBy(h => h.JobName, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new WorkloadBreakdown(
+                g.Key,
+                g.Count(),
+                g.Count(IsFailure),
+                g.Sum(h => h.RowsProcessed),
+                g.Max(h => h.PeakMemoryBytes) / (1024 * 1024),
+                Percentile(g.Where(h => h.EndTime is not null)
+                    .Select(h => Math.Max(0, (h.EndTime!.Value - h.StartTime).TotalMilliseconds)), 0.95)))
+            .OrderByDescending(w => w.Runs)
+            .ThenBy(w => w.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
+
+        var db = scope.GetRequiredService<PortalDbContext>();
+        var portalRows = await db.PortalExecutionJobs
+            .AsNoTracking()
+            .Where(j => j.CompletedAt != null && j.CompletedAt >= since)
+            .Select(j => new
+            {
+                j.Kind,
+                j.ReportId,
+                j.UserId,
+                j.ActorType,
+                j.ActorId,
+                j.Status,
+                j.RowsProcessed,
+                j.PeakMemoryBytes,
+                j.StartedAt,
+                j.CompletedAt
+            })
+            .ToListAsync(ct);
+        var portalBreakdown = portalRows
+            .GroupBy(j => $"{j.Kind}|report:{j.ReportId}|owner:{OwnerKey(j.ActorType, j.ActorId, j.UserId)}")
+            .Select(g => new WorkloadBreakdown(
+                g.Key,
+                g.Count(),
+                g.Count(j => j.Status is "Failed" or "Cancelled"),
+                g.Sum(j => j.RowsProcessed),
+                g.Max(j => j.PeakMemoryBytes) / (1024 * 1024),
+                Percentile(g.Where(j => j.StartedAt is not null && j.CompletedAt is not null)
+                    .Select(j => Math.Max(0, (j.CompletedAt!.Value - j.StartedAt!.Value).TotalMilliseconds)), 0.95)))
+            .OrderByDescending(w => w.Runs)
+            .ThenBy(w => w.Key, StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToList();
 
         var sb = new StringBuilder();
         sb.AppendLine($"ETL-SQL capacity report — last {Math.Max(1, cfg.LookbackHours)}h.");
@@ -82,6 +131,8 @@ public sealed class CapacityReportAdminService(
             $"Scheduled jobs: {history.Count} run(s), {failures} non-success ({failureRate:0.0}%).");
         sb.AppendLine(
             $"Execution p95: duration {p95DurationMs:0} ms, peak memory {p95PeakMemoryMB:0} MB, CPU {p95CpuSeconds:0.00} s; max peak memory {maxPeakMemoryMB} MB.");
+        AppendBreakdown(sb, "Scheduled job breakdown", scheduledJobBreakdown);
+        AppendBreakdown(sb, "Portal execution breakdown", portalBreakdown);
         sb.AppendLine("Long-term daily trends are retained in JobHistoryDaily and HostMetricsDaily rollups.");
 
         return new AdminDigestContent(
@@ -92,6 +143,37 @@ public sealed class CapacityReportAdminService(
 
     private static double EffectiveCpuPercent(HostMetricSample sample) =>
         sample.HostCpuPercent ?? sample.ProcessCpuPercent;
+
+    private static bool IsFailure(JobHistoryEntry entry) =>
+        !string.Equals(entry.Status, "SUCCESS", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(entry.Status, "RUNNING", StringComparison.OrdinalIgnoreCase);
+
+    private static string OwnerKey(string actorType, string? actorId, int userId)
+    {
+        if (string.Equals(actorType, "ServiceAccount", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(actorId))
+            return $"service:{actorId}";
+        return $"user:{userId}";
+    }
+
+    private static void AppendBreakdown(StringBuilder sb, string heading, IReadOnlyList<WorkloadBreakdown> rows)
+    {
+        sb.AppendLine();
+        sb.AppendLine($"{heading}:");
+        if (rows.Count == 0)
+        {
+            sb.AppendLine("  none in window");
+            return;
+        }
+
+        foreach (var row in rows)
+        {
+            var failureRate = row.Runs == 0 ? 0 : row.Failures * 100.0 / row.Runs;
+            sb.AppendLine(
+                $"  {row.Key}: runs {row.Runs}, failures {row.Failures} ({failureRate:0.0}%), " +
+                $"rows {row.RowsProcessed}, max memory {row.MaxPeakMemoryMB} MB, p95 duration {row.P95DurationMs:0} ms");
+        }
+    }
 
     private static double Percentile(IEnumerable<double> values, double percentile)
     {
@@ -110,4 +192,12 @@ public sealed class CapacityReportAdminService(
 
         return sorted[lower] + (sorted[upper] - sorted[lower]) * (rank - lower);
     }
+
+    private sealed record WorkloadBreakdown(
+        string Key,
+        int Runs,
+        int Failures,
+        long RowsProcessed,
+        long MaxPeakMemoryMB,
+        double P95DurationMs);
 }

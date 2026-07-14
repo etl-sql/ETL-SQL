@@ -160,6 +160,35 @@ public class AdminServicesTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.PortalExecutionJobs.AddRange(
+                new PortalExecutionJob
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Kind = "Report",
+                    ReportId = 42,
+                    UserId = 7,
+                    Status = "Succeeded",
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-20),
+                    StartedAt = DateTime.UtcNow.AddMinutes(-19),
+                    CompletedAt = DateTime.UtcNow.AddMinutes(-18),
+                    RowsProcessed = 100,
+                    PeakMemoryBytes = 128 * mb,
+                    CpuTimeSeconds = 0.5
+                },
+                new PortalExecutionJob
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Kind = "DatasetRefresh",
+                    ReportId = 42,
+                    UserId = 7,
+                    Status = "Failed",
+                    CreatedAt = DateTime.UtcNow.AddMinutes(-15),
+                    StartedAt = DateTime.UtcNow.AddMinutes(-14),
+                    CompletedAt = DateTime.UtcNow.AddMinutes(-13),
+                    RowsProcessed = 0,
+                    PeakMemoryBytes = 64 * mb,
+                    CpuTimeSeconds = 0.25
+                });
             db.AdminServiceRuns.Add(new AdminServiceRun
             {
                 ServiceName = "capacity-report",
@@ -177,6 +206,11 @@ public class AdminServicesTests
         Assert.Contains("CPU max/p95", factory.Sender.Sent[^1].Body);
         Assert.Contains("2 run(s), 1 non-success (50.0%)", factory.Sender.Sent[^1].Body);
         Assert.Contains("Execution p95:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Scheduled job breakdown:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("capacity-job: runs 2, failures 1 (50.0%)", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Portal execution breakdown:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Report|report:42|owner:user:7: runs 1", factory.Sender.Sent[^1].Body);
+        Assert.Contains("DatasetRefresh|report:42|owner:user:7: runs 1, failures 1", factory.Sender.Sent[^1].Body);
         Assert.Contains("JobHistoryDaily and HostMetricsDaily", factory.Sender.Sent[^1].Body);
 
         using (var scope = factory.Services.CreateScope())

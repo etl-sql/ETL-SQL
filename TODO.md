@@ -307,3 +307,7 @@ Operations Control Plane → 4.1 Central fleet management*.
       retained host/job history with peak and p95 CPU, memory, execution duration, and failure-rate
       signals; high-cardinality or stream-only signals remain exported through the standard metrics
       surface.
+- [x] Add workload breakdowns by environment, node, job, report, dataset, connector, owner, and
+      workload class without exposing sensitive row data. The native capacity report now includes
+      bounded scheduled-job and Portal-execution breakdowns by workload kind, report id, and owner id;
+      connector and dataset dimensions remain on the standard low-cardinality metrics surface.
