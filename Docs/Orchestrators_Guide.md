@@ -1092,7 +1092,22 @@ When the Orchestrator is **online**, two service-control buttons appear next to 
 
 When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button also appears that uses the Windows `ServiceController` API to start the local service. On separate-server deployments, start the service manually on its host.
 
-### 14.7 Differences from `DROP JOB`
+### 14.7 Metrics and Scraping
+
+The Orchestrator Service exposes three unauthenticated operations endpoints:
+
+| Endpoint | Format | Purpose |
+| :--- | :--- | :--- |
+| `GET /health` | JSON | Liveness probe for supervisors and load balancers. |
+| `GET /metrics` | JSON | Existing Portal/UI metrics payload with active jobs, queued jobs, maximum jobs, available slots, and active child processes. |
+| `GET /metrics/prometheus` | Prometheus text | Scrape-friendly gauges for the same non-secret scheduler and process counts. |
+
+`/metrics/prometheus` emits stable low-cardinality labels: `environment`, `node`, and
+`component="orchestrator"`. It does not emit job names, script paths, script text, parameters,
+connection metadata, credentials, or error details. Expose it only on a trusted management network or
+behind your standard monitoring ingress controls.
+
+### 14.8 Differences from `DROP JOB`
 
 | Action | Effect |
 | :--- | :--- |

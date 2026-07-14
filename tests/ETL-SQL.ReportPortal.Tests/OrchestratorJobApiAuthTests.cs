@@ -83,12 +83,27 @@ public class OrchestratorJobApiAuthTests : IDisposable
     [Theory]
     [InlineData("/health")]
     [InlineData("/metrics")]
+    [InlineData("/metrics/prometheus")]
     public async Task Probes_StayOpenWithoutApiKey(string path)
     {
         var client = _factory.CreateClient();
         using var req = Request(HttpMethod.Get, path, apiKey: null);
         var res = await client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task PrometheusMetrics_UsesTextFormat()
+    {
+        var client = _factory.CreateClient();
+        using var req = Request(HttpMethod.Get, "/metrics/prometheus", apiKey: null);
+        var res = await client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.StartsWith("text/plain", res.Content.Headers.ContentType?.MediaType);
+        var body = await res.Content.ReadAsStringAsync();
+        Assert.Contains("# HELP etlsql_orchestrator_jobs_active", body);
+        Assert.Contains("component=\"orchestrator\"", body);
     }
 
     [Fact]

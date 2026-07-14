@@ -78,6 +78,14 @@ namespace ETL_SQL.Orchestrator.Service
                 });
             }).WithName("getMetrics");
 
+            app.MapGet("/metrics/prometheus", (SchedulerService scheduler, ChildProcessTracker tracker) =>
+            {
+                var m = scheduler.GetMetrics();
+                return Results.Text(
+                    BuildPrometheusMetrics(m, tracker.ActiveCount),
+                    "text/plain; version=0.0.4; charset=utf-8");
+            }).WithName("getPrometheusMetrics");
+
             // ── Ad-hoc job execution (authenticated — see ApiKeyDenied) ──────────
             app.MapPost("/jobs", (HttpContext ctx, IConfiguration cfg, JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
             {
@@ -541,6 +549,51 @@ namespace ETL_SQL.Orchestrator.Service
                 ? scriptText
                 : new RunScriptStatement(new LiteralExpression(uri.ToPinnedString(latest.Version), TokenType.STRING_LITERAL), run.Parameters).ToSql();
         }
+
+        private static string BuildPrometheusMetrics(JobThrottleMetrics metrics, int activeProcesses)
+        {
+            var labels = new Dictionary<string, string>
+            {
+                ["environment"] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
+                ["node"] = Environment.MachineName,
+                ["component"] = "orchestrator"
+            };
+
+            var sb = new StringBuilder();
+            AppendGauge(sb, "etlsql_orchestrator_jobs_active",
+                "Currently active Orchestrator jobs.", metrics.ActiveJobs, labels);
+            AppendGauge(sb, "etlsql_orchestrator_jobs_queued",
+                "Currently queued Orchestrator jobs.", metrics.QueuedJobs, labels);
+            AppendGauge(sb, "etlsql_orchestrator_jobs_max",
+                "Maximum concurrent Orchestrator jobs allowed.", metrics.MaxJobs, labels);
+            AppendGauge(sb, "etlsql_orchestrator_jobs_available_slots",
+                "Available Orchestrator execution slots.", metrics.AvailableSlots, labels);
+            AppendGauge(sb, "etlsql_orchestrator_processes_active",
+                "Currently active child processes.", activeProcesses, labels);
+            return sb.ToString();
+        }
+
+        private static void AppendGauge(
+            StringBuilder sb,
+            string name,
+            string help,
+            double value,
+            IReadOnlyDictionary<string, string> labels)
+        {
+            sb.Append("# HELP ").Append(name).Append(' ').AppendLine(help);
+            sb.Append("# TYPE ").Append(name).AppendLine(" gauge");
+            sb.Append(name).Append(FormatLabels(labels)).Append(' ')
+                .AppendLine(value.ToString("G17", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        private static string FormatLabels(IReadOnlyDictionary<string, string> labels) =>
+            "{" + string.Join(",", labels.Select(label =>
+                $"{label.Key}=\"{EscapeLabelValue(label.Value)}\"")) + "}";
+
+        private static string EscapeLabelValue(string value) =>
+            value.Replace("\\", "\\\\", StringComparison.Ordinal)
+                .Replace("\n", "\\n", StringComparison.Ordinal)
+                .Replace("\"", "\\\"", StringComparison.Ordinal);
 
         // ── Ad-hoc job runner (unchanged) ─────────────────────────────────────
 

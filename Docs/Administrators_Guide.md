@@ -161,7 +161,7 @@ elapsed. Removing it sooner intentionally invalidates access tokens signed by th
 
 ### 4.3 Orchestrator API Key
 
-A shared API key protects every Orchestrator route that submits, cancels, inspects, schedules, or manages jobs — including the ad-hoc execution routes `POST /jobs`, `DELETE /jobs/{id}`, and `GET /jobs/{id}`. Only the unauthenticated probes `GET /health` and `GET /metrics` are exempt. The portal sends the key in the `X-Orchestrator-Key` request header.
+A shared API key protects every Orchestrator route that submits, cancels, inspects, schedules, or manages jobs — including the ad-hoc execution routes `POST /jobs`, `DELETE /jobs/{id}`, and `GET /jobs/{id}`. Only the unauthenticated probes `GET /health`, `GET /metrics`, and `GET /metrics/prometheus` are exempt. The portal sends the key in the `X-Orchestrator-Key` request header.
 
 ```json
 {
