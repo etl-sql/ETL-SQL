@@ -386,7 +386,7 @@ function renderVisualFlow(stage, ctx) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/src/etl-sql-vscode/media/designer/designer.css">
-  \${vscodeShim()}
+  ${vscodeShim()}
   <style>
     html, body {
       height: 100%;
@@ -559,7 +559,7 @@ function renderVisualFlow(stage, ctx) {
   <script type="module">
     import { renderDag } from '/src/etl-sql-vscode/media/designer/designer.js';
     
-    const data = \${initData};
+    const data = ${initData};
     const container = document.getElementById('dagRoot');
     
     // Mount the DAG
