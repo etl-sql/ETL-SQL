@@ -29,8 +29,8 @@ the remaining gap is infrastructure coverage.
 ## Active Development
 
 ### Schema-Resilient Flat File Modes
-- [ ] Support `IGNORE_EXTRA_COLUMNS = ON`, `NULL_MISSING_COLUMNS = ON`, and `MAP_BY_HEADER_NAME = ON` in `FLATFILE` (CSV) connector.
-- [ ] Support the same schema resilience options in `EXCEL` connector.
-- [ ] Pass destination table columns as `templateSchema` in `BULK INSERT` statement execution.
-- [ ] Add unit tests in `FlatFileTests.cs` and `ExcelTests.cs` to verify positional mapping, header name mapping, extra columns ignoring, and missing columns nulling.
+- [x] Support `IGNORE_EXTRA_COLUMNS = ON`, `NULL_MISSING_COLUMNS = ON`, and `MAP_BY_HEADER_NAME = ON` in `FLATFILE` (CSV) connector.
+- [x] Support the same schema resilience options in `EXCEL` connector.
+- [x] Pass destination table columns as `templateSchema` in `BULK INSERT` statement execution.
+- [x] Add unit tests in `FlatFileTests.cs` and `ExcelTests.cs` to verify positional mapping, header name mapping, extra columns ignoring, and missing columns nulling.
 
