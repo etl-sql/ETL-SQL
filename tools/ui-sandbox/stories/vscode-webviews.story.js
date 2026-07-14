@@ -347,6 +347,155 @@ function renderDesigner(stage, ctx) {
   return { dispose() { iframe.remove(); }, resize() {} };
 }
 
+function renderVisualFlow(stage, ctx) {
+  const graph = {
+    nodes: [
+      { id: 'conn:src_sales', label: 'src_sales (CSV)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {} } },
+      { id: 'conn:src_crm', label: 'src_crm.dbo.Customers (MSSQL)', type: 'table', meta: { columns: ['CustomerId', 'CustomerName', 'Region'], columnLineage: {} } },
+      { id: 'table:#temp_sales', label: '#temp_sales (Temp)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {
+        OrderId: { sources: [{ table: 'src_sales', column: 'OrderId' }], transform: 'PASS' },
+        CustomerId: { sources: [{ table: 'src_sales', column: 'CustomerId' }], transform: 'PASS' },
+        Amount: { sources: [{ table: 'src_sales', column: 'Amount' }], transform: 'PASS' },
+      } } },
+      { id: 'table:#temp_customers', label: '#temp_customers (Temp)', type: 'table', meta: { columns: ['CustomerId', 'CustomerName', 'Region'], columnLineage: {
+        CustomerId: { sources: [{ table: 'src_crm', column: 'CustomerId' }], transform: 'PASS' },
+        CustomerName: { sources: [{ table: 'src_crm', column: 'CustomerName' }], transform: 'PASS' },
+        Region: { sources: [{ table: 'src_crm', column: 'Region' }], transform: 'PASS' },
+      } } },
+      { id: 'table:#temp_enriched', label: '#temp_enriched (Temp)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'CustomerName', 'Region', 'Amount'], columnLineage: {
+        OrderId: { sources: [{ table: '#temp_sales', column: 'OrderId' }], transform: 'PASS' },
+        CustomerId: { sources: [{ table: '#temp_sales', column: 'CustomerId' }], transform: 'PASS' },
+        CustomerName: { sources: [{ table: '#temp_customers', column: 'CustomerName' }], transform: 'PASS' },
+        Region: { sources: [{ table: '#temp_customers', column: 'Region' }], transform: 'PASS' },
+        Amount: { sources: [{ table: '#temp_sales', column: 'Amount' }], transform: 'PASS' },
+      } } },
+      { id: 'table:dest_db', label: 'dest_db.reporting.MonthlySalesSummary (Postgres)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'CustomerName', 'Region', 'Amount', 'EnrichedAt'], columnLineage: {
+        OrderId: { sources: [{ table: '#temp_enriched', column: 'OrderId' }], transform: 'PASS' },
+        CustomerId: { sources: [{ table: '#temp_enriched', column: 'CustomerId' }], transform: 'PASS' },
+        CustomerName: { sources: [{ table: '#temp_enriched', column: 'CustomerName' }], transform: 'PASS' },
+        Region: { sources: [{ table: '#temp_enriched', column: 'Region' }], transform: 'PASS' },
+        Amount: { sources: [{ table: '#temp_enriched', column: 'Amount' }], transform: 'PASS' },
+        EnrichedAt: { sources: [], transform: 'GETDATE()' },
+      } } }
+    ],
+    edges: [
+      { source: 'conn:src_sales', target: 'table:#temp_sales', label: 'SELECT INTO' },
+      { source: 'conn:src_crm', target: 'table:#temp_customers', label: 'SELECT INTO' },
+      { source: 'table:#temp_sales', target: 'table:#temp_enriched', label: 'JOIN' },
+      { source: 'table:#temp_customers', target: 'table:#temp_enriched', label: 'JOIN' },
+      { source: 'table:#temp_enriched', target: 'table:dest_db', label: 'MERGE' }
+    ]
+  };
+
+  const initData = JSON.stringify(graph).replace(/</g, '\\u003c');
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/src/etl-sql-vscode/media/designer/designer.css">
+  ${vscodeShim()}
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background-color: #1e1e1e;
+      color: #d4d4d4;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    #dagRoot {
+      height: calc(100% - 35px);
+      width: 100%;
+      position: relative;
+    }
+    .vscode-header {
+      height: 35px;
+      line-height: 35px;
+      padding: 0 16px;
+      background-color: #252526;
+      border-bottom: 1px solid #3c3c3c;
+      font-size: 12px;
+      font-weight: 600;
+      color: #969696;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .vscode-header-tab {
+      background-color: #1e1e1e;
+      color: #e1e1e1;
+      padding: 0 12px;
+      border-right: 1px solid #252526;
+      height: 35px;
+      display: flex;
+      align-items: center;
+    }
+    .vscode-header-right {
+      color: #858585;
+      font-size: 11px;
+    }
+  </style>
+  <title>VS Code Visual Flow</title>
+</head>
+<body>
+  <div class="vscode-header">
+    <div class="vscode-header-tab">
+      <span>monthly_sales_summary.etlsql (Visual Flow)</span>
+    </div>
+    <div class="vscode-header-right">
+      <span>Auto-refresh: On Save</span>
+    </div>
+  </div>
+  <div id="dagRoot"></div>
+  <script type="module">
+    import { renderDag } from '/src/etl-sql-vscode/media/designer/designer.js';
+    
+    const data = ${initData};
+    const container = document.getElementById('dagRoot');
+    
+    // Mount the DAG
+    const instance = renderDag(container, data, {
+      theme: 'vscode',
+      onNodeClick: (nodeId, nodeMeta) => {
+        // Send a postMessage to VS Code to mock cursor jumping to code location
+        window.acquireVsCodeApi().postMessage({
+          type: 'jump_to_line',
+          nodeId: nodeId,
+          label: nodeMeta?.label || nodeId
+        });
+      }
+    });
+  </script>
+</body>
+</html>`;
+
+  const iframe = makeFrame(html);
+  
+  // Setup listener to print a message in the sandbox status line when a card is clicked
+  const onMessage = (e) => {
+    if (e.data && e.data.__fromWebview) {
+      const msg = e.data.__fromWebview;
+      if (msg.type === 'jump_to_line') {
+        ctx.stat(`vscode.postMessage -> jump_to_line: ${msg.label} (Mock cursor jumps to SQL code)`);
+      }
+    }
+  };
+  window.addEventListener('message', onMessage);
+
+  stage.replaceChildren(iframe);
+  ctx.stat('Visual Flow (DAG) · 6 nodes, 5 edges · Hover nodes for columns · Click header to inspect details · Click card body to jump cursor');
+  
+  return {
+    dispose() {
+      window.removeEventListener('message', onMessage);
+      iframe.remove();
+    },
+    resize() {}
+  };
+}
+
 export default {
   id: 'vscode-webviews',
   title: 'VS Code webviews',
@@ -356,10 +505,12 @@ export default {
     { id: 'preview',      label: 'Report preview' },
     { id: 'preview-sink', label: 'Report preview · all visuals' },
     { id: 'designer',     label: 'Report designer' },
+    { id: 'visual-flow',  label: 'Visual Flow (DAG)' },
   ],
   async mount(stage, fixtureId, ctx) {
     if (fixtureId === 'preview' || fixtureId === 'preview-sink') return renderPreview(stage, ctx, fixtureId);
     if (fixtureId === 'designer') return renderDesigner(stage, ctx);
+    if (fixtureId === 'visual-flow') return renderVisualFlow(stage, ctx);
     return renderResults(stage, ctx);
   },
 };
