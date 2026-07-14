@@ -1151,6 +1151,8 @@ content, message bodies, and delivery errors from labels.
 Refresh-token maintenance emits purge-cycle spans and metrics from `ETL-SQL.BackgroundServices`.
 The span carries the deleted-row count, while metrics keep only service name, operation, status,
 workload kind, environment, node, and component labels and never include token hashes or usernames.
+Audit-retention purges follow the same pattern: deleted-row counts are trace-only, and labels omit
+audit actions, resource ids, details, actor names, and any retained or purged audit payload text.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

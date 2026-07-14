@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,9 +29,7 @@ public sealed class AuditRetentionService(
                 var cutoff = clock.GetUtcNow().UtcDateTime.AddDays(-config.Audit.RetentionDays);
                 using var scope = scopeFactory.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-                var removed = await db.AuditLogs
-                    .Where(a => a.Timestamp < cutoff)
-                    .ExecuteDeleteAsync(stoppingToken);
+                var removed = await PurgeExpiredAsync(db, cutoff, stoppingToken);
                 if (removed > 0)
                     log.LogInformation(
                         "Purged {Count} audit rows older than {Cutoff:o} (retention {Days}d)",
@@ -53,6 +52,42 @@ public sealed class AuditRetentionService(
             {
                 return;
             }
+        }
+    }
+
+    internal static async Task<int> PurgeExpiredAsync(
+        PortalDbContext db, DateTime cutoffUtc, CancellationToken ct = default)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun(
+            "portal", "audit-retention", "purge_expired");
+        try
+        {
+            var removed = await db.AuditLogs
+                .Where(a => a.Timestamp < cutoffUtc)
+                .ExecuteDeleteAsync(ct);
+            sw.Stop();
+            BackgroundServiceObservability.SetRowsProcessed(activity, removed);
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                "portal",
+                "audit-retention",
+                "purge_expired",
+                "success",
+                sw.ElapsedMilliseconds);
+            return removed;
+        }
+        catch
+        {
+            sw.Stop();
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                "portal",
+                "audit-retention",
+                "purge_expired",
+                "failure",
+                sw.ElapsedMilliseconds);
+            throw;
         }
     }
 }

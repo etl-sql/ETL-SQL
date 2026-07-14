@@ -264,6 +264,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       sent/skipped/failed status labels and no recipients, SMTP aliases, or alert text.
 - [x] Extend first-class OpenTelemetry metrics/traces to refresh-token maintenance purges with
       deleted-row counts on spans and no token hashes or usernames in metric labels.
+- [x] Extend first-class OpenTelemetry metrics/traces to audit-retention purges with deleted-row
+      counts on spans and no audit actions, details, or payload text in metric labels.
 - [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class
