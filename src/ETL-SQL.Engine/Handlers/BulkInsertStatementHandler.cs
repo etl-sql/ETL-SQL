@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Data;
@@ -96,13 +97,24 @@ public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, IL
         if (connector == null)
             throw new ExecutionException("FLATFILE connector not found.");
 
+        List<ColumnDefinition>? destColumnDefs = null;
+        try
+        {
+            var destCols = await destination.GetColumnsAsync();
+            destColumnDefs = destCols.Select(c => new ColumnDefinition(c, "VARCHAR", false)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.Debug("[BulkInsertStatementHandler] Could not retrieve destination columns for template schema: {Message}", ex.Message);
+        }
+
         string resolvedPath = context.ResolvePath(stmt.FilePath);
         // Flat-file connectors perform their own file-type validation; the authorizer adds
         // enterprise-root and policy-freshness enforcement at this operation boundary.
         resolvedPath = new FileSystemPolicyAuthorizer(context.SecurityService)
             .Authorize(context, resolvedPath, FileSystemAccessKind.Read, validateFileType: false)
             .CanonicalPath;
-        var source = connector.CreateDataSource(context, resolvedPath, ffOptions);
+        var source = connector.CreateDataSource(context, resolvedPath, ffOptions, destColumnDefs);
 
         try
         {

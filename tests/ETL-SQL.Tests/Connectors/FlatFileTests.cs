@@ -8,6 +8,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using Spectre.Console;
 using Xunit;
@@ -195,6 +196,126 @@ namespace ETL_SQL.Tests.Connectors
                 var ds4 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options4);
                 var b4 = await ds4.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha", b4[0].Rows[0]["name"]?.ToString());
+            }
+            finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
+        }
+
+        [Fact]
+        public async Task TestSchemaResilience_MapByHeaderName()
+        {
+            string csvFile = "FileTest_Resilient_Header.csv";
+            await File.WriteAllTextAsync(csvFile, "NAME,ID,EXTRA_COL\nAlpha,1,some_extra_val\nBeta,2,another_extra");
+
+            try
+            {
+                var templateSchema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("id", "INT", false),
+                    new ColumnDefinition("name", "VARCHAR", false),
+                    new ColumnDefinition("age", "INT", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "MAP_BY_HEADER_NAME", "ON" },
+                    { "IGNORE_EXTRA_COLUMNS", "ON" },
+                    { "NULL_MISSING_COLUMNS", "ON" }
+                };
+
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options, templateSchema);
+                var batches = await ds.ReadBatches().ToListAsync();
+
+                Assert.Single(batches);
+                var dt = batches[0];
+
+                // Column names must match the expected/template schema casing and columns
+                Assert.Equal(new[] { "id", "name", "age" }, dt.ColumnNames);
+                Assert.Equal(2, dt.Rows.Count);
+
+                // Rows mapped by header name
+                Assert.Equal("1", dt.Rows[0]["id"]?.ToString());
+                Assert.Equal("Alpha", dt.Rows[0]["name"]?.ToString());
+                Assert.Null(dt.Rows[0]["age"]);
+
+                Assert.Equal("2", dt.Rows[1]["id"]?.ToString());
+                Assert.Equal("Beta", dt.Rows[1]["name"]?.ToString());
+                Assert.Null(dt.Rows[1]["age"]);
+            }
+            finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
+        }
+
+        [Fact]
+        public async Task TestSchemaResilience_Positional()
+        {
+            string csvFile = "FileTest_Resilient_Positional.csv";
+            await File.WriteAllTextAsync(csvFile, "1,Alpha,30,extra_val\n2,Beta,40,another_extra");
+
+            try
+            {
+                var templateSchema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("id", "INT", false),
+                    new ColumnDefinition("name", "VARCHAR", false),
+                    new ColumnDefinition("age", "INT", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "HEADER", "OFF" },
+                    { "IGNORE_EXTRA_COLUMNS", "ON" },
+                    { "NULL_MISSING_COLUMNS", "ON" }
+                };
+
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options, templateSchema);
+                var batches = await ds.ReadBatches().ToListAsync();
+
+                Assert.Single(batches);
+                var dt = batches[0];
+
+                Assert.Equal(new[] { "id", "name", "age" }, dt.ColumnNames);
+                Assert.Equal(2, dt.Rows.Count);
+
+                // Row 0
+                Assert.Equal("1", dt.Rows[0]["id"]?.ToString());
+                Assert.Equal("Alpha", dt.Rows[0]["name"]?.ToString());
+                Assert.Equal("30", dt.Rows[0]["age"]?.ToString());
+
+                // Row 1
+                Assert.Equal("2", dt.Rows[1]["id"]?.ToString());
+                Assert.Equal("Beta", dt.Rows[1]["name"]?.ToString());
+                Assert.Equal("40", dt.Rows[1]["age"]?.ToString());
+            }
+            finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
+        }
+
+        [Fact]
+        public async Task TestSchemaResilience_StrictSchemaThrows()
+        {
+            string csvFile = "FileTest_Resilient_Strict.csv";
+            await File.WriteAllTextAsync(csvFile, "1,Alpha\n2,Beta");
+
+            try
+            {
+                var templateSchema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("id", "INT", false),
+                    new ColumnDefinition("name", "VARCHAR", false),
+                    new ColumnDefinition("age", "INT", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "HEADER", "OFF" },
+                    { "STRICT_SCHEMA", "ON" },
+                    { "NULL_MISSING_COLUMNS", "OFF" }
+                };
+
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options, templateSchema);
+
+                await Assert.ThrowsAsync<ExecutionException>(async () =>
+                {
+                    await ds.ReadBatches().ToListAsync();
+                });
             }
             finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
         }

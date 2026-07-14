@@ -24,6 +24,10 @@ namespace ETL_SQL.Connectors.Excel
         private readonly EncryptionOptions _encryption;
         private readonly string? _range;
         private readonly Dictionary<string, string>? _options;
+        private readonly IEnumerable<ColumnDefinition>? _templateSchema;
+        private readonly bool _ignoreExtraColumns;
+        private readonly bool _nullMissingColumns;
+        private readonly bool _mapByHeaderName;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
 
@@ -34,10 +38,11 @@ namespace ETL_SQL.Connectors.Excel
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
-        public ExcelDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null)
+        public ExcelDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
         {
             _context = context;
             _logger = context.Logger;
+            _templateSchema = templateSchema;
 
             _options = options;
             _hasHeader = true; // Default
@@ -48,6 +53,9 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("HEADER", out var h)) _hasHeader = h.ToUpperInvariant() == "ON";
                 if (options.TryGetValue("RANGE", out var r)) _range = r;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
+                if (options.TryGetValue("IGNORE_EXTRA_COLUMNS", out var iec)) _ignoreExtraColumns = iec.ToUpperInvariant() == "ON" || iec.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("NULL_MISSING_COLUMNS", out var nmc)) _nullMissingColumns = nmc.ToUpperInvariant() == "ON" || nmc.ToUpperInvariant() == "TRUE";
+                if (options.TryGetValue("MAP_BY_HEADER_NAME", out var mbh)) _mapByHeaderName = mbh.ToUpperInvariant() == "ON" || mbh.ToUpperInvariant() == "TRUE";
             }
 
             _encryption = new EncryptionOptions(options);
@@ -99,7 +107,7 @@ namespace ETL_SQL.Connectors.Excel
 
             if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
 
-            var columnNames = new List<string>();
+            var excelCols = new List<string>();
             int dataStartRow = startRow;
 
             if (_hasHeader && startRow < sheet.Rows.Count)
@@ -107,7 +115,7 @@ namespace ETL_SQL.Connectors.Excel
                 var headerRow = sheet.Rows[startRow];
                 for (int c = startCol; c <= endCol; c++)
                 {
-                    columnNames.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
+                    excelCols.Add(headerRow[c]?.ToString()?.Trim() is string s && !string.IsNullOrEmpty(s) ? s : $"Column{c - startCol + 1}");
                 }
                 dataStartRow++;
             }
@@ -115,21 +123,135 @@ namespace ETL_SQL.Connectors.Excel
             {
                 for (int c = startCol; c <= endCol; c++)
                 {
-                    columnNames.Add($"Column{c - startCol + 1}");
+                    excelCols.Add($"Column{c - startCol + 1}");
                 }
             }
 
+            var actualHeaders = new List<string>();
+            var sourceMapping = new List<int>();
+
+            bool strictSchema = false;
+            if (_options != null && _options.TryGetValue("STRICT_SCHEMA", out var ss))
+            {
+                strictSchema = ss.ToUpperInvariant() == "ON" || ss.ToUpperInvariant() == "TRUE";
+            }
+
+            if (_templateSchema != null && (_mapByHeaderName || _ignoreExtraColumns || _nullMissingColumns || strictSchema))
+            {
+                var expectedCols = _templateSchema.Select(c => c.ColumnName).ToList();
+
+                if (_mapByHeaderName && _hasHeader)
+                {
+                    var usedIndices = new HashSet<int>();
+                    for (int i = 0; i < expectedCols.Count; i++)
+                    {
+                        var expectedName = expectedCols[i];
+                        int idx = excelCols.FindIndex(h => h.Equals(expectedName, StringComparison.OrdinalIgnoreCase));
+                        if (idx >= 0)
+                        {
+                            actualHeaders.Add(expectedCols[i]);
+                            sourceMapping.Add(idx);
+                            usedIndices.Add(idx);
+                        }
+                        else
+                        {
+                            if (_nullMissingColumns)
+                            {
+                                actualHeaders.Add(expectedCols[i]);
+                                sourceMapping.Add(-1);
+                            }
+                            else if (strictSchema)
+                            {
+                                throw new ExecutionException($"Required column '{expectedName}' is missing from the Excel sheet header.");
+                            }
+                        }
+                    }
+
+                    for (int j = 0; j < excelCols.Count; j++)
+                    {
+                        if (!usedIndices.Contains(j))
+                        {
+                            if (!_ignoreExtraColumns)
+                            {
+                                if (strictSchema)
+                                {
+                                    throw new ExecutionException($"Excel sheet contains extra column '{excelCols[j]}' that is not in the expected template schema.");
+                                }
+                                else
+                                {
+                                    actualHeaders.Add(excelCols[j]);
+                                    sourceMapping.Add(j);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    int maxCols = Math.Max(expectedCols.Count, excelCols.Count);
+                    for (int i = 0; i < maxCols; i++)
+                    {
+                        if (i < expectedCols.Count && i < excelCols.Count)
+                        {
+                            actualHeaders.Add(expectedCols[i]);
+                            sourceMapping.Add(i);
+                        }
+                        else if (i < expectedCols.Count)
+                        {
+                            if (_nullMissingColumns)
+                            {
+                                actualHeaders.Add(expectedCols[i]);
+                                sourceMapping.Add(-1);
+                            }
+                            else if (strictSchema)
+                            {
+                                throw new ExecutionException($"Excel sheet contains fewer columns ({excelCols.Count}) than expected ({expectedCols.Count}).");
+                            }
+                        }
+                        else
+                        {
+                            if (!_ignoreExtraColumns)
+                            {
+                                if (strictSchema)
+                                {
+                                    throw new ExecutionException($"Excel sheet contains more columns ({excelCols.Count}) than expected ({expectedCols.Count}).");
+                                }
+                                else
+                                {
+                                    actualHeaders.Add(excelCols[i]);
+                                    sourceMapping.Add(i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                actualHeaders = excelCols;
+                sourceMapping = Enumerable.Range(0, excelCols.Count).ToList();
+            }
+
             var etlBatch = new ETL_SQL.Data.DataTable();
-            etlBatch.SetColumns(columnNames);
+            etlBatch.SetColumns(actualHeaders);
 
             for (int r = dataStartRow; r <= endRow; r++)
             {
                 var row = sheet.Rows[r];
                 var etlRow = etlBatch.NewRow();
-                for (int c = startCol; c <= endCol; c++)
+                for (int i = 0; i < actualHeaders.Count; i++)
                 {
-                    string colName = columnNames[c - startCol];
-                    etlRow[colName] = row[c] == DBNull.Value ? null : row[c];
+                    string colName = actualHeaders[i];
+                    int excelColIndex = i < sourceMapping.Count ? sourceMapping[i] : -1;
+                    if (excelColIndex >= 0 && (startCol + excelColIndex) < row.ItemArray.Length)
+                    {
+                        int sheetColIdx = startCol + excelColIndex;
+                        etlRow[colName] = row[sheetColIdx] == DBNull.Value ? null : row[sheetColIdx];
+                    }
+                    else
+                    {
+                        etlRow[colName] = null;
+                    }
                 }
                 await etlBatch.AddRowAsync(etlRow);
 
@@ -137,7 +259,7 @@ namespace ETL_SQL.Connectors.Excel
                 {
                     yield return etlBatch;
                     etlBatch = new ETL_SQL.Data.DataTable();
-                    etlBatch.SetColumns(columnNames);
+                    etlBatch.SetColumns(actualHeaders);
                 }
             }
 

@@ -28,14 +28,20 @@ namespace ETL_SQL.Connectors.Excel
             { "RANGE", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
-            { "PASSWORD", Array.Empty<string>() }
+            { "PASSWORD", Array.Empty<string>() },
+            { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF", "TRUE", "FALSE" } },
+            { "NULL_MISSING_COLUMNS", new[] { "ON", "OFF", "TRUE", "FALSE" } },
+            { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF", "TRUE", "FALSE" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "HEADER", new[] { "ON", "OFF" } },
             { "COMPRESS", new[] { "ON", "OFF" } },
-            { "ENCRYPT", new[] { "ON", "OFF" } }
+            { "ENCRYPT", new[] { "ON", "OFF" } },
+            { "IGNORE_EXTRA_COLUMNS", new[] { "ON", "OFF" } },
+            { "NULL_MISSING_COLUMNS", new[] { "ON", "OFF" } },
+            { "MAP_BY_HEADER_NAME", new[] { "ON", "OFF" } }
         };
 
         public string GetHelp() =>
@@ -49,7 +55,10 @@ namespace ETL_SQL.Connectors.Excel
             "  PASSWORD: Password for encryption/decryption";
 
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
-            => new ExcelDataSource(context, connectionString, options);
+            => CreateDataSource(context, connectionString, options, null);
+
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema)
+            => new ExcelDataSource(context, connectionString, options, templateSchema);
 
         public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());

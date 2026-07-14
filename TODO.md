@@ -23,3 +23,14 @@ the remaining gap is infrastructure coverage.
 - [ ] Iterate CI-in-the-loop: add tests, push, read the CI coverage percentage (the authoritative
       scope; a local run excluding Portal reports around 50%, not comparable), repeat until >= 70.0,
       then restore the `ci.yml` threshold to **70.0**.
+
+---
+
+## Active Development
+
+### Schema-Resilient Flat File Modes
+- [ ] Support `IGNORE_EXTRA_COLUMNS = ON`, `NULL_MISSING_COLUMNS = ON`, and `MAP_BY_HEADER_NAME = ON` in `FLATFILE` (CSV) connector.
+- [ ] Support the same schema resilience options in `EXCEL` connector.
+- [ ] Pass destination table columns as `templateSchema` in `BULK INSERT` statement execution.
+- [ ] Add unit tests in `FlatFileTests.cs` and `ExcelTests.cs` to verify positional mapping, header name mapping, extra columns ignoring, and missing columns nulling.
+

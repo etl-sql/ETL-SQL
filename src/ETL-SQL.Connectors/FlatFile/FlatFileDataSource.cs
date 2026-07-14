@@ -32,6 +32,10 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly string? _nullAs;
         private readonly string? _dateFormat;
         private readonly bool _strictSchema;
+        private readonly IEnumerable<ColumnDefinition>? _templateSchema;
+        private readonly bool _ignoreExtraColumns;
+        private readonly bool _nullMissingColumns;
+        private readonly bool _mapByHeaderName;
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
@@ -66,6 +70,7 @@ namespace ETL_SQL.Connectors.FlatFile
             _context = context;
             _logger = context.Logger;
             _options = options;
+            _templateSchema = templateSchema;
             _hasHeader = true;
             _delimiter = ',';
             _encoding = Encoding.UTF8;
@@ -141,6 +146,21 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (options.TryGetValue("STRICT_SCHEMA", out var ss))
                 {
                     _strictSchema = ss.ToUpperInvariant() == "ON" || ss.ToUpperInvariant() == "TRUE";
+                }
+
+                if (options.TryGetValue("IGNORE_EXTRA_COLUMNS", out var iec))
+                {
+                    _ignoreExtraColumns = iec.ToUpperInvariant() == "ON" || iec.ToUpperInvariant() == "TRUE";
+                }
+
+                if (options.TryGetValue("NULL_MISSING_COLUMNS", out var nmc))
+                {
+                    _nullMissingColumns = nmc.ToUpperInvariant() == "ON" || nmc.ToUpperInvariant() == "TRUE";
+                }
+
+                if (options.TryGetValue("MAP_BY_HEADER_NAME", out var mbh))
+                {
+                    _mapByHeaderName = mbh.ToUpperInvariant() == "ON" || mbh.ToUpperInvariant() == "TRUE";
                 }
 
                 if (options.TryGetValue("ENCODING", out var enc))
@@ -431,22 +451,125 @@ namespace ETL_SQL.Connectors.FlatFile
                 yield break;
 
             var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
-            var currentBatch = new DataTable();
+            var actualHeaders = new List<string>();
+            var sourceMapping = new List<int>();
 
-            if (_hasHeader)
+            if (_templateSchema != null && (_mapByHeaderName || _ignoreExtraColumns || _nullMissingColumns || _strictSchema))
             {
-                currentBatch.SetColumns(headers.Select(h => h.Trim()));
+                var expectedCols = _templateSchema.Select(c => c.ColumnName).ToList();
+                var csvCols = _hasHeader
+                    ? headers.Select(h => h.Trim()).ToList()
+                    : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+
+                if (_mapByHeaderName && _hasHeader)
+                {
+                    var usedCsvIndices = new HashSet<int>();
+                    for (int i = 0; i < expectedCols.Count; i++)
+                    {
+                        var expectedName = expectedCols[i];
+                        int csvIndex = csvCols.FindIndex(h => h.Equals(expectedName, StringComparison.OrdinalIgnoreCase));
+                        if (csvIndex >= 0)
+                        {
+                            actualHeaders.Add(expectedCols[i]);
+                            sourceMapping.Add(csvIndex);
+                            usedCsvIndices.Add(csvIndex);
+                        }
+                        else
+                        {
+                            if (_nullMissingColumns)
+                            {
+                                actualHeaders.Add(expectedCols[i]);
+                                sourceMapping.Add(-1);
+                            }
+                            else if (_strictSchema)
+                            {
+                                throw new ExecutionException($"Required column '{expectedName}' is missing from the flat file header.");
+                            }
+                        }
+                    }
+
+                    for (int j = 0; j < csvCols.Count; j++)
+                    {
+                        if (!usedCsvIndices.Contains(j))
+                        {
+                            if (!_ignoreExtraColumns)
+                            {
+                                if (_strictSchema)
+                                {
+                                    throw new ExecutionException($"Flat file contains extra column '{csvCols[j]}' that is not in the expected template schema.");
+                                }
+                                else
+                                {
+                                    actualHeaders.Add(csvCols[j]);
+                                    sourceMapping.Add(j);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    int maxCols = Math.Max(expectedCols.Count, csvCols.Count);
+                    for (int i = 0; i < maxCols; i++)
+                    {
+                        if (i < expectedCols.Count && i < csvCols.Count)
+                        {
+                            actualHeaders.Add(expectedCols[i]);
+                            sourceMapping.Add(i);
+                        }
+                        else if (i < expectedCols.Count)
+                        {
+                            if (_nullMissingColumns)
+                            {
+                                actualHeaders.Add(expectedCols[i]);
+                                sourceMapping.Add(-1);
+                            }
+                            else if (_strictSchema)
+                            {
+                                throw new ExecutionException($"Flat file contains fewer columns ({csvCols.Count}) than expected ({expectedCols.Count}).");
+                            }
+                        }
+                        else
+                        {
+                            if (!_ignoreExtraColumns)
+                            {
+                                if (_strictSchema)
+                                {
+                                    throw new ExecutionException($"Flat file contains more columns ({csvCols.Count}) than expected ({expectedCols.Count}).");
+                                }
+                                else
+                                {
+                                    actualHeaders.Add(csvCols[i]);
+                                    sourceMapping.Add(i);
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else
             {
-                var colNames = _fixedColumns != null
-                    ? _fixedColumns.Select(c => c.Name).ToList()
-                    : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
-                currentBatch.SetColumns(colNames);
-                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
+                if (_hasHeader)
+                {
+                    actualHeaders = headers.Select(h => h.Trim()).ToList();
+                }
+                else
+                {
+                    actualHeaders = _fixedColumns != null
+                        ? _fixedColumns.Select(c => c.Name).ToList()
+                        : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                }
+                sourceMapping = Enumerable.Range(0, actualHeaders.Count).ToList();
             }
 
-            var actualHeaders = new List<string>(currentBatch.ColumnNames);
+            var currentBatch = new DataTable();
+            currentBatch.SetColumns(actualHeaders);
+
+            if (!_hasHeader)
+            {
+                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch, sourceMapping));
+            }
+
             int totalRowsRead = 0;
 
             var lineQueue = new Queue<string>();
@@ -457,7 +580,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
                 {
                     var dataLine = lineQueue.Dequeue();
-                    await ProcessDataLine(dataLine, currentBatch, actualHeaders);
+                    await ProcessDataLine(dataLine, currentBatch, actualHeaders, sourceMapping);
                     totalRowsRead++;
 
                     if (currentBatch.Rows.Count >= batchSize)
@@ -534,33 +657,41 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        private async Task ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
+        private async Task ProcessDataLine(string line, DataTable batch, List<string> actualHeaders, List<int> sourceMapping)
         {
             var values = _fixedColumns != null ? SplitFixedWidthLine(line) : SplitLine(line);
-            await batch.AddRowAsync(CreateRow(values, batch));
+            await batch.AddRowAsync(CreateRow(values, batch, sourceMapping));
         }
 
-        private Row CreateRow(string[] values, DataTable batch)
+        private Row CreateRow(string[] values, DataTable batch, List<int> sourceMapping)
         {
             var row = batch.NewRow();
             var columnNames = batch.ColumnNames;
-            for (int i = 0; i < columnNames.Count && i < values.Length; i++)
+            for (int i = 0; i < columnNames.Count; i++)
             {
-                string val = _trim ? values[i].Trim() : values[i];
-
-                if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
+                int srcIdx = i < sourceMapping.Count ? sourceMapping[i] : i;
+                if (srcIdx < 0 || srcIdx >= values.Length)
                 {
                     row[i] = null;
                 }
                 else
                 {
-                    if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, _culture, DateTimeStyles.None, out var dt))
+                    string val = _trim ? values[srcIdx].Trim() : values[srcIdx];
+
+                    if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
                     {
-                        row[i] = dt;
+                        row[i] = null;
                     }
                     else
                     {
-                        row[i] = val;
+                        if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, _culture, DateTimeStyles.None, out var dt))
+                        {
+                            row[i] = dt;
+                        }
+                        else
+                        {
+                            row[i] = val;
+                        }
                     }
                 }
             }
