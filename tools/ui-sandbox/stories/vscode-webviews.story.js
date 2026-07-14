@@ -326,15 +326,20 @@ function renderDesigner(stage, ctx) {
     };
     window.__vscodeSave = async function(script) { console.log('vscode.save', script.length); };
   </script>
-  <script src="/src/etl-sql-vscode/media/echarts.min.js"></script>
-  <script type="module">
-    import { createDesigner } from '/src/etl-sql-vscode/media/designer/designer.js';
-    createDesigner(document.getElementById('designerRoot'), {
-      designState: window.__SANDBOX_STATE__,
-      reportName: window.__INIT__.reportName,
-      apiBase: '',
-      host: 'vscode',
-      authFetch: window.function renderVisualFlow(stage, ctx) {
+  <script s      authFetch: window.__vscodeFetch,
+      onSaveScript: window.__vscodeSave,
+      onCancel: () => console.log('vscode.cancel')
+    });
+  </script>
+</body>
+</html>`;
+  const iframe = makeFrame(html);
+  stage.replaceChildren(iframe);
+  ctx.stat('report designer · 2 pages, 8 visuals, 2 datasets + vscode API shim');
+  return { dispose() { iframe.remove(); }, resize() {} };
+}
+
+function renderVisualFlow(stage, ctx) {
   const graph = {
     nodes: [
       { id: 'conn:src_sales', label: 'src_sales (CSV File)', type: 'table', meta: { columns: ['OrderId', 'CustomerId', 'Amount', 'ProductId'], columnLineage: {} } },
@@ -381,7 +386,7 @@ function renderDesigner(stage, ctx) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/src/etl-sql-vscode/media/designer/designer.css">
-  ${vscodeShim()}
+  \${vscodeShim()}
   <style>
     html, body {
       height: 100%;
@@ -554,7 +559,7 @@ function renderDesigner(stage, ctx) {
   <script type="module">
     import { renderDag } from '/src/etl-sql-vscode/media/designer/designer.js';
     
-    const data = ${initData};
+    const data = \${initData};
     const container = document.getElementById('dagRoot');
     
     // Mount the DAG
