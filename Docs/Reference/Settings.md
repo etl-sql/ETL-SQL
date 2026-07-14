@@ -203,12 +203,12 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 | `Portal:DatasetRootPath` | string | `./data/datasets` | — | Folder storing shared dataset Parquet archives. |
 | `Portal:Storage:Provider` | string | `Local` | — | Shared file system provider (`Local` or `Smb` / UNC). |
 | `Portal:Storage:KeyRingPath` | string | `null` | — | Folder storing Data Protection decryption keys (must be shared in HA). |
-| `Portal:Modules:Reporting` | boolean | `true` | — | Enables the report library entry page plus report catalog, report player, datasets, subscriptions, catalog search, and report export API routes. Disabled routes return 404. |
+| `Portal:Modules:Reporting` | boolean | `true` | — | Enables the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
 | `Portal:Modules:Designer` | boolean | `true` | — | Enables the browser report designer entry page and API routes. Disabled routes return 404. |
 | `Portal:Modules:ConnectionCatalog` | boolean | `true` | — | Enables the shared connection catalog and diagnostics module flag. Route fencing lands in a later modularization slice. |
 | `Portal:Modules:SecretStore` | boolean | `true` | — | Enables the Portal-managed secret store module flag. Route fencing lands in a later modularization slice. |
-| `Portal:Modules:Scheduling` | boolean | `true` | — | Enables scheduled refresh/orchestrator work module flag. Worker fencing lands in the modularization follow-up. |
-| `Portal:Modules:Operations` | boolean | `true` | — | Enables operational health, fleet, audit, and telemetry module flag. Route fencing lands in a later modularization slice. |
+| `Portal:Modules:Scheduling` | boolean | `true` | — | Enables scheduled refresh/orchestrator poller work when Reporting is also enabled. |
+| `Portal:Modules:Operations` | boolean | `true` | — | Enables operational digest and native admin digest worker loops. Route fencing lands in a later modularization slice. |
 | `Portal:Modules:Documentation` | boolean | `true` | — | Enables Portal-hosted documentation surfaces module flag. Route fencing lands in a later modularization slice. |
 | `Portal:MaxPreviewRows` | integer | `50000` | — | Maximum preview lines displayed in GUI tables. |
 
@@ -221,9 +221,10 @@ Configuration settings for the Report Portal UI server, shared storage, and acti
 - `Operations` (default: `true`): Operational health, fleet status, audit, and administrative telemetry.
 - `Documentation` (default: `true`): Portal-hosted documentation surfaces.
 
-These flags are the shared configuration contract for Portal modularization. The Reporting and Designer
-modules currently fence their frontend entry pages and API routes; worker/background-service fencing is
-a separate follow-up phase.
+These flags are the shared configuration contract for Portal modularization. Reporting and Designer
+currently fence their frontend entry pages and API routes. Reporting, Scheduling, and Operations also
+fence their owned background worker loops; security, identity, audit, database migration, and node
+heartbeat services remain active because they protect the host itself.
 
 ### Portal Resource Controls (`Portal:Resources`)
 - `MaxConcurrentReportExecutions` (default: `4`): Max total active queries allowed.

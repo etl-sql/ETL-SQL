@@ -57,7 +57,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
 
 #### Phase 5: Report Portal Modularization (Bites)
-- [ ] **Fenced Background Services:** Conditionally disable background workers, schedulers, and node-heartbeat capacities associated with disabled modules to reduce memory footprints and security surface areas.
 - [ ] **Multi-Topology Certification:** Certify varied deployment profiles (e.g., a pure "Secret Store & Connection Catalog" gateway node vs. a pure "BI Report Player" viewing node) sharing a single code executable.
 
 ---

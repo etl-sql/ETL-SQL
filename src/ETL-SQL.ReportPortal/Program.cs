@@ -445,26 +445,51 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.AuditRetentionSe
 builder.Services.AddHostedService(sp =>
     sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditOutboxTransportService>());
 
+// Optional operational workers. Portal:Modules gates the whole operations surface; each worker's
+// own Enabled flag still controls whether it performs work after registration.
 // Optional scheduled operational-metrics digest email (Portal:OperationalDigest; disabled by default).
 // HA-safe: a cluster lock ensures exactly one node sends per interval.
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OperationalMetricsDigestService>();
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.OperationalMetricsDigestService>(
+    builder.Services,
+    "Operations",
+    modules => modules.IsEnabled("Operations"));
 
 // Native admin services (Portal:AdminServices; all disabled by default) — managed replacements for
 // the samples/admin_operations scheduler scripts. Same HA cluster-lock cadence as the digest above.
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.IAdminNotificationSender,
     ETL_SQL.ReportPortal.Services.SmtpAdminNotificationSender>();
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.FailureDigestAdminService>();
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.BackupReportAdminService>();
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.CapacityReportAdminService>();
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.FailureDigestAdminService>(
+    builder.Services,
+    "Operations",
+    modules => modules.IsEnabled("Operations"));
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.BackupReportAdminService>(
+    builder.Services,
+    "Operations",
+    modules => modules.IsEnabled("Operations"));
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.CapacityReportAdminService>(
+    builder.Services,
+    "Operations",
+    modules => modules.IsEnabled("Operations"));
 
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.ExecutionJobService>();
 builder.Services.AddSingleton<ETL_SQL.Orchestrator.Scheduling.INodeLeaseLossHandler>(
     sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
-builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPollerService>();
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.SessionCache>(
+    builder.Services,
+    "Reporting",
+    modules => modules.IsEnabled("Reporting"),
+    sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.ExecutionJobService>(
+    builder.Services,
+    "Reporting",
+    modules => modules.IsEnabled("Reporting"),
+    sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.ExecutionJobService>());
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPollerService>(
+    builder.Services,
+    "Scheduling",
+    modules => modules.IsEnabled("Reporting") && modules.IsEnabled("Scheduling"));
 
 // JWT secret validation (runs after WebApplicationFactory can inject test configuration)
 builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.JwtSecretValidationService>();
@@ -477,8 +502,14 @@ builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.RefreshTokenMain
 
 // Dataset at-rest key validation: fail closed if Portal:Dataset:AtRestKey is missing/weak in production
 // (unless Portal:Dataset:AllowMachineFallback is deliberately set for dev/standalone).
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyValidationService>();
-builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.SnapshotMigrationService>();
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyValidationService>(
+    builder.Services,
+    "Reporting",
+    modules => modules.IsEnabled("Reporting"));
+AddPortalModuleHostedService<ETL_SQL.ReportPortal.Services.SnapshotMigrationService>(
+    builder.Services,
+    "Reporting",
+    modules => modules.IsEnabled("Reporting"));
 
 // Phase 5 — subscriptions (backed by Orchestrator jobs)
 
@@ -574,21 +605,24 @@ using (var scope = app.Services.CreateScope())
                     db,
                     scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("PiiColumnEncryptionMaintenance"));
-                await DatasetStorageMaintenance.ReconcileAsync(
-                    db,
-                    portalConfig,
-                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("DatasetStorageMaintenance"));
-                // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
-                // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
-                // and converge Orchestrator jobs to subscription row state (the source of truth).
-                await SubscriptionScriptMaintenance.ReconcileAsync(
-                    db,
-                    scope.ServiceProvider.GetRequiredService<PortalConfig>(),
-                    scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
-                    scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
-                        .CreateLogger("SubscriptionScriptMaintenance"),
-                    scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
+                if (scope.ServiceProvider.GetRequiredService<PortalModuleRegistry>().IsEnabled("Reporting"))
+                {
+                    await DatasetStorageMaintenance.ReconcileAsync(
+                        db,
+                        portalConfig,
+                        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("DatasetStorageMaintenance"));
+                    // P0.1/P1.2: rewrite any pre-upgrade subscription script (which embedded decrypted SMTP
+                    // credentials) to the credential-free trigger form, drop orphaned scripts and temp files,
+                    // and converge Orchestrator jobs to subscription row state (the source of truth).
+                    await SubscriptionScriptMaintenance.ReconcileAsync(
+                        db,
+                        scope.ServiceProvider.GetRequiredService<PortalConfig>(),
+                        scope.ServiceProvider.GetRequiredService<OrchestratorDbLocator>().Resolve(),
+                        scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("SubscriptionScriptMaintenance"),
+                        scope.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Storage.IOrchestratorStoreFactory>());
+                }
 
                 // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
                 // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
@@ -975,4 +1009,23 @@ static RateLimitPartition<string> CreateFixedWindowPartition(
             QueueLimit = 0,
             AutoReplenishment = true
         });
+}
+
+static void AddPortalModuleHostedService<TService>(
+    IServiceCollection services,
+    string moduleName,
+    Func<PortalModuleRegistry, bool> isEnabled,
+    Func<IServiceProvider, TService>? factory = null)
+    where TService : class, IHostedService
+{
+    services.AddSingleton<IHostedService>(sp =>
+    {
+        var modules = sp.GetRequiredService<PortalModuleRegistry>();
+        if (!isEnabled(modules))
+            return new DisabledPortalModuleHostedService(moduleName, typeof(TService).Name);
+
+        return factory is null
+            ? ActivatorUtilities.CreateInstance<TService>(sp)
+            : factory(sp);
+    });
 }
