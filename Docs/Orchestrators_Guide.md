@@ -1121,6 +1121,10 @@ Scheduled and manually triggered persisted jobs emit the same pattern from `ETL-
 the `orchestrator.scheduled_job` span carries the durable history id as `etlsql.job.id`, script
 hash, attempt number, status, rows, peak memory, and CPU time, while metrics keep job id and script
 hash out of labels.
+Enterprise policy refresh attempts emit spans from `ETL-SQL.Orchestrator.Policy` and metrics from the
+same-named meter. The `orchestrator.policy_refresh` span carries terminal status plus policy version
+and policy hash when a refresh succeeds; metrics report refresh count and duration with only
+environment, component, workload kind, and status labels.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

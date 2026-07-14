@@ -246,9 +246,10 @@ Operations Control Plane → 4.1 Central fleet management*.
 - [x] Extend first-class OpenTelemetry metrics/traces to scheduled Orchestrator background jobs,
       including durable history id, script hash, attempt number, terminal status, duration, rows,
       peak memory, and CPU time while keeping metrics labels low-cardinality.
-- [ ] Extend first-class OpenTelemetry metrics/traces to engine, dataset, connector, policy-refresh,
-      and remaining background-service workloads without imposing standalone overhead when exporters
-      are disabled.
+- [x] Extend first-class OpenTelemetry metrics/traces to Orchestrator enterprise policy-refresh
+      attempts, with policy version/hash on traces and low-cardinality status metrics.
+- [ ] Extend first-class OpenTelemetry metrics/traces to engine, dataset, connector, and remaining
+      background-service workloads without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine, dataset, connector, policy, and workload-class
       metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,

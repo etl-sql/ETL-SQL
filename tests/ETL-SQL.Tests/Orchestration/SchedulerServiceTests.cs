@@ -183,6 +183,62 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        public void PolicyRefreshObservability_EmitsPolicyTraceAndLowCardinalityMetrics()
+        {
+            var stoppedActivities = new List<Activity>();
+            using var activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == PolicyRefreshObservability.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStopped = activity => stoppedActivities.Add(activity)
+            };
+            ActivitySource.AddActivityListener(activityListener);
+
+            var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+            using var meterListener = new MeterListener
+            {
+                InstrumentPublished = (instrument, listener) =>
+                {
+                    if (instrument.Meter.Name == PolicyRefreshObservability.MeterName)
+                        listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.Start();
+
+            var policy = new ETL_SQL.Core.Governance.EffectiveEnterprisePolicy(
+                IsEnrolled: true,
+                IsAvailable: true,
+                Status: "Live",
+                PolicyVersion: "v-refresh",
+                Source: "test",
+                IssuedAtUtc: DateTimeOffset.UtcNow.AddMinutes(-1),
+                ExpiresAtUtc: DateTimeOffset.UtcNow.AddHours(1),
+                LoadedAtUtc: DateTimeOffset.UtcNow,
+                Document: new ETL_SQL.Core.Governance.OrganizationPolicyDocument(),
+                ConfigurationValues: new Dictionary<string, string?>());
+
+            var activity = PolicyRefreshObservability.StartRefreshActivity();
+            PolicyRefreshObservability.CompleteRefreshActivity(activity, policy, "success", durationMs: 10);
+            activity?.Dispose();
+
+            var span = Assert.Single(stoppedActivities);
+            Assert.Equal("orchestrator.policy_refresh", span.OperationName);
+            Assert.Equal("success", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status));
+            Assert.Equal("v-refresh", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyVersion));
+            Assert.False(string.IsNullOrWhiteSpace(Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyHash)));
+            Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.policy_refresh.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "orchestrator")
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "success")
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "policy-refresh"));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyVersion));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyHash));
+        }
+
+        [Fact]
         public async Task Job_WithNullNextRun_IsExecuted()
         {
             var jobs = new[] { new JobDefinition("TestJob", "SELECT 1;", 1, "HOUR", null, null, null) };

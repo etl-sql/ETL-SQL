@@ -17,10 +17,14 @@ public sealed class EnterprisePolicyRefreshService(
         while (!stoppingToken.IsCancellationRequested)
         {
             await Task.Delay(RefreshInterval, stoppingToken).ConfigureAwait(false);
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var activity = PolicyRefreshObservability.StartRefreshActivity();
             try
             {
                 var policy = await EnterprisePolicyRuntime.InitializeFromMachineAsync(
                     cancellationToken: stoppingToken).ConfigureAwait(false);
+                sw.Stop();
+                PolicyRefreshObservability.CompleteRefreshActivity(activity, policy, "success", sw.ElapsedMilliseconds);
                 logger.LogInformation(
                     "Enterprise policy {PolicyVersion} refreshed from {PolicySource} with status {PolicyStatus}",
                     policy.PolicyVersion, policy.Source, policy.Status);
@@ -31,6 +35,8 @@ public sealed class EnterprisePolicyRefreshService(
             }
             catch (Exception ex)
             {
+                sw.Stop();
+                PolicyRefreshObservability.CompleteRefreshActivity(activity, null, "failure", sw.ElapsedMilliseconds);
                 logger.LogCritical(ex,
                     "Authoritative enterprise policy could not be refreshed; stopping the fail-closed host");
                 lifetime.StopApplication();
