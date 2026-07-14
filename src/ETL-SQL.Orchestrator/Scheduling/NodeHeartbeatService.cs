@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Observability;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -78,6 +79,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                var component = Role.ToLowerInvariant();
                 try
                 {
                     var capacity = _capacityMonitor.Capture();
@@ -102,7 +104,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             capturedUtc = capacity.CapturedAtUtc.ToString("O")
                         }
                     });
-                    await _store.RegisterOrRenewNodeAsync(NodeId, Role, ttl, metadata);
+                    await RegisterOrRenewWithTelemetryAsync(component, ttl, metadata);
                     leaseExpiresAtUtc = DateTime.UtcNow.Add(ttl);
 
                     // Append a host-utilization time-series sample (capacity planning). Best-effort:
@@ -158,6 +160,37 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     break;
                 }
             }
+        }
+
+        private async Task RegisterOrRenewWithTelemetryAsync(string component, TimeSpan ttl, string metadata)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using var activity = BackgroundServiceObservability.StartRun(
+                component, "node-heartbeat", "renew");
+            try
+            {
+                await _store.RegisterOrRenewNodeAsync(NodeId, Role, ttl, metadata);
+                CompleteHeartbeat(activity, sw, component, "success", 0);
+            }
+            catch
+            {
+                CompleteHeartbeat(activity, sw, component, "failure", 0);
+                throw;
+            }
+        }
+
+        private static void CompleteHeartbeat(System.Diagnostics.Activity? activity, System.Diagnostics.Stopwatch sw,
+            string component, string status, long prunedNodes)
+        {
+            sw.Stop();
+            BackgroundServiceObservability.SetRowsProcessed(activity, prunedNodes);
+            BackgroundServiceObservability.CompleteRun(
+                activity,
+                component,
+                "node-heartbeat",
+                "renew",
+                status,
+                sw.ElapsedMilliseconds);
         }
 
         private async Task NotifyLeaseLostAsync(string reason, CancellationToken ct)

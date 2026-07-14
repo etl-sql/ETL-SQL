@@ -268,6 +268,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       counts on spans and no audit actions, details, or payload text in metric labels.
 - [x] Extend first-class OpenTelemetry metrics/traces to audit outbox transport drain/prune cycles
       with row counts on spans and no event ids, payload JSON, endpoints, or bearer tokens in labels.
+- [x] Extend first-class OpenTelemetry metrics/traces to node heartbeat renewals with host-role
+      component labels and no node ids, machine names, metadata JSON, or capacity values in labels.
 - [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class

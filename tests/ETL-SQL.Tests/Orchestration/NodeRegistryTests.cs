@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Storage;
 using Microsoft.Data.Sqlite;
@@ -131,6 +134,7 @@ namespace ETL_SQL.Tests.Orchestration
         [Fact]
         public async Task HeartbeatService_RegistersOnStart_AndDeregistersOnStop()
         {
+            using var telemetry = new BackgroundTelemetryCapture();
             var store = await NewStoreAsync();
             var service = new NodeHeartbeatService(
                 store, new ConfigurationBuilder().Build(), NullLogger<NodeHeartbeatService>.Instance, "Portal");
@@ -156,6 +160,20 @@ namespace ETL_SQL.Tests.Orchestration
                 Assert.True(capacity.TryGetProperty("MemoryLoadPercent", out _));
                 Assert.True(capacity.TryGetProperty("ProcessCpuPercent", out _));
                 Assert.True(capacity.TryGetProperty("IsOverloaded", out _));
+                for (var i = 0; i < 200 && telemetry.Activities.Count == 0; i++)
+                    await Task.Delay(25);
+                Assert.Contains(telemetry.Activities, activity =>
+                    activity.OperationName == "background_service.run"
+                    && Tag(activity, ObservabilityConventions.Tags.Component) == "portal"
+                    && Tag(activity, ObservabilityConventions.Tags.ServiceName) == "node-heartbeat"
+                    && Tag(activity, BackgroundServiceObservability.OperationTag) == "renew"
+                    && Tag(activity, ObservabilityConventions.Tags.Status) == "success");
+                Assert.Contains(telemetry.Measurements, measurement =>
+                    measurement.Name == "etlsql.background_service.run.completed"
+                    && HasTag(measurement.Tags, ObservabilityConventions.Tags.Component, "portal")
+                    && HasTag(measurement.Tags, ObservabilityConventions.Tags.ServiceName, "node-heartbeat")
+                    && HasTag(measurement.Tags, BackgroundServiceObservability.OperationTag, "renew")
+                    && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "success"));
             }
             finally
             {
@@ -229,6 +247,63 @@ namespace ETL_SQL.Tests.Orchestration
                 await service.StopAsync(CancellationToken.None);
             }
         }
+
+        private sealed class BackgroundTelemetryCapture : IDisposable
+        {
+            private readonly ActivityListener _activityListener;
+            private readonly MeterListener _meterListener;
+
+            public List<Activity> Activities { get; } = [];
+            public List<(string Name, double Value, Dictionary<string, object?> Tags)> Measurements { get; } = [];
+
+            public BackgroundTelemetryCapture()
+            {
+                _activityListener = new ActivityListener
+                {
+                    ShouldListenTo = source => source.Name == BackgroundServiceObservability.ActivitySourceName,
+                    Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                    ActivityStopped = activity => Activities.Add(activity)
+                };
+                ActivitySource.AddActivityListener(_activityListener);
+
+                _meterListener = new MeterListener
+                {
+                    InstrumentPublished = (instrument, listener) =>
+                    {
+                        if (instrument.Meter.Name == BackgroundServiceObservability.MeterName)
+                            listener.EnableMeasurementEvents(instrument);
+                    }
+                };
+                _meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+                    Measurements.Add((instrument.Name, value, ToDictionary(tags))));
+                _meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+                    Measurements.Add((instrument.Name, value, ToDictionary(tags))));
+                _meterListener.Start();
+            }
+
+            public void Dispose()
+            {
+                _activityListener.Dispose();
+                _meterListener.Dispose();
+            }
+        }
+
+        private static string? Tag(Activity activity, string key)
+        {
+            var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+            return value?.ToString();
+        }
+
+        private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+        {
+            var result = new Dictionary<string, object?>();
+            foreach (var tag in tags)
+                result[tag.Key] = tag.Value;
+            return result;
+        }
+
+        private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+            tags.TryGetValue(key, out var actual) && Equals(actual, value);
 
         private sealed class FailingAfterFirstHeartbeatStore : INodeRegistryStore
         {

@@ -1157,6 +1157,9 @@ Audit outbox transport drain and prune cycles emit background-service spans/metr
 failed, empty, saturated, and success statuses as applicable. Row counts are trace-only; metric
 labels omit event ids, audit actions, resource ids, payload JSON, bearer tokens, endpoints, and
 transport error text.
+Node heartbeat renewals emit background-service spans/metrics from `ETL-SQL.BackgroundServices`
+with the host role as component and `node-heartbeat` as service name. Labels omit node ids,
+machine names, heartbeat metadata JSON, capacity values, and lease-loss reasons.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
