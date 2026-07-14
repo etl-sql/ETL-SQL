@@ -102,12 +102,13 @@ namespace ETL_SQL.Orchestrator.Service
         /// </summary>
         public static void ValidateApiKeyBinding(IConfiguration configuration)
         {
+            var maxPreviousApiKeys = Math.Max(0, configuration.GetValue<int?>("Orchestrator:MaxPreviousApiKeys") ?? 1);
             var previousApiKeys =
                 configuration.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? [];
-            if (previousApiKeys.Length > 1)
+            if (previousApiKeys.Length > maxPreviousApiKeys)
             {
                 throw new InvalidOperationException(
-                    "Orchestrator:PreviousApiKeys supports exactly one temporary previous key.");
+                    $"Orchestrator:PreviousApiKeys supports at most {maxPreviousApiKeys} temporary previous key(s).");
             }
 
             var apiKeys = new[] { configuration["Orchestrator:ApiKey"] }

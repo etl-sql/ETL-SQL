@@ -39,6 +39,8 @@ Configures the zero-trust execution sandbox limits, folder restrictions, allowed
 | `Security:AllowedHosts` | array | `["*"]` | — | Hosts permitted to connect to HTTP endpoints. |
 | `Security:ApprovedSafeZones` | array | `["c:\Users\chuck\scratch\ETL-SQL\samples"]` | — | Paths where scripts are permitted to write or read files when `PathProtectionMode` is restricted. |
 | `Security:AllowedEnvVars` | array | `["TEMP", "USERDOMAIN", ...]` | — | Environment variables whitelisted for access within ETL scripts via the `ENV_VAR()` function. |
+| `Security:AdditionalBlockedExtensions` | array | `[]` | — | Extra administrator-defined file extensions to deny. These only add restrictions and cannot weaken built-in blocked extensions. |
+| `Security:AdditionalBlockedPaths` | array | `[]` | — | Extra administrator-defined paths or path segment names to deny. Rooted entries match by canonical path prefix; relative entries match path segments. |
 | `Security:MaxFileOperationsPerScript` | integer | `100` | `SET ALLOW_FILE_OPERATIONS = n`<br>or `SET MAX_FILE_OPERATIONS = n` | Limits the number of file modifications a single script can perform. |
 | `Security:MaxRecursiveNestingDepth` | integer | `5` | `SET ALLOW_RECURSIVE_LAYERS = n` | Limits nesting depth when run scripts call other scripts. |
 | `Security:MaxParallelDegree` | integer | `32` | `SET MAX_PARALLEL_DEGREE = n` | Maximum concurrent threads used in parallel command blocks. |
@@ -159,6 +161,8 @@ Defines default settings, delays, timeouts, and credentials for remote systems.
 | `Connectors:Retry:BaseDelaySeconds` | float | `1.0` | — | Initial delay backing off between failed requests. |
 | `Connectors:DataWarehouse:DefaultCommandTimeoutSeconds` | integer | `1800` | — | Max duration of SQL commands executed on target database servers (30 mins). |
 | `Connectors:DataWarehouse:SchemaCacheTtlSeconds` | integer | `300` | — | Duration target table schemas are cached to skip query re-verification. |
+| `Connectors:DataWarehouse:SchemaSoftRefreshIntervalSeconds` | integer | `300` | — | Age at which cached metadata remains usable but triggers background refresh. |
+| `Connectors:DataWarehouse:SchemaDiskCacheMaxAgeDays` | integer | `14` | — | Maximum age for on-disk schema cache files before they are ignored and pruned. |
 | `Connectors:Ftp` | object | `{"Host": "localhost", ...}` | — | Connection settings for FTP connections. |
 | `Connectors:Sftp` | object | `{"Host": "localhost", ...}` | — | Connection settings for SFTP connections. |
 | `Connectors:AzureBlob` | object | `{"ConnectionString": ...}` | — | Storage string and default container for Azure Blob connectivity. |
@@ -173,7 +177,9 @@ Configuration details for the background runner service.
 | :--- | :--- | :--- | :--- | :--- |
 | `Orchestrator:ApiKey` | string | `""` | — | Secret token used to authenticate request calls to the scheduler API. |
 | `Orchestrator:PreviousApiKeys` | array | `[]` | — | Rolled api keys accepted temporarily during secret rotation phases. |
+| `Orchestrator:MaxPreviousApiKeys` | integer | `1` | — | Maximum number of previous API keys accepted during a temporary rotation overlap. |
 | `Orchestrator:ScriptRoot` | string | `""` | — | Path target folder for orchestrator scripts and scheduling plans. |
+| `Orchestrator:DatabasePath` | string | `null` | — | SQLite database path. `null` uses the canonical `%LocalAppData%/ETL-SQL/etlsql.db` default. |
 | `Orchestrator:Database:Provider` | string | `Sqlite` | — | Database backing storage (`Sqlite` or `Postgres`). |
 | `Orchestrator:Database:ConnectionString` | string | `""` | — | DB Connection details when `Postgres` provider is specified. |
 

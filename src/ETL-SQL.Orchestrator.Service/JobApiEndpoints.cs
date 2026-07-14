@@ -459,8 +459,9 @@ namespace ETL_SQL.Orchestrator.Service
         {
             var apiKey = cfg["Orchestrator:ApiKey"];
             var previousApiKeys = cfg.GetSection("Orchestrator:PreviousApiKeys").Get<string[]>() ?? Array.Empty<string>();
+            var maxPreviousApiKeys = Math.Max(0, cfg.GetValue<int?>("Orchestrator:MaxPreviousApiKeys") ?? 1);
             var scriptRoot = cfg["Orchestrator:ScriptRoot"] ?? AppDomain.CurrentDomain.BaseDirectory;
-            var fingerprint = string.Join('\u001f', [apiKey ?? "", scriptRoot, .. previousApiKeys]);
+            var fingerprint = string.Join('\u001f', [apiKey ?? "", scriptRoot, maxPreviousApiKeys.ToString(), .. previousApiKeys]);
             if (_configInitialized && string.Equals(_cachedConfigFingerprint, fingerprint, StringComparison.Ordinal))
                 return;
 
@@ -480,7 +481,7 @@ namespace ETL_SQL.Orchestrator.Service
                 }
 
                 var digests = new List<byte[]>();
-                foreach (var k in _cachedPreviousApiKeys.Take(1).Where(key => !string.IsNullOrWhiteSpace(key)))
+                foreach (var k in _cachedPreviousApiKeys.Take(maxPreviousApiKeys).Where(key => !string.IsNullOrWhiteSpace(key)))
                 {
                     digests.Add(SHA256.HashData(Encoding.UTF8.GetBytes(k)));
                 }

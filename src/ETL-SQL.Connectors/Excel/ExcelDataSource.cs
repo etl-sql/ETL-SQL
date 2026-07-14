@@ -129,6 +129,7 @@ namespace ETL_SQL.Connectors.Excel
 
             var actualHeaders = new List<string>();
             var sourceMapping = new List<int>();
+            var sourceColumnCount = excelCols.Count;
 
             bool strictSchema = false;
             if (_options != null && _options.TryGetValue("STRICT_SCHEMA", out var ss))
@@ -142,6 +143,8 @@ namespace ETL_SQL.Connectors.Excel
 
                 if (_mapByHeaderName && _hasHeader)
                 {
+                    EnsureUniqueHeaders(excelCols, "Excel sheet");
+
                     var usedIndices = new HashSet<int>();
                     for (int i = 0; i < expectedCols.Count; i++)
                     {
@@ -234,6 +237,10 @@ namespace ETL_SQL.Connectors.Excel
 
             var etlBatch = new ETL_SQL.Data.DataTable();
             etlBatch.SetColumns(actualHeaders);
+            var ignoredExtraColumnCount = Math.Max(0, sourceColumnCount - sourceMapping.Where(i => i >= 0).Distinct().Count());
+            var nullFilledMissingColumnCount = sourceMapping.Count(i => i < 0);
+            var emitResilienceDiagnostics = ignoredExtraColumnCount > 0 || nullFilledMissingColumnCount > 0;
+            var affectedRowCount = 0;
 
             for (int r = dataStartRow; r <= endRow; r++)
             {
@@ -254,6 +261,7 @@ namespace ETL_SQL.Connectors.Excel
                     }
                 }
                 await etlBatch.AddRowAsync(etlRow);
+                affectedRowCount++;
 
                 if (etlBatch.Rows.Count >= batchSize)
                 {
@@ -265,6 +273,28 @@ namespace ETL_SQL.Connectors.Excel
 
             if (etlBatch.Rows.Count > 0)
                 yield return etlBatch;
+
+            if (emitResilienceDiagnostics)
+            {
+                _logger.Info(
+                    "EXCEL schema resilience applied: ignored extra columns={IgnoredExtraColumns}; null-filled missing columns={NullFilledMissingColumns}; affected rows={AffectedRows}.",
+                    ignoredExtraColumnCount,
+                    nullFilledMissingColumnCount,
+                    affectedRowCount);
+            }
+        }
+
+        private static void EnsureUniqueHeaders(IReadOnlyList<string> headers, string sourceDescription)
+        {
+            var duplicate = headers
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .GroupBy(h => h, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(g => g.Count() > 1);
+
+            if (duplicate != null)
+            {
+                throw new ExecutionException($"{sourceDescription} header contains duplicate column '{duplicate.Key}'. MAP_BY_HEADER_NAME requires unique source headers.");
+            }
         }
 
         public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)

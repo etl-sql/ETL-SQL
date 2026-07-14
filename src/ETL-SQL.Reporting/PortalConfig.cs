@@ -135,7 +135,8 @@ public class OperationalDigestConfig
 
     /// <summary>
     /// When true, send only when at least one alert condition is met (failure rate, pending migrations,
-    /// queue backlog) — a quieter "alert me when something is wrong" mode. Default false (always send).
+    /// queue backlog/outbox/storage pressure) — a quieter "alert me when something is wrong" mode.
+    /// Default false (always send).
     /// </summary>
     public bool AlertOnly { get; set; }
 
@@ -145,8 +146,44 @@ public class OperationalDigestConfig
     /// <summary>Queued-execution count at or above which a backlog alert is raised.</summary>
     public int QueueDepthAlertThreshold { get; set; } = 20;
 
+    /// <summary>Average queued-execution age in seconds at or above which an alert is raised. 0 disables.</summary>
+    public int QueueAgeSecondsAlertThreshold { get; set; } = 300;
+
+    /// <summary>Subscription delivery failure rate in percent at or above which an alert is raised. 0 disables.</summary>
+    public int DeliveryFailureRatePercentThreshold { get; set; } = 25;
+
+    /// <summary>Pending audit outbox rows at or above which an alert is raised. 0 disables.</summary>
+    public int AuditOutboxPendingAlertThreshold { get; set; } = 1000;
+
+    /// <summary>Oldest pending audit outbox age in seconds at or above which an alert is raised. 0 disables.</summary>
+    public int AuditOutboxAgeSecondsAlertThreshold { get; set; } = 900;
+
+    /// <summary>Pending security-event rows at or above which an alert is raised. 0 disables.</summary>
+    public int SecurityEventPendingAlertThreshold { get; set; } = 1000;
+
+    /// <summary>Oldest pending security-event age in seconds at or above which an alert is raised. 0 disables.</summary>
+    public int SecurityEventAgeSecondsAlertThreshold { get; set; } = 900;
+
+    /// <summary>Dataset storage bytes at or above which an alert is raised. 0 disables.</summary>
+    public long DatasetStorageBytesAlertThreshold { get; set; }
+
+    /// <summary>Snapshot storage bytes at or above which an alert is raised. 0 disables.</summary>
+    public long SnapshotStorageBytesAlertThreshold { get; set; }
+
+    /// <summary>Report snapshots older than this many hours are counted as stale. 0 disables.</summary>
+    public int SnapshotFreshnessHours { get; set; }
+
+    /// <summary>Datasets older than this many hours are counted as stale. 0 disables.</summary>
+    public int DatasetFreshnessHours { get; set; }
+
+    /// <summary>Active policy versions expiring within this many hours raise an alert. 0 disables.</summary>
+    public int PolicyVersionExpiryWarningHours { get; set; } = 72;
+
     /// <summary>Raise an alert when the catalog has unapplied EF migrations. Default true.</summary>
     public bool AlertOnPendingMigrations { get; set; } = true;
+
+    /// <summary>Base path or URL used in emitted alert runbook links.</summary>
+    public string RunbookBaseUri { get; set; } = "Docs/Operations/Alerting_Service_Objectives.md";
 }
 
 public class PortalLoadBalancerConfig

@@ -10,38 +10,19 @@ namespace ETL_SQL.ReportPortal.Services;
 /// </summary>
 public static class OperationalMetricsDigest
 {
-    public sealed record DigestContent(string Subject, string Body, IReadOnlyList<string> Alerts)
+    public sealed record OperationalAlert(string Severity, string Code, string Message, string Runbook)
+    {
+        public override string ToString() => $"[{Severity}] {Code}: {Message} Runbook: {Runbook}";
+    }
+
+    public sealed record DigestContent(string Subject, string Body, IReadOnlyList<OperationalAlert> Alerts)
     {
         public bool HasAlerts => Alerts.Count > 0;
     }
 
     public static DigestContent Build(OperationalMetrics m, OperationalDigestConfig cfg)
     {
-        var alerts = new List<string>();
-
-        var failureRate = m.RecentExecutions > 0
-            ? m.RecentExecutionFailures * 100.0 / m.RecentExecutions
-            : 0.0;
-        if (cfg.FailureRatePercentThreshold > 0
-            && m.RecentExecutions > 0
-            && failureRate >= cfg.FailureRatePercentThreshold)
-        {
-            alerts.Add($"Execution failure rate {failureRate:0.#}% over the last {m.WindowHours}h "
-                + $"({m.RecentExecutionFailures}/{m.RecentExecutions}) is at or above the "
-                + $"{cfg.FailureRatePercentThreshold}% threshold.");
-        }
-
-        if (cfg.QueueDepthAlertThreshold > 0 && m.QueuedExecutions >= cfg.QueueDepthAlertThreshold)
-        {
-            alerts.Add($"Execution queue depth {m.QueuedExecutions} is at or above the "
-                + $"{cfg.QueueDepthAlertThreshold} backlog threshold (cap {m.ExecutionCap}).");
-        }
-
-        if (cfg.AlertOnPendingMigrations && m.PendingMigrations > 0)
-        {
-            alerts.Add($"{m.PendingMigrations} database migration(s) are pending — the catalog schema is "
-                + "not fully upgraded.");
-        }
+        var alerts = BuildAlerts(m, cfg);
 
         var subject = alerts.Count > 0
             ? $"[ETL-SQL Portal] Operational ALERT ({alerts.Count}) — {m.NodeId}"
@@ -63,7 +44,7 @@ public static class OperationalMetricsDigest
         body.AppendLine($"  Active {m.ActiveExecutions} / queued {m.QueuedExecutions} "
             + $"(cap {m.ExecutionCap}, per-user {m.PerUserExecutionCap})");
         body.AppendLine($"  Last {m.WindowHours}h: {m.RecentExecutions} run(s), "
-            + $"{m.RecentExecutionFailures} failed ({failureRate:0.#}%)");
+            + $"{m.RecentExecutionFailures} failed ({FailureRate(m.RecentExecutionFailures, m.RecentExecutions):0.#}%)");
         body.AppendLine($"  Avg duration {m.AverageExecutionDurationMs:0} ms; "
             + $"avg queued age {m.AverageQueuedExecutionAgeSeconds:0}s");
         body.AppendLine();
@@ -75,6 +56,17 @@ public static class OperationalMetricsDigest
         body.AppendLine("Storage:");
         body.AppendLine($"  Datasets {FormatBytes(m.DatasetStorageBytes)}; "
             + $"snapshots {FormatBytes(m.SnapshotStorageBytes)}");
+        body.AppendLine($"  Stale snapshots {m.StaleSnapshots}; stale datasets {m.StaleDatasets}");
+        body.AppendLine();
+        body.AppendLine("Outboxes:");
+        body.AppendLine($"  Audit pending {m.AuditOutboxPending}, failed {m.AuditOutboxFailed}, "
+            + $"oldest pending {m.AuditOutboxOldestPendingAgeSeconds:0}s");
+        body.AppendLine($"  Security events pending {m.SecurityEventPending}, failed {m.SecurityEventFailed}, "
+            + $"oldest pending {m.SecurityEventOldestPendingAgeSeconds:0}s");
+        body.AppendLine();
+        body.AppendLine("Policy authority:");
+        body.AppendLine($"  Active versions expiring {m.ActivePolicyVersionsExpiring}; "
+            + $"expired {m.ActivePolicyVersionsExpired}");
         body.AppendLine();
         body.AppendLine("Schema:");
         body.AppendLine($"  Applied {m.AppliedMigrations}, pending {m.PendingMigrations} "
@@ -82,6 +74,162 @@ public static class OperationalMetricsDigest
 
         return new DigestContent(subject, body.ToString().TrimEnd(), alerts);
     }
+
+    public static IReadOnlyList<OperationalAlert> BuildAlerts(OperationalMetrics m, OperationalDigestConfig cfg)
+    {
+        var alerts = new List<OperationalAlert>();
+
+        var failureRate = FailureRate(m.RecentExecutionFailures, m.RecentExecutions);
+        if (cfg.FailureRatePercentThreshold > 0
+            && m.RecentExecutions > 0
+            && failureRate >= cfg.FailureRatePercentThreshold)
+        {
+            alerts.Add(Alert("critical", "portal_execution_failure_rate",
+                $"Execution failure rate {failureRate:0.#}% over the last {m.WindowHours}h "
+                + $"({m.RecentExecutionFailures}/{m.RecentExecutions}) is at or above the "
+                + $"{cfg.FailureRatePercentThreshold}% threshold.",
+                cfg));
+        }
+
+        if (cfg.QueueDepthAlertThreshold > 0 && m.QueuedExecutions >= cfg.QueueDepthAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "portal_execution_queue_depth",
+                $"Execution queue depth {m.QueuedExecutions} is at or above the "
+                + $"{cfg.QueueDepthAlertThreshold} backlog threshold (cap {m.ExecutionCap}).",
+                cfg));
+        }
+
+        if (cfg.QueueAgeSecondsAlertThreshold > 0
+            && m.AverageQueuedExecutionAgeSeconds >= cfg.QueueAgeSecondsAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "portal_execution_queue_age",
+                $"Average queued execution age {m.AverageQueuedExecutionAgeSeconds:0}s is at or above the "
+                + $"{cfg.QueueAgeSecondsAlertThreshold}s threshold.",
+                cfg));
+        }
+
+        var deliveryFailureRate = FailureRate(m.RecentDeliveryFailures, m.RecentDeliveries);
+        if (cfg.DeliveryFailureRatePercentThreshold > 0
+            && m.RecentDeliveries > 0
+            && deliveryFailureRate >= cfg.DeliveryFailureRatePercentThreshold)
+        {
+            alerts.Add(Alert("warning", "portal_delivery_failure_rate",
+                $"Subscription delivery failure rate {deliveryFailureRate:0.#}% over the last {m.WindowHours}h "
+                + $"({m.RecentDeliveryFailures}/{m.RecentDeliveries}) is at or above the "
+                + $"{cfg.DeliveryFailureRatePercentThreshold}% threshold.",
+                cfg));
+        }
+
+        if (cfg.AlertOnPendingMigrations && m.PendingMigrations > 0)
+        {
+            alerts.Add(Alert("warning", "portal_schema_pending_migrations",
+                $"{m.PendingMigrations} database migration(s) are pending; the catalog schema is not fully upgraded.",
+                cfg));
+        }
+
+        if (cfg.AuditOutboxPendingAlertThreshold > 0
+            && m.AuditOutboxPending >= cfg.AuditOutboxPendingAlertThreshold)
+        {
+            alerts.Add(Alert("critical", "portal_audit_outbox_backlog",
+                $"Audit outbox pending backlog {m.AuditOutboxPending} is at or above the "
+                + $"{cfg.AuditOutboxPendingAlertThreshold} threshold.",
+                cfg));
+        }
+
+        if (cfg.AuditOutboxAgeSecondsAlertThreshold > 0
+            && m.AuditOutboxOldestPendingAgeSeconds >= cfg.AuditOutboxAgeSecondsAlertThreshold)
+        {
+            alerts.Add(Alert("critical", "portal_audit_outbox_age",
+                $"Oldest pending audit outbox message age {m.AuditOutboxOldestPendingAgeSeconds:0}s is at or above the "
+                + $"{cfg.AuditOutboxAgeSecondsAlertThreshold}s threshold.",
+                cfg));
+        }
+
+        if (cfg.SecurityEventPendingAlertThreshold > 0
+            && m.SecurityEventPending >= cfg.SecurityEventPendingAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "security_event_outbox_backlog",
+                $"Security-event pending backlog {m.SecurityEventPending} is at or above the "
+                + $"{cfg.SecurityEventPendingAlertThreshold} threshold.",
+                cfg));
+        }
+
+        if (cfg.SecurityEventAgeSecondsAlertThreshold > 0
+            && m.SecurityEventOldestPendingAgeSeconds >= cfg.SecurityEventAgeSecondsAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "security_event_outbox_age",
+                $"Oldest pending security-event age {m.SecurityEventOldestPendingAgeSeconds:0}s is at or above the "
+                + $"{cfg.SecurityEventAgeSecondsAlertThreshold}s threshold.",
+                cfg));
+        }
+
+        if (cfg.DatasetStorageBytesAlertThreshold > 0
+            && m.DatasetStorageBytes >= cfg.DatasetStorageBytesAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "portal_dataset_storage_bytes",
+                $"Dataset storage {FormatBytes(m.DatasetStorageBytes)} is at or above the "
+                + $"{FormatBytes(cfg.DatasetStorageBytesAlertThreshold)} threshold.",
+                cfg));
+        }
+
+        if (cfg.SnapshotStorageBytesAlertThreshold > 0
+            && m.SnapshotStorageBytes >= cfg.SnapshotStorageBytesAlertThreshold)
+        {
+            alerts.Add(Alert("warning", "portal_snapshot_storage_bytes",
+                $"Snapshot storage {FormatBytes(m.SnapshotStorageBytes)} is at or above the "
+                + $"{FormatBytes(cfg.SnapshotStorageBytesAlertThreshold)} threshold.",
+                cfg));
+        }
+
+        if (cfg.SnapshotFreshnessHours > 0 && m.StaleSnapshots > 0)
+        {
+            alerts.Add(Alert("warning", "portal_stale_snapshots",
+                $"{m.StaleSnapshots} report snapshot(s) are older than the configured "
+                + $"{cfg.SnapshotFreshnessHours}h freshness objective.",
+                cfg));
+        }
+
+        if (cfg.DatasetFreshnessHours > 0 && m.StaleDatasets > 0)
+        {
+            alerts.Add(Alert("warning", "portal_stale_datasets",
+                $"{m.StaleDatasets} dataset(s) are older than the configured "
+                + $"{cfg.DatasetFreshnessHours}h freshness objective.",
+                cfg));
+        }
+
+        if (cfg.PolicyVersionExpiryWarningHours > 0 && m.ActivePolicyVersionsExpired > 0)
+        {
+            alerts.Add(Alert("critical", "portal_policy_version_expired",
+                $"{m.ActivePolicyVersionsExpired} active policy version(s) are expired.",
+                cfg));
+        }
+
+        if (cfg.PolicyVersionExpiryWarningHours > 0 && m.ActivePolicyVersionsExpiring > 0)
+        {
+            alerts.Add(Alert("warning", "portal_policy_version_expiring",
+                $"{m.ActivePolicyVersionsExpiring} active policy version(s) expire within "
+                + $"{cfg.PolicyVersionExpiryWarningHours}h.",
+                cfg));
+        }
+
+        return alerts;
+    }
+
+    private static OperationalAlert Alert(string severity, string code, string message, OperationalDigestConfig cfg) =>
+        new(severity, code, message, BuildRunbook(cfg, code));
+
+    private static string BuildRunbook(OperationalDigestConfig cfg, string code)
+    {
+        var baseUri = string.IsNullOrWhiteSpace(cfg.RunbookBaseUri)
+            ? "Docs/Operations/Alerting_Service_Objectives.md"
+            : cfg.RunbookBaseUri.Trim();
+        return baseUri.Contains('#', StringComparison.Ordinal)
+            ? baseUri
+            : $"{baseUri}#{code.Replace('_', '-')}";
+    }
+
+    private static double FailureRate(int failures, int total) =>
+        total > 0 ? failures * 100.0 / total : 0.0;
 
     private static string FormatBytes(long bytes)
     {

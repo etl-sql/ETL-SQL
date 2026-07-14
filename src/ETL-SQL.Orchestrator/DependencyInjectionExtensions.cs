@@ -202,7 +202,9 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<IOrchestratorStoreFactory, OrchestratorStoreFactory>();
             services.AddSingleton(sp => (RelationalJobHistoryStore)sp
                 .GetRequiredService<IOrchestratorStoreFactory>()
-                .Create(configuration["Orchestrator:DatabasePath"]));
+                .Create(string.IsNullOrWhiteSpace(configuration["Orchestrator:DatabasePath"])
+                    ? null
+                    : configuration["Orchestrator:DatabasePath"]));
             services.AddSingleton<IJobHistoryStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<IBundleStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());
             services.AddSingleton<ILineageCatalogStore>(sp => sp.GetRequiredService<RelationalJobHistoryStore>());

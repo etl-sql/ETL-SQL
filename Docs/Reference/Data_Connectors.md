@@ -533,6 +533,9 @@ General-purpose connector for delimited and fixed-width text files.
 | `TRIM` | `ON`/`OFF` — remove leading/trailing whitespace from fields | No |
 | `COUNT_AT_END` | `ON`/`OFF` — validate row count against a trailer record (Default: `OFF`) | No |
 | `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching (Default: `OFF`) | No |
+| `IGNORE_EXTRA_COLUMNS` | `ON`/`OFF` — omit source columns that are not present in the template schema instead of appending them to the output | No |
+| `NULL_MISSING_COLUMNS` | `ON`/`OFF` — include template columns missing from the source and fill their values with `NULL` | No |
+| `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align source columns to template columns by case-insensitive header name instead of position; requires unique source headers | No |
 | `FORMAT` | `DELIMITED` (Default) or `FIXED` | No |
 | `TEMPLATE` | Name of a `#temp` table defining fixed-width offsets (Required if `FORMAT=FIXED`) | Conditional |
 | `COMPRESS` | `ON`/`OFF` — transparent GZip read/write (Default: `OFF`) | No |
@@ -543,6 +546,8 @@ General-purpose connector for delimited and fixed-width text files.
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
 > **Note:** When both `COMPRESS=ON` and `ENCRYPT=ON` are specified, the engine always applies compression first, then encryption — regardless of option order. This is because encryption maximises entropy, making subsequent compression ineffective.
+
+Schema-resilient reads require a destination/template schema, such as the destination table schema supplied during `BULK INSERT`. `STRICT_SCHEMA=ON` still fails on drift unless the relevant resilience option explicitly accepts that drift: `IGNORE_EXTRA_COLUMNS=ON` accepts surplus source columns, and `NULL_MISSING_COLUMNS=ON` accepts missing source columns by filling template columns with `NULL`. `MAP_BY_HEADER_NAME=ON` changes alignment only; it does not accept missing or extra columns by itself. When resilience changes the accepted shape, the connector emits an operational diagnostic with ignored extra-column count, null-filled missing-column count, and affected row count. Use `EXPECT SCHEMA` after loading into `#temp` when the downstream contract must be asserted against the accepted temp-table shape.
 
 Querying a `FLATFILE` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
 
@@ -601,6 +606,10 @@ Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`).
 | `SHEET` | Target sheet name (Default: first sheet) | No |
 | `HEADER` | `ON`/`OFF` — treat first row as column names (Default: `ON`) | No |
 | `RANGE` | Explicit cell range to read (e.g. `'A1:F500'`) | No |
+| `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching when a template schema is supplied (Default: `OFF`) | No |
+| `IGNORE_EXTRA_COLUMNS` | `ON`/`OFF` — omit source columns that are not present in the template schema instead of appending them to the output | No |
+| `NULL_MISSING_COLUMNS` | `ON`/`OFF` — include template columns missing from the source and fill their values with `NULL` | No |
+| `MAP_BY_HEADER_NAME` | `ON`/`OFF` — align source columns to template columns by case-insensitive header name instead of position; requires unique source headers | No |
 | `COMPRESS` | `ON`/`OFF` — GZip the output file after writing | No |
 | `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
 | `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
@@ -609,6 +618,8 @@ Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`).
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
 Querying a `EXCEL` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
+
+Excel uses the same schema-resilience contract as `FLATFILE`: `STRICT_SCHEMA=ON` fails on unaccepted drift, `IGNORE_EXTRA_COLUMNS=ON` accepts surplus columns, `NULL_MISSING_COLUMNS=ON` fills absent template columns with `NULL`, and `MAP_BY_HEADER_NAME=ON` aligns by unique source header names. Resilience diagnostics report ignored extra-column count, null-filled missing-column count, and affected row count. Use `EXPECT SCHEMA` after staging if the accepted temp-table shape is part of the pipeline contract.
 
 *Examples:*
 ```sql

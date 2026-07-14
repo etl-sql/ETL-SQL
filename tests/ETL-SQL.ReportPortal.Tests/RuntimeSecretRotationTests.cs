@@ -110,7 +110,26 @@ public class RuntimeSecretRotationTests
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             OrchestratorStartup.ValidateApiKeyBinding(configuration));
-        Assert.Contains("exactly one", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("at most 1", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void OrchestratorApiKeyRing_AllowsConfiguredPreviousKeyLimit()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Orchestrator:ApiKey"] = "current-key",
+                ["Orchestrator:MaxPreviousApiKeys"] = "2",
+                ["Orchestrator:PreviousApiKeys:0"] = "previous-key",
+                ["Orchestrator:PreviousApiKeys:1"] = "older-key"
+            })
+            .Build();
+
+        OrchestratorStartup.ValidateApiKeyBinding(configuration);
+        Assert.True(JobApiEndpoints.ApiKeyAccepted(configuration, "current-key"));
+        Assert.True(JobApiEndpoints.ApiKeyAccepted(configuration, "previous-key"));
+        Assert.True(JobApiEndpoints.ApiKeyAccepted(configuration, "older-key"));
     }
 
     [Fact]

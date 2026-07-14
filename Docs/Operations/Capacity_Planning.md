@@ -149,3 +149,91 @@ Before calling a deployment sized, run the technical procedure in
 - first sustained breach and the recommended operating margin
 
 If the measured result differs from this guide, trust the measured result for that environment.
+
+## Historical Capacity Report
+
+The native `Portal:AdminServices:CapacityReport` digest summarizes the short lookback window and the
+retained daily rollups. Use the short-window section to spot immediate pressure, and use the
+historical trend section to decide whether the deployment is growing toward a capacity boundary.
+
+The report distinguishes the signals ETL-SQL can measure directly:
+
+- **CPU** - sustained host or process CPU saturation points toward scale-up or scale-out.
+- **Memory** - high host memory or job peak memory points toward larger hosts, lower concurrency,
+  smaller batches, or report/export tuning.
+- **Storage** - state/spill disk floors and forecasts point toward storage expansion, retention
+  changes, or repartitioning spill-heavy workloads.
+- **Workload** - daily run count, failures, rows, and busiest day show schedule pressure and growth.
+- **Queue wait vs. run duration** - high queue wait with comparatively normal run duration points
+  toward execution-slot saturation or schedule bursts; high run duration with low queue wait points
+  toward slow report logic, downstream connectors, databases, exports, or storage.
+- **Hourly Portal pressure** - inferred queued/active overlap from persisted execution lifecycle rows
+  shows whether queue bursts coincided with active slots at the configured cap. Queued overlap below
+  the global cap usually means per-user/per-group limits, node-capacity admission, or burst timing
+  need review before raising the global cap.
+
+Connector, database, and concurrency bottlenecks need correlation with external telemetry and queue
+history. If job duration rises while CPU, memory, and disk remain healthy, inspect downstream
+databases, APIs, file shares, and connector latency before increasing ETL-SQL concurrency. If queue
+depth or queue age rises while hosts have headroom, adjust schedule distribution or concurrency caps
+and validate with the capacity harness.
+
+## Interpreting Capacity Signals
+
+Use the capacity report as a decision aid, not as an automatic scaler. The first question is which
+resource is saturated while the workload is slow or queued.
+
+| Signal pattern | Likely bottleneck | First action |
+| :--- | :--- | :--- |
+| CPU max or p95 at 80%+, memory and disk healthy, queue wait rising | CPU or worker-slot saturation | Scale up CPU, scale out Portal/Orchestrator nodes where supported, or lower overlap between heavy jobs |
+| Memory max at 80%+, high job peak memory, repeated large exports or snapshots | Memory pressure | Increase RAM, reduce concurrent exports/refreshes, lower batch sizes, or split Portal and Orchestrator |
+| State or spill disk floor near the report threshold, forecast trending downward | Storage capacity or spill-heavy workload | Increase storage, shorten retention, move spill/state to faster/larger volumes, or repartition spill-heavy jobs |
+| Queue wait high, active slots at cap, run duration normal | Concurrency cap or schedule burst | Spread schedules, raise concurrency only after CPU/memory/disk are healthy, or add nodes where topology supports it |
+| Run duration high, queue wait low, host resources healthy | Connector, database, API, file share, or report logic | Inspect downstream telemetry, query plans, connector latency, export size, and report script complexity |
+| Queue overlap below global cap but users still wait | Per-user/per-group cap, node-capacity admission, or burst timing | Review fairness caps and node capacity limits before raising the global execution cap |
+| Failure rate rises with latency but host resources are healthy | External dependency or script quality | Inspect provider errors, retry behavior, source-system health, and recent script changes |
+
+## Scale Decision Examples
+
+**Scale up** when one node is consistently CPU or memory bound and the deployment is still a
+single-node or split-host topology. Example: Portal p95 queue wait is 12 seconds, active slots are at
+cap, CPU p95 is 85%, and memory is stable. Add CPU or move Portal/Orchestrator to separate hosts
+before increasing `Resources:MaxConcurrentReportExecutions`.
+
+**Scale out** when HA is already configured, multiple nodes can share state safely, and pressure is
+node-local rather than database/storage-bound. Example: two Portal nodes show active slots at cap,
+CPU and memory are high, PostgreSQL and shared storage remain healthy, and sticky-session routing is
+working. Add another Portal node and validate that load distribution improves without increasing
+database lock or storage latency.
+
+**Repartition workloads** when one script, report, or schedule family dominates the busiest hour.
+Example: the report shows one refresh group producing most rows and peak memory. Split the job by
+date, region, tenant, or source system; stage into smaller `#temp` batches; or run the heavy refresh
+outside the interactive reporting peak.
+
+**Adjust schedules** when queue pressure is bursty but total daily work is reasonable. Example: the
+busiest queued hour is 08:00Z with active slots at cap, while the rest of the day is idle. Spread
+subscriptions, refreshes, and orchestrator jobs across the hour or move non-urgent jobs outside the
+business-start window.
+
+**Do not scale ETL-SQL first** when run duration rises while host CPU, memory, storage, and queue
+wait remain healthy. That pattern usually means a downstream database, API, file share, cloud
+service, or report query is slow. Raising concurrency can amplify the source-system bottleneck.
+
+## Measured History vs. Synthetic Estimates
+
+The reference baseline and formulas are starter estimates. Use them before a production history
+exists, then replace them with measured workload history as soon as the deployment has enough data.
+
+Measured history is required before making claims about:
+
+- production jobs/hour for real row profiles
+- month-end, shift-handoff, subscription, or dashboard peak windows
+- connector and database bottlenecks
+- spill-heavy transformations and large exports
+- HA node count and load-balancer behavior
+- retention impact on state, snapshot, dataset, audit, and outbox storage
+
+Synthetic estimates are acceptable only for initial server requests, lab comparisons, and deciding
+which capacity harness profiles to run. Production sizing should cite the capacity report, harness
+results, host telemetry, and downstream system evidence together.

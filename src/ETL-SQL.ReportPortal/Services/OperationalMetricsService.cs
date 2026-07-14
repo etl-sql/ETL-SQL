@@ -31,6 +31,10 @@ public sealed class OperationalMetricsService(
         int RecentDeliveryFailures,
         long DatasetStorageBytes,
         long SnapshotStorageBytes,
+        int StaleSnapshots,
+        int StaleDatasets,
+        int ActivePolicyVersionsExpiring,
+        int ActivePolicyVersionsExpired,
         int ActiveSubscriptions,
         int SmtpConnections,
         int AppliedMigrations,
@@ -116,6 +120,9 @@ public sealed class OperationalMetricsService(
 
         var activeSubscriptions = await db.Subscriptions.CountAsync(s => s.IsActive, ct);
         var smtpConnections = await db.SmtpConnections.CountAsync(ct);
+        var staleSnapshots = await CountStaleSnapshotsAsync(now, ct);
+        var staleDatasets = await CountStaleDatasetsAsync(now, ct);
+        var policyExpiry = await CountPolicyExpiryAsync(now, ct);
 
         // Schema migration status: an operator can confirm the catalog is fully migrated after an
         // upgrade (PendingMigrations == 0) without shell access.
@@ -142,6 +149,10 @@ public sealed class OperationalMetricsService(
             recentDeliveryFailures,
             DirectorySizeBytes(config.DatasetRootPath),
             DirectorySizeBytes(config.SnapshotDirectory),
+            staleSnapshots,
+            staleDatasets,
+            policyExpiry.Expiring,
+            policyExpiry.Expired,
             activeSubscriptions,
             smtpConnections,
             appliedMigrations.Count,
@@ -214,12 +225,57 @@ public sealed class OperationalMetricsService(
         return new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, DateTimeKind.Utc);
     }
 
+    private async Task<int> CountStaleSnapshotsAsync(DateTime now, CancellationToken ct)
+    {
+        if (config.OperationalDigest.SnapshotFreshnessHours <= 0)
+            return 0;
+
+        var cutoff = now.AddHours(-config.OperationalDigest.SnapshotFreshnessHours);
+        return await db.Reports
+            .AsNoTracking()
+            .Where(r => !r.IsDeleted
+                && (r.LastRefreshCompletedAt == null || r.LastRefreshCompletedAt < cutoff))
+            .CountAsync(ct);
+    }
+
+    private async Task<int> CountStaleDatasetsAsync(DateTime now, CancellationToken ct)
+    {
+        if (config.OperationalDigest.DatasetFreshnessHours <= 0)
+            return 0;
+
+        var cutoff = now.AddHours(-config.OperationalDigest.DatasetFreshnessHours);
+        return await db.Datasets
+            .AsNoTracking()
+            .Where(d => d.LastRefresh == null || d.LastRefresh < cutoff)
+            .CountAsync(ct);
+    }
+
+    private async Task<PolicyExpiryCounts> CountPolicyExpiryAsync(DateTime now, CancellationToken ct)
+    {
+        if (config.OperationalDigest.PolicyVersionExpiryWarningHours <= 0)
+            return new PolicyExpiryCounts(0, 0);
+
+        var nowOffset = new DateTimeOffset(now, TimeSpan.Zero);
+        var warningCutoff = nowOffset.AddHours(config.OperationalDigest.PolicyVersionExpiryWarningHours);
+        var activeVersions = await db.PolicyVersions
+            .AsNoTracking()
+            .Where(p => p.RolloutState == nameof(PolicyRolloutState.Active))
+            .Select(p => p.ExpiresAtUtc)
+            .ToListAsync(ct);
+
+        var expired = activeVersions.Count(expiresAt => expiresAt <= nowOffset);
+        var expiring = activeVersions.Count(expiresAt => expiresAt > nowOffset && expiresAt <= warningCutoff);
+        return new PolicyExpiryCounts(expiring, expired);
+    }
+
 
     private sealed record ExecutionLoadRow(
         DateTime CompletedAt,
         string Status,
         long RowsProcessed,
         long PeakMemoryBytes);
+
+    private sealed record PolicyExpiryCounts(int Expiring, int Expired);
 
     /// <summary>Total size of regular files directly under a storage root; 0 when absent.</summary>
     private static long DirectorySizeBytes(string? path)

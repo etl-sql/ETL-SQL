@@ -193,5 +193,46 @@ namespace ETL_SQL.Tests.Connectors
             }
             finally { if (File.Exists(outPath)) File.Delete(outPath); }
         }
+
+        [Fact]
+        [Trait("Connector", "EXCEL")]
+        public async Task TestExcelSchemaResilience_MapByHeaderName_DuplicateHeaderThrows()
+        {
+            string outPath = Path.Combine(Path.GetTempPath(), "ExcelTest_Resilient_Duplicate_Header.xlsx");
+            try
+            {
+                var dsWrite = new ExcelDataSource(SystemExecutionContext.Instance, outPath);
+                var dtWrite = new ETL_SQL.Data.DataTable();
+                dtWrite.SetColumns(new[] { "ID", "id", "name" });
+                var row = dtWrite.NewRow();
+                row["ID"] = 1;
+                row["id"] = 2;
+                row["name"] = "Alpha";
+                await dtWrite.AddRowAsync(row);
+                await dsWrite.WriteBatches(new[] { dtWrite }.ToAsyncEnumerable());
+
+                var templateSchema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("id", "INT", false),
+                    new ColumnDefinition("name", "VARCHAR", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "MAP_BY_HEADER_NAME", "ON" },
+                    { "IGNORE_EXTRA_COLUMNS", "ON" }
+                };
+
+                var dsRead = new ExcelDataSource(SystemExecutionContext.Instance, outPath, options, templateSchema);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+                {
+                    await dsRead.ReadBatches().ToListAsync();
+                });
+
+                Assert.Contains("duplicate column", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally { if (File.Exists(outPath)) File.Delete(outPath); }
+        }
     }
 }

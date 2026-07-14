@@ -53,6 +53,10 @@ public sealed class OperationalObservabilityTests : IDisposable
             SnapshotDirectory = snapshotDir,
             Resources = new ResourcesConfig { MaxConcurrentReportExecutions = 4, MaxConcurrentExecutionsPerUser = 2 }
         };
+        config.OperationalDigest.QueueDepthAlertThreshold = 2;
+        config.OperationalDigest.SnapshotFreshnessHours = 24;
+        config.OperationalDigest.DatasetFreshnessHours = 24;
+        config.OperationalDigest.PolicyVersionExpiryWarningHours = 72;
 
         // A user + folder + report so the seeded subscriptions satisfy their foreign keys.
         var owner = new PortalUser { UserName = "ops_owner", Email = "ops@test.local", IsActive = true };
@@ -61,11 +65,44 @@ public sealed class OperationalObservabilityTests : IDisposable
         var folder = new Folder { Name = "ops", Path = "/ops", OwnerId = owner.Id };
         db.Folders.Add(folder);
         await db.SaveChangesAsync();
-        var report = new Report { FolderId = folder.Id, Name = "Ops Report", ScriptPath = "ops.rptsql", CreatedBy = owner.Id };
-        db.Reports.Add(report);
+        var now = DateTime.UtcNow;
+        var report = new Report
+        {
+            FolderId = folder.Id,
+            Name = "Ops Report",
+            ScriptPath = "ops.rptsql",
+            CreatedBy = owner.Id,
+            LastRefreshCompletedAt = now.AddHours(-30)
+        };
+        var freshReport = new Report
+        {
+            FolderId = folder.Id,
+            Name = "Fresh Ops Report",
+            ScriptPath = "fresh.rptsql",
+            CreatedBy = owner.Id,
+            LastRefreshCompletedAt = now.AddHours(-2)
+        };
+        db.Reports.AddRange(report, freshReport);
+        await db.SaveChangesAsync();
+        db.Datasets.AddRange(
+            new Dataset
+            {
+                Name = "stale-dataset",
+                FolderPath = "/ops",
+                ParquetFilePath = Path.Combine(datasetDir, "stale.parquet"),
+                SourceQuery = "SELECT 1",
+                LastRefresh = now.AddHours(-30)
+            },
+            new Dataset
+            {
+                Name = "fresh-dataset",
+                FolderPath = "/ops",
+                ParquetFilePath = Path.Combine(datasetDir, "fresh.parquet"),
+                SourceQuery = "SELECT 1",
+                LastRefresh = now.AddHours(-2)
+            });
         await db.SaveChangesAsync();
 
-        var now = DateTime.UtcNow;
         PortalExecutionJob Job(string status, bool completed) => new()
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -120,6 +157,40 @@ public sealed class OperationalObservabilityTests : IDisposable
                 CreatedAt = now.AddMinutes(-10),
                 UpdatedAt = now.AddMinutes(-10)
             });
+        db.PolicyVersions.AddRange(
+            new PolicyVersionEntity
+            {
+                Tenant = "acme",
+                Environment = "prod",
+                PolicyVersion = "expired",
+                PolicyHash = "hash-expired",
+                IssuedAtUtc = DateTimeOffset.UtcNow.AddDays(-10),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(-1),
+                Author = "ops",
+                RolloutState = "Active"
+            },
+            new PolicyVersionEntity
+            {
+                Tenant = "contoso",
+                Environment = "prod",
+                PolicyVersion = "expiring",
+                PolicyHash = "hash-expiring",
+                IssuedAtUtc = DateTimeOffset.UtcNow.AddDays(-1),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddHours(4),
+                Author = "ops",
+                RolloutState = "Active"
+            },
+            new PolicyVersionEntity
+            {
+                Tenant = "fabrikam",
+                Environment = "prod",
+                PolicyVersion = "healthy",
+                PolicyHash = "hash-healthy",
+                IssuedAtUtc = DateTimeOffset.UtcNow.AddDays(-1),
+                ExpiresAtUtc = DateTimeOffset.UtcNow.AddDays(14),
+                Author = "ops",
+                RolloutState = "Active"
+            });
         await db.SaveChangesAsync();
 
         var node = new PortalNodeIdentity();
@@ -144,6 +215,10 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(2, m.RecentDeliveryFailures);    // Failed + Denied
         Assert.Equal(1024, m.DatasetStorageBytes);
         Assert.Equal(256, m.SnapshotStorageBytes);
+        Assert.Equal(1, m.StaleSnapshots);
+        Assert.Equal(1, m.StaleDatasets);
+        Assert.Equal(1, m.ActivePolicyVersionsExpiring);
+        Assert.Equal(1, m.ActivePolicyVersionsExpired);
         Assert.Equal(2, m.ActiveSubscriptions);
         Assert.Equal(1, m.SmtpConnections);
         Assert.Equal(1, m.AuditOutboxPending);
@@ -157,12 +232,24 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
 
         var prometheus = await new PortalPrometheusMetricsExporter(
-            new OperationalMetricsService(db, config, node)).ExportAsync();
+            new OperationalMetricsService(db, config, node),
+            config).ExportAsync();
         Assert.Contains("# TYPE etlsql_portal_execution_active gauge", prometheus);
         Assert.Contains("etlsql_portal_execution_queued", prometheus);
         Assert.Contains("etlsql_portal_dataset_storage_bytes", prometheus);
+        Assert.Contains("etlsql_portal_stale_snapshots", prometheus);
+        Assert.Contains("etlsql_portal_stale_datasets", prometheus);
+        Assert.Contains("etlsql_portal_policy_versions_expiring", prometheus);
+        Assert.Contains("etlsql_portal_policy_versions_expired", prometheus);
         Assert.Contains("etlsql_portal_audit_outbox_pending", prometheus);
         Assert.Contains("etlsql_security_event_pending", prometheus);
+        Assert.Contains("etlsql_portal_operational_alert_active", prometheus);
+        Assert.Contains("alert_code=\"portal_execution_queue_depth\"", prometheus);
+        Assert.Contains("alert_code=\"portal_stale_snapshots\"", prometheus);
+        Assert.Contains("alert_code=\"portal_stale_datasets\"", prometheus);
+        Assert.Contains("alert_code=\"portal_policy_version_expiring\"", prometheus);
+        Assert.Contains("alert_code=\"portal_policy_version_expired\"", prometheus);
+        Assert.Contains("runbook=\"Docs/Operations/Alerting_Service_Objectives.md#portal-execution-queue-depth\"", prometheus);
         Assert.Contains($"node=\"{node.NodeId}\"", prometheus);
         Assert.DoesNotContain(datasetDir, prometheus);
         Assert.DoesNotContain(snapshotDir, prometheus);

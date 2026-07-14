@@ -128,7 +128,31 @@ public partial class SecurityService
                 _logger.Info("Security: Loaded {Count} authorized environment variables.", envVars.Length);
             }
 
-            // 4. Runaway Protection Limits
+            // 4. Administrator deny-lists. These only add restrictions; they never replace
+            // the built-in non-bypassable system guardrails.
+            var customBlockedExtensions = section.GetSection("AdditionalBlockedExtensions").Get<string[]>();
+            if (customBlockedExtensions != null)
+            {
+                AdditionalBlockedExtensions.Clear();
+                foreach (var ext in customBlockedExtensions.Select(NormalizeExtension).Where(e => e.Length > 0))
+                {
+                    AdditionalBlockedExtensions.Add(ext);
+                }
+                _logger.Info("Security: Loaded {Count} additional blocked file extensions.", AdditionalBlockedExtensions.Count);
+            }
+
+            var customBlockedPaths = section.GetSection("AdditionalBlockedPaths").Get<string[]>();
+            if (customBlockedPaths != null)
+            {
+                AdditionalBlockedPaths.Clear();
+                foreach (var path in customBlockedPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
+                {
+                    AdditionalBlockedPaths.Add(NormalizeConfiguredBlockedPath(path));
+                }
+                _logger.Info("Security: Loaded {Count} additional blocked paths.", AdditionalBlockedPaths.Count);
+            }
+
+            // 5. Runaway Protection Limits
             MaxFileOperations = int.TryParse(section["MaxFileOperationsPerScript"], out var mfo) ? mfo : DefaultMaxFileOperations;
             MaxRecursiveDepth = int.TryParse(section["MaxRecursiveNestingDepth"], out var mrd) ? mrd : DefaultMaxRecursiveDepth;
             MaxParallelDegree = int.TryParse(section["MaxParallelDegree"], out var mpd) ? mpd : DefaultMaxParallelDegree;
@@ -228,6 +252,18 @@ public partial class SecurityService
     public HashSet<string> AllowedHosts { get; }
 
     /// <summary>
+    /// Administrator-supplied deny-list of additional file extensions. These are checked before
+    /// allowUnknown/session overrides and cannot be used to weaken built-in restrictions.
+    /// </summary>
+    public HashSet<string> AdditionalBlockedExtensions { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Administrator-supplied deny-list of additional paths or path segment names.
+    /// Rooted entries are matched by canonical path prefix; relative entries are matched as path segments.
+    /// </summary>
+    public HashSet<string> AdditionalBlockedPaths { get; } = new(PathComparison == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Validates that an environment variable is safe to read.
     /// </summary>
     public void ValidateEnvVar(string name)
@@ -291,6 +327,8 @@ public partial class SecurityService
 
         // 0. Internal Bypass
         if (IsInternalOperation) return;
+
+        EnforceAdditionalBlockedPaths(fullPath);
 
         // 0.1 Unrestricted Mode Bypass
         if (ProtectionMode == PathProtectionMode.Unrestricted) return;
@@ -410,6 +448,35 @@ public partial class SecurityService
         return false;
     }
 
+    private void EnforceAdditionalBlockedPaths(string fullPath)
+    {
+        if (AdditionalBlockedPaths.Count == 0) return;
+
+        var normalizedPath = fullPath.Replace('\\', '/');
+        var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var blocked in AdditionalBlockedPaths)
+        {
+            if (IsRootedConfiguredPath(blocked))
+            {
+                var blockedPath = blocked.Replace('\\', '/').TrimEnd('/');
+                if (string.Equals(normalizedPath.TrimEnd('/'), blockedPath, PathComparison)
+                    || normalizedPath.StartsWith(blockedPath + "/", PathComparison))
+                {
+                    throw new SecurityException($"Unauthorized access to administrator-blocked path: {blocked} in path {fullPath}");
+                }
+            }
+            else
+            {
+                var blockedClean = blocked.Trim('/').Replace('\\', '/');
+                if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new SecurityException($"Unauthorized access to administrator-blocked path segment: {blocked} in path {fullPath}");
+                }
+            }
+        }
+    }
+
     private static bool IsBlockedDirectoryMatch(string normalizedPath, string[] segments, string blocked)
     {
         var blockedClean = blocked.Trim('/');
@@ -432,6 +499,40 @@ public partial class SecurityService
         return segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static string NormalizeExtension(string extension)
+    {
+        var ext = extension.Trim();
+        if (ext.Length == 0) return string.Empty;
+        if (!ext.StartsWith('.')) ext = "." + ext;
+        return ext.ToLowerInvariant();
+    }
+
+    private static string NormalizeConfiguredBlockedPath(string path)
+    {
+        var trimmed = path.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, '/', '\\');
+        if (trimmed.Length == 0) return trimmed;
+
+        if (IsRootedConfiguredPath(trimmed))
+        {
+            try
+            {
+                return Path.GetFullPath(trimmed)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar, '/', '\\');
+            }
+            catch
+            {
+                return trimmed;
+            }
+        }
+
+        return trimmed.Trim('/', '\\');
+    }
+
+    private static bool IsRootedConfiguredPath(string path) =>
+        Path.IsPathRooted(path)
+        || path.StartsWith("/", StringComparison.Ordinal)
+        || Regex.IsMatch(path, @"^[A-Za-z]:[\\/]");
+
     /// <summary>
     /// Validates that a file's extension is safe to process.
     /// </summary>
@@ -443,7 +544,7 @@ public partial class SecurityService
         if (string.IsNullOrEmpty(ext)) return;
 
         // 1. Check blacklist (highest priority - NEVER bypassable)
-        if (BlockedExtensions.Contains(ext))
+        if (BlockedExtensions.Contains(ext) || AdditionalBlockedExtensions.Contains(ext))
         {
             throw new SecurityException($"Access denied to dangerous file type: {ext}. These system-level file types are strictly forbidden.");
         }
@@ -480,7 +581,7 @@ public partial class SecurityService
     public bool IsDangerousExecutable(string path)
     {
         var ext = Path.GetExtension(path)?.ToLowerInvariant();
-        return !string.IsNullOrEmpty(ext) && BlockedExtensions.Contains(ext);
+        return !string.IsNullOrEmpty(ext) && (BlockedExtensions.Contains(ext) || AdditionalBlockedExtensions.Contains(ext));
     }
 
     /// <summary>

@@ -51,12 +51,10 @@ namespace ETL_SQL.Connectors.Sqlite
                     "SQLite PASSWORD is unsupported because this distribution does not ship SQLCipher. " +
                     "Use filesystem or volume encryption instead.");
 
-            _commandTimeout = options != null
-                && options.TryGetValue("TIMEOUT_SECONDS", out var ts)
-                && int.TryParse(ts, out var t)
-                && t > 0
-                    ? t
-                    : builder.DefaultTimeout > 0 ? builder.DefaultTimeout : 30;
+            _commandTimeout = ConnectorTimeouts.ResolveCommandTimeoutSeconds(
+                context,
+                options,
+                builder.DefaultTimeout > 0 ? builder.DefaultTimeout : 30);
 
             string dbPath = builder.DataSource;
             if (builder.Mode != SqliteOpenMode.Memory

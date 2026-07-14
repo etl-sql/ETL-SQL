@@ -70,7 +70,10 @@ namespace ETL_SQL.Orchestrator.Execution
             }
             else
             {
-                var dbPath = configuration["Orchestrator:DatabasePath"] ?? SQLiteJobHistoryStore.DefaultDbPath();
+                var configuredDbPath = configuration["Orchestrator:DatabasePath"];
+                var dbPath = string.IsNullOrWhiteSpace(configuredDbPath)
+                    ? SQLiteJobHistoryStore.DefaultDbPath()
+                    : configuredDbPath;
                 _dialect = new SqliteOrchestratorDialect($"Data Source={dbPath}");
             }
             _logger = logger;

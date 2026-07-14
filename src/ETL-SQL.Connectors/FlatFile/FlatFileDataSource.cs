@@ -453,6 +453,7 @@ namespace ETL_SQL.Connectors.FlatFile
             var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
             var actualHeaders = new List<string>();
             var sourceMapping = new List<int>();
+            var sourceColumnCount = headers.Length;
 
             if (_templateSchema != null && (_mapByHeaderName || _ignoreExtraColumns || _nullMissingColumns || _strictSchema))
             {
@@ -460,9 +461,12 @@ namespace ETL_SQL.Connectors.FlatFile
                 var csvCols = _hasHeader
                     ? headers.Select(h => h.Trim()).ToList()
                     : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                sourceColumnCount = csvCols.Count;
 
                 if (_mapByHeaderName && _hasHeader)
                 {
+                    EnsureUniqueHeaders(csvCols, "Flat file");
+
                     var usedCsvIndices = new HashSet<int>();
                     for (int i = 0; i < expectedCols.Count; i++)
                     {
@@ -564,10 +568,15 @@ namespace ETL_SQL.Connectors.FlatFile
 
             var currentBatch = new DataTable();
             currentBatch.SetColumns(actualHeaders);
+            var ignoredExtraColumnCount = Math.Max(0, sourceColumnCount - sourceMapping.Where(i => i >= 0).Distinct().Count());
+            var nullFilledMissingColumnCount = sourceMapping.Count(i => i < 0);
+            var emitResilienceDiagnostics = ignoredExtraColumnCount > 0 || nullFilledMissingColumnCount > 0;
+            var affectedRowCount = 0;
 
             if (!_hasHeader)
             {
                 await currentBatch.AddRowAsync(CreateRow(headers, currentBatch, sourceMapping));
+                affectedRowCount++;
             }
 
             int totalRowsRead = 0;
@@ -582,6 +591,7 @@ namespace ETL_SQL.Connectors.FlatFile
                     var dataLine = lineQueue.Dequeue();
                     await ProcessDataLine(dataLine, currentBatch, actualHeaders, sourceMapping);
                     totalRowsRead++;
+                    affectedRowCount++;
 
                     if (currentBatch.Rows.Count >= batchSize)
                     {
@@ -600,6 +610,28 @@ namespace ETL_SQL.Connectors.FlatFile
 
             if (currentBatch.Rows.Count > 0)
                 yield return currentBatch;
+
+            if (emitResilienceDiagnostics)
+            {
+                _logger.Info(
+                    "FLATFILE schema resilience applied: ignored extra columns={IgnoredExtraColumns}; null-filled missing columns={NullFilledMissingColumns}; affected rows={AffectedRows}.",
+                    ignoredExtraColumnCount,
+                    nullFilledMissingColumnCount,
+                    affectedRowCount);
+            }
+        }
+
+        private static void EnsureUniqueHeaders(IReadOnlyList<string> headers, string sourceDescription)
+        {
+            var duplicate = headers
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .GroupBy(h => h, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(g => g.Count() > 1);
+
+            if (duplicate != null)
+            {
+                throw new ExecutionException($"{sourceDescription} header contains duplicate column '{duplicate.Key}'. MAP_BY_HEADER_NAME requires unique source headers.");
+            }
         }
 
         private sealed class RecordReader

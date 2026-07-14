@@ -38,7 +38,7 @@ namespace ETL_SQL.Connectors.SqlServer
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _commandTimeout = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
+            _commandTimeout = ConnectorTimeouts.ResolveCommandTimeoutSeconds(context, options);
 
             // Security Hardening: egress control
             var host = SqlServerConnector.GetHostStatic(connectionString, options);

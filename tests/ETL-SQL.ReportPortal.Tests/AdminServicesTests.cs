@@ -152,10 +152,20 @@ public class AdminServicesTests
             HostCpuPercent: 60,
             StateDiskFreeBytes: 700 * mb,
             SpillDiskFreeBytes: 650 * mb));
+        await hostMetrics.AppendHostMetricAsync(new HostMetricSample(
+            "node-a",
+            DateTime.UtcNow.Date.AddDays(-7),
+            MemoryLoadPercent: 30,
+            ProcessCpuPercent: 12,
+            HostCpuPercent: 20,
+            StateDiskFreeBytes: 900 * mb,
+            SpillDiskFreeBytes: 800 * mb));
         var firstRun = await jobHistory.LogJobStartAsync("capacity-job");
         await jobHistory.LogJobEndAsync(firstRun, "SUCCESS", rowsProcessed: 10, peakMemoryBytes: 256 * mb, cpuTimeSeconds: 1.5);
         var failedRun = await jobHistory.LogJobStartAsync("capacity-job");
         await jobHistory.LogJobEndAsync(failedRun, "FAILURE", "boom", rowsProcessed: 0, peakMemoryBytes: 512 * mb, cpuTimeSeconds: 2.5);
+        await jobHistory.RollUpJobHistoryAsync();
+        await hostMetrics.RollUpHostMetricsAsync();
 
         using (var scope = factory.Services.CreateScope())
         {
@@ -211,7 +221,17 @@ public class AdminServicesTests
         Assert.Contains("Portal execution breakdown:", factory.Sender.Sent[^1].Body);
         Assert.Contains("Report|report:42|owner:user:7: runs 1", factory.Sender.Sent[^1].Body);
         Assert.Contains("DatasetRefresh|report:42|owner:user:7: runs 1, failures 1", factory.Sender.Sent[^1].Body);
-        Assert.Contains("JobHistoryDaily and HostMetricsDaily", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Portal queue diagnosis:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("p95 queue wait", factory.Sender.Sent[^1].Body);
+        Assert.Contains("execution slots are likely saturated", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Portal hourly pressure - last 30 days:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("busiest queued hour", factory.Sender.Sent[^1].Body);
+        Assert.Contains("active-slot cap reached", factory.Sender.Sent[^1].Body);
+        Assert.Contains("Historical planning trend - last 30 days", factory.Sender.Sent[^1].Body);
+        Assert.Contains("saturation indicators:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("watch memory, state storage, spill storage", factory.Sender.Sent[^1].Body);
+        Assert.Contains("disk forecast:", factory.Sender.Sent[^1].Body);
+        Assert.Contains("bottleneck guide:", factory.Sender.Sent[^1].Body);
 
         using (var scope = factory.Services.CreateScope())
         {

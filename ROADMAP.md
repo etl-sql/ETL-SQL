@@ -21,15 +21,15 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 #### Phase 4: Operations Control Plane
 
 ##### 4.4 Historical capacity planning and sizing
-- [ ] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
-- [ ] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.
-- [ ] Document benchmark-to-production sizing guidance and clearly state where measured workload history is required instead of synthetic estimates.
+- [x] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
+- [x] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.
+- [x] Document benchmark-to-production sizing guidance and clearly state where measured workload history is required instead of synthetic estimates.
 
 ##### 4.5 Alerting and service objectives
-- [ ] Define recommended SLIs/SLOs for availability, queue wait, execution success/latency, freshness, policy availability, audit/security delivery, database health, and recovery.
+- [x] Define recommended SLIs/SLOs for availability, queue wait, execution success/latency, freshness, policy availability, audit/security delivery, database health, and recovery.
 - [ ] Add configurable alerts for queue age/depth, sustained CPU or memory pressure, repeated spills, failed/retried jobs, stale snapshots/datasets, policy/signature failures, certificate expiry, outbox backlog, disk pressure, storage growth, database connectivity/pool exhaustion, and unhealthy fleet nodes.
-- [ ] Support alert routing through standard observability systems rather than building a proprietary pager; include deduplication, severity, recovery notifications, and runbook links in emitted signals.
-- [ ] Provide baseline thresholds but require administrators to tune them from measured workload and business criticality.
+- [x] Support alert routing through standard observability systems rather than building a proprietary pager; include deduplication, severity, recovery notifications, and runbook links in emitted signals.
+- [x] Provide baseline thresholds but require administrators to tune them from measured workload and business criticality.
 
 ##### 4.6 HA topology and failure certification
 - [ ] Publish supported standalone, departmental, and HA reference topologies with exact requirements for PostgreSQL, load balancing, shared artifact storage, certificates, DNS, service supervision, and network trust boundaries.

@@ -10,6 +10,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Core.Services;
 /// <summary>
@@ -18,7 +19,7 @@ namespace ETL_SQL.Core.Services;
 /// </summary>
 public class MetadataManager : IMetadataManager
 {
-    private static readonly TimeSpan WarehouseCacheTtl = TimeSpan.FromMinutes(5);
+    private readonly TimeSpan _warehouseCacheTtl = TimeSpan.FromMinutes(5);
 
     /// <summary>How old an in-memory entry may get before a read triggers a background refresh
     /// (stale-while-revalidate): reads stay instant, and the schema keeps converging without a
@@ -45,10 +46,29 @@ public class MetadataManager : IMetadataManager
     private readonly ConcurrentDictionary<string, DateTimeOffset> _cacheTimestamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _ongoingRefreshes = new(StringComparer.OrdinalIgnoreCase);
 
-    public MetadataManager(ILogger logger, IConnectorRegistry connectors)
+    public MetadataManager(ILogger logger, IConnectorRegistry connectors, IConfiguration? configuration = null)
     {
         _logger = logger;
         _connectors = connectors;
+
+        var warehouseCacheTtlSeconds = configuration?.GetValue<int?>("Connectors:DataWarehouse:SchemaCacheTtlSeconds");
+        if (warehouseCacheTtlSeconds is > 0)
+        {
+            _warehouseCacheTtl = TimeSpan.FromSeconds(warehouseCacheTtlSeconds.Value);
+            SoftRefreshInterval = _warehouseCacheTtl;
+        }
+
+        var softRefreshSeconds = configuration?.GetValue<int?>("Connectors:DataWarehouse:SchemaSoftRefreshIntervalSeconds");
+        if (softRefreshSeconds is > 0)
+        {
+            SoftRefreshInterval = TimeSpan.FromSeconds(softRefreshSeconds.Value);
+        }
+
+        var diskCacheMaxAgeDays = configuration?.GetValue<int?>("Connectors:DataWarehouse:SchemaDiskCacheMaxAgeDays");
+        if (diskCacheMaxAgeDays is > 0)
+        {
+            DiskCacheMaxAge = TimeSpan.FromDays(diskCacheMaxAgeDays.Value);
+        }
     }
 
     private bool IsCacheValid(string cacheKey, string? connectorType)
@@ -56,7 +76,7 @@ public class MetadataManager : IMetadataManager
         if (!_cacheTimestamps.TryGetValue(cacheKey, out var fetchedAt)) return false;
         var connector = connectorType != null ? _connectors.GetConnector(connectorType) : null;
         if (connector?.IsDataWarehouse == true)
-            return DateTimeOffset.UtcNow - fetchedAt < WarehouseCacheTtl;
+            return DateTimeOffset.UtcNow - fetchedAt < _warehouseCacheTtl;
         return true;
     }
 

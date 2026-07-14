@@ -6,6 +6,7 @@ using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Xunit;
@@ -193,6 +194,41 @@ namespace ETL_SQL.Tests.Security
             // Should block .exe even if allowUnknown (override flag) is TRUE
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\tool.exe", allowUnknown: true));
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\driver.sys", allowUnknown: true));
+        }
+
+        [Fact]
+        public void AdditionalBlockedExtensions_FromConfiguration_AreDenyOnly()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Security:AdditionalBlockedExtensions:0"] = "backup"
+                })
+                .Build();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.UpdateFromConfiguration(config);
+
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidateFileType("C:\\Safe\\daily.backup", allowUnknown: true));
+        }
+
+        [Fact]
+        public void AdditionalBlockedPaths_FromConfiguration_BlockConfiguredSegments()
+        {
+            var config = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Security:AdditionalBlockedPaths:0"] = "quarantine"
+                })
+                .Build();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false
+            };
+            security.UpdateFromConfiguration(config);
+
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() =>
+                security.ValidatePath("C:\\Data\\quarantine\\extract.csv"));
         }
 
         [Fact]

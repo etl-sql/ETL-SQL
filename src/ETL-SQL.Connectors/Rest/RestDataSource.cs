@@ -47,7 +47,7 @@ namespace ETL_SQL.Connectors.Rest
             _url = url;
             _options = options;
             _logger = context.Logger;
-            _timeoutSeconds = options != null && options.TryGetValue("TIMEOUT_SECONDS", out var ts) && int.TryParse(ts, out var t) && t > 0 ? t : 30;
+            _timeoutSeconds = ConnectorTimeouts.ResolveCommandTimeoutSeconds(context, options);
 
             // Security Hardening: egress control (local guardrail + enterprise host/scheme/port/range policy)
             ETL_SQL.Core.Governance.ConnectorPolicyAuthorizer.EnforceEnterpriseUrl(context, new Uri(url));

@@ -41,8 +41,9 @@ public sealed class OperationalMetricsDigestTests
             new OperationalDigestConfig());
 
         Assert.True(content.HasAlerts);
-        Assert.Contains(content.Alerts, a => a.Contains("failure rate"));
+        Assert.Contains(content.Alerts, a => a.Code == "portal_execution_failure_rate" && a.Severity == "critical");
         Assert.Contains("ALERT", content.Subject);
+        Assert.Contains("Runbook:", content.Body);
     }
 
     [Fact]
@@ -53,7 +54,7 @@ public sealed class OperationalMetricsDigestTests
             Metrics(recentExecutions: 100, recentExecutionFailures: 10),
             new OperationalDigestConfig());
 
-        Assert.DoesNotContain(content.Alerts, a => a.Contains("failure rate"));
+        Assert.DoesNotContain(content.Alerts, a => a.Code == "portal_execution_failure_rate");
     }
 
     [Fact]
@@ -63,7 +64,7 @@ public sealed class OperationalMetricsDigestTests
             Metrics(pendingMigrations: 2, schemaUpToDate: false),
             new OperationalDigestConfig { AlertOnPendingMigrations = true });
 
-        Assert.Contains(content.Alerts, a => a.Contains("migration"));
+        Assert.Contains(content.Alerts, a => a.Code == "portal_schema_pending_migrations");
     }
 
     [Fact]
@@ -73,7 +74,7 @@ public sealed class OperationalMetricsDigestTests
             Metrics(pendingMigrations: 2, schemaUpToDate: false),
             new OperationalDigestConfig { AlertOnPendingMigrations = false });
 
-        Assert.DoesNotContain(content.Alerts, a => a.Contains("migration"));
+        Assert.DoesNotContain(content.Alerts, a => a.Code == "portal_schema_pending_migrations");
     }
 
     [Fact]
@@ -83,7 +84,49 @@ public sealed class OperationalMetricsDigestTests
             Metrics(queuedExecutions: 25),
             new OperationalDigestConfig { QueueDepthAlertThreshold = 20 });
 
-        Assert.Contains(content.Alerts, a => a.Contains("queue depth"));
+        Assert.Contains(content.Alerts, a => a.Code == "portal_execution_queue_depth");
+    }
+
+    [Fact]
+    public void QueueAgeDeliveryOutboxAndStorageThresholds_RaiseStructuredAlerts()
+    {
+        var content = OperationalMetricsDigest.Build(
+            Metrics(
+                recentDeliveries: 10,
+                recentDeliveryFailures: 4,
+                averageQueuedExecutionAgeSeconds: 600,
+                auditOutboxPending: 1500,
+                auditOutboxOldestPendingAgeSeconds: 1200,
+                securityEventPending: 1100,
+                securityEventOldestPendingAgeSeconds: 1000,
+                datasetStorageBytes: 11 * 1024 * 1024,
+                snapshotStorageBytes: 12 * 1024 * 1024,
+                staleSnapshots: 2,
+                staleDatasets: 3,
+                activePolicyVersionsExpiring: 1,
+                activePolicyVersionsExpired: 1),
+            new OperationalDigestConfig
+            {
+                DatasetStorageBytesAlertThreshold = 10 * 1024 * 1024,
+                SnapshotStorageBytesAlertThreshold = 10 * 1024 * 1024,
+                SnapshotFreshnessHours = 24,
+                DatasetFreshnessHours = 24,
+                PolicyVersionExpiryWarningHours = 72
+            });
+
+        Assert.Contains(content.Alerts, a => a.Code == "portal_execution_queue_age");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_delivery_failure_rate");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_audit_outbox_backlog" && a.Severity == "critical");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_audit_outbox_age");
+        Assert.Contains(content.Alerts, a => a.Code == "security_event_outbox_backlog");
+        Assert.Contains(content.Alerts, a => a.Code == "security_event_outbox_age");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_dataset_storage_bytes");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_snapshot_storage_bytes");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_stale_snapshots");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_stale_datasets");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_policy_version_expiring");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_policy_version_expired" && a.Severity == "critical");
+        Assert.All(content.Alerts, alert => Assert.Contains("Alerting_Service_Objectives.md#", alert.Runbook));
     }
 
     [Fact]
@@ -143,7 +186,20 @@ public sealed class OperationalMetricsDigestTests
         int recentExecutionFailures = 0,
         int queuedExecutions = 0,
         int pendingMigrations = 0,
-        bool schemaUpToDate = true)
+        bool schemaUpToDate = true,
+        int recentDeliveries = 5,
+        int recentDeliveryFailures = 0,
+        double averageQueuedExecutionAgeSeconds = 3,
+        int auditOutboxPending = 0,
+        double auditOutboxOldestPendingAgeSeconds = 0,
+        int securityEventPending = 0,
+        double securityEventOldestPendingAgeSeconds = 0,
+        long datasetStorageBytes = 10 * 1024 * 1024,
+        long snapshotStorageBytes = 2 * 1024 * 1024,
+        int staleSnapshots = 0,
+        int staleDatasets = 0,
+        int activePolicyVersionsExpiring = 0,
+        int activePolicyVersionsExpired = 0)
         => new(
             ActiveExecutions: 1,
             QueuedExecutions: queuedExecutions,
@@ -154,29 +210,33 @@ public sealed class OperationalMetricsDigestTests
             AffinityCookieName: "ETLSQL_PORTAL_AFFINITY",
             RecentExecutions: recentExecutions,
             RecentExecutionFailures: recentExecutionFailures,
-            RecentDeliveries: 5,
-            RecentDeliveryFailures: 0,
-            DatasetStorageBytes: 10 * 1024 * 1024,
-            SnapshotStorageBytes: 2 * 1024 * 1024,
+            RecentDeliveries: recentDeliveries,
+            RecentDeliveryFailures: recentDeliveryFailures,
+            DatasetStorageBytes: datasetStorageBytes,
+            SnapshotStorageBytes: snapshotStorageBytes,
+            StaleSnapshots: staleSnapshots,
+            StaleDatasets: staleDatasets,
+            ActivePolicyVersionsExpiring: activePolicyVersionsExpiring,
+            ActivePolicyVersionsExpired: activePolicyVersionsExpired,
             ActiveSubscriptions: 3,
             SmtpConnections: 1,
             AppliedMigrations: 40,
             PendingMigrations: pendingMigrations,
             LastAppliedMigration: "20260101_Init",
             SchemaUpToDate: schemaUpToDate,
-            AuditOutboxPending: 0,
+            AuditOutboxPending: auditOutboxPending,
             AuditOutboxFailed: 0,
             AuditOutboxPendingBytes: 0,
-            AuditOutboxOldestPendingAgeSeconds: 0,
-            SecurityEventPending: 0,
+            AuditOutboxOldestPendingAgeSeconds: auditOutboxOldestPendingAgeSeconds,
+            SecurityEventPending: securityEventPending,
             SecurityEventFailed: 0,
             SecurityEventStoredBytes: 0,
             SecurityEventDropped: 0,
-            SecurityEventOldestPendingAgeSeconds: 0,
+            SecurityEventOldestPendingAgeSeconds: securityEventOldestPendingAgeSeconds,
             SecurityEventCollectorConfigured: false,
             SecurityEventCollectorReachable: null,
             AverageExecutionDurationMs: 1234,
-            AverageQueuedExecutionAgeSeconds: 3,
+            AverageQueuedExecutionAgeSeconds: averageQueuedExecutionAgeSeconds,
             HourlyExecutionLoad: new List<HourlyExecutionLoad>(),
             GeneratedAt: new DateTime(2026, 7, 3, 12, 0, 0, DateTimeKind.Utc),
             WindowHours: 24);

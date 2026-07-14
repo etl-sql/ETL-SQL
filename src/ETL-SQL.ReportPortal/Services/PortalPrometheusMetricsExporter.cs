@@ -10,11 +10,14 @@ namespace ETL_SQL.ReportPortal.Services;
 /// metrics API. The endpoint is intended for network-controlled scrapers; it never emits paths,
 /// credentials, usernames, report names, scripts, connection strings, or policy payload values.
 /// </summary>
-public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService metricsService)
+public sealed class PortalPrometheusMetricsExporter(
+    OperationalMetricsService metricsService,
+    PortalConfig? portalConfig = null)
 {
     public async Task<string> ExportAsync(CancellationToken ct = default)
     {
         var metrics = await metricsService.GetAsync(ct);
+        var alertConfig = portalConfig?.OperationalDigest ?? new OperationalDigestConfig();
         var labels = new Dictionary<string, string>
         {
             [ObservabilityConventions.PrometheusLabel(PortalObservability.Tags.Environment)] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
@@ -49,6 +52,18 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             "Bytes currently used by Portal dataset storage.", metrics.DatasetStorageBytes, labels);
         AppendGauge(sb, "etlsql_portal_snapshot_storage_bytes",
             "Bytes currently used by Portal snapshot storage.", metrics.SnapshotStorageBytes, labels);
+        AppendGauge(sb, "etlsql_portal_stale_snapshots",
+            "Report snapshots older than the configured operational freshness objective.",
+            metrics.StaleSnapshots, labels);
+        AppendGauge(sb, "etlsql_portal_stale_datasets",
+            "Datasets older than the configured operational freshness objective.",
+            metrics.StaleDatasets, labels);
+        AppendGauge(sb, "etlsql_portal_policy_versions_expiring",
+            "Active policy versions expiring within the configured operational warning window.",
+            metrics.ActivePolicyVersionsExpiring, labels);
+        AppendGauge(sb, "etlsql_portal_policy_versions_expired",
+            "Active policy versions that have passed their expiration timestamp.",
+            metrics.ActivePolicyVersionsExpired, labels);
         AppendGauge(sb, "etlsql_portal_subscriptions_active",
             "Active report subscriptions.", metrics.ActiveSubscriptions, labels);
         AppendGauge(sb, "etlsql_portal_smtp_connections",
@@ -91,6 +106,7 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             "Whether the remote security-event collector was reachable on the last known attempt; -1 means unknown.",
             metrics.SecurityEventCollectorReachable is null ? -1 : metrics.SecurityEventCollectorReachable.Value ? 1 : 0,
             labels);
+        AppendAlertGauges(sb, metrics, alertConfig, labels);
         AppendRuntimeGauges(sb, labels);
 
         return sb.ToString();
@@ -112,6 +128,27 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             "Total generation 1 garbage collections since process start.", GC.CollectionCount(1), labels);
         AppendGauge(sb, "etlsql_runtime_gc_collections_gen2_total",
             "Total generation 2 garbage collections since process start.", GC.CollectionCount(2), labels);
+    }
+
+    private static void AppendAlertGauges(
+        StringBuilder sb,
+        OperationalMetricsService.OperationalMetrics metrics,
+        OperationalDigestConfig config,
+        IReadOnlyDictionary<string, string> baseLabels)
+    {
+        foreach (var alert in OperationalMetricsDigest.BuildAlerts(metrics, config))
+        {
+            var labels = new Dictionary<string, string>(baseLabels)
+            {
+                ["severity"] = alert.Severity,
+                ["alert_code"] = alert.Code,
+                ["runbook"] = alert.Runbook
+            };
+            AppendGauge(sb, "etlsql_portal_operational_alert_active",
+                "Active Portal operational alert signals. Labels identify severity, stable code, and runbook.",
+                1,
+                labels);
+        }
     }
 
     private static void AppendGauge(

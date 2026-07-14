@@ -319,5 +319,37 @@ namespace ETL_SQL.Tests.Connectors
             }
             finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
         }
+
+        [Fact]
+        public async Task TestSchemaResilience_MapByHeaderName_DuplicateHeaderThrows()
+        {
+            string csvFile = "FileTest_Resilient_Duplicate_Header.csv";
+            await File.WriteAllTextAsync(csvFile, "ID,id,name\n1,2,Alpha");
+
+            try
+            {
+                var templateSchema = new List<ColumnDefinition>
+                {
+                    new ColumnDefinition("id", "INT", false),
+                    new ColumnDefinition("name", "VARCHAR", false)
+                };
+
+                var options = new Dictionary<string, string>
+                {
+                    { "MAP_BY_HEADER_NAME", "ON" },
+                    { "IGNORE_EXTRA_COLUMNS", "ON" }
+                };
+
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options, templateSchema);
+
+                var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
+                {
+                    await ds.ReadBatches().ToListAsync();
+                });
+
+                Assert.Contains("duplicate column", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally { if (File.Exists(csvFile)) File.Delete(csvFile); }
+        }
     }
 }
