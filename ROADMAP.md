@@ -6,56 +6,6 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 
 ---
 
-## Enterprise Policy Enforcement & Monitoring
-
-*Completes the enterprise controls for protected enrollment and authoritative client runtime. Standalone installations remain unenrolled, unrestricted by organization policy, and independent of network services.*
-
-### Shipped Scope
-- **Machine Enrollment:** Machine-level enrollment, protected bootstrap, trust key, machine identity, and enroll/status/unenroll CLI.
-- **Signed Policy Retrieval:** Tenant-bound RSA-PSS signed policy retrieval, protected cache, rollback/expiry checks, final configuration precedence, diagnostics, dynamic reload, and fail-closed host refresh.
-- **Policy Authority & Operation-Boundary Enforcement:** Administrator policy-authority API and Portal workflow for validating, versioning, publishing, superseding, activating, and rolling back signed organization policies.
-- **Shared Runtime Enforcement:** Filesystem path traversal checks, network/connector destination rules, and process resource boundaries.
-
-### Future Candidate Phases
-
-#### Phase 4: Operations Control Plane
-
-##### 4.4 Historical capacity planning and sizing
-- [x] Produce sizing and trend reports that distinguish CPU, memory, storage, connector, database, and concurrency bottlenecks.
-- [x] Add saturation indicators and forecast thresholds so administrators can identify when to scale up, scale out, repartition workloads, or adjust schedules.
-- [x] Document benchmark-to-production sizing guidance and clearly state where measured workload history is required instead of synthetic estimates.
-
-##### 4.5 Alerting and service objectives
-- [x] Define recommended SLIs/SLOs for availability, queue wait, execution success/latency, freshness, policy availability, audit/security delivery, database health, and recovery.
-- [ ] Add configurable alerts for queue age/depth, sustained CPU or memory pressure, repeated spills, failed/retried jobs, stale snapshots/datasets, policy/signature failures, certificate expiry, outbox backlog, disk pressure, storage growth, database connectivity/pool exhaustion, and unhealthy fleet nodes.
-- [x] Support alert routing through standard observability systems rather than building a proprietary pager; include deduplication, severity, recovery notifications, and runbook links in emitted signals.
-- [x] Provide baseline thresholds but require administrators to tune them from measured workload and business criticality.
-
-##### 4.6 HA topology and failure certification
-- [ ] Publish supported standalone, departmental, and HA reference topologies with exact requirements for PostgreSQL, load balancing, shared artifact storage, certificates, DNS, service supervision, and network trust boundaries.
-- [ ] Certify node loss, process crash, network partition, PostgreSQL failover, shared-storage outage, duplicate scheduler leadership, orphaned work, and recovery without duplicate or lost mutations.
-- [ ] Document which components ETL-SQL coordinates and which remain responsibilities of PostgreSQL, load balancers, object/file storage, Kubernetes, Windows Services/systemd, or other infrastructure.
-- [ ] Add topology-aware health and readiness checks so load balancers remove unsafe nodes without hiding whole-environment failures.
-
-##### 4.7 Disaster recovery objectives
-- [ ] Define supported RPO/RTO targets for each reference topology and identify the state, artifact, key, certificate, policy, outbox, and external dependency included in each target.
-- [ ] Add scheduled restore drills that verify database consistency, artifact references, encrypted data/key availability, policy enrollment, service accounts, audit/security continuity, and orchestrator recovery.
-- [ ] Prevent cloned restores from silently reusing machine identity or client credentials in another environment; require deliberate re-enrollment and credential rotation.
-- [ ] Produce a machine-readable recovery report with achieved RPO/RTO, missing dependencies, data loss window, and operator actions.
-- [ ] Document regional/site failure, split custody, backup retention, immutable/offline backup, and emergency access procedures.
-
-##### 4.8 Searchable Portal Documentation Hub
-- [ ] Compile the repository's markdown document library (cookbooks, reference guides, manuals) into a unified, searchable static website using a static site generator (e.g., MkDocs or Docusaurus).
-- [ ] Host the compiled documentation site natively inside the Report Portal (e.g. under a `/docs` route) to allow administrators, analysts, and business users to search and navigate documentation in their web browser.
-- [ ] Reconcile the static site's theme and search indices with the Portal's user interface, ensuring sensitive configurations remain excluded from the compiled index.
-
-##### Prioritization gates
-- [ ] Rank each workstream using measured administrative pain, customer deployment scale, security impact, and dependency on external infrastructure.
-- [ ] Preserve scoped read-only fleet aggregation by default; any future remote mutation or upgrade command requires a separate threat model, authorization design, approval workflow, and audit contract.
-- [ ] Complete threat-model and senior security review with all high-severity findings resolved.
-- [ ] Pass full functional, performance, migration, recovery, enterprise certification, and standalone regression suites.
-- [ ] Confirm documentation never claims OS-level containment against administrators or arbitrary alternate executables; mandate WDAC/AppLocker or equivalent controls where that boundary is required.
-
 ## Adaptive Execution & Extended Large-Data Certification
 
 *Improves streaming scan, filter, projection, low-cardinality aggregation, and spill-backed `#temp` staging efficiency and concurrency under bounded-memory behavior.*

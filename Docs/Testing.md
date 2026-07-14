@@ -1,6 +1,11 @@
 # Testing
 
 For the overall lane model and cleanup guidance, see [Test_Strategy.md](Strategy/Test_Strategy.md).
+For enterprise release-gate evidence and prioritization, see
+[Enterprise Release Gates](Operations/Enterprise_Release_Gates.md).
+For enterprise security review and full-suite release evidence, use
+[Enterprise Security Review Packet](Operations/Enterprise_Security_Review_Packet.md) and
+[Enterprise Release Evidence Checklist](Operations/Enterprise_Release_Evidence_Checklist.md).
 
 ## Current Release-Confidence Status
 

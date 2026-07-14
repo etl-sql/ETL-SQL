@@ -395,6 +395,8 @@ Organizations may begin with PostgreSQL, shared storage, and multiple nodes. The
 ## 10. Relationship to the Product Roadmap
 
 This strategy defines the destination. [`ROADMAP.md`](../../ROADMAP.md) defines the delivery order:
+[`Docs/Operations/Enterprise_Release_Gates.md`](../Operations/Enterprise_Release_Gates.md) defines the
+release-gate evidence required before enterprise claims are made.
 
 1. Standalone correctness and script-first reconstruction
 2. Operator tooling, backup, restore, and upgrade validation

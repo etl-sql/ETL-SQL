@@ -205,7 +205,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Modules.SecretStore` | `true` | Feature flag for Portal-managed secret vault APIs and secret resolution. Disabled routes return 404. |
 | `Modules.Scheduling` | `true` | Feature flag for refresh scheduling and orchestrator polling when Reporting is also enabled. |
 | `Modules.Operations` | `true` | Feature flag for operational digest and native admin digest worker loops. Route fencing is a later modularization slice. |
-| `Modules.Documentation` | `true` | Feature flag for Portal-hosted documentation surfaces. Route fencing is a later modularization slice. |
+| `Modules.Documentation` | `true` | Feature flag for the Portal-hosted searchable documentation hub at `/docs`. Disabled routes return 404. |
 
 Certified module profiles include a gateway node (`Reporting=false`, `Designer=false`,
 `Scheduling=false`, `Operations=false`, `ConnectionCatalog=true`, `SecretStore=true`) and a

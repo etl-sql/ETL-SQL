@@ -196,6 +196,12 @@ namespace ETL_SQL.App
         {
             Description = "Verify catalog and key versions and archive integrity without writing any files."
         };
+        private static readonly Option<string?> RestoreReportOption = new("--report", Array.Empty<string>())
+        {
+            Description = "Write a machine-readable JSON recovery report to this path.",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => null
+        };
         private static readonly Option<string?> SecretNameOption = new("--name", new[] { "-n" })
         {
             Description = "Name of the secret (letters, numbers, period, underscore, hyphen).",
@@ -577,6 +583,7 @@ namespace ETL_SQL.App
                 RestoreKeysOption,
                 RestoreToOption,
                 RestoreValidateOption,
+                RestoreReportOption,
             };
             restoreCommand.SetAction(context => Dispatch(context, "admin-restore", handler));
             adminCommand.Add(restoreCommand);
@@ -973,6 +980,7 @@ namespace ETL_SQL.App
                 cliContext.RestoreKeys = res.GetValue(RestoreKeysOption);
                 cliContext.RestoreTo = res.GetValue(RestoreToOption);
                 cliContext.RestoreValidateOnly = res.GetValue(RestoreValidateOption);
+                cliContext.RestoreReport = res.GetValue(RestoreReportOption);
             }
             else if (commandName == "admin-migrate-database")
             {

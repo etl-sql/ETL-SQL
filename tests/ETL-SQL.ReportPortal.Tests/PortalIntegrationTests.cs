@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Storage;
+using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using Microsoft.EntityFrameworkCore;
@@ -61,10 +62,71 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.NotNull(body);
         Assert.Equal("Healthy", body!["status"]?.GetValue<string>());
+        Assert.Equal("Standalone", body["mode"]?.GetValue<string>());
         var checks = body["checks"]!.AsObject();
         Assert.Equal("ok", checks["database"]?.GetValue<string>());
         Assert.Equal("ok", checks["storage"]?.GetValue<string>());
         Assert.Equal("ok", checks["lease"]?.GetValue<string>());
+        Assert.Equal("ok", checks["topology"]?.GetValue<string>());
+        Assert.Empty(body["findings"]!.AsArray());
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Healthz_FailsClosedWhenHaTopologyUsesStandaloneState()
+    {
+        using var factory = new HaExpectedWithStandaloneStateFactory();
+        using var client = factory.CreateClient();
+
+        var res = await client.GetAsync("/healthz");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(body);
+        Assert.Equal("Unhealthy", body!["status"]?.GetValue<string>());
+        Assert.Equal("HighAvailability", body["mode"]?.GetValue<string>());
+        var checks = body["checks"]!.AsObject();
+        Assert.NotEqual("ok", checks["topology"]?.GetValue<string>());
+        var findings = body["findings"]!.AsArray().Select(node => node!.GetValue<string>()).ToArray();
+        Assert.Contains("ha-requires-portal-postgres", findings);
+        Assert.Contains("ha-requires-orchestrator-postgres", findings);
+        Assert.Contains("ha-requires-shared-key-ring", findings);
+    }
+
+    [Fact]
+    public async Task DocumentationHub_SearchesMarkdownLibrary()
+    {
+        var indexResponse = await _client.GetAsync("/api/docs/index");
+        Assert.Equal(HttpStatusCode.OK, indexResponse.StatusCode);
+        var index = await indexResponse.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.NotNull(index);
+        Assert.Contains(index!, item => item!["path"]!.GetValue<string>() == "README.md");
+
+        var searchResponse = await _client.GetAsync("/api/docs/search?q=report portal");
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+        var results = await searchResponse.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.NotNull(results);
+        Assert.NotEmpty(results!);
+
+        var docResponse = await _client.GetAsync("/api/docs/document?path=README.md");
+        Assert.Equal(HttpStatusCode.OK, docResponse.StatusCode);
+        var doc = await docResponse.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal("README.md", doc!["path"]!.GetValue<string>());
+        Assert.Contains("# ETL-SQL Documentation Map", doc["markdown"]!.GetValue<string>());
+
+        var traversal = await _client.GetAsync("/api/docs/document?path=../appsettings.json");
+        Assert.Equal(HttpStatusCode.NotFound, traversal.StatusCode);
+    }
+
+    [Fact]
+    public async Task DocumentationHub_RespectsModuleFlag()
+    {
+        using var factory = new DocumentationDisabledFactory();
+        using var client = factory.CreateClient();
+
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/docs")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/docs.html")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/docs/index")).StatusCode);
     }
 
     [Fact]
@@ -3196,6 +3258,32 @@ CREATE VISUAL {visualName} AS CARD (
                 e.TargetTable == $"report:{visualName}" &&
                 e.Operation == "CREATE VISUAL" &&
                 e.ScriptPath == scriptPath);
+        }
+    }
+
+    private sealed class HaExpectedWithStandaloneStateFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config)
+        {
+            config.Topology.ExpectedMode = "HighAvailability";
+        }
+
+        protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
+        {
+            settings["Portal:Topology:ExpectedMode"] = "HighAvailability";
+        }
+    }
+
+    private sealed class DocumentationDisabledFactory : PortalWebFactory
+    {
+        protected override void CustomizePortalConfig(PortalConfig config)
+        {
+            config.Modules.Documentation = false;
+        }
+
+        protected override void CustomizeConfiguration(Dictionary<string, string?> settings)
+        {
+            settings["Portal:Modules:Documentation"] = "false";
         }
     }
 }

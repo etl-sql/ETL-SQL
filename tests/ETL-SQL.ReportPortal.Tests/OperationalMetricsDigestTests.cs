@@ -130,6 +130,28 @@ public sealed class OperationalMetricsDigestTests
     }
 
     [Fact]
+    public void EnterpriseHealthSignals_RaiseStructuredAlerts()
+    {
+        var content = OperationalMetricsDigest.Build(
+            Metrics(
+                databaseConnectivityHealthy: false,
+                databasePoolExhaustionSuspected: true,
+                policyAuthorityHealthy: false,
+                clientCertificateExpiresAtUtc: DateTimeOffset.UtcNow.AddHours(12),
+                unhealthyFleetNodes: 1),
+            new OperationalDigestConfig
+            {
+                CertificateExpiryWarningHours = 24
+            });
+
+        Assert.Contains(content.Alerts, a => a.Code == "portal_database_connectivity" && a.Severity == "critical");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_database_pool_exhaustion" && a.Severity == "critical");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_policy_signature_unavailable" && a.Severity == "critical");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_client_certificate_expiry" && a.Severity == "warning");
+        Assert.Contains(content.Alerts, a => a.Code == "portal_unhealthy_fleet_nodes" && a.Severity == "warning");
+    }
+
+    [Fact]
     public async Task OperationalDigestService_EmitsLowCardinalityBackgroundTelemetry()
     {
         var stoppedActivities = new List<Activity>();
@@ -199,7 +221,12 @@ public sealed class OperationalMetricsDigestTests
         int staleSnapshots = 0,
         int staleDatasets = 0,
         int activePolicyVersionsExpiring = 0,
-        int activePolicyVersionsExpired = 0)
+        int activePolicyVersionsExpired = 0,
+        bool databaseConnectivityHealthy = true,
+        bool databasePoolExhaustionSuspected = false,
+        bool policyAuthorityHealthy = true,
+        DateTimeOffset? clientCertificateExpiresAtUtc = null,
+        int unhealthyFleetNodes = 0)
         => new(
             ActiveExecutions: 1,
             QueuedExecutions: queuedExecutions,
@@ -235,6 +262,11 @@ public sealed class OperationalMetricsDigestTests
             SecurityEventOldestPendingAgeSeconds: securityEventOldestPendingAgeSeconds,
             SecurityEventCollectorConfigured: false,
             SecurityEventCollectorReachable: null,
+            DatabaseConnectivityHealthy: databaseConnectivityHealthy,
+            DatabasePoolExhaustionSuspected: databasePoolExhaustionSuspected,
+            PolicyAuthorityHealthy: policyAuthorityHealthy,
+            ClientCertificateExpiresAtUtc: clientCertificateExpiresAtUtc,
+            UnhealthyFleetNodes: unhealthyFleetNodes,
             AverageExecutionDurationMs: 1234,
             AverageQueuedExecutionAgeSeconds: averageQueuedExecutionAgeSeconds,
             HourlyExecutionLoad: new List<HourlyExecutionLoad>(),

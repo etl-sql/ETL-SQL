@@ -227,6 +227,10 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.True(m.AuditOutboxOldestPendingAgeSeconds > 0);
         Assert.True(m.SecurityEventPending >= 0);
         Assert.True(m.SecurityEventStoredBytes >= 0);
+        Assert.True(m.DatabaseConnectivityHealthy);
+        Assert.False(m.DatabasePoolExhaustionSuspected);
+        Assert.True(m.PolicyAuthorityHealthy);
+        Assert.Equal(0, m.UnhealthyFleetNodes);
         Assert.Equal("shared-state-ha", m.Topology);
         Assert.Equal(node.NodeId, m.NodeId);
         Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
@@ -241,6 +245,11 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("etlsql_portal_stale_datasets", prometheus);
         Assert.Contains("etlsql_portal_policy_versions_expiring", prometheus);
         Assert.Contains("etlsql_portal_policy_versions_expired", prometheus);
+        Assert.Contains("etlsql_portal_policy_authority_healthy", prometheus);
+        Assert.Contains("etlsql_portal_client_certificate_expires_in_seconds", prometheus);
+        Assert.Contains("etlsql_portal_database_connectivity_healthy", prometheus);
+        Assert.Contains("etlsql_portal_database_pool_exhaustion_suspected", prometheus);
+        Assert.Contains("etlsql_portal_fleet_nodes_unhealthy", prometheus);
         Assert.Contains("etlsql_portal_audit_outbox_pending", prometheus);
         Assert.Contains("etlsql_security_event_pending", prometheus);
         Assert.Contains("etlsql_portal_operational_alert_active", prometheus);

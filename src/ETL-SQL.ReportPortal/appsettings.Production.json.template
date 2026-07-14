@@ -12,6 +12,13 @@
     },
     "PolicyAuthority": {
       "SigningCertThumbprint": "0123456789ABCDEF0123456789ABCDEF01234567"
+    },
+    "Topology": {
+      "ExpectedMode": "Auto",
+      "MinLivePortalNodes": 1,
+      "MinLiveOrchestratorNodes": 0,
+      "RequirePostgresForHa": true,
+      "RequireSharedKeyRingForHa": true
     }
   },
   "ConnectionStrings": {

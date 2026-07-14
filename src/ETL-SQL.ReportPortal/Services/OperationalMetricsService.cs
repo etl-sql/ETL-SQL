@@ -1,6 +1,9 @@
 using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -12,7 +15,8 @@ namespace ETL_SQL.ReportPortal.Services;
 public sealed class OperationalMetricsService(
     PortalDbContext db,
     PortalConfig config,
-    PortalNodeIdentity? nodeIdentity = null)
+    PortalNodeIdentity? nodeIdentity = null,
+    HealthCheckService? healthChecks = null)
 {
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
@@ -52,6 +56,11 @@ public sealed class OperationalMetricsService(
         double SecurityEventOldestPendingAgeSeconds,
         bool SecurityEventCollectorConfigured,
         bool? SecurityEventCollectorReachable,
+        bool DatabaseConnectivityHealthy,
+        bool DatabasePoolExhaustionSuspected,
+        bool PolicyAuthorityHealthy,
+        DateTimeOffset? ClientCertificateExpiresAtUtc,
+        int UnhealthyFleetNodes,
         double AverageExecutionDurationMs,
         double AverageQueuedExecutionAgeSeconds,
         IReadOnlyList<HourlyExecutionLoad> HourlyExecutionLoad,
@@ -134,6 +143,9 @@ public sealed class OperationalMetricsService(
             .ToListAsync(ct);
         var auditFailed = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Failed", ct);
         var securityEvents = SecurityEventRuntime.GetDiagnostics();
+        var health = await GetHealthSummaryAsync(ct);
+        var clientCertificateExpiresAtUtc = TryGetClientCertificateExpiry(
+            new EnterpriseEnrollmentStore().GetStatus().Enrollment?.ClientCertificateThumbprint);
 
         return new OperationalMetrics(
             activeExecutions,
@@ -172,6 +184,11 @@ public sealed class OperationalMetricsService(
                 : Math.Max(0, (DateTimeOffset.UtcNow - securityEvents.OldestPendingUtc.Value).TotalSeconds),
             securityEvents.CollectorConfigured,
             securityEvents.CollectorReachable,
+            health.DatabaseConnectivityHealthy,
+            health.DatabasePoolExhaustionSuspected,
+            health.PolicyAuthorityHealthy,
+            clientCertificateExpiresAtUtc,
+            health.UnhealthyFleetNodes,
             averageExecutionDurationMs,
             averageQueuedExecutionAgeSeconds,
             hourlyExecutionLoad,
@@ -276,6 +293,98 @@ public sealed class OperationalMetricsService(
         long PeakMemoryBytes);
 
     private sealed record PolicyExpiryCounts(int Expiring, int Expired);
+
+    private sealed record HealthSummary(
+        bool DatabaseConnectivityHealthy,
+        bool DatabasePoolExhaustionSuspected,
+        bool PolicyAuthorityHealthy,
+        int UnhealthyFleetNodes);
+
+    private async Task<HealthSummary> GetHealthSummaryAsync(CancellationToken ct)
+    {
+        if (healthChecks is null)
+            return new HealthSummary(true, false, true, 0);
+
+        try
+        {
+            var report = await healthChecks.CheckHealthAsync(ct);
+            var databaseHealthy = !TryGetHealthEntry(report, "db", out var dbEntry)
+                || dbEntry.Status != HealthStatus.Unhealthy;
+            var poolExhaustion = TryGetHealthEntry(report, "db", out dbEntry)
+                && (IsPoolExhaustion(dbEntry.Exception) || IsPoolExhaustion(dbEntry.Description));
+            var policyHealthy = !TryGetHealthEntry(report, "policy-authority", out var policyEntry)
+                || (policyEntry.Status != HealthStatus.Unhealthy && policyEntry.Status != HealthStatus.Degraded);
+            var unhealthyFleetNodes = report.Status == HealthStatus.Healthy ? 0 : 1;
+
+            return new HealthSummary(databaseHealthy, poolExhaustion, policyHealthy, unhealthyFleetNodes);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return new HealthSummary(false, IsPoolExhaustion(ex), true, 1);
+        }
+    }
+
+    private static bool IsPoolExhaustion(Exception? ex) =>
+        ex is not null && (IsPoolExhaustion(ex.Message) || IsPoolExhaustion(ex.InnerException));
+
+    private static bool TryGetHealthEntry(
+        HealthReport report,
+        string name,
+        out HealthReportEntry entry)
+    {
+        foreach (var candidate in report.Entries)
+        {
+            if (string.Equals(candidate.Key, name, StringComparison.OrdinalIgnoreCase))
+            {
+                entry = candidate.Value;
+                return true;
+            }
+        }
+
+        entry = default;
+        return false;
+    }
+
+    private static bool IsPoolExhaustion(string? message) =>
+        !string.IsNullOrWhiteSpace(message)
+        && message.Contains("pool", StringComparison.OrdinalIgnoreCase)
+        && (message.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("exhaust", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("maximum", StringComparison.OrdinalIgnoreCase));
+
+    private static DateTimeOffset? TryGetClientCertificateExpiry(string? thumbprint)
+    {
+        if (string.IsNullOrWhiteSpace(thumbprint))
+            return null;
+
+        var normalized = thumbprint.Replace(" ", "", StringComparison.Ordinal).ToUpperInvariant();
+        foreach (var location in new[] { StoreLocation.LocalMachine, StoreLocation.CurrentUser })
+        {
+            try
+            {
+                using var store = new X509Store(StoreName.My, location);
+                store.Open(OpenFlags.ReadOnly);
+                foreach (var cert in store.Certificates)
+                {
+                    using (cert)
+                    {
+                        if (string.Equals(cert.Thumbprint, normalized, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(cert.GetCertHashString(HashAlgorithmName.SHA256), normalized,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            return new DateTimeOffset(cert.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Operational metrics report absence rather than leaking certificate-store errors.
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Total size of regular files directly under a storage root; 0 when absent.</summary>
     private static long DirectorySizeBytes(string? path)

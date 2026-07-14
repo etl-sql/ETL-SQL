@@ -67,6 +67,13 @@ public static class OperationalMetricsDigest
         body.AppendLine("Policy authority:");
         body.AppendLine($"  Active versions expiring {m.ActivePolicyVersionsExpiring}; "
             + $"expired {m.ActivePolicyVersionsExpired}");
+        body.AppendLine($"  Signing health {(m.PolicyAuthorityHealthy ? "healthy" : "NOT healthy")}; "
+            + $"client certificate expires {FormatTimestamp(m.ClientCertificateExpiresAtUtc)}");
+        body.AppendLine();
+        body.AppendLine("Health:");
+        body.AppendLine($"  Database {(m.DatabaseConnectivityHealthy ? "reachable" : "NOT reachable")}; "
+            + $"pool exhaustion suspected {(m.DatabasePoolExhaustionSuspected ? "yes" : "no")}");
+        body.AppendLine($"  Unhealthy fleet nodes {m.UnhealthyFleetNodes}");
         body.AppendLine();
         body.AppendLine("Schema:");
         body.AppendLine($"  Applied {m.AppliedMigrations}, pending {m.PendingMigrations} "
@@ -212,6 +219,46 @@ public static class OperationalMetricsDigest
                 cfg));
         }
 
+        if (cfg.AlertOnPolicyAuthorityUnavailable && !m.PolicyAuthorityHealthy)
+        {
+            alerts.Add(Alert("critical", "portal_policy_signature_unavailable",
+                "Policy-authority signing health is degraded or unavailable; policy publication and emergency rollback may fail.",
+                cfg));
+        }
+
+        if (cfg.CertificateExpiryWarningHours > 0
+            && m.ClientCertificateExpiresAtUtc is { } certExpiry
+            && certExpiry <= DateTimeOffset.UtcNow.AddHours(cfg.CertificateExpiryWarningHours))
+        {
+            var severity = certExpiry <= DateTimeOffset.UtcNow ? "critical" : "warning";
+            alerts.Add(Alert(severity, "portal_client_certificate_expiry",
+                certExpiry <= DateTimeOffset.UtcNow
+                    ? "The enrolled client certificate is expired."
+                    : $"The enrolled client certificate expires within {cfg.CertificateExpiryWarningHours}h.",
+                cfg));
+        }
+
+        if (cfg.AlertOnDatabaseConnectivityFailure && !m.DatabaseConnectivityHealthy)
+        {
+            alerts.Add(Alert("critical", "portal_database_connectivity",
+                "Portal database health check is unhealthy; the node may be unsafe to serve traffic.",
+                cfg));
+        }
+
+        if (cfg.AlertOnDatabasePoolExhaustion && m.DatabasePoolExhaustionSuspected)
+        {
+            alerts.Add(Alert("critical", "portal_database_pool_exhaustion",
+                "Portal database diagnostics indicate connection pool exhaustion or timeout pressure.",
+                cfg));
+        }
+
+        if (cfg.AlertOnUnhealthyFleetNodes && m.UnhealthyFleetNodes > 0)
+        {
+            alerts.Add(Alert("warning", "portal_unhealthy_fleet_nodes",
+                $"{m.UnhealthyFleetNodes} fleet node(s) report degraded or unhealthy readiness.",
+                cfg));
+        }
+
         return alerts;
     }
 
@@ -230,6 +277,9 @@ public static class OperationalMetricsDigest
 
     private static double FailureRate(int failures, int total) =>
         total > 0 ? failures * 100.0 / total : 0.0;
+
+    private static string FormatTimestamp(DateTimeOffset? value) =>
+        value is null ? "not configured" : value.Value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
 
     private static string FormatBytes(long bytes)
     {

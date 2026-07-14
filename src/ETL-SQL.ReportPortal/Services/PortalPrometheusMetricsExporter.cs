@@ -64,6 +64,15 @@ public sealed class PortalPrometheusMetricsExporter(
         AppendGauge(sb, "etlsql_portal_policy_versions_expired",
             "Active policy versions that have passed their expiration timestamp.",
             metrics.ActivePolicyVersionsExpired, labels);
+        AppendGauge(sb, "etlsql_portal_policy_authority_healthy",
+            "Whether the policy-authority signing surface is healthy.",
+            metrics.PolicyAuthorityHealthy ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_client_certificate_expires_in_seconds",
+            "Seconds until the enrolled client certificate expires; -1 means not configured or unavailable.",
+            metrics.ClientCertificateExpiresAtUtc is null
+                ? -1
+                : Math.Floor((metrics.ClientCertificateExpiresAtUtc.Value - DateTimeOffset.UtcNow).TotalSeconds),
+            labels);
         AppendGauge(sb, "etlsql_portal_subscriptions_active",
             "Active report subscriptions.", metrics.ActiveSubscriptions, labels);
         AppendGauge(sb, "etlsql_portal_smtp_connections",
@@ -76,6 +85,15 @@ public sealed class PortalPrometheusMetricsExporter(
             "Whether the Portal database schema has no pending migrations.", metrics.SchemaUpToDate ? 1 : 0, labels);
         AppendGauge(sb, "etlsql_portal_database_reachable",
             "Whether the Portal database was reachable while composing this metrics snapshot.", 1, labels);
+        AppendGauge(sb, "etlsql_portal_database_connectivity_healthy",
+            "Whether the Portal database health check is healthy.",
+            metrics.DatabaseConnectivityHealthy ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_database_pool_exhaustion_suspected",
+            "Whether Portal database diagnostics indicate pool exhaustion or timeout pressure.",
+            metrics.DatabasePoolExhaustionSuspected ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_fleet_nodes_unhealthy",
+            "Number of fleet nodes represented by this snapshot that report degraded or unhealthy readiness.",
+            metrics.UnhealthyFleetNodes, labels);
         AppendGauge(sb, "etlsql_portal_metrics_window_hours",
             "Operational metrics lookback window in hours.", metrics.WindowHours, labels);
         AppendGauge(sb, "etlsql_portal_audit_outbox_pending",

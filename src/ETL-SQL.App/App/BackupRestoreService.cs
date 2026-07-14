@@ -220,6 +220,14 @@ namespace ETL_SQL.App
                 await ExtractZipToDirectoryAsync(keysZip, keysExtract);
 
                 var problems = await ValidateAsync(dataExtract, keysExtract, logger);
+                await WriteRecoveryReportIfRequestedAsync(
+                    ctx,
+                    dataExtract,
+                    keysExtract,
+                    problems,
+                    targetDirectory: ctx.RestoreValidateOnly ? null : ctx.RestoreTo,
+                    restored: false,
+                    logger);
                 if (problems.Count > 0)
                 {
                     logger.WriteLine($"Validation FAILED ({problems.Count} problem(s)):", ConsoleColor.Red);
@@ -263,6 +271,14 @@ namespace ETL_SQL.App
                 RestrictToOwner(restoredConfig, isDirectory: false);
                 // Likewise the restored Data Protection key ring.
                 RestrictToOwner(Path.Combine(target, DpKeyRingDirName), isDirectory: true);
+                await WriteRecoveryReportIfRequestedAsync(
+                    ctx,
+                    dataExtract,
+                    keysExtract,
+                    problems,
+                    target,
+                    restored: true,
+                    logger);
 
                 logger.WriteLine($"Restore complete into: {target}", ConsoleColor.Green);
                 logger.WriteLine("Next steps:", ConsoleColor.Cyan);
@@ -280,6 +296,95 @@ namespace ETL_SQL.App
             finally
             {
                 TryDeleteDir(work);
+            }
+        }
+
+        private static async Task WriteRecoveryReportIfRequestedAsync(
+            CliContext ctx,
+            string dataExtract,
+            string keysExtract,
+            IReadOnlyList<string> problems,
+            string? targetDirectory,
+            bool restored,
+            ILogger logger)
+        {
+            if (string.IsNullOrWhiteSpace(ctx.RestoreReport))
+                return;
+
+            var reportPath = Path.GetFullPath(ctx.RestoreReport.Trim('"', '\'', ' '));
+            var report = await BuildRecoveryReportAsync(dataExtract, keysExtract, problems, targetDirectory, restored);
+            var reportDir = Path.GetDirectoryName(reportPath);
+            if (!string.IsNullOrWhiteSpace(reportDir))
+                await CreateDirectoryAsync(reportDir);
+            await File.WriteAllTextAsync(reportPath, report.ToJsonString(JsonOpts));
+            RestrictToOwner(reportPath, isDirectory: false);
+            logger.WriteLine($"Recovery report: {reportPath}", ConsoleColor.Gray);
+        }
+
+        internal static async Task<JsonObject> BuildRecoveryReportAsync(
+            string dataExtract,
+            string keysExtract,
+            IReadOnlyList<string> problems,
+            string? targetDirectory,
+            bool restored)
+        {
+            var manifest = await ReadJsonObjectOrNullAsync(Path.Combine(dataExtract, DataManifestName));
+            var keysManifest = await ReadJsonObjectOrNullAsync(Path.Combine(keysExtract, KeysManifestName));
+            var createdUtcText = (string?)manifest?["createdUtc"];
+            DateTimeOffset? createdUtc = DateTimeOffset.TryParse(createdUtcText, out var parsedCreated)
+                ? parsedCreated
+                : null;
+            var generatedUtc = DateTimeOffset.UtcNow;
+            long? achievedRpoSeconds = createdUtc is null
+                ? null
+                : Math.Max(0, (long)(generatedUtc - createdUtc.Value).TotalSeconds);
+
+            var fileCount = manifest?["files"] is JsonArray files ? files.Count : 0;
+            var fileBytes = manifest?["files"] is JsonArray fileArray
+                ? fileArray.OfType<JsonObject>().Sum(file => (long?)file["bytes"] ?? 0L)
+                : 0L;
+
+            var actions = new JsonArray();
+            actions.Add("Start Portal and Orchestrator with the restored configuration only after reviewing environment-specific secrets and endpoints.");
+            actions.Add("Verify /healthz, /health, /metrics, service-account login, audit/security delivery, and scheduled job recovery.");
+            actions.Add("Re-enroll restored machines and rotate client credentials if this is a clone, replacement host, or cross-environment restore.");
+            actions.Add("Verify dataset cache paths or re-materialize datasets when absolute cache paths changed.");
+
+            return new JsonObject
+            {
+                ["schemaVersion"] = "1.0",
+                ["generatedUtc"] = generatedUtc.ToString("o"),
+                ["operation"] = restored ? "restore" : "validate",
+                ["status"] = problems.Count == 0 ? "Pass" : "Fail",
+                ["backupId"] = (string?)manifest?["backupId"],
+                ["keysBackupId"] = (string?)keysManifest?["backupId"],
+                ["backupCreatedUtc"] = createdUtcText,
+                ["appVersion"] = (string?)manifest?["appVersion"],
+                ["catalogMigration"] = (string?)manifest?["catalogMigration"],
+                ["atRestKeyVersion"] = (string?)manifest?["atRestKeyVersion"],
+                ["targetDirectory"] = targetDirectory,
+                ["restored"] = restored,
+                ["achievedRpoSeconds"] = achievedRpoSeconds,
+                ["achievedRtoSeconds"] = null,
+                ["dataLossWindowSeconds"] = achievedRpoSeconds,
+                ["fileCount"] = fileCount,
+                ["fileBytes"] = fileBytes,
+                ["missingDependencies"] = new JsonArray(problems.Select(p => (JsonNode)p).ToArray()),
+                ["operatorActions"] = actions
+            };
+        }
+
+        private static async Task<JsonObject?> ReadJsonObjectOrNullAsync(string path)
+        {
+            if (!File.Exists(path))
+                return null;
+            try
+            {
+                return JsonNode.Parse(await File.ReadAllTextAsync(path))?.AsObject();
+            }
+            catch
+            {
+                return null;
             }
         }
 

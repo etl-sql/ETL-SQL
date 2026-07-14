@@ -350,6 +350,8 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTranspor
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsExporter>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalTopologyReadinessService>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.DocumentationLibraryService>();
 // Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
 // (no exportable private key persisted); when unset the authority reports "not configured".
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =>
@@ -743,9 +745,15 @@ app.Use(async (context, next) =>
         var isReportEntry = string.Equals(path, "/", StringComparison.OrdinalIgnoreCase)
             || string.Equals(path, "/index.html", StringComparison.OrdinalIgnoreCase);
         var isDesignerEntry = string.Equals(path, "/designer.html", StringComparison.OrdinalIgnoreCase);
+        var isDocsEntry = string.Equals(path, "/docs.html", StringComparison.OrdinalIgnoreCase);
 
         if ((isReportEntry && !modules.IsEnabled("Reporting"))
             || (isDesignerEntry && !modules.IsEnabled("Designer")))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+        if (isDocsEntry && !modules.IsEnabled("Documentation"))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
@@ -820,46 +828,18 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // dependencies required for this node to safely accept traffic: portal DB, shared artifact storage,
 // and the node-registry/lease store.
 app.MapGet("/healthz", async (
-    IServiceScopeFactory scopes,
-    ETL_SQL.Core.Storage.IArtifactStorage artifacts,
-    ETL_SQL.Core.Data.INodeRegistryStore nodes,
+    ETL_SQL.ReportPortal.Services.PortalTopologyReadinessService readiness,
     CancellationToken ct) =>
 {
-    var checks = new Dictionary<string, string>();
-    var checkTimeout = TimeSpan.FromSeconds(2);
-
-    checks["database"] = await RunHealthzCheckAsync(async checkCt =>
-    {
-        using var scope = scopes.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        return await db.Database.CanConnectAsync(checkCt) ? "ok" : "unreachable";
-    }, checkTimeout, ct);
-
-    checks["storage"] = await RunHealthzCheckAsync(async checkCt =>
-    {
-        await foreach (var _ in artifacts.EnumerateAsync(
-            ETL_SQL.Core.Storage.ArtifactArea.Snapshots,
-            prefix: null,
-            recursive: false,
-            checkCt).WithCancellation(checkCt))
-        {
-            break;
-        }
-        return "ok";
-    }, checkTimeout, ct);
-
-    checks["lease"] = await RunHealthzCheckAsync(async checkCt =>
-    {
-        await nodes.GetLiveNodesAsync().WaitAsync(checkCt);
-        return "ok";
-    }, checkTimeout, ct);
-
-    var healthy = checks.Values.All(value => value == "ok");
+    var result = await readiness.CheckAsync(ct);
+    var healthy = string.Equals(result.Status, "Healthy", StringComparison.OrdinalIgnoreCase);
     return Results.Json(
         new
         {
-            status = healthy ? "Healthy" : "Unhealthy",
-            checks
+            status = result.Status,
+            mode = result.Mode,
+            checks = result.Checks,
+            findings = result.Findings
         },
         statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
@@ -879,6 +859,12 @@ app.MapGet("/third-party-notices", () =>
         ? Results.NotFound("THIRD-PARTY-NOTICES.md was not found.")
         : Results.Text(File.ReadAllText(noticesPath), "text/markdown; charset=utf-8");
 }).AllowAnonymous();
+
+app.MapGet("/docs", (ETL_SQL.ReportPortal.Services.PortalModuleRegistry modules) =>
+    modules.IsEnabled("Documentation")
+        ? Results.Redirect("/docs.html")
+        : Results.NotFound(new { error = "documentation_disabled" }))
+   .AllowAnonymous();
 
 // Root → login
 app.MapGet("/", () => Results.Redirect("/login.html"))
@@ -958,35 +944,6 @@ static string? FindRepoFile(string fileName)
     }
 
     return null;
-}
-
-static async Task<string> RunHealthzCheckAsync(
-    Func<CancellationToken, Task<string>> check,
-    TimeSpan timeout,
-    CancellationToken requestCt)
-{
-    var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(requestCt);
-    var checkTask = Task.Run(() => check(timeoutCts.Token));
-    var completed = await Task.WhenAny(checkTask, Task.Delay(timeout, requestCt));
-    if (completed != checkTask)
-    {
-        try { timeoutCts.Cancel(); } catch { }
-        _ = checkTask.ContinueWith(_ => timeoutCts.Dispose(), TaskScheduler.Default);
-        return nameof(TimeoutException);
-    }
-
-    try
-    {
-        return await checkTask;
-    }
-    catch (Exception ex)
-    {
-        return ex.GetType().Name;
-    }
-    finally
-    {
-        timeoutCts.Dispose();
-    }
 }
 
 static RateLimitPartition<string> CreateFixedWindowPartition(

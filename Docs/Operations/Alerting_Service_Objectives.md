@@ -58,6 +58,11 @@ no longer lists the code.
       "SnapshotFreshnessHours": 0,
       "DatasetFreshnessHours": 0,
       "PolicyVersionExpiryWarningHours": 72,
+      "CertificateExpiryWarningHours": 168,
+      "AlertOnPolicyAuthorityUnavailable": true,
+      "AlertOnDatabaseConnectivityFailure": true,
+      "AlertOnDatabasePoolExhaustion": true,
+      "AlertOnUnhealthyFleetNodes": true,
       "RunbookBaseUri": "Docs/Operations/Alerting_Service_Objectives.md"
     }
   }
@@ -70,6 +75,9 @@ on business requirements for report snapshots and shared datasets.
 Set `PolicyVersionExpiryWarningHours` to the amount of lead time operators need before an active
 organization policy expires. Set it to `0` only for standalone portals that do not use the policy
 authority.
+Set `CertificateExpiryWarningHours` to the lead time needed to replace client certificates before
+enrolled machines lose policy access. Database and fleet-node alert switches are enabled by default;
+disable them only when those signals are already routed from `/health` or an external fleet monitor.
 
 ## Runbooks
 
@@ -208,6 +216,51 @@ Severity: warning.
 3. Validate canary rollout where used, then activate the replacement policy.
 4. Confirm Prometheus and digest alerts clear after the active version has sufficient lifetime.
 
+### portal-policy-signature-unavailable
+
+Severity: critical.
+
+1. Check the policy-authority signing certificate or key reference configured for the Portal.
+2. Verify the OS certificate store, private-key ACLs, key vault, or mounted secret is available to the service account.
+3. Do not publish or roll back policies until the signing surface is healthy.
+4. Recheck `/health` and the operational digest after restoring key access.
+
+### portal-client-certificate-expiry
+
+Severity: warning before expiry; critical after expiry.
+
+1. Identify the enrolled machine certificate reported by fleet inventory or local enrollment status.
+2. Issue and bind a replacement certificate before the warning window closes.
+3. Confirm policy retrieval succeeds with the new certificate and old credentials are retired.
+4. Treat repeated late rotations as a certificate lifecycle process defect.
+
+### portal-database-connectivity
+
+Severity: critical.
+
+1. Check PostgreSQL/SQLite reachability, credentials, DNS, TLS, and network ACLs.
+2. Remove this node from load-balancer rotation if `/healthz` is failing.
+3. For PostgreSQL HA, verify primary/replica state and failover completion before restarting Portal nodes.
+4. Confirm the health check and `etlsql_portal_database_connectivity_healthy` return healthy.
+
+### portal-database-pool-exhaustion
+
+Severity: critical.
+
+1. Check database connection pool limits, slow queries, blocked transactions, and leaked long-running sessions.
+2. Compare Portal execution concurrency with database `max_connections` and downstream capacity.
+3. Reduce Portal concurrency or increase pool/database limits only after confirming the bottleneck.
+4. Verify pool timeout/exhaustion messages stop and queue age returns below threshold.
+
+### portal-unhealthy-fleet-nodes
+
+Severity: warning.
+
+1. Open `/health` and `/healthz` on the affected node and inspect failing checks.
+2. Check node heartbeat, artifact storage, policy authority, database, and execution-capacity findings.
+3. Drain the node before restart or repair when readiness is unsafe.
+4. Confirm the fleet alert clears after the node reports Healthy.
+
 ## Tuning
 
 Start with the defaults, then tune from measured data:
@@ -220,4 +273,5 @@ Start with the defaults, then tune from measured data:
 - Set freshness thresholds from explicit business freshness targets, not from default refresh
   intervals alone.
 - Set policy expiry lead time from policy review and rollout duration, including canary soak time.
+- Set certificate expiry lead time from certificate authority SLA and host restart requirements.
 - Use `AlertOnly = true` when the digest is routed to an on-call or ticketing mailbox.

@@ -151,25 +151,43 @@ namespace ETL_SQL.Tests.CliCommands
             var (dataZip, keysZip) = FindArchives(outDir);
 
             // Validate-only writes nothing and passes.
+            var validateReport = Path.Combine(_root, "validate-report.json");
             var validateCtx = new CliContext
             {
                 Command = "admin-restore",
                 RestoreFrom = dataZip,
                 RestoreKeys = keysZip,
-                RestoreValidateOnly = true
+                RestoreValidateOnly = true,
+                RestoreReport = validateReport
             };
             Assert.Equal(0, await BackupRestoreService.RestoreAsync(validateCtx, NullLogger.Instance));
+            Assert.True(File.Exists(validateReport));
+            var validateJson = JsonNode.Parse(File.ReadAllText(validateReport))!.AsObject();
+            Assert.Equal("1.0", (string?)validateJson["schemaVersion"]);
+            Assert.Equal("validate", (string?)validateJson["operation"]);
+            Assert.Equal("Pass", (string?)validateJson["status"]);
+            Assert.True((long?)validateJson["achievedRpoSeconds"] >= 0);
+            Assert.True((int?)validateJson["fileCount"] > 0);
+            Assert.Empty(validateJson["missingDependencies"]!.AsArray());
+            Assert.NotEmpty(validateJson["operatorActions"]!.AsArray());
 
             // Restore into a clean directory.
             var restoreDir = Path.Combine(_root, "restored");
+            var restoreReport = Path.Combine(_root, "restore-report.json");
             var restoreCtx = new CliContext
             {
                 Command = "admin-restore",
                 RestoreFrom = dataZip,
                 RestoreKeys = keysZip,
-                RestoreTo = restoreDir
+                RestoreTo = restoreDir,
+                RestoreReport = restoreReport
             };
             Assert.Equal(0, await BackupRestoreService.RestoreAsync(restoreCtx, NullLogger.Instance));
+            var restoreJson = JsonNode.Parse(File.ReadAllText(restoreReport))!.AsObject();
+            Assert.Equal("restore", (string?)restoreJson["operation"]);
+            Assert.Equal("Pass", (string?)restoreJson["status"]);
+            Assert.True((bool?)restoreJson["restored"]);
+            Assert.Equal(restoreDir, (string?)restoreJson["targetDirectory"]);
 
             // Layout materialized.
             Assert.True(File.Exists(Path.Combine(restoreDir, "portal.db")));

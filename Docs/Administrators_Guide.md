@@ -1151,6 +1151,9 @@ The Report Portal constrains filesystem access to configured roots. Set these to
 | `Portal:MapRootPath` | Map assets used by reports | `./data/maps` |
 | `Portal:Storage:Provider` | Artifact provider: `Local` or `Smb`/`Unc` | `Local` |
 | `Portal:Storage:KeyRingPath` | ASP.NET Data Protection key ring and Keys artifact root | `.portal-keys` beside the portal DB |
+| `Portal:Topology:ExpectedMode` | Readiness policy mode: `Auto`, `Standalone`, `Departmental`, or `HighAvailability` | `Auto` |
+| `Portal:Topology:MinLivePortalNodes` | Minimum live Portal heartbeats required by `/healthz` in HA mode | `1` |
+| `Portal:Topology:MinLiveOrchestratorNodes` | Minimum live Orchestrator heartbeats required by `/healthz` in HA mode | `0` |
 | `Orchestrator:DatabasePath` | Orchestrator SQLite database | `%LocalAppData%/ETL-SQL/etlsql.db` |
 | `Orchestrator:Database:Provider` | Orchestrator state provider: `Sqlite` or `Postgres` | `Sqlite` |
 | `Orchestrator:Database:ConnectionString` | Orchestrator PostgreSQL connection string when provider is `Postgres` | *(required for Postgres)* |
@@ -1184,6 +1187,13 @@ Example Portal node configuration:
       "SessionAffinityEnabled": true,
       "SessionAffinityCookieName": "ETLSQL_PORTAL_AFFINITY",
       "SessionAffinityCookieMinutes": 480
+    },
+    "Topology": {
+      "ExpectedMode": "HighAvailability",
+      "MinLivePortalNodes": 2,
+      "MinLiveOrchestratorNodes": 1,
+      "RequirePostgresForHa": true,
+      "RequireSharedKeyRingForHa": true
     },
     "Orchestrator": {
       "ApiUrl": "https://orchestrator-vip.example.com:5003",
@@ -1223,8 +1233,8 @@ Operational requirements:
 - Use sticky routing on the `ETLSQL_PORTAL_AFFINITY` cookie, or the configured
   `Portal:LoadBalancer:SessionAffinityCookieName`, because interactive sessions are node-local.
 - Point load balancer health checks at `GET /healthz`. It returns HTTP 200 only when the Portal can
-  reach PostgreSQL, shared snapshot storage, and the node-registry/lease store. Use `GET /health` for
-  richer monitoring.
+  reach PostgreSQL, shared snapshot storage, and the node-registry/lease store, and when the configured
+  topology contract is satisfied. Use `GET /health` for richer monitoring.
 - Keep `Portal:Jwt:Secret`, `Portal:Dataset:AtRestKey`, `Portal:Storage:KeyRingPath`, and
   `Portal:Orchestrator:ApiKey` identical across Portal nodes.
 - Run Portal and Orchestrator under service identities that can read/write the configured PostgreSQL
@@ -1232,6 +1242,10 @@ Operational requirements:
   account with explicit share and NTFS permissions.
 - Back up PostgreSQL and the shared artifact roots as one coordinated recovery set. The HA state is no
   longer represented by only `portal.db` and `etlsql.db` files.
+
+For the supported standalone, departmental, and HA topologies; readiness response contract; failure
+certification matrix; and responsibility boundary between ETL-SQL and infrastructure, see
+[`Docs/Operations/HA_Topology_Failure_Certification.md`](Operations/HA_Topology_Failure_Certification.md).
 
 ### 6.2 Containerized HA Clustering (Docker Compose)
 
@@ -1410,11 +1424,15 @@ roots as one coordinated recovery set. ETL-SQL does not back up PostgreSQL for y
   job, so a backup still runs when the orchestrator itself is down. Capture the command's exit code and
   alert on non-zero (wire it into the job-failure alerting in §9.1).
 - **Test the restore.** An unverified backup is a hope, not a recovery plan. Periodically restore into a
-  scratch directory with `etl-sql admin restore` (it validates integrity, key versions, and version
-  compatibility with `--validate` before writing anything — see §11.3) and confirm the Portal starts
-  and a report renders. Schedule this drill on a cadence that matches your recovery objectives.
+  scratch directory with `etl-sql admin restore --validate --report recovery-report.json` (it validates
+  integrity, key versions, and version compatibility before writing anything — see §11.3) and confirm
+  the Portal starts and a report renders. Schedule this drill on a cadence that matches your recovery
+  objectives.
 - Restored clones must not silently reuse machine identity or credentials in another environment —
   re-enroll and rotate as covered in §11.3.
+
+For supported RPO/RTO targets, restore-drill evidence, cross-environment clone safety, and regional
+failure procedures, see [`Docs/Operations/Disaster_Recovery_Objectives.md`](Operations/Disaster_Recovery_Objectives.md).
 
 ### Logs
 
@@ -1672,10 +1690,10 @@ Restore validates before it writes, and **fails closed** on any mismatch:
 
 ```bash
 # Verify integrity, key versions, and version compatibility WITHOUT writing anything
-etl-sql admin restore --from data.zip --keys keys.zip --validate
+etl-sql admin restore --from data.zip --keys keys.zip --validate --report recovery-report.json
 
 # Restore into a clean directory once validation passes
-etl-sql admin restore --from data.zip --keys keys.zip --to D:\restore-target
+etl-sql admin restore --from data.zip --keys keys.zip --to D:\restore-target --report recovery-report.json
 ```
 
 Validation checks that the two archives are a matching pair (same backup id), that the data archive's
@@ -1685,6 +1703,8 @@ reconstructs the on-disk layout and re-injects the secrets into the restored `ap
 next portal start, pending migrations apply automatically. Dataset caches referenced by **absolute**
 path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
 [§6.5](ReportPortal_Administrators_Guide.md#versioned-upgrades-and-rollback).
+The optional `--report` path writes a machine-readable recovery report containing the backup id,
+validation status, achieved RPO/data-loss window, missing dependencies, and required operator actions.
 
 This is the auditable, supported alternative to the manual file-copy backup in §8 for single-node
 deployments. In HA deployments, back up PostgreSQL with your database backup tooling and snapshot the

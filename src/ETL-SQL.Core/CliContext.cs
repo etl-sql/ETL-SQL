@@ -69,6 +69,7 @@ public class CliContext
     public string? RestoreFrom { get; set; }
     public string? RestoreKeys { get; set; }
     public string? RestoreTo { get; set; }
+    public string? RestoreReport { get; set; }
     public bool RestoreValidateOnly { get; set; }
 
     // admin migrate-database command

@@ -26,6 +26,30 @@ the remaining gap is infrastructure coverage.
 
 ---
 
+## v0.16.0 Pre-Release Evidence
+
+Collect release-suite evidence before publishing v0.16.0. The detailed evidence packet template is
+[`Docs/Operations/Enterprise_Release_Evidence_Checklist.md`](Docs/Operations/Enterprise_Release_Evidence_Checklist.md).
+
+- [ ] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
+- [ ] Full pre-release lane:
+      `.\scripts\Test-PreRelease.ps1 -IncludeSlt -IncludeDockerIntegration -IncludeStandardScale -BuildInstallers -Platforms win-x64`.
+- [ ] Migration and upgrade evidence: `.\scripts\Test-PreRelease.ps1 -IncludeSlt -Explain`
+      plus N to N+1 upgrade-path evidence.
+- [ ] Enterprise hardening certification on Windows and Linux:
+      `.\scripts\Test-EnterpriseHardeningCertification.ps1`.
+- [ ] Recovery drill evidence: `etl-sql admin restore --validate --report recovery-report.json`.
+- [ ] HA failure certification: `etl-sql admin ha-soak fault-run` and
+      `etl-sql admin ha-soak validate`.
+- [ ] Scale and performance evidence: `.\scripts\Test-ScaleCertification.ps1 -Tier Smoke`;
+      run Standard tier when advertising scale claims.
+- [ ] Standalone regression:
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~StandaloneRegressionTests`.
+- [ ] Security boundary docs:
+      `dotnet test tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj --filter FullyQualifiedName~SecurityBoundaryDocTests`.
+
+---
+
 ## Active Development
 
 ### Alerting and service objectives
@@ -34,7 +58,7 @@ the remaining gap is infrastructure coverage.
 - [x] Export active operational alert signals through Prometheus using low-cardinality labels for routing and deduplication.
 - [x] Add configurable alert coverage for stale snapshots and datasets using deployment-specific freshness windows.
 - [x] Add configurable alert coverage for expiring and expired active policy versions.
-- [ ] Add alert coverage for signature failures, certificate expiry, unhealthy fleet nodes, and database pool exhaustion as those metrics become available.
+- [x] Add alert coverage for signature failures, certificate expiry, unhealthy fleet nodes, and database pool exhaustion as those metrics become available.
 
 ### Historical capacity planning and sizing
 - [x] Extend the native capacity report digest with 30-day daily rollup trend summaries, saturation indicators, and disk threshold forecasts.

@@ -25,6 +25,7 @@ public class PortalConfig
     public PortalStorageConfig Storage { get; set; } = new();
     public PortalModuleConfig Modules { get; set; } = new();
     public PortalLoadBalancerConfig LoadBalancer { get; set; } = new();
+    public PortalTopologyConfig Topology { get; set; } = new();
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
     public AdminServicesConfig AdminServices { get; set; } = new();
 }
@@ -179,6 +180,21 @@ public class OperationalDigestConfig
     /// <summary>Active policy versions expiring within this many hours raise an alert. 0 disables.</summary>
     public int PolicyVersionExpiryWarningHours { get; set; } = 72;
 
+    /// <summary>Client certificates expiring within this many hours raise an alert. 0 disables.</summary>
+    public int CertificateExpiryWarningHours { get; set; } = 168;
+
+    /// <summary>Raise an alert when the policy-authority signing surface is degraded or unavailable.</summary>
+    public bool AlertOnPolicyAuthorityUnavailable { get; set; } = true;
+
+    /// <summary>Raise an alert when the Portal database health check is unhealthy.</summary>
+    public bool AlertOnDatabaseConnectivityFailure { get; set; } = true;
+
+    /// <summary>Raise an alert when health diagnostics indicate database connection pool exhaustion.</summary>
+    public bool AlertOnDatabasePoolExhaustion { get; set; } = true;
+
+    /// <summary>Raise an alert when this node reports unhealthy fleet/readiness status.</summary>
+    public bool AlertOnUnhealthyFleetNodes { get; set; } = true;
+
     /// <summary>Raise an alert when the catalog has unapplied EF migrations. Default true.</summary>
     public bool AlertOnPendingMigrations { get; set; } = true;
 
@@ -199,6 +215,27 @@ public class PortalLoadBalancerConfig
 
     /// <summary>Cookie lifetime in minutes. Minimum effective value is 1.</summary>
     public int SessionAffinityCookieMinutes { get; set; } = 480;
+}
+
+public class PortalTopologyConfig
+{
+    /// <summary>
+    /// Expected deployment topology for readiness policy: Auto, Standalone, Departmental, or
+    /// HighAvailability. Auto infers HA when PostgreSQL or a shared key ring is configured.
+    /// </summary>
+    public string ExpectedMode { get; set; } = "Auto";
+
+    /// <summary>Minimum live Portal heartbeats required before an HA node is ready for traffic.</summary>
+    public int MinLivePortalNodes { get; set; } = 1;
+
+    /// <summary>Minimum live Orchestrator heartbeats required before an HA node is ready for traffic.</summary>
+    public int MinLiveOrchestratorNodes { get; set; } = 0;
+
+    /// <summary>Require PostgreSQL for Portal and Orchestrator state when the expected mode is HA.</summary>
+    public bool RequirePostgresForHa { get; set; } = true;
+
+    /// <summary>Require a configured shared Data Protection key-ring path when the expected mode is HA.</summary>
+    public bool RequireSharedKeyRingForHa { get; set; } = true;
 }
 
 public class PortalStorageConfig
