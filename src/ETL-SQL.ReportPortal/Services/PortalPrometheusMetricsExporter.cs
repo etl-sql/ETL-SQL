@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -15,9 +16,9 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
         var metrics = await metricsService.GetAsync(ct);
         var labels = new Dictionary<string, string>
         {
-            [PrometheusLabel(PortalObservability.Tags.Environment)] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
-            [PrometheusLabel(PortalObservability.Tags.Node)] = metrics.NodeId,
-            [PrometheusLabel(PortalObservability.Tags.Component)] = "portal"
+            [ObservabilityConventions.PrometheusLabel(PortalObservability.Tags.Environment)] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
+            [ObservabilityConventions.PrometheusLabel(PortalObservability.Tags.Node)] = metrics.NodeId,
+            [ObservabilityConventions.PrometheusLabel(PortalObservability.Tags.Component)] = "portal"
         };
 
         var sb = new StringBuilder();
@@ -113,8 +114,4 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             .Replace("\n", "\\n", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
 
-    private static string PrometheusLabel(string tag) =>
-        tag.StartsWith("etlsql.", StringComparison.Ordinal)
-            ? tag["etlsql.".Length..].Replace('.', '_')
-            : tag.Replace('.', '_');
 }

@@ -1107,6 +1107,10 @@ The Orchestrator Service exposes three unauthenticated operations endpoints:
 connection metadata, credentials, or error details. Expose it only on a trusted management network or
 behind your standard monitoring ingress controls.
 
+These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventions` contract used by
+Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with
+underscores.
+
 ### 14.8 Differences from `DROP JOB`
 
 | Action | Effect |

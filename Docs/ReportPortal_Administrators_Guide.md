@@ -831,6 +831,11 @@ peak memory, CPU time, script hash, and request correlation id. These dimensions
 OpenTelemetry collectors or .NET listeners; avoid adding report names, usernames, local paths,
 parameter values, SQL text, or connection metadata as tags.
 
+Metric labels and trace tags use the shared `ETL_SQL.Core.Observability.ObservabilityConventions`
+names. Prometheus labels are the same names without the `etlsql.` prefix and with dots converted to
+underscores, for example `etlsql.environment` becomes `environment` and `etlsql.workload.kind`
+becomes `workload_kind`.
+
 ### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.

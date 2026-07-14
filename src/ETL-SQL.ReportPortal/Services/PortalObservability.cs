@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -10,20 +11,20 @@ public static class PortalObservability
 
     public static class Tags
     {
-        public const string Environment = "etlsql.environment";
-        public const string Node = "etlsql.node";
-        public const string Component = "etlsql.component";
-        public const string JobId = "etlsql.job.id";
-        public const string ReportId = "etlsql.report.id";
+        public const string Environment = ObservabilityConventions.Tags.Environment;
+        public const string Node = ObservabilityConventions.Tags.Node;
+        public const string Component = ObservabilityConventions.Tags.Component;
+        public const string JobId = ObservabilityConventions.Tags.JobId;
+        public const string ReportId = ObservabilityConventions.Tags.ReportId;
         public const string UserId = "etlsql.user.id";
-        public const string WorkloadKind = "etlsql.workload.kind";
-        public const string ExecutionMode = "etlsql.execution.mode";
-        public const string Status = "etlsql.status";
-        public const string RowsProcessed = "etlsql.rows_processed";
-        public const string PeakMemoryBytes = "etlsql.peak_memory_bytes";
-        public const string CpuTimeSeconds = "etlsql.cpu_time_seconds";
-        public const string ScriptHash = "etlsql.script_hash";
-        public const string CorrelationId = "etlsql.correlation_id";
+        public const string WorkloadKind = ObservabilityConventions.Tags.WorkloadKind;
+        public const string ExecutionMode = ObservabilityConventions.Tags.ExecutionMode;
+        public const string Status = ObservabilityConventions.Tags.Status;
+        public const string RowsProcessed = ObservabilityConventions.Tags.RowsProcessed;
+        public const string PeakMemoryBytes = ObservabilityConventions.Tags.PeakMemoryBytes;
+        public const string CpuTimeSeconds = ObservabilityConventions.Tags.CpuTimeSeconds;
+        public const string ScriptHash = ObservabilityConventions.Tags.ScriptHash;
+        public const string CorrelationId = ObservabilityConventions.Tags.CorrelationId;
     }
 
     public static Activity? StartExecutionJobActivity(ExecutionJob job, string workloadKind)

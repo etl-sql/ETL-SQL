@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Orchestrator.Channels;
@@ -554,9 +555,10 @@ namespace ETL_SQL.Orchestrator.Service
         {
             var labels = new Dictionary<string, string>
             {
-                ["environment"] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
-                ["node"] = Environment.MachineName,
-                ["component"] = "orchestrator"
+                [ObservabilityConventions.PrometheusLabel(ObservabilityConventions.Tags.Environment)] =
+                    Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
+                [ObservabilityConventions.PrometheusLabel(ObservabilityConventions.Tags.Node)] = Environment.MachineName,
+                [ObservabilityConventions.PrometheusLabel(ObservabilityConventions.Tags.Component)] = "orchestrator"
             };
 
             var sb = new StringBuilder();

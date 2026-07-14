@@ -237,10 +237,13 @@ Operations Control Plane → 4.1 Central fleet management*.
       correlation/script-hash context for OpenTelemetry collectors or .NET listeners.
 - [x] Export audit/security delivery health in Portal operational metrics: pending/failed counts,
       backlog bytes, oldest-pending age, dropped security events, and collector reachability state.
+- [x] Standardize low-cardinality observability tag/label names in
+      `ETL_SQL.Core.Observability.ObservabilityConventions` and use them from Portal and
+      Orchestrator metrics/traces.
 - [ ] Add first-class OpenTelemetry metrics and traces without imposing standalone overhead when
       exporters are disabled.
-- [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode,
-      status, policy version, and workload class while controlling high-cardinality labels.
+- [ ] Apply the shared dimensions to remaining engine, dataset, connector, policy, and workload-class
+      metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       spill, connector latency, retries, failures, storage growth, database pool health, policy
       refresh, audit/security backlog, and delivery health.
