@@ -270,6 +270,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       with row counts on spans and no event ids, payload JSON, endpoints, or bearer tokens in labels.
 - [x] Extend first-class OpenTelemetry metrics/traces to node heartbeat renewals with host-role
       component labels and no node ids, machine names, metadata JSON, or capacity values in labels.
+- [x] Extend first-class OpenTelemetry metrics/traces to Portal snapshot startup migration with
+      migrated counts on spans and no manifest paths, artifact keys, report names, or payload values.
 - [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class

@@ -1160,6 +1160,9 @@ transport error text.
 Node heartbeat renewals emit background-service spans/metrics from `ETL-SQL.BackgroundServices`
 with the host role as component and `node-heartbeat` as service name. Labels omit node ids,
 machine names, heartbeat metadata JSON, capacity values, and lease-loss reasons.
+Portal snapshot startup migration emits background-service spans/metrics with success, skipped,
+cancelled, or failure status. Migrated snapshot counts are trace-only; labels omit manifest paths,
+snapshot artifact keys, report names, and manifest payload values.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
