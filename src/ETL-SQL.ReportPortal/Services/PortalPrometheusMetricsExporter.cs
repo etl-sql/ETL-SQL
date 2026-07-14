@@ -59,6 +59,8 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             "Pending Portal database migrations.", metrics.PendingMigrations, labels);
         AppendGauge(sb, "etlsql_portal_schema_up_to_date",
             "Whether the Portal database schema has no pending migrations.", metrics.SchemaUpToDate ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_database_reachable",
+            "Whether the Portal database was reachable while composing this metrics snapshot.", 1, labels);
         AppendGauge(sb, "etlsql_portal_metrics_window_hours",
             "Operational metrics lookback window in hours.", metrics.WindowHours, labels);
         AppendGauge(sb, "etlsql_portal_audit_outbox_pending",

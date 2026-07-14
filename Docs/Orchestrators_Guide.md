@@ -1111,7 +1111,8 @@ job count, failed/interrupted count, average execution duration, rows processed,
 and latest local-node host headroom samples for memory, CPU, state-disk free bytes, and spill-disk
 free bytes when host metrics are available. Portal and Orchestrator Prometheus endpoints also export
 component-labeled runtime gauges for process working set, private memory, managed heap bytes, and GC
-collection counts.
+collection counts, plus database-reachable gauges for the backing state store used to compose each
+scrape.
 
 These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventions` contract used by
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with

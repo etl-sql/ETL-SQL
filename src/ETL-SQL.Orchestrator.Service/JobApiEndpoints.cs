@@ -608,6 +608,8 @@ namespace ETL_SQL.Orchestrator.Service
                 "Available Orchestrator execution slots.", metrics.AvailableSlots, labels);
             AppendGauge(sb, "etlsql_orchestrator_processes_active",
                 "Currently active child processes.", activeProcesses, labels);
+            AppendGauge(sb, "etlsql_orchestrator_database_reachable",
+                "Whether the Orchestrator database was reachable while composing this metrics snapshot.", 1, labels);
             AppendGauge(sb, "etlsql_orchestrator_jobs_completed_1h",
                 "Orchestrator jobs completed in the last hour.", completed.Count, labels);
             AppendGauge(sb, "etlsql_orchestrator_jobs_failed_1h",

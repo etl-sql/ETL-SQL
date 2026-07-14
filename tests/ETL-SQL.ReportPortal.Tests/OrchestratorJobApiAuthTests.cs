@@ -141,6 +141,7 @@ public class OrchestratorJobApiAuthTests : IDisposable
         Assert.Contains("etlsql_orchestrator_rows_processed_1h", body);
         Assert.Contains("etlsql_orchestrator_memory_load_percent", body);
         Assert.Contains("etlsql_orchestrator_state_disk_free_bytes", body);
+        Assert.Contains("etlsql_orchestrator_database_reachable", body);
         Assert.Contains("etlsql_runtime_process_working_set_bytes", body);
         Assert.Contains("etlsql_runtime_gc_heap_bytes", body);
         Assert.Contains("etlsql_runtime_gc_collections_gen2_total", body);
