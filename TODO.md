@@ -295,7 +295,7 @@ Operations Control Plane → 4.1 Central fleet management*.
       health metrics.
 - [x] Scope Portal and Orchestrator request logs with request correlation id and trace id, and emit
       `X-Correlation-ID` so logs, audit rows, spans, and client reports can be joined.
-- [ ] Extend correlation coverage to remaining engine and background-service
+- [x] Extend correlation coverage to remaining engine and background-service
       metrics/traces with job IDs, script hashes, policy version/hash, and request correlation IDs.
 - [ ] Keep observability exporters optional and ensure disabled exporters impose negligible
       standalone overhead.

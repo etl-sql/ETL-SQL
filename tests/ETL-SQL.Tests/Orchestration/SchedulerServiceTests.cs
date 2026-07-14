@@ -276,7 +276,7 @@ namespace ETL_SQL.Tests.Orchestration
                 measurements.Add((instrument.Name, value, ToDictionary(tags))));
             meterListener.Start();
 
-            var activity = EngineExecutionObservability.StartExecutionActivity("sha256:engine", "job-a");
+            var activity = EngineExecutionObservability.StartExecutionActivity("sha256:engine", "job-a", "corr-engine-1");
             EngineExecutionObservability.CompleteExecutionActivity(
                 activity,
                 "success",
@@ -293,6 +293,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("engine.execution", span.OperationName);
             Assert.Equal("sha256:engine", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
             Assert.Equal("job-a", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
+            Assert.Equal("corr-engine-1", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.CorrelationId));
             Assert.Equal("4096", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.SpillBytes));
             Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.completed"
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Node, Environment.MachineName)
@@ -302,6 +303,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.spill_bytes" && m.Value == 4096);
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.CorrelationId));
         }
 
         [Fact]

@@ -1135,10 +1135,10 @@ same-named meter. The `orchestrator.policy_refresh` span carries terminal status
 and policy hash when a refresh succeeds; metrics report refresh count and duration with only
 environment, node, component, workload kind, and status labels.
 In-process ETL-SQL engine executions emit spans from `ETL-SQL.Engine` and metrics from the same-named
-meter. The `engine.execution` span carries script hash, optional job correlation, rows, peak memory,
-CPU time, spill bytes, and spill-read bytes; the metrics report execution count, duration, rows,
-memory, CPU, spill writes, and spill reads with environment, node, component, execution mode, workload
-kind, and status labels only.
+meter. The `engine.execution` span carries script hash, optional job id, inherited request correlation
+id when a parent ETL-SQL span has one, rows, peak memory, CPU time, spill bytes, and spill-read bytes;
+the metrics report execution count, duration, rows, memory, CPU, spill writes, and spill reads with
+environment, node, component, execution mode, workload kind, and status labels only.
 Registered connectors emit spans from `ETL-SQL.Connectors` and metrics from the same-named meter for
 version, catalog, and data-source creation operations. Connector telemetry uses connector type,
 operation, status, environment, node, and component labels only; it intentionally omits connection

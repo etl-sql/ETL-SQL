@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Linq;
@@ -8,6 +9,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Engine;
 
 namespace ETL_SQL.Orchestrator.Execution
@@ -42,7 +44,7 @@ namespace ETL_SQL.Orchestrator.Execution
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var workloadKind = string.IsNullOrWhiteSpace(jobName) ? "script" : "job";
             var scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
-            using var activity = EngineExecutionObservability.StartExecutionActivity(scriptHash, jobName);
+            using var activity = EngineExecutionObservability.StartExecutionActivity(scriptHash, jobName, CurrentCorrelationId());
 
             try
             {
@@ -106,6 +108,12 @@ namespace ETL_SQL.Orchestrator.Execution
                     LastEvaluator?.Telemetry.SpillReadBytes ?? 0);
                 return output;
             }
+        }
+
+        private static string? CurrentCorrelationId()
+        {
+            var value = Activity.Current?.GetTagItem(ObservabilityConventions.Tags.CorrelationId)?.ToString();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
         }
     }
 }
