@@ -42,11 +42,11 @@ The enterprise operating model, authority hierarchy, trust boundaries, and progr
 - [x] ~~Surface unsupported version combinations, missing required capabilities, unhealthy dependencies, and policy divergence as actionable findings.~~ Moved to `TODO.md` for v0.16.0 execution.
 
 ##### 4.2 Upgrade orchestration and compatibility
-- [ ] Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.
-- [ ] Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.
-- [ ] Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.
-- [ ] Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.
-- [ ] Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.
+- [x] ~~Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.~~ Moved to `TODO.md` for v0.16.0 execution.
 
 ##### 4.3 Standard observability export
 - [ ] Add first-class OpenTelemetry metrics and traces, plus a Prometheus-compatible metrics endpoint where appropriate.
@@ -147,11 +147,11 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 - [ ] **Phase 4: Tag-Driven Policy Enforcement**
 
 ##### 4.2 Upgrade orchestration and compatibility
-- [ ] Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.
-- [ ] Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.
-- [ ] Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.
-- [ ] Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.
-- [ ] Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.
+- [x] ~~Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary deployment, database migration ownership, compatibility window, health verification, traffic restoration, and rollback decision.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Prevent two nodes from racing to run incompatible migrations; expose migration leader, progress, failure, and recovery state.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Add fleet-wide preflight and postflight reports while leaving package deployment to established tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.~~ Moved to `TODO.md` for v0.16.0 execution.
+- [x] ~~Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the supported compatibility window.~~ Moved to `TODO.md` for v0.16.0 execution.
 
 ##### 4.3 Standard observability export
 - [ ] Add first-class OpenTelemetry metrics and traces, plus a Prometheus-compatible metrics endpoint where appropriate.
@@ -214,6 +214,9 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 - **Allocation Budgets:** Budgeting memory and garbage collection targets at scale (10M / 50M rows and 1B scale certification).
 - **Adaptive Execution Controller:** Adaptive worker admission, concurrency caps, batch/memory grant setpoints, and spill writes.
 
+### Future Candidate Phases
+- [ ] **Schema-Resilient Flat File Modes:** Extend the `FLATFILE` (CSV/Excel) connectors with runtime resilience options such as `IGNORE_EXTRA_COLUMNS = ON`, `NULL_MISSING_COLUMNS = ON`, and `MAP_BY_HEADER_NAME = ON` to gracefully handle structure drifts from vendors without throwing validation crashes.
+
 ---
 
 ## Shared Connection & Secret Governance
@@ -227,6 +230,8 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 
 ### Future Candidate Phases
 - [ ] **Catalog approval workflow (optional):** Propose-and-approve workflow on shared connection creation/update/deletion for organizations that need four-eyes control.
+- [ ] **Connection Diagnostic Engine (`TEST CONNECTION`):** Implement a first-party `TEST CONNECTION <alias>` statement that actively tests DNS resolution, TCP handshake, port blocking, Host Key validation, and credential authentication, outputting a clear, plain-English troubleshooting report.
+- [ ] **SSH & PGP Key Management Portal:** Add a graphical dashboard in the Report Portal for administrators to securely generate, rotate, and export PGP and SSH key pairs, binding them to connection catalog entries.
 
 ---
 
@@ -270,3 +275,15 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 #### Phase 1: Visual Layout & Interaction Enhancements
 - [ ] **Snapshot-Backed Layout Designing:** Allow the Report Designer to load and deserialize the last successfully compiled `.etlsnap` package. Visuals on the grid canvas will render with historical snapshot data instead of empty wireframe placeholders, providing a rich "live-like" design experience without overloading production databases.
 - [ ] **Page-Level Auto-Interactions:** Add support for a page-level default setting to automatically configure cross-visual filtering (e.g., `CREATE PAGE Overview AS DASHBOARD ( INTERACTIONS ( DEFAULT = FILTER ) )`). This will auto-wire click selections on charts that share common source fields, reducing visual-level `INTERACTIONS` boilerplate code.
+
+---
+
+## Developer Experience (IDE & Tooling)
+
+*Enhances authoring efficiency, visual design, and code generation within the VS Code Extension and Terminal UI (TUI).*
+
+### Future Candidate Phases
+
+#### Phase 1: Visual Diagnostics & Intelligent Code Generation
+- [ ] **VS Code Visual Flow (DAG) Webview:** Port the Orchestrator's AST-to-DAG visual rendering engine into a VS Code extension panel. Developers can click "Show Visual Flow" to generate a read-only, interactive diagram of their ETL-SQL pipeline (representing data flowing from flat files, through temp tables and queries, to database targets), replicating the visual flow benefits of SSIS.
+- [ ] **Smart Snippets (Schema-Aware Code Generator):** Extend the Language Server's autocomplete functionality to auto-generate complex query boilerplate. When a developer triggers a smart snippet (e.g., `/upsert`), the editor will query active source and target schemas to auto-generate complete, correctly-mapped `MERGE` or `INSERT SELECT` statements.
