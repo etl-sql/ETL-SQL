@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -78,8 +79,10 @@ public sealed class OperationalMetricsDigestService(
         }
     }
 
-    private async Task SendDigestOnceAsync(OperationalDigestConfig cfg, CancellationToken ct)
+    internal async Task SendDigestOnceAsync(OperationalDigestConfig cfg, CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "operational-digest", "send");
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
         var metricsService = sp.GetRequiredService<OperationalMetricsService>();
@@ -91,6 +94,7 @@ public sealed class OperationalMetricsDigestService(
         if (cfg.AlertOnly && !content.HasAlerts)
         {
             log.LogDebug("Operational digest: alert-only mode and no alerts this interval; not sending.");
+            CompleteDigest(activity, sw, "skipped");
             return;
         }
 
@@ -102,10 +106,24 @@ public sealed class OperationalMetricsDigestService(
             log.LogInformation(
                 "Operational digest sent ({AlertCount} alert(s)) to {Recipients}.",
                 content.Alerts.Count, cfg.Recipients);
+            CompleteDigest(activity, sw, "sent");
         }
         else
         {
             log.LogWarning("Operational digest send failed: {Error}", error);
+            CompleteDigest(activity, sw, "failed");
         }
+    }
+
+    private static void CompleteDigest(System.Diagnostics.Activity? activity, System.Diagnostics.Stopwatch sw, string status)
+    {
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "operational-digest",
+            "send",
+            status,
+            sw.ElapsedMilliseconds);
     }
 }

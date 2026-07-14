@@ -1145,6 +1145,9 @@ error text.
 The Portal orchestrator poller uses the same background-service meter/source for each poll cycle,
 with statuses for degraded, idle, success, and failure. Poller labels intentionally omit
 Orchestrator database paths, job names, subscription ids, report script paths, and error text.
+Operational metrics digest sends also use `ETL-SQL.BackgroundServices`, with sent, skipped, and
+failed statuses. Digest telemetry omits recipients, SMTP aliases, alert text, metric snapshot
+content, message bodies, and delivery errors from labels.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

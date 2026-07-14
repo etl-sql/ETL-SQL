@@ -1,7 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using static ETL_SQL.ReportPortal.Services.OperationalMetricsService;
 
@@ -79,6 +86,58 @@ public sealed class OperationalMetricsDigestTests
         Assert.Contains(content.Alerts, a => a.Contains("queue depth"));
     }
 
+    [Fact]
+    public async Task OperationalDigestService_EmitsLowCardinalityBackgroundTelemetry()
+    {
+        var stoppedActivities = new List<Activity>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == BackgroundServiceObservability.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => stoppedActivities.Add(activity)
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == BackgroundServiceObservability.MeterName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.Start();
+
+        using var factory = new OperationalDigestFactory();
+        var cfg = factory.Services.GetRequiredService<PortalConfig>().OperationalDigest;
+        var service = ActivatorUtilities.CreateInstance<OperationalMetricsDigestService>(
+            factory.Services,
+            NullLogger<OperationalMetricsDigestService>.Instance);
+
+        await service.SendDigestOnceAsync(cfg, CancellationToken.None);
+
+        Assert.Single(factory.Sender.Sent);
+        Assert.Contains(stoppedActivities, activity =>
+            activity.OperationName == "background_service.run"
+            && Tag(activity, ObservabilityConventions.Tags.Component) == "portal"
+            && Tag(activity, ObservabilityConventions.Tags.WorkloadKind) == "background"
+            && Tag(activity, ObservabilityConventions.Tags.ServiceName) == "operational-digest"
+            && Tag(activity, BackgroundServiceObservability.OperationTag) == "send"
+            && Tag(activity, ObservabilityConventions.Tags.Status) == "sent");
+        Assert.Contains(measurements, measurement => measurement.Name == "etlsql.background_service.run.completed"
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.ServiceName, "operational-digest")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "sent"));
+        Assert.DoesNotContain(measurements, measurement => measurement.Tags.Any(tag =>
+            tag.Value is string value
+            && (value.Contains("ops@example.com", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("mailer", StringComparison.OrdinalIgnoreCase))));
+    }
+
     private static OperationalMetrics Metrics(
         int recentExecutions = 10,
         int recentExecutionFailures = 0,
@@ -121,4 +180,51 @@ public sealed class OperationalMetricsDigestTests
             HourlyExecutionLoad: new List<HourlyExecutionLoad>(),
             GeneratedAt: new DateTime(2026, 7, 3, 12, 0, 0, DateTimeKind.Utc),
             WindowHours: 24);
+
+    private sealed class OperationalDigestFactory : PortalWebFactory
+    {
+        public FakeSender Sender { get; } = new();
+
+        protected override void CustomizePortalConfig(PortalConfig config)
+        {
+            config.OperationalDigest.Enabled = true;
+            config.OperationalDigest.AlertOnly = false;
+            config.OperationalDigest.Recipients = "ops@example.com";
+            config.OperationalDigest.SmtpAlias = "mailer";
+        }
+
+        protected override void CustomizeServices(IServiceCollection services)
+        {
+            services.RemoveAll<IAdminNotificationSender>();
+            services.AddSingleton<IAdminNotificationSender>(Sender);
+        }
+    }
+
+    private sealed class FakeSender : IAdminNotificationSender
+    {
+        public List<AdminNotification> Sent { get; } = new();
+
+        public Task<(bool Success, string? Error)> SendAsync(AdminNotification notification, CancellationToken ct)
+        {
+            Sent.Add(notification);
+            return Task.FromResult<(bool, string?)>((true, null));
+        }
+    }
+
+    private static string? Tag(Activity activity, string key)
+    {
+        var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+        return value?.ToString();
+    }
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 }
