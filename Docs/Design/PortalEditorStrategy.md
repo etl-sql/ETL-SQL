@@ -1,92 +1,211 @@
-# Design Strategy: First-Class Web Editing in SaaS & Large-Farm Deployments
+# Design Strategy: First-Class Web Script Editing in the Report Portal
 
-As ETL-SQL scales into large enterprise farms (multiple orchestrators/portals) and SaaS/Cloud multi-tenant models, the developer profile shifts. 
+As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant
+models, the developer profile shifts. Local developers keep VS Code and the TUI, but centralized
+enterprise users and SaaS tenants often **cannot or will not install local desktop tools**. They
+expect to author, lint, test, schedule, and secure pipelines entirely in the browser — inside the
+portal's security boundary, using the connection catalog and secret vault that already live there.
 
-While local developers prefer VS Code and the TUI, centralized enterprise users and SaaS tenants often **cannot or do not want to install local desktop tools**. They expect to author, test, schedule, and secure pipelines entirely within the browser.
+This document sets the strategy for elevating the Portal's script editor to a first-class experience
+and lays out the implementation in independently shippable, bite-size chunks.
 
-This document evaluates whether we should upgrade the Portal's script editor to a "first-class" experience, the architectural trade-offs, and how to implement it safely.
-
----
-
-## 1. The Strategy: Should We Make the Portal Editor "First-Class"?
-
-### The "No" Argument (Keep it Lite)
-* **Accidental Complexity**: Building a web-based IDE (with autocomplete, diagnostics, file explorers, and formatting) is a massive engineering effort. 
-* **Resource Strain**: Running a Language Server (LSP) instance on the server for every active browser session consumes significant CPU and RAM.
-* **The "Local Dev" Preference**: Professional developers hate web editors. They want their local VS Code settings, custom themes, copilot extensions, and local git configurations.
-
-### The "Yes" Argument (SaaS & Governance Reality)
-* **Zero-Install Onboarding**: In a SaaS model, forcing a user to download VS Code, configure a local C# Language Server, set up SSH tunnels, and import connection profiles just to write a simple script is a major barrier to entry.
-* **Centralized Security (Zero-Trust)**: In a secure corporate environment, developers cannot connect local VS Code instances to remote database servers directly due to strict firewall rules. The web portal acts as a **secure proxy gateway**. Authoring scripts directly inside the portal's security boundary (using connection configurations and secrets stored in the portal vault) is highly secure.
-
-### The Verdict
-**Yes, we must elevate the Portal Editor.** We don't need to duplicate VS Code's entire feature set, but a "blind" text box with simple color highlighting (our current CodeMirror 6 setup) is not sufficient for a premium SaaS product. We must offer **intelligent assistance** (linting, schema autocomplete, and cell runs) in the browser.
+> **Reviewer's note (2026-07-14):** An earlier draft framed this as a choice between three packaged
+> options and recommended *Monaco + a per-session Language Server*. That recommendation was
+> reassessed against the architecture we have actually shipped (bounded-resource governance, memory
+> arbiters, leases, per-node heartbeats, connection ACLs, RLS, the audit outbox) and against the code
+> already in the repo. The conclusion changed. The rationale is preserved in §2 so the pivot is
+> auditable. The chosen direction is **CodeMirror 6 + stateless server-side analysis + a schema API**.
 
 ---
 
-## 2. Three Architectural Models for Web Editing
+## 1. Verdict: yes, elevate the editor
 
-To provide a first-class web editing experience without rewriting our entire IDE stack, we can choose between three models:
+A "blind" text box with color highlighting is not enough for a premium SaaS/enterprise product. But
+we do **not** need to duplicate VS Code. The value we must deliver in the browser is:
+
+- **Real-engine diagnostics** — the same lint/parse results a user gets in VS Code and the CLI.
+- **Schema-aware autocomplete** — tables/columns from the connections they are authorized to use.
+- **Safe interactive runs** — bounded, audited, run under the user's security context.
+
+Now that secrets, the connection catalog, RLS, and Governance Core live inside the portal, authoring
+*within that boundary* is a genuine feature, not a nicety — it is the secure alternative to punching
+local VS Code instances through the firewall to production databases.
+
+---
+
+## 2. Decoupling the decision (why not Monaco/Wasm/vscode.dev)
+
+The earlier three "options" conflated three **independent** decisions. Separating them is what makes
+the right path obvious:
+
+| Decision axis | Choices | Our pick | Why |
+| :--- | :--- | :--- | :--- |
+| Editor engine | CodeMirror 6 · Monaco | **CodeMirror 6** | Already shipping (`Shared/designer/codemirror`). Monaco is a rewrite of a working editor for marginal gain; CM6 supports async lint + autocomplete natively. |
+| Where analysis runs | Client (Wasm) · Server | **Server** | The parser/linter is C# in `ETL-SQL.Core`/`ETL-SQL.Analysis`. Wasm ships a multi-MB .NET runtime + a second build target for a *latency* win, not a capability. |
+| Session model | Persistent LSP session · Stateless request | **Stateless request** | A process-per-session C# Language Server is exactly the unbounded, noisy-neighbor, cross-tenant-isolation liability our governance model exists to prevent. |
+
+Consequences for the packaged options in the earlier draft:
+
+- **Monaco + per-session LSP — rejected.** Spawning a stateful `ETL-SQL.LanguageServer` **process per
+  active browser session** on a shared farm contradicts bounded-resource governance; "kill after 10
+  min idle" is a band-aid. Our `LanguageServer` is also a thin **stdio shell for one local VS Code
+  user** (per-instance `DocumentStateStore`); it is not a multi-session server component. The reusable
+  core is `ETL-SQL.Analysis`, invoked as a library — which is exactly what the stateless endpoints do.
+- **vscode.dev in an iframe — deferred.** By its own description it *still* needs the C# LSP in Wasm,
+  so it inherits the Wasm cost **plus** iframe/PWA/branding/licensing complexity.
+- **Wasm client-side parser — deferred (not rejected).** Its stated weakness ("no schema autocomplete
+  without network calls") is a false constraint: schema autocomplete is *always* a network call in any
+  web editor, because schemas live in the catalog/DB, not the browser. Wasm's real trade is a heavy
+  payload for zero-latency *local* lint. Keep it on the shelf as a future latency optimization.
+
+**Chosen approach: CodeMirror 6 + stateless server-side analysis + a schema API.** It reuses shipping
+code, is horizontally scalable (fits the LB/HA/farm model), runs inside the portal security boundary,
+and honors bounded-resource governance instead of fighting it. We already prove the pattern:
+`POST /api/designer/parse` runs the real C# parser statelessly over HTTP today.
+
+---
+
+## 3. Target architecture
 
 ```
-Option 1: Monaco Editor + LSP-over-WebSockets (Recommended)
-─────────────────────────────────────────────────────────────────────────────
-Browser (Monaco) ──▶ WebSocket ──▶ Portal Server ──▶ C# Language Server (LSP)
-
-Option 2: VS Code Web (vscode.dev) Integration
-─────────────────────────────────────────────────────────────────────────────
-Portal UI ──▶ IFrame Webview ──▶ vscode.dev + ETL-SQL Web Extension
-
-Option 3: WebAssembly (Wasm) Client-Side Parser
-─────────────────────────────────────────────────────────────────────────────
-Browser (CodeMirror) ──▶ Runs C# Parser compiled to Wasm locally in browser
+Browser (CodeMirror 6)                         Portal Server (stateless, per-request)
+──────────────────────────                     ─────────────────────────────────────────
+  edit buffer
+    │  debounced POST /api/designer/analyze ──▶ ETL-SQL.Analysis Linter + Core Parser
+    │                                    ◀────── AnalysisDiagnostic[]  (squiggles + gutter)
+    │
+    │  POST /api/designer/complete ───────────▶ completion engine + cached schema snapshot
+    │        (script, line, col, connRef) ◀──── CompletionItem[]      (autocomplete popup)
+    │
+    │  POST /api/designer/run  ───────────────▶ engine run, TOP 100 clamp, 15s timeout,
+    │        (selection, connRef)               user security ctx (RLS), MemoryGrantArbiter
+    │                                    ◀────── capped result grid  +  AD_HOC_RUN audit row
+    │
+    └─ POST /api/designer/save ───────────────▶ portal script store  (or git commit-on-behalf)
 ```
 
-### Option 1: Monaco Editor + LSP-over-WebSockets (The Standard Approach)
-Monaco is the editor engine that powers VS Code. It runs natively in the browser.
-* **How it works**: We replace CodeMirror with Monaco in the Portal UI. When a user opens a script, the browser establishes a WebSocket connection back to the Portal server. The Portal launches a lightweight C# Language Server (`ETL-SQL.LanguageServer`) and proxies the LSP JSON-RPC messages over the WebSocket.
-* **Gains**: The developer gets the **exact same autocompletes, diagnostics, and hover descriptions** in the browser as they do in VS Code, because both editors are talking to the same C# Language Server.
-* **Losses**: Server resource usage increases linearly with active editor sessions.
-
-### Option 2: VS Code Web (vscode.dev) Integration (The SaaS Leader Approach)
-Microsoft allows running VS Code entirely in the browser (vscode.dev) as a Progressive Web App (PWA).
-* **How it works**: We package our VS Code Extension as a **Web Extension** (running in the browser's JS sandbox). We embed a customized vscode.dev instance inside the Report Portal inside an iframe.
-* **Gains**: 100% identical experience to desktop VS Code. Zero duplicate code (the same extension works on desktop and web). Zero server-side LSP resource footprint (everything runs client-side in the browser).
-* **Losses**: Higher initial setup complexity to package the C# Language Server components to run client-side in WebAssembly.
-
-### Option 3: CodeMirror 6 + Wasm Parser (The Lightweight Approach)
-Keep the lightweight CodeMirror editor, but compile the C# parser/linter assembly to WebAssembly.
-* **How it works**: The browser runs the Wasm parser locally. As the user types, the Wasm code compiles the AST, runs linter checks, and highlights syntax errors locally.
-* **Gains**: Extremely fast (zero network latency for syntax checks), zero server load.
-* **Losses**: No database schema autocomplete (the Wasm parser doesn't have access to active database connection schemas without making network calls).
+No persistent per-session process. Every call is authenticated, authorized against connection-use
+ACLs, rate-limited, and stateless — position and connection reference travel *in the request*, not in
+server-side document state.
 
 ---
 
-## 3. SaaS Constraints: Resource Throttling & Security
+## 4. Implementation — bite-size chunks
 
-If developers can write and run scripts directly in the browser on a shared SaaS farm, we must enforce strict guardrails:
+Each chunk is independently shippable and testable. Phases A→B deliver the "intelligent assistance"
+promise; C→D add safe interactive execution and source control; E is polish. Reuse is called out per
+chunk so we are not rebuilding what already ships.
 
-1. **Design-Time Query Throttling**:
-   - In-editor "Run Cell" executions must not bog down the portal.
-   - We must enforce a strict `TOP 100` limit on all queries executed interactively in the web designer.
-   - Interactive queries should run in isolated worker threads with short timeouts (e.g. max 15 seconds).
-2. **Strict RLS & Auditing**:
-   - Every interactive run must be audited (`AuditLog` event: `AD_HOC_RUN`) and run under the security context of the logged-in portal user (applying `@@CURRENT_USER` and row-level security predicates).
-3. **Write-Back to Source Control**:
-   - If the portal is configured with a Git backend, saving a script in the web editor should execute a Git commit on behalf of the user, ensuring the "source-controlled report" promise is preserved.
+### Phase A — Real-engine diagnostics (highest value, lowest risk)
+
+- [ ] **A1 — `POST /api/designer/analyze` endpoint.** New action alongside `DesignerController.Parse`.
+  Request `{ script, dialect?, connectionRef? }`; tokenize → `Core.Parser.Parser.Parse()` →
+  `LinterFactory.CreateWithAllRules(sp)` → `Linter.AnalyzeAsync(script, context)`. Map results to a
+  wire shape mirroring `AnalysisDiagnostic` (`startLine/startColumn/endLine/endColumn/severity/message/
+  code/source`). Authenticated, `[EnableRateLimiting]`, stateless, no process spawned. *Reuse:*
+  `ETL-SQL.Analysis` (~50 rules incl. `SchemaValidationRule`, `GovernancePolicyRule`,
+  `CredentialLeakRule`, `AvoidSelectStarRule`), and the `/parse` request/DI pattern.
+- [ ] **A2 — CodeMirror lint source.** Extend the canonical `Shared/designer/codemirror` bundle to
+  include `@codemirror/lint`; add a debounced (~400 ms), cancel-on-keystroke async linter that POSTs
+  the buffer to `/analyze` and maps diagnostics to CM `Diagnostic[]` (severity → squiggle + gutter
+  marker + hover message). Edit the canonical asset, then `node scripts/sync-assets.js`.
+- [ ] **A3 — Parity test.** Golden test: a fixture script produces byte-identical diagnostics through
+  `/analyze` and through the CLI `lint` path, proving the "same engine as VS Code" promise and
+  guarding against drift.
+
+### Phase B — Schema-aware autocomplete
+
+- [ ] **B1 — Cached schema snapshot service.** `GET /api/designer/schema?connection=<ref>` returns
+  `{ tables:[{ name, columns:[{name,type}] }] }` for a connection the caller is **authorized to use**
+  (connection-use ACL check first). Introspect via the connector; cache per connection with a TTL and
+  explicit invalidate. *Reuse:* connection catalog + ACLs; the existing schema-suggestion metadata
+  (`SuggestionType.Table/Column`).
+- [ ] **B2 — Stateless completion endpoint + CM source.** `POST /api/designer/complete { script, line,
+  column, connectionRef }` runs the existing completion/suggestion engine server-side (position in the
+  request, no synced document) and returns `CompletionItem[]`. Wire CodeMirror `@codemirror/autocomplete`
+  as an async source that is context-aware (after `FROM`/`JOIN` → tables; after `alias.` → columns;
+  otherwise keywords/functions). *Reuse:* `CompletionProvider` logic from `ETL-SQL.LanguageServer`,
+  refactored into an `ETL-SQL.Analysis` service callable without an LSP session.
+- [ ] **B3 — Completion governance.** Suggestions expose only connections/tables the caller may use;
+  never surface schema for unauthorized connections and never surface secret values. Add a test that
+  an unauthorized `connectionRef` yields `403`/empty, never a schema leak.
+
+### Phase C — Interactive "Run selection" (the genuinely risky part — govern it hard)
+
+- [ ] **C1 — `POST /api/designer/run` with server-enforced limits.** Execute the selected statement
+  under a **server-clamped `TOP 100`** (rewrite/wrap — never trust a client-supplied limit), a 15 s
+  timeout, and a per-run `MemoryGrantArbiter` ceiling. *Reuse:* the engine execution path + memory
+  arbiter; isolate on a worker with the timeout as a hard cancel.
+- [ ] **C2 — Caller security context.** Run as the logged-in portal user: apply RLS predicates and
+  identity vars (`@@CURRENT_USER`, `USER_GROUPS()`), and resolve the connection + secrets from the
+  catalog/vault — **never** from client-supplied credentials. *Reuse:* RLS scan + identity var
+  plumbing; `SECRET:` resolution.
+- [ ] **C3 — Audit every run.** Emit an `AD_HOC_RUN` audit event (actor, connection, sanitized query,
+  row count, elapsed) through the durable audit outbox. *Reuse:* `AuditService` + outbox.
+- [ ] **C4 — Result panel.** Render the capped grid with the shared report-runtime table (tabulator),
+  showing "capped at 100 rows" and timing. *Reuse:* `Shared` report-runtime grid.
+
+### Phase D — Source-control write-back (only when a git backend is configured)
+
+- [ ] **D1 — Commit-on-save.** When the portal has a git backend, `POST /api/designer/save` commits on
+  behalf of the user (commit author = portal identity; push via a service token), preserving the
+  "source-controlled report" promise. When no git backend, save to the portal script store as today.
+- [ ] **D2 — Concurrency safety.** Track the base revision the edit started from; on save detect a
+  changed head and surface a refresh/merge path — never silently overwrite a newer commit.
+- [ ] **D3 — Audit + authz.** Saving/committing is authorized (author role) and audited; secrets are
+  never written into committed script text.
+
+### Phase E — Editor UX polish (CodeMirror, not Monaco)
+
+- [ ] **E1 — First-class editing affordances.** Bracket matching, keyword/function highlight (extend
+  the designer language mode), a diagnostics panel listing A1 results, and format-on-save if/when a
+  formatter exists.
+- [ ] **E2 — Commands & keybindings.** Command palette + shortcuts for Run selection, Format, and
+  Save/commit, mirroring the VS Code command names so muscle memory transfers.
 
 ---
 
-### Recommendation: Monaco + LSP-over-WebSockets
+## 5. Cross-cutting guardrails (SaaS / multi-tenant)
 
-For Phase 1 of our SaaS model, **Option 1 (Monaco + LSP-over-WebSockets)** is the most logical path. 
-- It allows us to reuse the existing C# Language Server binary compiled for the server without rewriting it in WebAssembly.
-- Monaco provides a premium, familiar editor interface that makes the Report Portal feel like a state-of-the-art BI engineering platform.
-- We can mitigate server resource load by starting the LSP process lazily on editor open, and killing it after 10 minutes of idle inactivity.
+These apply to every chunk above and are the part that most deserves scrutiny — interactive execution
+in a shared tenant is where the real risk lives, not the editor engine.
+
+1. **Design-time throttling is server-enforced.** `TOP 100`, the 15 s timeout, and the memory ceiling
+   live on the server (C1); the client editor is never trusted to impose them.
+2. **Every interactive run is audited and identity-bound.** `AD_HOC_RUN` under the caller's security
+   context with RLS applied (C2/C3).
+3. **Authorization rides existing ACLs.** Analyze/complete/run/schema all check connection-use ACLs and
+   never expose a connection, schema, or secret the caller is not entitled to.
+4. **Statelessness is a requirement, not an accident.** No per-session server process and no server-held
+   document — this is what lets the editor scale behind the load balancer across farm nodes.
+
+---
+
+## 6. Explicitly deferred (revisit on evidence, not by default)
+
+- **Wasm client-side parser** — reconsider only if measured `/analyze` round-trip latency is a real
+  annoyance. It is a latency optimization for syntax-only lint, at the cost of a .NET-on-Wasm payload
+  and a second compilation target.
+- **Monaco swap** — reconsider only on a concrete CodeMirror 6 limitation we actually hit.
+- **vscode.dev iframe** — parked; inherits the Wasm cost plus PWA/iframe/licensing complexity.
+- **True incremental LSP** (live hover, go-to-definition, multi-file) — if demand appears, back it with
+  a **pooled, stateless analyzer service**, never a process-per-session. The LSP protocol is fine; the
+  process-per-session model is the part we are avoiding.
+
+---
+
+## 7. Sequencing
+
+Ship **A → B** first: that alone converts the "blind text box" into an editor with the same
+diagnostics and schema awareness as VS Code, entirely within the portal boundary, with no new
+long-lived server resources. **C** unlocks interactive validation but carries the security/resource
+weight, so it lands only once its guardrails (§5) are in place. **D/E** are incremental polish. Wasm
+and Monaco stay on the shelf unless evidence pulls them forward.
 
 ---
 
 ### References
 - [Language Server Architecture](../Architecture/LanguageServer.md)
-- [Portal UI - Lite Editor Strategy](../Architecture/PortalUI.md#5-technology-choices)
+- [Portal UI — Lite Editor & technology choices](../Architecture/PortalUI.md#5-technology-choices)
+- [Report Portal architecture (auth, API, middleware)](../Architecture/ReportPortal.md)
 - [Zero-Trust Operations & Security](../Standards/Connectors_Standards.md)
