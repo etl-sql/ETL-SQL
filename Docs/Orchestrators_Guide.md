@@ -1125,6 +1125,10 @@ Enterprise policy refresh attempts emit spans from `ETL-SQL.Orchestrator.Policy`
 same-named meter. The `orchestrator.policy_refresh` span carries terminal status plus policy version
 and policy hash when a refresh succeeds; metrics report refresh count and duration with only
 environment, component, workload kind, and status labels.
+In-process ETL-SQL engine executions emit spans from `ETL-SQL.Engine` and metrics from the same-named
+meter. The `engine.execution` span carries script hash, optional job correlation, rows, peak memory,
+CPU time, spill bytes, and spill-read bytes; the metrics report execution count, duration, rows,
+memory, CPU, spill writes, and spill reads with low-cardinality labels only.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

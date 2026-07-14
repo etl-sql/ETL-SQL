@@ -1,4 +1,6 @@
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,6 +39,10 @@ namespace ETL_SQL.Orchestrator.Execution
             var process = System.Diagnostics.Process.GetCurrentProcess();
             var startCpu = process.TotalProcessorTime.TotalSeconds;
             var runAt = DateTime.UtcNow;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var workloadKind = string.IsNullOrWhiteSpace(jobName) ? "script" : "job";
+            var scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
+            using var activity = EngineExecutionObservability.StartExecutionActivity(scriptHash, jobName);
 
             try
             {
@@ -65,16 +71,40 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
-
-                return new ScriptExecutionResult(result.Success, result.RowsProcessed,
+                var output = new ScriptExecutionResult(result.Success, result.RowsProcessed,
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
                     process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                sw.Stop();
+                EngineExecutionObservability.CompleteExecutionActivity(
+                    activity,
+                    result.Success ? "success" : "failure",
+                    workloadKind,
+                    sw.ElapsedMilliseconds,
+                    output.RowsProcessed,
+                    output.PeakMemoryBytes,
+                    output.CpuTimeSeconds,
+                    LastEvaluator?.Telemetry.TotalSpilledBytes ?? 0,
+                    LastEvaluator?.Telemetry.SpillReadBytes ?? 0);
+
+                return output;
             }
             catch (Exception ex)
             {
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
-                return new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message), process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                var output = new ScriptExecutionResult(false, 0, SecretRedactor.Redact(ex.Message), process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
+                sw.Stop();
+                EngineExecutionObservability.CompleteExecutionActivity(
+                    activity,
+                    "failure",
+                    workloadKind,
+                    sw.ElapsedMilliseconds,
+                    output.RowsProcessed,
+                    output.PeakMemoryBytes,
+                    output.CpuTimeSeconds,
+                    LastEvaluator?.Telemetry.TotalSpilledBytes ?? 0,
+                    LastEvaluator?.Telemetry.SpillReadBytes ?? 0);
+                return output;
             }
         }
     }

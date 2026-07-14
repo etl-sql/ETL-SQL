@@ -248,13 +248,17 @@ Operations Control Plane → 4.1 Central fleet management*.
       peak memory, and CPU time while keeping metrics labels low-cardinality.
 - [x] Extend first-class OpenTelemetry metrics/traces to Orchestrator enterprise policy-refresh
       attempts, with policy version/hash on traces and low-cardinality status metrics.
-- [ ] Extend first-class OpenTelemetry metrics/traces to engine, dataset, connector, and remaining
+- [x] Extend first-class OpenTelemetry metrics/traces to in-process engine script executions with
+      script hash/job correlation on traces and terminal rows, CPU, memory, spill write, and spill
+      read metrics.
+- [ ] Extend first-class OpenTelemetry metrics/traces to dataset, connector, and remaining
       background-service workloads without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine, dataset, connector, policy, and workload-class
       metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
-      spill, connector latency, retries, failures, storage growth, database pool health, policy
-      refresh, audit/security backlog, and delivery health.
+      connector latency, retries, failures, storage growth, database pool health, and any remaining
+      dataset/background-service health not already covered by Portal, Orchestrator, engine spill,
+      policy refresh, audit/security backlog, and delivery health metrics.
 - [x] Scope Portal and Orchestrator request logs with request correlation id and trace id, and emit
       `X-Correlation-ID` so logs, audit rows, spans, and client reports can be joined.
 - [ ] Extend correlation coverage to remaining engine, connector, dataset, and background-service

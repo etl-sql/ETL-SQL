@@ -117,8 +117,11 @@ namespace ETL_SQL.Tests.Orchestration
         private static bool Invoked<T>(Mock<T> mock, string method) where T : class
             => mock.Invocations.Any(i => i.Method.Name == method);
 
-        private static string? Tag(Activity activity, string key) =>
-            activity.Tags.FirstOrDefault(t => t.Key == key).Value;
+        private static string? Tag(Activity activity, string key)
+        {
+            var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+            return value?.ToString();
+        }
 
         private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
         {
@@ -236,6 +239,60 @@ namespace ETL_SQL.Tests.Orchestration
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "policy-refresh"));
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyVersion));
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyHash));
+        }
+
+        [Fact]
+        public void EngineExecutionObservability_EmitsEngineSpanAndLowCardinalityMetrics()
+        {
+            var stoppedActivities = new List<Activity>();
+            using var activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == EngineExecutionObservability.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStopped = activity => stoppedActivities.Add(activity)
+            };
+            ActivitySource.AddActivityListener(activityListener);
+
+            var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+            using var meterListener = new MeterListener
+            {
+                InstrumentPublished = (instrument, listener) =>
+                {
+                    if (instrument.Meter.Name == EngineExecutionObservability.MeterName)
+                        listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.Start();
+
+            var activity = EngineExecutionObservability.StartExecutionActivity("sha256:engine", "job-a");
+            EngineExecutionObservability.CompleteExecutionActivity(
+                activity,
+                "success",
+                "job",
+                durationMs: 100,
+                rowsProcessed: 12,
+                peakMemoryBytes: 2048,
+                cpuTimeSeconds: 0.5,
+                spillBytes: 4096,
+                spillReadBytes: 1024);
+            activity?.Dispose();
+
+            var span = Assert.Single(stoppedActivities);
+            Assert.Equal("engine.execution", span.OperationName);
+            Assert.Equal("sha256:engine", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
+            Assert.Equal("job-a", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
+            Assert.Equal("4096", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.SpillBytes));
+            Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "engine")
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "success")
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "job"));
+            Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.spill_bytes" && m.Value == 4096);
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
+            Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
         }
 
         [Fact]
