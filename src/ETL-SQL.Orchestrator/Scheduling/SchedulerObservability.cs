@@ -22,6 +22,10 @@ internal static class SchedulerObservability
         Meter.CreateHistogram<long>("etlsql.orchestrator.scheduled_job.peak_memory_bytes");
     private static readonly Histogram<double> JobCpuTimeSeconds =
         Meter.CreateHistogram<double>("etlsql.orchestrator.scheduled_job.cpu_time_seconds");
+    private static readonly Histogram<long> JobQueueWaitMs =
+        Meter.CreateHistogram<long>("etlsql.orchestrator.scheduled_job.queue_wait_ms");
+    private static readonly Histogram<long> JobAttempts =
+        Meter.CreateHistogram<long>("etlsql.orchestrator.scheduled_job.attempts");
 
     public static Activity? StartScheduledJobActivity(long historyId, string scriptHash, int attempt)
     {
@@ -38,12 +42,12 @@ internal static class SchedulerObservability
         if (historyId > 0)
             activity.SetTag(ObservabilityConventions.Tags.JobId, historyId.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (attempt > 0)
-            activity.SetTag("etlsql.job.attempt", attempt);
+            activity.SetTag(ObservabilityConventions.Tags.JobAttempt, attempt);
         return activity;
     }
 
     public static void CompleteScheduledJobActivity(Activity? activity, string status, long durationMs,
-        long rowsProcessed, long peakMemoryBytes, double cpuTimeSeconds)
+        long rowsProcessed, long peakMemoryBytes, double cpuTimeSeconds, long queueWaitMs = 0, int attempt = 0)
     {
         if (activity is not null)
         {
@@ -51,6 +55,7 @@ internal static class SchedulerObservability
             activity.SetTag(ObservabilityConventions.Tags.RowsProcessed, rowsProcessed);
             activity.SetTag(ObservabilityConventions.Tags.PeakMemoryBytes, peakMemoryBytes);
             activity.SetTag(ObservabilityConventions.Tags.CpuTimeSeconds, cpuTimeSeconds);
+            activity.SetTag(ObservabilityConventions.Tags.QueueWaitMs, Math.Max(0, queueWaitMs));
             activity.SetStatus(status is "SUCCESS" ? ActivityStatusCode.Ok : ActivityStatusCode.Error);
         }
 
@@ -69,5 +74,7 @@ internal static class SchedulerObservability
         JobRowsProcessed.Record(Math.Max(0, rowsProcessed), tags);
         JobPeakMemoryBytes.Record(Math.Max(0, peakMemoryBytes), tags);
         JobCpuTimeSeconds.Record(Math.Max(0, cpuTimeSeconds), tags);
+        JobQueueWaitMs.Record(Math.Max(0, queueWaitMs), tags);
+        JobAttempts.Record(Math.Max(0, attempt), tags);
     }
 }

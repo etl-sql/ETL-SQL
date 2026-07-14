@@ -432,12 +432,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     long attemptRows = 0;
                     long attemptPeakMemory = 0;
                     double attemptCpuSeconds = 0;
+                    long attemptQueueWaitMs = 0;
                     try
                     {
                         var throttleSw = System.Diagnostics.Stopwatch.StartNew();
                         using var slot = await _throttle.AcquireAsync(job.Name, cycleCts.Token);
                         throttleSw.Stop();
                         var queueWaitMs = throttleSw.ElapsedMilliseconds;
+                        attemptQueueWaitMs = queueWaitMs;
                         _logger.LogInformation("Job {JobName} acquired throttle slot. Queue wait: {QueueWaitMs} ms.", job.Name, queueWaitMs);
                         using var scope = _serviceProvider.CreateScope();
                         var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
@@ -496,7 +498,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
                             attemptSw.ElapsedMilliseconds,
                             attemptRows,
                             attemptPeakMemory,
-                            attemptCpuSeconds);
+                            attemptCpuSeconds,
+                            attemptQueueWaitMs,
+                            attempt);
                     }
 
                     if (attempt < maxAttempts)

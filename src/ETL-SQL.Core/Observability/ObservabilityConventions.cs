@@ -25,6 +25,8 @@ public static class ObservabilityConventions
         public const string RowsProcessed = "etlsql.rows_processed";
         public const string PeakMemoryBytes = "etlsql.peak_memory_bytes";
         public const string CpuTimeSeconds = "etlsql.cpu_time_seconds";
+        public const string QueueWaitMs = "etlsql.queue_wait_ms";
+        public const string JobAttempt = "etlsql.job.attempt";
         public const string SpillBytes = "etlsql.spill_bytes";
         public const string SpillReadBytes = "etlsql.spill_read_bytes";
         public const string ScriptHash = "etlsql.script_hash";

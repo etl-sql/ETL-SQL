@@ -1127,6 +1127,8 @@ Scheduled and manually triggered persisted jobs emit the same pattern from `ETL-
 the `orchestrator.scheduled_job` span carries the durable history id as `etlsql.job.id`, script
 hash, attempt number, status, rows, peak memory, and CPU time, while metrics keep job id and script
 hash out of labels and include environment, node, component, workload kind, execution mode, and status.
+Scheduled-job metrics also record queue-wait milliseconds and attempt-number histograms using those
+same bounded labels.
 Enterprise policy refresh attempts emit spans from `ETL-SQL.Orchestrator.Policy` and metrics from the
 same-named meter. The `orchestrator.policy_refresh` span carries terminal status plus policy version
 and policy hash when a refresh succeeds; metrics report refresh count and duration with only

@@ -168,7 +168,9 @@ namespace ETL_SQL.Tests.Orchestration
                 durationMs: 50,
                 rowsProcessed: 77,
                 peakMemoryBytes: 4096,
-                cpuTimeSeconds: 0.75);
+                cpuTimeSeconds: 0.75,
+                queueWaitMs: 15,
+                attempt: 2);
             activity?.Dispose();
 
             var span = Assert.Single(stoppedActivities);
@@ -176,12 +178,16 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("99", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
             Assert.Equal("sha256:abc123", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
             Assert.Equal("SUCCESS", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status));
+            Assert.Equal("2", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobAttempt));
+            Assert.Equal("15", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.QueueWaitMs));
             Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.scheduled_job.completed"
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "orchestrator")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "SUCCESS")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "scheduled"));
             Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.scheduled_job.rows_processed" && m.Value == 77);
+            Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.scheduled_job.queue_wait_ms" && m.Value == 15);
+            Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.scheduled_job.attempts" && m.Value == 2);
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
             Assert.DoesNotContain(measurements, m => m.Tags.ContainsKey(ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
         }
