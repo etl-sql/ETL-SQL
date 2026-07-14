@@ -94,6 +94,16 @@ public interface IConnector
     /// <summary>Returns the target host for network-based connectors to support egress validation.</summary>
     string? GetHost(string connectionString, Dictionary<string, string>? options = null) => null;
 
+    /// <summary>
+    /// Returns the network endpoint used by the Connection Diagnostic Engine (TEST CONNECTION) to
+    /// actively probe reachability: the target host, TCP port, and whether a TLS handshake is
+    /// expected on connect. Returns <c>null</c> for file-based / non-network connectors, or when the
+    /// port cannot be determined — in which case the diagnostic falls back to <see cref="GetHost"/>
+    /// plus a PORT option / default-port lookup. Network connectors may override to supply the exact
+    /// endpoint (e.g. after resolving instance names or default ports).
+    /// </summary>
+    (string Host, int Port, bool ExpectTls)? GetProbeEndpoint(string connectionString, Dictionary<string, string>? options = null) => null;
+
     /// <summary>Returns true if the connector is file-based (e.g., CSV, Parquet, SQLite), requiring path resolution.</summary>
     bool IsFileBased => false;
 

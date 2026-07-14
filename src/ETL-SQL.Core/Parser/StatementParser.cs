@@ -195,6 +195,26 @@ public class StatementParser
             };
         }
 
+        // TEST CONNECTION <alias> [INTO #tmp] — TEST is a soft keyword (not reserved in the lexer),
+        // recognized only when immediately followed by CONNECTION, so scripts using "test" as an
+        // identifier/table name continue to parse.
+        if (type == TokenType.IDENTIFIER
+            && _parser.Current.Value.Equals("TEST", System.StringComparison.OrdinalIgnoreCase)
+            && _parser.Peek.Type == TokenType.CONNECTION)
+        {
+            var testTok = _parser.Advance();          // TEST
+            _parser.Advance();                        // CONNECTION
+            var alias = _parser.ConsumeIdentifier("Expected connection name after TEST CONNECTION").Value;
+            string? into = null;
+            if (_parser.Match(TokenType.INTO))
+            {
+                into = _parser.ConsumeIdentifier("Expected temporary table name after INTO").Value;
+                if (!into.StartsWith('#'))
+                    throw new SyntaxException("TEST CONNECTION ... INTO target must be a temporary table starting with '#'", _parser.Current.Line, _parser.Current.Column);
+            }
+            return new TestConnectionStatement(alias, into) { Line = testTok.Line, Column = testTok.Column };
+        }
+
         if (_dispatchMap.TryGetValue(type, out var handler))
         {
             _parser.Advance();

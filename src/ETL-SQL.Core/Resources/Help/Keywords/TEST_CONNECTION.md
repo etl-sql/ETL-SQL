@@ -1,0 +1,42 @@
+# TEST CONNECTION
+Actively diagnoses a catalog connection and prints a plain-English troubleshooting report. Layers are checked in order — DNS resolution → TCP reachability → TLS handshake — and the report stops at the first failure with a specific remedy.
+
+## Syntax
+```sql
+TEST CONNECTION <alias>;
+TEST CONNECTION <alias> INTO #results;   -- capture the report as a table instead of printing
+```
+
+## Example
+```sql
+CREATE CONNECTION ProdDB AS MSSQL (
+  SERVER   = 'sql-prod.corp',
+  DATABASE = 'Sales',
+  PORT     = 1433,
+  ENCRYPT  = true,
+  PASSWORD = 'SECRET:prod-db'
+);
+
+TEST CONNECTION ProdDB;
+```
+```
+Connection diagnostic for 'ProdDB' (MSSQL):
+  [ OK ] POLICY  Destination permitted by active security policy.
+  [ OK ] DNS     'sql-prod.corp' resolved to 10.2.4.9.
+  [ OK ] TCP     Port 1433 on sql-prod.corp is reachable.
+  [ OK ] TLS     TLS handshake succeeded (Tls13); certificate 'CN=sql-prod.corp' valid until 2027-01-30.
+  [ -- ] AUTH    Credential authentication was not probed.
+Result: all attempted checks passed.
+```
+
+## Notes
+- **Governed like a real connection.** Probing routes through the same egress controls as an actual connect: the destination connector type and host are re-authorized against the active security policy *before any packet is sent*, and each resolved address is re-checked at connect time to block DNS rebinding to internal ranges. A policy denial is reported as a `DENY` step and no probe runs.
+- **Secrets are never echoed** in the report, including in error text.
+- **Credential authentication is not probed** in this release — run a query to confirm the credentials are accepted.
+- File-based / local connectors (CSV, Parquet, SQLite) report the network layers as not applicable.
+- The TCP layer needs a port: it is taken from the connector, then a `PORT` option, then a well-known default. If none is known, the TCP check is skipped with guidance to add `PORT`.
+- The connect timeout is governed by `Engine:Diagnostics:ProbeTimeoutSeconds` (default 5).
+- See: CREATE CONNECTION, SHOW CONNECTION, ALTER CONNECTION
+
+References:
+- [Grammar](../../../../../Docs/Reference/Grammar.md)

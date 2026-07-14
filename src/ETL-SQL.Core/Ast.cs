@@ -2260,6 +2260,12 @@ public sealed record ShowConnectionConfigStatement : Statement
     public ShowConnectionConfigStatement(string connectionName) { ConnectionName = connectionName; }
 }
 
+/// <summary>
+/// TEST CONNECTION &lt;alias&gt; — actively runs a governed, layered diagnostic (DNS → TCP → TLS)
+/// against a catalog connection and reports a plain-English troubleshooting result.
+/// </summary>
+public sealed record TestConnectionStatement(string ConnectionName, string? IntoTable = null) : Statement;
+
 public sealed record ShowTablesStatement : Statement
 {
     public string? ConnectionName { get; }
