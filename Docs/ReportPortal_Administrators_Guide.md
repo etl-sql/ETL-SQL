@@ -833,7 +833,7 @@ parameter values, SQL text, or connection metadata as tags.
 
 The same service exposes first-class `System.Diagnostics.Metrics` instruments from meter
 `ETL-SQL.ReportPortal` for terminal execution count, duration, rows processed, peak memory, and CPU
-time. Metric tags intentionally stay low-cardinality: environment, component, workload kind,
+time. Metric tags intentionally stay low-cardinality: environment, node, component, workload kind,
 execution mode, and terminal status. Job id, report id, user id, and script hash remain trace-only
 correlation fields.
 

@@ -58,6 +58,7 @@ internal static class OrchestratorObservability
         var tags = new TagList
         {
             { ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { ObservabilityConventions.Tags.Node, Environment.MachineName },
             { ObservabilityConventions.Tags.Component, "orchestrator" },
             { ObservabilityConventions.Tags.ExecutionMode, "orchestrator" },
             { ObservabilityConventions.Tags.WorkloadKind, "ad-hoc" },

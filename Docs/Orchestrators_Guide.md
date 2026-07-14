@@ -1116,26 +1116,27 @@ Ad-hoc jobs submitted through `POST /jobs` also emit `System.Diagnostics.Activit
 meter. The `orchestrator.job` span carries job id, request correlation id, environment, node,
 component, workload kind, execution mode, status, rows, peak memory, and CPU time for trace
 correlation. Metrics cover completed job count, duration, rows processed, peak memory, and CPU time
-with low-cardinality tags only: environment, component, workload kind, execution mode, and status.
+with low-cardinality tags only: environment, node, component, workload kind, execution mode, and status.
 Scheduled and manually triggered persisted jobs emit the same pattern from `ETL-SQL.Orchestrator`:
 the `orchestrator.scheduled_job` span carries the durable history id as `etlsql.job.id`, script
 hash, attempt number, status, rows, peak memory, and CPU time, while metrics keep job id and script
-hash out of labels.
+hash out of labels and include environment, node, component, workload kind, execution mode, and status.
 Enterprise policy refresh attempts emit spans from `ETL-SQL.Orchestrator.Policy` and metrics from the
 same-named meter. The `orchestrator.policy_refresh` span carries terminal status plus policy version
 and policy hash when a refresh succeeds; metrics report refresh count and duration with only
-environment, component, workload kind, and status labels.
+environment, node, component, workload kind, and status labels.
 In-process ETL-SQL engine executions emit spans from `ETL-SQL.Engine` and metrics from the same-named
 meter. The `engine.execution` span carries script hash, optional job correlation, rows, peak memory,
 CPU time, spill bytes, and spill-read bytes; the metrics report execution count, duration, rows,
-memory, CPU, spill writes, and spill reads with low-cardinality labels only.
+memory, CPU, spill writes, and spill reads with environment, node, component, execution mode, workload
+kind, and status labels only.
 Registered connectors emit spans from `ETL-SQL.Connectors` and metrics from the same-named meter for
 version, catalog, and data-source creation operations. Connector telemetry uses connector type,
-operation, status, environment, and component labels only; it intentionally omits connection strings,
-hosts, table names, SQL text, paths, and credentials.
+operation, status, environment, node, and component labels only; it intentionally omits connection
+strings, hosts, table names, SQL text, paths, and credentials.
 Dataset registry operations emit spans from `ETL-SQL.Datasets` and metrics from the same-named meter
 for register, lookup, list, authorization, refresh-job registration, audit, delete, and path-build
-operations. Dataset ids are trace-only; metrics use operation, status, environment, and component
+operations. Dataset ids are trace-only; metrics use operation, status, environment, node, and component
 labels and omit dataset names, caller permission strings, paths, and credentials.
 Portal admin background services emit spans from `ETL-SQL.BackgroundServices` and metrics from the
 same-named meter for native failure-digest, backup-report, and capacity-report runs. These metrics

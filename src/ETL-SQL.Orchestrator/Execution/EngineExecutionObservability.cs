@@ -62,6 +62,7 @@ internal static class EngineExecutionObservability
         var tags = new TagList
         {
             { ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { ObservabilityConventions.Tags.Node, Environment.MachineName },
             { ObservabilityConventions.Tags.Component, "engine" },
             { ObservabilityConventions.Tags.ExecutionMode, "engine" },
             { ObservabilityConventions.Tags.WorkloadKind, workloadKind },

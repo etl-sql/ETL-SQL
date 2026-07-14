@@ -25,6 +25,7 @@ public static class DatasetObservability
             return null;
 
         activity.SetTag(ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default");
+        activity.SetTag(ObservabilityConventions.Tags.Node, Environment.MachineName);
         activity.SetTag(ObservabilityConventions.Tags.Component, "dataset");
         activity.SetTag(OperationTag, operation);
         return activity;
@@ -44,6 +45,7 @@ public static class DatasetObservability
         var tags = new TagList
         {
             { ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { ObservabilityConventions.Tags.Node, Environment.MachineName },
             { ObservabilityConventions.Tags.Component, "dataset" },
             { OperationTag, operation },
             { ObservabilityConventions.Tags.Status, status }

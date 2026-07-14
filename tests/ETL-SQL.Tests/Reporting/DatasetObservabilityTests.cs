@@ -44,6 +44,7 @@ namespace ETL_SQL.Tests.Reporting
             Assert.Equal(42, lookedUp?.Id);
             Assert.Contains(stoppedActivities, activity =>
                 activity.OperationName == "dataset.operation"
+                && Tag(activity, ObservabilityConventions.Tags.Node) == Environment.MachineName
                 && Tag(activity, DatasetObservability.OperationTag) == "register_or_update"
                 && Tag(activity, ObservabilityConventions.Tags.DatasetId) == "42"
                 && Tag(activity, ObservabilityConventions.Tags.Status) == "success");
@@ -51,6 +52,7 @@ namespace ETL_SQL.Tests.Reporting
                 Tag(activity, DatasetObservability.OperationTag) == "delete"
                 && Tag(activity, ObservabilityConventions.Tags.Status) == "failure");
             Assert.Contains(measurements, measurement => measurement.Name == "etlsql.dataset.operation.completed"
+                && HasTag(measurement.Tags, ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(measurement.Tags, ObservabilityConventions.Tags.Component, "dataset")
                 && HasTag(measurement.Tags, DatasetObservability.OperationTag, "register_or_update")
                 && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "success"));

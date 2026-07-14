@@ -25,6 +25,7 @@ internal static class ConnectorObservability
             return null;
 
         activity.SetTag(ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default");
+        activity.SetTag(ObservabilityConventions.Tags.Node, Environment.MachineName);
         activity.SetTag(ObservabilityConventions.Tags.Component, "connector");
         activity.SetTag(ObservabilityConventions.Tags.ConnectorType, connectorType);
         activity.SetTag(OperationTag, operation);
@@ -43,6 +44,7 @@ internal static class ConnectorObservability
         var tags = new TagList
         {
             { ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { ObservabilityConventions.Tags.Node, Environment.MachineName },
             { ObservabilityConventions.Tags.Component, "connector" },
             { ObservabilityConventions.Tags.ConnectorType, connectorType },
             { OperationTag, operation },

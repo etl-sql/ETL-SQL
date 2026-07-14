@@ -52,6 +52,7 @@ internal static class PolicyRefreshObservability
         var tags = new TagList
         {
             { ObservabilityConventions.Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { ObservabilityConventions.Tags.Node, Environment.MachineName },
             { ObservabilityConventions.Tags.Component, "orchestrator" },
             { ObservabilityConventions.Tags.WorkloadKind, "policy-refresh" },
             { ObservabilityConventions.Tags.Status, status }

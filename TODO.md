@@ -278,7 +278,7 @@ Operations Control Plane → 4.1 Central fleet management*.
       scheduler configuration values or database paths in labels.
 - [x] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
-- [ ] Apply the shared dimensions to remaining engine and workload-class
+- [x] Apply the shared dimensions to remaining engine and workload-class
       metrics while continuing to control high-cardinality labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       retries, failures, storage growth, database pool health, and any remaining

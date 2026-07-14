@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Execution;
 using ETL_SQL.Core.Observability;
+using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Service;
@@ -132,6 +133,45 @@ public class OrchestratorStartupTests
             foreach (var path in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
                 try { if (File.Exists(path)) File.Delete(path); } catch { }
         }
+    }
+
+    [Fact]
+    public void AdHocJobObservability_UsesSharedNodeMetricDimension()
+    {
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == OrchestratorObservability.MeterName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.Start();
+
+        OrchestratorObservability.CompleteAdHocJobActivity(
+            null,
+            "secret-job-id",
+            JobRunStatus.Completed,
+            durationMs: 25,
+            rowsProcessed: 10,
+            peakMemoryBytes: 1024,
+            cpuTimeSeconds: 0.1);
+
+        Assert.Contains(measurements, measurement =>
+            measurement.Name == "etlsql.orchestrator.job.completed"
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Node, Environment.MachineName)
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Component, "orchestrator")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.WorkloadKind, "ad-hoc")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "Completed"));
+        Assert.DoesNotContain(measurements, measurement =>
+            measurement.Tags.ContainsKey(ObservabilityConventions.Tags.JobId));
+        Assert.DoesNotContain(measurements, measurement => measurement.Tags.Any(tag =>
+            tag.Value is string value && value.Contains("secret-job-id", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static void AssertServiceRun(BackgroundTelemetryCapture telemetry, string operation, string status)

@@ -74,6 +74,7 @@ namespace ETL_SQL.Tests.Connectors
 
             Assert.Contains(stoppedActivities, activity =>
                 activity.OperationName == "connector.operation"
+                && Tag(activity, ObservabilityConventions.Tags.Node) == Environment.MachineName
                 && Tag(activity, ObservabilityConventions.Tags.ConnectorType) == "TELEMETRY_TEST"
                 && Tag(activity, ConnectorObservability.OperationTag) == "version"
                 && Tag(activity, ObservabilityConventions.Tags.Status) == "success");
@@ -81,6 +82,7 @@ namespace ETL_SQL.Tests.Connectors
                 Tag(activity, ConnectorObservability.OperationTag) == "columns"
                 && Tag(activity, ObservabilityConventions.Tags.Status) == "failure");
             Assert.Contains(measurements, m => m.Name == "etlsql.connector.operation.completed"
+                && HasTag(m.Tags, ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(m.Tags, ObservabilityConventions.Tags.ConnectorType, "TELEMETRY_TEST")
                 && HasTag(m.Tags, ConnectorObservability.OperationTag, "version")
                 && HasTag(m.Tags, ObservabilityConventions.Tags.Status, "success"));

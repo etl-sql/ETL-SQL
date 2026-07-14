@@ -47,6 +47,7 @@ public static class PortalObservability
             return null;
 
         activity.SetTag(Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default");
+        activity.SetTag(Tags.Node, Environment.MachineName);
         activity.SetTag(Tags.Component, "portal");
         activity.SetTag(Tags.JobId, job.Id);
         activity.SetTag(Tags.ReportId, job.ReportId);
@@ -82,6 +83,7 @@ public static class PortalObservability
         var tags = new TagList
         {
             { Tags.Environment, Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default" },
+            { Tags.Node, Environment.MachineName },
             { Tags.Component, "portal" },
             { Tags.Status, status },
             { Tags.ExecutionMode, job.TrustedDatasetExecution ? "trusted-dataset" : "portal" }

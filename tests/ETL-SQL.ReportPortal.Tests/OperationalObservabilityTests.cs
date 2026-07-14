@@ -262,6 +262,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         PortalObservability.CompleteExecutionJobActivity(null, job, workloadKind: "Interactive");
 
         Assert.Contains(measurements, m => m.Name == "etlsql.portal.execution.completed"
+            && HasTag(m.Tags, PortalObservability.Tags.Node, Environment.MachineName)
             && HasTag(m.Tags, PortalObservability.Tags.Component, "portal")
             && HasTag(m.Tags, PortalObservability.Tags.Status, "Completed")
             && HasTag(m.Tags, PortalObservability.Tags.WorkloadKind, "Interactive"));

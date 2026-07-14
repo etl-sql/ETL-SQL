@@ -177,6 +177,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("sha256:abc123", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.ScriptHash));
             Assert.Equal("SUCCESS", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status));
             Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.scheduled_job.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "orchestrator")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "SUCCESS")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "scheduled"));
@@ -234,6 +235,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("v-refresh", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyVersion));
             Assert.False(string.IsNullOrWhiteSpace(Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.PolicyHash)));
             Assert.Contains(measurements, m => m.Name == "etlsql.orchestrator.policy_refresh.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "orchestrator")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "success")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "policy-refresh"));
@@ -287,6 +289,7 @@ namespace ETL_SQL.Tests.Orchestration
             Assert.Equal("job-a", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.JobId));
             Assert.Equal("4096", Tag(span, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.SpillBytes));
             Assert.Contains(measurements, m => m.Name == "etlsql.engine.execution.completed"
+                && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Node, Environment.MachineName)
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Component, "engine")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.Status, "success")
                 && HasTag(m.Tags, ETL_SQL.Core.Observability.ObservabilityConventions.Tags.WorkloadKind, "job"));
