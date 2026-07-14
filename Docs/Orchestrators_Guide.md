@@ -1129,6 +1129,10 @@ In-process ETL-SQL engine executions emit spans from `ETL-SQL.Engine` and metric
 meter. The `engine.execution` span carries script hash, optional job correlation, rows, peak memory,
 CPU time, spill bytes, and spill-read bytes; the metrics report execution count, duration, rows,
 memory, CPU, spill writes, and spill reads with low-cardinality labels only.
+Registered connectors emit spans from `ETL-SQL.Connectors` and metrics from the same-named meter for
+version, catalog, and data-source creation operations. Connector telemetry uses connector type,
+operation, status, environment, and component labels only; it intentionally omits connection strings,
+hosts, table names, SQL text, paths, and credentials.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

@@ -1,6 +1,9 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using Moq;
@@ -33,6 +36,58 @@ namespace ETL_SQL.Tests.Connectors
                 Times.Once);
         }
 
+        [Fact]
+        public async Task ConnectorRegistry_EmitsConnectorOperationMetricsAndSpans()
+        {
+            var registry = new ConnectorRegistry();
+            registry.Register(new PreviewFailureConnector());
+            var connector = registry.GetConnector("TELEMETRY_TEST")!;
+            var context = new SystemExecutionContext();
+
+            var stoppedActivities = new List<Activity>();
+            using var activityListener = new ActivityListener
+            {
+                ShouldListenTo = source => source.Name == ConnectorObservability.ActivitySourceName,
+                Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+                ActivityStopped = activity => stoppedActivities.Add(activity)
+            };
+            ActivitySource.AddActivityListener(activityListener);
+
+            var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+            using var meterListener = new MeterListener
+            {
+                InstrumentPublished = (instrument, listener) =>
+                {
+                    if (instrument.Meter.Name == ConnectorObservability.MeterName)
+                        listener.EnableMeasurementEvents(instrument);
+                }
+            };
+            meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+                measurements.Add((instrument.Name, value, ToDictionary(tags))));
+            meterListener.Start();
+
+            Assert.Equal("1.0", await connector.GetVersionAsync(context, "secret-host"));
+            await Assert.ThrowsAsync<NotSupportedException>(() =>
+                connector.GetColumnsAsync(context, "secret-host", "Customers"));
+
+            Assert.Contains(stoppedActivities, activity =>
+                activity.OperationName == "connector.operation"
+                && Tag(activity, ObservabilityConventions.Tags.ConnectorType) == "TELEMETRY_TEST"
+                && Tag(activity, ConnectorObservability.OperationTag) == "version"
+                && Tag(activity, ObservabilityConventions.Tags.Status) == "success");
+            Assert.Contains(stoppedActivities, activity =>
+                Tag(activity, ConnectorObservability.OperationTag) == "columns"
+                && Tag(activity, ObservabilityConventions.Tags.Status) == "failure");
+            Assert.Contains(measurements, m => m.Name == "etlsql.connector.operation.completed"
+                && HasTag(m.Tags, ObservabilityConventions.Tags.ConnectorType, "TELEMETRY_TEST")
+                && HasTag(m.Tags, ConnectorObservability.OperationTag, "version")
+                && HasTag(m.Tags, ObservabilityConventions.Tags.Status, "success"));
+            Assert.DoesNotContain(measurements, m => m.Tags.Any(tag =>
+                tag.Value is string value && value.Contains("secret-host", StringComparison.OrdinalIgnoreCase)));
+        }
+
         private sealed class PreviewFailureConnector : IConnector
         {
             public string Name => "TELEMETRY_TEST";
@@ -46,7 +101,7 @@ namespace ETL_SQL.Tests.Connectors
             public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) => new PreviewFailureDataSource();
             public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-            public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult<IEnumerable<string>>(["id"]);
+            public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("columns unavailable");
             public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         }
 
@@ -74,5 +129,22 @@ namespace ETL_SQL.Tests.Connectors
             public IDataSource WithTable(string tableName) => this;
             public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
+
+        private static string? Tag(Activity activity, string key)
+        {
+            var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+            return value?.ToString();
+        }
+
+        private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+        {
+            var result = new Dictionary<string, object?>();
+            foreach (var tag in tags)
+                result[tag.Key] = tag.Value;
+            return result;
+        }
+
+        private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+            tags.TryGetValue(key, out var actual) && Equals(actual, value);
     }
 }

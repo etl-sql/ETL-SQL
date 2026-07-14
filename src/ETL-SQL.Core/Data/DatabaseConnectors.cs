@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Observability;
 
 namespace ETL_SQL.Data;
 /// <summary>
@@ -167,10 +168,11 @@ public class ConnectorRegistry : IConnectorRegistry
 
     public void Register(IConnector connector)
     {
-        _connectors[connector.Name] = connector;
-        foreach (var alias in connector.Aliases)
+        var instrumented = ConnectorObservability.Instrument(connector);
+        _connectors[instrumented.Name] = instrumented;
+        foreach (var alias in instrumented.Aliases)
         {
-            _connectors[alias] = connector;
+            _connectors[alias] = instrumented;
         }
     }
 
