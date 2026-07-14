@@ -266,6 +266,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       deleted-row counts on spans and no token hashes or usernames in metric labels.
 - [x] Extend first-class OpenTelemetry metrics/traces to audit-retention purges with deleted-row
       counts on spans and no audit actions, details, or payload text in metric labels.
+- [x] Extend first-class OpenTelemetry metrics/traces to audit outbox transport drain/prune cycles
+      with row counts on spans and no event ids, payload JSON, endpoints, or bearer tokens in labels.
 - [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class

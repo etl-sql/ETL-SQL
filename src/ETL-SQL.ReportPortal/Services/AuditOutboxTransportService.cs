@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,62 +53,76 @@ public sealed class AuditOutboxTransportService(
 
     public async Task<int> DrainOnceAsync(CancellationToken ct = default)
     {
-        var endpoint = GetEndpointOrThrow();
-        var now = clock.GetUtcNow().UtcDateTime;
-        var batchSize = Math.Max(1, config.Audit.TransportBatchSize);
-        var lockUntil = now.AddSeconds(Math.Max(1, config.Audit.TransportLockSeconds));
-
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-
-        var pendingCount = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Pending", ct);
-        if (pendingCount > Math.Max(1, config.Audit.OutboxBackpressureLimit))
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "audit-outbox-transport", "drain");
+        try
         {
-            log.LogWarning(
-                "Audit outbox pending backlog {PendingCount} exceeds configured limit {Limit}",
-                pendingCount, config.Audit.OutboxBackpressureLimit);
-        }
+            var endpoint = GetEndpointOrThrow();
+            var now = clock.GetUtcNow().UtcDateTime;
+            var batchSize = Math.Max(1, config.Audit.TransportBatchSize);
+            var lockUntil = now.AddSeconds(Math.Max(1, config.Audit.TransportLockSeconds));
 
-        var rows = await db.AuditOutboxMessages
-            .Where(x => x.Status == "Pending"
-                && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
-                && (x.LockedUntil == null || x.LockedUntil <= now))
-            .OrderBy(x => x.Id)
-            .Take(batchSize)
-            .ToListAsync(ct);
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
 
-        if (rows.Count == 0)
-            return 0;
+            var pendingCount = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Pending", ct);
+            if (pendingCount > Math.Max(1, config.Audit.OutboxBackpressureLimit))
+            {
+                log.LogWarning(
+                    "Audit outbox pending backlog {PendingCount} exceeds configured limit {Limit}",
+                    pendingCount, config.Audit.OutboxBackpressureLimit);
+            }
 
-        foreach (var row in rows)
-        {
-            row.LockedUntil = lockUntil;
-            row.UpdatedAt = now;
-        }
-        await db.SaveChangesAsync(ct);
+            var rows = await db.AuditOutboxMessages
+                .Where(x => x.Status == "Pending"
+                    && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
+                    && (x.LockedUntil == null || x.LockedUntil <= now))
+                .OrderBy(x => x.Id)
+                .Take(batchSize)
+                .ToListAsync(ct);
 
-        var response = await PostBatchAsync(endpoint, rows, ct);
-        now = clock.GetUtcNow().UtcDateTime;
+            if (rows.Count == 0)
+            {
+                CompleteTransport(activity, sw, "drain", "empty", 0);
+                return 0;
+            }
 
-        if (response.IsSuccessStatusCode)
-        {
             foreach (var row in rows)
             {
-                row.Status = "Delivered";
-                row.DeliveredAt = now;
-                row.LockedUntil = null;
-                row.LastError = null;
+                row.LockedUntil = lockUntil;
                 row.UpdatedAt = now;
             }
-        }
-        else
-        {
-            var error = SecretRedactor.Redact($"{(int)response.StatusCode} {response.ReasonPhrase}") ?? "Transport failed";
-            ApplyFailure(rows, now, error);
-        }
+            await db.SaveChangesAsync(ct);
 
-        await db.SaveChangesAsync(ct);
-        return rows.Count;
+            var response = await PostBatchAsync(endpoint, rows, ct);
+            now = clock.GetUtcNow().UtcDateTime;
+
+            if (response.IsSuccessStatusCode)
+            {
+                foreach (var row in rows)
+                {
+                    row.Status = "Delivered";
+                    row.DeliveredAt = now;
+                    row.LockedUntil = null;
+                    row.LastError = null;
+                    row.UpdatedAt = now;
+                }
+            }
+            else
+            {
+                var error = SecretRedactor.Redact($"{(int)response.StatusCode} {response.ReasonPhrase}") ?? "Transport failed";
+                ApplyFailure(rows, now, error);
+            }
+
+            await db.SaveChangesAsync(ct);
+            CompleteTransport(activity, sw, "drain", response.IsSuccessStatusCode ? "delivered" : "failed", rows.Count);
+            return rows.Count;
+        }
+        catch
+        {
+            CompleteTransport(activity, sw, "drain", "failure", 0);
+            throw;
+        }
     }
 
     /// <summary>
@@ -120,51 +135,83 @@ public sealed class AuditOutboxTransportService(
     /// </summary>
     public async Task<int> PruneAsync(CancellationToken ct = default)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        var now = clock.GetUtcNow().UtcDateTime;
-        var removed = 0;
-
-        var retentionCutoff = now.AddMinutes(-Math.Max(1, config.Audit.OutboxDeliveredRetentionMinutes));
-        var purgedDelivered = await db.AuditOutboxMessages
-            .Where(x => x.Status == "Delivered" && x.DeliveredAt != null && x.DeliveredAt < retentionCutoff)
-            .ExecuteDeleteAsync(ct);
-        removed += purgedDelivered;
-        if (purgedDelivered > 0)
-            log.LogInformation(
-                "Purged {Count} delivered audit outbox rows older than {Minutes}m",
-                purgedDelivered, config.Audit.OutboxDeliveredRetentionMinutes);
-
-        if (config.Audit.OutboxMaxBytes <= 0)
-            return removed;
-
-        var totalBytes = await db.AuditOutboxMessages.SumAsync(x => (long)x.PayloadJson.Length, ct);
-        if (totalBytes < config.Audit.OutboxMaxBytes)
-            return removed;
-
-        if (config.Audit.ResolveRequireRemoteDelivery(
-                ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current.IsEnrolled))
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", "audit-outbox-transport", "prune");
+        try
         {
-            // Mandatory delivery: do not drop events — the fail-closed gate already stops new
-            // mutations. Surface the saturation for operators.
-            log.LogError(
-                "Audit outbox (~{Bytes} bytes) has reached the size cap ({Cap} bytes) while remote " +
-                "delivery is required; mutations are failing closed until the collector drains.",
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var now = clock.GetUtcNow().UtcDateTime;
+            var removed = 0;
+
+            var retentionCutoff = now.AddMinutes(-Math.Max(1, config.Audit.OutboxDeliveredRetentionMinutes));
+            var purgedDelivered = await db.AuditOutboxMessages
+                .Where(x => x.Status == "Delivered" && x.DeliveredAt != null && x.DeliveredAt < retentionCutoff)
+                .ExecuteDeleteAsync(ct);
+            removed += purgedDelivered;
+            if (purgedDelivered > 0)
+                log.LogInformation(
+                    "Purged {Count} delivered audit outbox rows older than {Minutes}m",
+                    purgedDelivered, config.Audit.OutboxDeliveredRetentionMinutes);
+
+            if (config.Audit.OutboxMaxBytes <= 0)
+            {
+                CompleteTransport(activity, sw, "prune", "success", removed);
+                return removed;
+            }
+
+            var totalBytes = await db.AuditOutboxMessages.SumAsync(x => (long)x.PayloadJson.Length, ct);
+            if (totalBytes < config.Audit.OutboxMaxBytes)
+            {
+                CompleteTransport(activity, sw, "prune", "success", removed);
+                return removed;
+            }
+
+            if (config.Audit.ResolveRequireRemoteDelivery(
+                    ETL_SQL.Core.Governance.EnterprisePolicyRuntime.Current.IsEnrolled))
+            {
+                // Mandatory delivery: do not drop events — the fail-closed gate already stops new
+                // mutations. Surface the saturation for operators.
+                log.LogError(
+                    "Audit outbox (~{Bytes} bytes) has reached the size cap ({Cap} bytes) while remote " +
+                    "delivery is required; mutations are failing closed until the collector drains.",
+                    totalBytes, config.Audit.OutboxMaxBytes);
+                CompleteTransport(activity, sw, "prune", "saturated", removed);
+                return removed;
+            }
+
+            // Best-effort forwarding: shed the oldest rows (Delivered first, then Pending) to bound
+            // local disk use. Dropped Pending rows lose remote forwarding only — the durable AuditLog
+            // record remains.
+            log.LogWarning(
+                "Audit outbox (~{Bytes} bytes) exceeds the size cap ({Cap} bytes); shedding oldest rows " +
+                "to bound local disk use (remote delivery is not required).",
                 totalBytes, config.Audit.OutboxMaxBytes);
+
+            var shed = await ShedToCapAsync(db, totalBytes, ct);
+            removed += shed;
+            CompleteTransport(activity, sw, "prune", "success", removed);
             return removed;
         }
+        catch
+        {
+            CompleteTransport(activity, sw, "prune", "failure", 0);
+            throw;
+        }
+    }
 
-        // Best-effort forwarding: shed the oldest rows (Delivered first, then Pending) to bound
-        // local disk use. Dropped Pending rows lose remote forwarding only — the durable AuditLog
-        // record remains.
-        log.LogWarning(
-            "Audit outbox (~{Bytes} bytes) exceeds the size cap ({Cap} bytes); shedding oldest rows " +
-            "to bound local disk use (remote delivery is not required).",
-            totalBytes, config.Audit.OutboxMaxBytes);
-
-        var shed = await ShedToCapAsync(db, totalBytes, ct);
-        removed += shed;
-        return removed;
+    private static void CompleteTransport(System.Diagnostics.Activity? activity, System.Diagnostics.Stopwatch sw,
+        string operation, string status, long rowsProcessed)
+    {
+        sw.Stop();
+        BackgroundServiceObservability.SetRowsProcessed(activity, rowsProcessed);
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            "audit-outbox-transport",
+            operation,
+            status,
+            sw.ElapsedMilliseconds);
     }
 
     private async Task<int> ShedToCapAsync(PortalDbContext db, long totalBytes, CancellationToken ct)
