@@ -326,7 +326,10 @@ function renderDesigner(stage, ctx) {
     };
     window.__vscodeSave = async function(script) { console.log('vscode.save', script.length); };
   </script>
-  <script s      authFetch: window.__vscodeFetch,
+  <script type="module">
+    import { renderDesigner } from '/src/etl-sql-vscode/media/designer/designer.js';
+    renderDesigner(document.getElementById('designerRoot'), {
+      authFetch: window.__vscodeFetch,
       onSaveScript: window.__vscodeSave,
       onCancel: () => console.log('vscode.cancel')
     });
@@ -528,12 +531,26 @@ function renderVisualFlow(stage, ctx) {
       to { transform: rotate(360deg); }
     }
     
-    /* Edge badges transitions */
+    /* Edge badges styling and status overrides */
     .etlsql-dag-edge-badge {
       font-family: monospace;
       font-size: 10px !important;
       font-weight: bold;
-      transition: color 0.3s ease, border-color 0.3s ease, background-color 0.3s ease;
+      transition: all 0.3s ease;
+    }
+    
+    .etlsql-dag-edge-badge[data-status="running"] {
+      color: #eab308 !important;
+      border-color: #eab308 !important;
+      background-color: #2a2415 !important;
+      box-shadow: 0 0 6px rgba(234, 179, 8, 0.3);
+    }
+    
+    .etlsql-dag-edge-badge[data-status="completed"] {
+      color: #22c55e !important;
+      border-color: #22c55e !important;
+      background-color: #112215 !important;
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.3);
     }
   </style>
   <title>VS Code Visual Flow</title>
@@ -575,6 +592,54 @@ function renderVisualFlow(stage, ctx) {
       }
     });
 
+    // ── Responsive Auto-Scaling Engine ─────────────────────────────────────────
+    function adjustLayoutAndZoom() {
+      const canvas = container.querySelector('.etlsql-dag-canvas');
+      if (!canvas) return;
+      
+      const width = canvas.clientWidth;
+      
+      // Programmatically click "Reset view" to ensure we start from base state
+      const resetBtn = container.querySelector('.etlsql-dag-zoom-btn[title="Reset view"]');
+      if (resetBtn) resetBtn.click();
+
+      // Query zoom-out button
+      const zoomOutBtn = container.querySelector('.etlsql-dag-zoom-btn[title="Zoom out"]');
+      if (zoomOutBtn) {
+        if (width < 340) {
+          zoomOutBtn.click(); // zoom ~0.625
+          zoomOutBtn.click(); // zoom ~0.52
+          zoomOutBtn.click(); // zoom ~0.43
+        } else if (width < 450) {
+          zoomOutBtn.click(); // zoom ~0.625
+          zoomOutBtn.click(); // zoom ~0.52
+        } else if (width < 600) {
+          zoomOutBtn.click(); // zoom ~0.625
+        }
+      }
+
+      applyBadgeStyles();
+    }
+
+    function applyBadgeStyles() {
+      const badges = document.querySelectorAll('.etlsql-dag-edge-badge');
+      for (const b of badges) {
+        const text = b.textContent;
+        // Find matching edge
+        const edge = data.edges.find(e => {
+          const lbl = e.originalLabel || e.label;
+          return lbl === text || e.label === text;
+        });
+        if (edge && edge.status) {
+          b.setAttribute('data-status', edge.status);
+        }
+      }
+    }
+
+    // Call layout adjustment after rendering is complete, and register on window resize
+    setTimeout(adjustLayoutAndZoom, 150);
+    window.addEventListener('resize', adjustLayoutAndZoom);
+
     // ── Pipeline Animation Engine ─────────────────────────────────────────────
     let animInterval = null;
     
@@ -592,15 +657,16 @@ function renderVisualFlow(stage, ctx) {
         if (icon) icon.remove();
       });
       
-      // Reset all edge badges to their original label texts
-      const badges = document.querySelectorAll('.etlsql-dag-edge-badge');
-      badges.forEach(b => {
-        if (!b.dataset.original) b.dataset.original = b.textContent;
-        b.textContent = b.dataset.original;
-        b.style.color = '#93c5fd';
-        b.style.borderColor = '#3b82f6';
-        b.style.backgroundColor = '#1e293b';
+      // Reset all edge labels in data and restore text
+      data.edges.forEach(e => {
+        if (!e.originalLabel) e.originalLabel = e.label;
+        e.label = e.originalLabel;
+        delete e.status;
       });
+
+      // Redraw graph and reapply layout zoom
+      instance.resize();
+      setTimeout(adjustLayoutAndZoom, 50);
     }
 
     function runPipeline() {
@@ -625,8 +691,8 @@ function renderVisualFlow(stage, ctx) {
           const salesRows = Math.floor(12300 * pct);
           const crmRows = Math.floor(4500 * pct);
           
-          updateEdgeBadge('(SALES)', \`\${salesRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
-          updateEdgeBadge('(CRM)', \`\${crmRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+          updateEdgeBadge('SALES', \`\${salesRows.toLocaleString()} rows\`, 'running');
+          updateEdgeBadge('CRM', \`\${crmRows.toLocaleString()} rows\`, 'running');
         }
         
         // ── Phase 2: Ingestion Complete, Join Staging (2s to 4s) ──
@@ -636,37 +702,43 @@ function renderVisualFlow(stage, ctx) {
           setCardStatus('table:#temp_sales', 'completed', '✔️');
           setCardStatus('table:#temp_customers', 'completed', '✔️');
           
-          updateEdgeBadge('(SALES)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
-          updateEdgeBadge('(CRM)', '4,500 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          updateEdgeBadge('SALES', '12,300 rows', 'completed');
+          updateEdgeBadge('CRM', '4,500 rows', 'completed');
           
           // Join node is running
           setCardStatus('table:#temp_enriched', 'running', '↻');
           const pct = (sec - 2) / 2;
           const joinRows = Math.floor(12300 * pct);
           
-          updateEdgeBadge('JOIN (SALES)', \`\${joinRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
-          updateEdgeBadge('JOIN (CRM)', \`\${joinRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+          updateEdgeBadge('JOIN (SALES)', \`\${joinRows.toLocaleString()} rows\`, 'running');
+          updateEdgeBadge('JOIN (CRM)', \`\${joinRows.toLocaleString()} rows\`, 'running');
         }
         
         // ── Phase 3: Enrichment Complete, Load Merging (4s to 6s) ──
         if (sec > 4 && sec <= 6) {
           setCardStatus('table:#temp_enriched', 'completed', '✔️');
-          updateEdgeBadge('JOIN (SALES)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
-          updateEdgeBadge('JOIN (CRM)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          updateEdgeBadge('JOIN (SALES)', '12,300 rows', 'completed');
+          updateEdgeBadge('JOIN (CRM)', '12,300 rows', 'completed');
           
           // Target merge node is running
           setCardStatus('table:dest_db', 'running', '↻');
           const pct = (sec - 4) / 2;
           const loadRows = Math.floor(12300 * pct);
           
-          updateEdgeBadge('(DEST)', \`\${loadRows.toLocaleString()} rows\`, '#eab308', 'rgba(234,179,8,0.15)');
+          updateEdgeBadge('DEST', \`\${loadRows.toLocaleString()} rows\`, 'running');
         }
         
         // ── Phase 4: Execution Complete (6s+) ──
         if (sec > 6) {
           clearInterval(animInterval);
           setCardStatus('table:dest_db', 'completed', '✔️');
-          updateEdgeBadge('(DEST)', '12,300 rows', '#22c55e', 'rgba(34,197,94,0.15)');
+          
+          // Ensure all badges are green completed
+          updateEdgeBadge('SALES', '12,300 rows', 'completed');
+          updateEdgeBadge('CRM', '4,500 rows', 'completed');
+          updateEdgeBadge('JOIN (SALES)', '12,300 rows', 'completed');
+          updateEdgeBadge('JOIN (CRM)', '12,300 rows', 'completed');
+          updateEdgeBadge('DEST', '12,300 rows', 'completed');
           
           document.getElementById('runStatus').textContent = 'Status: Success (6.2s) - 12,300 rows loaded';
           document.getElementById('runStatus').style.color = '#22c55e';
@@ -698,21 +770,28 @@ function renderVisualFlow(stage, ctx) {
       }
     }
     
-    function updateEdgeBadge(keyword, text, color, bgColor) {
+    function updateEdgeBadge(keyword, text, status) {
+      // Find matching edge in graph data
+      const edge = data.edges.find(e => {
+        const lbl = e.originalLabel || e.label;
+        return lbl.includes(keyword);
+      });
+      
+      if (edge) {
+        edge.label = text;
+        edge.status = status;
+      }
+      
+      // Update the DOM elements
       const badges = document.querySelectorAll('.etlsql-dag-edge-badge');
       for (const b of badges) {
         const currentText = b.textContent;
         const originalText = b.dataset.original || currentText;
         
         if (currentText.includes(keyword) || originalText.includes(keyword)) {
+          if (!b.dataset.original) b.dataset.original = originalText;
           b.textContent = text;
-          if (color) {
-            b.style.color = color;
-            b.style.borderColor = color;
-          }
-          if (bgColor) {
-            b.style.backgroundColor = bgColor;
-          }
+          b.setAttribute('data-status', status);
           break;
         }
       }
@@ -748,7 +827,12 @@ function renderVisualFlow(stage, ctx) {
       window.removeEventListener('message', onMessage);
       iframe.remove();
     },
-    resize() {}
+    resize() {
+      // Allow DAG to respond to panel resizing
+      if (iframe.contentWindow?.document.dispatchEvent) {
+        iframe.contentWindow.dispatchEvent(new Event('resize'));
+      }
+    }
   };
 }
 
