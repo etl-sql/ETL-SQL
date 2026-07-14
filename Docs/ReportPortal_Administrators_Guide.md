@@ -811,6 +811,16 @@ when the execution path can measure them. Use this endpoint for per-job troubles
 administrator load monitoring. The current portal UI does not surface all of these fields yet, so
 the documented script and REST endpoints are the discovery path.
 
+For infrastructure scrapers, the Portal also exposes `GET /metrics` in Prometheus text format. It
+uses the same non-secret operational snapshot as `GET /api/admin/metrics/operational` and emits
+stable low-cardinality labels: `environment`, `node`, and `component="portal"`. The scrape includes
+active and queued executions, execution caps, recent execution/delivery totals and failures, average
+execution duration, average queue age, dataset/snapshot storage bytes, active subscriptions, SMTP
+connection count, and Portal schema migration status. It does not emit script paths, report names,
+usernames, connection strings, credentials, local filesystem paths, policy payload values, or secret
+configuration values. Treat `/metrics` as an operations endpoint and expose it only on a trusted
+management network or behind your standard monitoring ingress controls.
+
 ### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.

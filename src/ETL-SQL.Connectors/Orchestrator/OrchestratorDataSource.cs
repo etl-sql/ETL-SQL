@@ -56,6 +56,25 @@ namespace ETL_SQL.Connectors.Orchestrator
             };
         }
 
+        /// <summary>
+        /// Test/DI constructor for in-memory transport handlers. Production clients use the
+        /// policy-bound constructor above so redirects, proxies, and socket connects remain governed.
+        /// </summary>
+        public OrchestratorDataSource(HttpClient http, string apiKey, ILogger logger)
+        {
+            _http = http ?? throw new ArgumentNullException(nameof(http));
+            _baseUrl = http.BaseAddress?.ToString().TrimEnd('/') ?? "";
+            _apiKey = apiKey;
+            _logger = logger;
+            if (!string.IsNullOrWhiteSpace(apiKey))
+                _http.DefaultRequestHeaders.Add("X-Orchestrator-Key", apiKey);
+            Options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["HOST"] = _baseUrl,
+                ["API_KEY"] = "********"
+            };
+        }
+
         // ── IDataSource (stub) ────────────────────────────────────────────────────
 
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) =>

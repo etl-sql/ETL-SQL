@@ -122,14 +122,20 @@ public class MergeFilesStatementHandler : IStatementHandler
 
         if (File.Exists(dest))
         {
-            if (overwrite) File.Delete(dest);
-            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
+            if (!overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
+
+            var deleteDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Delete);
+            context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
+            context.SecurityService.ValidateFileType(deleteDest.CanonicalPath);
+            pathAuthorizer.DeleteValidatedFile(context, deleteDest);
         }
 
         if (context.IsVerbose)
             context.Log($"[MergeFiles] Merging {files.Count} files into '{dest}' (Header strip: {header})");
 
-        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth), Encoding.UTF8))
+        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth,
+                   failIfExists: !overwrite), Encoding.UTF8))
         {
             bool isFirstFile = true;
             foreach (var file in files)

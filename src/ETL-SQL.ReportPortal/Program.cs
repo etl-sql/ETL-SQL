@@ -343,6 +343,7 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTranspor
     .ConfigurePrimaryHttpMessageHandler(_ => ETL_SQL.Core.Governance.PolicyBoundHttp.CreateHandler());
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsExporter>();
 // Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
 // (no exportable private key persisted); when unset the authority reports "not configured".
 builder.Services.AddSingleton<ETL_SQL.Core.Governance.IPolicyEnvelopeSigner>(_ =>
@@ -542,16 +543,19 @@ using (var scope = app.Services.CreateScope())
                 // Forward-only, automatic on startup/upgrade. Log the applied set so an operator can
                 // confirm exactly which schema migrations ran during an upgrade.
                 var pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
+                PortalDatabaseMigrationLock.ReportProgress("MigrationCheck", pending.Count);
                 if (pending.Count == 0)
                 {
                     migrationLogger.LogInformation("Portal database schema is up to date; no migrations to apply.");
                 }
                 else
                 {
+                    PortalDatabaseMigrationLock.ReportProgress("ApplyingMigrations", pending.Count);
                     migrationLogger.LogInformation(
                         "Applying {Count} pending portal database migration(s): {Migrations}",
                         pending.Count, string.Join(", ", pending));
                     await db.Database.MigrateAsync();
+                    PortalDatabaseMigrationLock.ReportProgress("MigrationsApplied", 0);
                     migrationLogger.LogInformation("Portal database migrations applied successfully.");
                 }
 
@@ -580,7 +584,8 @@ using (var scope = app.Services.CreateScope())
                 // Resolve PortalConfig from DI (not the locally parsed copy) so test hosts that override the
                 // singleton — e.g. to pin FirstRun.AdminPassword — seed with the effective configuration.
                 await SeedFirstRunAsync(scope.ServiceProvider, scope.ServiceProvider.GetRequiredService<PortalConfig>());
-            });
+            },
+            ownerNodeId: scope.ServiceProvider.GetRequiredService<PortalNodeIdentity>().NodeId);
     }
     catch (Exception migrationEx)
     {
@@ -774,6 +779,14 @@ app.MapGet("/healthz", async (
             checks
         },
         statusCode: healthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+}).AllowAnonymous();
+
+app.MapGet("/metrics", async (
+    ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsExporter exporter,
+    CancellationToken ct) =>
+{
+    var text = await exporter.ExportAsync(ct);
+    return Results.Text(text, "text/plain; version=0.0.4; charset=utf-8");
 }).AllowAnonymous();
 
 app.MapGet("/third-party-notices", () =>

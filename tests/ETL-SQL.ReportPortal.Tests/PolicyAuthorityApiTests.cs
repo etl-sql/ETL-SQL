@@ -332,6 +332,62 @@ public class PolicyAuthorityApiTests
         Assert.Contains("HALT_CANARY_POLICY", actions);
     }
 
+    [Fact]
+    public async Task MachineRegisterAndRevoke_AreAdminGatedAndAudited()
+    {
+        using var factory = new SigningPortalFactory();
+        using var client = factory.CreateClient();
+        var adminToken = await GetAdminTokenAsync(client);
+        var (_, _, viewerToken, _) = await CreateReadyUserAsync(client, adminToken, "Viewer");
+        var machineId = Guid.NewGuid().ToString("N");
+        var enrollmentId = Guid.NewGuid().ToString("N");
+
+        var registerBody = new
+        {
+            machineId,
+            enrollmentId,
+            tenant = "acme",
+            environment = "prod",
+            canaryGroup = "ring0"
+        };
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthPost(client, viewerToken, "/api/admin/policy-authority/machines",
+                registerBody)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await AuthPost(client, viewerToken,
+                $"/api/admin/policy-authority/machines/{machineId}/revoke",
+                new { reason = "viewer attempt" })).StatusCode);
+
+        var registered = await AuthPost(client, adminToken, "/api/admin/policy-authority/machines",
+            registerBody);
+        Assert.Equal(HttpStatusCode.OK, registered.StatusCode);
+        var registeredDto = await registered.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.False(registeredDto!["revoked"]!.GetValue<bool>());
+        Assert.Equal("ring0", registeredDto["canaryGroup"]!.GetValue<string>());
+
+        var revoked = await AuthPost(client, adminToken,
+            $"/api/admin/policy-authority/machines/{machineId}/revoke",
+            new { reason = "laptop stolen" });
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        var revokedDto = await revoked.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.True(revokedDto!["revoked"]!.GetValue<bool>());
+        Assert.Equal("laptop stolen", revokedDto["revokedReason"]!.GetValue<string>());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var auditRows = await db.AuditLogs
+            .Where(a => a.ResourceType == "PolicyMachine" && a.ResourceId == machineId)
+            .Select(a => new { a.Action, a.Detail })
+            .ToListAsync();
+        Assert.Contains(auditRows, a => a.Action == "REGISTER_POLICY_MACHINE"
+            && a.Detail != null
+            && a.Detail.Contains("CanaryGroup=ring0", StringComparison.Ordinal));
+        Assert.Contains(auditRows, a => a.Action == "REVOKE_POLICY_MACHINE"
+            && a.Detail != null
+            && a.Detail.Contains("Reason=laptop stolen", StringComparison.Ordinal));
+    }
+
     private static async Task<JsonObject> PublishAsync(
         HttpClient client, string adminToken, string version, string policyJson,
         bool staged, DateTimeOffset expires)

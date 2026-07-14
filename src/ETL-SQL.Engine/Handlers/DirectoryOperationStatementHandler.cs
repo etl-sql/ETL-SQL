@@ -205,15 +205,24 @@ public class DirectoryOperationStatementHandler : IStatementHandler
                 case DirectoryOpType.Compress:
                     if (dest != null)
                     {
+                        var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write,
+                            validateFileType: true);
                         // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(dest);
+                        context.SecurityService.ValidateWriteAccess(compressDest.CanonicalPath);
 
-                        if (File.Exists(dest))
+                        if (File.Exists(compressDest.CanonicalPath))
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            if (!overwrite)
+                                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {compressDest.CanonicalPath}");
+
+                            var deleteDest = pathAuthorizer.Authorize(context, compressDest.CanonicalPath,
+                                FileSystemAccessKind.Delete, validateFileType: true);
+                            context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
+                            pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
-                        System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
+                        await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
+                            truncate: true, failIfExists: true);
+                        System.IO.Compression.ZipFile.CreateFromDirectory(path, destStream);
                         _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;

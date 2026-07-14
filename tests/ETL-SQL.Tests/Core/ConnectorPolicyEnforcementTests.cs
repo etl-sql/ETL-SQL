@@ -1,3 +1,8 @@
+using ETL_SQL.Common;
+using ETL_SQL.Connectors.Orchestrator;
+using ETL_SQL.Connectors.ReportPortal;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Governance;
@@ -269,6 +274,77 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
         Assert.False(handler.UseProxy);
     }
 
+    [Fact]
+    public void ProductionHttpClients_UsePolicyBoundFactory()
+    {
+        var srcRoot = Path.Combine(FindRepositoryRoot(), "src");
+        var forbidden = new[]
+        {
+            "new HttpClient(",
+            "new HttpClient {",
+            "new HttpClient()",
+            "new HttpClientHandler(",
+            "new SocketsHttpHandler("
+        };
+        var allowedFile = Path.GetFullPath(Path.Combine(srcRoot, "ETL-SQL.Core", "Governance",
+            "PolicyBoundHttp.cs"));
+
+        var offenders = Directory.EnumerateFiles(srcRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !string.Equals(Path.GetFullPath(file), allowedFile, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(file => File.ReadLines(file)
+                .Select((line, index) => new { file, line, lineNumber = index + 1 }))
+            .Where(hit => forbidden.Any(pattern => hit.line.Contains(pattern, StringComparison.Ordinal)))
+            .Select(hit => $"{Path.GetRelativePath(srcRoot, hit.file)}:{hit.lineNumber}: {hit.line.Trim()}")
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
+    public async Task ReportPortal_RedirectToDeniedHost_IsNotFollowed()
+    {
+        var handler = new RedirectingHandler("http://169.254.169.254/latest/meta-data/");
+        using var http = PolicyBoundHttp.CreateClient(handler, baseAddress: new Uri("https://portal.example.com/"));
+        await using var portal = new ReportPortalDataSource(http, "admin", "pass", NullLogger.Instance);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            portal.ExecuteAdminStatementAsync(new ShowPortalUsersStatement(), SystemExecutionContext.Instance));
+
+        Assert.Contains("302", ex.Message, StringComparison.Ordinal);
+        Assert.Single(handler.Requests);
+        Assert.Equal("portal.example.com", handler.Requests[0].Host);
+    }
+
+    [Fact]
+    public async Task Orchestrator_RedirectToDeniedHost_IsNotFollowed()
+    {
+        var handler = new RedirectingHandler("http://169.254.169.254/latest/meta-data/");
+        using var http = PolicyBoundHttp.CreateClient(handler, baseAddress: new Uri("https://orchestrator.example.com/"));
+        await using var orchestrator = new OrchestratorDataSource(http, "key", NullLogger.Instance);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            orchestrator.ExecuteAdminStatementAsync(new ShowJobsStatement(), SystemExecutionContext.Instance));
+
+        Assert.Contains("302", ex.Message, StringComparison.Ordinal);
+        Assert.Single(handler.Requests);
+        Assert.Equal("orchestrator.example.com", handler.Requests[0].Host);
+    }
+
+    [Fact]
+    public async Task SharePoint_RedirectToDeniedHost_IsNotFollowed()
+    {
+        var handler = new RedirectingHandler("http://169.254.169.254/latest/meta-data/");
+        await using var sharePoint = new SharePointConnector(SystemExecutionContext.Instance,
+            "https://company.sharepoint.com/sites/Finance", null, handler);
+
+        var ex = await Assert.ThrowsAsync<ExecutionException>(() =>
+            sharePoint.GetVersionAsync(SystemExecutionContext.Instance, "https://company.sharepoint.com/sites/Finance"));
+
+        Assert.Contains("SharePoint site connection failed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(handler.Requests);
+        Assert.Equal("company.sharepoint.com", handler.Requests[0].Host);
+    }
+
     private static Exception? Unwrap(Exception? ex)
     {
         while (ex is not null)
@@ -277,6 +353,40 @@ public sealed class ConnectorPolicyEnforcementTests : IDisposable
             ex = ex.InnerException;
         }
         return null;
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null)
+        {
+            if (Directory.Exists(Path.Combine(directory.FullName, "src"))
+                && Directory.Exists(Path.Combine(directory.FullName, "tests")))
+            {
+                return directory.FullName;
+            }
+            directory = directory.Parent;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate repository root from test base directory.");
+    }
+
+    private sealed class RedirectingHandler(string location) : HttpMessageHandler
+    {
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request.RequestUri!);
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.Redirect)
+            {
+                RequestMessage = request,
+                Headers = { Location = new Uri(location) },
+                Content = new StringContent("")
+            });
+        }
     }
 
     private static async Task ExecuteAsync(string sql)

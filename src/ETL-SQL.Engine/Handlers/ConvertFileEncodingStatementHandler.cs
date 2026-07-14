@@ -61,8 +61,13 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
 
         if (File.Exists(dest))
         {
-            if (overwrite) File.Delete(dest);
-            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
+            if (!overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}", null, stmt.Line, stmt.Column);
+
+            var deleteDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Delete);
+            context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
+            context.SecurityService.ValidateFileType(deleteDest.CanonicalPath);
+            pathAuthorizer.DeleteValidatedFile(context, deleteDest);
         }
 
         Encoding fromEncoding = ParseEncoding(fromEncVal);
@@ -72,7 +77,8 @@ public class ConvertFileEncodingStatementHandler : IStatementHandler
             context.Log($"[ConvertEncoding] Converting '{source}' ({fromEncoding.EncodingName}) -> '{dest}' ({toEncoding.EncodingName})");
 
         using (var reader = new StreamReader(pathAuthorizer.OpenValidatedRead(context, sourceAuth), fromEncoding))
-        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth), toEncoding))
+        using (var writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, destAuth,
+                   failIfExists: !overwrite), toEncoding))
         {
             char[] buffer = new char[8192];
             int read;

@@ -158,9 +158,11 @@ ETL-SQL supports this without weakening isolation, under a strict trust boundary
   (admin/identity, secrets, configuration, report publish/execute, report data) returns `403` for a
   FleetReader token. Issue a distinct FleetReader credential per environment; never reuse a department
   admin or a cross-environment credential.
-- **No raw data blending.** `/api/fleet/status` returns only aggregate operational counts —
-  environment status, queue depth, active executions, failed refreshes, audit-outbox backlog, and
-  storage availability. No report rows, scripts, identities, secrets, or keys cross the boundary.
+- **No raw data blending.** `/api/fleet/status` returns only aggregate operational counts and
+  sanitized inventory metadata — environment/node id, installed version, schema versions,
+  policy version/hash/timestamps, provider names, readiness findings, and queue/storage health.
+  No report rows, scripts, user identities, secrets, keys, policy payload values, local paths,
+  certificate thumbprints, or event targets cross the boundary.
 - **Containment.** Because the FleetReader credential authorizes nothing but the status endpoint, a
   compromised aggregator credential cannot pivot into any department's database, artifact storage,
   encryption keys, or execution capability — it can only read that environment's health summary. This
@@ -178,7 +180,101 @@ ETL-SQL supports this without weakening isolation, under a strict trust boundary
 | `failedRefreshes` | Reports whose last refresh failed. |
 | `auditOutboxPending`, `auditOutboxFailed` | Durable audit-outbox backlog and terminal failures. |
 | `storage` | Whether shared artifact storage is reachable (`ok` / `unavailable`). |
+| `securityEvents` | Local security-event queue/collector health: pending/failed counts, oldest pending time, stored bytes, drops, and collector reachability. |
+| `inventory.environment`, `inventory.nodeId` | Environment id and Portal node id for operations routing and HA affinity diagnosis. |
+| `inventory.installedVersion` | Report Portal assembly version running on the node. |
+| `inventory.schemaVersions` | Supported enrollment, policy-envelope, policy-payload, security-event schema versions plus Portal migration counts and last applied migration id. |
+| `inventory.policy` | Enrollment/policy availability, policy version/hash, issuance/expiry/load timestamps, signing/client-certificate configured flags, optional client-certificate expiry, and governed-key count. |
+| `inventory.providers` | Portal database provider and artifact-storage provider names only; no connection strings or paths. |
+| `inventory.configurationFingerprint` | Stable hash of non-secret fleet configuration inputs used to spot drift between nodes/environments without exposing values. |
+| `inventory.upgradeReadiness` | Boolean readiness plus findings such as pending migrations, unavailable storage, or unavailable/near-expiry enterprise policy. |
 
 `FleetHealthAggregator` fans out to each environment's endpoint with its scoped token, tolerates
 unreachable environments (reporting them rather than failing the whole view), and merges the results
 into a `FleetHealthReport` (with `Total`, `Unreachable`, and `Unhealthy` counts).
+
+The aggregator can shape that read-only result with `FleetViewOptions` after polling: search across
+environment/node/status/provider/policy/readiness fields, filter by status/reachability/provider/
+policy version/upgrade readiness, and group by status, environment, database provider, storage
+provider, policy version, or upgrade readiness. This is a local presentation operation over the
+already-authorized status payloads. It does not grant the aggregator any additional endpoint,
+mutation, script execution, report data, identity, secret, or key access.
+
+The aggregated `FleetHealthReport` also includes actionable findings synthesized from those same
+status payloads:
+
+- **Unsupported schema/version findings** — enrollment, policy-envelope, policy-payload, and
+  security-event schemas that the aggregator does not support.
+- **Missing capability findings** — an environment that omits inventory or security-event diagnostics.
+- **Dependency findings** — unreachable environments, degraded/unhealthy environment health, pending
+  migrations, unavailable artifact storage, unavailable enterprise policy, or near-expiry policy.
+- **Divergence findings** — nodes in the same environment reporting different policy versions,
+  policy hashes, installed versions, or non-secret configuration fingerprints.
+
+Findings are advisory and read-only. They identify what an operator should inspect; they do not let
+the fleet view mutate a remote environment or bypass the per-environment authority model.
+
+### Rolling upgrade compatibility metadata and reports
+
+Each inventory payload includes machine-readable compatibility metadata:
+
+- `metadataVersion` — compatibility metadata contract version.
+- `compatibilityWindow` — the rolling-compatibility promise for this node.
+- `rollingUpgradeSequence` — the supported operator sequence:
+  readiness check, node drain, binary deployment, single-owner database migration, health
+  verification, traffic restoration, postflight readiness, and rollback decision.
+- `components` — per-component contract metadata for Portal, engine, reporting/snapshots, Portal
+  database schema, artifact storage, enterprise enrollment, policy envelope, policy payload,
+  security-event collector, connectors, and plugins.
+
+`FleetHealthAggregator.BuildUpgradeReport` produces fleet-wide preflight and postflight reports from
+the already-collected status payloads. Preflight checks that environments are reachable and healthy,
+inventory/compatibility metadata is present, compatibility metadata uses the supported contract,
+installed versions remain within the advertised N-1 window, upgrade readiness is true, and Portal
+schemas have no pending migrations before traffic is restored. The N-1 check requires nodes in the
+same environment to report parseable semantic versions with the same major version and no more than
+one minor version of spread; wider or unparseable version spans fail clearly as
+`unsupported-compatibility-window`. Postflight adds a divergence check so mixed policy,
+configuration, or installed-version states are visible after deployment. Package deployment remains
+outside ETL-SQL; use Intune, SCCM, Ansible, Kubernetes, systemd, Windows Services, or your existing
+release tooling to install binaries and drain/restore traffic.
+
+Portal startup database mutation is serialized by `PortalDatabaseMigrationLock`: PostgreSQL uses a
+provider advisory lock and SQLite uses a process-local semaphore. Fleet inventory exposes the
+current migration state as `inventory.migration`: state, owner node id, provider, lock kind/key,
+started/acquired/completed/updated timestamps, pending migration count, and sanitized error text.
+Operators can therefore see which node owns migration/startup maintenance, whether it is waiting,
+checking, applying, succeeded, or failed, and whether recovery should be restore-from-backup or a
+normal retry after fixing the reported dependency.
+
+### Machine and node lifecycle behavior
+
+ETL-SQL uses two separate registries, with different lifecycle rules:
+
+- **Policy machines** are enrolled execution identities known to the policy authority. Administrators
+  register them through **Admin -> Policy Authority -> Machine enrollment** or
+  `POST /api/admin/policy-authority/machines` with machine ID, enrollment ID, tenant, environment,
+  optional client-certificate thumbprint, and optional canary group. Policy retrieval is always bound
+  to this registered tenant/environment; caller-supplied headers cannot move a machine into another
+  environment.
+- **Service nodes** are live Portal/Orchestrator processes in the shared node registry. They are not
+  manually registered. `NodeHeartbeatService` writes a TTL heartbeat with node ID, role, timestamps,
+  and sanitized capacity/security-event metadata. A graceful shutdown deregisters immediately; a
+  crashed node becomes stale when its heartbeat expires and is pruned as housekeeping.
+
+Duplicate and retirement behavior:
+
+- Registering a machine ID that is already active is rejected. To reassign a machine ID, revoke the
+  old record first, then register it again with the new enrollment details. Prefer a new machine ID
+  for replacements so incident history stays clear.
+- A machine presenting a known machine ID with a different enrollment ID or tenant is denied as a
+  copied/reassigned identity and the denial is audited as `POLICY_ENVELOPE_DENIED`.
+- Revoking a policy machine marks it unusable immediately. Subsequent policy retrieval attempts for
+  that machine return the uniform unauthorized-machine error and are audited; no cache or canary
+  setting can override revocation.
+- Retiring a service node means stopping the Portal/Orchestrator process cleanly so it deregisters
+  its heartbeat. If a host is lost, wait for the TTL to expire or let `PruneExpiredNodesAsync`
+  remove the stale row. Do not reuse a stale node ID manually; generated node IDs are process-unique.
+- Fleet views treat unreachable environments and expired node heartbeats as operational findings,
+  not authority to mutate another environment. Recovery remains local to the affected environment's
+  operators or automation.

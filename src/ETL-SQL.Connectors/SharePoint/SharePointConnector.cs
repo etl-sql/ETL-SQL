@@ -70,7 +70,7 @@ namespace ETL_SQL.Connectors
             // Setup HTTP client based on authentication mode
             if (handler != null)
             {
-                _httpClient = new HttpClient(handler);
+                _httpClient = PolicyBoundHttp.CreateClient(handler);
             }
             else
             {

@@ -131,6 +131,15 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal("shared-state-ha", m.Topology);
         Assert.Equal(node.NodeId, m.NodeId);
         Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
+
+        var prometheus = await new PortalPrometheusMetricsExporter(
+            new OperationalMetricsService(db, config, node)).ExportAsync();
+        Assert.Contains("# TYPE etlsql_portal_execution_active gauge", prometheus);
+        Assert.Contains("etlsql_portal_execution_queued", prometheus);
+        Assert.Contains("etlsql_portal_dataset_storage_bytes", prometheus);
+        Assert.Contains($"node=\"{node.NodeId}\"", prometheus);
+        Assert.DoesNotContain(datasetDir, prometheus);
+        Assert.DoesNotContain(snapshotDir, prometheus);
     }
 
     [Fact]
@@ -172,6 +181,23 @@ public sealed class OperationalObservabilityTests : IDisposable
         var viewerReq = new HttpRequestMessage(HttpMethod.Get, "/api/admin/metrics/operational");
         viewerReq.Headers.Authorization = new("Bearer", viewerToken);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.SendAsync(viewerReq)).StatusCode);
+    }
+
+    [Fact]
+    public async Task PrometheusMetricsEndpoint_AllowsReadOnlyScrape()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/metrics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.StartsWith("text/plain", response.Content.Headers.ContentType?.MediaType);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("# HELP etlsql_portal_execution_active", body);
+        Assert.Contains("component=\"portal\"", body);
+        Assert.DoesNotContain("Portal__Jwt__Secret", body);
+        Assert.DoesNotContain("ConnectionString", body);
     }
 
     /// <summary>

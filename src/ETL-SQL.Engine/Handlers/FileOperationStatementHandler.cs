@@ -248,23 +248,31 @@ public class FileOperationStatementHandler : IStatementHandler
                 case FileOpType.Compress:
                     if (dest != null)
                     {
+                        var compressDest = pathAuthorizer.Authorize(context, dest, FileSystemAccessKind.Write);
                         // Security Hardening: Block writing to script files and dangerous types
-                        context.SecurityService.ValidateWriteAccess(dest);
-                        context.SecurityService.ValidateFileType(dest);
+                        context.SecurityService.ValidateWriteAccess(compressDest.CanonicalPath);
+                        context.SecurityService.ValidateFileType(compressDest.CanonicalPath);
 
-                        if (File.Exists(dest))
+                        if (File.Exists(compressDest.CanonicalPath))
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            if (!overwrite)
+                                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {compressDest.CanonicalPath}");
+
+                            var deleteDest = pathAuthorizer.Authorize(context, compressDest.CanonicalPath, FileSystemAccessKind.Delete);
+                            context.SecurityService.ValidateWriteAccess(deleteDest.CanonicalPath);
+                            context.SecurityService.ValidateFileType(deleteDest.CanonicalPath);
+                            pathAuthorizer.DeleteValidatedFile(context, deleteDest);
                         }
 
+                        await using var destStream = pathAuthorizer.OpenValidatedWrite(context, compressDest,
+                            truncate: true, failIfExists: true);
                         if (Directory.Exists(source))
                         {
-                            System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
+                            System.IO.Compression.ZipFile.CreateFromDirectory(source, destStream);
                         }
                         else if (File.Exists(source))
                         {
-                            using var archive = ZipFile.Open(dest, ZipArchiveMode.Create);
+                            using var archive = new ZipArchive(destStream, ZipArchiveMode.Create);
                             archive.CreateEntryFromFile(source, Path.GetFileName(source));
                         }
                         else

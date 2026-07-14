@@ -104,11 +104,18 @@ public class SplitFileStatementHandler : IStatementHandler
                         currentDestFile = partAuth.CanonicalPath;
                         if (File.Exists(currentDestFile))
                         {
-                            if (overwrite) File.Delete(currentDestFile);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {currentDestFile}");
+                            if (!overwrite)
+                                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {currentDestFile}");
+
+                            var deletePart = pathAuthorizer.Authorize(context, currentDestFile,
+                                FileSystemAccessKind.Delete);
+                            context.SecurityService.ValidateWriteAccess(deletePart.CanonicalPath);
+                            context.SecurityService.ValidateFileType(deletePart.CanonicalPath);
+                            pathAuthorizer.DeleteValidatedFile(context, deletePart);
                         }
 
-                        writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, partAuth), Encoding.UTF8);
+                        writer = new StreamWriter(pathAuthorizer.OpenValidatedWrite(context, partAuth,
+                            failIfExists: !overwrite), Encoding.UTF8);
                         currentCount = 0;
                     }
 

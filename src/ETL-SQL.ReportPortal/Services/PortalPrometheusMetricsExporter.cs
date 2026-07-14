@@ -1,0 +1,87 @@
+using System.Globalization;
+using System.Text;
+
+namespace ETL_SQL.ReportPortal.Services;
+
+/// <summary>
+/// Prometheus text export for the same non-secret operational snapshot exposed through the admin
+/// metrics API. The endpoint is intended for network-controlled scrapers; it never emits paths,
+/// credentials, usernames, report names, scripts, connection strings, or policy payload values.
+/// </summary>
+public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService metricsService)
+{
+    public async Task<string> ExportAsync(CancellationToken ct = default)
+    {
+        var metrics = await metricsService.GetAsync(ct);
+        var labels = new Dictionary<string, string>
+        {
+            ["environment"] = Environment.GetEnvironmentVariable("ETLSQL_ENV") ?? "default",
+            ["node"] = metrics.NodeId,
+            ["component"] = "portal"
+        };
+
+        var sb = new StringBuilder();
+        AppendGauge(sb, "etlsql_portal_execution_active",
+            "Currently running report executions.", metrics.ActiveExecutions, labels);
+        AppendGauge(sb, "etlsql_portal_execution_queued",
+            "Currently queued report executions.", metrics.QueuedExecutions, labels);
+        AppendGauge(sb, "etlsql_portal_execution_cap",
+            "Maximum concurrent report executions allowed on this node.", metrics.ExecutionCap, labels);
+        AppendGauge(sb, "etlsql_portal_execution_per_user_cap",
+            "Maximum concurrent report executions allowed per user.", metrics.PerUserExecutionCap, labels);
+        AppendGauge(sb, "etlsql_portal_execution_recent_total",
+            "Executions completed within the metrics window.", metrics.RecentExecutions, labels);
+        AppendGauge(sb, "etlsql_portal_execution_recent_failures",
+            "Failed or cancelled executions within the metrics window.", metrics.RecentExecutionFailures, labels);
+        AppendGauge(sb, "etlsql_portal_execution_duration_average_ms",
+            "Average completed execution duration in milliseconds within the metrics window.",
+            metrics.AverageExecutionDurationMs, labels);
+        AppendGauge(sb, "etlsql_portal_execution_queue_age_average_seconds",
+            "Average age in seconds of currently queued executions.", metrics.AverageQueuedExecutionAgeSeconds, labels);
+        AppendGauge(sb, "etlsql_portal_subscription_delivery_recent_total",
+            "Subscription deliveries completed within the metrics window.", metrics.RecentDeliveries, labels);
+        AppendGauge(sb, "etlsql_portal_subscription_delivery_recent_failures",
+            "Failed or denied subscription deliveries within the metrics window.",
+            metrics.RecentDeliveryFailures, labels);
+        AppendGauge(sb, "etlsql_portal_dataset_storage_bytes",
+            "Bytes currently used by Portal dataset storage.", metrics.DatasetStorageBytes, labels);
+        AppendGauge(sb, "etlsql_portal_snapshot_storage_bytes",
+            "Bytes currently used by Portal snapshot storage.", metrics.SnapshotStorageBytes, labels);
+        AppendGauge(sb, "etlsql_portal_subscriptions_active",
+            "Active report subscriptions.", metrics.ActiveSubscriptions, labels);
+        AppendGauge(sb, "etlsql_portal_smtp_connections",
+            "Configured SMTP connections.", metrics.SmtpConnections, labels);
+        AppendGauge(sb, "etlsql_portal_schema_applied_migrations",
+            "Applied Portal database migrations.", metrics.AppliedMigrations, labels);
+        AppendGauge(sb, "etlsql_portal_schema_pending_migrations",
+            "Pending Portal database migrations.", metrics.PendingMigrations, labels);
+        AppendGauge(sb, "etlsql_portal_schema_up_to_date",
+            "Whether the Portal database schema has no pending migrations.", metrics.SchemaUpToDate ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_portal_metrics_window_hours",
+            "Operational metrics lookback window in hours.", metrics.WindowHours, labels);
+
+        return sb.ToString();
+    }
+
+    private static void AppendGauge(
+        StringBuilder sb,
+        string name,
+        string help,
+        double value,
+        IReadOnlyDictionary<string, string> labels)
+    {
+        sb.Append("# HELP ").Append(name).Append(' ').AppendLine(help);
+        sb.Append("# TYPE ").Append(name).AppendLine(" gauge");
+        sb.Append(name).Append(FormatLabels(labels)).Append(' ')
+            .AppendLine(value.ToString("G17", CultureInfo.InvariantCulture));
+    }
+
+    private static string FormatLabels(IReadOnlyDictionary<string, string> labels) =>
+        "{" + string.Join(",", labels.Select(label =>
+            $"{label.Key}=\"{EscapeLabelValue(label.Value)}\"")) + "}";
+
+    private static string EscapeLabelValue(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\n", "\\n", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal);
+}

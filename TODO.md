@@ -121,13 +121,13 @@ Already shipped: `FileHandleFinalPath` (Win `GetFinalPathNameByHandle` / Linux `
 re-check between authorize and mutate; `FileOperationStatementHandler` routes local DELETE/MOVE/RENAME
 through them; link/junction substitution tests live in `FileSystemPolicyAuthorizerTests` and
 `HardeningSecurityTests`.
-- [ ] Route the overwrite path that still calls raw `File.Delete(dest)` (in `FileOperationStatementHandler`,
+- [x] Route the overwrite path that still calls raw `File.Delete(dest)` (in `FileOperationStatementHandler`,
       the pre-move/rename overwrite branch) and any recursive `Directory.Delete` through the validated
       authorizer, so no mutation boundary bypasses the link-race re-check.
-- [ ] Add link/junction substitution tests at the remaining boundaries (directory move/delete and
+- [x] Add link/junction substitution tests at the remaining boundaries (directory move/delete and
       overwrite-on-move), and assert the documented best-effort behavior on platforms where the OS
       returns no handle final path (`Resolve` → `null`).
-- [ ] Document the remote-filesystem (`IRemoteFileSystem`: SFTP/FTP/S3/Azure) mutation stance —
+- [x] Document the remote-filesystem (`IRemoteFileSystem`: SFTP/FTP/S3/Azure) mutation stance —
       handle-based re-check is local-only; state explicitly that remote delete/move/rename rely on the
       provider and are outside the OS-handle guarantee.
 
@@ -136,17 +136,17 @@ Already shipped: `PolicyBoundHttp.CreateHandler/CreateClient` enforces no-proxy,
 connect-time DNS re-pin (`ConnectorPolicyAuthorizer.EnforceResolvedAddress`), and is wired into the
 SharePoint, Report Portal, Orchestrator, OpenLineage, TUI `PortalClient`, remote policy runtime, secret
 admin, and browser PDF export paths.
-- [ ] Audit every remaining production `new HttpClient` / `HttpClientHandler` (discovery, health/probe,
+- [x] Audit every remaining production `new HttpClient` / `HttpClientHandler` (discovery, health/probe,
       vault, OIDC metadata/JWKS) and migrate any raw client to `PolicyBoundHttp`; add a guard test that
       fails when a production HTTP client is constructed outside the policy-bound factory.
-- [ ] Add redirect re-authorization coverage: assert a 3xx to a policy-denied host is re-validated and
+- [x] Add redirect re-authorization coverage: assert a 3xx to a policy-denied host is re-validated and
       refused (not silently followed) across at least the Portal, Orchestrator, and SharePoint clients.
 
 ### Portal administrator UI for policy lifecycle — SHIPPED (verify only)
 `policy-authority-admin.js` + `PolicyAuthorityController` already cover validation, staged publication,
 activation, rollback, version history, machine enrollment inventory, machine revocation, and
 signing-key status — the roadmap bullet verbatim.
-- [ ] Confirm Portal WebApplicationFactory coverage (`Category=Portal`) exercises the activate/rollback
+- [x] Confirm Portal WebApplicationFactory coverage (`Category=Portal`) exercises the activate/rollback
       and machine-revoke mutation paths and their authority gate + audit emission; add cases if missing.
       No new UI work expected — mark the roadmap bullet shipped if coverage holds.
 
@@ -176,3 +176,69 @@ cohort while the fleet keeps `Active`.
       admin actions use `AuditService`) — don't re-propose a canary security event without a contract review.
 - [x] Docs: Administrators_Guide canary rollout section added (publish → ramp/promote → halt, cohort
       types, halt-reissue behavior). ROADMAP Phase 1 bullets 1–3 reconciled as shipped.
+
+---
+
+## Enterprise Policy Operations Documentation
+
+Brought in from `ROADMAP.md` → *Enterprise Policy Enforcement & Monitoring → Phase 3:
+Certification & Operations → Deployment and recovery*. This is the next enterprise item after
+Phase 1 policy hardening/canary rollout.
+
+- [x] Document policy-authority deployment, signing-key custody/rotation, machine
+      enrollment/revocation, service-identity permissions, staged rollout, emergency policy
+      publication, and unenrollment governance.
+- [x] Document cache and outbox backup/restore rules; restored machines must not duplicate machine
+      identity or silently reuse credentials in another environment.
+- [x] Define upgrade ordering and compatibility across bootstrap, envelope, policy, event, and
+      collector schema versions.
+- [x] Provide outage runbooks for policy authority, certificate expiry, invalid publication, SIEM
+      outage, disk exhaustion, and fail-closed fleet recovery.
+- [x] Add support-bundle diagnostics that expose versions, hashes, timestamps, and health without
+      policy payload values, trust material, credentials, or sensitive event targets.
+
+---
+
+## Enterprise Operations Control Plane
+
+Brought in from `ROADMAP.md` → *Enterprise Policy Enforcement & Monitoring → Phase 4:
+Operations Control Plane → 4.1 Central fleet management*.
+
+- [x] Expand fleet inventory beyond current health aggregation to include node/environment identity,
+      installed version, schema version, enrollment and policy compliance, last policy refresh,
+      signing/client-certificate expiry, configuration drift, storage provider, database provider,
+      and upgrade readiness.
+- [x] Add fleet search, filtering, grouping, and drill-down without granting the aggregator mutation
+      authority over departmental environments.
+- [x] Define explicit machine/node registration, retirement, duplicate identity, stale heartbeat, and
+      revoked-node behavior.
+- [x] Surface unsupported version combinations, missing required capabilities, unhealthy dependencies,
+      and policy divergence as actionable findings.
+
+### Upgrade orchestration and compatibility
+- [x] Define and automate the supported rolling-upgrade sequence: readiness check, node drain, binary
+      deployment, database migration ownership, compatibility window, health verification, traffic
+      restoration, and rollback decision.
+- [x] Publish machine-readable compatibility metadata for Portal, Orchestrator, engine, database
+      schema, policy/envelope schema, snapshots, plugins/connectors, and collectors.
+- [x] Prevent two nodes from racing to run incompatible migrations; expose migration leader,
+      progress, failure, and recovery state.
+- [x] Add fleet-wide preflight and postflight reports while leaving package deployment to established
+      tools such as Intune, SCCM, Ansible, Kubernetes, or equivalent infrastructure.
+- [x] Certify N-1 rolling compatibility where promised and fail clearly when a deployment exceeds the
+      supported compatibility window.
+
+### Standard observability export
+- [x] Add a Prometheus-compatible Portal `/metrics` endpoint backed by the existing non-secret
+      operational snapshot, with stable `environment`, `node`, and `component` labels.
+- [ ] Add first-class OpenTelemetry metrics and traces without imposing standalone overhead when
+      exporters are disabled.
+- [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode,
+      status, policy version, and workload class while controlling high-cardinality labels.
+- [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
+      spill, connector latency, retries, failures, storage growth, database pool health, policy
+      refresh, audit/security backlog, and delivery health.
+- [ ] Correlate metrics and traces with structured logs, audit events, security events, job IDs,
+      script hashes, and request correlation IDs.
+- [ ] Keep observability exporters optional and ensure disabled exporters impose negligible
+      standalone overhead.

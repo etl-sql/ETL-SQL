@@ -130,9 +130,25 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 context.SecurityService.ValidateFileType(targetFile);
 
                 context.IncrementOperationCount(OperationType.FileSystem, sourceFile, 1);
-                targetFile = pathAuthorizer.Authorize(context, targetFile,
-                    FileSystemAccessKind.Write).CanonicalPath;
-                File.Copy(sourceFile, targetFile, true);
+                var sourceAuth = pathAuthorizer.Authorize(context, sourceFile,
+                    FileSystemAccessKind.Read);
+                var targetAuth = pathAuthorizer.Authorize(context, targetFile,
+                    FileSystemAccessKind.Write);
+                if (File.Exists(targetAuth.CanonicalPath))
+                {
+                    var deleteTarget = pathAuthorizer.Authorize(context, targetAuth.CanonicalPath,
+                        FileSystemAccessKind.Delete);
+                    context.SecurityService.ValidateWriteAccess(deleteTarget.CanonicalPath);
+                    context.SecurityService.ValidateFileType(deleteTarget.CanonicalPath);
+                    pathAuthorizer.DeleteValidatedFile(context, deleteTarget);
+                }
+
+                await using (var sourceStream = pathAuthorizer.OpenValidatedRead(context, sourceAuth))
+                await using (var targetStream = pathAuthorizer.OpenValidatedWrite(context, targetAuth,
+                    failIfExists: true))
+                {
+                    await sourceStream.CopyToAsync(targetStream, context.CancellationToken);
+                }
 
                 if (context.IsVerbose)
                     context.Log($"[SyncDirectory] Copied: {relativePath}");
@@ -155,7 +171,8 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                     context.SecurityService.ValidateWriteAccess(destFile);
                     context.SecurityService.ValidateFileType(destFile);
                     context.IncrementOperationCount(OperationType.FileSystem, destFile, 1);
-                    File.Delete(destFile);
+                    pathAuthorizer.DeleteValidatedFile(context, pathAuthorizer.Authorize(context, destFile,
+                        FileSystemAccessKind.Delete));
 
                     if (context.IsVerbose)
                         context.Log($"[SyncDirectory] Deleted: {relativePath}");
@@ -200,10 +217,10 @@ public class SyncDirectoryStatementHandler : IStatementHandler
                 && Directory.GetDirectories(authorizedDirectory).Length == 0)
             {
                 var deleteTarget = authorizer.Authorize(context, authorizedDirectory,
-                    FileSystemAccessKind.Delete, validateFileType: false).CanonicalPath;
-                context.SecurityService.ValidateWriteAccess(deleteTarget);
-                context.IncrementOperationCount(OperationType.FileSystem, deleteTarget, 1);
-                Directory.Delete(deleteTarget, false);
+                    FileSystemAccessKind.Delete, validateFileType: false);
+                context.SecurityService.ValidateWriteAccess(deleteTarget.CanonicalPath);
+                context.IncrementOperationCount(OperationType.FileSystem, deleteTarget.CanonicalPath, 1);
+                authorizer.DeleteValidatedDirectory(context, deleteTarget, recursive: false);
             }
         }
     }

@@ -44,6 +44,20 @@ public static class PolicyBoundHttp
         return client;
     }
 
+    /// <summary>
+    /// Centralizes exceptional clients that use a supplied in-memory or test transport instead of a
+    /// socket transport. Production network clients must use <see cref="CreateClient(Action{SocketsHttpHandler}?, SslClientAuthenticationOptions?, TimeSpan?, Uri?)"/>.
+    /// </summary>
+    public static HttpClient CreateClient(HttpMessageHandler handler, TimeSpan? timeout = null, Uri? baseAddress = null)
+    {
+        var client = new HttpClient(handler);
+        if (timeout.HasValue)
+            client.Timeout = timeout.Value;
+        if (baseAddress != null)
+            client.BaseAddress = baseAddress;
+        return client;
+    }
+
     private static async ValueTask<Stream> ConnectValidatedAsync(
         SocketsHttpConnectionContext context,
         CancellationToken cancellationToken)

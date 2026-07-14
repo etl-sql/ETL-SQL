@@ -1,10 +1,14 @@
 using System;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Governance;
 using Xunit;
 
 namespace ETL_SQL.Tests.CliCommands
@@ -129,6 +133,68 @@ namespace ETL_SQL.Tests.CliCommands
             Assert.Contains("System.InvalidOperationException", redacted);
         }
 
+        [Fact]
+        public void SupportBundle_EnterpriseDiagnostics_ExposeMetadataWithoutTrustMaterialOrPayload()
+        {
+            const string tenant = "corp-production";
+            const string thumbprint = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
+            const string serviceIdentity = "DOMAIN\\etl-service";
+            using var key = RSA.Create(2048);
+            var publicKey = key.ExportSubjectPublicKeyInfoPem();
+            var enrollmentPath = Path.Combine(_baseDir, "Enterprise", "enrollment.json");
+            var store = new EnterpriseEnrollmentStore(
+                enrollmentPath,
+                new NoopEnrollmentValidator(),
+                new NoopEnrollmentProtector());
+            var document = new EnterpriseEnrollmentDocument
+            {
+                Tenant = tenant,
+                PolicyEndpoint = "https://policy.example.com/api/policy-authority",
+                PolicySigningPublicKey = publicKey,
+                ClientCertificateThumbprint = thumbprint,
+                ServiceIdentity = serviceIdentity
+            };
+            store.Enroll(document);
+
+            var policyDocument = new OrganizationPolicyDocument
+            {
+                Execution = new ExecutionPolicySection { MaxStringResultSize = 4096 },
+                SecurityEvents = new SecurityEventPolicySection
+                {
+                    CollectorEndpoint = "https://siem.example.com/events"
+                }
+            };
+            var policy = new EffectiveEnterprisePolicy(
+                true,
+                true,
+                "Live",
+                "2026.07.13.1",
+                "unit-test",
+                DateTimeOffset.UtcNow.AddMinutes(-5),
+                DateTimeOffset.UtcNow.AddHours(1),
+                DateTimeOffset.UtcNow,
+                policyDocument,
+                EnterprisePolicyConfiguration.Flatten(policyDocument.ToPolicyValues()));
+
+            var diagnostics = SupportBundleBuilder.BuildEnterpriseDiagnostics(store, policy);
+            var json = diagnostics.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+
+            Assert.DoesNotContain(tenant, json);
+            Assert.DoesNotContain("policy.example.com", json);
+            Assert.DoesNotContain(publicKey, json);
+            Assert.DoesNotContain(thumbprint, json);
+            Assert.DoesNotContain(serviceIdentity, json);
+            Assert.DoesNotContain("siem.example.com", json);
+            Assert.Contains("tenantHash", json);
+            Assert.Contains("policySigningKeyHash", json);
+            Assert.Contains("clientCertificateThumbprintHash", json);
+            Assert.Contains("policyHash", json);
+            Assert.Equal("1.0", (string?)diagnostics["enrollment"]!["schemaVersion"]);
+            Assert.Equal("2026.07.13.1", (string?)diagnostics["currentPolicy"]!["policyVersion"]);
+            Assert.Contains("SecurityEvents:CollectorEndpoint",
+                diagnostics["currentPolicy"]!["governedKeys"]!.AsArray().Select(x => (string?)x));
+        }
+
         // ── init scaffolding ──────────────────────────────────────────────────
 
         [Fact]
@@ -179,6 +245,28 @@ namespace ETL_SQL.Tests.CliCommands
 
             // A regenerated config gets a fresh JWT secret.
             Assert.NotEqual(firstSecret, secondSecret);
+        }
+
+        private sealed class NoopEnrollmentValidator : IEnterpriseEnrollmentProtectionValidator
+        {
+            public void Validate(string enrollmentPath)
+            {
+            }
+        }
+
+        private sealed class NoopEnrollmentProtector : IEnterpriseEnrollmentProtector
+        {
+            public void ProtectDirectory(string directory, string? serviceIdentity)
+            {
+            }
+
+            public void ProtectCacheDirectory(string directory, string? serviceIdentity)
+            {
+            }
+
+            public void ProtectFile(string file, string? serviceIdentity)
+            {
+            }
         }
     }
 }

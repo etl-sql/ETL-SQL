@@ -325,6 +325,105 @@ public sealed class FileSystemPolicyAuthorizerTests
     }
 
     [Fact]
+    public void MoveValidatedFile_OverwriteDestinationDetectsJunctionSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_move_overwrite_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_move_overwrite_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sourcePath = Path.Combine(root, "source.txt");
+            File.WriteAllText(sourcePath, "authorized");
+            var destDir = Path.Combine(root, "dest");
+            Directory.CreateDirectory(destDir);
+            var destinationPath = Path.Combine(destDir, "existing.txt");
+            File.WriteAllText(destinationPath, "authorized-destination");
+            var source = authorizer.Authorize(context.Object, sourcePath, FileSystemAccessKind.Move,
+                validateFileType: false);
+            var destination = authorizer.Authorize(context.Object, destinationPath, FileSystemAccessKind.Move,
+                validateFileType: false);
+
+            var outsideDestination = Path.Combine(outside, "existing.txt");
+            File.WriteAllText(outsideDestination, "protected");
+            Directory.Delete(destDir, recursive: true);
+            CreateDirectoryLink(destDir, outside);
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.MoveValidatedFile(context.Object, source, destination, overwrite: true));
+            Assert.Contains("canonical target", denied.Decision.Reason);
+            Assert.Equal("protected", File.ReadAllText(outsideDestination));
+            Assert.True(File.Exists(sourcePath));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void DeleteValidatedDirectory_DetectsJunctionSubstitutionAfterAuthorization()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"policy_dir_delete_{Guid.NewGuid():N}");
+        var outside = Path.Combine(Path.GetTempPath(), $"policy_dir_delete_out_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(outside);
+        try
+        {
+            var policy = EffectivePolicy(root);
+            EnterprisePolicyRuntime.SetCurrent(policy);
+            var security = new SecurityService(NullLogger.Instance)
+            {
+                IsTestMode = false,
+                ProtectionMode = PathProtectionMode.Defined
+            };
+            security.ApprovedSafeZones.Add(root);
+            var context = Context(security, ExecutionPolicySnapshot.Capture(policy, "operator",
+                ScriptExecutionMode.Batch, "script-hash"));
+            var authorizer = new FileSystemPolicyAuthorizer(security);
+
+            var sub = Path.Combine(root, "sub");
+            var canonical = Path.Combine(sub, "victim");
+            Directory.CreateDirectory(canonical);
+            File.WriteAllText(Path.Combine(canonical, "data.txt"), "authorized");
+            var authorized = authorizer.Authorize(context.Object, canonical, FileSystemAccessKind.Delete,
+                validateFileType: false);
+
+            var outsideVictim = Path.Combine(outside, "victim");
+            Directory.CreateDirectory(outsideVictim);
+            File.WriteAllText(Path.Combine(outsideVictim, "data.txt"), "protected");
+            Directory.Delete(sub, recursive: true);
+            CreateDirectoryLink(sub, outside);
+
+            var denied = Assert.Throws<FileSystemPolicyDeniedException>(() =>
+                authorizer.DeleteValidatedDirectory(context.Object, authorized, recursive: true));
+            Assert.Contains("canonical target", denied.Decision.Reason);
+            Assert.True(Directory.Exists(outsideVictim));
+            Assert.Equal("protected", File.ReadAllText(Path.Combine(outsideVictim, "data.txt")));
+        }
+        finally
+        {
+            EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+            try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(outside, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void MoveValidatedDirectory_DetectsJunctionSubstitutionAfterAuthorization()
     {
         var root = Path.Combine(Path.GetTempPath(), $"policy_dir_move_{Guid.NewGuid():N}");

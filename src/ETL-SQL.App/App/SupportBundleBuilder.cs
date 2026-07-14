@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -10,6 +12,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -89,6 +92,7 @@ namespace ETL_SQL.App
                 await WriteDoctorSnapshotAsync(staging, logger);
                 await WriteRedactedConfigAsync(staging);
                 await WriteDatabaseMetricsAsync(staging, config);
+                await WriteEnterpriseDiagnosticsAsync(staging);
                 CopyRecentLogs(staging, config);
 
                 if (File.Exists(outputPath))
@@ -274,6 +278,158 @@ namespace ETL_SQL.App
                 Path.Combine(staging, "database-metrics.json"),
                 metrics.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         }
+
+        private static async Task WriteEnterpriseDiagnosticsAsync(string staging)
+        {
+            var diagnostics = BuildEnterpriseDiagnostics();
+            await File.WriteAllTextAsync(
+                Path.Combine(staging, "enterprise-diagnostics.json"),
+                diagnostics.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        internal static JsonObject BuildEnterpriseDiagnostics(
+            EnterpriseEnrollmentStore? store = null,
+            EffectiveEnterprisePolicy? policy = null)
+        {
+            store ??= new EnterpriseEnrollmentStore();
+            policy ??= EnterprisePolicyRuntime.Current;
+
+            var status = store.GetStatus();
+            var root = new JsonObject
+            {
+                ["generatedUtc"] = DateTime.UtcNow.ToString("o"),
+                ["enrollment"] = BuildEnrollmentDiagnostics(status),
+                ["currentPolicy"] = BuildPolicyDiagnostics(policy),
+                ["securityEvents"] = JsonSerializer.SerializeToNode(
+                    SecurityEventRuntime.GetDiagnostics(),
+                    new JsonSerializerOptions(JsonSerializerDefaults.Web))!,
+                ["localFiles"] = BuildEnterpriseFileDiagnostics(store.Path)
+            };
+            return root;
+        }
+
+        private static JsonObject BuildEnrollmentDiagnostics(EnterpriseEnrollmentStatus status)
+        {
+            var result = new JsonObject
+            {
+                ["isEnrolled"] = status.IsEnrolled,
+                ["bootstrapPath"] = RedactDiagnosticText(status.Path)
+            };
+
+            if (status.Error is not null)
+            {
+                result["valid"] = false;
+                result["error"] = RedactDiagnosticText(status.Error);
+                return result;
+            }
+
+            if (status.Enrollment is not { } value)
+            {
+                result["valid"] = !status.IsEnrolled;
+                return result;
+            }
+
+            result["valid"] = true;
+            result["schemaVersion"] = value.SchemaVersion;
+            result["enrollmentId"] = value.EnrollmentId;
+            result["machineId"] = value.MachineId;
+            result["tenantHash"] = Hash(value.Tenant);
+            result["policyEndpoint"] = BuildEndpointDiagnostics(value.PolicyEndpoint);
+            result["policySigningKeyConfigured"] = true;
+            result["policySigningKeyHash"] = Hash(value.PolicySigningPublicKey);
+            result["clientCertificateConfigured"] = !string.IsNullOrWhiteSpace(value.ClientCertificateThumbprint);
+            result["clientCertificateThumbprintHash"] = HashNullable(value.ClientCertificateThumbprint);
+            result["serviceIdentityConfigured"] = !string.IsNullOrWhiteSpace(value.ServiceIdentity);
+            result["maxOfflineHours"] = value.MaxOfflineHours;
+            result["failClosed"] = value.FailClosed;
+            result["enrolledAtUtc"] = value.EnrolledAtUtc.ToString("o");
+            return result;
+        }
+
+        private static JsonObject BuildPolicyDiagnostics(EffectiveEnterprisePolicy policy)
+        {
+            var result = new JsonObject
+            {
+                ["isEnrolled"] = policy.IsEnrolled,
+                ["isAvailable"] = policy.IsAvailable,
+                ["status"] = policy.Status,
+                ["policyVersion"] = policy.PolicyVersion,
+                ["policyHash"] = ComputePolicyHash(policy.Document),
+                ["source"] = policy.Source,
+                ["issuedAtUtc"] = policy.IssuedAtUtc?.ToString("o"),
+                ["expiresAtUtc"] = policy.ExpiresAtUtc?.ToString("o"),
+                ["loadedAtUtc"] = policy.LoadedAtUtc?.ToString("o"),
+                ["warning"] = RedactDiagnosticText(policy.Error)
+            };
+
+            var governedKeys = new JsonArray();
+            foreach (var key in policy.ConfigurationValues.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase))
+                governedKeys.Add(key);
+            result["governedKeys"] = governedKeys;
+            return result;
+        }
+
+        private static JsonObject BuildEndpointDiagnostics(string endpoint)
+        {
+            if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri))
+            {
+                return new JsonObject
+                {
+                    ["configured"] = true,
+                    ["validAbsoluteUri"] = false
+                };
+            }
+
+            return new JsonObject
+            {
+                ["configured"] = true,
+                ["validAbsoluteUri"] = true,
+                ["scheme"] = uri.Scheme,
+                ["hostHash"] = Hash(uri.IdnHost),
+                ["port"] = uri.IsDefaultPort ? null : uri.Port
+            };
+        }
+
+        private static JsonObject BuildEnterpriseFileDiagnostics(string enrollmentPath)
+        {
+            var directory = Path.GetDirectoryName(enrollmentPath);
+            var cacheDirectory = directory is null ? null : Path.Combine(directory, "cache");
+            return new JsonObject
+            {
+                ["enrollment"] = BuildFileMetric(enrollmentPath),
+                ["policyCache"] = cacheDirectory is null ? null : BuildFileMetric(Path.Combine(cacheDirectory, "policy-cache.json")),
+                ["securityEventOutbox"] = cacheDirectory is null ? null : BuildFileMetric(Path.Combine(cacheDirectory, "security-events.db"))
+            };
+        }
+
+        private static JsonObject BuildFileMetric(string path)
+        {
+            var result = new JsonObject { ["path"] = RedactDiagnosticText(path) };
+            try
+            {
+                var info = new FileInfo(path);
+                result["exists"] = info.Exists;
+                if (info.Exists)
+                {
+                    result["sizeBytes"] = info.Length;
+                    result["lastWriteUtc"] = info.LastWriteTimeUtc.ToString("o");
+                }
+            }
+            catch (Exception ex)
+            {
+                result["error"] = RedactDiagnosticText(ex.Message);
+            }
+            return result;
+        }
+
+        private static string? ComputePolicyHash(OrganizationPolicyDocument? document) =>
+            document is null ? null : Hash(JsonSerializer.Serialize(document));
+
+        private static string? HashNullable(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? null : Hash(value);
+
+        private static string Hash(string value) =>
+            Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
         private static void CopyRecentLogs(string staging, IConfiguration? config)
         {
