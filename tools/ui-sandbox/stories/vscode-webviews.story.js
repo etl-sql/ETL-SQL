@@ -531,6 +531,32 @@ function renderVisualFlow(stage, ctx) {
       to { transform: rotate(360deg); }
     }
     
+    /* SVG Connection Lines High-Contrast Theme Overrides */
+    .etlsql-dag-svg path {
+      vector-effect: non-scaling-stroke !important;
+      stroke-width: 2.2px !important;
+      stroke: #8892b0 !important; /* brighter slate-gray for clear visibility on dark background */
+      transition: stroke 0.3s ease, stroke-width 0.3s ease;
+    }
+    
+    /* Active running pipeline animation */
+    .etlsql-dag-svg path.line-running {
+      stroke: #eab308 !important;
+      stroke-dasharray: 6 4 !important;
+      animation: ssis-line-flow 1.2s linear infinite !important;
+    }
+    
+    /* Completed pipeline line */
+    .etlsql-dag-svg path.line-completed {
+      stroke: #22c55e !important;
+      stroke-width: 2.5px !important;
+    }
+    
+    @keyframes ssis-line-flow {
+      from { stroke-dashoffset: 20; }
+      to { stroke-dashoffset: 0; }
+    }
+    
     /* Edge badges styling and status overrides */
     .etlsql-dag-edge-badge {
       font-family: monospace;
@@ -619,6 +645,7 @@ function renderVisualFlow(stage, ctx) {
       }
 
       applyBadgeStyles();
+      applyLineStyles();
     }
 
     function applyBadgeStyles() {
@@ -634,6 +661,20 @@ function renderVisualFlow(stage, ctx) {
           b.setAttribute('data-status', edge.status);
         }
       }
+    }
+
+    function applyLineStyles() {
+      const svg = container.querySelector('.etlsql-dag-svg');
+      if (!svg) return;
+      const paths = svg.querySelectorAll('path');
+      data.edges.forEach((edge, index) => {
+        const path = paths[index];
+        if (path && edge.status) {
+          path.setAttribute('class', \`line-\${edge.status}\`);
+        } else if (path) {
+          path.removeAttribute('class');
+        }
+      });
     }
 
     // Call layout adjustment after rendering is complete, and register on window resize
@@ -795,6 +836,9 @@ function renderVisualFlow(stage, ctx) {
           break;
         }
       }
+      
+      // Update line classes immediately
+      applyLineStyles();
     }
 
     // Attach listeners
