@@ -1111,6 +1111,10 @@ These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventi
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with
 underscores.
 
+Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
+identifier. Request logs are scoped with that correlation id and the active trace id so API calls,
+job logs, and external monitoring traces can be joined during incident review.
+
 ### 14.8 Differences from `DROP JOB`
 
 | Action | Effect |

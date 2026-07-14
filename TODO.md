@@ -247,7 +247,9 @@ Operations Control Plane → 4.1 Central fleet management*.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       spill, connector latency, retries, failures, storage growth, database pool health, policy
       refresh, audit/security backlog, and delivery health.
-- [ ] Correlate metrics and traces with structured logs, audit events, security events, job IDs,
-      script hashes, and request correlation IDs.
+- [x] Scope Portal and Orchestrator request logs with request correlation id and trace id, and emit
+      `X-Correlation-ID` so logs, audit rows, spans, and client reports can be joined.
+- [ ] Extend correlation coverage to remaining engine, connector, dataset, and background-service
+      metrics/traces with job IDs, script hashes, policy version/hash, and request correlation IDs.
 - [ ] Keep observability exporters optional and ensure disabled exporters impose negligible
       standalone overhead.

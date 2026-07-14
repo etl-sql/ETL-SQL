@@ -836,6 +836,10 @@ names. Prometheus labels are the same names without the `etlsql.` prefix and wit
 underscores, for example `etlsql.environment` becomes `environment` and `etlsql.workload.kind`
 becomes `workload_kind`.
 
+Every Portal HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
+identifier. Portal request logs are scoped with that correlation id and the active trace id, and audit
+rows use the same value when a controller does not pass a more specific operation id.
+
 ### 6.8 Report Dependencies
 
 Use `SHOW REPORT DEPENDENCIES 'Report Name'` or `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
@@ -607,6 +608,26 @@ else
     app.UseHttpsRedirection();
     app.UseHsts();
 }
+
+app.Use(async (context, next) =>
+{
+    var correlationId = context.TraceIdentifier;
+    var traceId = Activity.Current?.TraceId.ToString();
+    context.Response.OnStarting(() =>
+    {
+        context.Response.Headers.TryAdd("X-Correlation-ID", correlationId);
+        return Task.CompletedTask;
+    });
+
+    using (app.Logger.BeginScope(new Dictionary<string, object?>
+    {
+        [ETL_SQL.Core.Observability.ObservabilityConventions.Tags.CorrelationId] = correlationId,
+        ["trace_id"] = traceId
+    }))
+    {
+        await next();
+    }
+});
 
 app.Use(async (context, next) =>
 {

@@ -219,6 +219,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         var response = await client.GetAsync("/metrics");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(response.Headers.Contains("X-Correlation-ID"));
         Assert.StartsWith("text/plain", response.Content.Headers.ContentType?.MediaType);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("# HELP etlsql_portal_execution_active", body);

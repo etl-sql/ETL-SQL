@@ -90,6 +90,7 @@ public class OrchestratorJobApiAuthTests : IDisposable
         using var req = Request(HttpMethod.Get, path, apiKey: null);
         var res = await client.SendAsync(req);
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.True(res.Headers.Contains("X-Correlation-ID"));
     }
 
     [Fact]
