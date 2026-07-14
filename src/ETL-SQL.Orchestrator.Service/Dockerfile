@@ -54,4 +54,5 @@ RUN mkdir -p logs Snapshots Reports data Sessions
 
 EXPOSE 5001
 ENV ASPNETCORE_URLS=http://+:5001
+ENV ETLSQL_SECURITY_EVENT_OUTBOX_PATH=/app/data/security-events.db
 ENTRYPOINT ["dotnet", "ETL-SQL-Service.dll"]

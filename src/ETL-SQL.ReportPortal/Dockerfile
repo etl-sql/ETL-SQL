@@ -48,8 +48,9 @@ RUN apt-get update \
 COPY --from=publish /app/publish .
 
 # Create directories
-RUN mkdir -p Reports Snapshots
+RUN mkdir -p Reports Snapshots data
 
 EXPOSE 5002
 ENV ASPNETCORE_URLS=http://+:5002
+ENV ETLSQL_SECURITY_EVENT_OUTBOX_PATH=/app/data/security-events.db
 ENTRYPOINT ["dotnet", "ETL-SQL-Portal.dll"]

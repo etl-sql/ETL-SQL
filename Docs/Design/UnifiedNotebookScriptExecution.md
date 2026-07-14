@@ -72,7 +72,7 @@ When a script contains top-level labels, the editor displays inline action promp
 
 ```sql
 DECLARE @Threshold INT = 500;
-CREATE CONNECTION db AS MSSQL(...);
+CREATE CONNECTION db AS MSSQL(SERVER='localhost', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
 
 [ Run Cell ]  [ Run Below ]
 ingestion:
