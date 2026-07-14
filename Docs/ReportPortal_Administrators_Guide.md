@@ -823,6 +823,8 @@ report names, usernames, connection strings, credentials, local filesystem paths
 values, collector URLs, collector errors, or secret configuration values. Treat `/metrics` as an
 operations endpoint and expose it only on a trusted management network or behind your standard
 monitoring ingress controls.
+The scrape also includes component-labeled runtime gauges for process working set, private memory,
+managed heap bytes, and generation 0/1/2 GC collection counts.
 
 Portal execution jobs also emit `System.Diagnostics.ActivitySource` spans from
 `ETL-SQL.ReportPortal`. The `portal.execution_job` span uses bounded dimensions for environment,

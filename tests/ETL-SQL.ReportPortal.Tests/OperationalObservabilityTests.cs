@@ -226,6 +226,9 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("# HELP etlsql_portal_execution_active", body);
         Assert.Contains("# HELP etlsql_portal_audit_outbox_pending", body);
         Assert.Contains("# HELP etlsql_security_event_pending", body);
+        Assert.Contains("# HELP etlsql_runtime_process_working_set_bytes", body);
+        Assert.Contains("etlsql_runtime_gc_heap_bytes", body);
+        Assert.Contains("etlsql_runtime_gc_collections_gen2_total", body);
         Assert.Contains("component=\"portal\"", body);
         Assert.DoesNotContain("Portal__Jwt__Secret", body);
         Assert.DoesNotContain("ConnectionString", body);

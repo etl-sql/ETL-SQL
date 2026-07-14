@@ -282,6 +282,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       metrics while continuing to control high-cardinality labels.
 - [x] Expand Orchestrator `/metrics/prometheus` with one-hour completion/failure/latency/rows/CPU/
       memory gauges plus latest local-node host headroom without job names, paths, scripts, or errors.
+- [x] Export runtime process-memory and GC gauges from Portal and Orchestrator Prometheus endpoints
+      with only environment/node/component labels.
 - [ ] Export queue depth/age, active and throttled work, execution latency, rows, CPU, memory, GC,
       retries, failures, storage growth, database pool health, and any remaining
       background-service health not already covered by Portal, Orchestrator, engine spill,

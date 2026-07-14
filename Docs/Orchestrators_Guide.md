@@ -1109,7 +1109,9 @@ behind your standard monitoring ingress controls.
 In addition to live active/queued/max/available-slot gauges, the endpoint exports one-hour completed
 job count, failed/interrupted count, average execution duration, rows processed, peak memory, CPU time,
 and latest local-node host headroom samples for memory, CPU, state-disk free bytes, and spill-disk
-free bytes when host metrics are available.
+free bytes when host metrics are available. Portal and Orchestrator Prometheus endpoints also export
+component-labeled runtime gauges for process working set, private memory, managed heap bytes, and GC
+collection counts.
 
 These labels follow the shared `ETL_SQL.Core.Observability.ObservabilityConventions` contract used by
 Portal metrics and traces. Prometheus labels drop the `etlsql.` prefix and replace dots with

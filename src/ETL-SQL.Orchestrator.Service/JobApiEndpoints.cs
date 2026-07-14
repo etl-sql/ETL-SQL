@@ -636,7 +636,26 @@ namespace ETL_SQL.Orchestrator.Service
                 AppendGauge(sb, "etlsql_orchestrator_spill_disk_free_bytes",
                     "Latest sampled free bytes for Orchestrator spill storage.", host.SpillDiskFreeBytes, labels);
             }
+            AppendRuntimeGauges(sb, labels);
             return sb.ToString();
+        }
+
+        private static void AppendRuntimeGauges(StringBuilder sb, IReadOnlyDictionary<string, string> labels)
+        {
+            var process = Process.GetCurrentProcess();
+            process.Refresh();
+            AppendGauge(sb, "etlsql_runtime_process_working_set_bytes",
+                "Current process working set in bytes.", process.WorkingSet64, labels);
+            AppendGauge(sb, "etlsql_runtime_process_private_memory_bytes",
+                "Current process private memory in bytes.", process.PrivateMemorySize64, labels);
+            AppendGauge(sb, "etlsql_runtime_gc_heap_bytes",
+                "Approximate managed heap bytes reported by GC.GetTotalMemory.", GC.GetTotalMemory(forceFullCollection: false), labels);
+            AppendGauge(sb, "etlsql_runtime_gc_collections_gen0_total",
+                "Total generation 0 garbage collections since process start.", GC.CollectionCount(0), labels);
+            AppendGauge(sb, "etlsql_runtime_gc_collections_gen1_total",
+                "Total generation 1 garbage collections since process start.", GC.CollectionCount(1), labels);
+            AppendGauge(sb, "etlsql_runtime_gc_collections_gen2_total",
+                "Total generation 2 garbage collections since process start.", GC.CollectionCount(2), labels);
         }
 
         private static void AppendGauge(
