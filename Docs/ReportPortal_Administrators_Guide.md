@@ -816,10 +816,13 @@ uses the same non-secret operational snapshot as `GET /api/admin/metrics/operati
 stable low-cardinality labels: `environment`, `node`, and `component="portal"`. The scrape includes
 active and queued executions, execution caps, recent execution/delivery totals and failures, average
 execution duration, average queue age, dataset/snapshot storage bytes, active subscriptions, SMTP
-connection count, and Portal schema migration status. It does not emit script paths, report names,
-usernames, connection strings, credentials, local filesystem paths, policy payload values, or secret
-configuration values. Treat `/metrics` as an operations endpoint and expose it only on a trusted
-management network or behind your standard monitoring ingress controls.
+connection count, Portal schema migration status, audit outbox pending/failed counts, audit outbox
+pending bytes and oldest-pending age, security-event pending/failed counts, stored bytes, dropped
+count, oldest-pending age, and collector configured/reachable state. It does not emit script paths,
+report names, usernames, connection strings, credentials, local filesystem paths, policy payload
+values, collector URLs, collector errors, or secret configuration values. Treat `/metrics` as an
+operations endpoint and expose it only on a trusted management network or behind your standard
+monitoring ingress controls.
 
 Portal execution jobs also emit `System.Diagnostics.ActivitySource` spans from
 `ETL-SQL.ReportPortal`. The `portal.execution_job` span uses bounded dimensions for environment,

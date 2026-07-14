@@ -1,3 +1,4 @@
+using ETL_SQL.Core.Governance;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,6 +37,17 @@ public sealed class OperationalMetricsService(
         int PendingMigrations,
         string? LastAppliedMigration,
         bool SchemaUpToDate,
+        int AuditOutboxPending,
+        int AuditOutboxFailed,
+        long AuditOutboxPendingBytes,
+        double AuditOutboxOldestPendingAgeSeconds,
+        int SecurityEventPending,
+        int SecurityEventFailed,
+        long SecurityEventStoredBytes,
+        long SecurityEventDropped,
+        double SecurityEventOldestPendingAgeSeconds,
+        bool SecurityEventCollectorConfigured,
+        bool? SecurityEventCollectorReachable,
         double AverageExecutionDurationMs,
         double AverageQueuedExecutionAgeSeconds,
         IReadOnlyList<HourlyExecutionLoad> HourlyExecutionLoad,
@@ -109,6 +121,12 @@ public sealed class OperationalMetricsService(
         // upgrade (PendingMigrations == 0) without shell access.
         var appliedMigrations = (await db.Database.GetAppliedMigrationsAsync(ct)).ToList();
         var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(ct)).ToList();
+        var auditPending = await db.AuditOutboxMessages
+            .Where(x => x.Status == "Pending")
+            .Select(x => new { x.CreatedAt, x.PayloadJson })
+            .ToListAsync(ct);
+        var auditFailed = await db.AuditOutboxMessages.CountAsync(x => x.Status == "Failed", ct);
+        var securityEvents = SecurityEventRuntime.GetDiagnostics();
 
         return new OperationalMetrics(
             activeExecutions,
@@ -130,6 +148,19 @@ public sealed class OperationalMetricsService(
             pendingMigrations.Count,
             appliedMigrations.LastOrDefault(),
             pendingMigrations.Count == 0,
+            auditPending.Count,
+            auditFailed,
+            auditPending.Sum(x => (long)x.PayloadJson.Length),
+            auditPending.Count == 0 ? 0 : auditPending.Max(x => Math.Max(0, (now - x.CreatedAt).TotalSeconds)),
+            securityEvents.PendingCount,
+            securityEvents.FailedCount,
+            securityEvents.StoredBytes,
+            securityEvents.DroppedCount,
+            securityEvents.OldestPendingUtc is null
+                ? 0
+                : Math.Max(0, (DateTimeOffset.UtcNow - securityEvents.OldestPendingUtc.Value).TotalSeconds),
+            securityEvents.CollectorConfigured,
+            securityEvents.CollectorReachable,
             averageExecutionDurationMs,
             averageQueuedExecutionAgeSeconds,
             hourlyExecutionLoad,

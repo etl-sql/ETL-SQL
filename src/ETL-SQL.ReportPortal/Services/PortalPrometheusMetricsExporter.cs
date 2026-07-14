@@ -59,6 +59,34 @@ public sealed class PortalPrometheusMetricsExporter(OperationalMetricsService me
             "Whether the Portal database schema has no pending migrations.", metrics.SchemaUpToDate ? 1 : 0, labels);
         AppendGauge(sb, "etlsql_portal_metrics_window_hours",
             "Operational metrics lookback window in hours.", metrics.WindowHours, labels);
+        AppendGauge(sb, "etlsql_portal_audit_outbox_pending",
+            "Pending durable audit outbox messages.", metrics.AuditOutboxPending, labels);
+        AppendGauge(sb, "etlsql_portal_audit_outbox_failed",
+            "Failed durable audit outbox messages.", metrics.AuditOutboxFailed, labels);
+        AppendGauge(sb, "etlsql_portal_audit_outbox_pending_bytes",
+            "Approximate bytes stored by pending durable audit outbox messages.",
+            metrics.AuditOutboxPendingBytes, labels);
+        AppendGauge(sb, "etlsql_portal_audit_outbox_oldest_pending_age_seconds",
+            "Age in seconds of the oldest pending durable audit outbox message.",
+            metrics.AuditOutboxOldestPendingAgeSeconds, labels);
+        AppendGauge(sb, "etlsql_security_event_pending",
+            "Pending local security-event outbox messages.", metrics.SecurityEventPending, labels);
+        AppendGauge(sb, "etlsql_security_event_failed",
+            "Failed local security-event outbox messages.", metrics.SecurityEventFailed, labels);
+        AppendGauge(sb, "etlsql_security_event_stored_bytes",
+            "Bytes stored by the local security-event outbox.", metrics.SecurityEventStoredBytes, labels);
+        AppendGauge(sb, "etlsql_security_event_dropped",
+            "Security events dropped by the local runtime sink.", metrics.SecurityEventDropped, labels);
+        AppendGauge(sb, "etlsql_security_event_oldest_pending_age_seconds",
+            "Age in seconds of the oldest pending local security-event outbox message.",
+            metrics.SecurityEventOldestPendingAgeSeconds, labels);
+        AppendGauge(sb, "etlsql_security_event_collector_configured",
+            "Whether remote security-event collector delivery is configured.",
+            metrics.SecurityEventCollectorConfigured ? 1 : 0, labels);
+        AppendGauge(sb, "etlsql_security_event_collector_reachable",
+            "Whether the remote security-event collector was reachable on the last known attempt; -1 means unknown.",
+            metrics.SecurityEventCollectorReachable is null ? -1 : metrics.SecurityEventCollectorReachable.Value ? 1 : 0,
+            labels);
 
         return sb.ToString();
     }

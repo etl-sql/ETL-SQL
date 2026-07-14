@@ -102,6 +102,23 @@ public sealed class OperationalObservabilityTests : IDisposable
             new Subscription { ReportId = report.Id, UserId = owner.Id, SmtpAlias = "a", Recipients = "r", IsActive = true },
             new Subscription { ReportId = report.Id, UserId = owner.Id, SmtpAlias = "a", Recipients = "r", IsActive = false });
         db.SmtpConnections.Add(new SmtpConnection { Alias = "a", Host = "h", Port = 25 });
+        db.AuditOutboxMessages.AddRange(
+            new AuditOutboxMessage
+            {
+                Status = "Pending",
+                Action = "TEST_PENDING",
+                PayloadJson = "{\"event\":\"pending\"}",
+                CreatedAt = now.AddMinutes(-15),
+                UpdatedAt = now.AddMinutes(-15)
+            },
+            new AuditOutboxMessage
+            {
+                Status = "Failed",
+                Action = "TEST_FAILED",
+                PayloadJson = "{\"event\":\"failed\"}",
+                CreatedAt = now.AddMinutes(-10),
+                UpdatedAt = now.AddMinutes(-10)
+            });
         await db.SaveChangesAsync();
 
         var node = new PortalNodeIdentity();
@@ -128,6 +145,12 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Equal(256, m.SnapshotStorageBytes);
         Assert.Equal(2, m.ActiveSubscriptions);
         Assert.Equal(1, m.SmtpConnections);
+        Assert.Equal(1, m.AuditOutboxPending);
+        Assert.Equal(1, m.AuditOutboxFailed);
+        Assert.True(m.AuditOutboxPendingBytes > 0);
+        Assert.True(m.AuditOutboxOldestPendingAgeSeconds > 0);
+        Assert.True(m.SecurityEventPending >= 0);
+        Assert.True(m.SecurityEventStoredBytes >= 0);
         Assert.Equal("shared-state-ha", m.Topology);
         Assert.Equal(node.NodeId, m.NodeId);
         Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
@@ -137,6 +160,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("# TYPE etlsql_portal_execution_active gauge", prometheus);
         Assert.Contains("etlsql_portal_execution_queued", prometheus);
         Assert.Contains("etlsql_portal_dataset_storage_bytes", prometheus);
+        Assert.Contains("etlsql_portal_audit_outbox_pending", prometheus);
+        Assert.Contains("etlsql_security_event_pending", prometheus);
         Assert.Contains($"node=\"{node.NodeId}\"", prometheus);
         Assert.DoesNotContain(datasetDir, prometheus);
         Assert.DoesNotContain(snapshotDir, prometheus);
@@ -160,6 +185,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.True(body.ContainsKey("datasetStorageBytes"));
         Assert.True(body.ContainsKey("hourlyExecutionLoad"));
         Assert.True(body.ContainsKey("averageQueuedExecutionAgeSeconds"));
+        Assert.True(body.ContainsKey("auditOutboxPending"));
+        Assert.True(body.ContainsKey("securityEventPending"));
 
         // A non-admin is rejected.
         var create = new HttpRequestMessage(HttpMethod.Post, "/api/admin/users")
@@ -195,6 +222,8 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.StartsWith("text/plain", response.Content.Headers.ContentType?.MediaType);
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("# HELP etlsql_portal_execution_active", body);
+        Assert.Contains("# HELP etlsql_portal_audit_outbox_pending", body);
+        Assert.Contains("# HELP etlsql_security_event_pending", body);
         Assert.Contains("component=\"portal\"", body);
         Assert.DoesNotContain("Portal__Jwt__Secret", body);
         Assert.DoesNotContain("ConnectionString", body);

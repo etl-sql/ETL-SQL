@@ -233,6 +233,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       operational snapshot, with stable `environment`, `node`, and `component` labels.
 - [x] Add Portal execution-job `ActivitySource` spans with standardized bounded dimensions and
       correlation/script-hash context for OpenTelemetry collectors or .NET listeners.
+- [x] Export audit/security delivery health in Portal operational metrics: pending/failed counts,
+      backlog bytes, oldest-pending age, dropped security events, and collector reachability state.
 - [ ] Add first-class OpenTelemetry metrics and traces without imposing standalone overhead when
       exporters are disabled.
 - [ ] Standardize dimensions for environment, node, job, report, dataset, connector, execution mode,
