@@ -1,8 +1,11 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.EntityFrameworkCore;
@@ -159,6 +162,55 @@ public class AdminServicesTests
     }
 
     [Fact]
+    public async Task AdminServiceRun_EmitsLowCardinalityBackgroundTelemetry()
+    {
+        var stoppedActivities = new List<Activity>();
+        using var activityListener = new ActivityListener
+        {
+            ShouldListenTo = source => source.Name == BackgroundServiceObservability.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+            ActivityStopped = activity => stoppedActivities.Add(activity)
+        };
+        ActivitySource.AddActivityListener(activityListener);
+
+        var measurements = new List<(string Name, double Value, Dictionary<string, object?> Tags)>();
+        using var meterListener = new MeterListener
+        {
+            InstrumentPublished = (instrument, listener) =>
+            {
+                if (instrument.Meter.Name == BackgroundServiceObservability.MeterName)
+                    listener.EnableMeasurementEvents(instrument);
+            }
+        };
+        meterListener.SetMeasurementEventCallback<long>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.SetMeasurementEventCallback<double>((instrument, value, tags, _) =>
+            measurements.Add((instrument.Name, value, ToDictionary(tags))));
+        meterListener.Start();
+
+        using var factory = new AdminServicesFactory();
+        var run = await NewCapacityReport(factory).RunOnceAsync(CancellationToken.None);
+
+        Assert.Equal("Sent", run.Outcome);
+        Assert.Contains(stoppedActivities, activity =>
+            activity.OperationName == "background_service.run"
+            && Tag(activity, ObservabilityConventions.Tags.Component) == "portal"
+            && Tag(activity, ObservabilityConventions.Tags.WorkloadKind) == "background"
+            && Tag(activity, ObservabilityConventions.Tags.ServiceName) == "capacity-report"
+            && Tag(activity, BackgroundServiceObservability.OperationTag) == "admin_digest_run"
+            && Tag(activity, ObservabilityConventions.Tags.Status) == "sent");
+        Assert.Contains(measurements, measurement => measurement.Name == "etlsql.background_service.run.completed"
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Component, "portal")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.WorkloadKind, "background")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.ServiceName, "capacity-report")
+            && HasTag(measurement.Tags, ObservabilityConventions.Tags.Status, "sent"));
+        Assert.DoesNotContain(measurements, measurement => measurement.Tags.Any(tag =>
+            tag.Value is string value
+            && (value.Contains("ops@example.com", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("mailer", StringComparison.OrdinalIgnoreCase))));
+    }
+
+    [Fact]
     public async Task StatusApi_ReportsServicesAndHistory()
     {
         using var factory = new AdminServicesFactory();
@@ -247,6 +299,23 @@ public class AdminServicesTests
             return Task.FromResult<(bool, string?)>((true, null));
         }
     }
+
+    private static string? Tag(Activity activity, string key)
+    {
+        var value = activity.TagObjects.FirstOrDefault(t => t.Key == key).Value;
+        return value?.ToString();
+    }
+
+    private static Dictionary<string, object?> ToDictionary(ReadOnlySpan<KeyValuePair<string, object?>> tags)
+    {
+        var result = new Dictionary<string, object?>();
+        foreach (var tag in tags)
+            result[tag.Key] = tag.Value;
+        return result;
+    }
+
+    private static bool HasTag(Dictionary<string, object?> tags, string key, object value) =>
+        tags.TryGetValue(key, out var actual) && Equals(actual, value);
 
     private static async Task<string> GetAdminTokenAsync(HttpClient client)
     {

@@ -1,4 +1,5 @@
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Observability;
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,6 +93,8 @@ public abstract class AdminDigestServiceBase(
     public async Task<AdminServiceRun> RunOnceAsync(CancellationToken ct)
     {
         var cfg = Schedule;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var activity = BackgroundServiceObservability.StartRun("portal", ServiceName, "admin_digest_run");
         var run = new AdminServiceRun
         {
             ServiceName = ServiceName,
@@ -156,6 +159,15 @@ public abstract class AdminDigestServiceBase(
 
         run.CompletedAtUtc = DateTime.UtcNow;
         await RecordRunAsync(sp, run, ct);
+        sw.Stop();
+        BackgroundServiceObservability.CompleteRun(
+            activity,
+            "portal",
+            ServiceName,
+            "admin_digest_run",
+            run.Outcome.ToLowerInvariant(),
+            sw.ElapsedMilliseconds,
+            run.Attempts);
         return run;
     }
 

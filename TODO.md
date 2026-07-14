@@ -256,6 +256,8 @@ Operations Control Plane → 4.1 Central fleet management*.
       strings, hosts, table names, or credentials.
 - [x] Extend first-class OpenTelemetry metrics/traces to dataset registry operations with dataset id
       only on traces and low-cardinality operation/status metrics.
+- [x] Extend first-class OpenTelemetry metrics/traces to native Portal admin background service runs
+      with bounded service/operation/status labels and attempt histograms.
 - [ ] Extend first-class OpenTelemetry metrics/traces to remaining background-service workloads
       without imposing standalone overhead when exporters are disabled.
 - [ ] Apply the shared dimensions to remaining engine and workload-class

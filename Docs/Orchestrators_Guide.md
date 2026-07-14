@@ -1137,6 +1137,11 @@ Dataset registry operations emit spans from `ETL-SQL.Datasets` and metrics from 
 for register, lookup, list, authorization, refresh-job registration, audit, delete, and path-build
 operations. Dataset ids are trace-only; metrics use operation, status, environment, and component
 labels and omit dataset names, caller permission strings, paths, and credentials.
+Portal admin background services emit spans from `ETL-SQL.BackgroundServices` and metrics from the
+same-named meter for native failure-digest, backup-report, and capacity-report runs. These metrics
+use stable service name, operation, workload kind, status, environment, node, and component labels;
+they do not include notification recipients, SMTP aliases, message bodies, run details, paths, or
+error text.
 
 Every Orchestrator HTTP response includes `X-Correlation-ID`, matching ASP.NET Core's request trace
 identifier. Request logs are scoped with that correlation id and the active trace id so API calls,

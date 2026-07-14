@@ -16,6 +16,7 @@ public static class ObservabilityConventions
         public const string ReportId = "etlsql.report.id";
         public const string DatasetId = "etlsql.dataset.id";
         public const string ConnectorType = "etlsql.connector.type";
+        public const string ServiceName = "etlsql.service.name";
         public const string ExecutionMode = "etlsql.execution.mode";
         public const string WorkloadKind = "etlsql.workload.kind";
         public const string Status = "etlsql.status";
