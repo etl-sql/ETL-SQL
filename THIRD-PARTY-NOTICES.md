@@ -35,6 +35,8 @@ license banners in the bundled files when updating them.
 | Apache ECharts | `echarts.min.js` | Apache-2.0 | https://echarts.apache.org/ |
 | Chart.js | `chart.min.js` | MIT | https://www.chartjs.org/ |
 | Tabulator | `tabulator.min.js`, `tabulator.min.css` | MIT | https://tabulator.info/ |
+| CodeMirror 6 packages (`@codemirror/state`, `@codemirror/view`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/search`, `@codemirror/autocomplete`, `@codemirror/lint`) | `designer/codemirror/codemirror-bundle.min.js` | MIT | https://codemirror.net/ |
+| Lezer `@lezer/highlight` | `designer/codemirror/codemirror-bundle.min.js` | MIT | https://lezer.codemirror.net/ |
 
 Canonical source path:
 `src/ETL-SQL.ReportRuntime/Resources/Shared/`

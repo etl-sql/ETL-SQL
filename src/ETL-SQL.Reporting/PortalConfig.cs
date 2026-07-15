@@ -28,6 +28,23 @@ public class PortalConfig
     public PortalTopologyConfig Topology { get; set; } = new();
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
     public AdminServicesConfig AdminServices { get; set; } = new();
+    public PortalSourceControlConfig SourceControl { get; set; } = new();
+}
+
+/// <summary>
+/// Optional source-control write-back for portal-edited scripts. Disabled by default; when enabled
+/// the script root must live inside the configured repository root.
+/// </summary>
+public class PortalSourceControlConfig
+{
+    public bool Enabled { get; set; }
+    public string Provider { get; set; } = "None";
+    public string RepositoryRoot { get; set; } = "";
+    public bool PushOnSave { get; set; }
+    public string Remote { get; set; } = "origin";
+    public string Branch { get; set; } = "";
+    public string CommitterName { get; set; } = "ETL-SQL Portal";
+    public string CommitterEmail { get; set; } = "portal@localhost";
 }
 
 /// <summary>
@@ -354,6 +371,8 @@ public class PortalRateLimitConfig
     public int AuthWindowSeconds { get; set; } = 60;
     public int AnonymousTokenPermitLimit { get; set; } = 60;
     public int AnonymousTokenWindowSeconds { get; set; } = 60;
+    public int DesignerPermitLimit { get; set; } = 120;
+    public int DesignerWindowSeconds { get; set; } = 60;
     public int MetricsPermitLimit { get; set; } = 12;
     public int MetricsWindowSeconds { get; set; } = 60;
 }

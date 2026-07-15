@@ -1,5 +1,6 @@
-// Story: the lite rptsql editor (createScriptEditor — CodeMirror, no server).
+// Story: the shared portal script editor workbench (CodeMirror + run/results shell).
 import { importFresh, DESIGNER_JS } from '../util.js';
+import { makeMockApi } from '../mockApi.js';
 
 const SCRIPTS = {
   report:
@@ -15,7 +16,13 @@ CREATE VISUAL salesBar AS BAR (
 
 CREATE PAGE Overview AS DASHBOARD( STRUCTURE = 'A', MAP ( 'A' = salesBar ) );`,
   etl:
-`LOAD 'orders.csv' INTO #orders;
+`CREATE CONNECTION orders_csv AS FLATFILE('orders.csv', HEADER = 'ON');
+
+SELECT
+  region,
+  TRY_CAST(total AS DECIMAL) AS total
+INTO #orders
+FROM orders_csv;
 
 SELECT
   region,
@@ -24,26 +31,43 @@ INTO #summary
 FROM #orders
 WHERE total > 0
 GROUP BY region;`,
+  diagnostics:
+`CREATE CONNECTION c AS;
+
+SELECT * FROM #stage;`,
   empty: '',
 };
 
 export default {
   id: 'script-editor',
   title: 'Script editor',
-  subtitle: 'createScriptEditor()',
+  subtitle: 'createScriptEditorWorkbench()',
   fixtures: [
     { id: 'report', label: 'Report SQL' },
     { id: 'etl',    label: 'ETL SQL (with tags)' },
+    { id: 'diagnostics', label: 'Diagnostics' },
     { id: 'empty',  label: 'Empty' },
   ],
   async mount(stage, fixtureId, ctx) {
     const value = SCRIPTS[fixtureId] ?? '';
     const mod = await importFresh(DESIGNER_JS);
-    const ed = await mod.createScriptEditor(stage, {
-      value,
-      onChange: (v) => ctx.stat(`${v.length} chars · ${v.split('\n').length} lines`),
+    const api = makeMockApi({});
+    const workbench = await mod.createScriptEditorWorkbench(stage, {
+      title: 'Script',
+      runUrl: '/api/designer/run',
+      connectionRef: 'demo',
+      authFetch: api,
+      editor: {
+        value,
+        analyzeUrl: '/api/designer/analyze',
+        completeUrl: '/api/designer/complete',
+        connectionRef: 'demo',
+        authFetch: api,
+        onChange: (v) => ctx.stat(`${v.length} chars · ${v.split('\n').length} lines`),
+        onDiagnostics: (d) => ctx.stat(`${value.length} chars · ${d.length} diagnostics`),
+      },
     });
     ctx.stat(`${value.length} chars · ${(value ? value.split('\n').length : 0)} lines`);
-    return { dispose: () => ed.dispose() };
+    return { dispose: () => workbench.dispose() };
   },
 };

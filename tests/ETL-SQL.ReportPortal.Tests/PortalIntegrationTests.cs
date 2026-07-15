@@ -119,6 +119,43 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task DesignerAnalyze_ReturnsRealLinterDiagnostics()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var res = await AuthPost(token, "/api/designer/analyze", new { script = "SELECT * FROM #stage;" });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var diagnostics = body!["diagnostics"]!.AsArray();
+        var selectStar = diagnostics
+            .Select(d => d!.AsObject())
+            .Single(d => d["code"]!.GetValue<string>() == "AvoidSelectStar");
+        Assert.Equal("ETL-SQL Linter", selectStar["source"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task DesignerComplete_ReturnsLanguageSuggestions()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var res = await AuthPost(token, "/api/designer/complete", new
+        {
+            script = "SEL",
+            line = 0,
+            column = 3
+        });
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var items = body!["items"]!.AsArray();
+        Assert.Contains(items, item =>
+            item!["label"]!.GetValue<string>() == "SELECT" &&
+            item["kind"]!.GetValue<string>() == "keyword");
+    }
+
+    [Fact]
     public async Task DocumentationHub_RespectsModuleFlag()
     {
         using var factory = new DocumentationDisabledFactory();

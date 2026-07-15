@@ -199,6 +199,14 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `MapRootPath` | `./data/maps` | Root for map assets used by reports. |
 | `Storage.Provider` | `Local` | Artifact provider. Use `Smb`/`Unc` with UNC roots for shared HA storage. |
 | `Storage.KeyRingPath` | `.portal-keys` beside the database | Data Protection key-ring path. In HA, every Portal node must share the same path. |
+| `SourceControl.Enabled` | `false` | Enables source-control write-back for designer saves. |
+| `SourceControl.Provider` | `None` | Set to `Git` to commit edited report scripts to a local git working tree. |
+| `SourceControl.RepositoryRoot` | *(empty)* | Local git repository root. When `Provider = Git`, `ScriptRootPath` must be inside this directory. |
+| `SourceControl.PushOnSave` | `false` | Pushes committed designer saves after each successful commit. Use only with a configured service credential on the host. |
+| `SourceControl.Remote` | `origin` | Git remote used when `PushOnSave = true`. |
+| `SourceControl.Branch` | *(empty)* | Optional branch ref used for push. Empty uses git's current upstream/default push behavior. |
+| `SourceControl.CommitterName` | `ETL-SQL Portal` | Git committer name for portal-generated commits. The author name is the logged-in portal user. |
+| `SourceControl.CommitterEmail` | `portal@localhost` | Git author/committer email for portal-generated commits. |
 | `Modules.Reporting` | `true` | Feature flag for the report library entry page, reporting APIs, session cache, execution worker, dataset key validation, snapshot migration, and reporting startup reconciliation. Disabled routes return 404. |
 | `Modules.Designer` | `true` | Feature flag for the browser report designer entry page and design-time APIs. Disabled routes return 404. |
 | `Modules.ConnectionCatalog` | `true` | Feature flag for shared connection catalog APIs and diagnostics. Disabled routes return 404. |
@@ -1624,13 +1632,19 @@ queued.
     "AuthPermitLimit": 20,
     "AuthWindowSeconds": 60,
     "AnonymousTokenPermitLimit": 60,
-    "AnonymousTokenWindowSeconds": 60
+    "AnonymousTokenWindowSeconds": 60,
+    "DesignerPermitLimit": 120,
+    "DesignerWindowSeconds": 60,
+    "MetricsPermitLimit": 12,
+    "MetricsWindowSeconds": 60
   }
 }
 ```
 
 The auth policy covers every `/api/auth/*` action. The anonymous-token policy covers share-link and
-embed-token resolution. When the portal runs behind a reverse proxy, configure ASP.NET Core forwarded
+embed-token resolution. Designer operations use the designer policy. Prometheus scrapes use the
+metrics policy and share a single-flight snapshot cache with a 15-second refresh interval. When the
+portal runs behind a reverse proxy, configure ASP.NET Core forwarded
 headers at the host boundary so `RemoteIpAddress` is the trusted client address; do not accept forwarded
 addresses from arbitrary direct clients.
 

@@ -4,6 +4,10 @@
 // createDesigner calls:
 //   POST /api/designer/generate {designState}  -> { script }
 //   POST /api/designer/parse    {script}       -> { designState }
+//   POST /api/designer/analyze  {script}       -> { diagnostics }
+//   POST /api/designer/complete {script,line,column,connectionRef} -> { items }
+//   POST /api/designer/run      {script,selection,connectionRef} -> { columns, rows }
+//   GET  /api/designer/schema?connection=demo -> { tables }
 //   (save endpoints are bypassed via opts.onSaveScript in the story)
 //
 // The parse round-trip just echoes the seed state — a faithful script↔state parse
@@ -19,10 +23,20 @@ export function makeMockApi(seedState) {
       data = { script: generateMockScript(body.designState ?? seedState) };
     } else if (path.endsWith('/api/designer/parse')) {
       data = { designState: seedState };
+    } else if (path.endsWith('/api/designer/analyze')) {
+      data = { diagnostics: analyzeMockScript(body.script ?? '') };
+    } else if (path.endsWith('/api/designer/complete')) {
+      data = { items: completeMockScript(body.script ?? '', body.line ?? 0, body.column ?? 0, body.connectionRef ?? null) };
+    } else if (path.endsWith('/api/designer/run')) {
+      data = runMockScript(body.selection || body.script || '');
+    } else if (path.endsWith('/api/designer/schema')) {
+      data = { connection: 'demo', tables: mockSchemaTables() };
     } else if (path.endsWith('/api/scripts/upload')) {
       data = { path: 'sandbox/' + (body.fileName || 'report.rptsql') };
+    } else if (path.endsWith('/api/designer/save')) {
+      data = { version: 2, sourceRevision: 'sandbox-rev-2' };
     } else if (path.endsWith('/api/reports') || path.includes('/script-content')) {
-      data = { id: 1, ok: true };
+      data = { id: 1, ok: true, version: 1, sourceRevision: 'sandbox-rev-1' };
     }
 
     return {
@@ -32,6 +46,375 @@ export function makeMockApi(seedState) {
       text: async () => JSON.stringify(data),
     };
   };
+}
+
+function analyzeMockScript(script) {
+  const diagnostics = [];
+  const lines = String(script || '').split(/\r\n|\r|\n/);
+  lines.forEach((line, i) => {
+    const selectStar = line.indexOf('SELECT *');
+    if (selectStar >= 0) {
+      diagnostics.push({
+        startLine: i,
+        startColumn: selectStar,
+        endLine: i,
+        endColumn: selectStar + 6,
+        severity: 'Warning',
+        message: 'Avoid SELECT * in published scripts; list required columns explicitly.',
+        code: 'AvoidSelectStar',
+        source: 'Sandbox analyzer',
+      });
+    }
+    const badCreate = line.indexOf('CREATE CONNECTION');
+    if (badCreate >= 0 && /\bAS\s*;/.test(line)) {
+      diagnostics.push({
+        startLine: i,
+        startColumn: badCreate,
+        endLine: i,
+        endColumn: line.length,
+        severity: 'Error',
+        message: 'Expected connector type after AS.',
+        code: 'SYNTAX',
+        source: 'Sandbox analyzer',
+      });
+    }
+    if (badCreate >= 0 && /\bCREATE\s+CONNECTION\s+\w+\s+ON\b/i.test(line)) {
+      diagnostics.push({
+        startLine: i,
+        startColumn: badCreate,
+        endLine: i,
+        endColumn: line.length,
+        severity: 'Warning',
+        message: 'Use CREATE CONNECTION <name> AS <ConnectorType>(...) in current ETL-SQL scripts.',
+        code: 'CONNECTION_AS',
+        source: 'Sandbox analyzer',
+      });
+    }
+  });
+  return diagnostics;
+}
+
+function runMockScript(script) {
+  if (!/^\s*SELECT\b/i.test(String(script || ''))) {
+    return {
+      columns: [],
+      rows: [],
+      rowCount: 0,
+      capped: false,
+      elapsedMs: 0,
+      message: 'Select a single SELECT statement.',
+    };
+  }
+
+  const rows = [
+    { region: 'North', revenue: 18420, orders: 122 },
+    { region: 'South', revenue: 15980, orders: 104 },
+    { region: 'West', revenue: 22750, orders: 147 },
+  ];
+  return {
+    columns: ['region', 'revenue', 'orders'],
+    rows,
+    rowCount: rows.length,
+    capped: false,
+    elapsedMs: 18,
+    message: `Returned ${rows.length} rows.`,
+    trace: mockProgressTrace({
+      columns: ['region', 'revenue', 'orders'],
+      rows,
+      elapsedMs: 18,
+    }, script),
+  };
+}
+
+function mockProgressTrace(result, script) {
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  const elapsed = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 18;
+  return [
+    { type: 'clear', resetHistory: true },
+    { type: 'status', status: 'running' },
+    { type: 'message', text: 'Sandbox run started.', level: 'sys' },
+    { type: 'progress', data: [
+      { id: '1', name: 'Parse current statement', status: 'Completed', rowsProcessed: 0, durationMs: 2, isParallelBlock: false, children: [] },
+      { id: '2', name: 'Execute SELECT', status: 'Running', rowsProcessed: 0, durationMs: 0, isParallelBlock: false, children: [] },
+    ]},
+    { type: 'message', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 160), level: 'info' },
+    { type: 'progress', data: [
+      { id: '1', name: 'Parse current statement', status: 'Completed', rowsProcessed: 0, durationMs: 2, isParallelBlock: false, children: [] },
+      { id: '2', name: 'Execute SELECT', status: 'Completed', rowsProcessed: rows.length, durationMs: elapsed, isParallelBlock: false, children: [] },
+    ]},
+    { type: 'results', columns: result.columns || [], rows },
+    { type: 'performance', metrics: {
+      executionMs: elapsed,
+      rowsProcessed: rows.length,
+      memoryMb: 1.4,
+      statements: [
+        { type: 'SELECT', totalMs: elapsed },
+      ],
+    }},
+    { type: 'done', exitCode: 0 },
+  ];
+}
+
+function mockSchemaTables() {
+  return [
+    {
+      name: 'Users',
+      columns: [
+        { name: 'UserId', type: 'INT' },
+        { name: 'Id', type: 'INT' },
+        { name: 'Name', type: 'VARCHAR' },
+        { name: 'Email', type: 'VARCHAR' },
+        { name: 'Region', type: 'VARCHAR' },
+      ],
+    },
+    {
+      name: 'Customers',
+      columns: [
+        { name: 'CustomerId', type: 'INT' },
+        { name: 'CustomerName', type: 'VARCHAR' },
+        { name: 'Region', type: 'VARCHAR' },
+        { name: 'Segment', type: 'VARCHAR' },
+      ],
+    },
+    {
+      name: 'Orders',
+      columns: [
+        { name: 'OrderId', type: 'INT' },
+        { name: 'CustomerId', type: 'INT' },
+        { name: 'Amount', type: 'DECIMAL' },
+        { name: 'OrderDate', type: 'DATE' },
+      ],
+    },
+    {
+      name: 'Products',
+      columns: [
+        { name: 'ProductId', type: 'INT' },
+        { name: 'Sku', type: 'VARCHAR' },
+        { name: 'Category', type: 'VARCHAR' },
+        { name: 'UnitPrice', type: 'DECIMAL' },
+      ],
+    },
+    {
+      name: 'Sales',
+      columns: [
+        { name: 'SaleId', type: 'INT' },
+        { name: 'OrderId', type: 'INT' },
+        { name: 'ProductId', type: 'INT' },
+        { name: 'Revenue', type: 'DECIMAL' },
+        { name: 'SaleDate', type: 'DATE' },
+      ],
+    },
+  ];
+}
+
+const CONNECTOR_COMPLETIONS = [
+  ['MOCKDB()', 'In-memory test database'],
+  ['MSSQL(SERVER = \'\', DATABASE = \'\', TRUSTED_CONNECTION = TRUE)', 'SQL Server connection'],
+  ['POSTGRES(HOST = \'\', DATABASE = \'\', USER = \'\', PASSWORD = \'\')', 'PostgreSQL connection'],
+  ['FLATFILE(\'data.csv\', HEADER = \'ON\')', 'Delimited file connection'],
+  ['CSV(\'data.csv\', HEADER = \'ON\')', 'CSV file connection'],
+  ['JSON(PATH = \'data.json\')', 'JSON file connection'],
+  ['EXCEL(PATH = \'workbook.xlsx\')', 'Excel workbook connection'],
+  ['SFTP(HOST = \'\', USER = \'\', KEYFILE = \'\')', 'SFTP connection'],
+  ['REST(BASE_URL = \'\')', 'REST API connection'],
+  ['REPORTPORTAL(BASE_URL = \'\')', 'Report Portal connection'],
+  ['ORCHESTRATOR(BASE_URL = \'\')', 'Orchestrator connection'],
+];
+
+function completionItem(label, kind, detail = kind, documentation = null, insertText = null, startColumn = null, endColumn = null) {
+  const item = { label, insertText: insertText || label, kind, detail, documentation };
+  if (Number.isFinite(startColumn)) item.startColumn = startColumn;
+  if (Number.isFinite(endColumn)) item.endColumn = endColumn;
+  return item;
+}
+
+function uniqueItems(items) {
+  const seen = new Set();
+  return items.filter(item => {
+    const key = String(item.label).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function matchesPrefix(item, prefix) {
+  if (!prefix) return true;
+  const lower = prefix.toLowerCase();
+  const label = String(item.label || '').toLowerCase();
+  return label.startsWith(lower) || label.split('.').pop().startsWith(lower);
+}
+
+function connectionAliases(script, connectionRef) {
+  const aliases = new Set();
+  if (connectionRef) aliases.add(String(connectionRef));
+  const re = /\bCREATE\s+CONNECTION\s+([A-Za-z_][\w]*)\s+(?:AS|ON)\s+([A-Za-z_][\w]*)/ig;
+  let match;
+  while ((match = re.exec(String(script || ''))) !== null) {
+    aliases.add(match[1]);
+  }
+  return [...aliases];
+}
+
+function tableForName(name, schema) {
+  return schema.find(t => t.name.toLowerCase() === String(name || '').toLowerCase()) || null;
+}
+
+function tableAliases(script, schema) {
+  const aliases = new Map();
+  const re = /\b(?:FROM|JOIN)\s+(?:([A-Za-z_][\w]*)\.)?([A-Za-z_][\w#&$]*)(?:\s+(?:AS\s+)?([A-Za-z_][\w]*))?/ig;
+  let match;
+  while ((match = re.exec(String(script || ''))) !== null) {
+    const table = tableForName(match[2], schema);
+    const alias = match[3];
+    if (table && alias && !/^(WHERE|JOIN|LEFT|RIGHT|FULL|INNER|OUTER|ON|GROUP|ORDER|HAVING|LIMIT|UNION)$/i.test(alias)) {
+      aliases.set(alias.toLowerCase(), table);
+    }
+  }
+  return aliases;
+}
+
+function statementBeforeCursor(script, line, column) {
+  const lines = String(script || '').split(/\r\n|\r|\n/);
+  const safeLine = Math.max(0, Math.min(lines.length - 1, Number(line) || 0));
+  const current = lines[safeLine] || '';
+  const beforeCurrent = current.slice(0, Math.max(0, Math.min(current.length, Number(column) || 0)));
+  const before = [...lines.slice(0, safeLine), beforeCurrent].join('\n');
+  const lastSemi = before.lastIndexOf(';');
+  return lastSemi >= 0 ? before.slice(lastSemi + 1) : before;
+}
+
+function statementAroundCursor(script, line, column) {
+  const lines = String(script || '').split(/\r\n|\r|\n/);
+  const safeLine = Math.max(0, Math.min(lines.length - 1, Number(line) || 0));
+  const current = lines[safeLine] || '';
+  const beforeCurrent = current.slice(0, Math.max(0, Math.min(current.length, Number(column) || 0)));
+  const absoluteBefore = [...lines.slice(0, safeLine), beforeCurrent].join('\n');
+  const pos = absoluteBefore.length;
+  const text = String(script || '');
+  let start = text.lastIndexOf(';', Math.max(0, pos - 1));
+  let end = text.indexOf(';', pos);
+  start = start < 0 ? 0 : start + 1;
+  end = end < 0 ? text.length : end;
+  return text.slice(start, end);
+}
+
+function connectorItems(prefix) {
+  return CONNECTOR_COMPLETIONS
+    .map(([snippet, doc]) => completionItem(snippet.replace(/\(.*/, ''), 'connector', 'Connector', doc, snippet))
+    .filter(item => matchesPrefix(item, prefix));
+}
+
+function tableItems(qualifier, schema, rest) {
+  return schema
+    .filter(t => t.name.toLowerCase().startsWith(String(rest || '').toLowerCase()))
+    .map(t => completionItem(`${qualifier}.${t.name}`, 'table', 'Table'));
+}
+
+function columnItems(qualifier, table, rest) {
+  if (!table) return [];
+  return table.columns
+    .filter(c => c.name.toLowerCase().startsWith(String(rest || '').toLowerCase()))
+    .map(c => completionItem(`${qualifier}.${c.name}`, 'column', c.type));
+}
+
+function starExpansionItem(tableAliasLookup, table, column) {
+  const aliasEntry = [...tableAliasLookup.entries()][0] || null;
+  const qualifier = aliasEntry?.[0] || '';
+  const sourceTable = aliasEntry?.[1] || table;
+  if (!sourceTable?.columns?.length) return null;
+  const columns = sourceTable.columns
+    .map(c => qualifier ? `${qualifier}.${c.name}` : c.name)
+    .join(', ');
+  const endColumn = Number(column) || 0;
+  const startColumn = Math.max(0, endColumn - 1);
+  return completionItem('Expand * to columns', 'snippet', 'Column expansion', 'Replace * with explicit column names.', columns, startColumn, endColumn);
+}
+
+function completeMockScript(script, line, column, connectionRef) {
+  const lines = String(script || '').split(/\r\n|\r|\n/);
+  const current = lines[Math.max(0, Math.min(lines.length - 1, Number(line) || 0))] || '';
+  const before = current.slice(0, Math.max(0, Math.min(current.length, Number(column) || 0)));
+  const prefix = (before.match(/([\w@#&$.*()]+)$/) || [])[1] || '';
+  const upperBefore = before.toUpperCase();
+  const schema = mockSchemaTables();
+  const aliases = connectionAliases(script, connectionRef || 'demo');
+  const aliasLookup = new Set(aliases.map(a => a.toLowerCase()));
+  const statement = statementAroundCursor(script, line, column);
+  const beforeStatement = statementBeforeCursor(script, line, column);
+  const tableAliasLookup = tableAliases(statement, schema);
+
+  if (/\bCREATE\s+CONNECTION\s+[A-Za-z_][\w]*\s*$/i.test(before)) {
+    return [completionItem('AS', 'keyword', 'Keyword')];
+  }
+
+  if (/\bCREATE\s+CONNECTION\s+[A-Za-z_][\w]*\s+AS\s+[A-Za-z_]*$/i.test(before)) {
+    return connectorItems(prefix);
+  }
+
+  if (prefix.includes('.')) {
+    const parts = prefix.split('.');
+    if (parts.length === 2) {
+      const [qualifier, rest = ''] = parts;
+      if (aliasLookup.has(qualifier.toLowerCase())) {
+        return tableItems(qualifier, schema, rest);
+      }
+      const aliasedTable = tableAliasLookup.get(qualifier.toLowerCase());
+      if (aliasedTable) {
+        return columnItems(qualifier, aliasedTable, rest);
+      }
+      return [];
+    }
+    if (parts.length === 3) {
+      const [connection, tableName, rest = ''] = parts;
+      if (aliasLookup.has(connection.toLowerCase())) {
+        const table = tableForName(tableName, schema);
+        return columnItems(`${connection}.${tableName}`, table, rest);
+      }
+    }
+    return [];
+  }
+
+  if (/\b(FROM|JOIN|UPDATE|INTO)\s+[\w@#&$]*$/i.test(upperBefore)) {
+    return uniqueItems([
+      ...aliases.map(alias => completionItem(alias, 'connection', 'Connection')),
+      ...schema.map(t => completionItem(t.name, 'table', 'Table')),
+      ...aliases.flatMap(alias => schema.map(t => completionItem(`${alias}.${t.name}`, 'table', 'Table'))),
+    ]).filter(i => matchesPrefix(i, prefix));
+  }
+
+  const firstTable = (statement.match(/\bFROM\s+(?:([A-Za-z_][\w]*)\.)?([A-Za-z_][\w]*)/i) || [])[2];
+  const table = tableForName(firstTable, schema);
+  if (prefix === '*') {
+    const expansion = starExpansionItem(tableAliasLookup, table, column);
+    return expansion ? [expansion] : [];
+  }
+  if (/\bSELECT\b/i.test(beforeStatement) && !/\bFROM\s+[\w.]*$/i.test(beforeStatement)) {
+    const columns = table ? table.columns.map(c => completionItem(c.name, 'column', c.type)) : [];
+    const aliasColumns = [...tableAliasLookup.entries()].flatMap(([alias, aliasedTable]) =>
+      aliasedTable.columns.map(c => completionItem(`${alias}.${c.name}`, 'column', c.type)));
+    return uniqueItems([
+      ...columns,
+      ...aliasColumns,
+      completionItem('COUNT(*)', 'function', 'Function'),
+      completionItem('SUM()', 'function', 'Function'),
+      completionItem('TRY_CAST()', 'function', 'Function'),
+      completionItem('COALESCE()', 'function', 'Function'),
+    ]).filter(i => matchesPrefix(i, prefix));
+  }
+
+  return [
+    completionItem('SELECT', 'keyword'),
+    completionItem('FROM', 'keyword'),
+    completionItem('WHERE', 'keyword'),
+    completionItem('JOIN', 'keyword'),
+    completionItem('CREATE', 'keyword'),
+    completionItem('CONNECTION', 'keyword'),
+    completionItem('AS', 'keyword'),
+    ...connectorItems(prefix),
+    completionItem('SUM', 'function'),
+    completionItem('COUNT', 'function'),
+  ].filter(i => matchesPrefix(i, prefix));
 }
 
 function sanitizeName(name, id) {

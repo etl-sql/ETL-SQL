@@ -198,6 +198,53 @@ public class PortalConnectionCatalogApiTests
     }
 
     [Fact]
+    public async Task DesignerSchema_UsesCatalogAclsAndDoesNotLeakRestrictedSchema()
+    {
+        using var factory = new CatalogFactory();
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Put, token, "/api/admin/connections/designer_mock", new
+            {
+                connectorType = "MOCKDB",
+                options = new Dictionary<string, string>()
+            })).StatusCode);
+
+        var group = await SendAsync(client, HttpMethod.Post, token, "/api/admin/groups", new { name = "DesignerConnUsers" });
+        Assert.Equal(HttpStatusCode.Created, group.StatusCode);
+        var groupId = (await group.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await SendAsync(client, HttpMethod.Post, token, "/api/admin/connections/designer_mock/acl", new { groupId })).StatusCode);
+
+        var adminSchema = await SendAsync(client, HttpMethod.Get, token, "/api/designer/schema?connection=designer_mock", null);
+        Assert.Equal(HttpStatusCode.OK, adminSchema.StatusCode);
+        var adminBody = await adminSchema.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Contains(adminBody!["tables"]!.AsArray(), t => t!["name"]!.GetValue<string>() == "Users");
+
+        var outsider = await CreateReadyUserAsync(client, token, "designer_outsider", "Publisher");
+        var deniedSchema = await SendAsync(client, HttpMethod.Get, outsider.AccessToken, "/api/designer/schema?connection=designer_mock", null);
+        var deniedBody = await deniedSchema.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, deniedSchema.StatusCode);
+        Assert.DoesNotContain("Users", deniedBody);
+        Assert.DoesNotContain("Orders", deniedBody);
+
+        var deniedComplete = await SendAsync(client, HttpMethod.Post, outsider.AccessToken, "/api/designer/complete", new
+        {
+            script = "SELECT * FROM designer_mock.",
+            line = 0,
+            column = 28,
+            connectionRef = "designer_mock"
+        });
+        var deniedCompleteBody = await deniedComplete.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, deniedComplete.StatusCode);
+        Assert.DoesNotContain("Users", deniedCompleteBody);
+        Assert.DoesNotContain("Orders", deniedCompleteBody);
+    }
+
+    [Fact]
     public async Task SensitiveFields_RoundTripMaskExportAndResolve()
     {
         using var factory = new CatalogFactory();
@@ -449,6 +496,36 @@ public class PortalConnectionCatalogApiTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
         return (body!["token"]!.GetValue<string>(), body["refreshToken"]!.GetValue<string>());
+    }
+
+    private static async Task<(int UserId, string AccessToken)> CreateReadyUserAsync(
+        HttpClient client,
+        string adminToken,
+        string usernamePrefix,
+        string role)
+    {
+        var username = $"{usernamePrefix}_{Guid.NewGuid():N}"[..20];
+        const string initialPassword = "User@Test1!";
+        const string changedPassword = "User@Test2!";
+        var create = await SendAsync(client, HttpMethod.Post, adminToken, "/api/admin/users", new
+        {
+            username,
+            email = $"{username}@test.local",
+            password = initialPassword,
+            role
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var userId = (await create.Content.ReadFromJsonAsync<JsonObject>(Json))!["id"]!.GetValue<int>();
+
+        var initial = await LoginAsync(client, username, initialPassword);
+        var change = await SendAsync(client, HttpMethod.Post, initial.AccessToken, "/api/auth/change-password", new
+        {
+            currentPassword = initialPassword,
+            newPassword = changedPassword
+        });
+        Assert.Equal(HttpStatusCode.NoContent, change.StatusCode);
+
+        return (userId, (await LoginAsync(client, username, changedPassword)).AccessToken);
     }
 
     private static async Task<HttpResponseMessage> SendAsync(HttpClient client, HttpMethod method,

@@ -98,24 +98,24 @@ chunk so we are not rebuilding what already ships.
 
 ### Phase A — Real-engine diagnostics (highest value, lowest risk)
 
-- [ ] **A1 — `POST /api/designer/analyze` endpoint.** New action alongside `DesignerController.Parse`.
+- [x] **A1 — `POST /api/designer/analyze` endpoint.** New action alongside `DesignerController.Parse`.
   Request `{ script, dialect?, connectionRef? }`; tokenize → `Core.Parser.Parser.Parse()` →
   `LinterFactory.CreateWithAllRules(sp)` → `Linter.AnalyzeAsync(script, context)`. Map results to a
   wire shape mirroring `AnalysisDiagnostic` (`startLine/startColumn/endLine/endColumn/severity/message/
   code/source`). Authenticated, `[EnableRateLimiting]`, stateless, no process spawned. *Reuse:*
   `ETL-SQL.Analysis` (~50 rules incl. `SchemaValidationRule`, `GovernancePolicyRule`,
   `CredentialLeakRule`, `AvoidSelectStarRule`), and the `/parse` request/DI pattern.
-- [ ] **A2 — CodeMirror lint source.** Extend the canonical `Shared/designer/codemirror` bundle to
+- [x] **A2 — CodeMirror lint source.** Extend the canonical `Shared/designer/codemirror` bundle to
   include `@codemirror/lint`; add a debounced (~400 ms), cancel-on-keystroke async linter that POSTs
   the buffer to `/analyze` and maps diagnostics to CM `Diagnostic[]` (severity → squiggle + gutter
   marker + hover message). Edit the canonical asset, then `node scripts/sync-assets.js`.
-- [ ] **A3 — Parity test.** Golden test: a fixture script produces byte-identical diagnostics through
+- [x] **A3 — Parity test.** Golden test: a fixture script produces byte-identical diagnostics through
   `/analyze` and through the CLI `lint` path, proving the "same engine as VS Code" promise and
   guarding against drift.
 
 ### Phase B — Schema-aware autocomplete
 
-- [ ] **B1 — Shared, cached schema snapshot service.** `GET /api/designer/schema?connection=<ref>`
+- [x] **B1 — Shared, cached schema snapshot service.** `GET /api/designer/schema?connection=<ref>`
   returns `{ tables:[{ name, columns:[{name,type}] }] }` for a connection the caller is **authorized to
   use**. Schema is a property of the *connection/database, not the user*, so it is introspected **once
   per connection and cached server-side, then served to every editor session** — the VS Code/TUI
@@ -135,51 +135,60 @@ chunk so we are not rebuilding what already ships.
     introspection cost or cross-node drift becomes a real problem.
 
   *Reuse:* connection catalog + ACLs; the existing schema-suggestion metadata
-  (`SuggestionType.Table/Column`).
-- [ ] **B2 — Stateless completion endpoint + CM source.** `POST /api/designer/complete { script, line,
+  (`SuggestionType.Table/Column`). *Shipped:* the Portal schema endpoint resolves the shared
+  connection through the Portal catalog on every request, warms the existing metadata manager's
+  per-node cache under a user/connection/document-scoped URI, and returns only non-secret
+  table/column metadata.
+- [x] **B2 — Stateless completion endpoint + CM source.** `POST /api/designer/complete { script, line,
   column, connectionRef }` runs the existing completion/suggestion engine server-side (position in the
   request, no synced document) and returns `CompletionItem[]`. It is a **pure function over the B1
   cached snapshot** + parse position — it never introspects the database live on a completion request.
   Wire CodeMirror `@codemirror/autocomplete`
   as an async source that is context-aware (after `FROM`/`JOIN` → tables; after `alias.` → columns;
   otherwise keywords/functions). *Reuse:* `CompletionProvider` logic from `ETL-SQL.LanguageServer`,
-  refactored into an `ETL-SQL.Analysis` service callable without an LSP session.
-- [ ] **B3 — Completion governance.** Suggestions expose only connections/tables the caller may use;
+  refactored into an `ETL-SQL.Analysis` service callable without an LSP session. *Shipped:* the
+  endpoint reuses `GrammarLanguageService` directly and the shared CodeMirror bundle now includes
+  `@codemirror/autocomplete`.
+- [x] **B3 — Completion governance.** Suggestions expose only connections/tables the caller may use;
   never surface schema for unauthorized connections and never surface secret values. Add a test that
   an unauthorized `connectionRef` yields `403`/empty, never a schema leak.
 
 ### Phase C — Interactive "Run selection" (the genuinely risky part — govern it hard)
 
-- [ ] **C1 — `POST /api/designer/run` with server-enforced limits.** Execute the selected statement
-  under a **server-clamped `TOP 100`** (rewrite/wrap — never trust a client-supplied limit), a 15 s
-  timeout, and a per-run `MemoryGrantArbiter` ceiling. *Reuse:* the engine execution path + memory
-  arbiter; isolate on a worker with the timeout as a hard cancel.
-- [ ] **C2 — Caller security context.** Run as the logged-in portal user: apply RLS predicates and
+- [x] **C1 — `POST /api/designer/run` with server-enforced limits.** Execute one selected read-only
+  `SELECT`/set-query under a server-clamped 100-row retained result cap, a 15 s timeout, and a strict
+  per-run operator memory grant. *Reuse:* the engine execution path + memory arbiter; cancel via the
+  request-linked execution token.
+- [x] **C2 — Caller security context.** Run as the logged-in portal user: apply RLS predicates and
   identity vars (`@@CURRENT_USER`, `USER_GROUPS()`), and resolve the connection + secrets from the
   catalog/vault — **never** from client-supplied credentials. *Reuse:* RLS scan + identity var
   plumbing; `SECRET:` resolution.
-- [ ] **C3 — Audit every run.** Emit an `AD_HOC_RUN` audit event (actor, connection, sanitized query,
+- [x] **C3 — Audit every run.** Emit an `AD_HOC_RUN` audit event (actor, connection, sanitized query,
   row count, elapsed) through the durable audit outbox. *Reuse:* `AuditService` + outbox.
-- [ ] **C4 — Result panel.** Render the capped grid with the shared report-runtime table (tabulator),
-  showing "capped at 100 rows" and timing. *Reuse:* `Shared` report-runtime grid.
+- [x] **C4 — Result panel.** Render a capped shared designer result grid showing the 100-row cap and
+  timing. *Reuse:* `Shared` report-runtime styling.
 
 ### Phase D — Source-control write-back (only when a git backend is configured)
 
-- [ ] **D1 — Commit-on-save.** When the portal has a git backend, `POST /api/designer/save` commits on
+- [x] **D1 — Commit-on-save.** When the portal has a git backend, `POST /api/designer/save` commits on
   behalf of the user (commit author = portal identity; push via a service token), preserving the
   "source-controlled report" promise. When no git backend, save to the portal script store as today.
-- [ ] **D2 — Concurrency safety.** Track the base revision the edit started from; on save detect a
+- [x] **D2 — Concurrency safety.** Track the base revision the edit started from; on save detect a
   changed head and surface a refresh/merge path — never silently overwrite a newer commit.
-- [ ] **D3 — Audit + authz.** Saving/committing is authorized (author role) and audited; secrets are
+- [x] **D3 — Audit + authz.** Saving/committing is authorized (author role) and audited; secrets are
   never written into committed script text.
 
 ### Phase E — Editor UX polish (CodeMirror, not Monaco)
 
-- [ ] **E1 — First-class editing affordances.** Bracket matching, keyword/function highlight (extend
+- [x] **E1 — First-class editing affordances.** Bracket matching, keyword/function highlight (extend
   the designer language mode), a diagnostics panel listing A1 results, and format-on-save if/when a
-  formatter exists.
-- [ ] **E2 — Commands & keybindings.** Command palette + shortcuts for Run selection, Format, and
-  Save/commit, mirroring the VS Code command names so muscle memory transfers.
+  formatter exists. *Shipped:* the shared workbench has bracket matching/highlighting, the diagnostics
+  panel, and a protocol-style results panel; formatting remains intentionally absent until a formatter
+  exists.
+- [x] **E2 — Commands & keybindings.** Command palette + shortcuts for Run selection, Format, and
+  Save/commit, mirroring the VS Code command names so muscle memory transfers. *Shipped:* the shared
+  Portal/sandbox workbench supports `Ctrl/Cmd+Shift+P`, `Ctrl/Cmd+Enter`, and `Ctrl/Cmd+S` when save
+  is available; Format appears only when a host supplies a formatter.
 
 ---
 

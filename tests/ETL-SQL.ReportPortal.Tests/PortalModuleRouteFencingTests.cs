@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -34,11 +37,76 @@ public class PortalModuleRouteFencingTests
         using var client = factory.CreateClient();
         var token = await GetAdminTokenAsync(client);
 
-        var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/parse", new { script = "" });
+        var parse = await SendAsync(client, HttpMethod.Post, token, "/api/designer/parse", new { script = "" });
+        var analyze = await SendAsync(client, HttpMethod.Post, token, "/api/designer/analyze", new { script = "SELECT * FROM #stage;" });
+        var complete = await SendAsync(client, HttpMethod.Post, token, "/api/designer/complete", new { script = "SEL", line = 0, column = 3 });
+        var run = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new { script = "SELECT 1 AS One;" });
+        var save = await SendAsync(client, HttpMethod.Post, token, "/api/designer/save", new { reportId = 1, scriptText = "SELECT 1;" });
+        var schema = await SendAsync(client, HttpMethod.Get, token, "/api/designer/schema?connection=x", null);
 
-        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, parse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, analyze.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, complete.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, run.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, save.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, schema.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/designer.html")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/index.html")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Designer_Run_ExecutesReadOnlySelectAndAudits()
+    {
+        using var factory = new ModuleFenceFactory(_ => { });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new
+        {
+            script = "SELECT 1 AS One;",
+            selection = "SELECT 1 AS One;"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonObject>(Json);
+        Assert.Single(body!["rows"]!.AsArray());
+        Assert.Equal(1, body["rows"]![0]!["One"]!.GetValue<int>());
+        Assert.False(body["capped"]!.GetValue<bool>());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "AD_HOC_RUN"));
+    }
+
+    [Fact]
+    public async Task Designer_Run_RejectsNonSelect()
+    {
+        using var factory = new ModuleFenceFactory(_ => { });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new
+        {
+            script = "DELETE FROM #stage;"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("SELECT 1 AS Value INTO #written UNION SELECT 2 AS Value;")]
+    [InlineData("SELECT 1 AS Value UNION SELECT 2 AS Value INTO #written;")]
+    [InlineData("SELECT 1 AS Value UNION SELECT 2 AS Value INTERSECT SELECT 3 AS Value INTO #written;")]
+    [InlineData("SELECT 1 AS Value EXCEPT SELECT 2 AS Value INTO #written;")]
+    public async Task Designer_Run_RejectsNestedSelectInto(string script)
+    {
+        using var factory = new ModuleFenceFactory(_ => { });
+        using var client = factory.CreateClient();
+        var token = await GetAdminTokenAsync(client);
+
+        var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new { script });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]

@@ -797,6 +797,14 @@ function _loadCm() {
     return _cmPromise;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 // Cached rptsql StreamLanguage instance (shared across all editor instances).
 let _rptsqlLang = null;
 function _getRptsqlLang(cm) {
@@ -865,6 +873,11 @@ function _getRptsqlLang(cm) {
  * @param {string}      [opts.value='']       Initial script content.
  * @param {boolean}     [opts.readOnly=false]
  * @param {Function}    [opts.onChange]        Called with the full new value on each change.
+ * @param {string}      [opts.analyzeUrl]      Optional endpoint for real parser/linter diagnostics.
+ * @param {string}      [opts.completeUrl]     Optional endpoint for context-aware completions.
+ * @param {string}      [opts.connectionRef]   Optional shared connection alias for schema completions.
+ * @param {Function}    [opts.authFetch]       Optional fetch wrapper used for analyzeUrl/completeUrl.
+ * @param {Function}    [opts.onDiagnostics]   Called with returned diagnostics.
  * @returns {Promise<{ getValue: Function, setValue: Function, dispose: Function }>}
  *   Returns a promise so callers can await the dynamic bundle load.
  */
@@ -876,8 +889,26 @@ export async function createScriptEditor(container, opts = {}) {
         defaultKeymap, history, historyKeymap, indentWithTab,
         syntaxHighlighting, defaultHighlightStyle, bracketMatching,
         searchKeymap, highlightSelectionMatches,
+        autocompletion, completionKeymap,
+        linter, lintGutter,
     } = cm;
 
+    const analyzeUrl = opts.analyzeUrl || null;
+    const completeUrl = opts.completeUrl || null;
+    const analyzeFetch = opts.authFetch ?? ((url, init) => fetch(url, init));
+    const completeFetch = opts.authFetch ?? ((url, init) => fetch(url, init));
+    const debounceMs = Number.isFinite(opts.analyzeDebounceMs) ? opts.analyzeDebounceMs : 450;
+    const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
+    const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
+    const acceptCompletionKey = completionKeys.find(binding => binding?.key === 'Enter' && typeof binding.run === 'function');
+    const keymaps = [
+        ...(acceptCompletionKey ? [{ ...acceptCompletionKey, key: 'Tab' }] : []),
+        ...completionKeys,
+        indentWithTab,
+        ...(Array.isArray(defaultKeymap) ? defaultKeymap : []),
+        ...(Array.isArray(historyKeymap) ? historyKeymap : []),
+        ...(Array.isArray(searchKeymap) ? searchKeymap : []),
+    ];
     const extensions = [
         lineNumbers(),
         highlightActiveLine(),
@@ -887,26 +918,649 @@ export async function createScriptEditor(container, opts = {}) {
         bracketMatching(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         highlightSelectionMatches(),
-        keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of(keymaps),
         _getRptsqlLang(cm),
         EditorState.readOnly.of(opts.readOnly ?? false),
     ];
+    if (hasCmLint && typeof lintGutter === 'function') extensions.push(lintGutter());
+
+    let analyzeTimer = null;
+    let analyzeAbort = null;
+    let analyzeRequest = null;
+    let analyzeRequestScript = null;
+    let view = null;
+    let diagPanel = null;
+
+    function completionKind(kind) {
+        switch (String(kind ?? '').toLowerCase()) {
+            case 'keyword': return 'keyword';
+            case 'function': return 'function';
+            case 'table': return 'class';
+            case 'column': return 'property';
+            case 'variable': return 'variable';
+            case 'alias': return 'variable';
+            case 'connection': return 'namespace';
+            case 'connector': return 'namespace';
+            case 'path': return 'file';
+            case 'optionname': return 'property';
+            case 'optionvalue': return 'constant';
+            case 'snippet': return 'text';
+            default: return 'text';
+        }
+    }
+
+    function cursorLineColumn(state, pos) {
+        const line = state.doc.lineAt(pos);
+        return { line: line.number - 1, column: pos - line.from };
+    }
+
+    function currentStatement() {
+        if (!view) return '';
+        const script = view.state.doc.toString();
+        const pos = view.state.selection.main.head;
+        let start = script.lastIndexOf(';', Math.max(0, pos - 1));
+        let end = script.indexOf(';', pos);
+        start = start < 0 ? 0 : start + 1;
+        end = end < 0 ? script.length : end;
+        return script.slice(start, end).trim();
+    }
+
+    function createCompletionSource() {
+        if (!completeUrl || typeof autocompletion !== 'function') return null;
+        return async (context) => {
+            const word = context.matchBefore(/[\w@#&$.*]+/);
+            const previous = context.state.sliceDoc(Math.max(0, context.pos - 1), context.pos);
+            if (!word && !context.explicit) {
+                return null;
+            }
+            if (word && word.from === word.to && !context.explicit && !/[\s.]/.test(previous)) {
+                return null;
+            }
+
+            const { line, column } = cursorLineColumn(context.state, context.pos);
+            const res = await completeFetch(completeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    script: context.state.doc.toString(),
+                    line,
+                    column,
+                    connectionRef: opts.connectionRef || null,
+                    documentUri: opts.documentUri || 'portal-designer',
+                }),
+            });
+            if (!res?.ok) return null;
+
+            const data = await res.json();
+            const items = Array.isArray(data?.items) ? data.items : [];
+            const defaultFrom = word?.from ?? context.pos;
+            return {
+                from: defaultFrom,
+                options: items.map(item => ({
+                    label: item.label,
+                    apply: (editorView, _completion, from, to) => {
+                        const docLine = editorView.state.doc.line(line + 1);
+                        const startColumn = Number.isFinite(item.startColumn) ? item.startColumn : null;
+                        const endColumn = Number.isFinite(item.endColumn) ? item.endColumn : null;
+                        const applyFrom = startColumn === null ? from : Math.min(docLine.to, docLine.from + Math.max(0, startColumn));
+                        const applyTo = endColumn === null ? to : Math.min(docLine.to, docLine.from + Math.max(0, endColumn));
+                        editorView.dispatch({
+                            changes: { from: applyFrom, to: applyTo, insert: item.insertText || item.label },
+                            selection: { anchor: applyFrom + String(item.insertText || item.label).length },
+                            scrollIntoView: true,
+                            userEvent: 'input.complete',
+                        });
+                    },
+                    type: completionKind(item.kind),
+                    detail: item.detail || item.kind || '',
+                    info: item.documentation || undefined,
+                })),
+            };
+        };
+    }
+
+    function setDiagnosticsStatus(text, kind = 'neutral') {
+        if (!diagPanel) return;
+        const status = diagPanel.querySelector('.etlsql-editor-diagnostics-status');
+        status.textContent = text;
+        status.dataset.kind = kind;
+    }
+
+    function diagnosticSeverity(d) {
+        const severity = String(d?.severity ?? '').toLowerCase();
+        if (severity.includes('error') || d?.severity === 0) return 'error';
+        if (severity.includes('info') || severity.includes('hint')) return 'info';
+        return 'warning';
+    }
+
+    function diagnosticOffset(doc, line, column) {
+        const safeLine = Math.max(1, Math.min(doc.lines, (Number.isFinite(line) ? line : 0) + 1));
+        const docLine = doc.line(safeLine);
+        return Math.min(docLine.to, docLine.from + Math.max(0, Number.isFinite(column) ? column : 0));
+    }
+
+    function toCodeMirrorDiagnostic(doc, d) {
+        const from = diagnosticOffset(doc, d.startLine, d.startColumn);
+        const endLine = Number.isFinite(d.endLine) ? d.endLine : d.startLine;
+        const endColumn = Number.isFinite(d.endColumn) ? d.endColumn : d.startColumn + 1;
+        let to = diagnosticOffset(doc, endLine, endColumn);
+        if (to <= from) to = Math.min(doc.length, from + 1);
+        return {
+            from,
+            to,
+            severity: diagnosticSeverity(d),
+            source: d.source || d.code || 'ETL-SQL',
+            message: d.message || d.code || 'Diagnostic',
+        };
+    }
+
+    function renderDiagnostics(diagnostics) {
+        opts.onDiagnostics?.(diagnostics);
+        if (!diagPanel) return;
+        const list = diagPanel.querySelector('.etlsql-editor-diagnostics-list');
+        list.innerHTML = '';
+        if (!diagnostics.length) {
+            setDiagnosticsStatus('No diagnostics', 'ok');
+            return;
+        }
+        const errors = diagnostics.filter(d => String(d.severity).toLowerCase().includes('error') || d.severity === 0).length;
+        setDiagnosticsStatus(`${diagnostics.length} diagnostic${diagnostics.length === 1 ? '' : 's'}${errors ? ` · ${errors} error${errors === 1 ? '' : 's'}` : ''}`, errors ? 'error' : 'warn');
+        for (const d of diagnostics.slice(0, 50)) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'etlsql-editor-diagnostic';
+            item.dataset.severity = String(d.severity ?? 'Warning').toLowerCase();
+            const line = Number.isFinite(d.startLine) ? d.startLine + 1 : 1;
+            const column = Number.isFinite(d.startColumn) ? d.startColumn + 1 : 1;
+            item.innerHTML = `<span class="etlsql-editor-diagnostic-code">${escapeHtml(d.code || d.source || 'diagnostic')}</span><span class="etlsql-editor-diagnostic-pos">${line}:${column}</span><span class="etlsql-editor-diagnostic-msg">${escapeHtml(d.message || '')}</span>`;
+            item.addEventListener('click', () => {
+                if (!view) return;
+                const safeLine = Math.max(1, Math.min(view.state.doc.lines, line));
+                const docLine = view.state.doc.line(safeLine);
+                const pos = Math.min(docLine.to, docLine.from + Math.max(0, column - 1));
+                view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) });
+                view.focus();
+            });
+            list.appendChild(item);
+        }
+    }
+
+    async function fetchDiagnostics(script) {
+        if (!analyzeUrl) return [];
+        if (analyzeRequest && analyzeRequestScript === script) return await analyzeRequest;
+
+        analyzeAbort?.abort();
+        const controller = new AbortController();
+        analyzeAbort = controller;
+        analyzeRequestScript = script;
+        analyzeRequest = (async () => {
+            const res = await analyzeFetch(analyzeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script, documentUri: opts.documentUri || 'portal-designer' }),
+                signal: controller.signal,
+            });
+            if (!res?.ok) throw new Error(res?.statusText || 'Analyze request failed');
+            const data = await res.json();
+            return data?.diagnostics ?? [];
+        })();
+
+        try {
+            return await analyzeRequest;
+        } finally {
+            if (analyzeAbort === controller) analyzeAbort = null;
+            if (analyzeRequestScript === script) {
+                analyzeRequest = null;
+                analyzeRequestScript = null;
+            }
+        }
+    }
+
+    async function runAnalysis(script) {
+        if (!analyzeUrl) return;
+        setDiagnosticsStatus('Analyzing...', 'neutral');
+        try {
+            renderDiagnostics(await fetchDiagnostics(script));
+        } catch (err) {
+            if (err?.name === 'AbortError') return;
+            renderDiagnostics([{
+                startLine: 0,
+                startColumn: 0,
+                severity: 'Error',
+                code: 'ANALYZE_REQUEST',
+                source: 'Portal editor',
+                message: err?.message || 'Analyze request failed',
+            }]);
+        }
+    }
+
+    function scheduleAnalysis(script) {
+        if (!analyzeUrl) return;
+        clearTimeout(analyzeTimer);
+        analyzeTimer = setTimeout(() => runAnalysis(script), debounceMs);
+    }
+
+    if (hasCmLint) {
+        extensions.push(linter(async editorView => {
+            try {
+                const diagnostics = await fetchDiagnostics(editorView.state.doc.toString());
+                renderDiagnostics(diagnostics);
+                return diagnostics.map(d => toCodeMirrorDiagnostic(editorView.state.doc, d));
+            } catch (err) {
+                if (err?.name === 'AbortError') return [];
+                const diagnostic = {
+                    startLine: 0,
+                    startColumn: 0,
+                    severity: 'Error',
+                    code: 'ANALYZE_REQUEST',
+                    source: 'Portal editor',
+                    message: err?.message || 'Analyze request failed',
+                };
+                renderDiagnostics([diagnostic]);
+                return [toCodeMirrorDiagnostic(editorView.state.doc, diagnostic)];
+            }
+        }, { delay: debounceMs }));
+    }
+
+    const completionSource = createCompletionSource();
+    if (completionSource) {
+        extensions.push(autocompletion({ override: [completionSource] }));
+    }
 
     if (opts.onChange) {
         extensions.push(EditorView.updateListener.of(update => {
-            if (update.docChanged) opts.onChange(update.state.doc.toString());
+            if (!update.docChanged) return;
+            const text = update.state.doc.toString();
+            opts.onChange(text);
+            if (!hasCmLint) scheduleAnalysis(text);
+        }));
+    } else if (analyzeUrl && !hasCmLint) {
+        extensions.push(EditorView.updateListener.of(update => {
+            if (update.docChanged) scheduleAnalysis(update.state.doc.toString());
         }));
     }
 
     const state = EditorState.create({ doc: opts.value ?? '', extensions });
-    const view  = new EditorView({ state, parent: container });
+    view = new EditorView({ state, parent: container });
+
+    if (analyzeUrl) {
+        container.classList.add('has-diagnostics');
+        diagPanel = document.createElement('div');
+        diagPanel.className = 'etlsql-editor-diagnostics';
+        diagPanel.innerHTML = '<div class="etlsql-editor-diagnostics-status" data-kind="neutral">Diagnostics pending</div><div class="etlsql-editor-diagnostics-list"></div>';
+        container.appendChild(diagPanel);
+        if (opts.analyzeOnLoad !== false) scheduleAnalysis(opts.value ?? '');
+    }
 
     return {
         getValue: () => view.state.doc.toString(),
+        getSelection: () => {
+            const ranges = view.state.selection.ranges
+                .filter(range => !range.empty)
+                .map(range => view.state.doc.sliceString(range.from, range.to));
+            return ranges.join('\n');
+        },
+        getCurrentStatement: () => currentStatement(),
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
-        dispose: () => view.destroy(),
+        analyze: () => runAnalysis(view.state.doc.toString()),
+        dispose: () => {
+            clearTimeout(analyzeTimer);
+            analyzeAbort?.abort();
+            view.destroy();
+            diagPanel?.remove();
+        },
+    };
+}
+
+function normalizeRunTrace(result, script) {
+    if (Array.isArray(result?.trace)) return result.trace;
+    const rows = Array.isArray(result?.rows) ? result.rows : [];
+    const columns = Array.isArray(result?.columns) ? result.columns : [];
+    const elapsedMs = Number.isFinite(result?.elapsedMs) ? result.elapsedMs : 0;
+    const message = result?.message || (rows.length ? `Returned ${rows.length} rows.` : 'No rows returned.');
+    return [
+        { type: 'clear', resetHistory: true },
+        { type: 'status', status: 'running' },
+        { type: 'message', level: 'sys', text: 'Designer run started.' },
+        { type: 'progress', data: [
+            { id: '1', name: 'Execute current statement', status: 'Completed', rowsProcessed: rows.length, durationMs: elapsedMs, isParallelBlock: false, children: [] },
+        ] },
+        { type: 'message', level: rows.length ? 'info' : 'warn', text: message },
+        { type: 'message', level: 'sys', text: String(script || '').trim().replace(/\s+/g, ' ').slice(0, 180) },
+        { type: 'results', columns, rows },
+        { type: 'performance', metrics: {
+            executionMs: elapsedMs,
+            rowsProcessed: rows.length,
+            memoryMb: 0,
+            statements: [{ type: 'SELECT', totalMs: elapsedMs }],
+        } },
+        { type: 'done', exitCode: 0 },
+    ];
+}
+
+function createScriptResultsPanel(container) {
+    let messages = [];
+    let progress = [];
+    let resultSets = [];
+    let performance = null;
+    let activeTab = 'results';
+    let status = 'idle';
+
+    container.className = 'etlsql-script-results';
+    container.innerHTML = `
+        <div class="etlsql-script-results-tabs">
+            <button type="button" data-tab="results">Results</button>
+            <button type="button" data-tab="messages">Messages</button>
+            <button type="button" data-tab="pipeline">Pipeline</button>
+            <button type="button" data-tab="performance">Performance</button>
+            <span class="etlsql-script-results-status" data-status>Idle</span>
+        </div>
+        <div class="etlsql-script-results-body" data-body></div>`;
+
+    const body = container.querySelector('[data-body]');
+    const statusEl = container.querySelector('[data-status]');
+
+    function setTab(tab) {
+        activeTab = tab;
+        render();
+    }
+
+    function escape(value) {
+        return escapeHtml(value);
+    }
+
+    function renderResults() {
+        const latest = resultSets[resultSets.length - 1];
+        if (!latest) return '<div class="etlsql-script-results-empty">No results yet.</div>';
+        const columns = Array.isArray(latest.columns) ? latest.columns : [];
+        const rows = Array.isArray(latest.rows) ? latest.rows : [];
+        if (!columns.length) return '<div class="etlsql-script-results-empty">No result grid.</div>';
+        const head = columns.map(c => `<th>${escape(c)}</th>`).join('');
+        const dataRows = rows.map(row => `<tr>${columns.map(c => `<td>${escape(formatResultCell(row?.[c]))}</td>`).join('')}</tr>`).join('');
+        return `<div class="etlsql-script-results-count">${rows.length} row${rows.length === 1 ? '' : 's'}</div><table><thead><tr>${head}</tr></thead><tbody>${dataRows || `<tr><td colspan="${columns.length}">No rows</td></tr>`}</tbody></table>`;
+    }
+
+    function renderMessages() {
+        if (!messages.length) return '<div class="etlsql-script-results-empty">No messages yet.</div>';
+        return `<div class="etlsql-script-message-list">${messages.map(m => `<div class="etlsql-script-message" data-level="${escape(m.level || 'info')}"><span>${escape(m.level || 'info')}</span>${escape(m.text || '')}</div>`).join('')}</div>`;
+    }
+
+    function renderPipelineRows(nodes, depth = 0) {
+        return (nodes || []).map(node => `
+            <tr>
+                <td style="padding-left:${8 + depth * 18}px">${escape(node.name || node.id || 'Step')}</td>
+                <td>${escape(node.status || '')}</td>
+                <td>${Number(node.rowsProcessed || 0).toLocaleString()}</td>
+                <td>${Number(node.durationMs || 0).toLocaleString()} ms</td>
+            </tr>${renderPipelineRows(node.children, depth + 1)}`).join('');
+    }
+
+    function renderPipeline() {
+        if (!progress.length) return '<div class="etlsql-script-results-empty">No pipeline events yet.</div>';
+        const latest = progress[progress.length - 1] || [];
+        return `<table><thead><tr><th>Step</th><th>Status</th><th>Rows</th><th>Duration</th></tr></thead><tbody>${renderPipelineRows(latest)}</tbody></table>`;
+    }
+
+    function renderPerformance() {
+        const metrics = performance?.metrics || performance;
+        if (!metrics) return '<div class="etlsql-script-results-empty">No performance metrics yet.</div>';
+        const statements = Array.isArray(metrics.statements) ? metrics.statements : [];
+        return `
+            <div class="etlsql-script-perf-summary">
+                <div><strong>${Number(metrics.executionMs || 0).toLocaleString()} ms</strong><span>Execution</span></div>
+                <div><strong>${Number(metrics.rowsProcessed || 0).toLocaleString()}</strong><span>Rows</span></div>
+                <div><strong>${Number(metrics.memoryMb || 0).toLocaleString()} MB</strong><span>Memory</span></div>
+            </div>
+            <table><thead><tr><th>Statement</th><th>Total</th></tr></thead><tbody>${statements.map(s => `<tr><td>${escape(s.type || 'Statement')}</td><td>${Number(s.totalMs || 0).toLocaleString()} ms</td></tr>`).join('')}</tbody></table>`;
+    }
+
+    function render() {
+        container.querySelectorAll('[data-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === activeTab));
+        statusEl.textContent = status;
+        if (activeTab === 'messages') body.innerHTML = renderMessages();
+        else if (activeTab === 'pipeline') body.innerHTML = renderPipeline();
+        else if (activeTab === 'performance') body.innerHTML = renderPerformance();
+        else body.innerHTML = renderResults();
+    }
+
+    function clear() {
+        messages = [];
+        progress = [];
+        resultSets = [];
+        performance = null;
+        status = 'Idle';
+        render();
+    }
+
+    function post(message) {
+        switch (message?.type) {
+            case 'clear':
+                clear();
+                break;
+            case 'status':
+                status = message.status || status;
+                break;
+            case 'message':
+                messages.push(message);
+                break;
+            case 'progress':
+                progress.push(Array.isArray(message.data) ? message.data : []);
+                break;
+            case 'results':
+                resultSets.push({ columns: message.columns || [], rows: message.rows || [] });
+                activeTab = 'results';
+                break;
+            case 'performance':
+                performance = message;
+                break;
+            case 'done':
+                status = message.exitCode === 0 ? 'Complete' : 'Failed';
+                break;
+            default:
+                break;
+        }
+        render();
+    }
+
+    container.querySelectorAll('[data-tab]').forEach(btn => btn.addEventListener('click', () => setTab(btn.dataset.tab)));
+    clear();
+    return {
+        replay(trace) {
+            for (const message of (Array.isArray(trace) ? trace : [])) post(message);
+        },
+        clear,
+        dispose() {
+            container.replaceChildren();
+        },
+    };
+}
+
+function formatResultCell(value) {
+    if (value == null) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+}
+
+export async function createScriptEditorWorkbench(container, opts = {}) {
+    container.innerHTML = `
+        <div class="etlsql-script-workbench">
+            <div class="etlsql-script-workbench-toolbar">
+                <strong>${escapeHtml(opts.title || 'Script')}</strong>
+                <span class="etlsql-script-workbench-spacer"></span>
+                <button type="button" class="btn btn-sm" data-command-palette title="Command Palette (Ctrl+Shift+P)">Commands</button>
+                <button type="button" class="btn btn-sm btn-primary" data-run>Run</button>
+                ${opts.onApply ? '<button type="button" class="btn btn-sm btn-primary" data-apply>Update Designer</button>' : ''}
+                ${opts.onSave ? '<button type="button" class="btn btn-sm" data-save>Save</button>' : ''}
+                ${opts.onClose ? '<button type="button" class="btn btn-sm" data-close>Close</button>' : ''}
+            </div>
+            <div class="etlsql-script-workbench-editor etlsql-editor-container" data-editor></div>
+            <div class="etlsql-script-workbench-splitter" data-splitter title="Drag to resize results"></div>
+            <div class="etlsql-script-workbench-results" data-results></div>
+            <div class="etlsql-script-command-palette" data-palette hidden>
+                <div class="etlsql-script-command-box">
+                    <input type="search" data-palette-filter placeholder="Run command" autocomplete="off">
+                    <div data-palette-list></div>
+                </div>
+            </div>
+        </div>`;
+
+    const root = container.querySelector('.etlsql-script-workbench');
+    const editorHost = container.querySelector('[data-editor]');
+    const resultsHost = container.querySelector('[data-results]');
+    const splitter = container.querySelector('[data-splitter]');
+    const palette = container.querySelector('[data-palette]');
+    const paletteFilter = container.querySelector('[data-palette-filter]');
+    const paletteList = container.querySelector('[data-palette-list]');
+    const resultsPanel = createScriptResultsPanel(resultsHost);
+    const editor = await createScriptEditor(editorHost, opts.editor || {});
+    let runAbort = null;
+
+    splitter.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        splitter.setPointerCapture(event.pointerId);
+        const rootRect = root.getBoundingClientRect();
+        const onMove = (moveEvent) => {
+            const y = Math.max(rootRect.top + 220, Math.min(rootRect.bottom - 160, moveEvent.clientY));
+            const editorHeight = Math.max(180, y - rootRect.top - 42);
+            const resultHeight = Math.max(140, rootRect.bottom - y - 8);
+            root.style.gridTemplateRows = `auto ${editorHeight}px 8px ${resultHeight}px`;
+        };
+        const onUp = () => {
+            splitter.removeEventListener('pointermove', onMove);
+            splitter.removeEventListener('pointerup', onUp);
+        };
+        splitter.addEventListener('pointermove', onMove);
+        splitter.addEventListener('pointerup', onUp);
+    });
+
+    async function run() {
+        if (!opts.runUrl && !opts.onRun) return;
+        const script = editor.getValue();
+        const selection = editor.getSelection?.() || '';
+        const statement = editor.getCurrentStatement?.() || '';
+        const runText = selection || statement || script;
+        resultsPanel.replay([{ type: 'clear', resetHistory: true }, { type: 'status', status: 'running' }, { type: 'message', level: 'sys', text: 'Running selected statement.' }]);
+        try {
+            runAbort?.abort();
+            runAbort = new AbortController();
+            const result = opts.onRun
+                ? await opts.onRun({ script, selection: runText, connectionRef: opts.connectionRef || null, signal: runAbort.signal })
+                : await (async () => {
+                    const fetcher = opts.authFetch ?? ((url, init) => fetch(url, init));
+                    const res = await fetcher(opts.runUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ script, selection: runText, connectionRef: opts.connectionRef || null, documentUri: opts.documentUri || 'portal-designer' }),
+                        signal: runAbort.signal,
+                    });
+                    if (!res?.ok) throw new Error(await res.text());
+                    return await res.json();
+                })();
+            resultsPanel.replay(normalizeRunTrace(result, runText));
+        } catch (err) {
+            if (err?.name === 'AbortError') return;
+            resultsPanel.replay([
+                { type: 'clear', resetHistory: true },
+                { type: 'message', level: 'error', text: err?.message || 'Run failed.' },
+                { type: 'done', exitCode: 1 },
+            ]);
+        }
+    }
+
+    async function save() {
+        await opts.onSave?.(editor.getValue());
+    }
+
+    async function apply() {
+        await opts.onApply?.(editor.getValue());
+    }
+
+    function commandItems() {
+        return [
+            { id: 'run', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: run },
+            { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
+            { id: 'apply', label: 'ETL-SQL: Update Designer from Script', enabled: Boolean(opts.onApply), action: apply },
+            { id: 'save', label: 'ETL-SQL: Save Script', enabled: Boolean(opts.onSave), action: save },
+            { id: 'format', label: 'ETL-SQL: Format Document', enabled: Boolean(opts.onFormat), action: () => opts.onFormat?.(editor.getValue()) },
+            { id: 'close', label: 'ETL-SQL: Close Editor', enabled: Boolean(opts.onClose), action: () => opts.onClose?.() },
+        ].filter(c => c.enabled);
+    }
+
+    function renderPalette() {
+        const filter = String(paletteFilter.value || '').toLowerCase();
+        const commands = commandItems().filter(c => !filter || c.label.toLowerCase().includes(filter));
+        paletteList.innerHTML = commands.length
+            ? commands.map((c, i) => `<button type="button" data-command="${escapeHtml(c.id)}" class="${i === 0 ? 'active' : ''}">${escapeHtml(c.label)}</button>`).join('')
+            : '<div class="etlsql-script-results-empty">No commands</div>';
+        paletteList.querySelectorAll('[data-command]').forEach(button => {
+            button.addEventListener('click', async () => {
+                const cmd = commands.find(c => c.id === button.dataset.command);
+                closePalette();
+                await cmd?.action();
+            });
+        });
+    }
+
+    function openPalette() {
+        palette.hidden = false;
+        paletteFilter.value = '';
+        renderPalette();
+        paletteFilter.focus();
+    }
+
+    function closePalette() {
+        palette.hidden = true;
+        editorHost.querySelector('.cm-editor')?.focus();
+    }
+
+    container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
+    container.querySelector('[data-run]')?.addEventListener('click', run);
+    container.querySelector('[data-apply]')?.addEventListener('click', apply);
+    container.querySelector('[data-save]')?.addEventListener('click', save);
+    container.querySelector('[data-close]')?.addEventListener('click', () => opts.onClose?.());
+    paletteFilter.addEventListener('input', renderPalette);
+    paletteFilter.addEventListener('keydown', async (event) => {
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closePalette();
+            return;
+        }
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const first = paletteList.querySelector('[data-command]');
+            first?.click();
+        }
+    });
+    palette.addEventListener('mousedown', event => {
+        if (event.target === palette) closePalette();
+    });
+    root.addEventListener('keydown', async (event) => {
+        const key = String(event.key || '').toLowerCase();
+        const mod = event.ctrlKey || event.metaKey;
+        if (mod && event.shiftKey && key === 'p') {
+            event.preventDefault();
+            openPalette();
+        } else if (mod && key === 'enter') {
+            event.preventDefault();
+            await run();
+        } else if (mod && key === 's' && opts.onSave) {
+            event.preventDefault();
+            await save();
+        }
+    });
+
+    return {
+        editor,
+        resultsPanel,
+        getValue: () => editor.getValue(),
+        run,
+        dispose() {
+            runAbort?.abort();
+            editor.dispose();
+            resultsPanel.dispose();
+        },
     };
 }
 
@@ -926,6 +1580,7 @@ export async function createScriptEditor(container, opts = {}) {
  * @param {Object|null} [opts.designState=null]   Parsed DesignState JSON (null = new report).
  * @param {number|null} [opts.reportId=null]       Existing report ID for save.
  * @param {number|null} [opts.reportVersion=null]  Current optimistic concurrency version.
+ * @param {string|null} [opts.sourceRevision=null] Current source-control revision, when configured.
  * @param {string}      [opts.reportName='New Report']
  * @param {number|null} [opts.folderId=null]
  * @param {string}      [opts.apiBase='']          Portal API base URL.
@@ -951,6 +1606,7 @@ export function createDesigner(container, opts = {}) {
     let reportName  = opts.reportName ?? 'New Report';
     const reportId  = opts.reportId   ?? null;
     let reportVersion = opts.reportVersion ?? null;
+    let sourceRevision = opts.sourceRevision ?? null;
     const folderId  = opts.folderId   ?? null;
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
@@ -1087,14 +1743,7 @@ export function createDesigner(container, opts = {}) {
     // Script overlay
     const scriptOverlay = document.createElement('div');
     scriptOverlay.className = 'etlsql-designer-script-overlay';
-    scriptOverlay.innerHTML = `
-        <div class="etlsql-designer-script-toolbar">
-            <strong style="flex:1">Script</strong>
-            <button class="btn btn-sm btn-primary" id="dsgn-script-apply">↺ Update Designer</button>
-            <button class="btn btn-sm" id="dsgn-script-close">✕ Close</button>
-        </div>
-        <div class="etlsql-designer-script-body etlsql-editor-container" id="dsgn-script-host"></div>
-    `;
+    scriptOverlay.innerHTML = '<div class="etlsql-designer-script-body" id="dsgn-script-workbench-host"></div>';
     root.appendChild(scriptOverlay);
 
     // Save-as modal
@@ -1405,9 +2054,25 @@ export function createDesigner(container, opts = {}) {
             text = r?.script ?? '';
         } catch { text = '-- Failed to generate script\n'; }
         scriptOverlay.classList.add('active');
-        const host = scriptOverlay.querySelector('#dsgn-script-host');
+        const host = scriptOverlay.querySelector('#dsgn-script-workbench-host');
         host.innerHTML = '';
-        scriptEditor = await createScriptEditor(host, { value: text });
+        scriptEditor = await createScriptEditorWorkbench(host, {
+            title: 'Script',
+            authFetch: _fetch,
+            runUrl: apiBase + '/api/designer/run',
+            connectionRef: opts.connectionRef || null,
+            documentUri: opts.documentUri || 'portal-designer',
+            editor: {
+                value: text,
+                analyzeUrl: apiBase + '/api/designer/analyze',
+                completeUrl: apiBase + '/api/designer/complete',
+                authFetch: _fetch,
+                connectionRef: opts.connectionRef || null,
+                documentUri: opts.documentUri || 'portal-designer',
+            },
+            onApply: applyScriptText,
+            onClose: closeScript,
+        });
     }
 
     function closeScript() {
@@ -1418,8 +2083,12 @@ export function createDesigner(container, opts = {}) {
 
     async function applyScript() {
         if (!scriptEditor) return;
+        await applyScriptText(scriptEditor.getValue());
+    }
+
+    async function applyScriptText(script) {
         try {
-            const r = await apiJson('/api/designer/parse', 'POST', { script: scriptEditor.getValue() });
+            const r = await apiJson('/api/designer/parse', 'POST', { script });
             if (r?.designState?.pages?.length) {
                 Object.assign(state, r.designState);
                 if (!state.datasets) state.datasets = [];
@@ -1447,11 +2116,12 @@ export function createDesigner(container, opts = {}) {
             }
             if (reportId) {
                 const saved = await apiJson(
-                    `/api/reports/${reportId}/script-content`,
-                    'PUT',
-                    { scriptText: script },
+                    '/api/designer/save',
+                    'POST',
+                    { reportId, scriptText: script, baseRevision: sourceRevision },
                     reportVersion);
                 reportVersion = saved?.version ?? reportVersion;
+                sourceRevision = saved?.sourceRevision ?? sourceRevision;
                 opts.onSave?.();
             } else {
                 saveModal.querySelector('#dsgn-modal-name').value   = reportName;
@@ -1620,8 +2290,6 @@ export function createDesigner(container, opts = {}) {
         if (del) { state.datasets = state.datasets.filter(d => d.id !== del.dataset.dsid); renderDatasets(); renderProps(); }
     });
 
-    scriptOverlay.querySelector('#dsgn-script-close').addEventListener('click',  closeScript);
-    scriptOverlay.querySelector('#dsgn-script-apply').addEventListener('click',  applyScript);
     saveModal.querySelector('#dsgn-modal-cancel').addEventListener('click', () => { saveModal.style.display = 'none'; });
     saveModal.querySelector('#dsgn-modal-ok').addEventListener('click', () => saveAsNew().catch(e => alert(e.message)));
 

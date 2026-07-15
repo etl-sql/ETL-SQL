@@ -30,6 +30,54 @@ const bundledAssets = [
     version: '5.5.0',
     license: 'MIT',
     project: 'https://tabulator.info/'
+  },
+  {
+    component: 'CodeMirror @codemirror/state',
+    version: '6.7.1',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/view',
+    version: '6.43.6',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/commands',
+    version: '6.10.4',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/language',
+    version: '6.12.4',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/search',
+    version: '6.7.1',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/autocomplete',
+    version: '6.20.3',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'CodeMirror @codemirror/lint',
+    version: '6.9.7',
+    license: 'MIT',
+    project: 'https://codemirror.net/'
+  },
+  {
+    component: 'Lezer @lezer/highlight',
+    version: '1.2.3',
+    license: 'MIT',
+    project: 'https://lezer.codemirror.net/'
   }
 ];
 
@@ -78,7 +126,11 @@ function walk(dir, predicate, output = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'bin' || entry.name === 'obj' || entry.name === 'node_modules') continue;
+      if (entry.name === 'bin'
+        || entry.name === 'obj'
+        || entry.name === 'node_modules'
+        || entry.name === '.git'
+        || entry.name === '.worktrees') continue;
       walk(full, predicate, output);
     } else if (predicate(full)) {
       output.push(full);

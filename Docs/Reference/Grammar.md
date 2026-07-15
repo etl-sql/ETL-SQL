@@ -620,18 +620,18 @@ Registers a named data source in the current session.
 
 ```sql
 -- General form
-CREATE CONNECTION <alias> ON <ConnectorType>(<connection-string>);
+CREATE CONNECTION <alias> AS <ConnectorType>(<connection-string>);
 
 -- Named-parameter form
-CREATE CONNECTION <alias> ON <ConnectorType>(
+CREATE CONNECTION <alias> AS <ConnectorType>(
     KEY = value [, ...]
 );
 
 -- Suppress error if already exists
-CREATE CONNECTION <alias> IF NOT EXISTS ON <ConnectorType>(...);
+CREATE CONNECTION <alias> IF NOT EXISTS AS <ConnectorType>(...);
 
 -- Update existing connection
-CREATE OR ALTER CONNECTION <alias> ON <ConnectorType>(...);
+CREATE OR ALTER CONNECTION <alias> AS <ConnectorType>(...);
 ```
 
 **SQL Database Connectors**

@@ -1,12 +1,18 @@
 using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
+using ETL_SQL.Analysis.Diagnostics;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Services;
 using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Controllers;
@@ -18,6 +24,22 @@ namespace ETL_SQL.ReportPortal.Controllers;
 public class DesignerController : ControllerBase
 {
     private const int GridCols = 12;
+    private readonly PortalDesignerSchemaService? _schemaService;
+    private readonly PortalDesignerRunService? _runService;
+    private readonly ReportScriptSaveService? _scriptSave;
+    private readonly ILanguageService? _languageService;
+
+    public DesignerController(
+        PortalDesignerSchemaService? schemaService = null,
+        PortalDesignerRunService? runService = null,
+        ReportScriptSaveService? scriptSave = null,
+        ILanguageService? languageService = null)
+    {
+        _schemaService = schemaService;
+        _runService = runService;
+        _scriptSave = scriptSave;
+        _languageService = languageService;
+    }
 
     // ── POST /api/designer/parse ──────────────────────────────────────────────
 
@@ -39,6 +61,233 @@ public class DesignerController : ControllerBase
         }
     }
 
+    // ── POST /api/designer/analyze ───────────────────────────────────────────
+
+    [HttpPost("analyze")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Analyze([FromBody] AnalyzeDesignerRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Script))
+            return Ok(new AnalyzeDesignerResponse([]));
+
+        var lines = SplitLines(req.Script);
+        var diagnostics = new List<AnalysisDiagnostic>();
+
+        try
+        {
+            var tokens = new Lexer(req.Script).Tokenize();
+            var ast = new CoreParser(tokens, req.Script).Parse();
+            diagnostics.AddRange(AnalysisDiagnosticBuilder.FromParserDiagnostics(ast.Diagnostics, lines));
+
+            var linter = LinterFactory.CreateWithAllRules(HttpContext?.RequestServices);
+            var lintContext = new DefaultLintContext
+            {
+                DocumentUri = string.IsNullOrWhiteSpace(req.DocumentUri) ? "portal-designer" : req.DocumentUri!
+            };
+            var lintResults = await linter.AnalyzeAsync(ast, lintContext);
+            diagnostics.AddRange(AnalysisDiagnosticBuilder.FromLintResults(lintResults, lines));
+        }
+        catch (Exception ex)
+        {
+            diagnostics.Add(AnalysisDiagnosticBuilder.FromException(ex, lines));
+        }
+
+        var ordered = diagnostics
+            .OrderByDescending(d => d.Severity == DiagnosticSeverity.Error)
+            .ThenBy(d => d.StartLine)
+            .ThenBy(d => d.StartColumn)
+            .ToList();
+        return Ok(new AnalyzeDesignerResponse(ordered));
+    }
+
+    // ── GET /api/designer/schema ─────────────────────────────────────────────
+
+    [HttpGet("schema")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Schema([FromQuery] string connection, CancellationToken cancellationToken)
+    {
+        if (_schemaService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer schema service is not configured." });
+
+        try
+        {
+            return Ok(await _schemaService.GetSchemaAsync(connection, User, null, cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Connection access denied." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "Connection not found." });
+        }
+    }
+
+    // ── POST /api/designer/complete ──────────────────────────────────────────
+
+    [HttpPost("complete")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Complete([FromBody] CompleteDesignerRequest req, CancellationToken cancellationToken)
+    {
+        if (_languageService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer completion service is not configured." });
+
+        string documentUri;
+        if (!string.IsNullOrWhiteSpace(req.ConnectionRef))
+        {
+            if (_schemaService is null)
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer schema service is not configured." });
+
+            try
+            {
+                documentUri = PortalDesignerSchemaService.BuildDocumentUri(
+                    User,
+                    PortalDesignerSchemaService.NormalizeConnectionRef(req.ConnectionRef!),
+                    req.DocumentUri);
+                await _schemaService.GetSchemaAsync(req.ConnectionRef!, User, documentUri, cancellationToken);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { error = ex.Message });
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new { error = "Connection access denied." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { error = "Connection not found." });
+            }
+        }
+        else
+        {
+            documentUri = PortalDesignerSchemaService.BuildDocumentUri(User, "adhoc", req.DocumentUri);
+        }
+
+        var (scriptBefore, prefix) = GetCompletionPosition(req.Script ?? string.Empty, req.Line, req.Column);
+        var suggestions = await _languageService.GetSuggestionsAsync(new SuggestionContext
+        {
+            Prefix = prefix,
+            FullScript = req.Script ?? string.Empty,
+            ScriptBefore = scriptBefore,
+            DocumentUri = documentUri
+        });
+
+        var suggestionList = suggestions.Take(100).ToList();
+        var items = new List<DesignerCompletionItem>();
+        if (prefix == "*")
+        {
+            var columnExpansion = suggestionList
+                .Where(s => string.Equals(s.Type.ToString(), "Column", StringComparison.OrdinalIgnoreCase))
+                .Select(s => s.Text)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (columnExpansion.Count > 0)
+            {
+                items.Add(new DesignerCompletionItem(
+                    "Expand * to columns",
+                    string.Join(", ", columnExpansion),
+                    "snippet",
+                    "Column expansion",
+                    "Replace * with explicit column names.",
+                    Math.Max(0, req.Column - 1),
+                    req.Column));
+            }
+        }
+
+        items.AddRange(suggestionList
+            .Take(100)
+            .Select(s => new DesignerCompletionItem(
+                s.Text,
+                s.Text,
+                s.Type.ToString().ToLowerInvariant(),
+                s.Type.ToString(),
+                s.Documentation)));
+
+        return Ok(new CompleteDesignerResponse(items));
+    }
+
+    // ── POST /api/designer/run ───────────────────────────────────────────────
+
+    [HttpPost("run")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Run([FromBody] RunDesignerRequest req, CancellationToken cancellationToken)
+    {
+        if (_runService is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer run service is not configured." });
+
+        try
+        {
+            return Ok(await _runService.RunAsync(req, User, cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { error = "Connection access denied." });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { error = "Connection not found." });
+        }
+        catch (OperationCanceledException)
+        {
+            return StatusCode(StatusCodes.Status408RequestTimeout, new { error = "Designer run exceeded the 15 second timeout." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    // ── POST /api/designer/save ──────────────────────────────────────────────
+
+    [HttpPost("save")]
+    [Authorize(Roles = "Admin,Publisher")]
+    [EnableRateLimiting("designer")]
+    public async Task<IActionResult> Save([FromBody] SaveDesignerRequest req, CancellationToken cancellationToken)
+    {
+        if (_scriptSave is null)
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Designer save service is not configured." });
+
+        var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
+        var result = await _scriptSave.SaveAsync(
+            req.ReportId,
+            req.ScriptText,
+            expectedVersion,
+            User,
+            CurrentUserId,
+            req.BaseRevision,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ReportScriptSaveStatus.Saved => SavedScriptResponse(result),
+            ReportScriptSaveStatus.NotFound => NotFound(),
+            ReportScriptSaveStatus.Forbidden => Forbid(),
+            ReportScriptSaveStatus.MissingVersion => OptimisticConcurrency.MissingVersion(this),
+            ReportScriptSaveStatus.Conflict => Conflict(new
+            {
+                error = "The resource changed after it was read. Refresh it and retry.",
+                current = new { id = result.Current!.Id, version = result.Current.Version }
+            }),
+            ReportScriptSaveStatus.SourceRevisionConflict => Conflict(new
+            {
+                error = result.Error,
+                sourceRevision = result.SourceRevision,
+                current = new { id = result.Current!.Id, version = result.Current.Version }
+            }),
+            _ => StatusCode(500, new { error = "Unknown save status." })
+        };
+    }
+
     // ── POST /api/designer/generate ───────────────────────────────────────────
 
     [HttpPost("generate")]
@@ -54,6 +303,38 @@ public class DesignerController : ControllerBase
 
     private static DesignerStateDto EmptyState() =>
         new(new List<DesignerPageDto>(), new List<DesignerDatasetDto>());
+
+    private static IReadOnlyList<string> SplitLines(string text) =>
+        text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+
+    private static (string ScriptBefore, string Prefix) GetCompletionPosition(string script, int line, int column)
+    {
+        var lines = SplitLines(script);
+        if (lines.Count == 0)
+            return ("", "");
+
+        var safeLine = Math.Clamp(line, 0, lines.Count - 1);
+        var currentLine = lines[safeLine];
+        var safeColumn = Math.Clamp(column, 0, currentLine.Length);
+        var beforeCursor = currentLine[..safeColumn];
+        var match = Regex.Match(beforeCursor, @"([\$&\#@\w\.\*]+)$");
+        var prefix = match.Success ? match.Value : string.Empty;
+        var scriptBefore = string.Join("\n", lines.Take(safeLine));
+        if (safeLine > 0)
+            scriptBefore += "\n";
+        scriptBefore += beforeCursor;
+
+        return (scriptBefore, prefix);
+    }
+
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private IActionResult SavedScriptResponse(ReportScriptSaveResult result)
+    {
+        OptimisticConcurrency.SetETag(Response, result.Version!.Value);
+        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
+    }
 
     private static DesignerStateDto ScriptToState(Script ast)
     {

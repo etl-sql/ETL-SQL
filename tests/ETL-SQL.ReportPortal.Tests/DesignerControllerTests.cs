@@ -1,4 +1,8 @@
+using System.Text.Json;
+using ETL_SQL.Analysis.Diagnostics;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.ReportPortal.Controllers;
 using ETL_SQL.ReportPortal.Models;
@@ -112,5 +116,76 @@ public class DesignerControllerTests
         Assert.Equal("MyButton", button.Name);
         Assert.Equal("Click Me", button.Title);
         Assert.Equal("REFRESH", button.Options["BUTTON_TYPE"]);
+    }
+
+    [Fact]
+    public async Task Analyze_ReturnsParserDiagnostics()
+    {
+        var controller = new DesignerController();
+
+        var result = Assert.IsType<OkObjectResult>(
+            await controller.Analyze(new AnalyzeDesignerRequest("CREATE CONNECTION c AS;")));
+        var response = Assert.IsType<AnalyzeDesignerResponse>(result.Value);
+
+        Assert.Contains(response.Diagnostics, d =>
+            d.Severity == ETL_SQL.Core.Common.DiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Analyze_ReturnsLintDiagnostics()
+    {
+        var controller = new DesignerController();
+
+        var result = Assert.IsType<OkObjectResult>(
+            await controller.Analyze(new AnalyzeDesignerRequest("SELECT * FROM #stage;")));
+        var response = Assert.IsType<AnalyzeDesignerResponse>(result.Value);
+
+        Assert.Contains(response.Diagnostics, d =>
+            string.Equals(d.Code, "AvoidSelectStar", StringComparison.OrdinalIgnoreCase) &&
+            d.Source == "ETL-SQL Linter");
+    }
+
+    [Fact]
+    public async Task Analyze_MatchesCliAnalysisDiagnostics()
+    {
+        const string script = """
+            SELECT * FROM #stage;
+            CREATE CONNECTION c AS;
+            """;
+        var controller = new DesignerController();
+
+        var result = Assert.IsType<OkObjectResult>(
+            await controller.Analyze(new AnalyzeDesignerRequest(script, DocumentUri: "golden.rptsql")));
+        var response = Assert.IsType<AnalyzeDesignerResponse>(result.Value);
+
+        var endpointJson = JsonSerializer.Serialize(response.Diagnostics, JsonSerializerOptions.Web);
+        var cliJson = JsonSerializer.Serialize(await AnalyzeLikeCliAsync(script), JsonSerializerOptions.Web);
+        Assert.Equal(cliJson, endpointJson);
+    }
+
+    private static async Task<IReadOnlyList<AnalysisDiagnostic>> AnalyzeLikeCliAsync(string script)
+    {
+        var lines = SplitLines(script);
+        var tokens = new Lexer(script).Tokenize();
+        var ast = new CoreParser(tokens, script).Parse();
+        var diagnostics = new List<AnalysisDiagnostic>();
+        diagnostics.AddRange(AnalysisDiagnosticBuilder.FromParserDiagnostics(ast.Diagnostics, lines));
+
+        var linter = LinterFactory.CreateWithAllRules();
+        var lintResults = await linter.AnalyzeAsync(ast, new DefaultLintContext { DocumentUri = "golden.rptsql" });
+        diagnostics.AddRange(AnalysisDiagnosticBuilder.FromLintResults(lintResults, lines));
+
+        return diagnostics
+            .OrderByDescending(d => d.Severity == DiagnosticSeverity.Error)
+            .ThenBy(d => d.StartLine)
+            .ThenBy(d => d.StartColumn)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> SplitLines(string script)
+    {
+        return script.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
     }
 }

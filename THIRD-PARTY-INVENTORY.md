@@ -13,137 +13,145 @@ About screens. It is not legal advice.
 | Apache ECharts | src/ETL-SQL.ReportRuntime/Resources/Shared/echarts.min.js | Apache-2.0 | https://echarts.apache.org/ |
 | Chart.js | src/ETL-SQL.ReportRuntime/Resources/Shared/chart.min.js | MIT | https://www.chartjs.org/ |
 | Tabulator | src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css | MIT | https://tabulator.info/ |
+| CodeMirror @codemirror/state | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/view | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/commands | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/language | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/search | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/autocomplete | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/lint | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| Lezer @lezer/highlight | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://lezer.codemirror.net/ |
 
 ## Direct NuGet Packages
 
 | Package | Version | Usage | License | License type | Project URL | Referenced by |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| Apache.Arrow | 23.0.0 | runtime | Apache-2.0 | expression | https://arrow.apache.org/ | src/ETL-SQL.Engine/ETL-SQL.Engine.csproj |
+| Apache.Arrow | 23.0.0 | runtime | Apache-2.0 | expression | https://arrow.apache.org/ | src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
 | Apache.Avro | 1.12.1 | runtime | LICENSE | file | https://avro.apache.org/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| AWSSDK.S3 | 4.0.24 | runtime | Apache-2.0 | expression | https://github.com/aws/aws-sdk-net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Azure.Storage.Blobs | 12.28.0 | runtime | MIT | expression | https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Blobs_12.28.0/sdk/storage/Azure.Storage.Blobs/README.md | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| AWSSDK.S3 | 4.0.100.3 | runtime | Apache-2.0 | expression | https://github.com/aws/aws-sdk-net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Azure.Storage.Blobs | 12.29.1 | runtime | MIT | expression | https://github.com/Azure/azure-sdk-for-net/blob/Azure.Storage.Blobs_12.29.1/sdk/storage/Azure.Storage.Blobs/README.md | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | BenchmarkDotNet | 0.15.8 | test | MIT | expression | https://github.com/dotnet/BenchmarkDotNet | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj |
-| Confluent.Kafka | 2.14.2 | runtime | Apache-2.0 | expression | https://github.com/confluentinc/confluent-kafka-dotnet/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| coverlet.collector | 10.0.1 | test | MIT | expression | https://github.com/coverlet-coverage/coverlet | tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| Confluent.Kafka | 2.15.0 | runtime | Apache-2.0 | expression | https://github.com/confluentinc/confluent-kafka-dotnet/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| coverlet.collector | 10.0.1 | test | MIT | expression | https://github.com/coverlet-coverage/coverlet | tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Cronos | 0.13.0 | runtime | MIT | expression | https://github.com/HangfireIO/Cronos | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| Docker.DotNet.Enhanced | 4.2.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| ExcelDataReader | 3.8.0 | runtime | MIT | expression | https://github.com/ExcelDataReader/ExcelDataReader | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| ExcelDataReader.DataSet | 3.8.0 | runtime | MIT | expression | https://github.com/ExcelDataReader/ExcelDataReader | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Docker.DotNet.Enhanced | 4.3.3 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| ExcelDataReader | 3.9.0 | runtime | MIT | expression | https://github.com/ExcelDataReader/ExcelDataReader | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| ExcelDataReader.DataSet | 3.9.0 | runtime | MIT | expression | https://github.com/ExcelDataReader/ExcelDataReader | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | FluentFTP | 54.2.0 | runtime | MIT | expression | https://github.com/robinrodricks/FluentFTP | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Google.Cloud.BigQuery.V2 | 3.12.0 | runtime | Apache-2.0 | expression | https://github.com/googleapis/google-cloud-dotnet | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | MailKit | 4.17.0 | runtime | MIT | expression | http://www.mimekit.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.8 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj |
-| Microsoft.AspNetCore.Mvc.Testing | 10.0.8 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
+| Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.9 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| Microsoft.AspNetCore.Identity.EntityFrameworkCore | 10.0.9 | runtime | MIT | expression | https://asp.net/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj |
+| Microsoft.AspNetCore.Mvc.Testing | 10.0.9 | test | MIT | expression | https://asp.net/ | tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
 | Microsoft.ClearScript.V8 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.ClearScript.V8.Native.linux-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.ClearScript.V8.Native.linux-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.ClearScript.V8.Native.osx-arm64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.ClearScript.V8.Native.osx-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Microsoft.ClearScript.V8.Native.win-x64 | 7.5.1 | runtime | License.txt | file | http://github.com/Microsoft/ClearScript | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Microsoft.Data.SqlClient | 7.0.1 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Microsoft.Data.SqlClient | 7.0.2 | runtime | MIT | expression | https://aka.ms/sqlclientproject | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Microsoft.Data.Sqlite | 10.0.9 | runtime | MIT | expression | https://docs.microsoft.com/dotnet/standard/data/sqlite/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.EntityFrameworkCore.Design | 10.0.8 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj; src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj |
+| Microsoft.EntityFrameworkCore.Design | 10.0.9 | runtime | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj; src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj |
 | Microsoft.EntityFrameworkCore.Sqlite | 10.0.9 | runtime, test | MIT | expression | https://docs.microsoft.com/ef/core/ | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
-| Microsoft.Extensions.Configuration | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.Extensions.Configuration.Abstractions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.Extensions.Configuration.Binder | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.Extensions.Configuration.EnvironmentVariables | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.Extensions.Configuration.Json | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.Extensions.DependencyInjection | 10.0.8 | runtime, test | MIT | expression | https://dot.net/ | src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj; src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
-| Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj |
-| Microsoft.Extensions.Hosting.Abstractions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.Extensions.Hosting.Systemd | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
-| Microsoft.Extensions.Hosting.WindowsServices | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| Microsoft.Extensions.Logging | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.Extensions.Logging.Abstractions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Microsoft.Extensions.Logging.Console | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj |
-| Microsoft.Extensions.Logging.Debug | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj |
-| Microsoft.Extensions.Options | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Microsoft.NET.Test.Sdk | 18.6.0 | test | MIT | expression | https://github.com/microsoft/vstest | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| Microsoft.OpenApi | 3.6.0 | runtime | MIT | expression | https://github.com/Microsoft/OpenAPI.NET | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| MiniExcel | 1.44.1 | runtime | Apache-2.0 | expression | https://github.com/mini-software/MiniExcel | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| MongoDB.Driver | 3.9.0 | runtime | Apache-2.0 | expression | https://www.mongodb.com/docs/drivers/csharp/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Moq | 4.20.72 | test | BSD-3-Clause | expression | https://github.com/moq/moq | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| MySqlConnector | 2.6.0 | runtime | MIT | expression | https://mysqlconnector.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Neo4j.Driver | 5.26.0 | runtime | Apache-2.0 | expression | https://github.com/neo4j/neo4j-dotnet-driver | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Microsoft.Extensions.Configuration | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.Configuration.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
+| Microsoft.Extensions.Configuration.Binder | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
+| Microsoft.Extensions.Configuration.EnvironmentVariables | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.Configuration.Json | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.DependencyInjection | 10.0.9 | runtime, test | MIT | expression | https://dot.net/ | src/ETL-SQL.Analysis/ETL-SQL.Analysis.csproj; src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
+| Microsoft.Extensions.DependencyInjection.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.ReportHosting/ETL-SQL.ReportHosting.csproj |
+| Microsoft.Extensions.Hosting.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
+| Microsoft.Extensions.Hosting.Systemd | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
+| Microsoft.Extensions.Hosting.WindowsServices | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| Microsoft.Extensions.Logging | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.Logging.Abstractions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
+| Microsoft.Extensions.Logging.Console | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj |
+| Microsoft.Extensions.Logging.Debug | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj |
+| Microsoft.Extensions.Options | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.Extensions.Options.ConfigurationExtensions | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| Microsoft.NET.Test.Sdk | 18.7.0 | test | MIT | expression | https://github.com/microsoft/vstest | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| Microsoft.OpenApi | 3.8.0 | runtime | MIT | expression | https://github.com/Microsoft/OpenAPI.NET | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| MiniExcel | 1.45.0 | runtime | Apache-2.0 | expression | https://github.com/mini-software/MiniExcel | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| MongoDB.Driver | 3.10.0 | runtime | Apache-2.0 | expression | https://www.mongodb.com/docs/drivers/csharp/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Moq | 4.20.72 | test | BSD-3-Clause | expression | https://github.com/moq/moq | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| MySqlConnector | 2.6.1 | runtime | MIT | expression | https://mysqlconnector.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Neo4j.Driver | 6.2.1 | runtime | Apache-2.0 | expression | https://github.com/neo4j/neo4j-dotnet-driver | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Npgsql | 10.0.3 | runtime | PostgreSQL | expression | https://github.com/npgsql/npgsql | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj; src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj |
-| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.2 | runtime | PostgreSQL | expression | https://github.com/npgsql/efcore.pg | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj |
+| Npgsql.EntityFrameworkCore.PostgreSQL | 10.0.3 | runtime | PostgreSQL | expression | https://github.com/npgsql/efcore.pg | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj; src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj |
 | OmniSharp.Extensions.LanguageServer | 0.19.9 | runtime, test | LICENSE | file | https://github.com/OmniSharp/csharp-language-server-protocol | src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj |
 | Oracle.ManagedDataAccess.Core | 23.26.200 | runtime | LICENSE.txt | file | https://www.oracle.com/database/technologies/appdev/dotnet.html | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | Parquet.Net | 6.0.3 | runtime | MIT | expression | https://github.com/aloneguid/parquet-dotnet | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | PDFsharp-MigraDoc | 6.2.4 | runtime | MIT | expression | https://docs.pdfsharp.net/ | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| PgpCore | 7.1.0 | runtime | MIT | expression | https://github.com/mattosaurus/PgpCore | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj |
-| Polly | 8.6.6 | runtime | BSD-3-Clause | expression | https://github.com/App-vNext/Polly | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Serilog | 4.3.1 | runtime, test | Apache-2.0 | expression | https://serilog.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| PgpCore | 7.2.0 | runtime | MIT | expression | https://github.com/mattosaurus/PgpCore | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj |
+| Polly | 8.7.0 | runtime | BSD-3-Clause | expression | https://github.com/App-vNext/Polly | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Serilog | 4.4.0 | runtime, test | Apache-2.0 | expression | https://serilog.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Serilog.Extensions.Hosting | 10.0.0 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-extensions-hosting | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
 | Serilog.Extensions.Logging | 10.0.0 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-extensions-logging | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| Serilog.Settings.Configuration | 10.0.0 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-settings-configuration | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
+| Serilog.Settings.Configuration | 10.0.1 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-settings-configuration | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
 | Serilog.Sinks.Console | 6.1.1 | runtime | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-console | src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj |
 | Serilog.Sinks.File | 7.0.0 | runtime, test | Apache-2.0 | expression | https://github.com/serilog/serilog-sinks-file | src/ETL-SQL.Core/ETL-SQL.Core.csproj; src/ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | Serilog.Sinks.XUnit | 3.0.19 | test | MIT | expression | https://github.com/trbenning/serilog-sinks-xunit | tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | SkiaSharp.NativeAssets.Linux | 3.119.2 | runtime | MIT | expression | https://go.microsoft.com/fwlink/?linkid=868515 | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
 | Snappier | 1.3.1 | runtime | BSD-3-Clause | expression | https://brantburnett.github.io/Snappier/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Snowflake.Data | 5.6.0 | runtime | Apache-2.0 | expression | https://github.com/snowflakedb/snowflake-connector-net | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Spectre.Console | 0.55.2 | runtime, test | MIT | expression | https://github.com/spectreconsole/spectre.console | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| Snowflake.Data | 5.7.0 | runtime | Apache-2.0 | expression | https://github.com/snowflakedb/snowflake-connector-net | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Spectre.Console | 0.57.2 | runtime, test | MIT | expression | https://github.com/spectreconsole/spectre.console | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.Engine/ETL-SQL.Engine.csproj; src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj; tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | SQLitePCLRaw.bundle_e_sqlite3 | 3.0.3 | runtime | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
 | SSH.NET | 2025.1.0 | runtime | MIT | expression | https://licenses.nuget.org/MIT | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
-| Svg.Skia | 5.0.0 | runtime | MIT | expression | https://github.com/wieslawsoltes/Svg.Skia | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
-| Swashbuckle.AspNetCore | 10.2.1 | runtime | MIT | expression | https://github.com/domaindrivendev/Swashbuckle.AspNetCore | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
-| System.CommandLine | 2.0.8 | runtime | MIT | expression | https://github.com/dotnet/command-line-api | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| System.Data.Odbc | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
+| Svg.Skia | 5.1.1 | runtime | MIT | expression | https://github.com/wieslawsoltes/Svg.Skia | src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj |
+| Swashbuckle.AspNetCore | 10.2.3 | runtime | MIT | expression | https://github.com/domaindrivendev/Swashbuckle.AspNetCore | src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj |
+| System.CommandLine | 2.0.9 | runtime | MIT | expression | https://github.com/dotnet/command-line-api | src/ETL-SQL.App/ETL-SQL.App.csproj; src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
+| System.Data.Odbc | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj |
 | System.Linq.Async | 7.0.1 | runtime, test | MIT | expression | https://github.com/dotnet/reactive | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| System.Security.Cryptography.ProtectedData | 10.0.8 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| Testcontainers | 4.12.0 | runtime, test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
-| Testcontainers.MsSql | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| Testcontainers.MySql | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| Testcontainers.Oracle | 4.12.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
-| Testcontainers.PostgreSql | 4.12.0 | runtime, test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| System.Security.Cryptography.ProtectedData | 10.0.9 | runtime | MIT | expression | https://dot.net/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers | 4.13.0 | runtime, test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj |
+| Testcontainers.MsSql | 4.13.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers.MySql | 4.13.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers.Oracle | 4.13.0 | runtime | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj |
+| Testcontainers.PostgreSql | 4.13.0 | runtime, test | MIT | expression | https://dotnet.testcontainers.org/ | src/ETL-SQL.Core/ETL-SQL.Core.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 | TextCopy | 6.2.1 | runtime | MIT | expression | https://github.com/CopyText/TextCopy | src/ETL-SQL.TUI/ETL-SQL.TUI.csproj |
-| xunit | 2.9.3 | test | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
-| xunit.runner.visualstudio | 3.1.5 | test | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| xunit | 2.9.3 | test | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
+| xunit.runner.visualstudio | 3.1.5 | test | Apache-2.0 | expression | https://licenses.nuget.org/Apache-2.0 | tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj; tests/ETL-SQL.FuzzTests/ETL-SQL.FuzzTests.csproj; tests/ETL-SQL.LanguageServer.Tests/ETL-SQL.LanguageServer.Tests.csproj; tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj; tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj; tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj; tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj |
 
 ## Direct npm Packages
 
 | Package | Version range | Usage | License | Project URL | Source manifests |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | @eslint/js | ^10.0.1 | development | MIT | https://eslint.org | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
-| @tailwindcss/vite | ^4.2.2 | runtime | MIT | https://tailwindcss.com | src/etl-sql-vscode/ui/package.json |
+| @tailwindcss/vite | ^4.3.1 | runtime | MIT | https://tailwindcss.com | src/etl-sql-vscode/ui/package.json |
 | @tanstack/react-table | ^8.21.3 | runtime | MIT | https://tanstack.com/table | src/etl-sql-vscode/ui/package.json |
 | @types/jsdom | ^28.0.1 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/jsdom | src/etl-sql-vscode/package.json |
 | @types/mocha | ^10.0.1 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/mocha | src/etl-sql-vscode/package.json |
-| @types/node | ^25.9.1 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
-| @types/react | ^19.2.14 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react | src/etl-sql-vscode/ui/package.json |
+| @types/node | ^25.9.4 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
+| @types/react | ^19.2.17 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react | src/etl-sql-vscode/ui/package.json |
 | @types/react-dom | ^19.2.3 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom | src/etl-sql-vscode/ui/package.json |
 | @types/vscode | ^1.91.0 | development | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/vscode | src/etl-sql-vscode/package.json |
-| @typescript-eslint/eslint-plugin | ^8.60.0 | development | MIT | https://typescript-eslint.io/packages/eslint-plugin | src/etl-sql-vscode/package.json |
-| @typescript-eslint/parser | ^8.60.0 | development | MIT | https://typescript-eslint.io/packages/parser | src/etl-sql-vscode/package.json |
-| @vitejs/plugin-react | ^6.0.1 | development | MIT | https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#readme | src/etl-sql-vscode/ui/package.json |
-| @vitest/coverage-v8 | ^4.1.2 | development | MIT | https://vitest.dev/guide/coverage | src/etl-sql-vscode/package.json |
+| @typescript-eslint/eslint-plugin | ^8.62.0 | development | MIT | https://typescript-eslint.io/packages/eslint-plugin | src/etl-sql-vscode/package.json |
+| @typescript-eslint/parser | ^8.62.0 | development | MIT | https://typescript-eslint.io/packages/parser | src/etl-sql-vscode/package.json |
+| @vitejs/plugin-react | ^6.0.3 | development | MIT | https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#readme | src/etl-sql-vscode/ui/package.json |
+| @vitest/coverage-v8 | ^4.1.9 | development | MIT | https://vitest.dev/guide/coverage | src/etl-sql-vscode/package.json |
 | @vscode/test-electron | ^2.5.2 | development | MIT | https://github.com/Microsoft/vscode-test.git | src/etl-sql-vscode/package.json |
 | @vscode/webview-ui-toolkit | ^1.4.0 | runtime | MIT | https://github.com/microsoft/vscode-webview-ui-toolkit#readme | src/etl-sql-vscode/ui/package.json |
 | clsx | ^2.1.1 | runtime | MIT | lukeed/clsx | src/etl-sql-vscode/ui/package.json |
 | echarts | ^6.0.0 | runtime | Apache-2.0 | https://echarts.apache.org | src/etl-sql-vscode/ui/package.json |
-| eslint | ^10.4.0 | development | MIT | https://eslint.org | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
+| eslint | ^10.6.0 | development | MIT | https://eslint.org | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
 | eslint-plugin-react-hooks | ^7.0.1 | development | MIT | https://react.dev/ | src/etl-sql-vscode/ui/package.json |
-| eslint-plugin-react-refresh | ^0.5.2 | development | MIT | github:ArnaudBarre/eslint-plugin-react-refresh | src/etl-sql-vscode/ui/package.json |
-| framer-motion | ^12.38.0 | runtime | MIT | https://github.com/motiondivision/motion/ | src/etl-sql-vscode/ui/package.json |
+| eslint-plugin-react-refresh | ^0.5.3 | development | MIT | github:ArnaudBarre/eslint-plugin-react-refresh | src/etl-sql-vscode/ui/package.json |
+| framer-motion | ^12.42.0 | runtime | MIT | https://github.com/motiondivision/motion/ | src/etl-sql-vscode/ui/package.json |
 | glob | ^13.0.6 | development | BlueOak-1.0.0 | git@github.com:isaacs/node-glob.git | src/etl-sql-vscode/package.json |
-| globals | ^17.6.0 | development | MIT | sindresorhus/globals | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
+| globals | ^17.7.0 | development | MIT | sindresorhus/globals | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
 | jsdom | ^29.0.2 | development | MIT | git+https://github.com/jsdom/jsdom.git | src/etl-sql-vscode/package.json |
-| lucide-react | ^1.8.0 | runtime | ISC | https://lucide.dev | src/etl-sql-vscode/ui/package.json |
+| lucide-react | ^1.21.0 | runtime | ISC | https://lucide.dev | src/etl-sql-vscode/ui/package.json |
 | mocha | ^11.3.0 | development | MIT | https://mochajs.org/ | src/etl-sql-vscode/package.json |
 | react | ^19.2.4 | runtime | MIT | https://react.dev/ | src/etl-sql-vscode/ui/package.json |
 | react-dom | ^19.2.4 | runtime | MIT | https://react.dev/ | src/etl-sql-vscode/ui/package.json |
 | tailwind-merge | ^3.5.0 | runtime | MIT | https://github.com/dcastil/tailwind-merge | src/etl-sql-vscode/ui/package.json |
-| tailwindcss | ^4.2.2 | runtime | MIT | https://tailwindcss.com | src/etl-sql-vscode/ui/package.json |
+| tailwindcss | ^4.3.1 | runtime | MIT | https://tailwindcss.com | src/etl-sql-vscode/ui/package.json |
 | typescript | ^6.0.3 | development | Apache-2.0 | https://www.typescriptlang.org/ | src/etl-sql-vscode/package.json; src/etl-sql-vscode/ui/package.json |
-| typescript-eslint | ^8.58.0 | development | MIT | https://typescript-eslint.io/packages/typescript-eslint | src/etl-sql-vscode/ui/package.json |
-| vite | ^8.0.4 | development | MIT | https://vite.dev | src/etl-sql-vscode/ui/package.json |
+| typescript-eslint | ^8.62.0 | development | MIT | https://typescript-eslint.io/packages/typescript-eslint | src/etl-sql-vscode/ui/package.json |
+| vite | ^8.1.0 | development | MIT | https://vite.dev | src/etl-sql-vscode/ui/package.json |
 | vite-plugin-singlefile | ^2.3.2 | development | MIT | https://github.com/richardtallent/vite-plugin-singlefile/tree/main/#readme | src/etl-sql-vscode/ui/package.json |
-| vitest | ^4.1.2 | development | MIT | https://vitest.dev | src/etl-sql-vscode/package.json |
-| vscode-languageclient | ^10.0.0 | development | MIT | https://github.com/Microsoft/vscode-languageserver-node.git | src/etl-sql-vscode/package.json |
+| vitest | ^4.1.9 | development | MIT | https://vitest.dev | src/etl-sql-vscode/package.json |
+| vscode-languageclient | ^10.0.1 | runtime | MIT | https://github.com/Microsoft/vscode-languageserver-node.git | src/etl-sql-vscode/package.json |
 
 ## Review Notes
 

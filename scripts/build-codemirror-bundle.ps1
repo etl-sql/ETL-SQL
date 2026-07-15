@@ -65,6 +65,16 @@ export {
     searchKeymap,
     highlightSelectionMatches,
 } from '@codemirror/search';
+export {
+    autocompletion,
+    completionKeymap,
+    closeBrackets,
+    closeBracketsKeymap,
+} from '@codemirror/autocomplete';
+export {
+    linter,
+    lintGutter,
+} from '@codemirror/lint';
 export { tags } from '@lezer/highlight';
 "@ | Set-Content (Join-Path $TmpDir "entry.js") -Encoding UTF8
 
@@ -76,6 +86,8 @@ export { tags } from '@lezer/highlight';
         "@codemirror/commands" `
         "@codemirror/language" `
         "@codemirror/search" `
+        "@codemirror/autocomplete" `
+        "@codemirror/lint" `
         esbuild 2>&1
     if ($LASTEXITCODE -ne 0) { throw "npm install failed: $npmOut" }
     Pop-Location

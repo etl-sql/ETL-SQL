@@ -31,10 +31,12 @@ public class ReportsController : ControllerBase
     private readonly ILineageCatalogStore lineageCatalog;
     private readonly FolderPermissionService folderPermissions;
     private readonly ReportScriptInspectionService scriptInspection;
+    private readonly ReportScriptSaveService scriptSave;
+    private readonly PortalScriptSourceControlService sourceControl;
     private readonly IDatasetRegistry datasetRegistry;
     private readonly ETL_SQL.Core.Storage.IArtifactStorage artifacts;
 
-    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts)
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig, ILineageCatalogStore lineageCatalog, FolderPermissionService folderPermissions, ReportScriptInspectionService scriptInspection, ReportScriptSaveService scriptSave, PortalScriptSourceControlService sourceControl, IDatasetRegistry datasetRegistry, ETL_SQL.Core.Storage.IArtifactStorage artifacts)
     {
         this.db = db;
         this.audit = audit;
@@ -42,6 +44,8 @@ public class ReportsController : ControllerBase
         this.lineageCatalog = lineageCatalog;
         this.folderPermissions = folderPermissions;
         this.scriptInspection = scriptInspection;
+        this.scriptSave = scriptSave;
+        this.sourceControl = sourceControl;
         this.datasetRegistry = datasetRegistry;
         this.artifacts = artifacts;
     }
@@ -1615,7 +1619,7 @@ public class ReportsController : ControllerBase
             ? await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
             : string.Empty;
         OptimisticConcurrency.SetETag(Response, report.Version);
-        return Ok(new ScriptContentResponse(text, report.Version));
+        return Ok(new ScriptContentResponse(text, report.Version, await sourceControl.GetCurrentRevisionAsync()));
     }
 
     // ── PUT /api/reports/{id}/script-content ──────────────────────────────────
@@ -1624,77 +1628,29 @@ public class ReportsController : ControllerBase
     [Authorize(Roles = "Admin,Publisher")]
     public async Task<IActionResult> SaveScriptContent(int id, [FromBody] ScriptContentRequest req)
     {
-        var report = await db.Reports.Include(r => r.Folder)
-            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
-        if (report is null) return NotFound();
-
-        var perm = await GetEffectivePermissionAsync(report.FolderId);
-        if (perm is null || perm < FolderPermission.Manage) return Forbid();
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
-        if (expectedVersion is null)
-            return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, report, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
-
-        var scriptKey = ToScriptKey(report.ScriptPath);
-        if (scriptKey is null)
-            return Forbid();
-
-        var hash = "sha256:" + Convert.ToHexString(
-            SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(req.ScriptText))).ToLowerInvariant();
-
-        // Keep the prior content in memory as the rollback backup (scripts are small text files). The
-        // atomic IArtifactStorage write swaps the content in place; if the metadata commit fails we
-        // restore the old bytes (or delete a newly-created script), preserving the file↔DB coupling.
-        var hadOriginal = await artifacts.ExistsAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
-        var backup = hadOriginal
-            ? await artifacts.ReadAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
-            : null;
-
-        await using var transaction = await db.Database.BeginTransactionAsync();
-        var wroteScript = false;
-        try
+        var result = await scriptSave.SaveAsync(id, req.ScriptText, expectedVersion, User, CurrentUserId, req.BaseRevision);
+        return result.Status switch
         {
-            // Claim the catalog version before touching the published script. The open write
-            // transaction prevents another portal process from claiming the next version until the
-            // content swap and metadata commit complete.
-            await db.SaveChangesAsync();
-
-            await artifacts.WriteAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey, req.ScriptText);
-            wroteScript = true;
-
-            report.PublishedScriptHash = hash;
-            report.ScriptLastModified = DateTime.UtcNow;
-            report.UpdatedAt = DateTime.UtcNow;
-            await db.SaveChangesAsync();
-            await transaction.CommitAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await transaction.RollbackAsync();
-            if (wroteScript) await RestoreScriptAsync(scriptKey, backup, hadOriginal);
-            await db.Entry(report).ReloadAsync();
-            return OptimisticConcurrency.Conflict(this, ToDto(report, null));
-        }
-        catch
-        {
-            await transaction.RollbackAsync();
-            if (wroteScript) await RestoreScriptAsync(scriptKey, backup, hadOriginal);
-            throw;
-        }
-        await audit.LogAsync(CurrentUserId, "DESIGNER_SAVE", "Report", id.ToString(), report.Name);
-        OptimisticConcurrency.SetETag(Response, report.Version);
-        return Ok(new { report.Version });
+            ReportScriptSaveStatus.Saved => SavedScriptResponse(result),
+            ReportScriptSaveStatus.NotFound => NotFound(),
+            ReportScriptSaveStatus.Forbidden => Forbid(),
+            ReportScriptSaveStatus.MissingVersion => OptimisticConcurrency.MissingVersion(this),
+            ReportScriptSaveStatus.Conflict => OptimisticConcurrency.Conflict(this, ToDto(result.Current!, null)),
+            ReportScriptSaveStatus.SourceRevisionConflict => Conflict(new
+            {
+                error = result.Error,
+                sourceRevision = result.SourceRevision,
+                current = ToDto(result.Current!, null)
+            }),
+            _ => StatusCode(500, new { error = "Unknown save status." })
+        };
     }
 
-    /// <summary>Restores a script after a failed save: rewrite the prior bytes, or delete a file that
-    /// did not exist before this save.</summary>
-    private async Task RestoreScriptAsync(string scriptKey, byte[]? backup, bool hadOriginal)
+    private IActionResult SavedScriptResponse(ReportScriptSaveResult result)
     {
-        if (backup is not null)
-            await artifacts.WriteAllBytesAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey, backup);
-        else if (!hadOriginal)
-            await artifacts.DeleteAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey);
+        OptimisticConcurrency.SetETag(Response, result.Version!.Value);
+        return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
     }
 
     // ── POST /api/scripts/upload ──────────────────────────────────────────────

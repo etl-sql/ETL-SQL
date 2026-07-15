@@ -15,6 +15,7 @@ using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Middleware;
 using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.ReportPortal.Services.HealthChecks;
+using ETL_SQL.Analysis.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -98,6 +99,8 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.ReportPortal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
 builder.Services.AddSingleton<PortalModuleRegistry>();
+builder.Services.AddSingleton<ETL_SQL.Core.IMetadataManager, ETL_SQL.Core.Services.MetadataManager>();
+builder.Services.AddSingleton<ETL_SQL.Core.Services.ILanguageService, GrammarLanguageService>();
 
 // Cluster node heartbeat (P1.7): register this Portal node in the shared node registry so the
 // cluster has a live view of all Portal/Orchestrator nodes over shared state.
@@ -303,14 +306,20 @@ builder.Services.AddRateLimiter(options =>
             limits.AnonymousTokenPermitLimit,
             limits.AnonymousTokenWindowSeconds);
     });
-    options.AddPolicy("metrics", context =>
+    options.AddPolicy("designer", context =>
     {
         var limits = context.RequestServices.GetRequiredService<PortalConfig>().RateLimit;
         return CreateFixedWindowPartition(
             context,
-            "metrics",
-            limits.MetricsPermitLimit,
-            limits.MetricsWindowSeconds);
+            "designer",
+            limits.DesignerPermitLimit,
+            limits.DesignerWindowSeconds);
+    });
+    options.AddPolicy("metrics", context =>
+    {
+        var limits = context.RequestServices.GetRequiredService<PortalConfig>().RateLimit;
+        return CreateFixedWindowPartition(
+            context, "metrics", limits.MetricsPermitLimit, limits.MetricsWindowSeconds);
     });
 });
 
@@ -385,6 +394,10 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionServic
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerSchemaService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerRunService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalScriptSourceControlService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptSaveService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReferenceImpactService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ReportScriptInspectionService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SnapshotPackageService>();

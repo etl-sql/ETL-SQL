@@ -4,7 +4,7 @@ Connections link ETL-SQL to external data sources — databases, files, APIs, an
 
 ## Syntax
 
-- `CREATE CONNECTION <name> ON <TYPE>(<options>);`
+- `CREATE CONNECTION <name> AS <TYPE>(<options>);`
 - `DROP CONNECTION <name>;`
 - `SHOW CONNECTIONS [INTO #table];`
 
