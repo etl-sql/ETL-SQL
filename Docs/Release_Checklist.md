@@ -38,7 +38,27 @@ Replace `x.y.z` with the target version (current target: **0.15.0**) throughout.
 - [ ] Add a hand-written `## [x.y.z] — YYYY-MM-DD` section to `CHANGELOG.md`
       (Set-Version intentionally does **not** touch the changelog). Move items out of `[Unreleased]`.
 - [ ] Group changelog entries under **Added / Changed / Fixed / Security** (Keep a Changelog).
-- [ ] Create a curated release notes file in `Docs/ReleaseNotes/vx.y.z.md` summarizing key highlights, performance enhancements, and bug fixes for this version (following the structure in `Docs/ReleaseNotes/v0.12.0.md`).
+- [ ] Author the curated release notes in `Docs/ReleaseNotes/vx.y.z.md`:
+      1. Copy [`Docs/ReleaseNotes/TEMPLATE.md`](ReleaseNotes/TEMPLATE.md) to `Docs/ReleaseNotes/vx.y.z.md`.
+      2. Fill in every section following the inline guidance comments (delete them as you go).
+      3. Cross-reference `Docs/Design/` and `Docs/Strategy/` for architectural context on highlights.
+      4. Run `git diff --stat vLAST..HEAD -- src` and verify no shipped feature is missing.
+      5. See [`Docs/ReleaseNotes/README.md`](ReleaseNotes/README.md) for the full authoring guide and quality bar.
+
+      **Required sections** (do not skip even if the answer is "None"):
+      - Release Summary (2-4 sentence theme)
+      - Breaking Changes & Required Actions
+      - Deprecations (with removal timeline)
+      - Highlights (2-5 features with user problem, solution, and code example)
+      - Improvements (grouped by area)
+      - Performance (quantified)
+      - Security (with references)
+      - Bug Fixes
+      - Known Issues
+      - Upgrade Guide (exact steps)
+      - Install (platform table)
+      - Resources (links)
+
 - [ ] Stage and commit the version bump, changelog updates, and release notes:
       ```powershell
       git add Docs/ReleaseNotes/vx.y.z.md
