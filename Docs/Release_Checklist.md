@@ -38,7 +38,12 @@ Replace `x.y.z` with the target version (current target: **0.15.0**) throughout.
 - [ ] Add a hand-written `## [x.y.z] — YYYY-MM-DD` section to `CHANGELOG.md`
       (Set-Version intentionally does **not** touch the changelog). Move items out of `[Unreleased]`.
 - [ ] Group changelog entries under **Added / Changed / Fixed / Security** (Keep a Changelog).
-- [ ] Commit: `git commit -am "Bump version to x.y.z"`.
+- [ ] Create a curated release notes file in `Docs/ReleaseNotes/vx.y.z.md` summarizing key highlights, performance enhancements, and bug fixes for this version (following the structure in `Docs/ReleaseNotes/v0.12.0.md`).
+- [ ] Stage and commit the version bump, changelog updates, and release notes:
+      ```powershell
+      git add Docs/ReleaseNotes/vx.y.z.md
+      git commit -am "Bump version to x.y.z and add release notes"
+      ```
 
 ## Phase 2 — Code review & security pass
 

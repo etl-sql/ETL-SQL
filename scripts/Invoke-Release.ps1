@@ -13,7 +13,7 @@
       1. Pre-flight guards: tools present, clean tree, on the release branch, in sync with origin.
       2. Pre-release gate: release-validation/latest/state.json is Passed for the current commit.
       3. Version consistency across the six version sources.
-      4. Resolve release notes (-NotesFile, release-notes-vX.Y.Z.md, or the CHANGELOG section).
+      4. Resolve release notes (-NotesFile, Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or the CHANGELOG section).
       5. Stale ref guard: no remote/local tag vX.Y.Z; delete a fully-merged stale local branch.
       6. Push the branch; wait for CI to go green for the pushed commit.
       7. Create + push the release tag (full ref to avoid ambiguity). Signed (-s) when -SignTag is
@@ -203,6 +203,10 @@ if ($NotesFile) {
     if (-not (Test-Path $NotesFile)) { Fail "-NotesFile '$NotesFile' not found." }
     $notesPath = (Resolve-Path $NotesFile).Path
     Write-Ok "using $NotesFile"
+}
+elseif (Test-Path (Join-Path $RepoRoot "Docs/ReleaseNotes/$Tag.md")) {
+    $notesPath = Join-Path $RepoRoot "Docs/ReleaseNotes/$Tag.md"
+    Write-Ok "using Docs/ReleaseNotes/$Tag.md"
 }
 elseif (Test-Path (Join-Path $RepoRoot "release-notes-$Tag.md")) {
     $notesPath = Join-Path $RepoRoot "release-notes-$Tag.md"

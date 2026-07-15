@@ -12,7 +12,7 @@
 #
 # Options:
 #   --version X.Y.Z            (required) release version, no leading 'v'
-#   --notes-file PATH          curated release notes (default: release-notes-vX.Y.Z.md or CHANGELOG)
+#   --notes-file PATH          curated release notes (default: Docs/ReleaseNotes/vX.Y.Z.md, release-notes-vX.Y.Z.md, or CHANGELOG)
 #   --remote NAME              git remote (default: origin)
 #   --branch NAME              release branch (default: main)
 #   --dry-run                  print mutating actions without performing them
@@ -169,6 +169,8 @@ TEMP_NOTES=""
 if [ -n "$NOTES_FILE" ]; then
   [ -f "$NOTES_FILE" ] || die "--notes-file '$NOTES_FILE' not found."
   NOTES_PATH="$NOTES_FILE"; ok "using $NOTES_FILE"
+elif [ -f "Docs/ReleaseNotes/$TAG.md" ]; then
+  NOTES_PATH="Docs/ReleaseNotes/$TAG.md"; ok "using Docs/ReleaseNotes/$TAG.md"
 elif [ -f "release-notes-$TAG.md" ]; then
   NOTES_PATH="release-notes-$TAG.md"; ok "using release-notes-$TAG.md"
 else
