@@ -77,9 +77,9 @@ Thumbs.db
 Desktop.ini
 
 ## Test data (generated large files)
-TestData/large_*.csv
-TestData/qualified_output.csv
-TestData/*.out.csv
+testdata/large_*.csv
+testdata/qualified_output.csv
+testdata/*.out.csv
 slt_results/
 release-validation/
 tests/ETL-SQL.SqlLogicTests/slt.runsettings
@@ -189,8 +189,16 @@ samples/output/
 # Ignore large stress test data
 TestData/test_stress_BigTable.csv
 TestData/test_StressResult.csv
+testdata/test_stress_BigTable.csv
+testdata/test_StressResult.csv
 samples/output/*.csv
 samples/output/*.json
 samples/output/*.zip
 samples/output/*.enc
+
+# Root-level generated artifacts
+/docker-compose.override.yml
+/package-lock.json
+/portal_manifest.json
+/release-validation-*.log
 

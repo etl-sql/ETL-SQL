@@ -71,7 +71,7 @@ ETL-SQL provides pre-configured Docker Compose configurations to run containeriz
    - `./logs/orchestrator` — Background execution log output
 
 3. **Development Builds (Source Override)**:
-   If you have the source tree cloned locally and need to test code modifications inside the containers, use the [docker-compose.override.yml](../docker-compose.override.yml) file. When Docker Compose finds this file alongside the main compose config, it automatically overrides the registry images and compiles the local C# code via multi-stage builds.
+   If you have the source tree cloned locally and need to test code modifications inside the containers, copy [`deploy/docker/docker-compose.override.example.yml`](../deploy/docker/docker-compose.override.example.yml) to `docker-compose.override.yml`. When Docker Compose finds this file alongside the main compose config, it automatically overrides the registry images and compiles the local C# code via multi-stage builds.
 
 4. **High Availability Scaling**:
    For multi-node active-active load-balanced clusters, use the HA-specific docker compose template located at [deploy/docker/docker-compose.ha.yml](../deploy/docker/docker-compose.ha.yml). This setup supports variable container scaling behind a sticky HAProxy load balancer. See [Section 6.2 Containerized HA Clustering (Docker Compose)](#62-containerized-ha-clustering-docker-compose) below for detailed instructions.

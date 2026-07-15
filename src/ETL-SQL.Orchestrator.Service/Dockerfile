@@ -5,7 +5,7 @@ WORKDIR /src
 COPY ["Directory.Build.props", "."]
 COPY ["Directory.Packages.props", "."]
 COPY ["NuGet.Config", "."]
-COPY ["etl-sql.snk", "."]
+COPY ["build/signing/etl-sql.snk", "build/signing/"]
 COPY ["THIRD-PARTY-NOTICES.md", "/"]
 COPY ["src/ETL-SQL.Core/ETL-SQL.Core.csproj", "ETL-SQL.Core/"]
 COPY ["src/ETL-SQL.Engine/ETL-SQL.Engine.csproj", "ETL-SQL.Engine/"]

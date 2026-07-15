@@ -12,6 +12,7 @@ Nothing is shared between environments — see
 | :--- | :--- |
 | `docker-compose.environment.yml` | Parameterized stack: PostgreSQL + Orchestrator + Portal, namespaced by `COMPOSE_PROJECT_NAME`. |
 | `environment.env.example` | Per-environment settings. Copy once per environment and edit every value. |
+| `docker-compose.override.example.yml` | Optional local-source override. Copy to repository-root `docker-compose.override.yml` when you want Docker Compose to build local C# source instead of using registry images. |
 | `docker-compose.ha.yml` | High Availability cluster stack: PostgreSQL + load-balanced / scaled Orchestrator and Portal nodes. |
 | `environment-ha.env.example` | Per-environment settings for the HA stack. |
 | `haproxy.cfg` | HAProxy configuration for cookie-based sticky sessions (Report Portal) and round-robin routing (Orchestrator). |

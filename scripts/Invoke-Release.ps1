@@ -38,7 +38,7 @@
     .\scripts\Invoke-Release.ps1 -Version 0.12.0 -PruneMergedBranches
 
 .EXAMPLE
-    .\scripts\Invoke-Release.ps1 -Version 0.12.0 -NotesFile .\release-notes-v0.12.0.md
+    .\scripts\Invoke-Release.ps1 -Version 0.12.0 -NotesFile .\Docs\ReleaseNotes\v0.12.0.md
 #>
 [CmdletBinding()]
 param(
