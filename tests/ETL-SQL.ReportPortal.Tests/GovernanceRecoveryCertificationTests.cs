@@ -78,6 +78,29 @@ public sealed class GovernanceRecoveryCertificationTests : IDisposable
     }
 
     [Fact]
+    public async Task UnavailableCollector_BlocksMutationEvenWhenCallerForgotToStageAudit()
+    {
+        var config = new PortalConfig { Audit = { RequireRemoteDelivery = true } };
+        var provider = await CreateProviderAsync("unstaged.db", config);
+        await using (var scope = provider.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.AuditOutboxMessages.Add(Row("Failed"));
+            await db.SaveChangesAsync();
+        }
+
+        await using var work = provider.CreateAsyncScope();
+        var workDb = work.ServiceProvider.GetRequiredService<PortalDbContext>();
+        workDb.Folders.Add(new Folder { Name = "Blocked", Path = "/blocked", OwnerId = 7 });
+
+        await Assert.ThrowsAsync<AuditDeliveryUnavailableException>(() => workDb.SaveChangesAsync());
+
+        await using var verify = provider.CreateAsyncScope();
+        var verifyDb = verify.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await verifyDb.Folders.AnyAsync(folder => folder.Path == "/blocked"));
+    }
+
+    [Fact]
     public async Task FirstEventDuringOutage_IsAllowed()
     {
         var config = new PortalConfig

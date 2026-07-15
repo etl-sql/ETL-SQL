@@ -10,9 +10,8 @@ TEST CONNECTION <alias> INTO #results;   -- capture the report as a table instea
 ## Example
 ```sql
 CREATE CONNECTION ProdDB AS MSSQL (
-  SERVER   = 'sql-prod.corp',
+  SERVER   = 'sql-prod.corp,1433',
   DATABASE = 'Sales',
-  PORT     = 1433,
   ENCRYPT  = true,
   PASSWORD = 'SECRET:prod-db'
 );

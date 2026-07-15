@@ -97,8 +97,6 @@ builder.Services.AddSingleton<ETL_SQL.Core.Governance.IConnectionCatalogProvider
     return ETL_SQL.Core.Governance.ConnectionCatalogProviderFactory.Create(options)
         ?? (ETL_SQL.Core.Governance.IConnectionCatalogProvider)ETL_SQL.ReportPortal.Services.UnconfiguredConnectionCatalogProvider.Instance;
 });
-builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider,
-    ETL_SQL.Core.Storage.ProcessArtifactWriteFenceTokenProvider>();
 builder.Services.AddSingleton<PortalModuleRegistry>();
 
 // Cluster node heartbeat (P1.7): register this Portal node in the shared node registry so the
@@ -150,9 +148,9 @@ builder.Services.AddSingleton<ETL_SQL.Core.Storage.IArtifactStorage>(sp =>
             [ETL_SQL.Core.Storage.ArtifactArea.Keys] = keysRoot,
         });
     var epochs = sp.GetRequiredService<ETL_SQL.Core.Data.IWriteEpochStore>();
-    var tokenProvider = sp.GetRequiredService<ETL_SQL.Core.Storage.IArtifactWriteFenceTokenProvider>();
+    var locks = sp.GetRequiredService<ETL_SQL.Core.Data.IClusterLockStore>();
     var fenced = new ETL_SQL.Core.Storage.FencedArtifactStorage(
-        inner, epochs, () => tokenProvider.CurrentToken);
+        inner, epochs, locks);
     var security = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
     return new ETL_SQL.Core.Storage.GuardedArtifactStorage(fenced, security);
 });
@@ -305,6 +303,15 @@ builder.Services.AddRateLimiter(options =>
             limits.AnonymousTokenPermitLimit,
             limits.AnonymousTokenWindowSeconds);
     });
+    options.AddPolicy("metrics", context =>
+    {
+        var limits = context.RequestServices.GetRequiredService<PortalConfig>().RateLimit;
+        return CreateFixedWindowPartition(
+            context,
+            "metrics",
+            limits.MetricsPermitLimit,
+            limits.MetricsWindowSeconds);
+    });
 });
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
@@ -350,6 +357,10 @@ builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.AuditOutboxTranspor
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ConfigurationExportService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.OperationalMetricsService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsExporter>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsCache>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalStorageUsageSampler>();
+builder.Services.AddHostedService(sp =>
+    sp.GetRequiredService<ETL_SQL.ReportPortal.Services.PortalStorageUsageSampler>());
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalTopologyReadinessService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.DocumentationLibraryService>();
 // Enterprise policy authority: the signer references a certificate by thumbprint in the OS store
@@ -845,12 +856,12 @@ app.MapGet("/healthz", async (
 }).AllowAnonymous();
 
 app.MapGet("/metrics", async (
-    ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsExporter exporter,
+    ETL_SQL.ReportPortal.Services.PortalPrometheusMetricsCache cache,
     CancellationToken ct) =>
 {
-    var text = await exporter.ExportAsync(ct);
+    var text = await cache.GetAsync(ct);
     return Results.Text(text, "text/plain; version=0.0.4; charset=utf-8");
-}).AllowAnonymous();
+}).AllowAnonymous().RequireRateLimiting("metrics");
 
 app.MapGet("/third-party-notices", () =>
 {

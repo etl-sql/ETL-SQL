@@ -84,7 +84,8 @@ public sealed class PortalPrometheusMetricsExporter(
         AppendGauge(sb, "etlsql_portal_schema_up_to_date",
             "Whether the Portal database schema has no pending migrations.", metrics.SchemaUpToDate ? 1 : 0, labels);
         AppendGauge(sb, "etlsql_portal_database_reachable",
-            "Whether the Portal database was reachable while composing this metrics snapshot.", 1, labels);
+            "Whether the Portal database was reachable while composing this metrics snapshot.",
+            metrics.DatabaseConnectivityHealthy ? 1 : 0, labels);
         AppendGauge(sb, "etlsql_portal_database_connectivity_healthy",
             "Whether the Portal database health check is healthy.",
             metrics.DatabaseConnectivityHealthy ? 1 : 0, labels);

@@ -20,9 +20,7 @@ internal static class ConnectorTimeouts
 
         var configured = GetConfiguration(context)
             ?.GetValue<int?>("Connectors:DataWarehouse:DefaultCommandTimeoutSeconds");
-        return configured.GetValueOrDefault(fallbackSeconds) > 0
-            ? configured!.Value
-            : fallbackSeconds;
+        return configured is > 0 ? configured.Value : fallbackSeconds;
     }
 
     private static IConfiguration? GetConfiguration(IExecutionContext? context)

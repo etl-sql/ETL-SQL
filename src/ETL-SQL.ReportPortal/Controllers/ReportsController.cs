@@ -294,8 +294,8 @@ public class ReportsController : ControllerBase
             UpdatedAt = DateTime.UtcNow
         };
         db.Reports.Add(report);
+        audit.Stage(CurrentUserId, "PUBLISH_REPORT", "Report", detail: report.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "PUBLISH_REPORT", "Report", report.Id.ToString(), report.Name);
 
         return CreatedAtAction(nameof(GetById), new { id = report.Id }, ToDto(report, null));
     }
@@ -1027,6 +1027,7 @@ public class ReportsController : ControllerBase
         }
 
         report.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
         try
         {
             await db.SaveChangesAsync();
@@ -1036,7 +1037,6 @@ public class ReportsController : ControllerBase
             await db.Entry(report).ReloadAsync();
             return OptimisticConcurrency.Conflict(this, ToDto(report, null));
         }
-        await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         OptimisticConcurrency.SetETag(Response, report.Version);
@@ -1058,8 +1058,8 @@ public class ReportsController : ControllerBase
         if (!exists)
         {
             db.ReportFavorites.Add(new ReportFavorite { UserId = CurrentUserId, ReportId = id });
+            audit.Stage(CurrentUserId, "FAVORITE_REPORT", "Report", id.ToString(), report.Name);
             await db.SaveChangesAsync();
-            await audit.LogAsync(CurrentUserId, "FAVORITE_REPORT", "Report", id.ToString(), report.Name);
         }
 
         return NoContent();
@@ -1075,8 +1075,8 @@ public class ReportsController : ControllerBase
         if (favorite is null) return NoContent();
 
         db.ReportFavorites.Remove(favorite);
+        audit.Stage(CurrentUserId, "UNFAVORITE_REPORT", "Report", id.ToString());
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "UNFAVORITE_REPORT", "Report", id.ToString());
         return NoContent();
     }
 
@@ -1105,8 +1105,8 @@ public class ReportsController : ControllerBase
             ExpiresAt = expiresAt
         };
         db.ReportShareLinks.Add(link);
+        audit.Stage(CurrentUserId, "CREATE_REPORT_SHARE_LINK", "Report", id.ToString(), report.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_SHARE_LINK", "Report", id.ToString(), report.Name);
 
         link.Report = report;
         return CreatedAtAction(nameof(ResolveShareLink), new { token = link.Token }, ToShareLinkDto(link));
@@ -1208,8 +1208,8 @@ public class ReportsController : ControllerBase
             ExpiresAt = expiresAt
         };
         db.ReportEmbedTokens.Add(token);
+        audit.Stage(CurrentUserId, "CREATE_REPORT_EMBED_TOKEN", "Report", id.ToString(), report.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_EMBED_TOKEN", "Report", id.ToString(), report.Name);
         token.Report = report;
         return CreatedAtAction(nameof(ResolveEmbedToken), new { token = token.Token }, ToEmbedTokenDto(token));
     }
@@ -1348,8 +1348,8 @@ public class ReportsController : ControllerBase
             IsDefault = req.IsDefault
         };
         db.SavedReportViews.Add(view);
+        audit.Stage(CurrentUserId, "CREATE_SAVED_REPORT_VIEW", "Report", id.ToString(), req.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_SAVED_REPORT_VIEW", "Report", id.ToString(), req.Name);
         return CreatedAtAction(nameof(GetSavedViews), new { id }, ToSavedViewDto(view));
     }
 
@@ -1367,8 +1367,8 @@ public class ReportsController : ControllerBase
             view.IsDefault = req.IsDefault.Value;
         }
         view.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(CurrentUserId, "UPDATE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "UPDATE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
         return Ok(ToSavedViewDto(view));
     }
 
@@ -1378,8 +1378,8 @@ public class ReportsController : ControllerBase
         var view = await db.SavedReportViews.FirstOrDefaultAsync(v => v.Id == viewId && v.ReportId == id && v.UserId == CurrentUserId);
         if (view is null) return NoContent();
         db.SavedReportViews.Remove(view);
+        audit.Stage(CurrentUserId, "DELETE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "DELETE_SAVED_REPORT_VIEW", "Report", id.ToString(), view.Name);
         return NoContent();
     }
 
@@ -1419,8 +1419,8 @@ public class ReportsController : ControllerBase
             SmtpAlias = req.SmtpAlias
         };
         db.ReportAlerts.Add(alert);
+        audit.Stage(CurrentUserId, "CREATE_REPORT_ALERT", "Report", id.ToString(), req.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "CREATE_REPORT_ALERT", "Report", id.ToString(), req.Name);
         return CreatedAtAction(nameof(GetAlerts), new { id }, ToAlertDto(alert));
     }
 
@@ -1442,8 +1442,8 @@ public class ReportsController : ControllerBase
         if (req.SmtpAlias is not null) alert.SmtpAlias = req.SmtpAlias;
         if (req.IsActive.HasValue) alert.IsActive = req.IsActive.Value;
         alert.UpdatedAt = DateTime.UtcNow;
+        audit.Stage(CurrentUserId, "UPDATE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "UPDATE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         return Ok(ToAlertDto(alert));
     }
 
@@ -1454,8 +1454,8 @@ public class ReportsController : ControllerBase
         if (alert is null) return NoContent();
         if (!IsAdmin && alert.OwnerId != CurrentUserId) return Forbid();
         db.ReportAlerts.Remove(alert);
+        audit.Stage(CurrentUserId, "DELETE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         await db.SaveChangesAsync();
-        await audit.LogAsync(CurrentUserId, "DELETE_REPORT_ALERT", "Report", id.ToString(), alert.Name);
         return NoContent();
     }
 
@@ -1581,6 +1581,7 @@ public class ReportsController : ControllerBase
             await datasetRegistry.Delete(datasetName);
 
         report.IsDeleted = true;
+        audit.Stage(CurrentUserId, "DELETE_REPORT", "Report", id.ToString(), report.Name);
         try
         {
             await db.SaveChangesAsync();
@@ -1590,7 +1591,6 @@ public class ReportsController : ControllerBase
             await db.Entry(report).ReloadAsync();
             return OptimisticConcurrency.Conflict(this, ToDto(report, null));
         }
-        await audit.LogAsync(CurrentUserId, "DELETE_REPORT", "Report", id.ToString(), report.Name);
         return NoContent();
     }
 

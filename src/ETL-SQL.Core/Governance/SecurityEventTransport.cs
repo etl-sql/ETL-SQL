@@ -13,6 +13,7 @@ public sealed record SecurityEventTransportOptions
     public required string MachineId { get; init; }
     public int BatchSize { get; init; } = 100;
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
+    public TimeSpan DeliveredRetention { get; init; } = TimeSpan.FromHours(24);
     public SecurityEventSeverity MinimumSeverity { get; init; } = SecurityEventSeverity.Warning;
 }
 
@@ -48,7 +49,8 @@ public sealed class SecurityEventTransport
             throw new ArgumentException(
                 "Security event collector endpoint must be HTTPS without embedded credentials.",
                 nameof(options));
-        if (options.BatchSize <= 0 || options.LeaseDuration <= TimeSpan.Zero)
+        if (options.BatchSize <= 0 || options.LeaseDuration <= TimeSpan.Zero
+            || options.DeliveredRetention <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(options), "Transport limits must be positive.");
         ArgumentException.ThrowIfNullOrWhiteSpace(options.TenantId);
         ArgumentException.ThrowIfNullOrWhiteSpace(options.EnrollmentId);
@@ -59,6 +61,7 @@ public sealed class SecurityEventTransport
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken = default)
     {
+        _outbox.PruneDelivered(nowUtc.Subtract(_options.DeliveredRetention));
         _outbox.ApplyForwardingFilter(_options.MinimumSeverity, nowUtc);
         var batch = _outbox.ClaimBatch(_options.BatchSize, nowUtc, _options.LeaseDuration);
         if (batch.Count == 0) return new(0, 0, 0);

@@ -354,6 +354,8 @@ public class PortalRateLimitConfig
     public int AuthWindowSeconds { get; set; } = 60;
     public int AnonymousTokenPermitLimit { get; set; } = 60;
     public int AnonymousTokenWindowSeconds { get; set; } = 60;
+    public int MetricsPermitLimit { get; set; } = 12;
+    public int MetricsWindowSeconds { get; set; } = 60;
 }
 
 public class PortalSecurityConfig

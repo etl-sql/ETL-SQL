@@ -39,6 +39,24 @@ public sealed class SecurityEventTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task DrainOnce_PrunesDeliveredEventsPastRetention()
+    {
+        var eventId = Guid.NewGuid();
+        var deliveredAt = Now.AddDays(-2);
+        var outbox = CreateOutbox();
+        outbox.Emit(Event(eventId));
+        Assert.Single(outbox.ClaimBatch(1, deliveredAt, TimeSpan.FromMinutes(1)));
+        outbox.MarkDelivered([eventId], deliveredAt);
+        Assert.True(outbox.GetHealth().StoredBytes > 0);
+
+        var transport = CreateTransport(outbox, new RecordingHandler(_ => Ack()));
+        var result = await transport.DrainOnceAsync(Now);
+
+        Assert.Equal(0, result.Claimed);
+        Assert.Equal(0, outbox.GetHealth().StoredBytes);
+    }
+
+    [Fact]
     public async Task DrainOnce_RetriesOnlyUnacknowledgedEvents()
     {
         var first = Guid.NewGuid();

@@ -231,7 +231,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.False(m.DatabasePoolExhaustionSuspected);
         Assert.True(m.PolicyAuthorityHealthy);
         Assert.Equal(0, m.UnhealthyFleetNodes);
-        Assert.Equal("shared-state-ha", m.Topology);
+        Assert.Equal("Standalone", m.Topology);
         Assert.Equal(node.NodeId, m.NodeId);
         Assert.Equal("ETLSQL_PORTAL_AFFINITY", m.AffinityCookieName);
 
@@ -329,6 +329,20 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("component=\"portal\"", body);
         Assert.DoesNotContain("Portal__Jwt__Secret", body);
         Assert.DoesNotContain("ConnectionString", body);
+    }
+
+    [Fact]
+    public async Task PrometheusMetricsEndpoint_IsRateLimitedPerClient()
+    {
+        using var factory = new PortalWebFactory();
+        using var client = factory.CreateClient();
+
+        for (var request = 0; request < 12; request++)
+            Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/metrics")).StatusCode);
+
+        var rejected = await client.GetAsync("/metrics");
+        Assert.Equal(HttpStatusCode.TooManyRequests, rejected.StatusCode);
+        Assert.True(rejected.Headers.Contains("Retry-After"));
     }
 
     [Fact]

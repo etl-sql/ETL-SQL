@@ -112,6 +112,21 @@ public sealed class SecurityEventOutboxTests : IDisposable
     }
 
     [Fact]
+    public void DeliveredEvents_DoNotConsumePendingEventCapacity()
+    {
+        var now = new DateTimeOffset(2026, 7, 12, 18, 0, 0, TimeSpan.Zero);
+        var first = Guid.NewGuid();
+        var outbox = CreateOutbox(maxEvents: 1);
+        outbox.Emit(Event(first));
+        Assert.Single(outbox.ClaimBatch(1, now, TimeSpan.FromMinutes(1)));
+        outbox.MarkDelivered([first], now);
+
+        outbox.Emit(Event(Guid.NewGuid()));
+
+        Assert.Equal(1, outbox.GetHealth().PendingCount);
+    }
+
+    [Fact]
     public void ExistingOutboxSchema_IsMigratedBeforeSeverityFiltering()
     {
         Directory.CreateDirectory(_root);

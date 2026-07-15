@@ -1,6 +1,8 @@
 using ETL_SQL.ReportPortal.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -14,8 +16,13 @@ namespace ETL_SQL.ReportPortal.Services;
 /// No-op unless <see cref="AuditConfig.RequireRemoteDelivery"/> is set, so the local zero-trust
 /// default (best-effort forwarding) is unchanged.
 /// </summary>
-public sealed class AuditFailClosedInterceptor(PortalConfig config, TimeProvider clock) : SaveChangesInterceptor
+public sealed class AuditFailClosedInterceptor(
+    PortalConfig config,
+    TimeProvider clock,
+    IHttpContextAccessor? httpContext = null) : SaveChangesInterceptor
 {
+    private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
+
     public override InterceptionResult<int> SavingChanges(
         DbContextEventData eventData,
         InterceptionResult<int> result)
@@ -49,9 +56,76 @@ public sealed class AuditFailClosedInterceptor(PortalConfig config, TimeProvider
             .Entries<AuditOutboxMessage>()
             .Any(e => e.State == EntityState.Added);
         if (!stagingAudit)
-            return false;
+        {
+            var mutatedTypes = context.ChangeTracker.Entries()
+                .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                .Where(e => e.Entity is not AuditLog and not AuditOutboxMessage)
+                .Select(e => e.Metadata.ClrType.Name)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToArray();
+            if (mutatedTypes.Length == 0)
+                return false;
+            StageFallbackAudit(context, mutatedTypes);
+        }
 
         db = context;
         return true;
+    }
+
+    private void StageFallbackAudit(PortalDbContext db, IReadOnlyList<string> mutatedTypes)
+    {
+        var occurredAt = clock.GetUtcNow().UtcDateTime;
+        var request = httpContext?.HttpContext;
+        var userId = int.TryParse(request?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var parsedUserId)
+            ? parsedUserId
+            : (int?)null;
+        var actorType = request?.User.FindFirstValue(TokenService.IdentityTypeClaim)
+            == TokenService.ServiceIdentityType ? "ServiceAccount" : "User";
+        var actorId = actorType == "ServiceAccount"
+            ? request?.User.FindFirstValue(TokenService.ServiceAccountIdClaim)
+            : userId?.ToString();
+        var resourceType = string.Join(',', mutatedTypes);
+        const string action = "PORTAL_MUTATION";
+        const string detail = "A mutation reached the persistence boundary without an explicit audit event.";
+        var correlationId = request?.TraceIdentifier;
+
+        var auditLog = new AuditLog
+        {
+            UserId = userId,
+            ActorType = actorType,
+            ActorId = actorId,
+            Action = action,
+            ResourceType = resourceType,
+            Timestamp = occurredAt,
+            Detail = detail,
+            CorrelationId = correlationId
+        };
+        db.AuditLogs.Add(auditLog);
+        db.AuditOutboxMessages.Add(new AuditOutboxMessage
+        {
+            AuditLog = auditLog,
+            UserId = userId,
+            ActorType = actorType,
+            ActorId = actorId,
+            Action = action,
+            ResourceType = resourceType,
+            CorrelationId = correlationId,
+            OccurredAt = occurredAt,
+            PayloadJson = JsonSerializer.Serialize(new
+            {
+                userId,
+                actorType,
+                actorId,
+                action,
+                resourceType,
+                detail,
+                correlationId,
+                occurredAt
+            }, PayloadJsonOptions),
+            Status = "Pending",
+            CreatedAt = occurredAt,
+            UpdatedAt = occurredAt
+        });
     }
 }

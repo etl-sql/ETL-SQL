@@ -379,7 +379,11 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "SELECT COUNT(*), COALESCE(SUM(payload_bytes), 0) FROM security_events;";
+        command.CommandText = """
+            SELECT COALESCE(SUM(CASE WHEN status = 'Pending' THEN 1 ELSE 0 END), 0),
+                   COALESCE(SUM(payload_bytes), 0)
+            FROM security_events;
+            """;
         using var reader = command.ExecuteReader();
         reader.Read();
         return (reader.GetInt32(0), reader.GetInt64(1));

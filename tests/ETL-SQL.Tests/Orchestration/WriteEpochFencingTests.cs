@@ -93,5 +93,50 @@ namespace ETL_SQL.Tests.Orchestration
             await Assert.ThrowsAsync<FencedWriteException>(() =>
                 stale.MoveAsync(ArtifactArea.Datasets, ".staging", "final.parquet"));
         }
+
+        [Fact]
+        public async Task CoordinatedStorage_AllowsHealthyNodesToAlternateWrites()
+        {
+            await _store.InitializeAsync();
+            var inner = new InMemoryArtifactStorage();
+            var nodeA = new FencedArtifactStorage(inner, _store, _store);
+            var nodeB = new FencedArtifactStorage(inner, _store, _store);
+
+            await nodeA.WriteAllTextAsync(ArtifactArea.Snapshots, "shared.html", "A1");
+            await nodeB.WriteAllTextAsync(ArtifactArea.Snapshots, "shared.html", "B1");
+            await nodeA.WriteAllTextAsync(ArtifactArea.Snapshots, "shared.html", "A2");
+
+            Assert.Equal("A2", await inner.ReadAllTextAsync(ArtifactArea.Snapshots, "shared.html"));
+            Assert.Equal(3, await _store.GetWriteEpochAsync("artifact", "Snapshots/shared.html"));
+        }
+
+        [Fact]
+        public async Task CoordinatedStorage_FencesDeleteAndAdvancesEpoch()
+        {
+            await _store.InitializeAsync();
+            var inner = new InMemoryArtifactStorage();
+            var nodeA = new FencedArtifactStorage(inner, _store, _store);
+            var nodeB = new FencedArtifactStorage(inner, _store, _store);
+
+            await nodeA.WriteAllTextAsync(ArtifactArea.Datasets, "shared.parquet", "data");
+            Assert.True(await nodeB.DeleteAsync(ArtifactArea.Datasets, "shared.parquet"));
+
+            Assert.False(await inner.ExistsAsync(ArtifactArea.Datasets, "shared.parquet"));
+            Assert.Equal(2, await _store.GetWriteEpochAsync("artifact", "Datasets/shared.parquet"));
+        }
+
+        [Fact]
+        public async Task ExplicitStaleToken_CannotDeleteNewerArtifact()
+        {
+            await _store.InitializeAsync();
+            var inner = new InMemoryArtifactStorage();
+            await new FencedArtifactStorage(inner, _store, () => 8)
+                .WriteAllTextAsync(ArtifactArea.Datasets, "protected.parquet", "new");
+
+            var stale = new FencedArtifactStorage(inner, _store, () => 3);
+            await Assert.ThrowsAsync<FencedWriteException>(() =>
+                stale.DeleteAsync(ArtifactArea.Datasets, "protected.parquet"));
+            Assert.True(await inner.ExistsAsync(ArtifactArea.Datasets, "protected.parquet"));
+        }
     }
 }

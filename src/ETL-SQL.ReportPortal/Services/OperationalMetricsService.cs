@@ -16,7 +16,8 @@ public sealed class OperationalMetricsService(
     PortalDbContext db,
     PortalConfig config,
     PortalNodeIdentity? nodeIdentity = null,
-    HealthCheckService? healthChecks = null)
+    HealthCheckService? healthChecks = null,
+    PortalStorageUsageSampler? storageUsage = null)
 {
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
@@ -91,27 +92,41 @@ public sealed class OperationalMetricsService(
             .CountAsync(j => j.CompletedAt != null && j.CompletedAt >= since, ct);
         var recentExecutionFailures = await db.PortalExecutionJobs
             .CountAsync(j => j.CompletedAt >= since && (j.Status == "Failed" || j.Status == "Cancelled"), ct);
-        var recentExecutionRows = await db.PortalExecutionJobs
+        var hourlyRows = await db.PortalExecutionJobs
             .AsNoTracking()
             .Where(j => j.CompletedAt != null && j.CompletedAt >= since)
-            .Select(j => new
+            .GroupBy(j => new
             {
-                j.CompletedAt,
-                j.StartedAt,
-                j.Status,
-                j.RowsProcessed,
-                j.PeakMemoryBytes
+                j.CompletedAt!.Value.Year,
+                j.CompletedAt.Value.Month,
+                j.CompletedAt.Value.Day,
+                j.CompletedAt.Value.Hour
+            })
+            .Select(group => new
+            {
+                group.Key.Year,
+                group.Key.Month,
+                group.Key.Day,
+                group.Key.Hour,
+                Executions = group.Count(),
+                Failures = group.Count(j => j.Status == "Failed" || j.Status == "Cancelled"),
+                RowsProcessed = group.Sum(j => j.RowsProcessed),
+                PeakMemoryBytes = group.Max(j => j.PeakMemoryBytes)
             })
             .ToListAsync(ct);
-        var hourlyExecutionLoad = BuildHourlyExecutionLoad(since, now, recentExecutionRows
-            .Where(j => j.CompletedAt is not null)
-            .Select(j => new ExecutionLoadRow(
-                j.CompletedAt!.Value,
-                j.Status,
-                j.RowsProcessed,
-                j.PeakMemoryBytes)));
-        var completedDurations = recentExecutionRows
-            .Where(j => j.CompletedAt is not null && j.StartedAt is not null)
+        var hourlyExecutionLoad = BuildHourlyExecutionLoad(since, now, hourlyRows.Select(row =>
+            new ExecutionLoadBucket(
+                new DateTime(row.Year, row.Month, row.Day, row.Hour, 0, 0, DateTimeKind.Utc),
+                row.Executions,
+                row.Failures,
+                row.RowsProcessed,
+                row.PeakMemoryBytes)));
+        var durationRows = await db.PortalExecutionJobs
+            .AsNoTracking()
+            .Where(j => j.CompletedAt != null && j.CompletedAt >= since && j.StartedAt != null)
+            .Select(j => new { j.StartedAt, j.CompletedAt })
+            .ToListAsync(ct);
+        var completedDurations = durationRows
             .Select(j => (j.CompletedAt!.Value - j.StartedAt!.Value).TotalMilliseconds)
             .Where(ms => ms >= 0)
             .ToList();
@@ -152,15 +167,15 @@ public sealed class OperationalMetricsService(
             queuedExecutions,
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.MaxConcurrentExecutionsPerUser,
-            "shared-state-ha",
+            ResolveTopology(),
             nodeIdentity?.NodeId ?? Environment.MachineName,
             config.LoadBalancer.SessionAffinityCookieName,
             recentExecutions,
             recentExecutionFailures,
             recentDeliveries,
             recentDeliveryFailures,
-            DirectorySizeBytes(config.DatasetRootPath),
-            DirectorySizeBytes(config.SnapshotDirectory),
+            storageUsage?.DatasetStorageBytes ?? PortalStorageUsageSampler.MeasureDirectory(config.DatasetRootPath),
+            storageUsage?.SnapshotStorageBytes ?? PortalStorageUsageSampler.MeasureDirectory(config.SnapshotDirectory),
             staleSnapshots,
             staleDatasets,
             policyExpiry.Expiring,
@@ -196,22 +211,25 @@ public sealed class OperationalMetricsService(
             (int)FailureWindow.TotalHours);
     }
 
+    private string ResolveTopology()
+    {
+        var expected = config.Topology.ExpectedMode?.Trim();
+        if (!string.IsNullOrWhiteSpace(expected)
+            && !string.Equals(expected, "Auto", StringComparison.OrdinalIgnoreCase))
+            return expected;
+
+        return string.Equals(config.Database.Provider, "Postgres", StringComparison.OrdinalIgnoreCase)
+            ? "HighAvailability"
+            : "Standalone";
+    }
+
     private static IReadOnlyList<HourlyExecutionLoad> BuildHourlyExecutionLoad(
         DateTime since,
         DateTime now,
-        IEnumerable<ExecutionLoadRow> rows)
+        IEnumerable<ExecutionLoadBucket> rows)
     {
         var buckets = rows
-            .GroupBy(row => TruncateToHour(row.CompletedAt))
-            .ToDictionary(
-                group => group.Key,
-                group => new
-                {
-                    Executions = group.Count(),
-                    Failures = group.Count(row => row.Status is "Failed" or "Cancelled"),
-                    RowsProcessed = group.Sum(row => row.RowsProcessed),
-                    PeakMemoryBytes = group.Max(row => row.PeakMemoryBytes)
-                });
+            .ToDictionary(row => row.HourUtc);
 
         var start = TruncateToHour(since);
         var end = TruncateToHour(now);
@@ -286,9 +304,10 @@ public sealed class OperationalMetricsService(
     }
 
 
-    private sealed record ExecutionLoadRow(
-        DateTime CompletedAt,
-        string Status,
+    private sealed record ExecutionLoadBucket(
+        DateTime HourUtc,
+        int Executions,
+        int Failures,
         long RowsProcessed,
         long PeakMemoryBytes);
 
@@ -386,24 +405,4 @@ public sealed class OperationalMetricsService(
         return null;
     }
 
-    /// <summary>Total size of regular files directly under a storage root; 0 when absent.</summary>
-    private static long DirectorySizeBytes(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            return 0;
-        try
-        {
-            long total = 0;
-            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
-            {
-                try { total += new FileInfo(file).Length; }
-                catch { /* a file vanishing mid-scan must not fail metrics */ }
-            }
-            return total;
-        }
-        catch
-        {
-            return 0;
-        }
-    }
 }
