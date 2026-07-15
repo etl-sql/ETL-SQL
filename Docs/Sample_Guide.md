@@ -69,7 +69,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 
 ## Core Samples
 
-Core samples introduce language features and small workflows. Some read or write files under `TestData/` or `samples/output/`; inspect the paths before running them from a different working directory.
+Core samples introduce language features and small workflows. Some read or write files under `testdata/` or `samples/output/`; inspect the paths before running them from a different working directory.
 
 ### 1. [Basic_ETL.etlsql](../samples/01_Basics/Basic_ETL.etlsql)
 **Purpose**: Introduction to basic ETL operations.

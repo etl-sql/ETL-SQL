@@ -1,4 +1,4 @@
-﻿-- Sample: SET WHAT_IF
+-- Sample: SET WHAT_IF
 -- Purpose: Demonstrates the dry-run mode for safe script validation.
 
 CREATE CONNECTION local_db AS MOCKDB();
@@ -16,7 +16,7 @@ VALUES (99, 'DryRunUser', 'dryrun@example.com');
 DELETE FROM local_db.Orders WHERE OrderID = 1;
 
 -- This FILE_OPERATION will be logged but NOT executed
-COMPRESS_FILE 'TestData/sample.csv' TO 'samples/output/sample.csv.zip';
+COMPRESS_FILE 'testdata/sample.csv' TO 'samples/output/sample.csv.zip';
 
 PRINT('--- DRY RUN END ---');
 

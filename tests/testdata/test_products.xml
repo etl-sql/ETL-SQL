@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<products>
+  <product>
+    <id>101</id>
+    <name>Laptop Pro</name>
+    <category>Electronics</category>
+    <price>1299.99</price>
+    <stock>42</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>102</id>
+    <name>Wireless Mouse</name>
+    <category>Electronics</category>
+    <price>29.99</price>
+    <stock>200</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>103</id>
+    <name>Desk Chair</name>
+    <category>Furniture</category>
+    <price>449.00</price>
+    <stock>15</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>104</id>
+    <name>Standing Desk</name>
+    <category>Furniture</category>
+    <price>799.00</price>
+    <stock>8</stock>
+    <active>false</active>
+  </product>
+  <product>
+    <id>105</id>
+    <name>USB-C Hub</name>
+    <category>Electronics</category>
+    <price>49.95</price>
+    <stock>135</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>106</id>
+    <name>Bookshelf</name>
+    <category>Furniture</category>
+    <price>199.00</price>
+    <stock>30</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>107</id>
+    <name>Mechanical Keyboard</name>
+    <category>Electronics</category>
+    <price>149.99</price>
+    <stock>60</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>108</id>
+    <name>Monitor 27"</name>
+    <category>Electronics</category>
+    <price>349.00</price>
+    <stock>25</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>109</id>
+    <name>Ergonomic Footrest</name>
+    <category>Accessories</category>
+    <price>59.99</price>
+    <stock>75</stock>
+    <active>true</active>
+  </product>
+  <product>
+    <id>110</id>
+    <name>Webcam HD</name>
+    <category>Electronics</category>
+    <price>89.95</price>
+    <stock>50</stock>
+    <active>false</active>
+  </product>
+</products>

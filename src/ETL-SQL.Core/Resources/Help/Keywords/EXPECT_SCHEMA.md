@@ -24,10 +24,10 @@ EXPECT SCHEMA #orders (
 );
 
 -- Validate using a JSON specification contract file
-EXPECT SCHEMA #orders FROM 'TestData/Specs/customer_spec.json';
+EXPECT SCHEMA #orders FROM 'testdata/Specs/customer_spec.json';
 
 -- Warn on drift instead of throwing an error
-EXPECT SCHEMA #orders FROM 'TestData/Specs/customer_spec.json' ON DRIFT WARN;
+EXPECT SCHEMA #orders FROM 'testdata/Specs/customer_spec.json' ON DRIFT WARN;
 
 -- Validate a remote connector table (schema check only — no data is loaded)
 EXPECT SCHEMA MyConn.dbo.Products (

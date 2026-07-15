@@ -1,5 +1,5 @@
-﻿DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c AS FLATFILE('\TestData/test_sales.csv');
+DROP CONNECTION IF EXISTS c;
+CREATE CONNECTION c AS FLATFILE('\testdata/test_sales.csv');
 
 -- Base dataset
 SELECT month, region, product, SUM(units) AS units, SUM(revenue) AS revenue

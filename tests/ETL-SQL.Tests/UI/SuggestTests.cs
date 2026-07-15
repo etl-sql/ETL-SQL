@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -85,10 +85,10 @@ namespace ETL_SQL.Tests.UI
         {
             // This test depends on the environment, but we can check if it triggers
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("Tes", "CREATE CONNECTION C AS FLATFILE('Tes", new Dictionary<string, IDataSource>());
-            // If TestData directory exists, it should have some hits
-            if (System.IO.Directory.Exists("TestData"))
+            // If testdata directory exists, it should have some hits
+            if (System.IO.Directory.Exists("testdata"))
             {
-                Assert.True(suggestions.Any(s => s.Text.Contains("TestData")), "Should suggest TestData");
+                Assert.True(suggestions.Any(s => s.Text.Contains("testdata")), "Should suggest testdata");
             }
         }
 
@@ -243,7 +243,7 @@ namespace ETL_SQL.Tests.UI
         [Fact]
         public async Task TestTextQualifierSuggestions()
         {
-            string script = "CREATE CONNECTION cs AS FLATFILE('TestData/test_qualified_output.csv', TEXT_QUALIFIER=D";
+            string script = "CREATE CONNECTION cs AS FLATFILE('testdata/test_qualified_output.csv', TEXT_QUALIFIER=D";
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("D", script, new Dictionary<string, ETL_SQL.Data.IDataSource>());
 
             // Should suggest DOUBLEQUOTE and DOUBLEQUOTES in alpha order

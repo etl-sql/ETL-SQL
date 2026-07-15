@@ -1,7 +1,7 @@
 PRINT 'Starting Big Data Stress Test (1M rows)...';
 
-CREATE CONNECTION BigData AS FLATFILE('TestData/test_large_1M.csv', HEADER = 'ON');
-CREATE CONNECTION SmallData AS FLATFILE('TestData/test_stress_SmallTable.csv', HEADER = 'ON');
+CREATE CONNECTION BigData AS FLATFILE('testdata/test_large_1M.csv', HEADER = 'ON');
+CREATE CONNECTION SmallData AS FLATFILE('testdata/test_stress_SmallTable.csv', HEADER = 'ON');
 CREATE CONNECTION ResultOut AS FLATFILE('samples/output/test_StressResult.csv', HEADER = 'ON');
 
 -- Perform a large scale join

@@ -1,5 +1,5 @@
-﻿CREATE CONNECTION source_data AS FLATFILE('data.csv', HEADER = ON);
-CREATE CONNECTION smallDict AS FLATFILE('TestData/categories.csv');
+CREATE CONNECTION source_data AS FLATFILE('data.csv', HEADER = ON);
+CREATE CONNECTION smallDict AS FLATFILE('testdata/categories.csv');
 
 SELECT s.category_name, COUNT(*) AS TotalCount, SUM(l.value) AS TotalValue
 INTO #havingResults

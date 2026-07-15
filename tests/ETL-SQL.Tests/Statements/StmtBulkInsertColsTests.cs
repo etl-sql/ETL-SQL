@@ -23,7 +23,7 @@ namespace ETL_SQL.Tests.Statements
             var provider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
 
-            string dataPath = Path.Combine(FindProjectRoot(), "TestData", "test_bulk_mapped.csv").Replace("\\", "/");
+            string dataPath = Path.Combine(FindProjectRoot(), "tests", "testdata", "test_bulk_mapped.csv").Replace("\\", "/");
             string script = $@"
                 CREATE TABLE #Target (
                     Name VARCHAR(100),
@@ -60,7 +60,7 @@ namespace ETL_SQL.Tests.Statements
             var provider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
 
-            string dataPath = Path.Combine(FindProjectRoot(), "TestData", "test_bulk_few_cols.csv").Replace("\\", "/");
+            string dataPath = Path.Combine(FindProjectRoot(), "tests", "testdata", "test_bulk_few_cols.csv").Replace("\\", "/");
             string script = $@"
                 CREATE TABLE #T (Name VARCHAR(100), Age INT, Location VARCHAR(100));
                 BULK INSERT #T (Name, Age, Location) FROM '{dataPath}' WITH (FORMAT = 'CSV');
@@ -85,7 +85,7 @@ namespace ETL_SQL.Tests.Statements
             var provider = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
 
-            string dataPath = Path.Combine(FindProjectRoot(), "TestData", "test_bulk_null_vals.csv").Replace("\\", "/");
+            string dataPath = Path.Combine(FindProjectRoot(), "tests", "testdata", "test_bulk_null_vals.csv").Replace("\\", "/");
             string script = $@"
                 CREATE TABLE #T2 (Name VARCHAR(100), Age VARCHAR(10), Location VARCHAR(100));
                 BULK INSERT #T2 (Name, Age, Location) FROM '{dataPath}' WITH (FORMAT = 'CSV');

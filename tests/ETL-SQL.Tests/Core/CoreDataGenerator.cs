@@ -12,7 +12,7 @@ namespace ETL_SQL.Tests.Core
     public static class TestDataGenerator
     {
         private static readonly string TestDataDir =
-            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "TestData");
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "tests", "testdata");
 
         public static void EnsureTestDataFiles()
         {

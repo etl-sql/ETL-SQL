@@ -2458,7 +2458,7 @@ SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
 
 DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c AS FLATFILE('TestData/test_sales.csv');
+CREATE CONNECTION c AS FLATFILE('testdata/test_sales.csv');
 
 -- Shared base dataset (refreshed every hour)
 CREATE DATASET &summary

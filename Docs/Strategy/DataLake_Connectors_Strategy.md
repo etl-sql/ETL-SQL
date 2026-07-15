@@ -258,7 +258,7 @@ Data warehouses can have tens of thousands of tables. The LSP schema cache TTL s
 - [ ] `ETL-SQL.Connectors/DuckDbConnector.cs` (new): `DuckDB.NET.Data`. In-process engine. Passes `READ_PARQUET`, `READ_CSV`, `READ_JSON` table functions through to DuckDB natively. S3/ADLS support via DuckDB extensions (`httpfs`, `azure`).
 - [ ] No auth needed for local mode; S3 credentials via `OPTIONS(S3_ACCESS_KEY_ID, S3_SECRET)`.
 - [ ] `DependencyInjectionSetup.cs`: Register `DuckDbConnector`.
-- [ ] Unit tests: in-process, no `Category=Integration`. Test data: small Parquet file committed to `tests/TestData/`.
+- [ ] Unit tests: in-process, no `Category=Integration`. Test data: small Parquet file committed to `tests/testdata/`.
 - [ ] `Docs/Reference/Data_Connectors.md`: DuckDB section. Document as "embedded analytical engine" distinct from file connectors.
 
 ---

@@ -16,14 +16,14 @@ namespace ETL_SQL.Tests.Core.Core
 
         public DataGeneratorTests()
         {
-            // Use a temp directory so tests don't pollute the real TestData folder
+            // Use a temp directory so tests don't pollute the real testdata folder
             _testDataDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-DataGen-Tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_testDataDir);
 
             // Redirect the generator to write here by patching working directory
             _originalDir = Directory.GetCurrentDirectory();
             Directory.SetCurrentDirectory(_testDataDir);
-            Directory.CreateDirectory(Path.Combine(_testDataDir, "TestData"));
+            Directory.CreateDirectory(Path.Combine(_testDataDir, "testdata"));
         }
 
         private readonly string _originalDir;
@@ -40,9 +40,9 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(100); // Small count for fast tests
 
-            Assert.True(File.Exists(Path.Combine(_testDataDir, "TestData", "test_stress_BigTable.csv")),
+            Assert.True(File.Exists(Path.Combine(_testDataDir, "testdata", "test_stress_BigTable.csv")),
                 "BigTable.csv should be created");
-            Assert.True(File.Exists(Path.Combine(_testDataDir, "TestData", "test_stress_SmallTable.csv")),
+            Assert.True(File.Exists(Path.Combine(_testDataDir, "testdata", "test_stress_SmallTable.csv")),
                 "SmallTable.csv should be created");
         }
 
@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(50);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_BigTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_BigTable.csv");
             var lines = File.ReadAllLines(path);
 
             // Header + 50 data rows
@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(10);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_BigTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_BigTable.csv");
             var dataLines = File.ReadAllLines(path).Skip(1).ToList(); // skip header
 
             Assert.Equal(10, dataLines.Count);
@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(20);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_BigTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_BigTable.csv");
             var lines = File.ReadAllLines(path).Skip(1); // skip header
 
             foreach (var line in lines)
@@ -96,7 +96,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(5);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_SmallTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_SmallTable.csv");
             var lines = File.ReadAllLines(path);
 
             Assert.True(lines.Length >= 2, "SmallTable should have header + data rows");
@@ -108,7 +108,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(5);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_SmallTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_SmallTable.csv");
             var dataLines = File.ReadAllLines(path).Skip(1).ToList();
 
             Assert.Equal(1000, dataLines.Count);
@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Core.Core
         {
             DataGenerator.Generate(5);
 
-            var path = Path.Combine(_testDataDir, "TestData", "test_stress_SmallTable.csv");
+            var path = Path.Combine(_testDataDir, "testdata", "test_stress_SmallTable.csv");
             var lines = File.ReadAllLines(path).Skip(1).ToList();
 
             for (int i = 0; i < lines.Count; i++)

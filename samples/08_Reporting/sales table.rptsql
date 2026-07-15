@@ -1,4 +1,4 @@
-﻿SET REPORT TITLE = 'Sales Table';
+SET REPORT TITLE = 'Sales Table';
 
 SET REPORT DESCRIPTION = 'Demonstrate how to
 USE input parameters';
@@ -16,7 +16,7 @@ CREATE BUTTON run_btn AS (
     STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
 );
 
-CREATE CONNECTION c AS FLATFILE('TestData/test_sales.csv');
+CREATE CONNECTION c AS FLATFILE('testdata/test_sales.csv');
 
 SELECT
      c.FILE.region

@@ -147,7 +147,7 @@ public class DataGenerator
     public static void Generate(int count = 1000000)
     {
         // 1. BigTable
-        string bigPath = "TestData/test_stress_BigTable.csv";
+        string bigPath = "testdata/test_stress_BigTable.csv";
         using (var sw = new System.IO.StreamWriter(bigPath))
         {
             sw.WriteLine("ID,Value,Data");
@@ -157,7 +157,7 @@ public class DataGenerator
         }
 
         // 2. SmallTable (Expected by tests)
-        string smallPath = "TestData/test_stress_SmallTable.csv";
+        string smallPath = "testdata/test_stress_SmallTable.csv";
         using (var sw = new System.IO.StreamWriter(smallPath))
         {
             sw.WriteLine("ID,Name");

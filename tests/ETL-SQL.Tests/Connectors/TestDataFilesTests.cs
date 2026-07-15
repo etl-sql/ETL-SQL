@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -10,13 +10,13 @@ using Xunit;
 namespace ETL_SQL.Tests.Connectors
 {
     /// <summary>
-    /// Integration tests against the standard test data files in TestData/.
+    /// Integration tests against the standard test fixture files in tests/testdata/.
     /// Validates that JSON, XML, XLSX, and large CSV files can be read correctly.
     /// </summary>
     public class TestDataFilesTests
     {
         private static readonly string TestDataPath =
-            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "TestData"));
+            Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "tests", "testdata"));
 
         public TestDataFilesTests()
         {

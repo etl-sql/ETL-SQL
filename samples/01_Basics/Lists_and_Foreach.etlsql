@@ -1,4 +1,4 @@
-﻿CREATE CONNECTION wide_data AS FLATFILE('TestData/wide_test.csv');
+CREATE CONNECTION wide_data AS FLATFILE('testdata/wide_test.csv');
 
 DECLARE @valid_cats LIST(varchar) = ['Test', 'Prod'];
 DECLARE @excluded_ids LIST(int) = [51, 52, 53];

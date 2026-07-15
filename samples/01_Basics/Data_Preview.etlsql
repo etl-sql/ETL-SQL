@@ -1,4 +1,4 @@
-﻿CREATE CONNECTION dict AS FLATFILE('TestData/categories.csv');
+CREATE CONNECTION dict AS FLATFILE('testdata/categories.csv');
 
 SELECT id, category_name
 FROM dict;

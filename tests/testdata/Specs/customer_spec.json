@@ -1,0 +1,66 @@
+{
+  "pipeline_name": "customer_feed",
+  "metadata": {
+    "description": "Standard outbound customer feed generated daily.",
+    "classification": "internal",
+    "owner": "sales_ops"
+  },
+  "destination": {
+    "connector_type": "FLATFILE",
+    "format": "CSV",
+    "delimiter": "comma",
+    "text_qualifier": "doublequote",
+    "encoding": "UTF8",
+    "naming_pattern": "customer_feed_{yyyyMMdd}.csv",
+    "path": "C:/Outbound/CustomerFeeds",
+    "has_header": true
+  },
+  "schema": [
+    {
+      "column_name": "customer_id",
+      "type_family": "INT",
+      "nullable": false,
+      "description": "Unique customer ID",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "first_name",
+      "type_family": "VARCHAR",
+      "max_length": 50,
+      "nullable": false,
+      "description": "First name of the customer",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "last_name",
+      "type_family": "VARCHAR",
+      "max_length": 50,
+      "nullable": false,
+      "description": "Last name of the customer",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "email",
+      "type_family": "VARCHAR",
+      "max_length": 255,
+      "nullable": true,
+      "validation_regex": "^[^@]+@[^@]+\\.[^@]+$",
+      "description": "Customer email address (must contain @)",
+      "tags": ["pii"]
+    },
+    {
+      "column_name": "signup_date",
+      "type_family": "DATE",
+      "nullable": true,
+      "description": "Date customer registered (formatted as yyyy-MM-dd)",
+      "tags": ["none"]
+    },
+    {
+      "column_name": "is_active",
+      "type_family": "BIT",
+      "nullable": true,
+      "description": "1 = active; 0 = inactive",
+      "tags": ["none"]
+    }
+  ]
+}

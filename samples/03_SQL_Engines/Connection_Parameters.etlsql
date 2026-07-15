@@ -1,5 +1,5 @@
-﻿-- Generate a test CSV file using default comma delim
-CREATE CONNECTION dummy AS FLATFILE('TestData/dummy.csv');
+-- Generate a test CSV file using default comma delim
+CREATE CONNECTION dummy AS FLATFILE('testdata/dummy.csv');
 DROP TABLE IF EXISTS #temp_out;
 CREATE TABLE #temp_out (Col1 VARCHAR(50), Col2 VARCHAR(50));
 INSERT INTO #temp_out (Col1, Col2) VALUES ('value1', 'value2');

@@ -163,19 +163,19 @@ namespace ETL_SQL.Tests.Statements
         [Fact]
         public void ParsesExpectSchemaWithJsonSpec()
         {
-            var script = Parse("EXPECT SCHEMA #data FROM 'TestData/Specs/customer_spec.json';");
+            var script = Parse("EXPECT SCHEMA #data FROM 'tests/testdata/Specs/customer_spec.json';");
             Assert.Single(script.Statements);
             var stmt = Assert.IsType<ExpectSchemaStatement>(script.Statements[0]);
             Assert.Equal("#data", stmt.Target);
             Assert.Null(stmt.Columns);
-            Assert.Equal("TestData/Specs/customer_spec.json", stmt.SchemaPath);
+            Assert.Equal("tests/testdata/Specs/customer_spec.json", stmt.SchemaPath);
             Assert.False(stmt.WarnOnDrift);
         }
 
         [Fact]
         public void ParsesExpectSchemaWithJsonSpecAndOnDriftWarn()
         {
-            var script = Parse("EXPECT SCHEMA #data FROM 'TestData/Specs/customer_spec.json' ON DRIFT WARN;");
+            var script = Parse("EXPECT SCHEMA #data FROM 'tests/testdata/Specs/customer_spec.json' ON DRIFT WARN;");
             var stmt = Assert.IsType<ExpectSchemaStatement>(script.Statements[0]);
             Assert.True(stmt.WarnOnDrift);
         }
@@ -193,7 +193,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task PassesWhenJsonSpecMatches()
         {
             var ev = GetEvaluator();
-            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "tests", "testdata", "Specs", "customer_spec.json").Replace("\\", "/");
 
             await ev.Evaluate(Parse($@"
                 CREATE TABLE #data (
@@ -212,7 +212,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task ThrowsOnMissingColumnWithJsonSpec()
         {
             var ev = GetEvaluator();
-            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "tests", "testdata", "Specs", "customer_spec.json").Replace("\\", "/");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
                 await ev.Evaluate(Parse($@"
@@ -230,7 +230,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task ThrowsOnTypeFamilyMismatchWithJsonSpec()
         {
             var ev = GetEvaluator();
-            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "tests", "testdata", "Specs", "customer_spec.json").Replace("\\", "/");
 
             var ex = await Assert.ThrowsAsync<ExecutionException>(async () =>
                 await ev.Evaluate(Parse($@"
@@ -252,7 +252,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task WarnOnDriftWithJsonSpecLogsWarningInsteadOfThrowing()
         {
             var ev = GetEvaluator();
-            string specPath = System.IO.Path.Combine(FindProjectRoot(), "TestData", "Specs", "customer_spec.json").Replace("\\", "/");
+            string specPath = System.IO.Path.Combine(FindProjectRoot(), "tests", "testdata", "Specs", "customer_spec.json").Replace("\\", "/");
 
             await ev.Evaluate(Parse($@"
                 CREATE TABLE #data (

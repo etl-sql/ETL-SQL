@@ -1,7 +1,7 @@
-﻿-- Define Database Connections
+-- Define Database Connections
 CREATE CONNECTION my_oracle AS ORACLE('Server=OracleDemo;');
 CREATE CONNECTION my_mssql AS MSSQL('Server=SqlDemo;Database=DemoDb;');
-CREATE CONNECTION my_csv AS FLATFILE('TestData/test_source.csv');
+CREATE CONNECTION my_csv AS FLATFILE('testdata/test_source.csv');
 
 -- Create Temporary Table via INSERT INTO
 INSERT INTO #hr

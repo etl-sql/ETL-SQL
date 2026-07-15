@@ -1,7 +1,7 @@
-﻿-- Comprehensive Verification Suite for Phase 11
+-- Comprehensive Verification Suite for Phase 11
 -- Tests CTEs, Scalar Functions, and complex queries
 
-CREATE CONNECTION csv AS FLATFILE('TestData/comprehensive_test.csv', TEXT_QUALIFIER=DOUBLEQUOTES);
+CREATE CONNECTION csv AS FLATFILE('testdata/comprehensive_test.csv', TEXT_QUALIFIER=DOUBLEQUOTES);
 
 -- 1. Test Scalar Functions (String & Math)
 PRINT('--- 1. Testing Scalar Functions ---');
