@@ -1220,6 +1220,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `USING` | DML | Canonical language token |
 | `VALUES` | DML | Canonical language token |
 | `WHERE` | DML | Canonical language token |
+| `WINDOW` | DML | Canonical language token |
 
 ### 19.2 DDL Keywords
 
@@ -1744,6 +1745,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `HASH_FILE` | General | Canonical language token |
 | `HELP` | General | Canonical language token |
 | `ICON` | General | Canonical language token |
+| `IGNORE_EXTRA_COLUMNS` | General | Canonical language token |
 | `IN` | General | Canonical language token |
 | `INPUT` | General | Canonical language token |
 | `INTEGRITY` | General | Canonical language token |
@@ -1756,10 +1758,12 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `LINEAGE_TAGS` | General | Canonical language token |
 | `LOAD` | General | Canonical language token |
 | `LOCAL` | General | Canonical language token |
+| `MAP_BY_HEADER_NAME` | General | Canonical language token |
 | `MAX` | General | Canonical language token |
 | `MAXERRORS` | General | Canonical language token |
 | `MIN` | General | Canonical language token |
 | `NONE` | General | Canonical language token |
+| `NULL_MISSING_COLUMNS` | General | Canonical language token |
 | `OCTET_LENGTH` | General | Canonical language token |
 | `OFF` | General | Canonical language token |
 | `ON` | General | Canonical language token |
@@ -1805,6 +1809,7 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `VALUE` | General | Canonical language token |
 | `VARIABLES` | General | Canonical language token |
 | `VERIFY` | General | Canonical language token |
+| `WINDOW` | General | Canonical language token |
 | `ZONES` | General | Canonical language token |
 
 ### 19.17 Connector Types
@@ -1867,9 +1872,6 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `CHARINDEX` | Function | Canonical built-in function |
 | `CHECKSUM` | Function | Canonical built-in function |
 | `COALESCE` | Function | Canonical built-in function |
-| `?? ` | Operator | Null-coalescing shorthand; compiles to `COALESCE` at parse time (see Grammar §14.4) |
-| `=> :` | Operator | Arrow conditional; chains compile to one `CASE WHEN` at parse time (see Grammar §14.5) |
-| `-> ->>` | Operator | JSON field/element access (Postgres style); compile to `JSON_GET`/`JSON_GET_TEXT` (see Grammar §14.6) |
 | `CONCAT` | Function | Canonical built-in function |
 | `CONNECTION_PROPERTY` | Function | Canonical built-in function |
 | `CORR` | Function | Canonical built-in function |
@@ -2118,4 +2120,5 @@ See [User Manual](User_Manual.md) and [Administrators Guide](Administrators_Guid
 | `@trusted` | Tag | Standard governance tag |
 | `@unit` | Tag | Standard governance tag |
 <!-- END GENERATED CANONICAL TOKEN INDEX -->
+
 
