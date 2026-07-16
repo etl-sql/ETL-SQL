@@ -1,34 +1,50 @@
 # REGEXP_REPLACE
+
 Replaces occurrences of a regex pattern in a string.
 
-**Category:** Regex
-
 ## Syntax
+
 ```sql
 REGEXP_REPLACE(string, pattern, replacement)
 REGEXP_REPLACE(string, pattern, replacement, position, occurrence, flags)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The source string |
-| `pattern` | `STRING` | PCRE regular expression |
-| `replacement` | `STRING` | Replacement string. Use `\1`, `\2` etc. for capture group backreferences |
-| `position` | `INT` | Optional: start position (default: 1) |
-| `occurrence` | `INT` | Optional: which match to replace (0 = all, default: 0) |
-| `flags` | `STRING` | Optional: `i`, `m`, `s` |
+
+- **string** - Source string.
+- **pattern** - PCRE regular expression.
+- **replacement** - Replacement string. Use `\1`, `\2`, and similar tokens for capture group backreferences.
+- **position** - Optional 1-based start position. Defaults to `1`.
+- **occurrence** - Optional occurrence to replace. Use `0` for all matches. Defaults to `0`.
+- **flags** - Optional modifier flags, such as `i`, `m`, or `s`.
 
 ## Returns
-`STRING` — The string with matching occurrences replaced.
 
-## Example
+Returns the string with matching occurrences replaced.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT REGEXP_REPLACE('Hello World', 'o', '0');           -- → 'Hell0 W0rld'
-SELECT REGEXP_REPLACE(phone, '[^\d]', '');                -- strip non-digits
-SELECT REGEXP_REPLACE(ssn, '(\d{3})-\d{2}-(\d{4})', 'XXX-XX-\2'); -- partial mask
+SELECT REGEXP_REPLACE('Hello World', 'o', '0') AS replaced_text;
 ```
 
-## See Also
-- [Standard Library — §3.7 Regex (PCRE)](../../../guides/getting-started.md#37-regex-pcre)
-- Related: [`REGEXP_LIKE`](regexp_like.md), [`REGEXP_SUBSTR`](regexp_substr.md), [`REPLACE`](../string/replace.md)
+```sql
+SELECT REGEXP_REPLACE(phone, '[^\d]', '') AS digits_only
+FROM #contacts;
+```
+
+```sql
+SELECT REGEXP_REPLACE(ssn, '(\d{3})-\d{2}-(\d{4})', 'XXX-XX-\2') AS masked_ssn
+FROM #people;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REGEXP_LIKE](regexp_like.md)
+- [REGEXP_SUBSTR](regexp_substr.md)
+- [REPLACE](../string/replace.md)

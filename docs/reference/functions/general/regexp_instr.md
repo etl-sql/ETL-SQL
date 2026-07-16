@@ -1,34 +1,44 @@
 # REGEXP_INSTR
+
 Returns the 1-based position of the first (or Nth) regex match in a string.
 
-**Category:** Regex
-
 ## Syntax
+
 ```sql
 REGEXP_INSTR(string, pattern)
 REGEXP_INSTR(string, pattern, position, occurrence, option, flags)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The string to search |
-| `pattern` | `STRING` | PCRE regular expression |
-| `position` | `INT` | Optional: start position (default: 1) |
-| `occurrence` | `INT` | Optional: which match to find (default: 1) |
-| `option` | `INT` | Optional: `0` = start of match, `1` = end of match + 1 |
-| `flags` | `STRING` | Optional: `i`, `m`, `s` |
+
+- **string** - String to search.
+- **pattern** - PCRE regular expression.
+- **position** - Optional 1-based start position. Defaults to `1`.
+- **occurrence** - Optional match occurrence to find. Defaults to `1`.
+- **option** - Optional return mode: `0` returns the start of the match, `1` returns the end of the match plus one.
+- **flags** - Optional modifier flags, such as `i`, `m`, or `s`.
 
 ## Returns
-`INT` — 1-based position of the match, or `0` if not found.
 
-## Example
+Returns the 1-based position of the match, or `0` when no match is found.
+
+## Null Behavior
+
+Returns `NULL` when `string` or `pattern` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT REGEXP_INSTR('hello world', 'o');       -- → 5  (first 'o')
-SELECT REGEXP_INSTR('hello world', 'o', 1, 2); -- → 8  (second 'o')
-SELECT REGEXP_INSTR(text, '\d+') AS num_pos FROM #data;
+SELECT REGEXP_INSTR('hello world', 'o') AS first_o_position;
 ```
 
-## See Also
-- [Standard Library — §3.7 Regex (PCRE)](../../../guides/getting-started.md#37-regex-pcre)
-- Related: [`REGEXP_SUBSTR`](regexp_substr.md), [`CHARINDEX`](../string/charindex.md)
+```sql
+SELECT REGEXP_INSTR(text, '\d+') AS number_position
+FROM #data;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REGEXP_SUBSTR](regexp_substr.md)
+- [CHARINDEX](../string/charindex.md)

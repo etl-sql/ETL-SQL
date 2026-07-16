@@ -108,6 +108,10 @@ Thin-page batches completed:
 - `docs/reference/functions/general/datetimeoffsetsfromparts.md`
 - `docs/reference/functions/general/decode.md`
 - `docs/reference/functions/general/regexp_matches.md`
+- `docs/reference/functions/general/regexp_instr.md`
+- `docs/reference/functions/general/regexp_like.md`
+- `docs/reference/functions/general/regexp_replace.md`
+- `docs/reference/functions/general/regexp_substr.md`
 - `docs/reference/functions/general/get_tags.md`
 - `docs/reference/functions/general/levenshtein.md`
 - `docs/reference/functions/general/ngram_tokens.md`
