@@ -1,31 +1,43 @@
 # DECODE
+
 Evaluates a value against a series of search terms, returning the corresponding result. Oracle-style CASE shorthand.
 
-**Category:** Logic
-
 ## Syntax
+
 ```sql
-DECODE(value, search1, result1, search2, result2, ..., [default])
+DECODE(value, search1, result1, search2, result2, ...)
+DECODE(value, search1, result1, search2, result2, ..., default)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value` | `ANY` | The expression to compare |
-| `searchN` | `ANY` | Comparison values (matched in order) |
-| `resultN` | `ANY` | Value returned when `value = searchN` |
-| `default` | `ANY` | Optional: value returned if no search matches |
+
+- **value** - Expression to compare.
+- **searchN** - Comparison values, evaluated in order.
+- **resultN** - Value returned when `value = searchN`.
+- **default** - Optional value returned when no search value matches.
 
 ## Returns
-Same type as `resultN` — the first matching result, or `default` (NULL if omitted).
 
-## Example
+Returns the first matching result, or `default` when supplied. If no match is found and `default` is omitted, returns `NULL`.
+
+## Null Behavior
+
+Returns `NULL` when no search value matches and `default` is omitted.
+
+## Examples
+
 ```sql
-SELECT DECODE(status, 'A', 'Active', 'I', 'Inactive', 'Unknown') FROM #customers;
-SELECT DECODE(MONTH(order_date), 12, 'Q4', 11, 'Q4', 10, 'Q4', 'Other') AS quarter
-  FROM #orders;
+SELECT DECODE(status, 'A', 'Active', 'I', 'Inactive', 'Unknown') AS status_label
+FROM #customers;
 ```
 
-## See Also
-- [Standard Library — §7. Conditional & Null-Handling Functions](../../../guides/getting-started.md#7-conditional--null-handling-functions)
-- Related: [`IIF`](../conversion/iif.md), [`COALESCE`](../conversion/coalesce.md)
+```sql
+SELECT DECODE(MONTH(order_date), 12, 'Q4', 11, 'Q4', 10, 'Q4', 'Other') AS quarter
+FROM #orders;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [IIF](../conversion/iif.md)
+- [COALESCE](../conversion/coalesce.md)

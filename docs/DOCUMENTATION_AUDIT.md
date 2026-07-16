@@ -106,6 +106,7 @@ Thin-page batches completed:
 - `docs/reference/functions/json-xml/json_object.md`
 - `docs/reference/functions/general/to_date.md`
 - `docs/reference/functions/general/datetimeoffsetsfromparts.md`
+- `docs/reference/functions/general/decode.md`
 - `docs/reference/functions/general/regexp_matches.md`
 - `docs/reference/functions/general/get_tags.md`
 - `docs/reference/functions/general/levenshtein.md`
@@ -123,6 +124,15 @@ Thin-page batches completed:
 - `docs/reference/functions/general/remote_file_exists.md`
 - `docs/reference/functions/json-xml/xmlforest.md`
 - `docs/reference/functions/json-xml/xmlvalue.md`
+- `docs/reference/functions/general/format.md`
+- `docs/reference/functions/general/generate_series.md`
+- `docs/reference/functions/general/greatest.md`
+- `docs/reference/functions/general/least.md`
+- `docs/reference/functions/general/median.md`
+- `docs/reference/functions/general/mod.md`
+- `docs/reference/functions/general/newid.md`
+- `docs/reference/functions/general/nvl.md`
+- `docs/reference/functions/general/nvl2.md`
 - `docs/reference/functions/datetime/current_timestamp.md`
 - `docs/reference/functions/datetime/minute.md`
 - `docs/reference/functions/datetime/now.md`
@@ -233,6 +243,8 @@ Thin-page batches completed:
 - `docs/reference/functions/general/timefromparts.md`
 - `docs/reference/functions/general/to_timestamp.md`
 - `docs/reference/functions/general/trunc.md`
+- `docs/reference/functions/general/truncate.md`
+- `docs/reference/functions/general/try_parse.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 

@@ -1,30 +1,40 @@
 # LEAST
+
 Returns the smallest value from a list of arguments.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 LEAST(value1, value2, ...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value1` | `ANY` | First comparable value |
-| `value2` | `ANY` | Second comparable value |
-| `...` | `ANY` | Additional values (variadic) |
+
+- **value1** - First comparable value.
+- **value2** - Second comparable value.
+- **...** - Additional comparable values.
 
 ## Returns
-Same type as inputs — the minimum value among all arguments. Returns `NULL` if any argument is `NULL`.
 
-## Example
+Returns the minimum value among all arguments.
+
+## Null Behavior
+
+Returns `NULL` when any argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT LEAST(3, 1, 4, 1, 5);              -- → 1
-SELECT LEAST(sale_price, list_price) AS effective_price FROM #items;
-SELECT LEAST(deadline, GETDATE() + 7) AS effective_deadline FROM #tasks;
+SELECT LEAST(3, 1, 4, 1, 5) AS smallest_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`GREATEST`](greatest.md), [`MIN`](../aggregate/min.md)
+```sql
+SELECT LEAST(sale_price, list_price) AS effective_price
+FROM #items;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [GREATEST](greatest.md)
+- [MIN](../aggregate/min.md)

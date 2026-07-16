@@ -1,29 +1,43 @@
 # TRY_PARSE
+
 Safely converts a culture-formatted string to a type, returning NULL on failure.
 
-**Category:** System
-
 ## Syntax
+
 ```sql
 TRY_PARSE(string, type)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The string to parse |
-| `type` | `TYPE` | The target data type |
+
+- **string** - String to parse.
+- **type** - Target data type.
 
 ## Returns
-The parsed value, or `NULL` if parsing fails. Never raises an exception.
 
-## Example
+Returns the parsed value, or `NULL` when parsing fails.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL` or parsing fails.
+
+## Remarks
+
+`TRY_PARSE` does not raise an exception for invalid input.
+
+## Examples
+
 ```sql
-SELECT TRY_PARSE('May 17, 2026', DATE);   -- → 2026-05-17
-SELECT TRY_PARSE('not a date', DATE);     -- → NULL
-SELECT TRY_PARSE(raw_date, DATE) AS clean_date FROM #imported;
+SELECT TRY_PARSE('May 17, 2026', DATE) AS parsed_date;
 ```
 
-## See Also
-- [Standard Library — §2. Type Conversion](../../../guides/getting-started.md#2-type-conversion)
-- Related: [`PARSE`](parse.md), [`TRY_CAST`](../conversion/try_cast.md)
+```sql
+SELECT TRY_PARSE(raw_date, DATE) AS clean_date
+FROM #imported;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [PARSE](parse.md)
+- [TRY_CAST](../conversion/try_cast.md)

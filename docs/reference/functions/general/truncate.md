@@ -1,29 +1,39 @@
 # TRUNCATE
+
 Truncates a number to a specified number of decimal places without rounding.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 TRUNCATE(number, decimals)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `DECIMAL` / `FLOAT` | The value to truncate |
-| `decimals` | `INT` | Number of decimal places to keep |
+
+- **number** - Numeric value to truncate.
+- **decimals** - Number of decimal places to keep.
 
 ## Returns
-`DECIMAL` — The value truncated toward zero (no rounding).
 
-## Example
+Returns the value truncated toward zero without rounding.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT TRUNCATE(3.999, 2);    -- → 3.99  (not 4.00)
-SELECT TRUNCATE(3.999, 0);    -- → 3.0
-SELECT TRUNCATE(-3.999, 1);   -- → -3.9
+SELECT TRUNCATE(3.999, 2) AS truncated_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`FLOOR`](../math/floor.md), [`ROUND`](../math/round.md)
+```sql
+SELECT TRUNCATE(amount, 2) AS truncated_amount
+FROM #payments;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [FLOOR](../math/floor.md)
+- [ROUND](../math/round.md)

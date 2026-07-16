@@ -1,30 +1,40 @@
 # GREATEST
+
 Returns the largest value from a list of arguments.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 GREATEST(value1, value2, ...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value1` | `ANY` | First comparable value |
-| `value2` | `ANY` | Second comparable value |
-| `...` | `ANY` | Additional values (variadic) |
+
+- **value1** - First comparable value.
+- **value2** - Second comparable value.
+- **...** - Additional comparable values.
 
 ## Returns
-Same type as inputs — the maximum value among all arguments. Returns `NULL` if any argument is `NULL`.
 
-## Example
+Returns the maximum value among all arguments.
+
+## Null Behavior
+
+Returns `NULL` when any argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT GREATEST(3, 1, 4, 1, 5);           -- → 5
-SELECT GREATEST(cost, minimum_charge) AS billed FROM #jobs;
-SELECT GREATEST(start_date, '2026-01-01') AS effective_start FROM #projects;
+SELECT GREATEST(3, 1, 4, 1, 5) AS largest_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`LEAST`](least.md), [`MAX`](../aggregate/max.md)
+```sql
+SELECT GREATEST(cost, minimum_charge) AS billed
+FROM #jobs;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LEAST](least.md)
+- [MAX](../aggregate/max.md)
