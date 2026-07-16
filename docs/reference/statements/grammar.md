@@ -183,7 +183,7 @@ Common uses: date window boundaries, numeric filter ranges, batch size limits.
 The canonical type for variables that hold an `ENC:...` value - a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. This type ensures the value is protected throughout its lifecycle in the engine.
 
 **Engine Behaviors:**
-- **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value (displaying `*******` or `ENC:*******`) unless `SET SHOW_SECRETS ON` is active.
+- **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value with a redacted placeholder unless `SET SHOW_SECRETS ON` is active.
 - **Auto-Decryption:** The engine automatically decrypts the `ENC:` value in two scenarios:
   1. When passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.).
   2. When evaluated in an expression that is assigned to a non-SENSITIVE target or used in a comparison.
@@ -206,11 +206,11 @@ PRINT 'The password is: ' + @pwd;
 
 Sets the `IsSensitive` runtime flag on the variable. Three effects activate immediately:
 
-1. **`SHOW VARIABLES` masking** - the value is replaced with `*******` in all variable listing output (unless `SET SHOW_SECRETS ON` is active).
+1. **`SHOW VARIABLES` masking** - the value is replaced with a redacted placeholder in all variable listing output (unless `SET SHOW_SECRETS ON` is active).
 2. **`ENC:` auto-decryption** - if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
 3. **Lint taint tracking** - if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
 
-`SENSITIVE` ensures that the value is protected in output - `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_SECRETS ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
+`SENSITIVE` ensures that the value is protected in output - `PRINT @sensitiveVar` will output a redacted placeholder unless `SET SHOW_SECRETS ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
 
 ```sql
 DECLARE @dbPass SENSITIVE = 'ENC:abc123==';  -- masked in SHOW VARIABLES, decrypted at connect time
@@ -430,7 +430,7 @@ SHOW PROFILE INTO #perf;
 ```
 
 ### 2.3 `SET SHOW_SECRETS`
-Controls display masking only. When `ON`, variables marked as `SENSITIVE` (see §4.1) may be revealed in plain text during `SHOW VARIABLES`, `PRINT`, logs, diagnostics, or exports. Default: `OFF`.
+Controls display masking only. When `ON`, variables marked as `SENSITIVE` (see section 4.1) may be revealed in plain text during `SHOW VARIABLES`, `PRINT`, logs, diagnostics, or exports. Default: `OFF`.
 
 `SET SHOW_PASSWORD` is accepted as an alias and behaves identically. `SHOW_SECRETS` is the preferred form.
 
@@ -1029,12 +1029,12 @@ EXPECT SCHEMA #staging FROM 'Specs/customer_spec.json' ON DRIFT WARN;
 ```
 
 The JSON specification file must contain a top-level `"schema"` array of objects:
-- `column_name` — (string, required) Name of the column.
-- `type_family` — (string, required) Expected data type family (e.g., `VARCHAR`, `INT`, `DECIMAL`).
-- `nullable` — (boolean, optional) Set to `true` to allow null values, or `false` (default) to enforce NOT NULL.
-- `max_length` — (number, optional) Maximum character length for string fields.
-- `precision` — (number, optional) Precision for numeric fields.
-- `scale` — (number, optional) Scale for numeric fields.
+- `column_name` - string, required. Name of the column.
+- `type_family` - string, required. Expected data type family, such as `VARCHAR`, `INT`, or `DECIMAL`.
+- `nullable` - boolean, optional. Set to `true` to allow null values, or `false` (default) to enforce NOT NULL.
+- `max_length` - number, optional. Maximum character length for string fields.
+- `precision` - number, optional. Precision for numeric fields.
+- `scale` - number, optional. Scale for numeric fields.
 
 **Named connection checks:**
 ```sql
@@ -1128,48 +1128,48 @@ FROM <source> [AS alias]
 
 ### 5.1.1 Modern SELECT conveniences
 
-**Star modifiers** — adjust a `*` projection inline (applied in the order `EXCLUDE` → `REPLACE` → `RENAME`):
+**Star modifiers** - adjust a `*` projection inline. Modifiers are applied in this order: `EXCLUDE`, then `REPLACE`, then `RENAME`.
 ```sql
 SELECT * EXCLUDE (password, internal_notes) FROM users;
 SELECT * REPLACE (UPPER(name) AS name) FROM users;      -- keep all columns, swap one expression
 SELECT * RENAME (id AS user_id) FROM users;
 ```
 
-**`COLUMNS(...)` selector** — select many columns at once in the projection: `COLUMNS(*)`, `COLUMNS(* EXCLUDE (a, b))`, or `COLUMNS('regex')` (case-insensitive name match):
+**`COLUMNS(...)` selector** - select many columns at once in the projection: `COLUMNS(*)`, `COLUMNS(* EXCLUDE (a, b))`, or `COLUMNS('regex')` (case-insensitive name match):
 ```sql
 SELECT COLUMNS('^amount') FROM #sales;     -- every column whose name starts with "amount"
 SELECT COLUMNS(* EXCLUDE (secret)) FROM #users;
 ```
 
-**`ORDER BY ALL`** — order by every output column, left to right (optionally `DESC`):
+**`ORDER BY ALL`** - order by every output column, left to right (optionally `DESC`):
 ```sql
 SELECT region, product, total FROM #sales ORDER BY ALL;
 SELECT region, product, total FROM #sales ORDER BY ALL DESC;
 ```
 
-**Lateral column aliases** — a SELECT item may reference an alias defined by an *earlier* item in the same list; the earlier expression is inlined. `ORDER BY` may also reference an output alias. A real source column always wins over an alias of the same name:
+**Lateral column aliases** - a SELECT item may reference an alias defined by an *earlier* item in the same list; the earlier expression is inlined. `ORDER BY` may also reference an output alias. A real source column always wins over an alias of the same name:
 ```sql
 SELECT a + b AS total, total * 2 AS doubled FROM #t;
 SELECT a, a * -1 AS neg FROM #t ORDER BY neg;
 ```
 
-**`count()` shorthand** — a zero-argument `COUNT()` is treated as `COUNT(*)`:
+**`count()` shorthand** - a zero-argument `COUNT()` is treated as `COUNT(*)`:
 ```sql
 SELECT count() FROM #orders;
 ```
 
-**Underscore digit separators** — `_` may separate digits in numeric literals:
+**Underscore digit separators** - `_` may separate digits in numeric literals:
 ```sql
 SELECT 1_000_000 AS one_million;
 ```
 
-**`USING SAMPLE`** — return a random subset. `PERCENT`/`%` samples each row with the given probability (Bernoulli); `ROWS` returns a fixed-size random sample (reservoir). `REPEATABLE (seed)` makes it deterministic:
+**`USING SAMPLE`** - return a random subset. `PERCENT`/`%` samples each row with the given probability (Bernoulli); `ROWS` returns a fixed-size random sample (reservoir). `REPEATABLE (seed)` makes it deterministic:
 ```sql
 SELECT * FROM #events USING SAMPLE 10 PERCENT;
 SELECT * FROM #events USING SAMPLE 1000 ROWS REPEATABLE (42);
 ```
 
-**Trailing commas** — an optional trailing comma is allowed in `SELECT`, `GROUP BY`, and `ORDER BY` lists (and function arguments):
+**Trailing commas** - an optional trailing comma is allowed in `SELECT`, `GROUP BY`, and `ORDER BY` lists (and function arguments):
 ```sql
 SELECT region, total,
 FROM #sales
@@ -1258,7 +1258,7 @@ FROM   <left_table> [AS alias]
 | :--- | :--- | :--- |
 | `ON <expr> > <threshold>` | Yes | Any expression using `SIMILARITY()`, `LEVENSHTEIN()`, or arithmetic over them. The threshold filters matches. |
 | `KEEP BEST <n>` | No | Keep at most N right-side matches per left row, ranked by score descending. Omitting this returns all matches above threshold (fan-out possible). |
-| `__score` | Automatic | The similarity score of the winning match is injected into the result. Selecting it explicitly is optional — it is always available. |
+| `__score` | Automatic | The similarity score of the winning match is injected into the result. Selecting it explicitly is optional; it is always available. |
 
 **Semantics**
 
@@ -1309,7 +1309,7 @@ FUZZY JOIN #reference b
 | 10 k–100 k | < 500 k | Acceptable. Blocking is essential at this scale. |
 | > 100 k | > 500 k | May be slow. Consider dedicated record-linkage tooling (e.g. Splink). |
 
-> See [Standard Library](../functions/standard-library.md) for `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and `NGRAMS/NGRAM_TOKENS` — the building blocks used in `FUZZY JOIN` expressions.
+> See [Standard Library](../functions/standard-library.md) for `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and `NGRAMS/NGRAM_TOKENS`, the building blocks used in `FUZZY JOIN` expressions.
 
 ### 5.6 `CROSS APPLY` / `OUTER APPLY` (and `LATERAL`)
 ```sql
@@ -1322,7 +1322,7 @@ FROM Orders AS o
 OUTER APPLY (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
 ```
 
-`LATERAL` is the ANSI/DuckDB/PostgreSQL spelling of the same operator — the right-hand subquery is correlated and may reference the left side:
+`LATERAL` is the ANSI/DuckDB/PostgreSQL spelling of the same operator. The right-hand subquery is correlated and may reference the left side:
 
 | `LATERAL` form | Equivalent |
 | :--- | :--- |
@@ -1359,7 +1359,7 @@ ASOF JOIN quotes q
 
 - The `ON` clause must contain **exactly one** inequality (`<`, `<=`, `>`, `>=`) plus zero or more equality predicates.
 - Direction follows the operator: `>=`/`>` pick the **largest** qualifying right value (most recent at/before); `<=`/`<` pick the **smallest** (nearest at/after).
-- The right side is buffered; matching is currently O(left × right). Use equality keys to narrow candidates on large inputs.
+- The right side is buffered; matching is currently O(left * right). Use equality keys to narrow candidates on large inputs.
 
 `CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `UNNEST`/`FLATTEN` (expand a list/array into rows), `NGRAMS`, and `NGRAM_TOKENS`:
 
@@ -1369,7 +1369,7 @@ SELECT s.id, t.Value AS tag
 FROM #sources s
 CROSS APPLY STRING_SPLIT(s.tags, ',') t;
 
--- Build a trigram blocking index for fuzzy matching (see §16.5 of Standard_Library.md)
+-- Build a trigram blocking index for fuzzy matching.
 SELECT gram, r.id AS ref_id
 INTO   #ref_index
 FROM   #reference r
@@ -1392,7 +1392,7 @@ GROUP BY GROUPING SETS((Region, Product), (Region), ());
 ```
 
 #### `GROUP BY ALL`
-Groups by **every** SELECT expression that does not contain an aggregate (or window function) — no need to restate the non-aggregated columns:
+Groups by **every** SELECT expression that does not contain an aggregate or window function, so you do not need to restate the non-aggregated columns:
 ```sql
 -- Equivalent to GROUP BY Region, Product
 SELECT Region, Product, SUM(Amount) AS Total
@@ -1421,7 +1421,7 @@ UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 ```
 
 #### DuckDB-style statement form
-A cleaner statement syntax is available alongside the SQL-standard clause above. It supports **dynamic value discovery** (omit `IN` and the distinct values become columns automatically), **multiple `ON` columns**, **multiple aggregates**, and the **`COLUMNS(* EXCLUDE …)`** selector for UNPIVOT.
+A cleaner statement syntax is available alongside the SQL-standard clause above. It supports **dynamic value discovery** (omit `IN` and the distinct values become columns automatically), **multiple `ON` columns**, **multiple aggregates**, and the **`COLUMNS(* EXCLUDE ...)`** selector for UNPIVOT.
 
 ```sql
 -- PIVOT <source> ON <cols> [IN (<values>)] USING <agg>(<col>) [AS <name>] [, ...] [GROUP BY <cols>]
@@ -1821,7 +1821,7 @@ TRUNCATE TABLE staging.Daily_Import;
 
 ### 10.1 `CREATE TABLE`
 
-Column definitions support inline `/* @tag: value; */` metadata comments placed after the data type (and after the column constraints). These tags are treated identically to `CREATE TAG` — they are seeded into the lineage tracker when the statement executes.
+Column definitions support inline `/* @tag: value; */` metadata comments placed after the data type (and after the column constraints). These tags are treated identically to `CREATE TAG` and are seeded into the lineage tracker when the statement executes.
 
 ```sql
 CREATE TABLE #OrderItems (
@@ -1979,7 +1979,7 @@ RUN SCRIPT 'calculate_totals.etlsql' WITH(@category = 'Finance', @total = @count
 PRINT 'Total: ' + CAST(@count AS STRING);
 ```
 
-### 11.4 `GO` — Batch Separator
+### 11.4 `GO` - Batch Separator
 The `GO` keyword is a batch separator. It is not an ETL-SQL statement but a signal to the parser to split the script into discrete execution batches. Each batch is compiled and executed completely before the next one begins.
 
 - **Scope**: Variables declared in a previous batch are available in subsequent batches.
@@ -2098,12 +2098,12 @@ ROLLBACK;            -- or ROLLBACK TRAN
 `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `ILIKE`, `~`, `~*`, `BETWEEN`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`
 
 ### 14.4 Null-Coalescing Shorthand `??`
-`a ?? b [?? c ...]` is ETL-SQL dialect shorthand that compiles to `COALESCE(a, b, c)` at parse time —
+`a ?? b [?? c ...]` is ETL-SQL dialect shorthand that compiles to `COALESCE(a, b, c)` at parse time.
 the engine, lineage tracking, and SQL pushdown all see a plain `COALESCE`, so scripts using `??` push
 down to every connector unchanged. `CASE`/`COALESCE` remain the portable standard to teach; `??` is a
 convenience.
 
-Precedence: binds tighter than comparisons and looser than arithmetic —
+Precedence: binds tighter than comparisons and looser than arithmetic.
 `amount ?? 0 > 5` means `(amount ?? 0) > 5`, and `a + b ?? 0` means `(a + b) ?? 0`.
 
 ```sql
@@ -2114,7 +2114,7 @@ SELECT nickname ?? legal_name ?? '(unknown)' AS display_name FROM #people;
 ### 14.5 Arrow Conditional `=>`
 `cond => value : else` is ETL-SQL dialect shorthand that compiles to
 `CASE WHEN cond THEN value ELSE else END` at parse time. Chains flatten into **one** CASE with
-multiple WHEN arms — evaluated top to bottom, exactly like CASE (short-circuit; universal SQL on
+multiple WHEN arms, evaluated top to bottom, exactly like CASE (short-circuit; universal SQL on
 pushdown):
 
 ```sql
@@ -2123,7 +2123,7 @@ SELECT score >= 90 => 'A' : score >= 80 => 'B' : 'F' AS grade FROM #tests;
 ```
 
 Rules:
-- The final `: else` branch is **required** — a dangling `cond => value` is a syntax error, never an
+- The final `: else` branch is **required**. A dangling `cond => value` is a syntax error, never an
   implicit NULL.
 - Lowest precedence (below `OR`): `a OR b => x : y` means `(a OR b) => x : y`.
 - A `NULL`/UNKNOWN condition falls through to the next arm/else (standard CASE behavior).
@@ -2132,9 +2132,9 @@ Rules:
 ### 14.6 JSON Access Operators `->` / `->>`
 PostgreSQL/MySQL/SQLite-style JSON access, compiled at parse time to the `JSON_GET` /
 `JSON_GET_TEXT` functions:
-- `json -> key` — object field (string key) or array element (integer index; negative counts from
-  the end) **as JSON** — strings keep their quotes, so steps chain.
-- `json ->> key` — the same access **as text** — strings unquoted; objects/arrays as raw JSON text.
+- `json -> key` accesses an object field (string key) or array element (integer index; negative counts from
+  the end) **as JSON**. Strings keep their quotes, so steps chain.
+- `json ->> key` performs the same access **as text**. Strings are unquoted; objects/arrays are raw JSON text.
 
 Left-associative and binding tighter than arithmetic. Null-propagating: a missing key, out-of-range
 index, or invalid JSON yields `NULL`, never an error.
@@ -2156,8 +2156,8 @@ SELECT * FROM #data WHERE id NOT BETWEEN @min AND @max;
 #### `IS [NOT] DISTINCT FROM`
 Null-safe comparison that treats `NULL` as an ordinary comparable value rather than producing `UNKNOWN`. Unlike `=`/`<>`, it never yields `NULL`.
 
-- `a IS DISTINCT FROM b` — `TRUE` when the operands differ, **including** when exactly one is `NULL`; `FALSE` when they are equal or **both** `NULL`.
-- `a IS NOT DISTINCT FROM b` — the logical negation: a null-safe equality (`NULL IS NOT DISTINCT FROM NULL` is `TRUE`).
+- `a IS DISTINCT FROM b` returns `TRUE` when the operands differ, **including** when exactly one is `NULL`; `FALSE` when they are equal or **both** `NULL`.
+- `a IS NOT DISTINCT FROM b` is the logical negation: a null-safe equality (`NULL IS NOT DISTINCT FROM NULL` is `TRUE`).
 
 ```sql
 -- Find rows whose value changed, counting NULL <-> value transitions as changes
@@ -2214,7 +2214,7 @@ SELECT SYSDATE AT TIME ZONE @tz;
 
 ## 15. Job Scheduling
 
-### 15.1 `CREATE JOB` — Core Orchestrator
+### 15.1 `CREATE JOB` - Core Orchestrator
 Registers a job with the Core Orchestrator service. Job names must be unquoted identifiers.
 
 ```sql
@@ -2276,7 +2276,7 @@ TO 'C:\Recovered\finance-load';
 **Options (WITH clause):** `MAX_RETRIES` (default 0) and `RETRY_DELAY` or `RETRY_DELAY_SECONDS` (default 30 seconds). Both values must be integers.
 
 > [!NOTE]
-> Standard `CREATE JOB` statements do not support cron strings or the `AT <alias>` clause. Cron expressions are only supported in Portal Refresh Jobs (see §15.3).
+> Standard `CREATE JOB` statements do not support cron strings or the `AT <alias>` clause. Cron expressions are only supported in Portal Refresh Jobs (see section 15.3).
 
 ### 15.2 Remote Orchestrator Job Creation
 To create a job on a remote orchestrator, wrap the `CREATE JOB` statement inside an `EXECUTE <alias> BEGIN ... END` block. The alias must be a connection configured with `AS ORCHESTRATOR()`.
