@@ -49,11 +49,10 @@ public sealed class ArchitectureBoundaryTests
         ["ReportBuilder.CLI"] = 7,
     };
 
-    // Upward project references that exist today. Each is an open layering-debt item in TODO.md
-    // ("Correct the Engine dependency direction"). New upward edges are not permitted.
+    // Upward project references that exist today. Each is an open layering-debt item in TODO.md.
+    // New upward edges are not permitted.
     private static readonly HashSet<(string From, string To)> KnownUpwardReferences =
     [
-        ("Engine", "Reporting"),
     ];
 
     // Packages a given layer must not depend on. Core is meant to be a contracts/domain layer (no heavy

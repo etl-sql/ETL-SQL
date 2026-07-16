@@ -8,7 +8,6 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Governance;
-using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>
@@ -63,7 +62,7 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
 
         context.IncrementOperationCount(OperationType.FileSystem, filePath);
 
-        var themeJson = ThemeBuilder.BuildEChartsTheme(stmt.Properties);
+        var themeJson = ReportingThemeBuilder.BuildEChartsTheme(stmt.Properties);
         var options = new JsonSerializerOptions { WriteIndented = true };
         File.WriteAllText(filePath, themeJson.ToJsonString(options));
         _logger.Debug("Persisted theme '{ThemeName}' to {Path}", stmt.Name, filePath);
@@ -82,6 +81,5 @@ public class CreateThemeStatementHandler(ILogger logger) : IStatementHandler
     /// All other keys are passed through as-is to the root of the theme object.
     /// </summary>
     public static JsonObject BuildEChartsTheme(Dictionary<string, string> props)
-        => ThemeBuilder.BuildEChartsTheme(props);
+        => ReportingThemeBuilder.BuildEChartsTheme(props);
 }
-
