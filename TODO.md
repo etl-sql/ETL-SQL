@@ -139,6 +139,6 @@ work by priority.
 - [ ] **P2 — Thin Portal controllers.** Move parsing, AST/DTO conversion, lint orchestration, schema
       registration, and save workflows into application services; keep controllers focused on
       authorization, transport mapping, and HTTP results.
-- [ ] **P1 — Enforce source boundaries in tests.** Add an architecture test for allowed project
+- [x] **P1 — Enforce source boundaries in tests.** Add an architecture test for allowed project
       references and banned namespaces/packages so the documented layering rules fail during CI when
       violated.
