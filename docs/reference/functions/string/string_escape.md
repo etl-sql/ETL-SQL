@@ -1,36 +1,44 @@
 # STRING_ESCAPE
+
 Escapes special characters in a string for safe embedding in a target format.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 STRING_ESCAPE(text, type)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `text` | `STRING` | The string to escape |
-| `type` | `STRING` | The target format — see Accepted Values |
+
+- **text** - String to escape.
+- **type** - Target format. See [accepted values](#accepted-values).
 
 ## Returns
-`STRING` — The input string with special characters escaped for the specified format.
+
+Returns `text` with special characters escaped for the specified format.
+
+## Null Behavior
+
+Returns `NULL` when `text` or `type` is `NULL`.
 
 ## Accepted Values
-| `type` | Description |
-| :--- | :--- |
-| `'json'` | Escapes `"`, `\`, and control characters (U+0000–U+001F) for embedding in JSON strings |
 
-## Example
+- **`'json'`** - Escapes quotes, backslashes, and control characters from `U+0000` through `U+001F` for embedding in JSON strings.
+
+## Examples
+
 ```sql
-SELECT STRING_ESCAPE('Line1\nLine2', 'json');  -- → 'Line1\\nLine2'
-SELECT STRING_ESCAPE(notes, 'json') AS safe_notes FROM #records;
-
--- Build a JSON string manually
-SELECT '{"message": "' + STRING_ESCAPE(body, 'json') + '"}' FROM #messages;
+SELECT STRING_ESCAPE(notes, 'json') AS safe_notes
+FROM #records;
 ```
 
-## See Also
-- [Standard Library — §3.6 Translation & Escaping](../../../guides/getting-started.md#36-translation--escaping)
-- Related: [`QUOTENAME`](quotename.md), [`JSON_MODIFY`](../json-xml/json_modify.md)
+```sql
+SELECT '{"message": "' + STRING_ESCAPE(body, 'json') + '"}' AS message_json
+FROM #messages;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [QUOTENAME](quotename.md)
+- [JSON_MODIFY](../json-xml/json_modify.md)

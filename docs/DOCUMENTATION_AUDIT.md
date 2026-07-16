@@ -169,6 +169,7 @@ Thin-page batches completed:
 - `docs/reference/functions/string/patindex.md`
 - `docs/reference/functions/string/position.md`
 - `docs/reference/functions/string/repeat.md`
+- `docs/reference/functions/string/replace.md`
 - `docs/reference/functions/string/replicate.md`
 - `docs/reference/functions/string/reverse.md`
 - `docs/reference/functions/string/rpad.md`
@@ -176,6 +177,9 @@ Thin-page batches completed:
 - `docs/reference/functions/string/space.md`
 - `docs/reference/functions/string/split_part.md`
 - `docs/reference/functions/string/string_split.md`
+- `docs/reference/functions/string/string_escape.md`
+- `docs/reference/functions/string/stuff.md`
+- `docs/reference/functions/string/translate.md`
 - `docs/reference/functions/string/unicode.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`

@@ -1,38 +1,48 @@
 # TRANSLATE
+
 Replaces individual characters in a string using a character-to-character mapping.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 TRANSLATE(string, find_chars, replace_chars)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The source string |
-| `find_chars` | `STRING` | Each character in this string is searched for |
-| `replace_chars` | `STRING` | Replacement character at the same position in this string |
+
+- **string** - Source string.
+- **find_chars** - Characters to search for.
+- **replace_chars** - Replacement characters matched by position to `find_chars`.
 
 ## Returns
-`STRING` — The source string with each character from `find_chars` replaced by its positional counterpart in `replace_chars`.
+
+Returns `string` with each character from `find_chars` replaced by the character at the same position in `replace_chars`.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
 
 ## Remarks
-- Operates character-by-character (not substring-by-substring — use [`REPLACE`](replace.md) for substrings).
+
+- Operates character by character. Use [`REPLACE`](replace.md) for substring replacement.
 - `find_chars` and `replace_chars` must be the same length.
 
-## Example
-```sql
-SELECT TRANSLATE('hello', 'aeiou', '12345');   -- → 'h2ll4'
-SELECT TRANSLATE(phone, '()-. ', '');           -- strips formatting  (requires same length; use REPLACE for removal)
+## Examples
 
--- Rotate13
-SELECT TRANSLATE(text,
-    'abcdefghijklmnopqrstuvwxyz',
-    'nopqrstuvwxyzabcdefghijklm') AS rot13 FROM #messages;
+```sql
+SELECT TRANSLATE('hello', 'aeiou', '12345') AS translated_text;
 ```
 
-## See Also
-- [Standard Library — §3.6 Translation & Escaping](../../../guides/getting-started.md#36-translation--escaping)
-- Related: [`REPLACE`](replace.md)
+```sql
+SELECT TRANSLATE(
+  text,
+  'abcdefghijklmnopqrstuvwxyz',
+  'nopqrstuvwxyzabcdefghijklm'
+) AS rot13
+FROM #messages;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REPLACE](replace.md)
