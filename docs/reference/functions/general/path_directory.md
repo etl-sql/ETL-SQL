@@ -1,26 +1,39 @@
 # PATH_DIRECTORY
+
 Extracts the directory information portion of a path.
 
-**Category:** File / Path
-
 ## Syntax
+
 ```sql
 PATH_DIRECTORY(path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `path` | `VARCHAR` / `STRING` | The file or directory path |
+
+- **path** - File or directory path.
 
 ## Returns
-`STRING` — The directory path, or `NULL` if input is `NULL` or contains no directory information.
 
-## Example
+Returns the directory path.
+
+## Null Behavior
+
+Returns `NULL` when `path` is `NULL` or contains no directory information.
+
+## Examples
+
 ```sql
-SELECT PATH_DIRECTORY('C:\Data\SubDir\input.csv');  -- → 'C:\Data\SubDir'
+SELECT PATH_DIRECTORY('C:\Data\SubDir\input.csv') AS directory_path;
 ```
 
-## See Also
-- [Standard Library — §8.2 Path Operations](../../../guides/getting-started.md#82-path-operations)
-- Related: [`PATH_COMBINE`](path_combine.md), [`PATH_FILENAME`](path_filename.md), [`PATH_EXTENSION`](path_extension.md)
+```sql
+SELECT PATH_DIRECTORY(file_path) AS parent_directory
+FROM #files;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [PATH_COMBINE](path_combine.md)
+- [PATH_FILENAME](path_filename.md)
+- [PATH_EXTENSION](path_extension.md)

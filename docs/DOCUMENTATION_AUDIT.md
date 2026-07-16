@@ -144,11 +144,17 @@ Thin-page batches completed:
 - `docs/reference/functions/general/bitshiftleft.md`
 - `docs/reference/functions/general/bitshiftright.md`
 - `docs/reference/functions/general/bitxor.md`
+- `docs/reference/functions/general/file_hash.md`
+- `docs/reference/functions/general/file_list.md`
 - `docs/reference/functions/general/file_modified.md`
 - `docs/reference/functions/general/file_size.md`
+- `docs/reference/functions/general/path_combine.md`
+- `docs/reference/functions/general/path_directory.md`
+- `docs/reference/functions/general/path_extension.md`
 - `docs/reference/functions/general/path_filename.md`
 - `docs/reference/functions/general/random_decimal.md`
 - `docs/reference/functions/general/random_int.md`
+- `docs/reference/functions/general/remote_file_list.md`
 - `docs/reference/functions/general/initcap.md`
 - `docs/reference/functions/general/remove_hidden_characters.md`
 - `docs/reference/functions/general/remove_html_characters.md`

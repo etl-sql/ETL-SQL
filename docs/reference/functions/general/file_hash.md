@@ -1,27 +1,45 @@
 # FILE_HASH
+
 Computes the cryptographic checksum (hash) of a local file.
 
-**Category:** File / Metadata
-
 ## Syntax
+
 ```sql
-FILE_HASH(path [, algorithm])
+FILE_HASH(path)
+FILE_HASH(path, algorithm)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `path` | `VARCHAR` / `STRING` | The local path of the file |
-| `algorithm` | `VARCHAR` / `STRING` | (Optional) The hash algorithm to use: `MD5`, `SHA1`, `SHA256`, or `SHA512`. Defaults to `SHA256`. |
+
+- **path** - Local file path.
+- **algorithm** - Optional hash algorithm: `MD5`, `SHA1`, `SHA256`, or `SHA512`. Defaults to `SHA256`.
 
 ## Returns
-`STRING` — The computed hexadecimal hash string in lowercase. Returns `NULL` if the file does not exist, or if path is `NULL`.
 
-## Example
+Returns the computed hexadecimal hash string in lowercase.
+
+## Null Behavior
+
+Returns `NULL` when `path` is `NULL` or the file does not exist.
+
+## Remarks
+
+Local file access must pass the engine path-resolution guardrails.
+
+## Examples
+
 ```sql
-SELECT FILE_HASH('C:\Data\input.csv', 'SHA256');  -- → 'a3ef...'
+SELECT FILE_HASH('C:\Data\input.csv', 'SHA256') AS file_sha256;
 ```
 
-## See Also
-- [Standard Library — §8.1 File Operations](../../../guides/getting-started.md#81-file-operations)
-- Related: [`FILE_SIZE`](file_size.md), [`FILE_MODIFIED`](file_modified.md), [`HASHBYTES`](../cryptography/hashbytes.md)
+```sql
+SELECT file_path, FILE_HASH(file_path) AS content_hash
+FROM #incoming_files;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [FILE_SIZE](file_size.md)
+- [FILE_MODIFIED](file_modified.md)
+- [HASHBYTES](../cryptography/hashbytes.md)

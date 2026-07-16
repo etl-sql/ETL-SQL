@@ -1,24 +1,29 @@
 # REMOTE_FILE_LIST
+
 Returns a table of files on a remote connection (SFTP, FTP, or Azure Blob).
 
-**Category:** File
-
 ## Syntax
+
 ```sql
 REMOTE_FILE_LIST(connection_name)
 REMOTE_FILE_LIST(connection_name, path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `connection_name` | `IDENTIFIER` | Name of an SFTP, FTP, or AZURE_BLOB connection |
-| `path` | `STRING` | Optional: remote directory path to list (default: connection root) |
+
+- **connection_name** - Name of an SFTP, FTP, or Azure Blob connection.
+- **path** - Optional remote directory path to list. Defaults to the connection root.
 
 ## Returns
-Table with columns: `NAME` (STRING), `FULLPATH` (STRING), `SIZE` (DECIMAL bytes), `LASTMODIFIED` (DATETIME), `ISDIRECTORY` (BIT).
 
-## Example
+Returns a table with these columns: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, and `ISDIRECTORY`.
+
+## Null Behavior
+
+Returns no rows when `path` is `NULL` or the remote directory cannot be listed.
+
+## Examples
+
 ```sql
 CREATE CONNECTION sftp_src AS SFTP(HOST='files.partner.com', USER='etl', KEYFILE='C:\keys\sftp.pem');
 
@@ -28,7 +33,8 @@ FROM REMOTE_FILE_LIST(sftp_src, '/var/ftp/incoming/')
 WHERE NAME LIKE '%.csv' AND LASTMODIFIED > DATEADD(DAY, -1, GETDATE());
 ```
 
-## See Also
-- [Standard Library — §14. File System Functions](../../../guides/getting-started.md#14-file-system-functions)
-- [Data Connectors Reference](../../../guides/administration.md)
-- Related: [`FILE_LIST`](file_list.md)
+## References
+
+- [Standard Library](../standard-library.md)
+- [Administration Guide](../../../guides/administration.md)
+- [FILE_LIST](file_list.md)

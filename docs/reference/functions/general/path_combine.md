@@ -1,28 +1,41 @@
 # PATH_COMBINE
+
 Combines multiple path segments into a single file/directory path securely.
 
-**Category:** File / Path
-
 ## Syntax
+
 ```sql
-PATH_COMBINE(p1, p2 [, ...])
+PATH_COMBINE(path1, path2, ...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `p1` | `VARCHAR` / `STRING` | The first path segment |
-| `p2` | `VARCHAR` / `STRING` | The second path segment |
-| `...` | `VARCHAR` / `STRING` | Additional path segments |
+
+- **path1** - First path segment.
+- **path2** - Second path segment.
+- **...** - Additional path segments.
 
 ## Returns
-`STRING` — The combined path string. Skips `NULL` segments. Returns `NULL` if all segments are `NULL`.
 
-## Example
+Returns the combined path string.
+
+## Null Behavior
+
+Skips `NULL` segments. Returns `NULL` when all segments are `NULL`.
+
+## Examples
+
 ```sql
-SELECT PATH_COMBINE('C:\Data', 'SubDir', 'file.txt'); -- → 'C:\Data\SubDir\file.txt'
+SELECT PATH_COMBINE('C:\Data', 'SubDir', 'file.txt') AS full_path;
 ```
 
-## See Also
-- [Standard Library — §8.2 Path Operations](../../../guides/getting-started.md#82-path-operations)
-- Related: [`PATH_FILENAME`](path_filename.md), [`PATH_EXTENSION`](path_extension.md), [`PATH_DIRECTORY`](path_directory.md)
+```sql
+SELECT PATH_COMBINE(root_path, file_name) AS output_path
+FROM #exports;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [PATH_FILENAME](path_filename.md)
+- [PATH_EXTENSION](path_extension.md)
+- [PATH_DIRECTORY](path_directory.md)

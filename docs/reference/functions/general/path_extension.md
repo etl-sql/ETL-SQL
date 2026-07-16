@@ -1,26 +1,40 @@
 # PATH_EXTENSION
+
 Extracts the extension portion of a path (including the period `.`).
 
-**Category:** File / Path
-
 ## Syntax
+
 ```sql
 PATH_EXTENSION(path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `path` | `VARCHAR` / `STRING` | The file path |
+
+- **path** - File path.
 
 ## Returns
-`STRING` — The extension (e.g. `.csv`), or an empty string if there is no extension. Returns `NULL` if input is `NULL`.
 
-## Example
+Returns the extension, including the period. Returns an empty string when there is no extension.
+
+## Null Behavior
+
+Returns `NULL` when `path` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT PATH_EXTENSION('C:\Data\input.csv');  -- → '.csv'
+SELECT PATH_EXTENSION('C:\Data\input.csv') AS extension;
 ```
 
-## See Also
-- [Standard Library — §8.2 Path Operations](../../../guides/getting-started.md#82-path-operations)
-- Related: [`PATH_COMBINE`](path_combine.md), [`PATH_FILENAME`](path_filename.md), [`PATH_DIRECTORY`](path_directory.md)
+```sql
+SELECT *
+FROM #files
+WHERE PATH_EXTENSION(file_path) = '.csv';
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [PATH_COMBINE](path_combine.md)
+- [PATH_FILENAME](path_filename.md)
+- [PATH_DIRECTORY](path_directory.md)
