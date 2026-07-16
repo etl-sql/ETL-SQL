@@ -1,30 +1,39 @@
 # GET_TAG_VALUE
+
 Retrieves the metadata tag value assigned to a specific table or column.
 
-**Category:** Lineage & Metadata
-
 ## Syntax
-`sql
+
+```sql
 GET_TAG_VALUE(table_name, column_name, tag_name)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| 	able_name | VARCHAR / STRING | Name of the table |
-| column_name | VARCHAR / STRING | Name of the column |
-| 	ag_name | VARCHAR / STRING | Name of the metadata tag to retrieve |
+
+- **table_name** - Table or dataset name to inspect.
+- **column_name** - Column name to inspect.
+- **tag_name** - Metadata tag name to retrieve.
 
 ## Returns
-STRING â€” The tag value, or NULL if the tag does not exist.
 
-## Example
-`sql
-SELECT GET_TAG_VALUE('Customers', 'SSN', 'PII_LEVEL'); -- â†’ 'High'
-`
+Returns the tag value as a `STRING`.
 
-## See Also
-- Related: [GET_TAGS](get_tags.md), [HAS_TAG](has_tag.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when the requested tag does not exist.
+
+## Examples
+
+```sql
+SELECT GET_TAG_VALUE('Customers', 'SSN', 'PII_LEVEL') AS pii_level;
+```
+
+```sql
+SELECT GET_TAG_VALUE('Orders', 'OrderTotal', 'CLASSIFICATION') AS classification;
+```
+
+## References
+
+- [Lineage](../../statements/session-control/lineage.md)
+- [GET_TAGS](get_tags.md)
+- [HAS_TAG](has_tag.md)

@@ -1,20 +1,46 @@
 # STDDEV
-Returns the sample standard deviation of a set of values. Alias for STDEV.
 
-**Category:** Aggregates
+Returns the sample standard deviation of a numeric expression. `STDDEV` is an alias for [`STDEV`](../aggregate/stdev.md).
 
 ## Syntax
-`sql
+
+```sql
 STDDEV(expression)
-`
+```
 
-## Example
-`sql
-SELECT STDDEV(Sales) FROM MonthlySales;
-`
+## Parameters
 
-## See Also
-- Related: [STDEV](../aggregate/stdev.md), [STDEVP](../aggregate/stdevp.md)
+- **expression** - Numeric expression to evaluate.
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+## Returns
+
+Returns a numeric standard deviation value using sample semantics.
+
+## Null Behavior
+
+`NULL` values are ignored. If there are not enough non-null rows to calculate sample standard deviation, the result is `NULL`.
+
+## Remarks
+
+- Use `STDDEV` when writing SQL-standard or Postgres-style scripts.
+- Use [`STDEV`](../aggregate/stdev.md) for the T-SQL-style alias.
+- Use [`STDEVP`](../aggregate/stdevp.md) for population standard deviation.
+
+## Examples
+
+```sql
+SELECT STDDEV(amount) AS sample_stddev
+FROM #sales;
+```
+
+```sql
+SELECT region, STDDEV(order_total) AS order_stddev
+FROM #orders
+GROUP BY region;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [STDEV](../aggregate/stdev.md)
+- [STDEVP](../aggregate/stdevp.md)

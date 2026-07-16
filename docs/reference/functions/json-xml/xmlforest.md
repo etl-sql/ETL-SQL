@@ -1,23 +1,39 @@
 # XMLFOREST
+
 Constructs an XML forest (a sequence of XML elements) from the provided arguments.
 
-**Category:** XML
-
 ## Syntax
-`sql
+
+```sql
 XMLFOREST(value1 AS name1, value2 AS name2, ...)
-`
+```
+
+## Parameters
+
+- **valueN** - Value to serialize into an XML element.
+- **nameN** - Element name for the corresponding value.
 
 ## Returns
-STRING / XML â€” The concatenated XML elements. Returns NULL if all inputs are NULL.
 
-## Example
-`sql
-SELECT XMLFOREST('John' AS FirstName, 'Doe' AS LastName); -- â†’ '<FirstName>John</FirstName><LastName>Doe</LastName>'
-`
+Returns the concatenated XML elements as XML text.
 
-## See Also
-- Related: [XMLELEMENT](xmlelement.md), [XMLATTRIBUTES](xmlattributes.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when all inputs are `NULL`.
+
+## Examples
+
+```sql
+SELECT XMLFOREST('John' AS FirstName, 'Doe' AS LastName) AS name_xml;
+```
+
+```sql
+SELECT XMLFOREST(customer_id AS Id, customer_name AS Name) AS customer_xml
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [XMLELEMENT](xmlelement.md)
+- [XMLATTRIBUTES](xmlattributes.md)

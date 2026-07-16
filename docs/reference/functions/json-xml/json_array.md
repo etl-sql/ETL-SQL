@@ -1,23 +1,38 @@
 # JSON_ARRAY
+
 Constructs a JSON array string from a list of values.
 
-**Category:** JSON
-
 ## Syntax
-`sql
+
+```sql
 JSON_ARRAY(value1, value2, ...)
-`
+```
+
+## Parameters
+
+- **value1, value2, ...** - Values to include in the JSON array.
 
 ## Returns
-STRING â€” The formatted JSON array. Returns NULL if the input is NULL.
 
-## Example
-`sql
-SELECT JSON_ARRAY(10, 'sales', true); -- â†’ '[10, "sales", true]'
-`
+Returns a `STRING` containing a JSON array.
 
-## See Also
-- Related: [JSON_OBJECT](json_object.md), [JSON_VALUE](../json-xml/json_value.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+`NULL` arguments are included as JSON `null` values.
+
+## Examples
+
+```sql
+SELECT JSON_ARRAY(10, 'sales', TRUE) AS payload;
+```
+
+```sql
+SELECT JSON_ARRAY(customer_id, email, status) AS customer_tuple
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [JSON_OBJECT](json_object.md)
+- [JSON_VALUE](json_value.md)

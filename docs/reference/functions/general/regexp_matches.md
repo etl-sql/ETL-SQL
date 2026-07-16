@@ -1,23 +1,41 @@
 # REGEXP_MATCHES
-Table-valued function that returns a table of all regex matches in a string.
 
-**Category:** Regex
+Returns all regular expression matches in a string as rows.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM REGEXP_MATCHES(string, pattern)
-`
+```
+
+## Parameters
+
+- **string** - Source string to search.
+- **pattern** - Regular expression pattern.
 
 ## Returns
-TABLE â€” A table of matching substring values.
 
-## Example
-`sql
-SELECT * FROM REGEXP_MATCHES('apple, banana, cherry', '\w+');
-`
+Returns a table of matching substring values.
 
-## See Also
-- Related: [REGEXP_SUBSTR](regexp_substr.md), [REGEXP_SPLIT_TO_TABLE](regexp_split_to_table.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns no rows when `string` or `pattern` is `NULL`.
+
+## Examples
+
+```sql
+SELECT *
+FROM REGEXP_MATCHES('apple, banana, cherry', '\w+');
+```
+
+```sql
+SELECT m.value
+FROM #raw_text
+CROSS APPLY REGEXP_MATCHES(text_value, '[A-Z]{2}\d{4}') AS m;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REGEXP_SUBSTR](regexp_substr.md)
+- [REGEXP_SPLIT_TO_TABLE](regexp_split_to_table.md)

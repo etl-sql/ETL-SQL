@@ -1,23 +1,40 @@
 # GET_TAGS
-Table-valued function that returns a table of metadata tag names defined on a table or column.
 
-**Category:** Lineage & Metadata
+Returns metadata tag names defined on a table or column.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM GET_TAGS(table_name [, column_name])
-`
+```
+
+## Parameters
+
+- **table_name** - Table or dataset name to inspect.
+- **column_name** - Optional column name.
 
 ## Returns
-TABLE â€” A table of tag names with a single column alue (VARCHAR).
 
-## Example
-`sql
-SELECT * FROM GET_TAGS('Customers', 'SSN');
-`
+Returns a table of tag names.
 
-## See Also
-- Related: [GET_TAG_VALUE](get_tag_value.md), [HAS_TAG](has_tag.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns no rows when no tags match the requested table or column.
+
+## Examples
+
+```sql
+SELECT *
+FROM GET_TAGS('Customers', 'SSN');
+```
+
+```sql
+SELECT *
+FROM GET_TAGS('Orders');
+```
+
+## References
+
+- [Lineage](../../statements/session-control/lineage.md)
+- [GET_TAG_VALUE](get_tag_value.md)
+- [HAS_TAG](has_tag.md)

@@ -1,28 +1,38 @@
 # METAPHONE
+
 Returns the English phonetic code (Metaphone key) of a string.
 
-**Category:** Fuzzy Matching
-
 ## Syntax
-`sql
+
+```sql
 METAPHONE(string)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| string | VARCHAR / STRING | The input string to encode |
+
+- **string** - The input string to encode.
 
 ## Returns
-STRING â€” The Metaphone phonetic key. Returns NULL if input is NULL.
 
-## Example
-`sql
-SELECT METAPHONE('Jackson'); -- â†’ 'JKSN'
-`
+Returns a `STRING` phonetic key.
 
-## See Also
-- Related: [SOUNDEX](soundex.md), [DMETAPHONE](dmetaphone.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
+```sql
+SELECT METAPHONE('Jackson') AS phonetic_key;
+```
+
+```sql
+SELECT customer_id, METAPHONE(last_name) AS last_name_key
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SOUNDEX](soundex.md)
+- [DMETAPHONE](dmetaphone.md)

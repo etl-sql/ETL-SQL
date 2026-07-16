@@ -1,23 +1,41 @@
 # REGEXP_SPLIT_TO_TABLE
-Table-valued function that splits a string into a table using a regular expression separator.
 
-**Category:** Regex
+Splits a string into rows using a regular expression separator.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM REGEXP_SPLIT_TO_TABLE(string, pattern)
-`
+```
+
+## Parameters
+
+- **string** - Source string to split.
+- **pattern** - Regular expression separator.
 
 ## Returns
-TABLE â€” A table of split parts with a single column alue (VARCHAR).
 
-## Example
-`sql
-SELECT * FROM REGEXP_SPLIT_TO_TABLE('a, b; c', '[,;]\s*');
-`
+Returns a table of split string parts.
 
-## See Also
-- Related: [STRING_SPLIT](../string/string_split.md), [REGEXP_MATCHES](regexp_matches.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns no rows when `string` or `pattern` is `NULL`.
+
+## Examples
+
+```sql
+SELECT *
+FROM REGEXP_SPLIT_TO_TABLE('a, b; c', '[,;]\s*');
+```
+
+```sql
+SELECT row_id, part.value
+FROM #raw_rows
+CROSS APPLY REGEXP_SPLIT_TO_TABLE(raw_list, '\s*\|\s*') AS part;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [STRING_SPLIT](../string/string_split.md)
+- [REGEXP_MATCHES](regexp_matches.md)

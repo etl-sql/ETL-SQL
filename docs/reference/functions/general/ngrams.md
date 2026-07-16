@@ -1,29 +1,41 @@
 # NGRAMS
-Table-valued function that returns a table of N-character grams from a string. Used with UNNEST for inverted-index blocking.
 
-**Category:** Fuzzy Matching
+Returns N-character grams from a string as rows. Use it to create blocking keys for fuzzy matching and inverted-index style joins.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM NGRAMS(string, size)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| string | VARCHAR / STRING | The text to slice |
-| size | INT | Gram length (N) |
+
+- **string** - Text to split into grams.
+- **size** - Gram length.
 
 ## Returns
-TABLE â€” A table of generated grams with a single column alue (VARCHAR).
 
-## Example
-`sql
-SELECT * FROM NGRAMS('hello', 2); -- â†’ 'he', 'el', 'll', 'lo'
-`
+Returns a table of generated gram values.
 
-## See Also
-- Related: [NGRAM_TOKENS](ngram_tokens.md), [SIMILARITY](similarity.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns no rows when `string` or `size` is `NULL`.
+
+## Examples
+
+```sql
+SELECT *
+FROM NGRAMS('hello', 2);
+```
+
+```sql
+SELECT customer_id, gram.value AS name_gram
+FROM #customers
+CROSS APPLY NGRAMS(normalized_name, 3) AS gram;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [NGRAM_TOKENS](ngram_tokens.md)
+- [SIMILARITY](similarity.md)

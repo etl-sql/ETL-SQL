@@ -1,24 +1,38 @@
 # PI
-Returns the value of the mathematical constant pi ($\pi$).
 
-**Category:** Math
+Returns the mathematical constant pi.
 
 ## Syntax
+
 ```sql
 PI()
 ```
 
 ## Parameters
+
 None.
 
 ## Returns
-`DECIMAL` — The value of $\pi$ (approximately 3.141592653589793).
 
-## Example
+Returns a decimal value approximately equal to `3.141592653589793`.
+
+## Null Behavior
+
+`PI()` takes no arguments and never returns `NULL`.
+
+## Examples
+
 ```sql
-SELECT PI();            -- → 3.141592653589793
+SELECT PI() AS pi_value;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometric](../../../guides/getting-started.md#52-trigonometric)
-- Related: [`DEGREES`](degrees.md), [`RADIANS`](radians.md)
+```sql
+SELECT 2 * PI() * radius AS circumference
+FROM #circles;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DEGREES](degrees.md)
+- [RADIANS](radians.md)

@@ -1,21 +1,48 @@
 # XMLTABLE
-Table-valued function that projects rows from XML data using XPath expressions.
 
-**Category:** XML
+Projects rows and columns from XML data using XPath expressions.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM XMLTABLE(xml, row_xpath COLUMNS (...))
-`
+```
 
-## Example
-`sql
--- Projects structured rows from XML content
-SELECT * FROM XMLTABLE('<root><row><id>1</id><name>A</name></row></root>', '/root/row');
-`
+## Parameters
 
-## See Also
-- Related: [XMLVALUE](xmlvalue.md), [XMLQUERY](xmlquery.md)
+- **xml** - XML string or XML expression.
+- **row_xpath** - XPath expression that selects rows.
+- **COLUMNS (...)** - Column projection list with names, types, and XPath expressions.
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+## Returns
+
+Returns a table shaped by the `COLUMNS` clause.
+
+## Null Behavior
+
+Returns no rows when `xml` is `NULL` or `row_xpath` matches no rows.
+
+## Remarks
+
+- Use `XMLTABLE` when XML needs to be transformed into relational rows.
+- Use [`XMLVALUE`](xmlvalue.md) for scalar extraction.
+- Use [`XMLQUERY`](xmlquery.md) for XML fragments.
+
+## Examples
+
+```sql
+SELECT *
+FROM XMLTABLE(
+  '<root><row><id>1</id><name>A</name></row></root>',
+  '/root/row' COLUMNS (
+    id INT PATH 'id',
+    name VARCHAR(100) PATH 'name'
+  )
+);
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [XMLVALUE](xmlvalue.md)
+- [XMLQUERY](xmlquery.md)

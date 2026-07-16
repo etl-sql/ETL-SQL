@@ -1,23 +1,46 @@
 # NGRAM_TOKENS
-Table-valued function that returns 3-character grams of normalized tokens in a string. Used for fuzzy join blocking key generation.
 
-**Category:** Fuzzy Matching
+Returns 3-character grams from normalized tokens in a string. Use this for fuzzy-join blocking keys.
 
 ## Syntax
-`sql
+
+```sql
 SELECT * FROM NGRAM_TOKENS(string)
-`
+```
+
+## Parameters
+
+- **string** - Source string to normalize and split into token grams.
 
 ## Returns
-TABLE â€” A table containing a single column alue (VARCHAR) with the computed token 3-grams.
 
-## Example
-`sql
-SELECT * FROM NGRAM_TOKENS('John Smith');
-`
+Returns a table of token 3-gram values.
 
-## See Also
-- Related: [NGRAMS](ngrams.md), [NORMALIZE](normalize.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns no rows when `string` is `NULL`.
+
+## Remarks
+
+- `NGRAM_TOKENS` is intended for candidate generation before more expensive fuzzy comparisons.
+- Use [`NGRAMS`](ngrams.md) for direct N-character grams.
+- Use [`NORMALIZE`](normalize.md) before custom matching logic.
+
+## Examples
+
+```sql
+SELECT *
+FROM NGRAM_TOKENS('John Smith');
+```
+
+```sql
+SELECT customer_id, token.value AS blocking_key
+FROM #customers
+CROSS APPLY NGRAM_TOKENS(customer_name) AS token;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [NGRAMS](ngrams.md)
+- [NORMALIZE](normalize.md)

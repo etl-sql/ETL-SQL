@@ -1,22 +1,42 @@
 # CURRENT_DATE
+
 Returns the current date (no time component).
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 CURRENT_DATE()
 ```
 
-## Returns
-`DATE` — Today's date with no time component.
+## Parameters
 
-## Example
+None.
+
+## Returns
+
+Returns a `DATE`.
+
+## Null Behavior
+
+`CURRENT_DATE()` takes no arguments and never returns `NULL`.
+
+## Remarks
+
+- Use `CURRENT_DATE()` when date-only comparison is needed.
+- Use [`CURRENT_TIME`](current_time.md) for time only.
+- Use [`CURRENT_TIMESTAMP`](current_timestamp.md) for date and time.
+
+## Examples
+
 ```sql
 SELECT CURRENT_DATE();
+
 SELECT * FROM #orders WHERE order_date = CURRENT_DATE();
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`GETDATE`](getdate.md), [`CURRENT_TIMESTAMP`](current_timestamp.md)
+## References
+
+- [Standard Library](../standard-library.md)
+- [CURRENT_TIME](current_time.md)
+- [CURRENT_TIMESTAMP](current_timestamp.md)
+- [GETDATE](getdate.md)

@@ -1,9 +1,9 @@
 # RADIANS
+
 Converts an angle value in degrees to radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 RADIANS(degrees)
 ```
@@ -14,13 +14,26 @@ RADIANS(degrees)
 | `degrees` | `DECIMAL` / `FLOAT` | The angle in degrees |
 
 ## Returns
-`DECIMAL` — The angle in radians. Returns `NULL` if input is `NULL`.
 
-## Example
+Returns a numeric angle in radians.
+
+## Null Behavior
+
+`RADIANS(NULL)` returns `NULL`.
+
+## Examples
+
 ```sql
-SELECT RADIANS(180);    -- → 3.141592653589793 (PI)
+SELECT RADIANS(180) AS half_turn_radians;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometric](../../../guides/getting-started.md#52-trigonometric)
-- Related: [`DEGREES`](degrees.md), [`PI`](pi.md)
+```sql
+SELECT RADIANS(angle_degrees) AS angle_radians
+FROM #vectors;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DEGREES](degrees.md)
+- [PI](pi.md)

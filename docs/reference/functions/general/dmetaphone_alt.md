@@ -1,28 +1,38 @@
 # DMETAPHONE_ALT
+
 Returns the alternate Double Metaphone phonetic key for a string.
 
-**Category:** Fuzzy Matching
-
 ## Syntax
-`sql
+
+```sql
 DMETAPHONE_ALT(string)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| string | VARCHAR / STRING | The input string to encode |
+
+- **string** - The input string to encode.
 
 ## Returns
-STRING â€” The alternate phonetic key. Returns NULL if input is NULL.
 
-## Example
-`sql
-SELECT DMETAPHONE_ALT('Schmidt'); -- â†’ 'XMT'
-`
+Returns a `STRING` alternate phonetic key.
 
-## See Also
-- Related: [DMETAPHONE](dmetaphone.md), [METAPHONE](metaphone.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
+```sql
+SELECT DMETAPHONE_ALT('Schmidt') AS alternate_key;
+```
+
+```sql
+SELECT customer_id, DMETAPHONE_ALT(last_name) AS last_name_alt_key
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DMETAPHONE](dmetaphone.md)
+- [METAPHONE](metaphone.md)

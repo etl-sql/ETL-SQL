@@ -1,23 +1,37 @@
 # DATETIMEOFFSETSFROMPARTS
+
 Constructs a DATETIMEOFFSET value from individual date, time, and timezone offset components.
 
-**Category:** Date & Time
-
 ## Syntax
-`sql
+
+```sql
 DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)
-`
+```
+
+## Parameters
+
+- **year, month, day** - Date components.
+- **hour, minute, second** - Time components.
+- **fractions** - Fractional seconds component.
+- **hour_offset, minute_offset** - Time zone offset from UTC.
+- **precision** - Fractional second precision.
 
 ## Returns
-DATETIMEOFFSET â€” The constructed datetimeoffset value.
 
-## Example
-`sql
-SELECT DATETIMEOFFSETSFROMPARTS(2026, 6, 12, 14, 30, 0, 0, -5, 0, 0); -- â†’ '2026-06-12 14:30:00 -05:00'
-`
+Returns a `DATETIMEOFFSET`.
 
-## See Also
-- Related: [DATETIMEFROMPARTS](datetimefromparts.md), [TIMEFROMPARTS](timefromparts.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when any required component is `NULL`.
+
+## Examples
+
+```sql
+SELECT DATETIMEOFFSETSFROMPARTS(2026, 6, 12, 14, 30, 0, 0, -5, 0, 0) AS local_time;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DATETIMEFROMPARTS](datetimefromparts.md)
+- [TIMEFROMPARTS](timefromparts.md)

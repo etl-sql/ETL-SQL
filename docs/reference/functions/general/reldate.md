@@ -1,28 +1,39 @@
 # RELDATE
+
 Resolves a relative date expression string into a standard DATETIME value.
 
-**Category:** Date & Time
-
 ## Syntax
-`sql
+
+```sql
 RELDATE(expression)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| expression | VARCHAR / STRING | The expression to resolve (e.g., 'D' = today, 'D-1' = yesterday, 'W-1' = start of last week, 'M-1' = start of last month) |
+
+- **expression** - Relative date expression such as `D`, `D-1`, `W-1`, or `M-1`.
 
 ## Returns
-DATETIME â€” The resolved datetime. Returns NULL if input is NULL or invalid.
 
-## Example
-`sql
-SELECT RELDATE('D-7'); -- â†’ Seven days ago
-`
+Returns the resolved `DATETIME`.
 
-## See Also
-- Related: [GETDATE](../datetime/getdate.md), [NOW](../datetime/now.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when `expression` is `NULL` or invalid.
+
+## Examples
+
+```sql
+SELECT RELDATE('D-7') AS seven_days_ago;
+```
+
+```sql
+SELECT *
+FROM #orders
+WHERE order_date >= RELDATE('M-1');
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [GETDATE](../datetime/getdate.md)
+- [NOW](../datetime/now.md)

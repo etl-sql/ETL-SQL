@@ -1,29 +1,39 @@
 # REGEXP_COUNT
+
 Returns the number of times a regular expression pattern matches within a string.
 
-**Category:** Regex
-
 ## Syntax
-`sql
+
+```sql
 REGEXP_COUNT(string, pattern)
-`
+```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| string | VARCHAR / STRING | The text to search |
-| pattern | VARCHAR / STRING | The regular expression pattern to search for |
+
+- **string** - Source string to search.
+- **pattern** - Regular expression pattern.
 
 ## Returns
-INT â€” The count of matches. Returns NULL if any argument is NULL.
 
-## Example
-`sql
-SELECT REGEXP_COUNT('abc123xyz456', '\d+'); -- â†’ 2
-`
+Returns an `INT` count of matches.
 
-## See Also
-- Related: [REGEXP_LIKE](regexp_like.md), [REGEXP_SUBSTR](regexp_substr.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when `string` or `pattern` is `NULL`.
+
+## Examples
+
+```sql
+SELECT REGEXP_COUNT('abc123xyz456', '\d+') AS numeric_runs;
+```
+
+```sql
+SELECT row_id, REGEXP_COUNT(raw_text, '[A-Z]{2}\d{4}') AS code_count
+FROM #raw_rows;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REGEXP_LIKE](regexp_like.md)
+- [REGEXP_SUBSTR](regexp_substr.md)

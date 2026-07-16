@@ -1,21 +1,45 @@
 # XMLELEMENT
-Constructs an XML element with the specified name, optional attributes, and element content.
 
-**Category:** XML
+Constructs an XML element with the specified name, optional attributes, and optional content.
 
 ## Syntax
-`sql
+
+```sql
 XMLELEMENT(name [, attributes] [, content])
-`
+```
 
-## Example
-`sql
-SELECT XMLELEMENT('Emp', XMLATTRIBUTES('true' AS active), 'Jane'); 
--- â†’ '<Emp active="true">Jane</Emp>'
-`
+## Parameters
 
-## See Also
-- Related: [XMLATTRIBUTES](xmlattributes.md), [XMLFOREST](xmlforest.md)
+- **name** - Element name.
+- **attributes** - Optional [`XMLATTRIBUTES`](xmlattributes.md) expression.
+- **content** - Optional element content.
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+## Returns
+
+Returns an XML string.
+
+## Null Behavior
+
+Returns `NULL` when `name` is `NULL`.
+
+## Remarks
+
+- Use `XMLELEMENT` to build small XML payloads from relational values.
+- Use [`XMLFOREST`](xmlforest.md) when constructing multiple sibling elements.
+
+## Examples
+
+```sql
+SELECT XMLELEMENT('Emp', XMLATTRIBUTES('true' AS active), 'Jane') AS employee_xml;
+```
+
+```sql
+SELECT XMLELEMENT('Customer', XMLATTRIBUTES(customer_id AS id), customer_name) AS customer_xml
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [XMLATTRIBUTES](xmlattributes.md)
+- [XMLFOREST](xmlforest.md)

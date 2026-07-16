@@ -1,23 +1,47 @@
 # LEVENSHTEIN
-Computes the Levenshtein distance (edit distance) between two strings.
 
-**Category:** Fuzzy Matching
+Computes the Levenshtein edit distance between two strings.
 
 ## Syntax
-`sql
+
+```sql
 LEVENSHTEIN(string1, string2)
-`
+```
+
+## Parameters
+
+- **string1** - First string.
+- **string2** - Second string.
 
 ## Returns
-INT â€” The minimum number of single-character edits (insertions, deletions, or substitutions) required to change string1 into string2.
 
-## Example
-`sql
-SELECT LEVENSHTEIN('kitten', 'sitting'); -- â†’ 3
-`
+Returns an `INT` count of single-character insertions, deletions, or substitutions required to transform `string1` into `string2`.
 
-## See Also
-- Related: [SIMILARITY](similarity.md), [SOUNDEX](soundex.md)
+## Null Behavior
 
-References:
-- [Standard Library](../../../guides/getting-started.md)
+Returns `NULL` when either input is `NULL`.
+
+## Remarks
+
+- Lower values are closer matches.
+- Use [`SIMILARITY`](similarity.md) when a normalized `0` to `1` score is easier to compare.
+
+## Examples
+
+```sql
+SELECT LEVENSHTEIN('kitten', 'sitting') AS edit_distance;
+```
+
+```sql
+SELECT a.customer_id, b.customer_id AS possible_match
+FROM #customers a
+JOIN #customers b
+  ON LEVENSHTEIN(a.normalized_name, b.normalized_name) <= 2
+ WHERE a.customer_id <> b.customer_id;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SIMILARITY](similarity.md)
+- [SOUNDEX](soundex.md)
