@@ -1,31 +1,45 @@
 # DATE_TRUNC
+
 Truncates a datetime to the beginning of the specified date part boundary.
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 DATE_TRUNC(datepart, date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `datepart` | `KEYWORD` | The boundary to truncate to — see [§3.1 Keyword Parameter Enumerations](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
-| `date` | `DATE` / `DATETIME` | The date to truncate |
+
+- **datepart** - Boundary to truncate to. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **date** - Date or datetime value to truncate.
 
 ## Returns
-`DATETIME` — The date with all components below `datepart` zeroed out.
+
+Returns a `DATETIME` with all components below `datepart` zeroed out.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
 
 ## Accepted Values for `datepart`
+
 `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE`, `SECOND`
 
-## Example
+## Examples
+
 ```sql
-SELECT DATE_TRUNC(MONTH, '2026-05-17 12:30:00');    -- → 2026-05-01 00:00:00
-SELECT DATE_TRUNC(HOUR, '2026-05-17 14:37:15');     -- → 2026-05-17 14:00:00
+SELECT DATE_TRUNC(MONTH, '2026-05-17 12:30:00') AS month_start;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`DATETRUNC`](../general/datetrunc.md) (T-SQL style variant), [`TRUNC`](../general/trunc.md)
+```sql
+SELECT DATE_TRUNC(HOUR, event_time) AS event_hour, COUNT(*) AS event_count
+FROM #events
+GROUP BY DATE_TRUNC(HOUR, event_time);
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [DATETRUNC](../general/datetrunc.md)
+- [TRUNC](../general/trunc.md)

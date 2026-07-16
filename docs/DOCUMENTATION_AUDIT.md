@@ -165,14 +165,19 @@ Thin-page batches completed:
 - `docs/reference/functions/conversion/try_cast.md`
 - `docs/reference/functions/cryptography/checksum.md`
 - `docs/reference/functions/cryptography/hashbytes.md`
+- `docs/reference/functions/datetime/dateadd.md`
+- `docs/reference/functions/datetime/datediff.md`
+- `docs/reference/functions/datetime/datepart.md`
+- `docs/reference/functions/datetime/datename.md`
+- `docs/reference/functions/datetime/date_trunc.md`
+- `docs/reference/functions/datetime/day.md`
+- `docs/reference/functions/datetime/extract.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 
 No function reference pages remain under 300 bytes, and the original under-700-byte review queue is complete. Some reviewed pages remain under 700 bytes because the topic is small.
 
-Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. The next category batches should start with:
-
-- Datetime functions: `dateadd.md`, `datediff.md`, `datepart.md`, `datename.md`, `date_trunc.md`, `day.md`, `extract.md`
+Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. Continue scanning category-by-category, then do the dedicated taxonomy move pass for files still misplaced under `general/`.
 
 Window aggregate note: aggregate functions such as `SUM`, `AVG`, `COUNT`, `MIN`, `MAX`, and `STDEV` already document their `OVER (...)` forms in their aggregate pages. Keep those pages as the source of truth and link to them from `docs/reference/functions/window/README.md`; do not duplicate full pages in the window folder unless behavior diverges.
 

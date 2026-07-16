@@ -1,31 +1,44 @@
 # EXTRACT
+
 Extracts a specified date part component from a date or time expression.
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 EXTRACT(field FROM source)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `field` | `KEYWORD` | The part to extract (e.g., `YEAR`, `EPOCH`) |
-| `source` | `DATE` / `DATETIME` | The date or time expression to extract from |
+
+- **field** - Date/time field to extract, such as `YEAR` or `EPOCH`.
+- **source** - Date or time expression to extract from.
 
 ## Returns
-`NUMERIC` — The value of the extracted component (e.g., an integer for components like `YEAR`, or a decimal value for `EPOCH` representing total seconds).
+
+Returns the extracted component as a numeric value.
+
+## Null Behavior
+
+Returns `NULL` when `source` is `NULL`.
 
 ## Accepted Values for `field`
+
 `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND`, `DOW`, `DOY`, `EPOCH`, `QUARTER`, `WEEK`, `ISODOW`, `DECADE`, `CENTURY`, `MILLENNIUM`
 
-## Example
+## Examples
+
 ```sql
-SELECT EXTRACT(YEAR FROM '2026-05-28');             -- → 2026
-SELECT EXTRACT(EPOCH FROM '2026-05-28 13:20:00');   -- → 1779974400
+SELECT EXTRACT(YEAR FROM '2026-05-28') AS order_year;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`DATEPART`](datepart.md), [`DATE_PART`](../general/date_part.md)
+```sql
+SELECT event_id, EXTRACT(EPOCH FROM event_time) AS event_epoch_seconds
+FROM #events;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [DATEPART](datepart.md)
+- [DATE_PART](../general/date_part.md)
