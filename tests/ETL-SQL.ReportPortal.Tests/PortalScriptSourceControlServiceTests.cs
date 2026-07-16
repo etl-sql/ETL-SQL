@@ -43,8 +43,39 @@ public class PortalScriptSourceControlServiceTests : IDisposable
 
         Assert.Throws<InvalidOperationException>(() =>
             service.ValidateScriptTextForCommit("CREATE CONNECTION c AS MSSQL(PASSWORD = 'plain');"));
+        Assert.Throws<InvalidOperationException>(() =>
+            service.ValidateScriptTextForCommit("CREATE CONNECTION c AS KAFKA(SASL_PASSWORD = 'plain');"));
+        Assert.Throws<InvalidOperationException>(() =>
+            service.ValidateScriptTextForCommit("IF 1 = 1 BEGIN CREATE CONNECTION c AS MSSQL(PASSWORD = 'plain'); END"));
         service.ValidateScriptTextForCommit("CREATE CONNECTION c AS MSSQL(PASSWORD = 'SECRET:db-password');");
         service.ValidateScriptTextForCommit("CREATE CONNECTION c AS MSSQL(PASSWORD = 'ENC:abc');");
+        service.ValidateScriptTextForCommit("CREATE CONNECTION c AS MSSQL(PASSWORD = @runtime_password);");
+    }
+
+    [Theory]
+    [InlineData("CREATE CONNECTION c AS MSSQL('Server=db;User Id=sa;Password=plain;');")]
+    [InlineData("CREATE CONNECTION c AS ODBC('Driver=X;Uid=etl;Pwd=plain;');")]
+    [InlineData("CREATE CONNECTION c AS API('https://etl:plain@example.test/v1');")]
+    [InlineData("CREATE CONNECTION c AS API(HEADERS = 'Authorization: Bearer plain-token');")]
+    [InlineData("CREATE CONNECTION c AS API(AUTHORIZATION = 'Bearer plain-token');")]
+    public void ValidateScriptTextForCommit_RejectsPlaintextCredentialBearingForms(string script)
+    {
+        var service = NewService();
+
+        Assert.Throws<InvalidOperationException>(() => service.ValidateScriptTextForCommit(script));
+    }
+
+    [Theory]
+    [InlineData("CREATE CONNECTION c AS MSSQL('Server=db;User Id=sa;Password=SECRET:db-password;');")]
+    [InlineData("CREATE CONNECTION c AS ODBC('Driver=X;Uid=etl;Pwd=ENC:abc;');")]
+    [InlineData("CREATE CONNECTION c AS API(HEADERS = 'Authorization: SECRET:api-auth');")]
+    [InlineData("CREATE CONNECTION c AS API(AUTHORIZATION = 'SECRET:api-auth');")]
+    [InlineData("CREATE CONNECTION c AS MSSQL('SHARED:sales_dw');")]
+    public void ValidateScriptTextForCommit_AllowsProtectedCredentialForms(string script)
+    {
+        var service = NewService();
+
+        service.ValidateScriptTextForCommit(script);
     }
 
     private PortalScriptSourceControlService NewService() => new(new PortalConfig

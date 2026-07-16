@@ -101,7 +101,7 @@ work by priority.
 - [ ] **P1 — Serialize explicit Git operations.** Protect Commit/Push actions from concurrent access to
       the shared repository index, preferably with isolated temporary indexes/worktrees plus a
       repository lease that also works across Portal nodes.
-- [ ] **P1 — Replace regex-only plaintext-secret validation.** Validate parsed connection definitions
+- [x] **P1 — Replace regex-only plaintext-secret validation.** Validate parsed connection definitions
       and connector-native connection strings, including positional strings, URLs, headers, and other
       credential-bearing forms. Add bypass regression tests.
 - [x] **P1 — Fix Designer completion document identity.** Build the scoped document URI exactly once and

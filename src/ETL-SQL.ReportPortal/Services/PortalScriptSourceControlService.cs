@@ -1,7 +1,11 @@
 using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Governance;
+using ETL_SQL.Core.Parser;
+using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Services;
 
@@ -60,7 +64,10 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
     {
         if (!IsEnabled) return;
 
-        var match = PlaintextSecretOptionRegex().Match(scriptText ?? string.Empty);
+        var text = scriptText ?? string.Empty;
+        ValidateParsedConnectionDefinitions(text);
+
+        var match = PlaintextSecretOptionRegex().Match(text);
         if (match.Success)
             throw new InvalidOperationException(
                 $"Source-controlled scripts must not contain raw {match.Groups["key"].Value} values. Use SECRET:name or ENC:... references.");
@@ -148,6 +155,188 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
         }
     }
 
-    [GeneratedRegex(@"\b(?<key>PASSWORD|API_KEY|TOKEN|SECRET|CLIENT_SECRET)\s*=\s*'(?!(?:SECRET:|ENC:))[^']+'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static void ValidateParsedConnectionDefinitions(string scriptText)
+    {
+        Script script;
+        try
+        {
+            var tokens = new Lexer(scriptText).Tokenize();
+            script = new CoreParser(tokens, scriptText).Parse();
+        }
+        catch
+        {
+            return;
+        }
+
+        if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+            return;
+
+        foreach (var statement in script.Statements)
+            ValidateStatement(statement);
+    }
+
+    private static void ValidateStatement(Statement statement)
+    {
+        switch (statement)
+        {
+            case CreateConnectionStatement create:
+                ValidateConnection(create.ConnectionName, create.ConnectionType, create.TargetExpression, create.Options, create);
+                break;
+            case AlterConnectionStatement alter:
+                ValidateConnection(alter.ConnectionName, alter.ConnectionType, alter.TargetExpression, alter.Options, alter);
+                break;
+            case BlockStatement block:
+                foreach (var nested in block.Statements) ValidateStatement(nested);
+                break;
+            case IfStatement ifStatement:
+                ValidateStatement(ifStatement.IfBody);
+                if (ifStatement.ElseIfClauses != null)
+                    foreach (var elseIf in ifStatement.ElseIfClauses) ValidateStatement(elseIf.Body);
+                if (ifStatement.ElseBody != null) ValidateStatement(ifStatement.ElseBody);
+                break;
+            case WhileStatement whileStatement:
+                ValidateStatement(whileStatement.Body);
+                break;
+            case ForStatement forStatement:
+                ValidateStatement(forStatement.Body);
+                break;
+            case ForeachStatement foreachStatement:
+                ValidateStatement(foreachStatement.Body);
+                break;
+            case TryCatchStatement tryCatch:
+                ValidateStatement(tryCatch.TryBody);
+                ValidateStatement(tryCatch.CatchBody);
+                break;
+        }
+    }
+
+    private static void ValidateConnection(
+        string connectionName,
+        string? connectorType,
+        Expression? target,
+        Dictionary<string, Expression>? options,
+        AstNode node)
+    {
+        if (target is LiteralExpression { Value: string targetValue })
+            ValidateConnectionTarget(connectionName, connectorType, targetValue, node);
+
+        if (options == null) return;
+        foreach (var (key, expression) in options)
+        {
+            if (expression is LiteralExpression { Value: string value })
+                ValidateConnectionOption(connectionName, connectorType, key, value, node);
+        }
+    }
+
+    private static void ValidateConnectionOption(
+        string connectionName,
+        string? connectorType,
+        string key,
+        string value,
+        AstNode node)
+    {
+        if (IsAllowedSecretReference(value))
+            return;
+
+        if (SecretResolvableFields.IsCredential(key)
+            || IsAdditionalCredentialKey(key)
+            || ContainsCredentialBearingHeader(value)
+            || ContainsPlaintextConnectionStringCredential(value, connectorType)
+            || ContainsPlaintextUriCredential(value))
+        {
+            ThrowPlaintextSecret(connectionName, key, node);
+        }
+    }
+
+    private static void ValidateConnectionTarget(
+        string connectionName,
+        string? connectorType,
+        string value,
+        AstNode node)
+    {
+        if (IsAllowedSecretReference(value)
+            || value.TrimStart().StartsWith("SHARED:", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (ContainsPlaintextConnectionStringCredential(value, connectorType)
+            || ContainsPlaintextUriCredential(value)
+            || ContainsCredentialBearingHeader(value))
+        {
+            ThrowPlaintextSecret(connectionName, "target", node);
+        }
+    }
+
+    private static bool ContainsPlaintextConnectionStringCredential(string value, string? connectorType)
+    {
+        foreach (Match match in ConnectionStringCredentialRegex().Matches(value))
+        {
+            var key = match.Groups["key"].Value;
+            var credentialValue = match.Groups["value"].Value.Trim().Trim('\'', '"');
+            if ((SecretResolvableFields.IsCredential(key)
+                    || SecretResolvableFields.IsConnectorDesignated(key, connectorType)
+                    || IsAdditionalCredentialKey(key))
+                && !IsAllowedSecretReference(credentialValue))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsPlaintextUriCredential(string value)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || string.IsNullOrWhiteSpace(uri.UserInfo)
+            || !uri.UserInfo.Contains(':', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var password = Uri.UnescapeDataString(uri.UserInfo[(uri.UserInfo.IndexOf(':') + 1)..]);
+        return !IsAllowedSecretReference(password);
+    }
+
+    private static bool ContainsCredentialBearingHeader(string value)
+    {
+        foreach (Match match in HeaderCredentialRegex().Matches(value))
+        {
+            var credentialValue = match.Groups["value"].Value.Trim();
+            if (!IsAllowedSecretReference(credentialValue))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsAllowedSecretReference(string value)
+    {
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith("SECRET:", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAdditionalCredentialKey(string key) =>
+        key.Equals("AUTHORIZATION", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("AUTHORIZATION_HEADER", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("BEARER_TOKEN", StringComparison.OrdinalIgnoreCase)
+        || key.Equals("HEADER_AUTHORIZATION", StringComparison.OrdinalIgnoreCase);
+
+    private static void ThrowPlaintextSecret(string connectionName, string key, AstNode node)
+    {
+        var location = node.Line > 0 ? $" at line {node.Line}, column {node.Column}" : string.Empty;
+        throw new InvalidOperationException(
+            $"Source-controlled scripts must not contain raw credential values in connection '{connectionName}' field '{key}'{location}. Use SECRET:name or ENC:... references.");
+    }
+
+    [GeneratedRegex(@"\b(?<key>PASSWORD|PWD|API_KEY|APIKEY|TOKEN|ACCESS_TOKEN|REFRESH_TOKEN|SECRET|SECRET_KEY|CLIENT_SECRET|SASL_PASSWORD|SAS_TOKEN|ACCOUNT_KEY|PASSPHRASE|PRIVATE_KEY|AUTHORIZATION|BEARER_TOKEN)\s*=\s*'(?!(?:SECRET:|ENC:))[^']+'", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
     private static partial Regex PlaintextSecretOptionRegex();
+
+    [GeneratedRegex(@"(?:^|;)\s*(?<key>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<quote>['""]?)(?<value>[^;'""]+)\k<quote>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex ConnectionStringCredentialRegex();
+
+    [GeneratedRegex(@"(?im)^\s*(?:Authorization|Proxy-Authorization|X-API-Key|Api-Key)\s*[:=]\s*(?<value>.+?)\s*$", RegexOptions.CultureInvariant, 1000)]
+    private static partial Regex HeaderCredentialRegex();
 }
