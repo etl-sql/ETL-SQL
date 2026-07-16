@@ -1,9 +1,9 @@
 # ISNULL
+
 Returns a replacement value when the expression is NULL.
 
-**Category:** Logic
-
 ## Syntax
+
 ```sql
 ISNULL(value, replacement)
 NVL(value, replacement)
@@ -11,25 +11,42 @@ IFNULL(value, replacement)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value` | `ANY` | The expression to test |
-| `replacement` | `ANY` | Value to return when `value` is NULL |
+
+- **value** - Expression to test.
+- **replacement** - Value returned when `value` is `NULL`.
 
 ## Returns
-Same type as inputs — `value` if not NULL, otherwise `replacement`.
+
+Returns `value` when it is not `NULL`; otherwise returns `replacement`.
+
+## Null Behavior
+
+Returns `replacement` when `value` is `NULL`.
 
 ## Remarks
+
 - `NVL` (Oracle style) and `IFNULL` (MySQL style) are aliases for `ISNULL`.
 - For more than two alternatives, use [`COALESCE`](coalesce.md).
 
-## Example
+## Examples
+
 ```sql
-SELECT ISNULL(NULL, 'default');           -- → 'default'
-SELECT ISNULL(discount, 0) AS discount FROM #orders;
-SELECT NVL(phone, 'N/A') AS phone FROM #contacts;
+SELECT ISNULL(NULL, 'default') AS selected_value;
 ```
 
-## See Also
-- [Standard Library — §7. Conditional & Null-Handling Functions](../../../guides/getting-started.md#7-conditional--null-handling-functions)
-- Related: [`COALESCE`](coalesce.md), [`NULLIF`](nullif.md), [`NVL2`](../general/nvl2.md)
+```sql
+SELECT order_id, ISNULL(discount, 0) AS discount
+FROM #orders;
+```
+
+```sql
+SELECT contact_id, NVL(phone, 'N/A') AS phone
+FROM #contacts;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [COALESCE](coalesce.md)
+- [NULLIF](nullif.md)
+- [NVL2](../general/nvl2.md)

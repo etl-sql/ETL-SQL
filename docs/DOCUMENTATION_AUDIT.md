@@ -16,6 +16,7 @@ Completed in the first cleanup pass:
 - Added section landing pages for the major guide, reference, cookbook, architecture, and release-support areas.
 - Added reusable templates for functions, connectors, statements, visuals, guides, cookbook recipes, architecture docs, and decision records.
 - Added snippet documentation entry points: `snippets/README.md` for maintainers and `docs/reference/snippets/README.md` for users.
+- Added aggregate/window navigation so aggregate functions used with `OVER (...)` remain discoverable from the window function area without duplicating pages.
 - Adopted lowercase documentation filenames for function reference pages while preserving SQL casing in page titles.
 - Expanded thin reference pages into full pages: `CAST`, `CONVERT`, `ENV`, `FILE_EXISTS`, `IS_NULL`, `TRY_CONVERT`, `CHAR_LENGTH`, `LENGTH`, `SUBSTR`, `FIRST_VALUE`, `LAST_VALUE`, `POW`, `CEIL`, `RANDOM`, `ERROR_MESSAGE`, `ERROR_NUMBER`, `ERROR_STATE`, `ERROR_LINE`, `ERROR_SEVERITY`, `VAR`, `VARP`, `IFNULL`, `QUOTIENT`, `ATAN2`, `NEWSEQUENTIALID`, `XMLEXISTS`, `XMLQUERY`, `SORT_LIST`, `DIRECTORY`, `LISTAGG`, `ADD_TO_LIST`, `APPEND_TO_LIST`, `BINARY_CHECKSUM`, `STDEVP`, `DIRECTORY_EXISTS`, `IS_NOT_NULL`, `REMOVE_FROM_LIST`, `PERCENTILE_DISC`, `OVERLAY`, `STDDEV`, `EXTRACTVALUE`, `OPENJSON`, `SYSDATE`, `JSON_EXTRACT`, `CURRENT_TIME`, `DATALENGTH`, `DMETAPHONE`, `PI`, `XMLELEMENT`, `JSON_TABLE`, `XMLTABLE`, `JSON_EXISTS`, `JSON_ARRAY`, `CURRENT_DATE`, `XMLATTRIBUTES`, `JSON_OBJECT`, `TO_DATE`, `DATETIMEOFFSETSFROMPARTS`, `REGEXP_MATCHES`, `GET_TAGS`, `LEVENSHTEIN`, `NGRAM_TOKENS`, `REGEXP_SPLIT_TO_TABLE`, `DEGREES`, `RADIANS`, `DMETAPHONE_ALT`, `GET_TAG_VALUE`, `HAS_TAG`, `METAPHONE`, `NGRAMS`, `REGEXP_COUNT`, `RELDATE`, `REMOTE_FILE_EXISTS`, `XMLFOREST`, `CURRENT_TIMESTAMP`, `MINUTE`, `NOW`, `SECOND`, `BIT_COUNT`, `BITAND`, `BITNOT`, `BITOR`, `BITSHIFTLEFT`, `BITSHIFTRIGHT`, `BITXOR`, `FILE_MODIFIED`, `FILE_SIZE`, `PATH_FILENAME`, `RANDOM_DECIMAL`, `RANDOM_INT`, and `HBAR`.
 - Removed exact duplicate guide pages and kept one canonical path for each topic.
@@ -157,6 +158,11 @@ Thin-page batches completed:
 - `docs/reference/functions/aggregate/stdev.md`
 - `docs/reference/functions/aggregate/string_agg.md`
 - `docs/reference/functions/aggregate/sum.md`
+- `docs/reference/functions/conversion/coalesce.md`
+- `docs/reference/functions/conversion/iif.md`
+- `docs/reference/functions/conversion/isnull.md`
+- `docs/reference/functions/conversion/nullif.md`
+- `docs/reference/functions/conversion/try_cast.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 
@@ -164,9 +170,10 @@ No function reference pages remain under 300 bytes, and the original under-700-b
 
 Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. The next category batches should start with:
 
-- Conversion/logic functions: `coalesce.md`, `iif.md`, `isnull.md`, `nullif.md`, `try_cast.md`
 - Cryptography functions: `checksum.md`, `hashbytes.md`
 - Datetime functions: `dateadd.md`, `datediff.md`, `datepart.md`, `datename.md`, `date_trunc.md`, `day.md`, `extract.md`
+
+Window aggregate note: aggregate functions such as `SUM`, `AVG`, `COUNT`, `MIN`, `MAX`, and `STDEV` already document their `OVER (...)` forms in their aggregate pages. Keep those pages as the source of truth and link to them from `docs/reference/functions/window/README.md`; do not duplicate full pages in the window folder unless behavior diverges.
 
 ## P1: Duplicate Pages
 

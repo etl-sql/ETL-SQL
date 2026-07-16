@@ -1,34 +1,51 @@
 # COALESCE
+
 Returns the first non-NULL value from a list of expressions.
 
-**Category:** Logic
-
 ## Syntax
+
 ```sql
 COALESCE(value1, value2, ...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value1` | `ANY` | First value to test |
-| `value2` | `ANY` | Second value (used if `value1` is NULL) |
-| `...` | `ANY` | Additional fallback values (variadic) |
+
+- **value1** - First value to test.
+- **value2** - Next fallback value.
+- **...** - Additional fallback values.
 
 ## Returns
-Same type as inputs — the first non-NULL value in the list, or `NULL` if all are NULL.
+
+Returns the first non-NULL value in the argument list.
+
+## Null Behavior
+
+Returns `NULL` when every argument is `NULL`.
 
 ## Remarks
-- Short-circuit: evaluation stops at the first non-NULL argument.
-- Equivalent to `CASE WHEN v1 IS NOT NULL THEN v1 WHEN v2 IS NOT NULL THEN v2 ... END`.
 
-## Example
+- Evaluation stops at the first non-NULL argument.
+- `COALESCE(a, b, c)` is equivalent to a searched `CASE` expression that tests each value for `IS NOT NULL`.
+
+## Examples
+
 ```sql
-SELECT COALESCE(NULL, NULL, 'fallback');    -- → 'fallback'
-SELECT COALESCE(nickname, first_name, 'Unknown') AS display_name FROM #users;
-SELECT COALESCE(NULLIF(TRIM(region), ''), 'Unknown') AS region FROM #staging;
+SELECT COALESCE(NULL, NULL, 'fallback') AS selected_value;
 ```
 
-## See Also
-- [Standard Library — §7. Conditional & Null-Handling Functions](../../../guides/getting-started.md#7-conditional--null-handling-functions)
-- Related: [`ISNULL`](isnull.md), [`NULLIF`](nullif.md), [`IIF`](iif.md)
+```sql
+SELECT user_id, COALESCE(nickname, first_name, 'Unknown') AS display_name
+FROM #users;
+```
+
+```sql
+SELECT COALESCE(NULLIF(TRIM(region), ''), 'Unknown') AS region
+FROM #staging;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [ISNULL](isnull.md)
+- [NULLIF](nullif.md)
+- [IIF](iif.md)

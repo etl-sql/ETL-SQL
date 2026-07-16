@@ -1,34 +1,49 @@
 # NULLIF
+
 Returns NULL if two expressions are equal; otherwise returns the first expression.
 
-**Category:** Logic
-
 ## Syntax
+
 ```sql
 NULLIF(value1, value2)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value1` | `ANY` | The value to return if not equal to `value2` |
-| `value2` | `ANY` | The comparison value |
+
+- **value1** - Value returned when the two values are not equal.
+- **value2** - Comparison value.
 
 ## Returns
-Same type as `value1` — `NULL` if `value1 = value2`; otherwise `value1`.
+
+Returns `NULL` when `value1 = value2`; otherwise returns `value1`.
+
+## Null Behavior
+
+Returns `NULL` when the two values compare equal. If they do not compare equal, the result follows `value1`.
 
 ## Remarks
+
 - Classic use: avoid division-by-zero: `value / NULLIF(denominator, 0)`.
 - Also used with `COALESCE` to treat empty strings as NULL: `COALESCE(NULLIF(TRIM(col), ''), 'default')`.
 
-## Example
+## Examples
+
 ```sql
-SELECT NULLIF(10, 10);         -- → NULL
-SELECT NULLIF(10, 5);          -- → 10
-SELECT total / NULLIF(qty, 0) AS unit_price FROM #orders;
-SELECT COALESCE(NULLIF(TRIM(region), ''), 'Unknown') FROM #data;
+SELECT NULLIF(10, 10) AS equal_result;
 ```
 
-## See Also
-- [Standard Library — §7. Conditional & Null-Handling Functions](../../../guides/getting-started.md#7-conditional--null-handling-functions)
-- Related: [`COALESCE`](coalesce.md), [`ISNULL`](isnull.md)
+```sql
+SELECT order_id, total / NULLIF(qty, 0) AS unit_price
+FROM #orders;
+```
+
+```sql
+SELECT COALESCE(NULLIF(TRIM(region), ''), 'Unknown') AS normalized_region
+FROM #data;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [COALESCE](coalesce.md)
+- [ISNULL](isnull.md)
