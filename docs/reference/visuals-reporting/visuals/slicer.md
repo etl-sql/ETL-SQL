@@ -3,18 +3,17 @@ A dropdown selector. SOURCE provides the option list; the selected value is boun
 For multi-select checkboxes, use MULTISELECT instead.
 
 Mappings:
-- **VALUE** — column supplying selectable values (required)
-- **LABEL** — optional display text column if different from the value stored
+- **VALUE** - column supplying selectable values (required)
+- **LABEL** - optional display text column if different from the value stored
 
 Options:
-- **DEFAULT = 'value'** — pre-selected option on page load (default: first row)
-- **INCLUDE_ALL = ON|OFF** — prepend an 'All' option that passes NULL or a special sentinel (default ON)
-- **ALL_LABEL = 'text'** — label for the All option (default 'All')
-- **TITLE = 'text'** — control label shown above the dropdown
+- **DEFAULT = 'value'** - pre-selected option on page load (default: first row)
+- **INCLUDE_ALL = ON|OFF** - prepend an 'All' option that passes NULL or a special sentinel (default ON)
+- **ALL_LABEL = 'text'** - label for the All option (default 'All')
+- **TITLE = 'text'** - control label shown above the dropdown
 
 Actions:
-  ON_CHANGE = SET_PARAMETER(@variable, value)
-- **** — fires when selection changes; passes the VALUE column value to @variable
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when selection changes; passes the VALUE column value to @variable
 
 ```sql
 DECLARE @region VARCHAR = 'All';

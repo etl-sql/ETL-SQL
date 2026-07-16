@@ -47,7 +47,7 @@ The text box accepts any string your ETL-SQL script reads as a parameter. Relati
 
 The quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3, Y-1) write directly to the text box and trigger `ON_CHANGE`. Clicking the 📅 button opens the system date picker; selecting a date writes the ISO date (`YYYY-MM-DD`) to the text box.
 
-## Example — Date range with relative defaults
+## Example - Date range with relative defaults
 
 ```sql
 CREATE VISUAL StartPicker AS RELDATEPICKER (

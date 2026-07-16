@@ -2,12 +2,12 @@ Type: RADAR
 A spider / radar chart that compares one or more series across multiple axes radiating from a central point. Best for comparing items across 4–12 dimensions.
 
 Data shape:
-- **First column** — series name (one row per item being compared)
-- **Other columns** — one numeric column per dimension; column headers become axis labels
+- **First column** - series name (one row per item being compared)
+- **Other columns** - one numeric column per dimension; column headers become axis labels
 
 Options:
-- **MIN** — explicit minimum for all axes (default 0)
-- **MAX** — explicit maximum for all axes (auto-scaled to 110% of data max if omitted)
+- **MIN** - explicit minimum for all axes (default 0)
+- **MAX** - explicit maximum for all axes (auto-scaled to 110% of data max if omitted)
   TITLE   = 'text'
 
 Single-series example (one product across performance dimensions):
