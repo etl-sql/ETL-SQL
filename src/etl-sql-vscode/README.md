@@ -242,7 +242,7 @@ Browse all active connections, catalog schemas, declared `@variables`, and live 
 
 ETL-SQL keeps governance metadata in the script instead of a separate after-the-fact catalog. Inline tags such as `/* @pii; @classification: confidential; @owner: finance_ops */` travel with columns through joins, aggregations, and derived expressions, so lineage stays connected to the transformations that created the data.
 
-After a script runs, lineage is queryable with `LINEAGE` / `LINEAGE_TAGS`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Lineage.md) for the full tag catalog and examples.
+After a script runs, lineage is queryable with `LINEAGE` / `LINEAGE_TAGS`, exportable as Markdown, and exportable as OpenLineage events for tools such as DataHub, Marquez, Airflow, Collibra, and Alation. See the [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) for the full tag catalog and examples.
 
 ---
 
@@ -345,10 +345,10 @@ Press **F5** to execute and open the **ETL-SQL Results** console.
 | Resource | Description |
 | :--- | :--- |
 | [User Manual](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/User_Manual.md) | Core paradigms, connections, variables, control flow, and debugging |
-| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Cookbook.md) | 20 production-grade, copy-pasteable ETL recipes |
-| [Report-SQL Guide](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Report_SQL_Guide.md) | Visuals, filters, dashboards, drill-downs, and hosting |
-| [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
+| [Pattern Cookbook](https://github.com/etl-sql/ETL-SQL/blob/main/docs/cookbooks/etl-recipes.md) | 20 production-grade, copy-pasteable ETL recipes |
+| [Report-SQL Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/report-sql.md) | Visuals, filters, dashboards, drill-downs, and hosting |
+| [Lineage & Governance Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/reference/statements/lineage.md) | Tags, inheritance rules, `SHOW LINEAGE`, `LINEAGE_TAGS`, OpenLineage export |
 | [Spec-Driven Development](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Spec_Driven_Development.md) | Full guide to the AI spec extraction + `gen-script` workflow |
-| [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Data_Connectors.md) | Every connector, its options, and authentication patterns |
-| [Grammar Reference](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/Reference/Grammar.md) | Complete language syntax reference |
-| [Notebook Guide](https://github.com/etl-sql/ETL-SQL/blob/main/Docs/ETL_Notebook_Guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense |
+| [Data Connectors](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/administration.md) | Every connector, its options, and authentication patterns |
+| [Grammar Reference](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/getting-started.md) | Complete language syntax reference |
+| [Notebook Guide](https://github.com/etl-sql/ETL-SQL/blob/main/docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense |

@@ -30,7 +30,57 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\Help\**\*.md" />
+    <!-- Core Language Statements & Flow Control (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\statements\**\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\statements\session-control\lineage.md" />
+    <EmbeddedResource Include="..\..\docs\reference\control-flow\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+    
+    <!-- SHOW & SET commands (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\show-commands\show.md" Link="Resources\Help\Keywords\SHOW.md" />
+    <EmbeddedResource Include="..\..\docs\reference\set-commands\set.md" Link="Resources\Help\Keywords\SET.md" />
+
+    <!-- Variables & Parameters (Variables & Keywords Categories) -->
+    <EmbeddedResource Include="..\..\docs\reference\variables-parameters\declare.md" Link="Resources\Help\Keywords\DECLARE.md" />
+    <EmbeddedResource Include="..\..\docs\reference\variables-parameters\use.md" Link="Resources\Help\Keywords\USE.md" />
+    <EmbeddedResource Include="..\..\docs\reference\variables-parameters\@@*.md" Link="Resources\Help\Variables\%(Filename)%(Extension)" />
+    
+    <!-- Dates & Times (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\dates-times\reldate.md" Link="Resources\Help\Keywords\RELDATE.md" />
+
+    <!-- File Operations (Operations & Keywords Categories) -->
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\bulk-insert.md" Link="Resources\Help\Keywords\BULK.INSERT.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\copy-file.md" Link="Resources\Help\Keywords\COPY.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\compress-file.md" Link="Resources\Help\Keywords\COMPRESS.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\encrypt-file.md" Link="Resources\Help\Keywords\ENCRYPT.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\file.md" Link="Resources\Help\Operations\FILE.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\directory.md" Link="Resources\Help\Operations\DIRECTORY.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\transfer.md" Link="Resources\Help\Operations\TRANSFER.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\create-pgp-key-pair.md" Link="Resources\Help\Operations\CREATE.PGP_KEY_PAIR.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\create-ssh-key-pair.md" Link="Resources\Help\Operations\CREATE.SSH_KEY_PAIR.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\send-email.md" Link="Resources\Help\Operations\SEND\EMAIL.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\send-file.md" Link="Resources\Help\Operations\SEND\FILE.md" />
+    <EmbeddedResource Include="..\..\docs\reference\file-operations\receive-file.md" Link="Resources\Help\Operations\RECEIVE\FILE.md" />
+
+    <!-- Lineage & Governance (Operations Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\statements\session-control\lineage.md" Link="Resources\Help\Operations\LINEAGE.md" />
+
+    <!-- Connectors (Connectors Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\connectors\**\*.md" Link="Resources\Help\Connectors\%(Filename)%(Extension)" />
+
+    <!-- Functions (Functions Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" />
+
+    <!-- Visuals & Reporting (Visuals & Report Categories) -->
+    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\visuals\*.md" Link="Resources\Help\Visuals\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\report\*.md" Link="Resources\Help\Report\%(Filename)%(Extension)" />
+
+    <!-- Portal Administration (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\portal-admin\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+
+    <!-- Orchestrator Jobs & Bundles (Keywords Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\orchestrator-jobs\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+
+    <!-- Global & Session Configuration (Options Category) -->
+    <EmbeddedResource Include="..\..\docs\reference\configuration\*.md" Link="Resources\Help\Options\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

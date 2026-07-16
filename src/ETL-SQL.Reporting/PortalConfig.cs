@@ -216,7 +216,7 @@ public class OperationalDigestConfig
     public bool AlertOnPendingMigrations { get; set; } = true;
 
     /// <summary>Base path or URL used in emitted alert runbook links.</summary>
-    public string RunbookBaseUri { get; set; } = "Docs/Operations/Alerting_Service_Objectives.md";
+    public string RunbookBaseUri { get; set; } = "docs/architecture/decisions/Alerting_Service_Objectives.md";
 }
 
 public class PortalLoadBalancerConfig

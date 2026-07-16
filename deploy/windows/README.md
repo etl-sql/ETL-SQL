@@ -32,4 +32,4 @@ After installing more than one environment, verify isolation and ACL boundaries:
 pwsh -File ..\verify\Test-Isolation.ps1 C:\ETL-SQL\*\*.env -CheckAcls
 ```
 
-See [`../README.md`](../README.md) for the platform overview and [`../../Docs/Operations/Departmental_Isolation.md`](../../Docs/Operations/Departmental_Isolation.md) for the full runbook.
+See [`../README.md`](../README.md) for the platform overview and [`../../docs/architecture/decisions/Departmental_Isolation.md`](../../docs/architecture/decisions/Departmental_Isolation.md) for the full runbook.

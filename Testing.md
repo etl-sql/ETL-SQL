@@ -1,6 +1,6 @@
 # ETL-SQL Testing Guide
 
-The testing guide lives at [Docs/Testing.md](Docs/Testing.md).
+The testing guide lives at [docs/guides/testing.md](Testing.md).
 
 Start there for:
 

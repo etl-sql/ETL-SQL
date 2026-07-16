@@ -50,14 +50,14 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 
 | Document | Contents |
 | :--- | :--- |
-| **[Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md)** | Variables, `DECLARE`/`SET`, `IF`/`WHILE`/`FOREACH`/`FOR`, `TRY...CATCH`, `SELECT` clauses, CTEs, JOINs, DML, DDL, `EXECUTE`, `PARALLEL`, `RUN SCRIPT`, job scheduling, transactions |
-| **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** | Every connector token, all `WITH()` options, authentication patterns, aliases, quick-reference table |
-| **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** | All data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with full signatures and examples |
-| **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, lineage/tagging, SSH key generation, Docker integration, profiling |
-| **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
-| **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
-| **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
-| **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
+| **[Grammar.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md)** | Variables, `DECLARE`/`SET`, `IF`/`WHILE`/`FOREACH`/`FOR`, `TRY...CATCH`, `SELECT` clauses, CTEs, JOINs, DML, DDL, `EXECUTE`, `PARALLEL`, `RUN SCRIPT`, job scheduling, transactions |
+| **[Data_Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** | Every connector token, all `WITH()` options, authentication patterns, aliases, quick-reference table |
+| **[Standard_Library.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md)** | All data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with full signatures and examples |
+| **[Specialized_Operations.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, lineage/tagging, SSH key generation, Docker integration, profiling |
+| **[Lineage.md](docs/reference/statements/session-control/lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
+| **[RelativeDate_Parameters.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/reference/functions/general/RELDATE.md)** | Relative date parameter syntax, `D` (today), `N` (now), offset expressions, use in `WHERE` clauses and report filters |
+| **[Report_SQL_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/report-sql.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
+| **[Administrators_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** | Production deployment, HA configuration, Governance Core, OIDC setup, backup/restore, health checks |
 
 Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
@@ -116,7 +116,7 @@ The platform now includes shipped enterprise operations features. When generatin
 - **Governance Core is shipped** across hosts: typed organization policy, policy enforcement at lint and execution boundaries, `SECRET:name` references via configured secret providers, redaction of raw secret values and `SECRET:` references, and durable remote audit outbox with optional fail-closed mutation behavior.
 - **Enterprise Identity is active work**. OIDC support includes federated login/logout/token refresh, issuer/audience/claim validation, OIDC-only account binding, and dynamic group-claim sync. The next phase adds service accounts and approval workflows. Check `TODO.md` and `ROADMAP.md` before assuming identity behavior is complete.
 
-For production configuration details, use **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Enterprise_Platform_Strategy.md)**.
+For production configuration details, use **[Administrators_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** as the source of truth. For the long-term enterprise model, use **[Enterprise_Platform_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)**.
 
 ---
 
@@ -142,7 +142,7 @@ SET WHAT_IF OFF;
 DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';
 ```
 
-For full security governance rules, see **[Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** (Part I — The Inviolable Rules).
+For full security governance rules, see **[Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** (Part I — The Inviolable Rules).
 
 ---
 
@@ -216,7 +216,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 26 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
+For 26 production-grade complete recipes, see **[Cookbook.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/cookbooks/etl-recipes.md)**.
 
 ---
 
@@ -227,21 +227,21 @@ Use this map to find the right document for any task.
 ### Writing Scripts
 | Need | Document |
 | :--- | :--- |
-| Full language syntax | **[Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md)** |
-| Connector options and authentication | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** |
-| Functions (string, date, math, regex, window) | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** |
-| File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
-| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Lineage.md)** |
-| Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/RelativeDate_Parameters.md)** |
-| Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
-| Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
-| Sample script inventory (290+ files in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
-| Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
-| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Script_Composition_Standards.md)** |
-| Production install, HA, Governance Core, OIDC | **[Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** |
-| Portal user/admin operations | **[ReportPortal_Administrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/ReportPortal_Administrators_Guide.md)** |
-| Orchestrator job operations | **[Orchestrators_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Orchestrators_Guide.md)** |
-| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Enterprise_Platform_Strategy.md)** |
+| Full language syntax | **[Grammar.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md)** |
+| Connector options and authentication | **[Data_Connectors.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** |
+| Functions (string, date, math, regex, window) | **[Standard_Library.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md)** |
+| File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** |
+| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](docs/reference/statements/session-control/lineage.md)** |
+| Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/reference/functions/general/RELDATE.md)** |
+| Complete production recipes | **[Cookbook.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/cookbooks/etl-recipes.md)** |
+| Pipeline mental model for new users | **[User_Manual.md](file:///C:/Users/chuck/scratch/ETL-SQL/.worktrees/enterprise-policy-hardening/Docs/User_Manual.md)** |
+| Sample script inventory (290+ files in `/samples/`) | **[Sample_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/sample-guide.md)** |
+| Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/report-sql.md)** |
+| Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Script_Composition_Standards.md)** |
+| Production install, HA, Governance Core, OIDC | **[Administrators_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/administration.md)** |
+| Portal user/admin operations | **[ReportPortal_Administrators_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/report-portal-admin.md)** |
+| Orchestrator job operations | **[Orchestrators_Guide.md](file:///C:/Users/chuck/scratch/ETL-SQL/.worktrees/enterprise-policy-hardening/Docs/Orchestrators_Guide.md)** |
+| Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
 
 ### Contributing Engine Code
 | Need | Document |
@@ -252,16 +252,16 @@ Use this map to find the right document for any task.
 | Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md)** |
 | Report Portal auth, HA topology, API, health checks | **[Architecture/ReportPortal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md)** |
 | Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/GrammarStateEngine.md)** |
-| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Engine_Coding_Standards.md)** |
-| Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** |
-| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Language_Syntax_Standards.md)** |
-| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Breaking_Change_Standards.md)** |
-| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Third_Party_Dependency_Standards.md)** |
-| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Source_Boundary_Standards.md)** |
-| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Report_Runtime_Asset_Standards.md)** |
-| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)** |
-| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Help_and_Snippet_Standards.md)** |
-| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Engine_Upgrade_Strategy.md)** |
+| C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Engine_Coding_Standards.md)** |
+| Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** |
+| Rules for adding language syntax | **[Standards/Language_Syntax_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Language_Syntax_Standards.md)** |
+| Protocol for breaking changes | **[Standards/Breaking_Change_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Breaking_Change_Standards.md)** |
+| Rules for third-party dependencies | **[Standards/Third_Party_Dependency_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Third_Party_Dependency_Standards.md)** |
+| Source boundaries and project ownership | **[Standards/Source_Boundary_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Source_Boundary_Standards.md)** |
+| Rules for report runtime assets | **[Standards/Report_Runtime_Asset_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Report_Runtime_Asset_Standards.md)** |
+| Rules for touching the presentation layer | **[Standards/Presentation_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Presentation_Standards.md)** |
+| Rules for writing help docs & snippets | **[Standards/Help_and_Snippet_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Help_and_Snippet_Standards.md)** |
+| Engine upgrade strategy | **[Strategy/Engine_Upgrade_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Engine_Upgrade_Strategy.md)** |
 
 ---
 
@@ -286,7 +286,7 @@ Help documents located under `src/ETL-SQL.Core/Resources/Help/` are loaded dynam
   - Never use raw leading-space indentation (e.g., `  PAGE_SIZE — rows per page`) as it collapses into a single paragraph in editor hover cards.
   - Bold the option/parameter name (e.g., `- **PAGE_SIZE = n** — ...`).
 - **Examples**: Provide one or two clean, copy-pasteable example blocks using ` ```sql ... ``` ` to illustrate common use cases.
-- **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](../../../../../Docs/Report_SQL_Guide.md)`).
+- **References**: Always end the document with a `References` section pointing to the official manuals or specifications (e.g., `- [Report SQL Guide](docs/guides/report-sql.md)`).
 
 ### 7.2 Snippet Formatting Standards
 
@@ -331,7 +331,7 @@ CREATE CONNECTION sales AS MSSQL(SERVER='sql01', DATABASE='SalesDB', USER='etl_w
 CREATE CONNECTION sales AS MSSQL WITH(SERVER='sql01', DATABASE='SalesDB');
 ```
 
-For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)**.
+For the full 10-inviolable-rules + 25-item checklist, see **[Standards/Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** and **[Architecture/Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md)**.
 
 ---
 
@@ -404,7 +404,7 @@ Before changing a browser-side report/portal component, prototype and visually v
 
 ## 11. Source Boundary Rules for Agents
 
-Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Source_Boundary_Migration_Plan.md)**.
+Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Source_Boundary_Migration_Plan.md)**.
 
 - Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
 - Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.
@@ -524,4 +524,4 @@ All ETL-SQL keywords must be **UPPERCASE, underscore-separated**: `ENGINE_COMPAT
 
 ---
 
-*For a complete syntax walkthrough, start at [User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md) and then refer to the [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) reference.*
+*For a complete syntax walkthrough, start at [User_Manual.md](file:///C:/Users/chuck/scratch/ETL-SQL/.worktrees/enterprise-policy-hardening/Docs/User_Manual.md) and then refer to the [Grammar.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md) reference.*

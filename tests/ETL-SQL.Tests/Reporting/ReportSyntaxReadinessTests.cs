@@ -34,16 +34,24 @@ namespace ETL_SQL.Tests.Reporting
         private static IEnumerable<string> EnumerateReleaseFacingFiles(string root)
         {
             yield return Path.Combine(root, "AGENTS.md");
-            yield return Path.Combine(root, "Docs", "Report_SQL_Guide.md");
-            yield return Path.Combine(root, "Docs", "Reference", "Grammar.md");
-            yield return Path.Combine(root, "Docs", "Sample_Guide.md");
-            yield return Path.Combine(root, "Docs", "Strategy", "ReportPortal_Strategy.md");
+            yield return Path.Combine(root, "docs", "guides", "report-sql.md");
+            yield return Path.Combine(root, "docs", "guides", "getting-started.md");
+            yield return Path.Combine(root, "docs", "guides", "sample-guide.md");
+            yield return Path.Combine(root, "docs", "architecture", "roadmaps", "ReportPortal_Strategy.md");
 
-            foreach (var file in Directory.GetFiles(Path.Combine(root, "src", "ETL-SQL.Core", "Resources", "Help", "Report"), "*.md"))
-                yield return file;
+            var reportDir = Path.Combine(root, "docs", "reference", "visuals-reporting", "report");
+            if (Directory.Exists(reportDir))
+            {
+                foreach (var file in Directory.GetFiles(reportDir, "*.md"))
+                    yield return file;
+            }
 
-            foreach (var file in Directory.GetFiles(Path.Combine(root, "src", "ETL-SQL.Core", "Resources", "Help", "Visuals"), "*.md"))
-                yield return file;
+            var visualsDir = Path.Combine(root, "docs", "reference", "visuals-reporting", "visuals");
+            if (Directory.Exists(visualsDir))
+            {
+                foreach (var file in Directory.GetFiles(visualsDir, "*.md"))
+                    yield return file;
+            }
 
             yield return Path.Combine(root, "samples", "golden_workflow", "golden_workflow.rptsql");
             yield return Path.Combine(root, "samples", "08_Reporting", "kitchen_sink.rptsql");

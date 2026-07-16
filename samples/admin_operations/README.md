@@ -3,7 +3,7 @@
 These scripts are **examples** of operational automation written in ETL-SQL. As of v0.15.0 each has
 a managed, first-class replacement in the Report Portal — three native background services
 configured under `Portal:AdminServices` with HA-safe scheduling, delivery retries, run history,
-and audit (see *Native admin services* in `Docs/Administrators_Guide.md`):
+and audit (see *Native admin services* in `docs/guides/administration.md`):
 
 | Script | Native replacement |
 | :--- | :--- |

@@ -30,8 +30,8 @@ namespace ETL_SQL.Tests.Docs
 
         private static readonly string[] Cookbooks =
         {
-            "Docs/Cookbook.md",
-            "Docs/Report_Cookbook.md",
+            "docs/cookbooks/etl-recipes.md",
+            "docs/cookbooks/report-recipes.md",
         };
 
         // Recipes that do not yet parse, keyed by content hash (stable across line shifts; changes the

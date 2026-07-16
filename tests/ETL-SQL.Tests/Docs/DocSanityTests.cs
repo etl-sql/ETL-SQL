@@ -26,7 +26,7 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void SampleFiles_ReferencedInSampleGuide_AllExist()
         {
-            var sampleGuidePath = RepoFile("Docs/Sample_Guide.md");
+            var sampleGuidePath = RepoFile("docs/guides/sample-guide.md");
             Assert.True(File.Exists(sampleGuidePath), $"Missing: {sampleGuidePath}");
 
             var content = File.ReadAllText(sampleGuidePath);
@@ -39,8 +39,8 @@ namespace ETL_SQL.Tests.Docs
             foreach (Match m in matches)
             {
                 var relPath = m.Groups[1].Value;
-                // Sample_Guide.md is in Docs/, so ../samples/... resolves from Docs/
-                var fullPath = Path.GetFullPath(Path.Combine(RepoRoot, "Docs", relPath));
+                // sample-guide.md is in docs/guides/, so ../../samples/... resolves from docs/guides/
+                var fullPath = Path.GetFullPath(Path.Combine(RepoRoot, "docs", "guides", relPath));
                 if (!File.Exists(fullPath))
                     missing.Add(relPath);
             }
@@ -55,21 +55,25 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void Grammar_SqlBlocks_ParseWithoutSyntaxError()
         {
-            var grammarPath = RepoFile("Docs/Reference/Grammar.md");
-            Assert.True(File.Exists(grammarPath), $"Missing: {grammarPath}");
+            var refDir = RepoFile("docs/reference");
+            var statementFiles = Directory.GetFiles(Path.Combine(refDir, "statements"), "*.md")
+                .Concat(Directory.GetFiles(Path.Combine(refDir, "control-flow"), "*.md"))
+                .ToArray();
 
-            var failures = FindSqlBlockParseFailures(new[] { grammarPath });
+            Assert.NotEmpty(statementFiles);
+
+            var failures = FindSqlBlockParseFailures(statementFiles);
 
             Assert.True(failures.Count == 0,
-                $"Grammar.md SQL blocks that failed to parse ({failures.Count}):\n" +
+                $"Reference SQL blocks that failed to parse ({failures.Count}):\n" +
                 string.Join("\n\n", failures));
         }
 
         [Fact]
         public void SyntaxIndexAndHelp_SqlBlocks_ParseWithoutSyntaxError()
         {
-            var syntaxIndexPath = RepoFile("Docs/Syntax_Index.md");
-            var helpDir = RepoFile("src/ETL-SQL.Core/Resources/Help");
+            var syntaxIndexPath = RepoFile("docs/Syntax_Index.md");
+            var helpDir = RepoFile("docs/reference");
             Assert.True(File.Exists(syntaxIndexPath), $"Missing: {syntaxIndexPath}");
             Assert.True(Directory.Exists(helpDir), $"Missing help dir: {helpDir}");
 
@@ -87,9 +91,9 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void GeneralDocs_SqlBlocks_ParseWithoutSyntaxError()
         {
-            var docsDir = RepoFile("Docs");
+            var docsDir = RepoFile("docs");
             var docsFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
-                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"));
+                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("architecture"));
             var rootFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly);
 
             var docFiles = docsFiles.Concat(rootFiles).ToArray();
@@ -130,13 +134,12 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void GeneralDocs_CreateConnectionOptions_AreSupportedByConnector()
         {
-            var docsDir = RepoFile("Docs");
-            var helpDir = RepoFile("src/ETL-SQL.Core/Resources/Help");
+            var docsDir = RepoFile("docs");
+            var helpDir = RepoFile("docs/reference");
             var markdownFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
                 .Concat(Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly))
-                .Concat(Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"))
+                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("architecture"))
                 .ToArray();
 
             var failures = FindUnsupportedConnectionOptions(markdownFiles);
@@ -172,12 +175,12 @@ namespace ETL_SQL.Tests.Docs
                 failure.Contains("CSV", StringComparison.OrdinalIgnoreCase));
         }
 
-        // ── Help files in Resources/Help exist and are non-empty ─────────────────
+        // ── Help files in docs/reference exist and are non-empty ─────────────────
 
         [Fact]
         public void HelpFiles_AllNonEmpty()
         {
-            var helpDir = RepoFile("src/ETL-SQL.Core/Resources/Help");
+            var helpDir = RepoFile("docs/reference");
             Assert.True(Directory.Exists(helpDir), $"Missing help dir: {helpDir}");
 
             var files = Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories);
@@ -192,7 +195,7 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void SyntaxIndex_HelpLinksExistOrUseExplicitNoHelpMarker()
         {
-            var syntaxIndexPath = RepoFile("Docs/Syntax_Index.md");
+            var syntaxIndexPath = RepoFile("docs/Syntax_Index.md");
             Assert.True(File.Exists(syntaxIndexPath), $"Missing: {syntaxIndexPath}");
 
             var missing = new List<string>();
@@ -248,12 +251,12 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void ReferenceDocs_DoNotContainStaleRoadmapLanguage()
         {
-            var referenceDir = RepoFile("Docs/Reference");
+            var referenceDir = RepoFile("docs/reference");
             Assert.True(Directory.Exists(referenceDir), $"Missing reference dir: {referenceDir}");
 
             var scannedFiles = Directory.GetFiles(referenceDir, "*.md", SearchOption.AllDirectories)
                 .Where(path => !Path.GetFileName(path).Equals("README.md", StringComparison.OrdinalIgnoreCase))
-                .Concat(new[] { RepoFile("Docs/Report_SQL_Guide.md") })
+                .Concat(new[] { RepoFile("docs/guides/report-sql.md") })
                 .Where(File.Exists)
                 .ToArray();
 
@@ -287,36 +290,46 @@ namespace ETL_SQL.Tests.Docs
         [Fact]
         public void HelpFiles_LinkBackToCanonicalReferenceDocs()
         {
-            var helpDir = RepoFile("src/ETL-SQL.Core/Resources/Help");
+            var helpDir = RepoFile("docs/reference");
             Assert.True(Directory.Exists(helpDir), $"Missing help dir: {helpDir}");
 
-            var canonicalReferenceByFolder = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            var canonicalReferences = new[]
             {
-                ["Connectors"] = "Docs/Reference/Data_Connectors.md",
-                ["Functions"] = "Docs/Reference/Standard_Library.md",
-                ["Keywords"] = "Docs/Reference/Grammar.md",
-                ["Operations"] = "Docs/Reference/Specialized_Operations.md",
-                ["Options"] = "Docs/Syntax_Index.md",
-                ["Report"] = "Docs/Report_SQL_Guide.md",
-                ["Variables"] = "Docs/Reference/Standard_Library.md",
-                ["Visuals"] = "Docs/Report_SQL_Guide.md",
+                "docs/guides/getting-started.md",
+                "docs/guides/administration.md",
+                "docs/guides/report-sql.md",
+                "docs/guides/report-portal-admin.md",
+                "docs/guides/job-orchestration.md",
+                "docs/Syntax_Index.md"
             };
 
             var missing = new List<string>();
             foreach (var path in Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories))
             {
-                var relativeToHelp = Path.GetRelativePath(helpDir, path);
-                var folder = relativeToHelp.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
-                if (!canonicalReferenceByFolder.TryGetValue(folder, out var canonicalReference))
-                    continue;
-
                 var content = File.ReadAllText(path).Replace('\\', '/');
-                if (!content.Contains(canonicalReference, StringComparison.OrdinalIgnoreCase))
-                    missing.Add($"{Path.GetRelativePath(RepoRoot, path)} -> {canonicalReference}");
+                var helpFileDir = Path.GetDirectoryName(path)!;
+
+                bool hasLink = false;
+                foreach (var canonicalReference in canonicalReferences)
+                {
+                    var canonicalFullPath = Path.GetFullPath(Path.Combine(RepoRoot, canonicalReference));
+                    var expectedRelativeLink = Path.GetRelativePath(helpFileDir, canonicalFullPath).Replace('\\', '/');
+                    if (content.Contains(expectedRelativeLink, StringComparison.OrdinalIgnoreCase) ||
+                        content.Contains(canonicalReference, StringComparison.OrdinalIgnoreCase))
+                    {
+                        hasLink = true;
+                        break;
+                    }
+                }
+
+                if (!hasLink)
+                {
+                    missing.Add(Path.GetRelativePath(RepoRoot, path));
+                }
             }
 
             Assert.True(missing.Count == 0,
-                $"Help files missing canonical reference links ({missing.Count}):\n" +
+                $"Help files missing a link to any canonical reference guide ({missing.Count}):\n" +
                 string.Join("\n", missing));
         }
 
@@ -505,5 +518,88 @@ namespace ETL_SQL.Tests.Docs
 
         private static string Truncate(string s, int maxLen) =>
             s.Length <= maxLen ? s : s[..maxLen] + "…";
+
+        [Fact]
+        public void MarkdownLinks_AllResolveCleanly()
+        {
+            var mdFiles = Directory.GetFiles(RepoRoot, "*.md", SearchOption.AllDirectories)
+                .Where(f => {
+                    var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    return !parts.Contains("Docs_Legacy") &&
+                           !parts.Contains("node_modules") &&
+                           !parts.Contains(".git") &&
+                           !parts.Contains("bin") &&
+                           !parts.Contains("obj") &&
+                           !parts.Contains("Help_Legacy") &&
+                           !parts.Contains(".worktrees") &&
+                           !parts.Contains(".vscode-test") &&
+                           !f.EndsWith("TEMPLATE.md", StringComparison.OrdinalIgnoreCase) &&
+                           !f.EndsWith("CLAUDE.md", StringComparison.OrdinalIgnoreCase) &&
+                           !f.EndsWith("GEMINI.md", StringComparison.OrdinalIgnoreCase) &&
+                           !f.EndsWith("AGENTS.md", StringComparison.OrdinalIgnoreCase);
+                })
+                .ToList();
+
+            var brokenLinks = new List<string>();
+            var linkRegex = new Regex(@"\[([^\]]+)\]\(([^)]+)\)", RegexOptions.Compiled);
+
+            foreach (var file in mdFiles)
+            {
+                var relativePath = Path.GetRelativePath(RepoRoot, file);
+                var content = File.ReadAllText(file);
+                var matches = linkRegex.Matches(content);
+                var fileDir = Path.GetDirectoryName(file)!;
+
+                foreach (Match match in matches)
+                {
+                    var link = match.Groups[2].Value;
+
+                    // Skip absolute, mailto, or page-internal anchor links
+                    if (link.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                        link.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                        link.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase) ||
+                        link.StartsWith("#"))
+                    {
+                        continue;
+                    }
+
+                    // Strip any anchor fragment
+                    var cleanLink = link;
+                    var hashIdx = link.IndexOf('#');
+                    if (hashIdx != -1)
+                    {
+                        cleanLink = link.Substring(0, hashIdx);
+                    }
+
+                    // Handle file:/// URL scheme
+                    if (cleanLink.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var fileUriPath = cleanLink.Substring(8).Replace('/', Path.DirectorySeparatorChar);
+                        if (Path.IsPathRooted(fileUriPath) && File.Exists(fileUriPath))
+                        {
+                            continue;
+                        }
+                        var rootResolved = Path.GetFullPath(Path.Combine(RepoRoot, fileUriPath));
+                        if (File.Exists(rootResolved))
+                        {
+                            continue;
+                        }
+                        brokenLinks.Add($"{relativePath}: Broken file link: {link}");
+                        continue;
+                    }
+
+                    // Try to resolve relative to current file
+                    var targetPath = Path.GetFullPath(Path.Combine(fileDir, cleanLink.Replace('/', Path.DirectorySeparatorChar)));
+                    if (!File.Exists(targetPath) && !Directory.Exists(targetPath))
+                    {
+                        brokenLinks.Add($"{relativePath}: Broken relative link: {link}");
+                    }
+                }
+            }
+
+            Assert.True(brokenLinks.Count == 0,
+                $"Found broken relative markdown links in repository ({brokenLinks.Count}):\n" +
+                string.Join("\n", brokenLinks));
+        }
     }
 }

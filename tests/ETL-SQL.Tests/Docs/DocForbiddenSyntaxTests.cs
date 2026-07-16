@@ -83,16 +83,13 @@ namespace ETL_SQL.Tests.Docs
 
         private static IEnumerable<string> DocFiles()
         {
-            var docs = Path.Combine(RepoRoot, "Docs");
-            var help = Path.Combine(RepoRoot, "src", "ETL-SQL.Core", "Resources", "Help");
-            var strategy = Path.Combine(docs, "Strategy") + Path.DirectorySeparatorChar;
+            var docs = Path.Combine(RepoRoot, "docs");
+            var roadmaps = Path.Combine(docs, "architecture", "roadmaps") + Path.DirectorySeparatorChar;
 
             var files = new List<string>();
             if (Directory.Exists(docs))
                 files.AddRange(Directory.GetFiles(docs, "*.md", SearchOption.AllDirectories)
-                    .Where(f => !f.StartsWith(strategy, StringComparison.OrdinalIgnoreCase)));
-            if (Directory.Exists(help))
-                files.AddRange(Directory.GetFiles(help, "*.md", SearchOption.AllDirectories));
+                    .Where(f => !f.StartsWith(roadmaps, StringComparison.OrdinalIgnoreCase)));
             return files.Distinct().OrderBy(f => f, StringComparer.Ordinal);
         }
     }

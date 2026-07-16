@@ -89,7 +89,7 @@ namespace ETL_SQL.SqlLogicTests
 
             if (!Directory.Exists(root)) return Enumerable.Empty<object[]>();
 
-            // Exclusions (see Docs/Standards/SLT_Coverage.md for full rationale):
+            // Exclusions (see docs/architecture/standards/SLT_Coverage.md for full rationale):
             //
             //   select4_debug.test — truncated artifact: same 1025 setup statements as select4.test
             //     but only 1019 of its 2832 queries (cuts off before complex join tests). No unique

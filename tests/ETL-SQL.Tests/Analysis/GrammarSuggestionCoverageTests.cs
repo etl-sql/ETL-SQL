@@ -87,14 +87,24 @@ namespace ETL_SQL.Tests.Analysis
             var visitedStates = new HashSet<StateNode>();
             var visitedTransitions = new HashSet<StateTransition>();
 
-            // The curated corpus plus the documented SQL examples — the walker resets to Root at each
-            // semicolon, so whole multi-statement snippets can be fed as-is.
-            var corpus = Corpus.Concat(LoadDocumentationSnippets());
+            var corpus = Corpus.Select(c => (Sql: c, File: "Curated Corpus"))
+                .Concat(LoadDocumentationSnippets());
 
-            foreach (var sql in corpus)
+            foreach (var item in corpus)
             {
                 var walker = new TokenWalker(tree);
-                foreach (var token in Tokenize(sql))
+                List<Token> tokens;
+                try
+                {
+                    tokens = Tokenize(item.Sql);
+                }
+                catch (Exception ex)
+                {
+                    Assert.Fail($"Tokenization failed in '{item.File}': {ex.Message}\nSnippet:\n{item.Sql}");
+                    throw;
+                }
+
+                foreach (var token in tokens)
                 {
                     if (token.Type == TokenType.EOF) break;
 
@@ -128,31 +138,27 @@ namespace ETL_SQL.Tests.Analysis
             Assert.True(transitionPct >= 30.0, $"Suggestion transition coverage dropped to {transitionPct:F1}% (floor 30%).");
         }
 
-        private static IEnumerable<string> LoadDocumentationSnippets()
+        private static IEnumerable<(string Sql, string File)> LoadDocumentationSnippets()
         {
             var repoRoot = FindRepoRoot();
             var files = new List<string>();
 
-            var docsDir = Path.Combine(repoRoot, "Docs");
+            var docsDir = Path.Combine(repoRoot, "docs");
             if (Directory.Exists(docsDir))
             {
                 files.AddRange(Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories));
-            }
-            var helpDir = Path.Combine(repoRoot, "src", "ETL-SQL.Core", "Resources", "Help");
-            if (Directory.Exists(helpDir))
-            {
-                files.AddRange(Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories));
             }
 
             var sqlBlock = new Regex(@"```sql\r?\n(.*?)\r?\n```", RegexOptions.Singleline);
             foreach (var file in files)
             {
+                var relPath = Path.GetRelativePath(repoRoot, file).Replace('\\', '/');
                 foreach (Match match in sqlBlock.Matches(File.ReadAllText(file)))
                 {
                     var block = match.Groups[1].Value.Trim();
                     if (!string.IsNullOrWhiteSpace(block))
                     {
-                        yield return block;
+                        yield return (block, relPath);
                     }
                 }
             }

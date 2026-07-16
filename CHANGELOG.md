@@ -359,7 +359,7 @@ Version numbers follow [Semantic Versioning 2.0.0](https://semver.org/).
 - Added job scheduler chaos coverage and concurrency race verification tests (scheduler, subscription, and active-work).
 - Added a subscription delivery diagnostics UI and preserved subscription failures in the history store.
 - Added verification tests for Report Portal user permission models and user workflows.
-- Added a new capacity planning guide (`Docs/Strategy/Capacity_Planning.md` or similar) and published service capacity baselines.
+- Added a new capacity planning guide (`docs/architecture/roadmaps/Capacity_Planning.md` or similar) and published service capacity baselines.
 - Added capacity workload templates and row-volume capacity planning profiles.
 - Added scaling tests for portal administration catalogs and enterprise identity lifecycle verification.
 
@@ -430,21 +430,21 @@ Hardening from the v0.10.0 release-readiness security review:
 **Release Infrastructure**
 - `scripts/Test-PreRelease.ps1`: local pre-release validation runner with resumable phases (source-hash fingerprinting prevents reusing stale results after code changes). Phases: sync-assets drift, restore, build, smoke/fast test lanes, Node.js unit tests, sample smoke, Smoke-tier scale cert. Optional switches: `-IncludeDockerIntegration`, `-IncludeStandardScale`, `-BuildInstallers`, `-SkipNode`, `-SkipScale`, `-Resume`.
 - `scripts/Compare-CertBaseline.ps1`: diffs a `cert-report.json` against a stored baseline — exact pass/fail, result-row count, checksum, and elapsed-time regression (±50% threshold). Exits 1 with a regression table on any failure.
-- `Docs/Strategy/Release_Capability_Matrix.md`: release claim matrix tying public product claims to concrete evidence and preventing release notes from overstating tested behavior.
+- `docs/architecture/roadmaps/Release_Capability_Matrix.md`: release claim matrix tying public product claims to concrete evidence and preventing release notes from overstating tested behavior.
 - `scripts/Get-TestLaneInventory.ps1`: static lane inventory report showing discovered xUnit tests by lane, category trait, project, and fast-lane exclusion reason.
 - `perf` lane now runs engine hardening performance tests plus the dedicated perf project; `fast`, `portal`, and `full` lanes include the Node lineage UI smoke test.
 - Scale certification baselines committed: `certification-results/baseline-smoke.json` (Smoke, 1×) and `certification-results/baseline-standard.json` (Standard, 10×, 13 scenarios, all passing).
 - `.github/CODEOWNERS` and Dependabot configuration added.
 - Four GitHub workflow templates under `.github/workflow-templates/` (local-validated-release, manual-docker-certification, manual-release-validation, manual-scale-certification) — staged for future activation; not yet wired to automatic triggers.
-- `Docs/Strategy/Release_Workflows.md` documents the local-first release ownership model and workflow template activation guide.
+- `docs/architecture/roadmaps/Release_Workflows.md` documents the local-first release ownership model and workflow template activation guide.
 - Windows release packaging scripts hardened for reliable local/CI builds: resolved WiX tool lookup, WiX 3.x Program Files discovery, explicit MSI failure handling, and local validated release workflow WiX installation.
 
 **Documentation**
 - `Docs/Architecture/Lineage.md` (new): what is tracked, `LineageEntry` data model, `SHOW LINEAGE` syntax variants, Mermaid and OpenLineage export, `SHOW LINEAGE HISTORY` cross-run catalog, metadata inheritance rules, and Orchestrator (`etlsql.db`) integration.
 - `Docs/Reference/Performance.md` (new): see Observability above.
-- `Docs/Strategy/Release_Workflows.md` (new): see Release Infrastructure above.
+- `docs/architecture/roadmaps/Release_Workflows.md` (new): see Release Infrastructure above.
 - Architecture documentation expanded for connector, engine, expression evaluation, language server, lineage, orchestrator, parser/lexer, portal UI, report portal, reporting, TUI editor, variable scoping, and VS Code extension boundaries.
-- `Docs/Testing.md`, `Docs/Strategy/Test_Strategy.md`, and `scripts/README.md` reorganized around the current lane model, pre-release phases, SLT usage, coverage expectations, and installer prerequisites.
+- `docs/guides/testing.md`, `docs/architecture/roadmaps/Test_Strategy.md`, and `scripts/README.md` reorganized around the current lane model, pre-release phases, SLT usage, coverage expectations, and installer prerequisites.
 - Connector standards and reference docs corrected for current connector option naming rules, supported connector inventory, and source-boundary guidance.
 
 **Tests**
@@ -531,8 +531,8 @@ Hardening from the v0.10.0 release-readiness security review:
 **Documentation**
 - Doc sanity tests: SQL blocks in `Grammar.md`, `Syntax_Index.md`, and all bundled help files parse without syntax errors; help link resolution verified; stale roadmap language guardrail for reference docs.
 - Connector Standards doc updated to reflect XML streaming refactor (Rule 7 compliance).
-- Scale certification claims page added (`Docs/Standards/ScaleCertification.md`).
-- SLT corpus coverage documented in `Docs/Standards/SLT_Coverage.md`.
+- Scale certification claims page added (`docs/architecture/standards/ScaleCertification.md`).
+- SLT corpus coverage documented in `docs/architecture/standards/SLT_Coverage.md`.
 
 ### Fixed
 - **Snowflake StackOverflow**: `SnowflakeDataSource.CreateCommand` was recursively calling itself; fixed to delegate to the underlying connection.

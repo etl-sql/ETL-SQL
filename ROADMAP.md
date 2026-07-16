@@ -2,13 +2,13 @@
 
 This document tracks future product tracks and candidate phases. When development begins, the next actionable phase is moved to `TODO.md`. Shipped work belongs in `CHANGELOG.md`.
 
-The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment promise are defined in [`Docs/Strategy/Enterprise_Platform_Strategy.md`](Docs/Strategy/Enterprise_Platform_Strategy.md).
+The enterprise operating model, authority hierarchy, trust boundaries, and progressive deployment promise are defined in [`docs/architecture/roadmaps/Enterprise_Platform_Strategy.md`](docs/architecture/roadmaps/Enterprise_Platform_Strategy.md).
 
 ## Review Workflow & Data Stewardship
 
 *Combines steward-facing governance, metadata ownership, and impact analysis.*
 
-Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stewardship_Strategy.md)
+Strategy: [`docs/architecture/roadmaps/Data_Stewardship_Strategy.md`](docs/architecture/roadmaps/Data_Stewardship_Strategy.md)
 
 ### Future Candidate Phases
 
@@ -48,7 +48,7 @@ Strategy: [`Docs/Strategy/Data_Stewardship_Strategy.md`](Docs/Strategy/Data_Stew
 #### Phase 1: Visual Diagnostics & Portal Editing
 - [ ] **VS Code Visual Flow (DAG) Webview:** Port the Orchestrator's AST-to-DAG rendering into a VS Code extension panel. "Show Visual Flow" generates a read-only, interactive diagram of the pipeline (flat files → temp tables/queries → database targets), replicating the visual-flow benefit of SSIS.
   - *Scope notes:* largely a reuse/packaging effort — the canonical `renderDag` already exists and the `sync-assets` pipeline already targets VS Code media. Start **read-only + on-demand refresh**; defer live-sync.
-- [ ] **First-Class Portal Script Editor:** Upgrade the Portal's script editor from a basic text area to a high-fidelity development interface for SaaS/large-farm environments. See the detailed design spec in [PortalEditorStrategy.md](Docs/Design/PortalEditorStrategy.md). Approach (reassessed 2026-07): **CodeMirror 6 + stateless server-side analysis + a schema API** — *not* Monaco and *not* a per-session Language Server, which conflict with the bounded-resource/multi-tenant model.
+- [ ] **First-Class Portal Script Editor:** Upgrade the Portal's script editor from a basic text area to a high-fidelity development interface for SaaS/large-farm environments. See the detailed design spec in [PortalEditorStrategy.md](docs/architecture/decisions/PortalEditorStrategy.md). Approach (reassessed 2026-07): **CodeMirror 6 + stateless server-side analysis + a schema API** — *not* Monaco and *not* a per-session Language Server, which conflict with the bounded-resource/multi-tenant model.
   - **Real-engine diagnostics:** keep CodeMirror 6; add a debounced, stateless `POST /api/designer/analyze` that reuses the `ETL-SQL.Analysis` linter (same rules as VS Code/CLI) and renders results as CodeMirror squiggles — no per-session server process.
   - **Schema autocomplete:** a shared, cached, ACL-gated schema-snapshot service plus a stateless completion endpoint feeding CodeMirror autocomplete.
   - **Governed interactive runs:** server-enforced `TOP 100` + short timeouts + a memory ceiling, executed under the logged-in user's RLS/identity context, with every run audited (`AD_HOC_RUN`).

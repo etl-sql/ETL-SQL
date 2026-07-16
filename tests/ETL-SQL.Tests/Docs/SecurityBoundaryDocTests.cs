@@ -17,18 +17,18 @@ public sealed class SecurityBoundaryDocTests
     // Collapse whitespace so assertions are robust to markdown line-wrapping.
     private static string AdminGuide() =>
         System.Text.RegularExpressions.Regex.Replace(
-            System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "Docs", "Administrators_Guide.md")),
+            System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "docs", "guides", "administration.md")),
             @"\s+", " ");
 
     private static string EnterpriseReleaseGates() =>
         System.Text.RegularExpressions.Regex.Replace(
             System.IO.File.ReadAllText(System.IO.Path.Combine(
-                RepoRoot, "Docs", "Operations", "Enterprise_Release_Gates.md")),
+                RepoRoot, "docs", "architecture", "decisions", "Enterprise_Release_Gates.md")),
             @"\s+", " ");
 
     private static string OperationDoc(string fileName) =>
         System.Text.RegularExpressions.Regex.Replace(
-            System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "Docs", "Operations", fileName)),
+            System.IO.File.ReadAllText(System.IO.Path.Combine(RepoRoot, "docs", "architecture", "decisions", fileName)),
             @"\s+", " ");
 
     private static string Todo() =>

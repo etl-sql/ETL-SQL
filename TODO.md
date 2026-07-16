@@ -9,7 +9,7 @@ release notes, or the relevant implementation/design document.
 ## v0.15.0 Release Debt
 
 Findings surfaced during the v0.15.0 release. Full detail in
-`Docs/Operations/v0.15.0-flaky-tests.md` and `Docs/Operations/v0.15.0-performance-results.md`.
+`docs/architecture/decisions/v0.15.0-flaky-tests.md` and `docs/architecture/decisions/v0.15.0-performance-results.md`.
 
 ### Restore the 70% coverage gate
 
@@ -29,7 +29,7 @@ the remaining gap is infrastructure coverage.
 ## v0.16.0 Pre-Release Evidence
 
 Collect release-suite evidence before publishing v0.16.0. The detailed evidence packet template is
-[`Docs/Operations/Enterprise_Release_Evidence_Checklist.md`](Docs/Operations/Enterprise_Release_Evidence_Checklist.md).
+[`docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md`](docs/architecture/decisions/Enterprise_Release_Evidence_Checklist.md).
 
 - [ ] Functional fast lane: `.\scripts\test-lane.ps1 -Lane fast -NoRestore`.
 - [ ] Full pre-release lane:

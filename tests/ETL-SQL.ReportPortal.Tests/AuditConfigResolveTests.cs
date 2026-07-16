@@ -5,8 +5,8 @@ namespace ETL_SQL.ReportPortal.Tests;
 
 /// <summary>
 /// Effective fail-closed audit policy: an explicit value always wins; when unset, it is on only for
-/// an enrolled deployment that has a collector configured. See Docs/Design/RowLevelSecurity.md sibling
-/// governance docs and the Administrators_Guide §4 audit section.
+/// an enrolled deployment that has a collector configured. See docs/architecture/decisions/RowLevelSecurity.md sibling
+/// governance docs and the docs/guides/administration.md §4 audit section.
 /// </summary>
 public sealed class AuditConfigResolveTests
 {

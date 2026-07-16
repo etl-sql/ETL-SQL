@@ -258,7 +258,7 @@ public sealed class OperationalObservabilityTests : IDisposable
         Assert.Contains("alert_code=\"portal_stale_datasets\"", prometheus);
         Assert.Contains("alert_code=\"portal_policy_version_expiring\"", prometheus);
         Assert.Contains("alert_code=\"portal_policy_version_expired\"", prometheus);
-        Assert.Contains("runbook=\"Docs/Operations/Alerting_Service_Objectives.md#portal-execution-queue-depth\"", prometheus);
+        Assert.Contains("runbook=\"docs/architecture/decisions/Alerting_Service_Objectives.md#portal-execution-queue-depth\"", prometheus);
         Assert.Contains($"node=\"{node.NodeId}\"", prometheus);
         Assert.DoesNotContain(datasetDir, prometheus);
         Assert.DoesNotContain(snapshotDir, prometheus);

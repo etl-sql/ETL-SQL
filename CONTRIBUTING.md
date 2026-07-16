@@ -91,7 +91,7 @@ ETL-SQL/
 │   └── etl-sql-vscode/        # VS Code language extension (TypeScript/Node)
 ├── tests/
 │   └── ETL-SQL.Tests/         # xUnit test suite (unit + integration)
-├── samples/                   # Sample .etlsql scripts (see Docs/Sample_Guide.md)
+├── samples/                   # Sample .etlsql scripts (see docs/guides/sample-guide.md)
 ├── Docs/                      # Full documentation library
 ├── AGENTS.md                  # AI assistant instruction manual
 ├── CHANGELOG.md               # Version history
@@ -143,16 +143,16 @@ Before touching the engine, read:
 
 ### New Connectors
 
-See [Docs/Standards/Connectors_Standards.md](Docs/Standards/Connectors_Standards.md) for the full compliance checklist (25 items). The short version:
+See [docs/architecture/standards/Connectors_Standards.md](docs/architecture/standards/Connectors_Standards.md) for the full compliance checklist (25 items). The short version:
 1. Implement `IConnector` and `IDataSource` (or `IDatabaseSource` for SQL engines)
 2. Register in `DependencyInjectionSetup.cs`
 3. Add a `GetSupportedOptions()` implementation documenting every `WITH()` key
-4. Add connector documentation to [Docs/Reference/Data_Connectors.md](Docs/Reference/Data_Connectors.md)
+4. Add connector documentation to [docs/guides/administration.md](docs/guides/administration.md)
 5. Write integration tests with Testcontainers (SQL) or temp files (file connectors)
 
 ### Presentation / TUI
 
-See [Docs/Standards/Presentation_Standards.md](Docs/Standards/Presentation_Standards.md) — the color system, layout rules, and error sanitization requirements.
+See [docs/architecture/standards/Presentation_Standards.md](docs/architecture/standards/Presentation_Standards.md) — the color system, layout rules, and error sanitization requirements.
 
 ### Browser-side UI (portal / report runtime)
 
@@ -217,13 +217,13 @@ When your change affects user-facing behavior, update the relevant docs:
 
 | What changed | Update |
 | :--- | :--- |
-| New syntax / keyword | [Docs/Reference/Grammar.md](Docs/Reference/Grammar.md) |
-| New built-in function | [Docs/Reference/Standard_Library.md](Docs/Reference/Standard_Library.md) — signature, return type, and copy-pasteable example required |
-| New connector or new `WITH()` option | [Docs/Reference/Data_Connectors.md](Docs/Reference/Data_Connectors.md) |
-| New file/email/Docker operation | [Docs/Reference/Specialized_Operations.md](Docs/Reference/Specialized_Operations.md) |
+| New syntax / keyword | [docs/guides/getting-started.md](docs/guides/getting-started.md) |
+| New built-in function | [docs/guides/getting-started.md](docs/guides/getting-started.md) — signature, return type, and copy-pasteable example required |
+| New connector or new `WITH()` option | [docs/guides/administration.md](docs/guides/administration.md) |
+| New file/email/Docker operation | [docs/guides/administration.md](docs/guides/administration.md) |
 | New connector implementation | [Docs/Architecture/Connectors.md](Docs/Architecture/Connectors.md) |
 | Security behavior change | [SECURITY.md](SECURITY.md) |
-| Breaking syntax change | [Docs/Migration_Guide.md](Docs/Migration_Guide.md) |
+| Breaking syntax change | [docs/guides/migration-guide.md](docs/guides/migration-guide.md) |
 | New release | [CHANGELOG.md](CHANGELOG.md) — use Keep a Changelog format |
 
 See [AGENTS.md](AGENTS.md) §7 for the complete documentation stewardship rules.
@@ -303,7 +303,7 @@ Open a GitHub Issue with the **[Feature Request]** label. Include:
 3. Proposed syntax (if it affects the ETL-SQL language)
 4. Which connector(s) or subsystem(s) are affected
 
-Large features (new connector types, new language constructs) will be discussed and may be tracked in a Strategy document under `Docs/Strategy/` before implementation begins.
+Large features (new connector types, new language constructs) will be discussed and may be tracked in a Strategy document under `docs/architecture/roadmaps/` before implementation begins.
 
 ---
 

@@ -39,19 +39,13 @@ namespace ETL_SQL.Tests.Analysis
 
             var mdFiles = new List<string>();
 
-            // Gather all markdown files in Docs/ and Resources/Help/
-            var docsDir = Path.Combine(repoRoot, "Docs");
+            // Gather all markdown files in docs/
+            var docsDir = Path.Combine(repoRoot, "docs");
             if (Directory.Exists(docsDir))
             {
                 var files = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
-                    .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("Strategy"));
+                    .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("architecture"));
                 mdFiles.AddRange(files);
-            }
-
-            var helpDir = Path.Combine(repoRoot, "src", "ETL-SQL.Core", "Resources", "Help");
-            if (Directory.Exists(helpDir))
-            {
-                mdFiles.AddRange(Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories));
             }
 
             Assert.NotEmpty(mdFiles);

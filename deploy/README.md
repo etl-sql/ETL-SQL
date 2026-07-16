@@ -3,7 +3,7 @@
 Templates for running **multiple isolated ETL-SQL environments** (dev/test/prod, or separate
 departments) side by side, each a complete, independent deployment with its own databases, artifact
 storage, keys, service identity, and ports. No application-layer sharing — see the topology and
-runbook in [Docs/Operations/Departmental_Isolation.md](../Docs/Operations/Departmental_Isolation.md).
+runbook in [docs/architecture/decisions/Departmental_Isolation.md](../docs/architecture/decisions/Departmental_Isolation.md).
 
 | Directory | Platform | What it provides |
 | :--- | :--- | :--- |

@@ -268,7 +268,7 @@ public static class OperationalMetricsDigest
     private static string BuildRunbook(OperationalDigestConfig cfg, string code)
     {
         var baseUri = string.IsNullOrWhiteSpace(cfg.RunbookBaseUri)
-            ? "Docs/Operations/Alerting_Service_Objectives.md"
+            ? "docs/architecture/decisions/Alerting_Service_Objectives.md"
             : cfg.RunbookBaseUri.Trim();
         return baseUri.Contains('#', StringComparison.Ordinal)
             ? baseUri
