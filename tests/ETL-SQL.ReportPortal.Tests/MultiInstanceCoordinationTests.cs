@@ -33,7 +33,8 @@ public sealed class MultiInstanceCoordinationTests
     }
 
     private sealed record Fixture(
-        PortalConfig Config, SmtpPasswordProtector Protector, string DbPath, int SubscriptionId);
+        PortalConfig Config, SmtpPasswordProtector Protector, PortalPiiProtector PiiProtector,
+        string DbPath, int SubscriptionId);
 
     /// <summary>Seeds a deliverable subscription, then yields the pieces needed to build independent
     /// delivery executors over fresh connections to the same portal database.</summary>
@@ -43,6 +44,7 @@ public sealed class MultiInstanceCoordinationTests
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
         var config = scope.ServiceProvider.GetRequiredService<PortalConfig>();
         var protector = scope.ServiceProvider.GetRequiredService<SmtpPasswordProtector>();
+        var piiProtector = scope.ServiceProvider.GetRequiredService<PortalPiiProtector>();
 
         var owner = new PortalUser
         {
@@ -90,7 +92,7 @@ public sealed class MultiInstanceCoordinationTests
         db.Subscriptions.Add(subscription);
         await db.SaveChangesAsync();
 
-        return new Fixture(config, protector, config.DatabasePath, subscription.Id);
+        return new Fixture(config, protector, piiProtector, config.DatabasePath, subscription.Id);
     }
 
     /// <summary>Builds an independent delivery executor over a fresh connection (its own DbContext,
@@ -99,6 +101,7 @@ public sealed class MultiInstanceCoordinationTests
     {
         var options = new DbContextOptionsBuilder<PortalDbContext>()
             .UseSqlite($"Data Source={f.DbPath}")
+            .UsePortalEncryption(f.PiiProtector)
             .Options;
         var db = new PortalDbContext(options);
         db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=10000;");

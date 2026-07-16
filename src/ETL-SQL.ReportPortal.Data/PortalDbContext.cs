@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace ETL_SQL.ReportPortal.Data;
 
@@ -43,8 +44,12 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     {
         base.OnModelCreating(builder);
 
-        var piiConverter = new EncryptedDbConverter();
-        var piiNullableConverter = new EncryptedDbNullableConverter();
+        // The protector is owned by this context's options (see PortalEncryptionOptions.UsePortalEncryption).
+        // When absent (design-time/migrations) the converters pass values through as plaintext.
+        var protector = ((IDbContextOptions)options)
+            .FindExtension<PortalEncryptionOptionsExtension>()?.Protector;
+        var piiConverter = new EncryptedDbConverter(protector);
+        var piiNullableConverter = new EncryptedDbNullableConverter(protector);
 
         builder.Entity<UserGroup>(e =>
         {
