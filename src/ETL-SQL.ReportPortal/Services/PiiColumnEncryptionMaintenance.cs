@@ -22,6 +22,7 @@ public static class PiiColumnEncryptionMaintenance
 
     public static async Task<int> EncryptExistingPlaintextAsync(
         PortalDbContext db,
+        PortalPiiProtector protector,
         ILogger logger,
         CancellationToken ct = default)
     {
@@ -41,13 +42,13 @@ public static class PiiColumnEncryptionMaintenance
                 {
                     if (string.IsNullOrEmpty(storedValue)
                         || (storedValue.StartsWith("dp:", StringComparison.Ordinal)
-                            && PortalEncryptionProvider.IsEncrypted(storedValue)))
+                            && protector.IsEncrypted(storedValue)))
                     {
                         continue;
                     }
 
-                    var plaintext = PortalEncryptionProvider.Decrypt(storedValue);
-                    var encrypted = PortalEncryptionProvider.Encrypt(plaintext);
+                    var plaintext = protector.Decrypt(storedValue);
+                    var encrypted = protector.Encrypt(plaintext);
                     if (string.IsNullOrEmpty(encrypted) || encrypted == storedValue)
                         continue;
 

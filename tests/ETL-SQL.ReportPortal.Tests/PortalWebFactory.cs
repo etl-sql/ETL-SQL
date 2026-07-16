@@ -89,11 +89,22 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
 
         builder.ConfigureServices(services =>
         {
-            // Replace DbContext with test-specific SQLite
+            // Replace DbContext with test-specific SQLite. RemoveAll of the options/context services
+            // alone leaves the production IDbContextOptionsConfiguration in place, so both it and this
+            // registration would apply — an implicit double-configuration. Strip it and re-add the
+            // configuration explicitly: test SQLite, the audit interceptor, and context-owned PII
+            // encryption (matching production, so the DI context decrypts what startup PII maintenance
+            // encrypts). Tests that hand-build a PortalDbContext over the same database must likewise
+            // opt into UsePortalEncryption with the host's PortalPiiProtector.
             services.RemoveAll<DbContextOptions<PortalDbContext>>();
             services.RemoveAll<PortalDbContext>();
-            services.AddDbContext<PortalDbContext>(opt =>
-                opt.UseSqlite($"Data Source={dbPath}"));
+            services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<PortalDbContext>>();
+            services.AddDbContext<PortalDbContext>((sp, opt) =>
+            {
+                opt.UseSqlite($"Data Source={dbPath}");
+                opt.AddInterceptors(sp.GetRequiredService<AuditFailClosedInterceptor>());
+                opt.UsePortalEncryption(sp.GetRequiredService<PortalPiiProtector>());
+            });
 
             // Override PortalConfig singleton with test values
             services.RemoveAll<PortalConfig>();

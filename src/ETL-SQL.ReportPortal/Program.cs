@@ -167,6 +167,9 @@ builder.Services.AddDbContext<PortalDbContext>((sp, opt) =>
 {
     PortalDatabase.Configure(opt, portalConfig);
     opt.AddInterceptors(sp.GetRequiredService<ETL_SQL.ReportPortal.Services.AuditFailClosedInterceptor>());
+    // PII column encryption is owned by the context, not a process-global static, so multiple
+    // hosts in one process each use their own Data Protection key ring.
+    opt.UsePortalEncryption(sp.GetRequiredService<PortalPiiProtector>());
 });
 
 // ── Identity ──────────────────────────────────────────────────────────────────
@@ -353,6 +356,10 @@ Directory.CreateDirectory(keyRingPath);
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(keyRingPath))
     .SetApplicationName("ETL-SQL.ReportPortal");
+// Context-owned PII protector built from this host's Data Protection key ring. Consumed by the
+// PortalDbContext options (UsePortalEncryption) and by startup PII maintenance.
+builder.Services.AddSingleton(sp =>
+    PortalPiiProtector.Create(sp.GetRequiredService<IDataProtectionProvider>()));
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.UserSecurityStateCache>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.PortalNodeIdentity>();
@@ -564,9 +571,6 @@ builder.WebHost.ConfigureKestrel(options =>
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
 
-// Initialize application-layer PII column encryption provider with Data Protection keys.
-PortalEncryptionProvider.Initialize(app.Services.GetRequiredService<IDataProtectionProvider>());
-
 if (Directory.Exists(app.Environment.WebRootPath))
 {
     try
@@ -629,6 +633,7 @@ using (var scope = app.Services.CreateScope())
                     db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
                 await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
                     db,
+                    scope.ServiceProvider.GetRequiredService<PortalPiiProtector>(),
                     scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
                         .CreateLogger("PiiColumnEncryptionMaintenance"));
                 if (scope.ServiceProvider.GetRequiredService<PortalModuleRegistry>().IsEnabled("Reporting"))

@@ -14,11 +14,12 @@ public sealed class PiiColumnEncryptionTests : IDisposable
     private readonly string _scratch =
         Path.Combine(Path.GetTempPath(), "pii_encryption_" + Guid.NewGuid().ToString("N")[..8]);
 
+    private readonly PortalPiiProtector _protector =
+        PortalPiiProtector.Create(new EphemeralDataProtectionProvider());
+
     public PiiColumnEncryptionTests()
     {
         Directory.CreateDirectory(_scratch);
-        var provider = new EphemeralDataProtectionProvider();
-        PortalEncryptionProvider.Initialize(provider);
     }
 
     public void Dispose()
@@ -31,6 +32,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<PortalDbContext>()
             .UseSqlite($"Data Source={Path.Combine(_scratch, "portal.db")}")
+            .UsePortalEncryption(_protector)
             .Options;
         await using var db = new PortalDbContext(options);
         await db.Database.MigrateAsync();
@@ -130,6 +132,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
     {
         var options = new DbContextOptionsBuilder<PortalDbContext>()
             .UseSqlite($"Data Source={Path.Combine(_scratch, "legacy.db")}")
+            .UsePortalEncryption(_protector)
             .Options;
         await using var db = new PortalDbContext(options);
         await db.Database.MigrateAsync();
@@ -170,6 +173,7 @@ public sealed class PiiColumnEncryptionTests : IDisposable
 
         var updated = await PiiColumnEncryptionMaintenance.EncryptExistingPlaintextAsync(
             db,
+            _protector,
             NullLogger.Instance);
 
         Assert.True(updated >= 7);
