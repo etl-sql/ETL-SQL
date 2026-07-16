@@ -122,7 +122,7 @@ work by priority.
       from actual state rather than exporting constant healthy/HA values.
 - [ ] **P2 — Make CodeMirror builds reproducible.** Pin CodeMirror and esbuild versions in a lockfile or
       equivalent manifest and generate SBOM versions from the resolved dependency graph.
-- [ ] **P2 — Bound expensive Designer requests.** Add script/body size, AST complexity, generated item,
+- [x] **P2 — Bound expensive Designer requests.** Add script/body size, AST complexity, generated item,
       and concurrency limits to parse, analyze, generate, run, schema, and save endpoints.
 
 ### Layering and maintainability

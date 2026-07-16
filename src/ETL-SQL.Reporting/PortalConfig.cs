@@ -29,6 +29,7 @@ public class PortalConfig
     public OperationalDigestConfig OperationalDigest { get; set; } = new();
     public AdminServicesConfig AdminServices { get; set; } = new();
     public PortalSourceControlConfig SourceControl { get; set; } = new();
+    public PortalDesignerLimitsConfig DesignerLimits { get; set; } = new();
 }
 
 /// <summary>
@@ -375,6 +376,16 @@ public class PortalRateLimitConfig
     public int DesignerWindowSeconds { get; set; } = 60;
     public int MetricsPermitLimit { get; set; } = 12;
     public int MetricsWindowSeconds { get; set; } = 60;
+}
+
+public class PortalDesignerLimitsConfig
+{
+    public int MaxScriptCharacters { get; set; } = 200_000;
+    public int MaxSelectionCharacters { get; set; } = 50_000;
+    public int MaxAstStatements { get; set; } = 1_000;
+    public int MaxGeneratedItems { get; set; } = 500;
+    public int MaxGeneratedScriptCharacters { get; set; } = 300_000;
+    public int MaxConcurrentRequests { get; set; } = 8;
 }
 
 public class PortalSecurityConfig

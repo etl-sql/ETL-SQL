@@ -6,6 +6,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.ReportPortal.Controllers;
 using ETL_SQL.ReportPortal.Models;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
 using CoreParser = ETL_SQL.Core.Parser.Parser;
@@ -14,6 +15,70 @@ namespace ETL_SQL.ReportPortal.Tests;
 
 public class DesignerControllerTests
 {
+    [Fact]
+    public void Parse_RejectsScriptOverLimit()
+    {
+        var controller = new DesignerController(portalConfig: new PortalConfig
+        {
+            DesignerLimits = new PortalDesignerLimitsConfig { MaxScriptCharacters = 10 }
+        });
+
+        var result = Assert.IsType<ObjectResult>(
+            controller.Parse(new ParseDesignerRequest("SELECT 1234567890 AS Value;")));
+
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, result.StatusCode);
+    }
+
+    [Fact]
+    public void Generate_RejectsTooManyItems()
+    {
+        var controller = new DesignerController(portalConfig: new PortalConfig
+        {
+            DesignerLimits = new PortalDesignerLimitsConfig { MaxGeneratedItems = 2 }
+        });
+        var state = new DesignerStateDto(
+            [
+                new DesignerPageDto(
+                    "p1",
+                    "Main",
+                    "Dashboard",
+                    [
+                        new DesignerVisualDto("v1", "A", "CARD", 1, 1, 12, 2, null, null, [], []),
+                        new DesignerVisualDto("v2", "B", "CARD", 1, 3, 12, 2, null, null, [], [])
+                    ])
+            ],
+            [new DesignerDatasetDto("ds1", "&data", "SELECT 1 AS Value")]);
+
+        var result = Assert.IsType<ObjectResult>(controller.Generate(new GenerateDesignerRequest(state)));
+
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, result.StatusCode);
+    }
+
+    [Fact]
+    public void Generate_RejectsWhenDesignerConcurrencyGateIsFull()
+    {
+        var config = new PortalConfig
+        {
+            DesignerLimits = new PortalDesignerLimitsConfig { MaxConcurrentRequests = 1 }
+        };
+        var controller = new DesignerController(portalConfig: config);
+        Assert.True(DesignerController.TryAcquireDesignerGateForTest(config, out var lease));
+        try
+        {
+            var state = new DesignerStateDto(
+                [new DesignerPageDto("p1", "Main", "Dashboard", [])],
+                []);
+
+            var result = Assert.IsType<ObjectResult>(controller.Generate(new GenerateDesignerRequest(state)));
+
+            Assert.Equal(StatusCodes.Status429TooManyRequests, result.StatusCode);
+        }
+        finally
+        {
+            lease.Dispose();
+        }
+    }
+
     [Fact]
     public void Generate_UsesReportDatasetIdentifiers()
     {
