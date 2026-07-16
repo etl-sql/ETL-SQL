@@ -1,27 +1,39 @@
 # COS
+
 Returns the trigonometric cosine of an angle in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 COS(radians)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `radians` | `FLOAT` | Angle in radians |
+
+- **radians** - Angle in radians.
 
 ## Returns
-`FLOAT` — Cosine of the angle, in the range [-1.0, 1.0].
 
-## Example
+Returns a `FLOAT` cosine value in the range `-1.0` through `1.0`.
+
+## Null Behavior
+
+Returns `NULL` when `radians` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT COS(0);           -- → 1.0
-SELECT COS(PI());        -- → -1.0
+SELECT COS(0) AS cosine_value;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometry](../../../guides/getting-started.md#52-trigonometry-inputoutput-in-radians)
-- Related: [`SIN`](sin.md), [`TAN`](tan.md), [`ACOS`](acos.md)
+```sql
+SELECT angle_radians, COS(angle_radians) AS cosine_value
+FROM #angles;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SIN](sin.md)
+- [TAN](tan.md)
+- [ACOS](acos.md)

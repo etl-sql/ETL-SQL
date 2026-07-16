@@ -1,28 +1,39 @@
 # LOG10
+
 Returns the base-10 logarithm of a number.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 LOG10(number)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `FLOAT` | A positive numeric value |
+
+- **number** - Positive numeric value.
 
 ## Returns
-`FLOAT` — log₁₀(number).
 
-## Example
+Returns a `FLOAT` base-10 logarithm.
+
+## Null Behavior
+
+Returns `NULL` when `number` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT LOG10(100);     -- → 2.0
-SELECT LOG10(1000);    -- → 3.0
-SELECT LOG10(amount) AS log_scale FROM #metrics WHERE amount > 0;
+SELECT LOG10(1000) AS log10_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`LOG`](log.md), [`EXP`](exp.md)
+```sql
+SELECT metric_id, LOG10(amount) AS log_scale
+FROM #metrics
+WHERE amount > 0;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LOG](log.md)
+- [EXP](exp.md)

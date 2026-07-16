@@ -1,27 +1,43 @@
 # TAN
+
 Returns the trigonometric tangent of an angle in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 TAN(radians)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `radians` | `FLOAT` | Angle in radians. Undefined at π/2 + nπ |
+
+- **radians** - Angle in radians.
 
 ## Returns
-`FLOAT` — Tangent of the angle.
 
-## Example
+Returns a `FLOAT` tangent value.
+
+## Null Behavior
+
+Returns `NULL` when `radians` is `NULL`.
+
+## Remarks
+
+The tangent is undefined at `PI()/2 + n * PI()`.
+
+## Examples
+
 ```sql
-SELECT TAN(0);                    -- → 0.0
-SELECT TAN(PI() / 4);             -- → 1.0  (45 degrees)
+SELECT TAN(0) AS tangent_value;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometry](../../../guides/getting-started.md#52-trigonometry-inputoutput-in-radians)
-- Related: [`SIN`](sin.md), [`COS`](cos.md), [`ATAN`](atan.md)
+```sql
+SELECT angle_radians, TAN(angle_radians) AS tangent_value
+FROM #angles;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SIN](sin.md)
+- [COS](cos.md)
+- [ATAN](atan.md)

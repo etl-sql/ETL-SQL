@@ -1,28 +1,39 @@
 # EXP
+
 Returns e (Euler's number) raised to the specified power.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 EXP(number)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `FLOAT` | The exponent |
+
+- **number** - Exponent to apply to `e`.
 
 ## Returns
-`FLOAT` — e^number (approximately 2.71828^number).
 
-## Example
+Returns a `FLOAT` value equal to `e` raised to `number`.
+
+## Null Behavior
+
+Returns `NULL` when `number` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT EXP(0);    -- → 1.0
-SELECT EXP(1);    -- → 2.71828...
-SELECT EXP(LOG(x)) AS original FROM #values;   -- LOG and EXP are inverses
+SELECT EXP(1) AS e_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`LOG`](log.md), [`POWER`](power.md)
+```sql
+SELECT value_id, EXP(LOG(x)) AS original_value
+FROM #values
+WHERE x > 0;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LOG](log.md)
+- [POWER](power.md)

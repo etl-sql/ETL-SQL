@@ -1,27 +1,39 @@
 # ACOS
+
 Returns the arccosine (inverse cosine) of a number, in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 ACOS(number)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `FLOAT` | Value in [-1.0, 1.0] |
+
+- **number** - Numeric value in the range `-1.0` through `1.0`.
 
 ## Returns
-`FLOAT` — Angle in radians in the range [0, π].
 
-## Example
+Returns a `FLOAT` angle in radians in the range `0` through `PI()`.
+
+## Null Behavior
+
+Returns `NULL` when `number` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT ACOS(1.0);     -- → 0.0
-SELECT ACOS(-1.0);    -- → 3.14159...  (π)
+SELECT ACOS(1.0) AS angle_radians;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometry](../../../guides/getting-started.md#52-trigonometry-inputoutput-in-radians)
-- Related: [`COS`](cos.md), [`ASIN`](asin.md), [`ATAN`](atan.md)
+```sql
+SELECT vector_id, ACOS(cosine_value) AS angle_radians
+FROM #vectors;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [COS](cos.md)
+- [ASIN](asin.md)
+- [ATAN](atan.md)

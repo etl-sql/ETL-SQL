@@ -131,11 +131,6 @@ Thin-page batches completed:
 - `docs/reference/functions/general/path_filename.md`
 - `docs/reference/functions/general/random_decimal.md`
 - `docs/reference/functions/general/random_int.md`
-
-`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
-
-No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
-
 - `docs/reference/functions/math/abs.md`
 - `docs/reference/functions/math/acos.md`
 - `docs/reference/functions/math/asin.md`
@@ -148,6 +143,11 @@ No function reference pages remain under 300 bytes. Some reviewed pages are stil
 - `docs/reference/functions/math/sign.md`
 - `docs/reference/functions/math/sqrt.md`
 - `docs/reference/functions/math/tan.md`
+
+`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
+
+No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
+
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
 - `docs/reference/functions/string/reverse.md`

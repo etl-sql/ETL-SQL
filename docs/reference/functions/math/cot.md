@@ -1,26 +1,40 @@
 # COT
+
 Returns the cotangent of the angle specified in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 COT(radians)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `radians` | `DECIMAL` / `FLOAT` | The angle in radians |
+
+- **radians** - Angle in radians.
 
 ## Returns
-`DECIMAL` — The cotangent value. Returns `NULL` if input is `NULL` or results in division by zero (e.g. at 0 radians).
 
-## Example
+Returns the cotangent value.
+
+## Null Behavior
+
+Returns `NULL` when `radians` is `NULL` or when the calculation would divide by zero.
+
+## Examples
+
 ```sql
-SELECT COT(0.5);        -- → 1.830487721712452
+SELECT COT(0.5) AS cotangent_value;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometric](../../../guides/getting-started.md#52-trigonometric)
-- Related: [`TAN`](tan.md), [`SIN`](sin.md), [`COS`](cos.md)
+```sql
+SELECT angle_radians, COT(angle_radians) AS cotangent_value
+FROM #angles
+WHERE angle_radians <> 0;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [TAN](tan.md)
+- [SIN](sin.md)
+- [COS](cos.md)

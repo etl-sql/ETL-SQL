@@ -1,28 +1,38 @@
 # ABS
+
 Returns the absolute (non-negative) value of a number.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 ABS(number)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `INT` / `DECIMAL` / `FLOAT` | The numeric value |
+
+- **number** - Numeric value to evaluate.
 
 ## Returns
-Same type as input — the non-negative magnitude of `number`.
 
-## Example
+Returns the non-negative magnitude of `number`.
+
+## Null Behavior
+
+Returns `NULL` when `number` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT ABS(-42);        -- → 42
-SELECT ABS(42);         -- → 42
-SELECT ABS(balance) AS abs_balance FROM #accounts;
+SELECT ABS(-42) AS magnitude;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`SIGN`](sign.md), [`ROUND`](round.md)
+```sql
+SELECT account_id, ABS(balance) AS abs_balance
+FROM #accounts;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SIGN](sign.md)
+- [ROUND](round.md)
