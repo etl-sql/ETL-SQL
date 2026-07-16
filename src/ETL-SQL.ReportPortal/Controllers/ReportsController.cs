@@ -1637,14 +1637,35 @@ public class ReportsController : ControllerBase
             ReportScriptSaveStatus.Forbidden => Forbid(),
             ReportScriptSaveStatus.MissingVersion => OptimisticConcurrency.MissingVersion(this),
             ReportScriptSaveStatus.Conflict => OptimisticConcurrency.Conflict(this, ToDto(result.Current!, null)),
-            ReportScriptSaveStatus.SourceRevisionConflict => Conflict(new
-            {
-                error = result.Error,
-                sourceRevision = result.SourceRevision,
-                current = ToDto(result.Current!, null)
-            }),
             _ => StatusCode(500, new { error = "Unknown save status." })
         };
+    }
+
+    // ── POST /api/reports/{id}/script-source/commit ─────────────────────────
+
+    [HttpPost("reports/{id:int}/script-source/commit")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> CommitScriptSource(int id, CancellationToken cancellationToken)
+    {
+        var report = await db.Reports.Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted, cancellationToken);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        var scriptKey = ToScriptKey(report.ScriptPath);
+        if (scriptKey is null)
+            return Forbid();
+
+        var result = await sourceControl.CommitScriptAsync(scriptKey, User, cancellationToken);
+        var detail = result.Revision is null
+            ? report.Name
+            : $"{report.Name}; sourceRevision={result.Revision}; committed={result.Committed}";
+        audit.Stage(CurrentUserId, "COMMIT_REPORT_SCRIPT", "Report", id.ToString(), detail);
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(new ScriptSourceControlResponse(result.Revision, result.Committed));
     }
 
     private IActionResult SavedScriptResponse(ReportScriptSaveResult result)

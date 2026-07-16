@@ -37,6 +37,33 @@ public class PortalScriptSourceControlServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CommitScript_SerializesConcurrentRepositoryWrites()
+    {
+        Directory.CreateDirectory(_root);
+        var reports = Path.Combine(_root, "Reports");
+        Directory.CreateDirectory(reports);
+        await File.WriteAllTextAsync(Path.Combine(reports, "sales.rptsql"), "SELECT 1 AS Value;");
+        await File.WriteAllTextAsync(Path.Combine(reports, "inventory.rptsql"), "SELECT 1 AS Value;");
+
+        await GitAsync("init");
+        await GitAsync("config", "user.name", "Test User");
+        await GitAsync("config", "user.email", "test@example.local");
+        await GitAsync("add", ".");
+        await GitAsync("commit", "-m", "initial");
+
+        var service = NewService();
+        await File.WriteAllTextAsync(Path.Combine(reports, "sales.rptsql"), "SELECT 2 AS Value;");
+        await File.WriteAllTextAsync(Path.Combine(reports, "inventory.rptsql"), "SELECT 3 AS Value;");
+
+        var results = await Task.WhenAll(
+            service.CommitScriptAsync("sales.rptsql", Principal()),
+            service.CommitScriptAsync("inventory.rptsql", Principal()));
+
+        Assert.All(results, result => Assert.True(result.Committed));
+        Assert.Equal("3", (await GitOutputAsync("rev-list", "--count", "HEAD")).Trim());
+    }
+
+    [Fact]
     public void ValidateScriptTextForCommit_RejectsPlaintextCredentialOptions()
     {
         var service = NewService();
@@ -93,6 +120,11 @@ public class PortalScriptSourceControlServiceTests : IDisposable
 
     private async Task GitAsync(params string[] args)
     {
+        _ = await GitOutputAsync(args);
+    }
+
+    private async Task<string> GitOutputAsync(params string[] args)
+    {
         var start = new ProcessStartInfo("git")
         {
             WorkingDirectory = _root,
@@ -108,6 +140,7 @@ public class PortalScriptSourceControlServiceTests : IDisposable
         var stderr = await process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
         Assert.True(process.ExitCode == 0, $"git {string.Join(' ', args)} failed: {stdout}{stderr}");
+        return stdout;
     }
 
     private static ClaimsPrincipal Principal() => new(new ClaimsIdentity(

@@ -13,8 +13,7 @@ public enum ReportScriptSaveStatus
     NotFound,
     Forbidden,
     MissingVersion,
-    Conflict,
-    SourceRevisionConflict
+    Conflict
 }
 
 public sealed record ReportScriptSaveResult(
@@ -61,15 +60,6 @@ public sealed class ReportScriptSaveService(
 
         sourceControl.ValidateScriptTextForCommit(scriptText);
         var currentRevision = await sourceControl.GetCurrentRevisionAsync(ct);
-        if (!sourceControl.IsBaseRevisionCurrent(baseRevision, currentRevision))
-        {
-            db.Entry(report).State = EntityState.Unchanged;
-            return new ReportScriptSaveResult(
-                ReportScriptSaveStatus.SourceRevisionConflict,
-                Current: report,
-                SourceRevision: currentRevision,
-                Error: "The source repository changed after this report was opened. Refresh it and retry.");
-        }
 
         var hash = "sha256:" + Convert.ToHexString(
             SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(scriptText))).ToLowerInvariant();
@@ -81,7 +71,6 @@ public sealed class ReportScriptSaveService(
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var wroteScript = false;
-        ScriptSourceControlCommit sourceCommit = new(currentRevision, false);
         try
         {
             await db.SaveChangesAsync(ct);
@@ -89,14 +78,12 @@ public sealed class ReportScriptSaveService(
             await artifacts.WriteAllTextAsync(ArtifactArea.Scripts, scriptKey, scriptText, ct: ct);
             wroteScript = true;
 
-            sourceCommit = await sourceControl.CommitScriptAsync(scriptKey, user, ct);
-
             report.PublishedScriptHash = hash;
             report.ScriptLastModified = DateTime.UtcNow;
             report.UpdatedAt = DateTime.UtcNow;
-            var detail = sourceCommit.Revision is null
+            var detail = currentRevision is null
                 ? report.Name
-                : $"{report.Name}; sourceRevision={sourceCommit.Revision}; committed={sourceCommit.Committed}";
+                : $"{report.Name}; sourceRevision={currentRevision}; sourceControlPending=true";
             audit.Stage(currentUserId, "DESIGNER_SAVE", "Report", id.ToString(), detail);
             await db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -115,7 +102,7 @@ public sealed class ReportScriptSaveService(
             throw;
         }
 
-        return new ReportScriptSaveResult(ReportScriptSaveStatus.Saved, report.Version, sourceCommit.Revision);
+        return new ReportScriptSaveResult(ReportScriptSaveStatus.Saved, report.Version, currentRevision);
     }
 
     private async Task RestoreScriptAsync(string scriptKey, byte[]? backup, bool hadOriginal, CancellationToken ct)

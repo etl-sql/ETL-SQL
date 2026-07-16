@@ -90,3 +90,5 @@ public record DesignerDatasetDto(
 public record ScriptContentRequest(string ScriptText, string? BaseRevision = null);
 
 public record ScriptContentResponse(string ScriptText, long Version = 1, string? SourceRevision = null);
+
+public record ScriptSourceControlResponse(string? SourceRevision, bool Committed);

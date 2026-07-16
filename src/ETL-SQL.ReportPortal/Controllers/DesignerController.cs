@@ -340,12 +340,6 @@ public class DesignerController : ControllerBase
                     error = "The resource changed after it was read. Refresh it and retry.",
                     current = new { id = result.Current!.Id, version = result.Current.Version }
                 }),
-                ReportScriptSaveStatus.SourceRevisionConflict => Conflict(new
-                {
-                    error = result.Error,
-                    sourceRevision = result.SourceRevision,
-                    current = new { id = result.Current!.Id, version = result.Current.Version }
-                }),
                 _ => StatusCode(500, new { error = "Unknown save status." })
             };
         }

@@ -95,10 +95,10 @@ work by priority.
 - [x] **P1 — Remove the process-global Portal PII encryption provider.** `PortalEncryptionProvider`
       stores one static `IDataProtector`, so sequential in-process Portal hosts can replace and dispose
       each other's key provider. Make encryption context-owned and add multi-host isolation coverage.
-- [ ] **P1 — Keep script save internally atomic after Git is separated.** Coordinate catalog metadata
+- [x] **P1 — Keep script save internally atomic after Git is separated.** Coordinate catalog metadata
       and artifact replacement so failures restore both consistently; Git commit/push must not be part
       of the save transaction and must expose its own success or failure state.
-- [ ] **P1 — Serialize explicit Git operations.** Protect Commit/Push actions from concurrent access to
+- [x] **P1 — Serialize explicit Git operations.** Protect Commit/Push actions from concurrent access to
       the shared repository index, preferably with isolated temporary indexes/worktrees plus a
       repository lease that also works across Portal nodes.
 - [x] **P1 — Replace regex-only plaintext-secret validation.** Validate parsed connection definitions

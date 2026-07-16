@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.RegularExpressions;
@@ -16,6 +17,8 @@ public sealed record ScriptSourceControlCommit(string? Revision, bool Committed)
 /// </summary>
 public sealed partial class PortalScriptSourceControlService(PortalConfig config)
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> RepositoryGates = new(StringComparer.OrdinalIgnoreCase);
+
     public bool IsEnabled =>
         config.SourceControl.Enabled
         && string.Equals(config.SourceControl.Provider, "Git", StringComparison.OrdinalIgnoreCase);
@@ -35,29 +38,32 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
         if (!IsEnabled)
             return new ScriptSourceControlCommit(null, false);
 
-        var relPath = ResolveRepositoryRelativeScriptPath(scriptKey);
-        var add = await RunGitAsync(["add", "--", relPath], ct);
-        add.EnsureSuccess("stage script");
-
-        var diff = await RunGitAsync(["diff", "--cached", "--quiet", "--", relPath], ct);
-        if (diff.ExitCode == 0)
-            return new ScriptSourceControlCommit(await GetCurrentRevisionAsync(ct), false);
-        if (diff.ExitCode != 1)
-            diff.EnsureSuccess("check staged script changes");
-
-        var message = $"Update portal report script {scriptKey}";
-        var commit = await RunGitAsync(["commit", "-m", message, "--", relPath], ct, BuildIdentityEnvironment(user));
-        commit.EnsureSuccess("commit script");
-
-        if (config.SourceControl.PushOnSave)
+        return await WithRepositoryLockAsync(async () =>
         {
-            var args = string.IsNullOrWhiteSpace(config.SourceControl.Branch)
-                ? new[] { "push", config.SourceControl.Remote }
-                : ["push", config.SourceControl.Remote, config.SourceControl.Branch];
-            (await RunGitAsync(args, ct)).EnsureSuccess("push script commit");
-        }
+            var relPath = ResolveRepositoryRelativeScriptPath(scriptKey);
+            var add = await RunGitAsync(["add", "--", relPath], ct);
+            add.EnsureSuccess("stage script");
 
-        return new ScriptSourceControlCommit(await GetCurrentRevisionAsync(ct), true);
+            var diff = await RunGitAsync(["diff", "--cached", "--quiet", "--", relPath], ct);
+            if (diff.ExitCode == 0)
+                return new ScriptSourceControlCommit(await GetCurrentRevisionAsync(ct), false);
+            if (diff.ExitCode != 1)
+                diff.EnsureSuccess("check staged script changes");
+
+            var message = $"Update portal report script {scriptKey}";
+            var commit = await RunGitAsync(["commit", "-m", message, "--", relPath], ct, BuildIdentityEnvironment(user));
+            commit.EnsureSuccess("commit script");
+
+            if (config.SourceControl.PushOnSave)
+            {
+                var args = string.IsNullOrWhiteSpace(config.SourceControl.Branch)
+                    ? new[] { "push", config.SourceControl.Remote }
+                    : ["push", config.SourceControl.Remote, config.SourceControl.Branch];
+                (await RunGitAsync(args, ct)).EnsureSuccess("push script commit");
+            }
+
+            return new ScriptSourceControlCommit(await GetCurrentRevisionAsync(ct), true);
+        }, ct);
     }
 
     public void ValidateScriptTextForCommit(string scriptText)
@@ -116,6 +122,53 @@ public sealed partial class PortalScriptSourceControlService(PortalConfig config
             ["GIT_COMMITTER_NAME"] = config.SourceControl.CommitterName,
             ["GIT_COMMITTER_EMAIL"] = config.SourceControl.CommitterEmail
         };
+    }
+
+    private async Task<T> WithRepositoryLockAsync<T>(Func<Task<T>> action, CancellationToken ct)
+    {
+        var repoRoot = Path.GetFullPath(config.SourceControl.RepositoryRoot);
+        var gate = RepositoryGates.GetOrAdd(repoRoot, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await using var fileLock = await AcquireRepositoryFileLockAsync(repoRoot, ct);
+            return await action();
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static async Task<FileStream> AcquireRepositoryFileLockAsync(string repoRoot, CancellationToken ct)
+    {
+        var gitDirectory = Path.Combine(repoRoot, ".git");
+        var lockDirectory = Directory.Exists(gitDirectory) ? gitDirectory : repoRoot;
+        Directory.CreateDirectory(lockDirectory);
+        var lockPath = Path.Combine(lockDirectory, "etlsql-portal-source-control.lock");
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                return new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    bufferSize: 1,
+                    FileOptions.Asynchronous);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+            }
+        }
     }
 
     private async Task<GitResult> RunGitAsync(
