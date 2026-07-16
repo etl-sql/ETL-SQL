@@ -37,3 +37,4 @@ SELECT GET_TAG_VALUE('Orders', 'OrderTotal', 'CLASSIFICATION') AS classification
 - [Lineage](../../statements/session-control/lineage.md)
 - [GET_TAGS](get_tags.md)
 - [HAS_TAG](has_tag.md)
+- [User Manual](../../../guides/getting-started.md)

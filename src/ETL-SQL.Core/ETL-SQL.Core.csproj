@@ -31,8 +31,8 @@
 
   <ItemGroup>
     <!-- Core Language Statements & Flow Control (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\statements\**\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\statements\session-control\lineage.md" />
-    <EmbeddedResource Include="..\..\docs\reference\control-flow\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\statements\**\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\statements\session-control\lineage.md;..\..\docs\reference\statements\**\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\control-flow\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\control-flow\README.md" />
     
     <!-- SHOW & SET commands (Keywords Category) -->
     <EmbeddedResource Include="..\..\docs\reference\show-commands\show.md" Link="Resources\Help\Keywords\SHOW.md" />
@@ -64,23 +64,26 @@
     <EmbeddedResource Include="..\..\docs\reference\statements\session-control\lineage.md" Link="Resources\Help\Operations\LINEAGE.md" />
 
     <!-- Connectors (Connectors Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\connectors\**\*.md" Link="Resources\Help\Connectors\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\connectors\**\*.md" Link="Resources\Help\Connectors\%(Filename)%(Extension)" Exclude="..\..\docs\reference\connectors\**\README.md" />
 
     <!-- Functions (Functions Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" Exclude="..\..\docs\reference\functions\**\README.md" />
 
     <!-- Visuals & Reporting (Visuals & Report Categories) -->
-    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\visuals\*.md" Link="Resources\Help\Visuals\%(Filename)%(Extension)" />
-    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\report\*.md" Link="Resources\Help\Report\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\visuals\*.md" Link="Resources\Help\Visuals\%(Filename)%(Extension)" Exclude="..\..\docs\reference\visuals-reporting\visuals\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\report\*.md" Link="Resources\Help\Report\%(Filename)%(Extension)" Exclude="..\..\docs\reference\visuals-reporting\report\README.md" />
 
     <!-- Portal Administration (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\portal-admin\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\portal-admin\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\portal-admin\README.md" />
 
     <!-- Orchestrator Jobs & Bundles (Keywords Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\orchestrator-jobs\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\orchestrator-jobs\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\orchestrator-jobs\README.md" />
 
     <!-- Global & Session Configuration (Options Category) -->
-    <EmbeddedResource Include="..\..\docs\reference\configuration\*.md" Link="Resources\Help\Options\%(Filename)%(Extension)" />
+    <EmbeddedResource Include="..\..\docs\reference\configuration\*.md" Link="Resources\Help\Options\%(Filename)%(Extension)" Exclude="..\..\docs\reference\configuration\README.md" />
+
+    <!-- Code Autocomplete Snippets -->
+    <EmbeddedResource Include="..\..\snippets\*.md" Link="Resources\Help\Snippets\%(Filename)%(Extension)" Exclude="..\..\snippets\README.md" />
   </ItemGroup>
 
 </Project>

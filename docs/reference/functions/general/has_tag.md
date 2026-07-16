@@ -38,3 +38,4 @@ SELECT HAS_TAG('Customers', 'SSN', 'PII_LEVEL', 'High') AS is_high_pii;
 - [Lineage](../../statements/session-control/lineage.md)
 - [GET_TAGS](get_tags.md)
 - [GET_TAG_VALUE](get_tag_value.md)
+- [User Manual](../../../guides/getting-started.md)

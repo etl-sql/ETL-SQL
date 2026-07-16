@@ -41,3 +41,4 @@ END CATCH;
 - [TRY...CATCH](../../control-flow/try-catch.md)
 - [ERROR_NUMBER](error_number.md)
 - [ERROR_MESSAGE](error_message.md)
+- [User Manual](../../../guides/getting-started.md)

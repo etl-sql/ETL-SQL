@@ -38,11 +38,14 @@ END;
 ```
 
 ```sql
+DECLARE @host = ENV('PGHOST');
+DECLARE @user = ENV('PGUSER');
+
 CREATE CONNECTION src AS POSTGRES(
-  HOST = ENV('PGHOST'),
+  HOST = @host,
   DATABASE = 'Sales',
-  USER = ENV('PGUSER'),
-  PASSWORD = SECRET:pg_password
+  USER = @user,
+  PASSWORD = 'SECRET:pg_password'
 );
 ```
 

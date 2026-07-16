@@ -139,7 +139,10 @@ namespace ETL_SQL.Tests.Docs
             var markdownFiles = Directory.GetFiles(docsDir, "*.md", SearchOption.AllDirectories)
                 .Concat(Directory.GetFiles(RepoRoot, "*.md", SearchOption.TopDirectoryOnly))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(f => !f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Contains("architecture"))
+                .Where(f => {
+                    var parts = f.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    return !parts.Contains("architecture") && !parts.Contains("templates");
+                })
                 .ToArray();
 
             var failures = FindUnsupportedConnectionOptions(markdownFiles);
@@ -300,11 +303,21 @@ namespace ETL_SQL.Tests.Docs
                 "docs/guides/report-sql.md",
                 "docs/guides/report-portal-admin.md",
                 "docs/guides/job-orchestration.md",
-                "docs/Syntax_Index.md"
+                "docs/Syntax_Index.md",
+                "docs/reference/functions/standard-library.md",
+                "docs/reference/connectors/data-connectors.md",
+                "docs/reference/statements/grammar.md",
+                "docs/reference/file-operations/specialized-operations.md",
+                "docs/reference/performance/performance.md",
+                "docs/reference/configuration/settings.md",
+                "docs/reference/portal-admin/service-accounts.md"
             };
 
             var missing = new List<string>();
-            foreach (var path in Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories))
+            var helpFiles = Directory.GetFiles(helpDir, "*.md", SearchOption.AllDirectories)
+                .Where(p => !Path.GetFileName(p).Equals("README.md", StringComparison.OrdinalIgnoreCase));
+
+            foreach (var path in helpFiles)
             {
                 var content = File.ReadAllText(path).Replace('\\', '/');
                 var helpFileDir = Path.GetDirectoryName(path)!;

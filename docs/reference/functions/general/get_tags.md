@@ -38,3 +38,4 @@ FROM GET_TAGS('Orders');
 - [Lineage](../../statements/session-control/lineage.md)
 - [GET_TAG_VALUE](get_tag_value.md)
 - [HAS_TAG](has_tag.md)
+- [User Manual](../../../guides/getting-started.md)
