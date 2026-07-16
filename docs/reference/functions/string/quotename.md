@@ -1,29 +1,39 @@
 # QUOTENAME
+
 Returns a string wrapped in delimiters to make it a valid identifier.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
-QUOTENAME(string, [delimiter])
+QUOTENAME(string)
+QUOTENAME(string, delimiter)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The identifier to delimit |
-| `delimiter` | `STRING` | Optional: delimiting character — `[` (default), `"`, or `'` |
+
+- **string** - Identifier to delimit.
+- **delimiter** - Optional delimiting character: `[`, `"`, or `'`. Defaults to `[`.
 
 ## Returns
-`STRING` — The identifier wrapped in the specified delimiter pair. Embedded delimiters inside the string are escaped by doubling them.
 
-## Example
+Returns the identifier wrapped in the specified delimiter pair. Embedded delimiters inside the string are escaped by doubling them.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT QUOTENAME('my column');        -- → '[my column]'
-SELECT QUOTENAME('my column', '"');   -- → '"my column"'
-SELECT QUOTENAME('it''s here', ''''); -- → '''it''''s here'''
+SELECT QUOTENAME('my column') AS delimited_name;
 ```
 
-## See Also
-- [Standard Library — §3.4 Formatting & Padding](../../../guides/getting-started.md#34-formatting--padding)
-- Related: [`STRING_ESCAPE`](string_escape.md)
+```sql
+SELECT QUOTENAME(column_name, '"') AS quoted_name
+FROM #columns;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [STRING_ESCAPE](string_escape.md)

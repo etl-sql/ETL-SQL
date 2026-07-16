@@ -1,32 +1,44 @@
 # TO_STR
+
 Converts any value to its string representation.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 TO_STR(value)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `value` | `ANY` | The value to convert — numbers, dates, booleans, GUIDs, etc. |
+
+- **value** - Value to convert, such as a number, date, boolean, GUID, or string.
 
 ## Returns
-`STRING` — The string representation of the value. Returns `NULL` if the input is `NULL`.
+
+Returns the string representation of `value`.
+
+## Null Behavior
+
+Returns `NULL` when `value` is `NULL`.
 
 ## Remarks
+
 - `TO_STR` is a convenience alias for `CAST(value AS STRING)`.
 - For locale-aware formatting of numbers and dates, use [`FORMAT`](../general/format.md) instead.
 
-## Example
+## Examples
+
 ```sql
-SELECT TO_STR(42);            -- → '42'
-SELECT TO_STR(GETDATE());     -- → '2026-05-17 09:00:00'
-SELECT 'Order #' + TO_STR(order_id) AS label FROM #orders;
+SELECT TO_STR(42) AS value_text;
 ```
 
-## See Also
-- [Standard Library — §3.4 Formatting & Padding](../../../guides/getting-started.md#34-formatting--padding)
-- Related: [`CAST`](../conversion/cast.md), [`FORMAT`](../general/format.md), [`STR`](str.md)
+```sql
+SELECT 'Order #' + TO_STR(order_id) AS label
+FROM #orders;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [CAST](../conversion/cast.md)
+- [FORMAT](../general/format.md)
+- [STR](str.md)

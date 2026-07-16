@@ -1,37 +1,44 @@
 # LEN
+
 Returns the number of characters in a string, or the number of items in a LIST.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 LEN(string)
 LENGTH(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` or `LIST` | The value to measure |
+
+- **string** - String or list value to measure.
 
 ## Returns
-`INT` — Character count for strings; item count for LISTs. Trailing spaces are not counted (matches SQL Server behavior).
+
+Returns an `INT` character count for strings or item count for lists. Trailing spaces are not counted.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
 
 ## Remarks
+
 - `LEN` and `LENGTH` are interchangeable aliases.
 - For byte-level length, use [`DATALENGTH`](datalength.md) instead.
-- Returns `NULL` if the input is `NULL`.
 
-## Example
+## Examples
+
 ```sql
-SELECT LEN('hello');           -- → 5
-SELECT LEN('hello   ');        -- → 5  (trailing spaces excluded)
-SELECT LENGTH('café');         -- → 4  (character count, not byte count)
-
-DECLARE @ids LIST = (1, 2, 3);
-SELECT LEN(@ids);              -- → 3
+SELECT LEN('hello') AS character_count;
 ```
 
-## See Also
-- [Standard Library — §3.6 Translation & Escaping](../../../guides/getting-started.md#36-translation--escaping)
-- Related: [`DATALENGTH`](datalength.md), [`CHAR_LENGTH`](char_length.md)
+```sql
+DECLARE @ids LIST = (1, 2, 3);
+SELECT LEN(@ids) AS item_count;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DATALENGTH](datalength.md)
+- [CHAR_LENGTH](char_length.md)

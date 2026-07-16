@@ -1,27 +1,38 @@
 # INITCAP
+
 Capitalizes the first letter of each word and lowercases the rest.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 INITCAP(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The input string to title-case |
+
+- **string** - Input string to title-case.
 
 ## Returns
-`STRING` — Each word capitalized, remaining characters lowercased. Word boundaries are spaces and common punctuation.
 
-## Example
+Returns a string with each word capitalized and remaining characters lowercased.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT INITCAP('hello world');        -- → 'Hello World'
-SELECT INITCAP('JOHN DOE') AS Name;  -- → 'John Doe'
+SELECT INITCAP('hello world') AS title_text;
 ```
 
-## See Also
-- [Standard Library — §3.1 Case & Whitespace](../../../guides/getting-started.md#31-case--whitespace)
-- Related: [`UPPER`](../string/upper.md), [`LOWER`](../string/lower.md)
+```sql
+SELECT INITCAP(customer_name) AS display_name
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [UPPER](../string/upper.md)
+- [LOWER](../string/lower.md)
