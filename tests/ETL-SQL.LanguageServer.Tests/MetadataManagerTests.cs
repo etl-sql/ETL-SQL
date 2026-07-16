@@ -126,6 +126,50 @@ namespace ETL_SQL.LanguageServer.Tests
         }
 
         [Fact]
+        public async Task RegisterConnection_DoesNotExposeConnectionStringButUsesHandleForDiscovery()
+        {
+            string connName = "SecretConn";
+            string connType = "MSSQL";
+            string connStr = "Server=myServer;User Id=etl;Password=plain;";
+            _manager.RegisterConnection(connName, connType, connStr);
+
+            var exposed = Assert.Single(_manager.GetConnections(), c => c.Name == connName);
+            Assert.Equal(string.Empty, exposed.ConnectionString);
+            Assert.False(string.IsNullOrWhiteSpace(exposed.SecretHandle));
+
+            var dataSourceMock = new Mock<IDataSource>();
+            dataSourceMock.Setup(d => d.GetTablesAsync()).ReturnsAsync(new List<string> { "T1" });
+
+            var connectorMock = new Mock<IConnector>();
+            connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), connStr, It.IsAny<Dictionary<string, string>>()))
+                         .Returns(dataSourceMock.Object);
+            _registryMock.Setup(r => r.GetConnector(connType)).Returns(connectorMock.Object);
+
+            var tables = await _manager.GetTablesAsync(connName);
+
+            Assert.Contains("T1", tables);
+            connectorMock.Verify(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), connStr, It.IsAny<Dictionary<string, string>>()), Times.Once);
+        }
+
+        [Fact]
+        public void RegisterDocumentConnection_PrunesOldestDocumentContextWhenBounded()
+        {
+            var manager = new MetadataManager(_loggerMock.Object, _registryMock.Object)
+            {
+                SchemaCacheDirectory = null,
+                DisableBackgroundRefresh = true,
+                MaxDocumentContexts = 1
+            };
+
+            manager.RegisterDocumentConnection("file:///doc1.etlsql", "C1", "MSSQL", "Server=one;Password=plain;");
+            manager.RegisterDocumentConnection("file:///doc2.etlsql", "C2", "MSSQL", "Server=two;Password=plain;");
+
+            Assert.DoesNotContain(manager.GetConnections("file:///doc1.etlsql"), c => c.Name == "C1");
+            var remaining = Assert.Single(manager.GetConnections("file:///doc2.etlsql"), c => c.Name == "C2");
+            Assert.Equal(string.Empty, remaining.ConnectionString);
+        }
+
+        [Fact]
         public async Task GetTablesAsync_CachesResults()
         {
             // Arrange

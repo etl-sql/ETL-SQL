@@ -107,7 +107,7 @@ work by priority.
 - [x] **P1 — Fix Designer completion document identity.** Build the scoped document URI exactly once and
       use the same value for schema registration and completion. Add a successful connection-aware
       completion integration test.
-- [ ] **P1 — Bound the metadata cache and remove resolved credential retention.** Use server-owned stable
+- [x] **P1 — Bound the metadata cache and remove resolved credential retention.** Use server-owned stable
       document identities, TTL/LRU eviction, refresh concurrency limits, and secret handles rather than
       storing resolved connection strings in singleton dictionaries.
 - [x] **P1 — Make Designer schema discovery bounded.** Return tables before columns or use a provider

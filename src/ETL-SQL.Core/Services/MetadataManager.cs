@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -35,8 +36,20 @@ public class MetadataManager : IMetadataManager
     /// write. Defaults to 14 days.</summary>
     public TimeSpan DiskCacheMaxAge { get; set; } = TimeSpan.FromDays(14);
 
+    /// <summary>Maximum combined table/view/column entries kept in memory before least-recently-used
+    /// entries are pruned. Defaults to 2048.</summary>
+    public int MaxMemoryCacheEntries { get; set; } = 2048;
+
+    /// <summary>Maximum document-scoped metadata contexts retained in memory. Defaults to 256.</summary>
+    public int MaxDocumentContexts { get; set; } = 256;
+
+    /// <summary>Document-scoped connections and temp tables idle longer than this are pruned. Defaults
+    /// to one hour.</summary>
+    public TimeSpan DocumentContextTtl { get; set; } = TimeSpan.FromHours(1);
+
     private readonly ILogger _logger;
     private readonly IConnectorRegistry _connectors;
+    private readonly SemaphoreSlim _refreshGate;
     private readonly ConcurrentDictionary<string, ConnectionInfo> _globalConnections = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, List<ConnectionInfo>> _docConnections = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, List<string>> _tables = new(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +58,9 @@ public class MetadataManager : IMetadataManager
     private readonly ConcurrentDictionary<string, List<ColumnMetadata>> _columns = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _cacheTimestamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Task> _ongoingRefreshes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _connectionSecrets = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _secretAccess = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _documentAccess = new(StringComparer.OrdinalIgnoreCase);
 
     public MetadataManager(ILogger logger, IConnectorRegistry connectors, IConfiguration? configuration = null)
     {
@@ -69,6 +85,21 @@ public class MetadataManager : IMetadataManager
         {
             DiskCacheMaxAge = TimeSpan.FromDays(diskCacheMaxAgeDays.Value);
         }
+
+        var maxMemoryEntries = configuration?.GetValue<int?>("Metadata:MaxMemoryCacheEntries");
+        if (maxMemoryEntries is > 0)
+            MaxMemoryCacheEntries = maxMemoryEntries.Value;
+
+        var maxDocumentContexts = configuration?.GetValue<int?>("Metadata:MaxDocumentContexts");
+        if (maxDocumentContexts is > 0)
+            MaxDocumentContexts = maxDocumentContexts.Value;
+
+        var documentContextTtlSeconds = configuration?.GetValue<int?>("Metadata:DocumentContextTtlSeconds");
+        if (documentContextTtlSeconds is > 0)
+            DocumentContextTtl = TimeSpan.FromSeconds(documentContextTtlSeconds.Value);
+
+        var maxConcurrentRefreshes = Math.Max(1, configuration?.GetValue<int?>("Metadata:MaxConcurrentRefreshes") ?? 2);
+        _refreshGate = new SemaphoreSlim(maxConcurrentRefreshes, maxConcurrentRefreshes);
     }
 
     private bool IsCacheValid(string cacheKey, string? connectorType)
@@ -80,7 +111,11 @@ public class MetadataManager : IMetadataManager
         return true;
     }
 
-    private void StampCache(string cacheKey) => _cacheTimestamps[cacheKey] = DateTimeOffset.UtcNow;
+    private void StampCache(string cacheKey)
+    {
+        _cacheTimestamps[cacheKey] = DateTimeOffset.UtcNow;
+        PruneMemoryCachesIfNeeded();
+    }
 
     /// <summary>True when a still-valid in-memory entry is old enough to refresh in the
     /// background (stale-while-revalidate), so non-warehouse schemas keep converging instead of
@@ -122,7 +157,10 @@ public class MetadataManager : IMetadataManager
 
     public void RegisterConnection(string name, string type, string connectionString)
     {
-        _globalConnections[name] = new ConnectionInfo(name, type, connectionString, false);
+        var handle = StoreConnectionSecret(connectionString);
+        if (_globalConnections.TryGetValue(name, out var existing))
+            RemoveConnectionSecret(existing);
+        _globalConnections[name] = new ConnectionInfo(name, type, string.Empty, false, SecretHandle: handle);
         _logger.Info("Registered global connection {Name} of type {Type}", name, type);
         ClearCacheForConnection(name);
         TryLoadAndRefreshCache(name, connectionString, null);
@@ -131,15 +169,23 @@ public class MetadataManager : IMetadataManager
     public void RegisterDocumentConnection(string uri, string name, string type, string connectionString)
     {
         var normalizedUri = NormalizeUri(uri);
+        TouchDocument(normalizedUri);
+        var handle = StoreConnectionSecret(connectionString);
         var list = _docConnections.GetOrAdd(normalizedUri, _ => new List<ConnectionInfo>());
         lock (list)
         {
-            list.RemoveAll(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
-            list.Add(new ConnectionInfo(name, type, connectionString, true));
+            var removed = list.Where(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            foreach (var connection in removed)
+            {
+                RemoveConnectionSecret(connection);
+                list.Remove(connection);
+            }
+            list.Add(new ConnectionInfo(name, type, string.Empty, true, SecretHandle: handle));
         }
         _logger.Info("Registered document connection {Name} for {Uri}", name, uri);
         ClearCacheForDocument(normalizedUri, name);
         TryLoadAndRefreshCache(name, connectionString, normalizedUri);
+        PruneDocumentContextsIfNeeded();
     }
 
     public void RegisterDocumentMetadata(
@@ -151,6 +197,7 @@ public class MetadataManager : IMetadataManager
         IEnumerable<string>? views = null)
     {
         var normalizedUri = NormalizeUri(uri);
+        TouchDocument(normalizedUri);
         var list = _docConnections.GetOrAdd(normalizedUri, _ => new List<ConnectionInfo>());
         lock (list)
         {
@@ -186,15 +233,19 @@ public class MetadataManager : IMetadataManager
         StampCache(key);
 
         _logger.Info("Registered metadata-only document connection {Name} for {Uri}", name, uri);
+        PruneDocumentContextsIfNeeded();
     }
 
     public void ClearDocumentConnections(string uri)
     {
         var normalizedUri = NormalizeUri(uri);
-        if (_docConnections.TryRemove(normalizedUri, out _))
+        if (_docConnections.TryRemove(normalizedUri, out var connections))
         {
             _logger.Debug("Cleared document connections for {Uri}.", normalizedUri);
+            lock (connections)
+                ClearDocumentSecrets(normalizedUri, connections.ToList());
             ClearCacheForDocument(normalizedUri);
+            _documentAccess.TryRemove(normalizedUri, out _);
         }
     }
 
@@ -210,6 +261,7 @@ public class MetadataManager : IMetadataManager
         var normalizedUri = NormalizeUri(uri);
         if (!string.IsNullOrEmpty(normalizedUri))
         {
+            TouchDocument(normalizedUri);
             var basePath = GetBasePath(normalizedUri);
             foreach (var kvp in _docConnections)
             {
@@ -222,7 +274,7 @@ public class MetadataManager : IMetadataManager
                 }
             }
         }
-        return result;
+        return result.Select(RedactConnection).ToList();
     }
 
     private ConnectionInfo? GetConnection(string connectionName, string? uri = null)
@@ -230,6 +282,7 @@ public class MetadataManager : IMetadataManager
         var normalizedUri = NormalizeUri(uri);
         if (!string.IsNullOrEmpty(normalizedUri))
         {
+            TouchDocument(normalizedUri);
             // Exact match first
             if (_docConnections.TryGetValue(normalizedUri, out var docs))
             {
@@ -262,6 +315,119 @@ public class MetadataManager : IMetadataManager
         return null;
     }
 
+    private string StoreConnectionSecret(string connectionString)
+    {
+        var handle = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+        _connectionSecrets[handle] = connectionString;
+        _secretAccess[handle] = DateTimeOffset.UtcNow;
+        return handle;
+    }
+
+    private string ResolveConnectionString(ConnectionInfo connection)
+    {
+        if (!string.IsNullOrWhiteSpace(connection.SecretHandle)
+            && _connectionSecrets.TryGetValue(connection.SecretHandle, out var value))
+        {
+            _secretAccess[connection.SecretHandle] = DateTimeOffset.UtcNow;
+            return value;
+        }
+
+        return connection.ConnectionString;
+    }
+
+    private static ConnectionInfo RedactConnection(ConnectionInfo connection) =>
+        connection with { ConnectionString = string.Empty };
+
+    private void TouchDocument(string normalizedUri)
+    {
+        if (!string.IsNullOrWhiteSpace(normalizedUri))
+            _documentAccess[normalizedUri] = DateTimeOffset.UtcNow;
+    }
+
+    private void RemoveConnectionSecret(ConnectionInfo connection)
+    {
+        if (string.IsNullOrWhiteSpace(connection.SecretHandle)) return;
+        _connectionSecrets.TryRemove(connection.SecretHandle, out _);
+        _secretAccess.TryRemove(connection.SecretHandle, out _);
+    }
+
+    private void ClearDocumentSecrets(string normalizedUri, List<ConnectionInfo>? connections = null)
+    {
+        if (connections is null && _docConnections.TryGetValue(normalizedUri, out var active))
+        {
+            lock (active)
+                connections = active.ToList();
+        }
+
+        if (connections is null) return;
+        foreach (var connection in connections)
+            RemoveConnectionSecret(connection);
+    }
+
+    private void PruneMemoryCachesIfNeeded()
+    {
+        var maxEntries = Math.Max(0, MaxMemoryCacheEntries);
+        if (maxEntries == 0) return;
+
+        while (_tables.Count + _views.Count + _columns.Count > maxEntries)
+        {
+            var oldest = _cacheTimestamps.OrderBy(kvp => kvp.Value).FirstOrDefault();
+            if (string.IsNullOrEmpty(oldest.Key)) break;
+            RemoveCacheEntry(oldest.Key);
+        }
+    }
+
+    private void RemoveCacheEntry(string cacheKey)
+    {
+        _cacheTimestamps.TryRemove(cacheKey, out _);
+        _tables.TryRemove(cacheKey, out _);
+        _views.TryRemove(cacheKey, out _);
+        _columns.TryRemove(cacheKey, out _);
+
+        var prefix = cacheKey + ":";
+        foreach (var key in _columns.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _columns.TryRemove(key, out _);
+            _cacheTimestamps.TryRemove(key, out _);
+        }
+    }
+
+    private void PruneDocumentContextsIfNeeded()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var expired = DocumentContextTtl > TimeSpan.Zero
+            ? _documentAccess
+                .Where(kvp => now - kvp.Value > DocumentContextTtl)
+                .Select(kvp => kvp.Key)
+                .ToList()
+            : new List<string>();
+
+        foreach (var uri in expired)
+            ClearDocumentContext(uri);
+
+        var maxContexts = Math.Max(0, MaxDocumentContexts);
+        if (maxContexts == 0) return;
+
+        while (_documentAccess.Count > maxContexts)
+        {
+            var oldest = _documentAccess.OrderBy(kvp => kvp.Value).FirstOrDefault();
+            if (string.IsNullOrEmpty(oldest.Key)) break;
+            ClearDocumentContext(oldest.Key);
+        }
+    }
+
+    private void ClearDocumentContext(string normalizedUri)
+    {
+        if (_docConnections.TryRemove(normalizedUri, out var connections))
+        {
+            lock (connections)
+                ClearDocumentSecrets(normalizedUri, connections.ToList());
+        }
+
+        ClearCacheForDocument(normalizedUri);
+        _documentAccess.TryRemove(normalizedUri, out _);
+    }
+
     public bool DebugMode { get; set; } = false;
     public string? SchemaCacheDirectory { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "SchemaCache");
     public bool DisableBackgroundRefresh { get; set; } = false;
@@ -283,15 +449,17 @@ public class MetadataManager : IMetadataManager
             {
                 // Stale-while-revalidate: serve instantly, refresh in the background when aged.
                 if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(key))
-                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    TriggerBackgroundRefresh(connectionName, ResolveConnectionString(conn), conn.IsDocument ? uri : null);
                 return cached;
             }
 
             if (conn.IsMetadataOnly)
                 return Enumerable.Empty<string>();
 
+            var connectionString = ResolveConnectionString(conn);
+
             // Try to load disk cache
-            var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
+            var diskCache = await LoadSchemaFromDiskAsync(connectionName, connectionString);
             if (diskCache != null)
             {
                 _tables[key] = diskCache.Tables;
@@ -304,7 +472,7 @@ public class MetadataManager : IMetadataManager
                 StampCache(key);
 
                 // Trigger async background refresh
-                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
                 var tablesList = diskCache.Tables.ToList();
                 var dcNormalizedUri = NormalizeUri(uri);
@@ -318,7 +486,7 @@ public class MetadataManager : IMetadataManager
             var connector = _connectors.GetConnector(conn.Type);
             if (connector == null) return Enumerable.Empty<string>();
 
-            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, connectionString);
             var tables = (await source.GetTablesAsync()).ToList();
 
             var normalizedUri = NormalizeUri(uri);
@@ -336,7 +504,7 @@ public class MetadataManager : IMetadataManager
             StampCache(key);
 
             // Trigger background refresh to fetch and cache columns as well
-            TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+            TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
             return tables;
         }
@@ -358,15 +526,17 @@ public class MetadataManager : IMetadataManager
             if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
             {
                 if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(key))
-                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    TriggerBackgroundRefresh(connectionName, ResolveConnectionString(conn), conn.IsDocument ? uri : null);
                 return cached;
             }
 
             if (conn.IsMetadataOnly)
                 return Enumerable.Empty<string>();
 
+            var connectionString = ResolveConnectionString(conn);
+
             // Try to load disk cache
-            var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
+            var diskCache = await LoadSchemaFromDiskAsync(connectionName, connectionString);
             if (diskCache != null)
             {
                 _tables[key] = diskCache.Tables;
@@ -379,7 +549,7 @@ public class MetadataManager : IMetadataManager
                 StampCache(key);
 
                 // Trigger async background refresh
-                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
                 return diskCache.Views;
             }
@@ -387,7 +557,7 @@ public class MetadataManager : IMetadataManager
             var connector = _connectors.GetConnector(conn.Type);
             if (connector == null) return Enumerable.Empty<string>();
 
-            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, connectionString);
             var views = Enumerable.Empty<string>();
             if (source is IDatabaseSource db)
             {
@@ -398,7 +568,7 @@ public class MetadataManager : IMetadataManager
             StampCache(key);
 
             // Trigger background refresh to fetch and cache columns as well
-            TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+            TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
             return views;
         }
@@ -507,15 +677,17 @@ public class MetadataManager : IMetadataManager
             if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
             {
                 if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(GetCacheKey(connectionName, conn.IsDocument ? uri : null)))
-                    TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                    TriggerBackgroundRefresh(connectionName, ResolveConnectionString(conn), conn.IsDocument ? uri : null);
                 return cached;
             }
 
             if (conn.IsMetadataOnly)
                 return Enumerable.Empty<ColumnMetadata>();
 
+            var connectionString = ResolveConnectionString(conn);
+
             // Try to load disk cache if memory cache is empty
-            var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
+            var diskCache = await LoadSchemaFromDiskAsync(connectionName, connectionString);
             if (diskCache != null)
             {
                 var connKey = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
@@ -529,7 +701,7 @@ public class MetadataManager : IMetadataManager
                 StampCache(connKey);
 
                 // Trigger async background refresh
-                TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+                TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
                 if (_columns.TryGetValue(key, out var diskLoadedCols))
                 {
@@ -541,7 +713,7 @@ public class MetadataManager : IMetadataManager
             var connector = _connectors.GetConnector(conn.Type);
             if (connector == null) return Enumerable.Empty<ColumnMetadata>();
 
-            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+            await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, connectionString);
             var colList = new List<ColumnMetadata>();
 
             var catalogProvider = source.GetCatalogProvider();
@@ -581,7 +753,7 @@ public class MetadataManager : IMetadataManager
             StampCache(key);
 
             // Trigger background refresh for the whole connection to pre-fetch other metadata
-            TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
+            TriggerBackgroundRefresh(connectionName, connectionString, conn.IsDocument ? uri : null);
 
             return colList;
         }
@@ -616,11 +788,19 @@ public class MetadataManager : IMetadataManager
 
     private void ClearCacheForConnection(string connectionName)
     {
-        var keysToRemove = _tables.Keys.Where(k => k.EndsWith($":{connectionName.ToUpperInvariant()}")).ToList();
+        var suffix = $":{connectionName}";
+        var upperSuffix = $":{connectionName.ToUpperInvariant()}:";
+        var keysToRemove = _tables.Keys.Where(k => k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ToList();
         foreach (var key in keysToRemove) _tables.TryRemove(key, out _);
 
-        var colKeysToRemove = _columns.Keys.Where(k => k.Contains($":{connectionName.ToUpperInvariant()}:")).ToList();
+        var viewKeysToRemove = _views.Keys.Where(k => k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var key in viewKeysToRemove) _views.TryRemove(key, out _);
+
+        var colKeysToRemove = _columns.Keys.Where(k => k.Contains(upperSuffix, StringComparison.OrdinalIgnoreCase)).ToList();
         foreach (var key in colKeysToRemove) _columns.TryRemove(key, out _);
+
+        foreach (var key in keysToRemove.Concat(viewKeysToRemove).Concat(colKeysToRemove))
+            _cacheTimestamps.TryRemove(key, out _);
     }
 
     public void CleanUpDocumentConnectionsAndTempTables(string uri, IEnumerable<string> activeConnectionNames, IEnumerable<string> activeTempTableNames)
@@ -637,6 +817,7 @@ public class MetadataManager : IMetadataManager
                 foreach (var c in toRemove)
                 {
                     list.Remove(c);
+                    RemoveConnectionSecret(c);
                     ClearCacheForDocument(normalizedUri, c.Name);
                 }
             }
@@ -665,21 +846,25 @@ public class MetadataManager : IMetadataManager
             var cacheKey = GetCacheKey(connectionName, normalizedUri);
             _tables.TryRemove(cacheKey, out _);
             _views.TryRemove(cacheKey, out _);
-            var colKeysToRemove = _columns.Keys.Where(k => k.StartsWith($"{cacheKey}:")).ToList();
+            _cacheTimestamps.TryRemove(cacheKey, out _);
+            var colKeysToRemove = _columns.Keys.Where(k => k.StartsWith($"{cacheKey}:", StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var k in colKeysToRemove) _columns.TryRemove(k, out _);
+            foreach (var k in colKeysToRemove) _cacheTimestamps.TryRemove(k, out _);
         }
         else
         {
             var prefix = $"{normalizedUri}:";
-            var keysToRemove = _tables.Keys.Where(k => k.StartsWith(prefix)).ToList();
+            var keysToRemove = _tables.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var k in keysToRemove) _tables.TryRemove(k, out _);
 
-            var viewKeysToRemove = _views.Keys.Where(k => k.StartsWith(prefix)).ToList();
+            var viewKeysToRemove = _views.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var k in viewKeysToRemove) _views.TryRemove(k, out _);
 
-            var colKeysToRemove = _columns.Keys.Where(k => k.StartsWith(prefix)).ToList();
+            var colKeysToRemove = _columns.Keys.Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList();
             foreach (var k in colKeysToRemove) _columns.TryRemove(k, out _);
 
+            foreach (var k in keysToRemove.Concat(viewKeysToRemove).Concat(colKeysToRemove))
+                _cacheTimestamps.TryRemove(k, out _);
             _docTempTables.TryRemove(normalizedUri, out _);
         }
     }
@@ -730,7 +915,15 @@ public class MetadataManager : IMetadataManager
         {
             try
             {
-                await RefreshSchemaInternalAsync(connectionName, connectionString, uri);
+                await _refreshGate.WaitAsync();
+                try
+                {
+                    await RefreshSchemaInternalAsync(connectionName, connectionString, uri);
+                }
+                finally
+                {
+                    _refreshGate.Release();
+                }
             }
             catch (Exception ex)
             {
@@ -754,7 +947,11 @@ public class MetadataManager : IMetadataManager
 
         _logger.Info("Starting background schema refresh for connection {Name} ({Type})", connectionName, conn.Type);
 
-        await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+        var resolvedConnectionString = ResolveConnectionString(conn);
+        if (string.IsNullOrEmpty(resolvedConnectionString))
+            resolvedConnectionString = connectionString;
+
+        await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, resolvedConnectionString);
 
         var tables = (await source.GetTablesAsync()).ToList();
         if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
@@ -851,7 +1048,7 @@ public class MetadataManager : IMetadataManager
             Views = views,
             Columns = columnsMap
         };
-        await SaveSchemaToDiskAsync(connectionName, connectionString, cacheData);
+        await SaveSchemaToDiskAsync(connectionName, resolvedConnectionString, cacheData);
 
         _logger.Info("Background schema refresh complete for connection {Name}. Cached {TableCount} tables/views.", connectionName, allObjects.Count);
     }

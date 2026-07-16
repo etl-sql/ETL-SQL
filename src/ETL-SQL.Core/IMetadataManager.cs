@@ -5,7 +5,13 @@ using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
 
-public record ConnectionInfo(string Name, string Type, string ConnectionString, bool IsDocument, bool IsMetadataOnly = false);
+public record ConnectionInfo(
+    string Name,
+    string Type,
+    string ConnectionString,
+    bool IsDocument,
+    bool IsMetadataOnly = false,
+    string? SecretHandle = null);
 public record ColumnMetadata(string Name, string DataType);
 
 /// <summary>
