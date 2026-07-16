@@ -1,7 +1,7 @@
 # ETL-SQL™
 
 <p align="center">
-  <img src="Docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
+  <img src="docs/assets/logo.png" alt="ETL-SQL Logo" width="160" />
 </p>
 
 ![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.15.0-blue?style=for-the-badge&logo=dotnet)
@@ -62,19 +62,19 @@ ELT is attractive because it centralizes execution in a warehouse, but it often 
 
 ### VS Code Extension & Notebooks
 
-![VS Code demo](Docs/assets/vscode-demo.gif)
+![VS Code demo](docs/assets/vscode-demo.gif)
 
 *Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution · Lineage*
 
 ### Report-SQL Dashboards
 
-![Report demo](Docs/assets/report-demo.gif)
+![Report demo](docs/assets/report-demo.gif)
 
 *Interactive charts · drill-down navigation · live parameter slicers · multi-page navigation · PDF export*
 
 ### Terminal IDE
 
-![TUI demo](Docs/assets/tui-demo.gif)
+![TUI demo](docs/assets/tui-demo.gif)
 
 *Syntax highlighting · autocomplete · live results grid · compare mode · profiling dashboard*
 
@@ -305,35 +305,36 @@ etl-sql-report build sales_dashboard.rptsql --format json
 
 | Document | Description |
 | :--- | :--- |
-| [User Manual](Docs/User_Manual.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
-| [ETL Notebook Guide](Docs/ETL_Notebook_Guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
-| [Report-SQL Guide](Docs/Report_SQL_Guide.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
-| [Pattern Cookbook](Docs/Cookbook.md) | Self-contained ETL recipes for common production workflows. |
-| [Sample Guide](Docs/Sample_Guide.md) | Inventory of sample scripts in the `samples/` folder. |
+| [Documentation Home](docs/README.md) | Main documentation map for guides, reference, cookbooks, architecture, and releases. |
+| [Getting Started](docs/guides/getting-started.md) | Pipeline mental model, connections, variables, control flow, and debugging. |
+| [ETL Notebook Guide](docs/guides/notebook-guide.md) | Cell execution model, cross-cell state, and notebook IntelliSense. |
+| [Report-SQL Guide](docs/guides/report-sql.md) | `.rptsql` syntax, visuals, filters, dashboards, drill-downs, and report hosting. |
+| [Pattern Cookbook](docs/cookbooks/etl-recipes.md) | Self-contained ETL recipes for common production workflows. |
+| [Sample Guide](docs/guides/sample-guide.md) | Inventory of sample scripts in the `samples/` folder. |
 
 ### Reference
 
 | Document | Description |
 | :--- | :--- |
-| [Syntax Index](Docs/Syntax_Index.md) | Central index of commands, functions, options, visual types, and syntax forms. |
-| [Grammar](Docs/Reference/Grammar.md) | Complete syntax reference. |
-| [Standard Library](Docs/Reference/Standard_Library.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
-| [Data Connectors](Docs/Reference/Data_Connectors.md) | Connector types, `WITH()` options, authentication patterns, and examples. |
-| [Specialized Operations](Docs/Reference/Specialized_Operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
-| [Performance](Docs/Reference/Performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
-| [Spec-Driven Development](Docs/Reference/Spec_Driven_Development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
+| [Syntax Index](docs/Syntax_Index.md) | Central index of commands, functions, options, visual types, and syntax forms. |
+| [Grammar](docs/reference/statements/grammar.md) | Complete syntax reference. |
+| [Standard Library](docs/reference/functions/standard-library.md) | Built-in functions: string, date, math, regex, window, JSON/XML, and more. |
+| [Data Connectors](docs/reference/connectors/data-connectors.md) | Connector types, options, authentication patterns, and examples. |
+| [Specialized Operations](docs/reference/file-operations/specialized-operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
+| [Performance](docs/reference/performance/performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
+| [Spec-Driven Development](docs/guides/spec-driven-development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
 
 ### Engineering
 
 | Document | Description |
 | :--- | :--- |
-| [Engine Architecture](Docs/Architecture/Engine.md) | Parser, AST, evaluator internals, dispatch, linting, and execution model. |
-| [Reporting Architecture](Docs/Architecture/Reporting.md) | Report runtime, manifest builder, renderer, exports, and parameter binding. |
-| [Connector Architecture](Docs/Architecture/Connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
-| [Lineage Architecture](Docs/Architecture/Lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
-| [VS Code Extension](Docs/Architecture/VSCodeExtension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
-| [Connector Certification Matrix](Docs/Standards/Connector_Certification_Matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
-| [Release Workflows](Docs/Strategy/Release_Workflows.md) | Local-first release validation and packaging workflow. |
+| [Engine Architecture](docs/architecture/Engine.md) | Parser, AST, evaluator internals, dispatch, linting, and execution model. |
+| [Reporting Architecture](docs/architecture/Reporting.md) | Report runtime, manifest builder, renderer, exports, and parameter binding. |
+| [Connector Architecture](docs/architecture/Connectors.md) | Connector interfaces, lifecycle, pushdown, and security boundaries. |
+| [Lineage Architecture](docs/architecture/Lineage.md) | Lineage capture, history queries, export formats, and orchestration integration. |
+| [VS Code Extension](docs/architecture/VSCodeExtension.md) | LSP, REPL channels, notebook controller, results panel, and report preview. |
+| [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) | Connector test classes, certification tiers, and release gate coverage. |
+| [Release Workflows](docs/architecture/roadmaps/Release_Workflows.md) | Local-first release validation and packaging workflow. |
 | [Security Policy](SECURITY.md) | Zero-trust sandbox, cryptographic architecture, and audit policy. |
 | [AI Agent Manual](AGENTS.md) | Mandatory instruction set for AI-assisted development in this repo. |
 
@@ -346,7 +347,7 @@ ETL-SQL moves and transforms real data, so we have tried to test as much of it a
 - **Over 3,500 automated unit and integration tests** (xUnit) spanning the parser, evaluator, expression and type system, connectors, security guardrails, reporting engine, language server, and Report Portal.
 - **Over 11,500 SQL-correctness checks.** The dedicated SQLite [`sqllogictest`](https://www.sqlite.org/sqllogictest/) lane currently runs 42 active files containing 9,375 query records and 2,160 statement records. The excluded index-optimization corpus relies on indexing physical tables, while ETL-SQL currently supports indexes on in-memory `#temp` tables.
 - **71 VS Code extension and UI unit tests** (Vitest), plus separate Node-based smoke checks for report designer and portal components.
-- **Layered connector integration coverage** using disposable containers where practical (including MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, MongoDB, Neo4j, S3/MinIO, Azure Blob/Azurite, SMTP/MailPit, Report Portal, and Orchestrator), provider emulators for BigQuery and Snowflake, and local files or loopback services for connectors such as Parquet, Avro, REST, and SharePoint. See the [Connector Certification Matrix](Docs/Standards/Connector_Certification_Matrix.md) for provider-specific coverage and remaining external-provider gaps.
+- **Layered connector integration coverage** using disposable containers where practical (including MSSQL, Postgres, MySQL, Oracle, SFTP, Kafka, MongoDB, Neo4j, S3/MinIO, Azure Blob/Azurite, SMTP/MailPit, Report Portal, and Orchestrator), provider emulators for BigQuery and Snowflake, and local files or loopback services for connectors such as Parquet, Avro, REST, and SharePoint. See the [Connector Certification Matrix](docs/architecture/standards/Connector_Certification_Matrix.md) for provider-specific coverage and remaining external-provider gaps.
 - **Performance and scale tests** exercise large-dataset and spill paths, including Standard-tier scenarios that scale to one million rows, plus a BenchmarkDotNet suite. Scale-certification scripts can compare results with checked-in baselines and fail on configured regressions.
 - **A 70% line-coverage threshold in CI** when the generated coverage summary is parsed successfully. The local pre-release workflow runs asset checks, dependency audits, build, smoke, fast, sample, VS Code, and Smoke-tier scale checks by default; SLT, Docker integration, Standard-tier scale, and installer validation are opt-in phases.
 

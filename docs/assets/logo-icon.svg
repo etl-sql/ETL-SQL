@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ETL-SQL application icon</title>
+  <desc id="desc">Two data streams enter a compact E-shaped pipeline and leave through one output arrow.</desc>
+  <defs>
+    <linearGradient id="etl-icon-gradient" x1="24" y1="128" x2="238" y2="128" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1457e6"/>
+      <stop offset="0.5" stop-color="#7b2ff7"/>
+      <stop offset="1" stop-color="#08d9e8"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#etl-icon-gradient)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 84h48c24 0 27 28 50 28h8"/>
+    <path d="M24 172h48c24 0 27-28 50-28h8"/>
+    <path d="M130 112V73l48-29 48 29v110l-48 29-48-29v-39"/>
+    <path d="M130 89h50"/>
+    <path d="M130 128h42"/>
+    <path d="M130 167h50"/>
+    <path d="M226 128h18"/>
+    <path d="M232 116l12 12-12 12"/>
+  </g>
+</svg>
