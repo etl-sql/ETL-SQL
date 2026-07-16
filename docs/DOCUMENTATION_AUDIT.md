@@ -15,8 +15,9 @@ Completed in the first cleanup pass:
 - Added `docs/README.md`.
 - Added section landing pages for the major guide, reference, cookbook, architecture, and release-support areas.
 - Added reusable templates for functions, connectors, statements, visuals, guides, cookbook recipes, architecture docs, and decision records.
+- Added snippet documentation entry points: `snippets/README.md` for maintainers and `docs/reference/snippets/README.md` for users.
 - Adopted lowercase documentation filenames for function reference pages while preserving SQL casing in page titles.
-- Expanded thin reference pages into full pages: `CAST`, `CONVERT`, `ENV`, `FILE_EXISTS`, `IS_NULL`, `TRY_CONVERT`, `CHAR_LENGTH`, `LENGTH`, `SUBSTR`, `FIRST_VALUE`, `LAST_VALUE`, `POW`, `CEIL`, `RANDOM`, `ERROR_MESSAGE`, `ERROR_NUMBER`, `ERROR_STATE`, `ERROR_LINE`, `ERROR_SEVERITY`, `VAR`, `VARP`, `IFNULL`, `QUOTIENT`, `ATAN2`, `NEWSEQUENTIALID`, `XMLEXISTS`, `XMLQUERY`, `SORT_LIST`, `DIRECTORY`, `LISTAGG`, `ADD_TO_LIST`, `APPEND_TO_LIST`, `BINARY_CHECKSUM`, `STDEVP`, `DIRECTORY_EXISTS`, `IS_NOT_NULL`, `REMOVE_FROM_LIST`, `PERCENTILE_DISC`, `OVERLAY`, `STDDEV`, `EXTRACTVALUE`, `OPENJSON`, `SYSDATE`, `JSON_EXTRACT`, `CURRENT_TIME`, `DATALENGTH`, `DMETAPHONE`, `PI`, `XMLELEMENT`, `JSON_TABLE`, `XMLTABLE`, `JSON_EXISTS`, `JSON_ARRAY`, `CURRENT_DATE`, `XMLATTRIBUTES`, `JSON_OBJECT`, `TO_DATE`, `DATETIMEOFFSETSFROMPARTS`, `REGEXP_MATCHES`, `GET_TAGS`, `LEVENSHTEIN`, `NGRAM_TOKENS`, `REGEXP_SPLIT_TO_TABLE`, `DEGREES`, `RADIANS`, `DMETAPHONE_ALT`, `GET_TAG_VALUE`, `HAS_TAG`, `METAPHONE`, `NGRAMS`, `REGEXP_COUNT`, `RELDATE`, `REMOTE_FILE_EXISTS`, `XMLFOREST`, `CURRENT_TIMESTAMP`, `MINUTE`, `NOW`, `SECOND`, `BIT_COUNT`, `BITAND`, `BITNOT`, `BITOR`, `BITSHIFTLEFT`, `BITSHIFTRIGHT`, `BITXOR`, and `HBAR`.
+- Expanded thin reference pages into full pages: `CAST`, `CONVERT`, `ENV`, `FILE_EXISTS`, `IS_NULL`, `TRY_CONVERT`, `CHAR_LENGTH`, `LENGTH`, `SUBSTR`, `FIRST_VALUE`, `LAST_VALUE`, `POW`, `CEIL`, `RANDOM`, `ERROR_MESSAGE`, `ERROR_NUMBER`, `ERROR_STATE`, `ERROR_LINE`, `ERROR_SEVERITY`, `VAR`, `VARP`, `IFNULL`, `QUOTIENT`, `ATAN2`, `NEWSEQUENTIALID`, `XMLEXISTS`, `XMLQUERY`, `SORT_LIST`, `DIRECTORY`, `LISTAGG`, `ADD_TO_LIST`, `APPEND_TO_LIST`, `BINARY_CHECKSUM`, `STDEVP`, `DIRECTORY_EXISTS`, `IS_NOT_NULL`, `REMOVE_FROM_LIST`, `PERCENTILE_DISC`, `OVERLAY`, `STDDEV`, `EXTRACTVALUE`, `OPENJSON`, `SYSDATE`, `JSON_EXTRACT`, `CURRENT_TIME`, `DATALENGTH`, `DMETAPHONE`, `PI`, `XMLELEMENT`, `JSON_TABLE`, `XMLTABLE`, `JSON_EXISTS`, `JSON_ARRAY`, `CURRENT_DATE`, `XMLATTRIBUTES`, `JSON_OBJECT`, `TO_DATE`, `DATETIMEOFFSETSFROMPARTS`, `REGEXP_MATCHES`, `GET_TAGS`, `LEVENSHTEIN`, `NGRAM_TOKENS`, `REGEXP_SPLIT_TO_TABLE`, `DEGREES`, `RADIANS`, `DMETAPHONE_ALT`, `GET_TAG_VALUE`, `HAS_TAG`, `METAPHONE`, `NGRAMS`, `REGEXP_COUNT`, `RELDATE`, `REMOTE_FILE_EXISTS`, `XMLFOREST`, `CURRENT_TIMESTAMP`, `MINUTE`, `NOW`, `SECOND`, `BIT_COUNT`, `BITAND`, `BITNOT`, `BITOR`, `BITSHIFTLEFT`, `BITSHIFTRIGHT`, `BITXOR`, `FILE_MODIFIED`, `FILE_SIZE`, `PATH_FILENAME`, `RANDOM_DECIMAL`, `RANDOM_INT`, and `HBAR`.
 - Removed exact duplicate guide pages and kept one canonical path for each topic.
 - Removed the duplicate markdown copy under `docs/assets/`.
 - Updated the repository `README.md` documentation map to point into `docs/`.
@@ -125,16 +126,16 @@ Thin-page batches completed:
 - `docs/reference/functions/general/bitshiftleft.md`
 - `docs/reference/functions/general/bitshiftright.md`
 - `docs/reference/functions/general/bitxor.md`
-
-`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
-
-No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
-
 - `docs/reference/functions/general/file_modified.md`
 - `docs/reference/functions/general/file_size.md`
 - `docs/reference/functions/general/path_filename.md`
 - `docs/reference/functions/general/random_decimal.md`
 - `docs/reference/functions/general/random_int.md`
+
+`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
+
+No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
+
 - `docs/reference/functions/math/abs.md`
 - `docs/reference/functions/math/acos.md`
 - `docs/reference/functions/math/asin.md`
@@ -182,6 +183,13 @@ Most legacy files have some new equivalent, but these legacy topics need deliber
 - `Docs_Legacy/Report_SQL_Guide.md` maps to `docs/guides/report-sql.md`, but that file is still over 2,600 lines and should be split into report authoring, visual reference, layout, actions, and publishing.
 - `Docs_Legacy/Cookbook.md` maps to `docs/cookbooks/etl-recipes.md`, but the cookbook should have a README and recipe template.
 - `Docs_Legacy/Reference/Dates_and_Times.md` and `Docs_Legacy/Reference/RelativeDate_Parameters.md` map to `docs/reference/dates-times/`, but stale links still point to legacy names.
+
+## P1: Snippet Documentation And Runtime Assets
+
+- Built-in autocomplete snippets stay in `/snippets` as runtime/editor assets, not under `/docs`.
+- `snippets/README.md` now documents snippet frontmatter, placeholder syntax, authoring rules, and build/runtime flow.
+- `docs/reference/snippets/README.md` now provides the user-facing guide for built-in and user-defined snippets.
+- Old physical `src/ETL-SQL.Core/Resources/Help` copies should be removed only after the project file embeds replacement docs/snippets from `/docs` and `/snippets`, and build/test coverage confirms runtime help and snippet loading still work.
 
 ## P1: Oversized Guides
 

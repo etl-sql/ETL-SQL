@@ -1,26 +1,42 @@
 # FILE_SIZE
+
 Returns the size of a local file in bytes.
 
-**Category:** File / Metadata
-
 ## Syntax
+
 ```sql
 FILE_SIZE(path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `path` | `VARCHAR` / `STRING` | The local path of the file |
+
+- **path** - Local file path to inspect.
 
 ## Returns
-`DECIMAL` — The file size in bytes. Returns `NULL` if the file does not exist, or if path is `NULL`.
 
-## Example
+Returns the file size in bytes as a numeric value.
+
+## Null Behavior
+
+Returns `NULL` when `path` is `NULL` or the file does not exist.
+
+## Remarks
+
+The path is resolved through the engine path boundary before file metadata is read.
+
+## Examples
+
 ```sql
-SELECT FILE_SIZE('C:\Data\input.csv');  -- → 2048
+SELECT FILE_SIZE('C:\Data\input.csv') AS input_bytes;
 ```
 
-## See Also
-- [Standard Library — §8.1 File Operations](../../../guides/getting-started.md#81-file-operations)
-- Related: [`FILE_HASH`](file_hash.md), [`FILE_MODIFIED`](file_modified.md)
+```sql
+SELECT source_path, FILE_SIZE(source_path) AS size_bytes
+FROM #file_inventory;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [FILE_HASH](file_hash.md)
+- [FILE_MODIFIED](file_modified.md)

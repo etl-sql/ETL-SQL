@@ -22,6 +22,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 - [Functions](functions/README.md) - scalar, aggregate, window, JSON/XML, collection, conversion, string, math, date/time, and cryptography functions.
 - [Dates and Times](dates-times/dates-times.md) - temporal model, date arithmetic, aliases, and relative date handling.
 - [Performance](performance/performance.md) - spill thresholds, external execution, memory model, and scale guidance.
+- [Snippets](snippets/README.md) - built-in and user-defined autocomplete templates.
 
 ## Reporting And Operations
 
@@ -29,4 +30,3 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 - [Portal Admin Commands](portal-admin/README.md) - script-first Report Portal administration.
 - [Orchestrator Jobs](orchestrator-jobs/README.md) - job, export, publish, validate, kill, and subscription commands.
 - [CLI](cli/README.md) - command-line interface reference.
-

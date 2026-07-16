@@ -1,28 +1,42 @@
 # RANDOM_INT
+
 Returns a random integer within an inclusive range.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 RANDOM_INT(min, max)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `min` | `INT` | Inclusive lower bound |
-| `max` | `INT` | Inclusive upper bound |
+
+- **min** - Inclusive lower bound.
+- **max** - Inclusive upper bound.
 
 ## Returns
-`INT` — A random integer where `min` ≤ result ≤ `max`.
 
-## Example
+Returns a random `INT` value where `min <= result <= max`.
+
+## Null Behavior
+
+Returns `NULL` when either bound is `NULL`.
+
+## Remarks
+
+Use this for generated sample data, randomized tests, and simulation scripts. Do not use it for cryptographic randomness.
+
+## Examples
+
 ```sql
-SELECT RANDOM_INT(1, 100);      -- e.g. → 47
+SELECT RANDOM_INT(1, 100) AS sample_value;
+```
+
+```sql
 SELECT RANDOM_INT(1, 6) AS dice_roll;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`RAND`](../math/rand.md), [`RANDOM_DECIMAL`](random_decimal.md)
+## References
+
+- [Standard Library](../standard-library.md)
+- [RAND](../math/rand.md)
+- [RANDOM_DECIMAL](random_decimal.md)

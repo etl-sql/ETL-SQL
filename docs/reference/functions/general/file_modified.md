@@ -1,26 +1,42 @@
 # FILE_MODIFIED
+
 Returns the last modification (write) timestamp of a local file.
 
-**Category:** File / Metadata
-
 ## Syntax
+
 ```sql
 FILE_MODIFIED(path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `path` | `VARCHAR` / `STRING` | The local path of the file |
+
+- **path** - Local file path to inspect.
 
 ## Returns
-`DATETIME` — The last write timestamp of the file. Returns `NULL` if the file does not exist, or if path is `NULL`.
 
-## Example
+Returns a `DATETIME` containing the file's last write timestamp.
+
+## Null Behavior
+
+Returns `NULL` when `path` is `NULL` or the file does not exist.
+
+## Remarks
+
+The path is resolved through the engine path boundary before file metadata is read.
+
+## Examples
+
 ```sql
-SELECT FILE_MODIFIED('C:\Data\input.csv');  -- → '2026-05-28 14:00:00'
+SELECT FILE_MODIFIED('C:\Data\input.csv') AS input_modified_at;
 ```
 
-## See Also
-- [Standard Library — §8.1 File Operations](../../../guides/getting-started.md#81-file-operations)
-- Related: [`FILE_SIZE`](file_size.md), [`FILE_HASH`](file_hash.md)
+```sql
+SELECT source_path, FILE_MODIFIED(source_path) AS modified_at
+FROM #file_inventory;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [FILE_SIZE](file_size.md)
+- [FILE_HASH](file_hash.md)
