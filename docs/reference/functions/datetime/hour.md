@@ -1,29 +1,45 @@
 # HOUR
+
 Returns the hour component of a datetime as an integer (0–23).
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 HOUR(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATETIME` / `TIME` | The source datetime or time value |
+
+- **date** - Source datetime or time value.
 
 ## Returns
-`INT` — Hour from `0` (midnight) to `23` (11 PM).
 
-## Example
+Returns an `INT` hour value from `0` through `23`.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT HOUR('2026-05-17 14:30:00');   -- → 14
-SELECT HOUR(GETDATE()) AS current_hour;
-SELECT HOUR(event_time) AS hour, COUNT(*) AS events
-  FROM #log GROUP BY HOUR(event_time) ORDER BY hour;
+SELECT HOUR('2026-05-17 14:30:00') AS order_hour;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`MINUTE`](minute.md), [`SECOND`](second.md), [`DATEPART`](datepart.md)
+```sql
+SELECT HOUR(GETDATE()) AS current_hour;
+```
+
+```sql
+SELECT HOUR(event_time) AS event_hour, COUNT(*) AS event_count
+FROM #log
+GROUP BY HOUR(event_time)
+ORDER BY event_hour;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [MINUTE](minute.md)
+- [SECOND](second.md)
+- [DATEPART](datepart.md)

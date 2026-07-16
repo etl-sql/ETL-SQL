@@ -1,29 +1,44 @@
 # YEAR
+
 Returns the year component of a date as an integer.
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 YEAR(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATE` / `DATETIME` | The source date |
+
+- **date** - Source date or datetime value.
 
 ## Returns
-`INT` — The four-digit year (e.g., `2026`).
 
-## Example
+Returns an `INT` year value.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT YEAR('2026-05-17');       -- → 2026
-SELECT YEAR(GETDATE());          -- → current year
-SELECT YEAR(order_date) AS year, SUM(amount) AS total
-  FROM #orders GROUP BY YEAR(order_date);
+SELECT YEAR('2026-05-17') AS order_year;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`MONTH`](month.md), [`DAY`](day.md), [`DATEPART`](datepart.md)
+```sql
+SELECT YEAR(GETDATE()) AS current_year;
+```
+
+```sql
+SELECT YEAR(order_date) AS order_year, SUM(amount) AS order_total
+FROM #orders
+GROUP BY YEAR(order_date);
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [MONTH](month.md)
+- [DAY](day.md)
+- [DATEPART](datepart.md)

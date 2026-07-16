@@ -1,28 +1,42 @@
 # MONTH
+
 Returns the month component of a date as an integer (1–12).
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 MONTH(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATE` / `DATETIME` | The source date |
+
+- **date** - Source date or datetime value.
 
 ## Returns
-`INT` — Month number from `1` (January) to `12` (December).
 
-## Example
+Returns an `INT` month number from `1` through `12`.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT MONTH('2026-05-17');    -- → 5
-SELECT MONTH(GETDATE());       -- → current month number
-SELECT DATENAME(MONTH, GETDATE()) AS month_name;   -- → 'May' (use DATENAME for name)
+SELECT MONTH('2026-05-17') AS order_month;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`YEAR`](year.md), [`DAY`](day.md), [`DATENAME`](datename.md)
+```sql
+SELECT MONTH(GETDATE()) AS current_month;
+```
+
+```sql
+SELECT DATENAME(MONTH, GETDATE()) AS current_month_name;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [YEAR](year.md)
+- [DAY](day.md)
+- [DATENAME](datename.md)

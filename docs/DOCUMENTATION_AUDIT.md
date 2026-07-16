@@ -172,6 +172,10 @@ Thin-page batches completed:
 - `docs/reference/functions/datetime/date_trunc.md`
 - `docs/reference/functions/datetime/day.md`
 - `docs/reference/functions/datetime/extract.md`
+- `docs/reference/functions/datetime/getdate.md`
+- `docs/reference/functions/datetime/hour.md`
+- `docs/reference/functions/datetime/month.md`
+- `docs/reference/functions/datetime/year.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 
