@@ -1,30 +1,40 @@
 # CEILING
+
 Returns the smallest integer greater than or equal to a number.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 CEILING(number)
 CEIL(number)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `DECIMAL` / `FLOAT` | The value to ceiling |
+
+- **number** - Numeric value to round upward.
 
 ## Returns
-`INT` — The smallest integer ≥ `number`. `CEIL` is an alias for `CEILING`.
 
-## Example
+Returns the smallest integer greater than or equal to `number`. `CEIL` is an alias for `CEILING`.
+
+## Null Behavior
+
+Returns `NULL` when `number` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT CEILING(3.1);    -- → 4
-SELECT CEILING(-3.9);   -- → -3
-SELECT CEIL(3.0);       -- → 3
-SELECT CEILING(qty / 10.0) * 10 AS next_pack_size FROM #orders;
+SELECT CEILING(3.1) AS rounded_up;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`FLOOR`](floor.md), [`ROUND`](round.md)
+```sql
+SELECT CEILING(qty / 10.0) * 10 AS next_pack_size
+FROM #orders;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [CEIL](ceil.md)
+- [FLOOR](floor.md)
+- [ROUND](round.md)

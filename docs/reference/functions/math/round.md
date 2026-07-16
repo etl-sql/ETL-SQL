@@ -1,30 +1,40 @@
 # ROUND
+
 Rounds a number to the specified number of decimal places.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 ROUND(number, decimals)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `DECIMAL` / `FLOAT` | The value to round |
-| `decimals` | `INT` | Decimal places to round to. Negative values round to the left of the decimal point |
+
+- **number** - Numeric value to round.
+- **decimals** - Number of decimal places to keep. Negative values round to the left of the decimal point.
 
 ## Returns
-`DECIMAL` — The rounded value.
 
-## Example
+Returns the rounded numeric value.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT ROUND(3.14159, 2);    -- → 3.14
-SELECT ROUND(3.145, 2);      -- → 3.15  (rounds half up)
-SELECT ROUND(1234.5, -2);    -- → 1200
-SELECT ROUND(amount, 2) AS rounded FROM #prices;
+SELECT ROUND(3.14159, 2) AS rounded_value;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`FLOOR`](floor.md), [`CEILING`](ceiling.md), [`TRUNCATE`](../../statements/dml/truncate.md)
+```sql
+SELECT ROUND(amount, 2) AS rounded_amount
+FROM #prices;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [FLOOR](floor.md)
+- [CEILING](ceiling.md)
+- [TRUNCATE](../general/truncate.md)

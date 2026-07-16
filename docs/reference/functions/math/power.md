@@ -1,30 +1,41 @@
 # POWER
+
 Raises a base number to an exponent.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 POWER(base, exponent)
 POW(base, exponent)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `base` | `DECIMAL` / `FLOAT` | The base number |
-| `exponent` | `DECIMAL` / `FLOAT` | The exponent |
+
+- **base** - Base numeric value.
+- **exponent** - Exponent to apply to `base`.
 
 ## Returns
-`FLOAT` — `base` raised to the power of `exponent`. `POW` is an alias for `POWER`.
 
-## Example
+Returns `base` raised to the power of `exponent` as a numeric value. `POW` is an alias for `POWER`.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT POWER(2, 10);     -- → 1024
-SELECT POWER(9, 0.5);    -- → 3.0  (square root)
-SELECT POW(10, 3);       -- → 1000
+SELECT POWER(2, 10) AS two_to_ten;
 ```
 
-## See Also
-- [Standard Library — §5.1 Arithmetic](../../../guides/getting-started.md#51-arithmetic)
-- Related: [`SQRT`](sqrt.md), [`EXP`](exp.md), [`LOG`](log.md)
+```sql
+SELECT POWER(amount, 2) AS amount_squared
+FROM #values;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SQRT](sqrt.md)
+- [EXP](exp.md)
+- [LOG](log.md)

@@ -1,31 +1,44 @@
 # SIN
+
 Returns the trigonometric sine of an angle in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 SIN(radians)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `radians` | `FLOAT` | Angle in radians |
+
+- **radians** - Angle in radians.
 
 ## Returns
-`FLOAT` — Sine of the angle, in the range [-1.0, 1.0].
+
+Returns a `FLOAT` sine value from `-1.0` through `1.0`.
+
+## Null Behavior
+
+Returns `NULL` when `radians` is `NULL`.
 
 ## Remarks
+
 - To convert degrees to radians: `degrees * (PI() / 180.0)`.
 
-## Example
+## Examples
+
 ```sql
-SELECT SIN(0);                              -- → 0.0
-SELECT SIN(PI() / 2);                       -- → 1.0
-SELECT SIN(45 * (PI() / 180.0));            -- → 0.7071...
+SELECT SIN(0) AS sine_zero;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometry](../../../guides/getting-started.md#52-trigonometry-inputoutput-in-radians)
-- Related: [`COS`](cos.md), [`TAN`](tan.md), [`ASIN`](asin.md), [`PI`](pi.md)
+```sql
+SELECT SIN(angle_degrees * (PI() / 180.0)) AS sine_value
+FROM #angles;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [COS](cos.md)
+- [TAN](tan.md)
+- [ASIN](asin.md)
+- [PI](pi.md)

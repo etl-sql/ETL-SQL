@@ -1,34 +1,46 @@
 # ATAN
+
 Returns the arctangent (inverse tangent) of a number, in radians.
 
-**Category:** Math
-
 ## Syntax
+
 ```sql
 ATAN(number)
 ATAN2(y, x)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `number` | `FLOAT` | Any real number |
-| `y` | `FLOAT` | Y-coordinate (for ATAN2) |
-| `x` | `FLOAT` | X-coordinate (for ATAN2) |
+
+- **number** - Input value for `ATAN`.
+- **y** - Y-coordinate for `ATAN2`.
+- **x** - X-coordinate for `ATAN2`.
 
 ## Returns
-`FLOAT` — `ATAN`: angle in radians in [-π/2, π/2]. `ATAN2`: quadrant-aware angle in (-π, π].
+
+Returns a `FLOAT` angle in radians. `ATAN` returns values from `-PI()/2` through `PI()/2`; `ATAN2` returns a quadrant-aware angle from `-PI()` through `PI()`.
+
+## Null Behavior
+
+Returns `NULL` when any required argument is `NULL`.
 
 ## Remarks
+
 - `ATAN2(y, x)` is preferred over `ATAN(y/x)` because it handles all quadrants and avoids division-by-zero.
 
-## Example
+## Examples
+
 ```sql
-SELECT ATAN(1.0);           -- → 0.7854...  (π/4)
-SELECT ATAN2(1.0, 1.0);     -- → 0.7854...  (45° angle)
-SELECT ATAN2(0.0, -1.0);    -- → 3.14159... (π, pointing left)
+SELECT ATAN(1.0) AS angle_radians;
 ```
 
-## See Also
-- [Standard Library — §5.2 Trigonometry](../../../guides/getting-started.md#52-trigonometry-inputoutput-in-radians)
-- Related: [`TAN`](tan.md), [`SIN`](sin.md), [`COS`](cos.md)
+```sql
+SELECT ATAN2(delta_y, delta_x) AS direction_radians
+FROM #vectors;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [TAN](tan.md)
+- [SIN](sin.md)
+- [COS](cos.md)
