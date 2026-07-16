@@ -110,7 +110,7 @@ work by priority.
 - [ ] **P1 — Bound the metadata cache and remove resolved credential retention.** Use server-owned stable
       document identities, TTL/LRU eviction, refresh concurrency limits, and secret handles rather than
       storing resolved connection strings in singleton dictionaries.
-- [ ] **P1 — Make Designer schema discovery bounded.** Return tables before columns or use a provider
+- [x] **P1 — Make Designer schema discovery bounded.** Return tables before columns or use a provider
       batch catalog API; add object limits, single-flight caching, cancellation, timeouts, and controlled
       concurrency instead of sequential N+1 provider calls.
 - [x] **P1 — Stop auditing full Designer SQL text.** Record a query fingerprint and structural resource

@@ -386,6 +386,10 @@ public class PortalDesignerLimitsConfig
     public int MaxGeneratedItems { get; set; } = 500;
     public int MaxGeneratedScriptCharacters { get; set; } = 300_000;
     public int MaxConcurrentRequests { get; set; } = 8;
+    public int MaxSchemaTables { get; set; } = 200;
+    public int MaxSchemaColumnsPerTable { get; set; } = 200;
+    public int MaxSchemaColumnConcurrency { get; set; } = 1;
+    public int MaxSchemaDiscoverySeconds { get; set; } = 10;
 }
 
 public class PortalSecurityConfig

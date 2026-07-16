@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Claims;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
@@ -19,9 +20,12 @@ public sealed class PortalDesignerSchemaService(
     IConnectionCatalogProvider catalog,
     ISecretProvider secrets,
     IConnectorRegistry connectors,
-    IMetadataManager metadata)
+    IMetadataManager metadata,
+    PortalConfig? portalConfig = null)
 {
     private const string ScopedDesignerUriPrefix = "portal-designer://";
+    private static readonly ConcurrentDictionary<string, Lazy<Task<DesignerSchemaResponse>>> ActiveDiscoveries = new(StringComparer.OrdinalIgnoreCase);
+    private PortalDesignerLimitsConfig Limits => portalConfig?.DesignerLimits ?? new PortalDesignerLimitsConfig();
 
     public async Task<DesignerSchemaResponse> GetSchemaAsync(
         string connectionRef,
@@ -30,9 +34,32 @@ public sealed class PortalDesignerSchemaService(
         CancellationToken cancellationToken = default)
     {
         var alias = NormalizeConnectionRef(connectionRef);
-        var definition = await catalog.ResolveAsync(alias, BuildIdentity(user), cancellationToken);
         var effectiveDocumentUri = ResolveDocumentUri(user, alias, documentUri);
-        return await RegisterResolvedConnectionAsync(alias, definition, effectiveDocumentUri, cancellationToken);
+        var key = $"{effectiveDocumentUri}|{alias}";
+        var discovery = ActiveDiscoveries.GetOrAdd(key, _ => new Lazy<Task<DesignerSchemaResponse>>(
+            () => GetSchemaCoreAsync(alias, user, effectiveDocumentUri, cancellationToken)));
+
+        try
+        {
+            return await discovery.Value.ConfigureAwait(false);
+        }
+        finally
+        {
+            ActiveDiscoveries.TryRemove(key, out _);
+        }
+    }
+
+    private async Task<DesignerSchemaResponse> GetSchemaCoreAsync(
+        string alias,
+        ClaimsPrincipal user,
+        string effectiveDocumentUri,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, Limits.MaxSchemaDiscoverySeconds)));
+
+        var definition = await catalog.ResolveAsync(alias, BuildIdentity(user), timeout.Token);
+        return await RegisterResolvedConnectionAsync(alias, definition, effectiveDocumentUri, timeout.Token);
     }
 
     public async Task<DesignerSchemaResponse> RegisterResolvedConnectionAsync(
@@ -49,24 +76,45 @@ public sealed class PortalDesignerSchemaService(
         if (string.IsNullOrEmpty(target) && options.Count > 0)
             target = connector.BuildConnectionString(options);
 
-        var tables = new List<DesignerSchemaTableDto>();
+        var tables = new ConcurrentBag<DesignerSchemaTableDto>();
         var metadataColumns = new Dictionary<string, IEnumerable<ColumnMetadata>>(StringComparer.OrdinalIgnoreCase);
         await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, target);
-        foreach (var table in (await source.GetTablesAsync()).Distinct(StringComparer.OrdinalIgnoreCase))
+        var tableNames = (await source.GetTablesAsync())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .Take(Math.Max(1, Limits.MaxSchemaTables))
+            .ToList();
+        using var columnGate = new SemaphoreSlim(Math.Max(1, Limits.MaxSchemaColumnConcurrency));
+        var columnTasks = tableNames.Select(async table =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var columns = await GetColumnsAsync(source, table);
-            metadataColumns[table] = columns;
-            tables.Add(new DesignerSchemaTableDto(
-                table,
-                columns.Select(c => new DesignerSchemaColumnDto(c.Name, c.DataType)).ToList()));
-        }
+            await columnGate.WaitAsync(cancellationToken);
+            try
+            {
+                var columns = (await GetColumnsAsync(source, table))
+                    .Take(Math.Max(1, Limits.MaxSchemaColumnsPerTable))
+                    .ToList();
+                lock (metadataColumns)
+                {
+                    metadataColumns[table] = columns;
+                }
+
+                tables.Add(new DesignerSchemaTableDto(
+                    table,
+                    columns.Select(c => new DesignerSchemaColumnDto(c.Name, c.DataType)).ToList()));
+            }
+            finally
+            {
+                columnGate.Release();
+            }
+        });
+        await Task.WhenAll(columnTasks);
 
         metadata.RegisterDocumentMetadata(
             documentUri,
             alias,
             connector.Name,
-            tables.Select(t => t.Name),
+            tableNames,
             metadataColumns);
 
         return new DesignerSchemaResponse(alias, tables.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList());
