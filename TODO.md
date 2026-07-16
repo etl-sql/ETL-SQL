@@ -120,7 +120,7 @@ work by priority.
       update/lease operation and retain the documented at-least-once EventId deduplication contract.
 - [x] **P2 — Correct operational metric labels and values.** Derive database reachability and topology
       from actual state rather than exporting constant healthy/HA values.
-- [ ] **P2 — Make CodeMirror builds reproducible.** Pin CodeMirror and esbuild versions in a lockfile or
+- [x] **P2 — Make CodeMirror builds reproducible.** Pin CodeMirror and esbuild versions in a lockfile or
       equivalent manifest and generate SBOM versions from the resolved dependency graph.
 - [x] **P2 — Bound expensive Designer requests.** Add script/body size, AST complexity, generated item,
       and concurrency limits to parse, analyze, generate, run, schema, and save endpoints.

@@ -31,54 +31,7 @@ const bundledAssets = [
     license: 'MIT',
     project: 'https://tabulator.info/'
   },
-  {
-    component: 'CodeMirror @codemirror/state',
-    version: '6.7.1',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/view',
-    version: '6.43.6',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/commands',
-    version: '6.10.4',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/language',
-    version: '6.12.4',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/search',
-    version: '6.7.1',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/autocomplete',
-    version: '6.20.3',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/lint',
-    version: '6.9.7',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'Lezer @lezer/highlight',
-    version: '1.2.3',
-    license: 'MIT',
-    project: 'https://lezer.codemirror.net/'
-  }
+  ...readCodeMirrorLockAssets()
 ];
 
 const npmLicenseFallbacks = {
@@ -120,6 +73,36 @@ const npmLicenseFallbacks = {
   'vitest': 'MIT',
   'vscode-languageclient': 'MIT'
 };
+
+function readCodeMirrorLockAssets() {
+  const codeMirrorAssetMetadata = {
+    '@codemirror/state': { component: 'CodeMirror @codemirror/state', project: 'https://codemirror.net/' },
+    '@codemirror/view': { component: 'CodeMirror @codemirror/view', project: 'https://codemirror.net/' },
+    '@codemirror/commands': { component: 'CodeMirror @codemirror/commands', project: 'https://codemirror.net/' },
+    '@codemirror/language': { component: 'CodeMirror @codemirror/language', project: 'https://codemirror.net/' },
+    '@codemirror/search': { component: 'CodeMirror @codemirror/search', project: 'https://codemirror.net/' },
+    '@codemirror/autocomplete': { component: 'CodeMirror @codemirror/autocomplete', project: 'https://codemirror.net/' },
+    '@codemirror/lint': { component: 'CodeMirror @codemirror/lint', project: 'https://codemirror.net/' },
+    '@lezer/highlight': { component: 'Lezer @lezer/highlight', project: 'https://lezer.codemirror.net/' },
+    'esbuild': { component: 'esbuild', project: 'https://esbuild.github.io/' }
+  };
+  const lockPath = path.join(repoRoot, 'scripts', 'codemirror', 'package-lock.json');
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+  const deps = Object.keys(lock.packages[''].dependencies || {});
+  return deps
+    .filter(name => codeMirrorAssetMetadata[name])
+    .map(name => {
+      const pkg = lock.packages[`node_modules/${name}`];
+      const meta = codeMirrorAssetMetadata[name];
+      if (!pkg?.version) throw new Error(`Missing ${name} in CodeMirror package-lock.json`);
+      return {
+        component: meta.component,
+        version: pkg.version,
+        license: pkg.license || npmLicenseFallbacks[name] || '',
+        project: meta.project
+      };
+    });
+}
 
 function walk(dir, predicate, output = []) {
   if (!fs.existsSync(dir)) return output;

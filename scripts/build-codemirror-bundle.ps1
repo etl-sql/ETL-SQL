@@ -14,6 +14,7 @@ param()
 $ErrorActionPreference = "Stop"
 $Root    = Split-Path -Parent $MyInvocation.MyCommand.Definition | Split-Path -Parent
 $OutDir  = Join-Path $Root "src\ETL-SQL.ReportRuntime\Resources\Shared\designer\codemirror"
+$ManifestDir = Join-Path $Root "scripts\codemirror"
 $TmpDir  = Join-Path $env:TEMP "etlsql-cm-build-$(Get-Random)"
 
 Write-Host "Building CodeMirror bundle..." -ForegroundColor Cyan
@@ -24,15 +25,8 @@ try {
     New-Item -ItemType Directory -Force -Path $TmpDir | Out-Null
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-    # Minimal package.json for the temp build workspace
-    @"
-{
-  "name": "cm-build",
-  "version": "1.0.0",
-  "type": "module",
-  "private": true
-}
-"@ | Set-Content (Join-Path $TmpDir "package.json") -Encoding UTF8
+    Copy-Item -LiteralPath (Join-Path $ManifestDir "package.json") -Destination (Join-Path $TmpDir "package.json")
+    Copy-Item -LiteralPath (Join-Path $ManifestDir "package-lock.json") -Destination (Join-Path $TmpDir "package-lock.json")
 
     # Entry file — re-exports everything the designer needs
     @"
@@ -78,18 +72,10 @@ export {
 export { tags } from '@lezer/highlight';
 "@ | Set-Content (Join-Path $TmpDir "entry.js") -Encoding UTF8
 
-    Write-Host "  Installing CodeMirror packages..." -ForegroundColor Yellow
+    Write-Host "  Installing pinned CodeMirror packages..." -ForegroundColor Yellow
     Push-Location $TmpDir
-    $npmOut = npm install `
-        "@codemirror/state" `
-        "@codemirror/view" `
-        "@codemirror/commands" `
-        "@codemirror/language" `
-        "@codemirror/search" `
-        "@codemirror/autocomplete" `
-        "@codemirror/lint" `
-        esbuild 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "npm install failed: $npmOut" }
+    $npmOut = npm ci 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed: $npmOut" }
     Pop-Location
 
     $EsBuild  = Join-Path $TmpDir "node_modules\.bin\esbuild.cmd"

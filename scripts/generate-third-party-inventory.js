@@ -31,54 +31,7 @@ const bundledAssets = [
     license: 'MIT',
     project: 'https://tabulator.info/'
   },
-  {
-    component: 'CodeMirror @codemirror/state',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/view',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/commands',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/language',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/search',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/autocomplete',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'CodeMirror @codemirror/lint',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://codemirror.net/'
-  },
-  {
-    component: 'Lezer @lezer/highlight',
-    files: 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js',
-    license: 'MIT',
-    project: 'https://lezer.codemirror.net/'
-  }
+  ...readCodeMirrorLockAssets()
 ];
 
 const npmLicenseFallbacks = {
@@ -120,6 +73,37 @@ const npmLicenseFallbacks = {
   'vitest': 'MIT',
   'vscode-languageclient': 'MIT'
 };
+
+function readCodeMirrorLockAssets() {
+  const bundleFile = 'src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js';
+  const manifestFiles = 'scripts/codemirror/package.json; scripts/codemirror/package-lock.json';
+  const metadata = {
+    '@codemirror/state': { component: 'CodeMirror @codemirror/state', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/view': { component: 'CodeMirror @codemirror/view', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/commands': { component: 'CodeMirror @codemirror/commands', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/language': { component: 'CodeMirror @codemirror/language', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/search': { component: 'CodeMirror @codemirror/search', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/autocomplete': { component: 'CodeMirror @codemirror/autocomplete', files: bundleFile, project: 'https://codemirror.net/' },
+    '@codemirror/lint': { component: 'CodeMirror @codemirror/lint', files: bundleFile, project: 'https://codemirror.net/' },
+    '@lezer/highlight': { component: 'Lezer @lezer/highlight', files: bundleFile, project: 'https://lezer.codemirror.net/' },
+    'esbuild': { component: 'esbuild', files: manifestFiles, project: 'https://esbuild.github.io/' }
+  };
+  const lockPath = path.join(repoRoot, 'scripts', 'codemirror', 'package-lock.json');
+  const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+  return Object.keys(lock.packages[''].dependencies || {})
+    .filter(name => metadata[name])
+    .map(name => {
+      const pkg = lock.packages[`node_modules/${name}`];
+      const meta = metadata[name];
+      if (!pkg?.version) throw new Error(`Missing ${name} in CodeMirror package-lock.json`);
+      return {
+        component: `${meta.component} ${pkg.version}`,
+        files: meta.files,
+        license: pkg.license || npmLicenseFallbacks[name] || '',
+        project: meta.project
+      };
+    });
+}
 
 function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');

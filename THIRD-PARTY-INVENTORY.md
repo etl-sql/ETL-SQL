@@ -13,14 +13,15 @@ About screens. It is not legal advice.
 | Apache ECharts | src/ETL-SQL.ReportRuntime/Resources/Shared/echarts.min.js | Apache-2.0 | https://echarts.apache.org/ |
 | Chart.js | src/ETL-SQL.ReportRuntime/Resources/Shared/chart.min.js | MIT | https://www.chartjs.org/ |
 | Tabulator | src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.js; src/ETL-SQL.ReportRuntime/Resources/Shared/tabulator.min.css | MIT | https://tabulator.info/ |
-| CodeMirror @codemirror/state | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/view | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/commands | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/language | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/search | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/autocomplete | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| CodeMirror @codemirror/lint | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
-| Lezer @lezer/highlight | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://lezer.codemirror.net/ |
+| CodeMirror @codemirror/autocomplete 6.20.3 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/commands 6.10.4 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/language 6.12.4 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/lint 6.9.7 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/search 6.7.1 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/state 6.7.1 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| CodeMirror @codemirror/view 6.43.6 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://codemirror.net/ |
+| Lezer @lezer/highlight 1.2.3 | src/ETL-SQL.ReportRuntime/Resources/Shared/designer/codemirror/codemirror-bundle.min.js | MIT | https://lezer.codemirror.net/ |
+| esbuild 0.25.8 | scripts/codemirror/package.json; scripts/codemirror/package-lock.json | MIT | https://esbuild.github.io/ |
 
 ## Direct NuGet Packages
 
