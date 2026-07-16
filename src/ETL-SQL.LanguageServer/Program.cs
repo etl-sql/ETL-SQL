@@ -116,6 +116,7 @@ namespace ETL_SQL.LSP
                         });
                         services.AddSingleton<ILineageTracker, LineageTracker>();
                         services.AddSingleton<IDockerManager, DockerContainerManager>();
+                        services.AddSingleton<ISessionMetadataStoreFactory, SqliteSessionMetadataStoreFactory>();
                         services.AddSingleton<ISessionStateManager, Engine.Services.SessionStateManager>();
                         services.AddSingleton<Engine.Services.SessionStateManager>(sp => (Engine.Services.SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
                         services.AddSingleton<Services.SecurityService>(sp =>

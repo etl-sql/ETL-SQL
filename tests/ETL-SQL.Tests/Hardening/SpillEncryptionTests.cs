@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Hardening
 
             services.AddSingleton<ISessionStateManager>(sp =>
             {
-                return new SessionStateManager(logger.Object, security, config, sessionRoot);
+                return new SessionStateManager(logger.Object, security, config, new SqliteSessionMetadataStoreFactory(), sessionRoot);
             });
             services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
 
@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Hardening
             var logger = new Mock<ILogger>();
             var security = new SecurityService(logger.Object);
             var config = new ConfigurationBuilder().Build();
-            var manager = new SessionStateManager(logger.Object, security, config);
+            var manager = new SessionStateManager(logger.Object, security, config, new SqliteSessionMetadataStoreFactory());
 
             var key1 = manager.GetSpillKey("session1");
             var key2 = manager.GetSpillKey("session1");
@@ -131,7 +131,7 @@ namespace ETL_SQL.Tests.Hardening
                 var logger = new Mock<ILogger>();
                 var security = new SecurityService(logger.Object) { IsTestMode = true };
                 var config = new ConfigurationBuilder().Build();
-                var manager = new SessionStateManager(logger.Object, security, config, sessionRoot);
+                var manager = new SessionStateManager(logger.Object, security, config, new SqliteSessionMetadataStoreFactory(), sessionRoot);
                 var maliciousId = Path.Combine("..", Path.GetFileName(sibling));
 
                 Assert.Throws<ExecutionException>(() => manager.ClearSession(maliciousId));

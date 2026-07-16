@@ -75,7 +75,7 @@ namespace ETL_SQL.Benchmarks
                 var tempSessionDir = Path.Combine(Path.GetTempPath(), "ETL-SQL-ShapeBench-" + Guid.NewGuid());
                 Directory.CreateDirectory(tempSessionDir);
 
-                var sessions = new SessionStateManager(l, security, config, tempSessionDir);
+                var sessions = new SessionStateManager(l, security, config, new SqliteSessionMetadataStoreFactory(), tempSessionDir);
                 var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
                 var bufferManager = new Mock<IBufferManager>();
                 var docker = new Mock<IDockerManager>();

@@ -75,6 +75,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<CliContext>(new CliContext());
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
+            services.AddSingleton<ISessionMetadataStoreFactory, SqliteSessionMetadataStoreFactory>();
             services.AddSingleton<IGovernancePolicyRegistry>(_ => GovernancePolicyRegistry.CreateDefault());
             services.AddHostedService<EnterprisePolicyRefreshService>();
             services.AddSingleton<ISecretProvider>(_ =>
@@ -112,8 +113,9 @@ namespace ETL_SQL.Orchestrator
                 var cfg = sp.GetRequiredService<IConfiguration>();
                 var log = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
                 var sec = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
+                var metadataStoreFactory = sp.GetRequiredService<ISessionMetadataStoreFactory>();
                 var customDir = cfg["Session:Root"];
-                return new SessionStateManager(log, sec, cfg, customDir);
+                return new SessionStateManager(log, sec, cfg, metadataStoreFactory, customDir);
             });
             services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
 

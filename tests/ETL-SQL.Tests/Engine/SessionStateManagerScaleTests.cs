@@ -76,7 +76,7 @@ public class SessionStateManagerScaleTests : IDisposable
             .AddInMemoryCollection(new[] { new KeyValuePair<string, string?>("Session:PersistentSessionTTLHours", "24") })
             .Build();
 
-        return new SessionStateManager(logger, security, config, _root);
+        return new SessionStateManager(logger, security, config, new SqliteSessionMetadataStoreFactory(), _root);
     }
 
     public void Dispose()

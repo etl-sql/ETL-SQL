@@ -28,4 +28,9 @@ public interface ISessionMetadataStore : IDisposable
     Task<(string? LastConn, Dictionary<string, string> ConnStrings)> LoadDockerStateAsync();
 }
 
+public interface ISessionMetadataStoreFactory
+{
+    ISessionMetadataStore Create(string sessionId, string sessionRoot, string machineKeyEntropy);
+}
+
 public record SavedTempTable(string TableName, List<ColumnDefinition> Schema, List<string> ChunkNames);

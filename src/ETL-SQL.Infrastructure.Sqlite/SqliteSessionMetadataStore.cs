@@ -379,3 +379,12 @@ public class SqliteSessionMetadataStore : ISessionMetadataStore
         }
     }
 }
+
+public sealed class SqliteSessionMetadataStoreFactory : ISessionMetadataStoreFactory
+{
+    public ISessionMetadataStore Create(
+        string sessionId,
+        string sessionRoot,
+        string machineKeyEntropy) =>
+        new SqliteSessionMetadataStore(sessionId, sessionRoot, machineKeyEntropy);
+}

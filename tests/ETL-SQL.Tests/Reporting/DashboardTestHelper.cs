@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Reporting
         {
             var logger = NullLogger.Instance;
             var security = new SecurityService(logger) { IsTestMode = true };
-            var sessions = new SessionStateManager(logger, security, new Mock<IConfiguration>().Object, null);
+            var sessions = new SessionStateManager(logger, security, new Mock<IConfiguration>().Object, new SqliteSessionMetadataStoreFactory(), null);
 
             var services = new ServiceCollection();
 

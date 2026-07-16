@@ -27,15 +27,22 @@ public class SessionStateManager : ISessionStateManager
     private readonly ILogger _logger;
     private readonly ETL_SQL.Services.SecurityService _securityService;
     private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
+    private readonly ISessionMetadataStoreFactory _metadataStoreFactory;
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
     private readonly ConcurrentDictionary<string, byte> _activeSessions = new();
     private readonly int _ttlHours;
 
-    public SessionStateManager(ILogger logger, ETL_SQL.Services.SecurityService securityService, Microsoft.Extensions.Configuration.IConfiguration configuration, string? customSessionDir = null)
+    public SessionStateManager(
+        ILogger logger,
+        ETL_SQL.Services.SecurityService securityService,
+        Microsoft.Extensions.Configuration.IConfiguration configuration,
+        ISessionMetadataStoreFactory metadataStoreFactory,
+        string? customSessionDir = null)
     {
         _logger = logger;
         _securityService = securityService;
         _configuration = configuration;
+        _metadataStoreFactory = metadataStoreFactory;
         SessionRoot = InitializeSessionRoot(customSessionDir);
 
         _ttlHours = int.TryParse(_configuration["Session:PersistentSessionTTLHours"], out var val) ? val : 24;
@@ -96,7 +103,7 @@ public class SessionStateManager : ISessionStateManager
         }
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
-        using var store = new SqliteSessionMetadataStore(sessionId, SessionRoot, entropyKey);
+        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey);
         await store.InitializeAsync();
 
         var sessionLock = GetSessionLock(sessionId);
@@ -160,7 +167,7 @@ public class SessionStateManager : ISessionStateManager
         if (!File.Exists(GetSessionDbPath(sessionId))) return null;
 
         var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
-        using var store = new SqliteSessionMetadataStore(sessionId, SessionRoot, entropyKey);
+        using var store = _metadataStoreFactory.Create(sessionId, SessionRoot, entropyKey);
         await store.InitializeAsync();
 
         try

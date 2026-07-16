@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests
             Directory.CreateDirectory(tempDir);
             try
             {
-                var sessions = new SessionStateManager(logger, _security, _config, tempDir);
+                var sessions = new SessionStateManager(logger, _security, _config, new SqliteSessionMetadataStoreFactory(), tempDir);
 
                 // Act & Assert
                 var ex = await Assert.ThrowsAsync<ExecutionException>(() =>

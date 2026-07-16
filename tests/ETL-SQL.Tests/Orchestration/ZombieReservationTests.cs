@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Orchestration
             var engineLoggerMock = new Mock<IEngineLogger>();
             var securityService = new SecurityService(engineLoggerMock.Object);
             var config = new ConfigurationBuilder().Build();
-            var sessionStateManager = new SessionStateManager(engineLoggerMock.Object, securityService, config);
+            var sessionStateManager = new SessionStateManager(engineLoggerMock.Object, securityService, config, new SqliteSessionMetadataStoreFactory());
 
             services.AddSingleton(new Mock<IFunctionRegistry>().Object);
             services.AddSingleton(new Mock<ILineageTracker>().Object);

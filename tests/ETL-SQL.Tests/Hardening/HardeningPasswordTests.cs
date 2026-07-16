@@ -118,7 +118,7 @@ namespace ETL_SQL.Tests.Hardening
             serviceCollection.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
             serviceCollection.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
 
-            var realSessionManager = new SessionStateManager(_mockLogger.Object, _securityService, new ConfigurationBuilder().Build());
+            var realSessionManager = new SessionStateManager(_mockLogger.Object, _securityService, new ConfigurationBuilder().Build(), new SqliteSessionMetadataStoreFactory());
             serviceCollection.AddSingleton<ISessionStateManager>(realSessionManager);
             serviceCollection.AddSingleton<SessionStateManager>(realSessionManager);
 

@@ -36,6 +36,7 @@
     <ProjectReference Include="..\..\src\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Core\ETL-SQL.Core.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Docker\ETL-SQL.Infrastructure.Docker.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
@@ -53,6 +54,7 @@
 
   <ItemGroup>
     <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Execution" />
     <Using Include="ETL_SQL.Core.Parser" />
     <Using Include="ETL_SQL.Engine" />
     <Using Include="ETL_SQL.Connectors" />

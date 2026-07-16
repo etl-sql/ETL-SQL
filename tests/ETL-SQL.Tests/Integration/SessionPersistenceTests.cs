@@ -43,7 +43,7 @@ namespace ETL_SQL.Tests.Integration.Integration
 
 
             var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
-            var sessionManager = new SessionStateManager(NullLogger.Instance, security, config, _sessionDir);
+            var sessionManager = new SessionStateManager(NullLogger.Instance, security, config, new SqliteSessionMetadataStoreFactory(), _sessionDir);
 
             // 1. Load Session
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

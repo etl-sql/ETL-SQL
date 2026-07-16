@@ -5,13 +5,15 @@ namespace ETL_SQL.Tests.Core;
 
 public sealed class SqliteSessionMetadataStoreTests
 {
+    private static readonly SqliteSessionMetadataStoreFactory StoreFactory = new();
+
     [Fact]
     public void Constructor_RejectsSessionIdTraversal()
     {
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session-root-" + Guid.NewGuid().ToString("N"));
 
         Assert.Throws<ArgumentException>(() =>
-            new SqliteSessionMetadataStore(Path.Combine("..", "escape"), root, "test-entropy"));
+            StoreFactory.Create(Path.Combine("..", "escape"), root, "test-entropy"));
     }
 
     [Fact]
@@ -20,7 +22,7 @@ public sealed class SqliteSessionMetadataStoreTests
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session;root-" + Guid.NewGuid().ToString("N"));
         try
         {
-            using var store = new SqliteSessionMetadataStore("session-a", root, "test-entropy");
+            using var store = StoreFactory.Create("session-a", root, "test-entropy");
             await store.InitializeAsync();
             await store.SaveVariablesAsync(
                 new Dictionary<string, object?> { ["answer"] = 42L },
@@ -43,7 +45,7 @@ public sealed class SqliteSessionMetadataStoreTests
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session-temp-" + Guid.NewGuid().ToString("N"));
         try
         {
-            using var store = new SqliteSessionMetadataStore("session-a", root, "test-entropy");
+            using var store = StoreFactory.Create("session-a", root, "test-entropy");
             await store.InitializeAsync();
 
             var schema = new List<ColumnDefinition>
@@ -79,7 +81,7 @@ public sealed class SqliteSessionMetadataStoreTests
         var root = Path.Combine(Path.GetTempPath(), "etlsql-session-large-" + Guid.NewGuid().ToString("N"));
         try
         {
-            using var store = new SqliteSessionMetadataStore("session-a", root, "test-entropy");
+            using var store = StoreFactory.Create("session-a", root, "test-entropy");
             await store.InitializeAsync();
 
             var variables = Enumerable.Range(0, 750)

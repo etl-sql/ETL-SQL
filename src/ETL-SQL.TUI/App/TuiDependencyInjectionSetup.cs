@@ -110,6 +110,7 @@ namespace ETL_SQL.TUI
 
             services.AddTransient<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
+            services.AddSingleton<ISessionMetadataStoreFactory, SqliteSessionMetadataStoreFactory>();
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
             var securityService = new ETL_SQL.Services.SecurityService(loggerService);

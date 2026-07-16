@@ -38,6 +38,7 @@ public sealed class ArchitectureBoundaryTests
         ["ReportPortal.Data"] = 2,
         ["Connectors"] = 3,
         ["Infrastructure.Docker"] = 3,
+        ["Infrastructure.Sqlite"] = 3,
         ["Orchestrator"] = 3,
         ["ReportHosting"] = 3,
         ["ReportPortal.Migrations.Postgres"] = 3,
