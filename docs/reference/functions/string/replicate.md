@@ -1,29 +1,40 @@
 # REPLICATE
+
 Repeats a string a specified number of times.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 REPLICATE(string, count)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The string to repeat |
-| `count` | `INT` | Number of repetitions |
+
+- **string** - String to repeat.
+- **count** - Number of times to repeat `string`.
 
 ## Returns
-`STRING` — The input `string` concatenated `count` times. Returns an empty string if `count` ≤ 0.
 
-## Example
+Returns the repeated string. Returns an empty string when `count` is `0` or negative.
+
+## Null Behavior
+
+Returns `NULL` when `string` or `count` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT REPLICATE('ab', 3);                       -- → 'ababab'
-SELECT REPLICATE('0', 5 - LEN(id)) + id         -- zero-pad an ID
-  AS padded_id FROM #items;
+SELECT REPLICATE('ab', 3) AS repeated_value;
 ```
 
-## See Also
-- [Standard Library — §3.4 Formatting & Padding](../../../guides/getting-started.md#34-formatting--padding)
-- Related: [`SPACE`](space.md), [`STR`](str.md)
+```sql
+SELECT REPLICATE('0', 5 - LEN(id)) + id AS padded_id
+FROM #items;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [REPEAT](repeat.md)
+- [SPACE](space.md)
+- [STR](str.md)

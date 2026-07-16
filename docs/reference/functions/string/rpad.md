@@ -1,29 +1,41 @@
 # RPAD
+
 Right-pads a string with another string until it reaches the specified target length.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
-RPAD(str, length [, pad_str])
+RPAD(string, length)
+RPAD(string, length, pad_string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `str` | `VARCHAR` / `STRING` | The original string to be padded |
-| `length` | `INT` | The target length of the output string |
-| `pad_str` | `VARCHAR` / `STRING` | (Optional) The character sequence to pad with. Defaults to a single space. |
+
+- **string** - Original string to pad.
+- **length** - Target length of the output string.
+- **pad_string** - Optional character sequence to pad with. Defaults to a single space.
 
 ## Returns
-`STRING` — The padded string. If `str` is already longer than `length`, it is truncated to `length` characters. Returns `NULL` if `str` or `length` is `NULL`.
 
-## Example
+Returns the padded string. If `string` is already longer than `length`, it is truncated to `length` characters.
+
+## Null Behavior
+
+Returns `NULL` when `string` or `length` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT RPAD('hello', 8, 'xy'); -- → 'helloxyx'
-SELECT RPAD('hello', 3);       -- → 'hel' (truncation)
+SELECT RPAD('hello', 8, 'xy') AS padded_value;
 ```
 
-## See Also
-- [Standard Library — §1.1 Core String](../../../guides/getting-started.md#11-core-string)
-- Related: [`LPAD`](lpad.md), [`REPEAT`](repeat.md)
+```sql
+SELECT RPAD(status_code, 8, '.') AS fixed_width_status
+FROM #statuses;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LPAD](lpad.md)
+- [REPEAT](repeat.md)

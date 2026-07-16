@@ -163,11 +163,15 @@ Thin-page batches completed:
 - `docs/reference/functions/string/concat.md`
 - `docs/reference/functions/string/concat_ws.md`
 - `docs/reference/functions/string/instr.md`
+- `docs/reference/functions/string/lpad.md`
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
 - `docs/reference/functions/string/patindex.md`
 - `docs/reference/functions/string/position.md`
+- `docs/reference/functions/string/repeat.md`
+- `docs/reference/functions/string/replicate.md`
 - `docs/reference/functions/string/reverse.md`
+- `docs/reference/functions/string/rpad.md`
 - `docs/reference/functions/string/rtrim.md`
 - `docs/reference/functions/string/space.md`
 - `docs/reference/functions/string/split_part.md`
