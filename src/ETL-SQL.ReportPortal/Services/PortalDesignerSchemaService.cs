@@ -20,6 +20,8 @@ public sealed class PortalDesignerSchemaService(
     IConnectorRegistry connectors,
     IMetadataManager metadata)
 {
+    private const string ScopedDesignerUriPrefix = "portal-designer://";
+
     public async Task<DesignerSchemaResponse> GetSchemaAsync(
         string connectionRef,
         ClaimsPrincipal user,
@@ -28,7 +30,7 @@ public sealed class PortalDesignerSchemaService(
     {
         var alias = NormalizeConnectionRef(connectionRef);
         var definition = await catalog.ResolveAsync(alias, BuildIdentity(user), cancellationToken);
-        var effectiveDocumentUri = BuildDocumentUri(user, alias, documentUri);
+        var effectiveDocumentUri = ResolveDocumentUri(user, alias, documentUri);
         await RegisterResolvedConnectionAsync(alias, definition, effectiveDocumentUri, cancellationToken);
 
         var tables = new List<DesignerSchemaTableDto>();
@@ -95,10 +97,22 @@ public sealed class PortalDesignerSchemaService(
         var userId = user.FindFirstValue(ClaimTypes.NameIdentifier)
             ?? user.Identity?.Name
             ?? "anonymous";
+        var alias = NormalizeConnectionRef(connectionRef);
         var suffix = string.IsNullOrWhiteSpace(documentUri)
             ? "default"
             : Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(documentUri))).ToLowerInvariant();
-        return $"portal-designer://u/{Uri.EscapeDataString(userId)}/c/{Uri.EscapeDataString(connectionRef)}/{suffix}";
+        return $"{ScopedDesignerUriPrefix}u/{Uri.EscapeDataString(userId)}/c/{Uri.EscapeDataString(alias)}/{suffix}";
+    }
+
+    public static string ResolveDocumentUri(ClaimsPrincipal user, string connectionRef, string? documentUri = null)
+    {
+        if (!string.IsNullOrWhiteSpace(documentUri)
+            && documentUri.Trim().StartsWith(ScopedDesignerUriPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return documentUri.Trim();
+        }
+
+        return BuildDocumentUri(user, connectionRef, documentUri);
     }
 
     private async Task<Dictionary<string, string>> ResolveSecretReferencesAsync(

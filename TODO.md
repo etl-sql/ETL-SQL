@@ -92,7 +92,7 @@ work by priority.
 
 ### Security, correctness, and performance
 
-- [ ] **P1 — Remove the process-global Portal PII encryption provider.** `PortalEncryptionProvider`
+- [x] **P1 — Remove the process-global Portal PII encryption provider.** `PortalEncryptionProvider`
       stores one static `IDataProtector`, so sequential in-process Portal hosts can replace and dispose
       each other's key provider. Make encryption context-owned and add multi-host isolation coverage.
 - [ ] **P1 — Keep script save internally atomic after Git is separated.** Coordinate catalog metadata
@@ -104,7 +104,7 @@ work by priority.
 - [ ] **P1 — Replace regex-only plaintext-secret validation.** Validate parsed connection definitions
       and connector-native connection strings, including positional strings, URLs, headers, and other
       credential-bearing forms. Add bypass regression tests.
-- [ ] **P1 — Fix Designer completion document identity.** Build the scoped document URI exactly once and
+- [x] **P1 — Fix Designer completion document identity.** Build the scoped document URI exactly once and
       use the same value for schema registration and completion. Add a successful connection-aware
       completion integration test.
 - [ ] **P1 — Bound the metadata cache and remove resolved credential retention.** Use server-owned stable
@@ -116,7 +116,7 @@ work by priority.
 - [ ] **P1 — Stop auditing full Designer SQL text.** Record a query fingerprint and structural resource
       metadata; do not place arbitrary literals or potentially sensitive row filters in ordinary audit
       detail.
-- [ ] **P1 — Make audit outbox claiming atomic across Portal nodes.** Claim batches with a database-safe
+- [x] **P1 — Make audit outbox claiming atomic across Portal nodes.** Claim batches with a database-safe
       update/lease operation and retain the documented at-least-once EventId deduplication contract.
 - [ ] **P2 — Correct operational metric labels and values.** Derive database reachability and topology
       from actual state rather than exporting constant healthy/HA values.

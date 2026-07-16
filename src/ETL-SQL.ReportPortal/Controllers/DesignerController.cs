@@ -144,11 +144,9 @@ public class DesignerController : ControllerBase
 
             try
             {
-                documentUri = PortalDesignerSchemaService.BuildDocumentUri(
-                    User,
-                    PortalDesignerSchemaService.NormalizeConnectionRef(req.ConnectionRef!),
-                    req.DocumentUri);
-                await _schemaService.GetSchemaAsync(req.ConnectionRef!, User, documentUri, cancellationToken);
+                var connectionRef = PortalDesignerSchemaService.NormalizeConnectionRef(req.ConnectionRef!);
+                documentUri = PortalDesignerSchemaService.ResolveDocumentUri(User, connectionRef, req.DocumentUri);
+                await _schemaService.GetSchemaAsync(connectionRef, User, documentUri, cancellationToken);
             }
             catch (ArgumentException ex)
             {
@@ -165,7 +163,7 @@ public class DesignerController : ControllerBase
         }
         else
         {
-            documentUri = PortalDesignerSchemaService.BuildDocumentUri(User, "adhoc", req.DocumentUri);
+            documentUri = PortalDesignerSchemaService.ResolveDocumentUri(User, "adhoc", req.DocumentUri);
         }
 
         var (scriptBefore, prefix) = GetCompletionPosition(req.Script ?? string.Empty, req.Line, req.Column);

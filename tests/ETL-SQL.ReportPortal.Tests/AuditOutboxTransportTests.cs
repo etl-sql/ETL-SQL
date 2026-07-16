@@ -98,6 +98,35 @@ public sealed class AuditOutboxTransportTests : IDisposable
     }
 
     [Fact]
+    public async Task DrainOnceAsync_SecondNodeSkipsRowsClaimedByFirstNode()
+    {
+        var sendStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseSend = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sends = 0;
+        var handler = new BlockingHandler(async request =>
+        {
+            Interlocked.Increment(ref sends);
+            sendStarted.SetResult();
+            await releaseSend.Task;
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        });
+        var (provider, config) = await CreateProviderAsync("claim.db", handler);
+        config.Audit.TransportLockSeconds = 60;
+        await SeedAuditAsync(provider);
+
+        var first = NewService(provider, config, handler).DrainOnceAsync();
+        await sendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        var secondProcessed = await NewService(provider, config, handler).DrainOnceAsync();
+        releaseSend.SetResult();
+        var firstProcessed = await first;
+
+        Assert.Equal(1, firstProcessed);
+        Assert.Equal(0, secondProcessed);
+        Assert.Equal(1, sends);
+    }
+
+    [Fact]
     public async Task DrainOnceAsync_RejectsNonHttpsEndpoint()
     {
         var handler = new CapturingHandler(_ => new HttpResponseMessage(HttpStatusCode.Accepted));
@@ -261,7 +290,7 @@ public sealed class AuditOutboxTransportTests : IDisposable
 
     private async Task<(ServiceProvider Provider, PortalConfig Config)> CreateProviderAsync(
         string dbName,
-        CapturingHandler handler)
+        HttpMessageHandler handler)
     {
         var config = new PortalConfig
         {
@@ -299,7 +328,7 @@ public sealed class AuditOutboxTransportTests : IDisposable
     private static AuditOutboxTransportService NewService(
         ServiceProvider provider,
         PortalConfig config,
-        CapturingHandler handler) =>
+        HttpMessageHandler handler) =>
         new(
             provider.GetRequiredService<IServiceScopeFactory>(),
             config,
@@ -320,6 +349,14 @@ public sealed class AuditOutboxTransportTests : IDisposable
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             return responder(request);
         }
+    }
+
+    private sealed class BlockingHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) =>
+            await responder(request);
     }
 
     private sealed class BackgroundTelemetryCapture : IDisposable

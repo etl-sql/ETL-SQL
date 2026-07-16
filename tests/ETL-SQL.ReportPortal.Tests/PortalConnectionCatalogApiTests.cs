@@ -222,6 +222,18 @@ public class PortalConnectionCatalogApiTests
         var adminBody = await adminSchema.Content.ReadFromJsonAsync<JsonObject>(Json);
         Assert.Contains(adminBody!["tables"]!.AsArray(), t => t!["name"]!.GetValue<string>() == "Users");
 
+        var adminComplete = await SendAsync(client, HttpMethod.Post, token, "/api/designer/complete", new
+        {
+            script = "SELECT * FROM designer_mock.",
+            line = 0,
+            column = 28,
+            connectionRef = "designer_mock",
+            documentUri = "portal://designer/session-1"
+        });
+        var adminCompleteBody = await adminComplete.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.OK, adminComplete.StatusCode);
+        Assert.Contains("designer_mock.Users", adminCompleteBody);
+
         var outsider = await CreateReadyUserAsync(client, token, "designer_outsider", "Publisher");
         var deniedSchema = await SendAsync(client, HttpMethod.Get, outsider.AccessToken, "/api/designer/schema?connection=designer_mock", null);
         var deniedBody = await deniedSchema.Content.ReadAsStringAsync();

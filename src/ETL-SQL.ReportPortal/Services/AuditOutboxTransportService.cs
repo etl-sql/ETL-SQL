@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -60,7 +61,6 @@ public sealed class AuditOutboxTransportService(
             var endpoint = GetEndpointOrThrow();
             var now = clock.GetUtcNow().UtcDateTime;
             var batchSize = Math.Max(1, config.Audit.TransportBatchSize);
-            var lockUntil = now.AddSeconds(Math.Max(1, config.Audit.TransportLockSeconds));
 
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
@@ -73,26 +73,13 @@ public sealed class AuditOutboxTransportService(
                     pendingCount, config.Audit.OutboxBackpressureLimit);
             }
 
-            var rows = await db.AuditOutboxMessages
-                .Where(x => x.Status == "Pending"
-                    && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
-                    && (x.LockedUntil == null || x.LockedUntil <= now))
-                .OrderBy(x => x.Id)
-                .Take(batchSize)
-                .ToListAsync(ct);
+            var rows = await ClaimBatchAsync(db, now, batchSize, ct);
 
             if (rows.Count == 0)
             {
                 CompleteTransport(activity, sw, "drain", "empty", 0);
                 return 0;
             }
-
-            foreach (var row in rows)
-            {
-                row.LockedUntil = lockUntil;
-                row.UpdatedAt = now;
-            }
-            await db.SaveChangesAsync(ct);
 
             var response = await PostBatchAsync(endpoint, rows, ct);
             now = clock.GetUtcNow().UtcDateTime;
@@ -242,6 +229,52 @@ public sealed class AuditOutboxTransportService(
         if (shed > 0)
             log.LogWarning("Shed {Count} audit outbox rows to satisfy the {Cap}-byte size cap", shed, cap);
         return shed;
+    }
+
+    private async Task<List<AuditOutboxMessage>> ClaimBatchAsync(
+        PortalDbContext db,
+        DateTime now,
+        int batchSize,
+        CancellationToken ct)
+    {
+        var candidateIds = await db.AuditOutboxMessages
+            .Where(x => x.Status == "Pending"
+                && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
+                && (x.LockedUntil == null || x.LockedUntil <= now))
+            .OrderBy(x => x.Id)
+            .Take(batchSize)
+            .Select(x => x.Id)
+            .ToListAsync(ct);
+
+        if (candidateIds.Count == 0)
+            return [];
+
+        var lockUntil = CreateUniqueLockUntil(now);
+        var claimed = await db.AuditOutboxMessages
+            .Where(x => candidateIds.Contains(x.Id)
+                && x.Status == "Pending"
+                && (x.NextAttemptAt == null || x.NextAttemptAt <= now)
+                && (x.LockedUntil == null || x.LockedUntil <= now))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.LockedUntil, (DateTime?)lockUntil)
+                .SetProperty(x => x.UpdatedAt, now), ct);
+
+        if (claimed == 0)
+            return [];
+
+        return await db.AuditOutboxMessages
+            .Where(x => candidateIds.Contains(x.Id)
+                && x.Status == "Pending"
+                && x.LockedUntil == lockUntil)
+            .OrderBy(x => x.Id)
+            .ToListAsync(ct);
+    }
+
+    private DateTime CreateUniqueLockUntil(DateTime now)
+    {
+        var lockSeconds = Math.Max(1, config.Audit.TransportLockSeconds);
+        var jitterTicks = RandomNumberGenerator.GetInt32(1, 1_000_000);
+        return now.AddSeconds(lockSeconds).AddTicks(jitterTicks);
     }
 
     private Uri GetEndpointOrThrow()
