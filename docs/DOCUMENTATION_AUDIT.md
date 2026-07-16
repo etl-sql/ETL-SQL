@@ -159,8 +159,12 @@ Thin-page batches completed:
 - `docs/reference/functions/math/tan.md`
 - `docs/reference/functions/string/ascii.md`
 - `docs/reference/functions/string/char.md`
+- `docs/reference/functions/string/charindex.md`
+- `docs/reference/functions/string/instr.md`
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
+- `docs/reference/functions/string/patindex.md`
+- `docs/reference/functions/string/position.md`
 - `docs/reference/functions/string/reverse.md`
 - `docs/reference/functions/string/rtrim.md`
 - `docs/reference/functions/string/space.md`
