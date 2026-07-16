@@ -1,27 +1,41 @@
 # BITOR
+
 Performs a bitwise OR operation on two integers.
 
-**Category:** Math / Bitwise
-
 ## Syntax
+
 ```sql
 BITOR(a, b)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `a` | `INT` / `BIGINT` | The first integer value |
-| `b` | `INT` / `BIGINT` | The second integer value |
+
+- **a** - First integer value.
+- **b** - Second integer value.
 
 ## Returns
-`BIGINT` — The bitwise OR result. Returns `NULL` if either argument is `NULL`.
 
-## Example
+Returns the bitwise OR result as a `BIGINT`.
+
+## Null Behavior
+
+Returns `NULL` when either argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT BITOR(12, 9);    -- → 13 (binary: 1100 | 1001 = 1101)
+SELECT BITOR(12, 9) AS combined_bits;
 ```
 
-## See Also
-- [Standard Library — §5.4 Bitwise](../../../guides/getting-started.md#54-bitwise)
-- Related: [`BITAND`](bitand.md), [`BITXOR`](bitxor.md), [`BITNOT`](bitnot.md)
+```sql
+UPDATE #roles
+SET permission_mask = BITOR(permission_mask, 4)
+WHERE role_name = 'Reviewer';
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [BITAND](bitand.md)
+- [BITXOR](bitxor.md)
+- [BITNOT](bitnot.md)

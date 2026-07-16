@@ -1,26 +1,39 @@
 # NOW
-Returns the current UTC date and time. Alias for GETDATE().
 
-**Category:** Date
+Returns the current UTC date and time. `NOW()` is an alias for `GETDATE()`.
 
 ## Syntax
+
 ```sql
 NOW()
 ```
 
 ## Returns
-`DATETIME` — Current UTC date and time.
+
+Returns a `DATETIME` containing the current UTC date and time.
+
+## Null Behavior
+
+This function does not take arguments and never returns `NULL`.
 
 ## Remarks
-- `NOW()` is the preferred cross-dialect alias; `GETDATE()` matches T-SQL convention.
-- Both return the same instant; use whichever matches your SQL dialect preference.
 
-## Example
+- `NOW()` is the preferred cross-dialect alias.
+- `GETDATE()` matches T-SQL convention.
+
+## Examples
+
 ```sql
-SELECT NOW();
-SELECT DATEDIFF(SECOND, start_time, NOW()) AS elapsed FROM #jobs;
+SELECT NOW() AS captured_at;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`GETDATE`](getdate.md), [`CURRENT_TIMESTAMP`](current_timestamp.md)
+```sql
+SELECT job_id, DATEDIFF(SECOND, start_time, NOW()) AS elapsed_seconds
+FROM #jobs;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [GETDATE](getdate.md)
+- [CURRENT_TIMESTAMP](current_timestamp.md)

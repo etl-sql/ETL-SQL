@@ -1,27 +1,39 @@
 # SECOND
-Returns the second component of a datetime as an integer (0–59).
 
-**Category:** Date
+Returns the second component of a datetime or time value as an integer from `0` through `59`.
 
 ## Syntax
+
 ```sql
 SECOND(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATETIME` / `TIME` | The source datetime or time value |
+
+- **date** - Source `DATETIME` or `TIME` value.
 
 ## Returns
-`INT` — Second from `0` to `59`.
 
-## Example
+Returns an `INT` second value.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT SECOND('2026-05-17 14:30:45');   -- → 45
-SELECT DATEDIFF(SECOND, start_time, end_time) AS duration_sec FROM #jobs;
+SELECT SECOND('2026-05-17 14:30:45') AS order_second;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`HOUR`](hour.md), [`MINUTE`](minute.md), [`DATEPART`](datepart.md)
+```sql
+SELECT job_id, SECOND(finished_at) AS finished_second
+FROM #jobs;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [HOUR](hour.md)
+- [MINUTE](minute.md)
+- [DATEPART](datepart.md)

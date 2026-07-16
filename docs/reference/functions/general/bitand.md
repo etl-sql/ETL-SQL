@@ -1,27 +1,41 @@
 # BITAND
+
 Performs a bitwise AND operation on two integers.
 
-**Category:** Math / Bitwise
-
 ## Syntax
+
 ```sql
 BITAND(a, b)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `a` | `INT` / `BIGINT` | The first integer value |
-| `b` | `INT` / `BIGINT` | The second integer value |
+
+- **a** - First integer value.
+- **b** - Second integer value.
 
 ## Returns
-`BIGINT` — The bitwise AND result. Returns `NULL` if either argument is `NULL`.
 
-## Example
+Returns the bitwise AND result as a `BIGINT`.
+
+## Null Behavior
+
+Returns `NULL` when either argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT BITAND(12, 9);   -- → 8 (binary: 1100 & 1001 = 1000)
+SELECT BITAND(12, 9) AS shared_bits;
 ```
 
-## See Also
-- [Standard Library — §5.4 Bitwise](../../../guides/getting-started.md#54-bitwise)
-- Related: [`BITOR`](bitor.md), [`BITXOR`](bitxor.md), [`BITNOT`](bitnot.md)
+```sql
+SELECT role_id
+FROM #roles
+WHERE BITAND(permission_mask, 4) = 4;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [BITOR](bitor.md)
+- [BITXOR](bitxor.md)
+- [BITNOT](bitnot.md)

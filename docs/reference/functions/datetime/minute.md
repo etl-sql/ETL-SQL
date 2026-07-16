@@ -1,27 +1,38 @@
 # MINUTE
-Returns the minute component of a datetime as an integer (0–59).
 
-**Category:** Date
+Returns the minute component of a datetime or time value as an integer from `0` through `59`.
 
 ## Syntax
+
 ```sql
 MINUTE(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATETIME` / `TIME` | The source datetime or time value |
+
+- **date** - Source `DATETIME` or `TIME` value.
 
 ## Returns
-`INT` — Minute from `0` to `59`.
 
-## Example
+Returns an `INT` minute value.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT MINUTE('2026-05-17 14:30:00');   -- → 30
+SELECT MINUTE('2026-05-17 14:30:00') AS order_minute;
+```
+
+```sql
 SELECT MINUTE(GETDATE()) AS current_minute;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`HOUR`](hour.md), [`SECOND`](second.md), [`DATEPART`](datepart.md)
+## References
+
+- [Standard Library](../standard-library.md)
+- [HOUR](hour.md)
+- [SECOND](second.md)
+- [DATEPART](datepart.md)

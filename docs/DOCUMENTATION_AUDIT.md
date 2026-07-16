@@ -16,14 +16,15 @@ Completed in the first cleanup pass:
 - Added section landing pages for the major guide, reference, cookbook, architecture, and release-support areas.
 - Added reusable templates for functions, connectors, statements, visuals, guides, cookbook recipes, architecture docs, and decision records.
 - Adopted lowercase documentation filenames for function reference pages while preserving SQL casing in page titles.
-- Expanded thin reference pages into full pages: `CAST`, `CONVERT`, `ENV`, `FILE_EXISTS`, `IS_NULL`, `TRY_CONVERT`, `CHAR_LENGTH`, `LENGTH`, `SUBSTR`, `FIRST_VALUE`, `LAST_VALUE`, `POW`, `CEIL`, `RANDOM`, `ERROR_MESSAGE`, `ERROR_NUMBER`, `ERROR_STATE`, `ERROR_LINE`, `ERROR_SEVERITY`, `VAR`, `VARP`, `IFNULL`, `QUOTIENT`, `ATAN2`, `NEWSEQUENTIALID`, `XMLEXISTS`, `XMLQUERY`, `SORT_LIST`, `DIRECTORY`, `LISTAGG`, `ADD_TO_LIST`, `APPEND_TO_LIST`, `BINARY_CHECKSUM`, `STDEVP`, `DIRECTORY_EXISTS`, `IS_NOT_NULL`, `REMOVE_FROM_LIST`, `PERCENTILE_DISC`, `OVERLAY`, `STDDEV`, `EXTRACTVALUE`, `OPENJSON`, `SYSDATE`, `JSON_EXTRACT`, `CURRENT_TIME`, `DATALENGTH`, `DMETAPHONE`, `PI`, `XMLELEMENT`, `JSON_TABLE`, `XMLTABLE`, `JSON_EXISTS`, `JSON_ARRAY`, `CURRENT_DATE`, `XMLATTRIBUTES`, `JSON_OBJECT`, `TO_DATE`, `DATETIMEOFFSETSFROMPARTS`, `REGEXP_MATCHES`, `GET_TAGS`, `LEVENSHTEIN`, `NGRAM_TOKENS`, `REGEXP_SPLIT_TO_TABLE`, `DEGREES`, `RADIANS`, `DMETAPHONE_ALT`, `GET_TAG_VALUE`, `HAS_TAG`, `METAPHONE`, `NGRAMS`, `REGEXP_COUNT`, `RELDATE`, `REMOTE_FILE_EXISTS`, `XMLFOREST`, and `HBAR`.
+- Expanded thin reference pages into full pages: `CAST`, `CONVERT`, `ENV`, `FILE_EXISTS`, `IS_NULL`, `TRY_CONVERT`, `CHAR_LENGTH`, `LENGTH`, `SUBSTR`, `FIRST_VALUE`, `LAST_VALUE`, `POW`, `CEIL`, `RANDOM`, `ERROR_MESSAGE`, `ERROR_NUMBER`, `ERROR_STATE`, `ERROR_LINE`, `ERROR_SEVERITY`, `VAR`, `VARP`, `IFNULL`, `QUOTIENT`, `ATAN2`, `NEWSEQUENTIALID`, `XMLEXISTS`, `XMLQUERY`, `SORT_LIST`, `DIRECTORY`, `LISTAGG`, `ADD_TO_LIST`, `APPEND_TO_LIST`, `BINARY_CHECKSUM`, `STDEVP`, `DIRECTORY_EXISTS`, `IS_NOT_NULL`, `REMOVE_FROM_LIST`, `PERCENTILE_DISC`, `OVERLAY`, `STDDEV`, `EXTRACTVALUE`, `OPENJSON`, `SYSDATE`, `JSON_EXTRACT`, `CURRENT_TIME`, `DATALENGTH`, `DMETAPHONE`, `PI`, `XMLELEMENT`, `JSON_TABLE`, `XMLTABLE`, `JSON_EXISTS`, `JSON_ARRAY`, `CURRENT_DATE`, `XMLATTRIBUTES`, `JSON_OBJECT`, `TO_DATE`, `DATETIMEOFFSETSFROMPARTS`, `REGEXP_MATCHES`, `GET_TAGS`, `LEVENSHTEIN`, `NGRAM_TOKENS`, `REGEXP_SPLIT_TO_TABLE`, `DEGREES`, `RADIANS`, `DMETAPHONE_ALT`, `GET_TAG_VALUE`, `HAS_TAG`, `METAPHONE`, `NGRAMS`, `REGEXP_COUNT`, `RELDATE`, `REMOTE_FILE_EXISTS`, `XMLFOREST`, `CURRENT_TIMESTAMP`, `MINUTE`, `NOW`, `SECOND`, `BIT_COUNT`, `BITAND`, `BITNOT`, `BITOR`, `BITSHIFTLEFT`, `BITSHIFTRIGHT`, `BITXOR`, and `HBAR`.
 - Removed exact duplicate guide pages and kept one canonical path for each topic.
 - Removed the duplicate markdown copy under `docs/assets/`.
 - Updated the repository `README.md` documentation map to point into `docs/`.
 - Removed active guide/reference/release links to old `Docs/` and `.worktrees/enterprise-policy-hardening/Docs` paths.
 - Verified no broken local markdown links were found after the pass.
 - Verified no exact duplicate markdown files remained after the pass.
-- Verified no mojibake replacement artifacts remained in the function reference tree after the latest pass.
+- Verified no mojibake replacement artifacts remained under `docs/` after the latest pass.
+- Normalized encoding artifacts in `docs/reference/statements/grammar.md`.
 
 ## P0: Navigation And Entry Points
 
@@ -113,11 +114,6 @@ Thin-page batches completed:
 - `docs/reference/functions/general/reldate.md`
 - `docs/reference/functions/general/remote_file_exists.md`
 - `docs/reference/functions/json-xml/xmlforest.md`
-
-`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
-
-No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
-
 - `docs/reference/functions/datetime/current_timestamp.md`
 - `docs/reference/functions/datetime/minute.md`
 - `docs/reference/functions/datetime/now.md`
@@ -129,6 +125,11 @@ No function reference pages remain under 300 bytes. Some reviewed pages are stil
 - `docs/reference/functions/general/bitshiftleft.md`
 - `docs/reference/functions/general/bitshiftright.md`
 - `docs/reference/functions/general/bitxor.md`
+
+`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
+
+No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
+
 - `docs/reference/functions/general/file_modified.md`
 - `docs/reference/functions/general/file_size.md`
 - `docs/reference/functions/general/path_filename.md`

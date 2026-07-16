@@ -1,26 +1,39 @@
 # BITNOT
+
 Performs a bitwise NOT (complement) operation on an integer.
 
-**Category:** Math / Bitwise
-
 ## Syntax
+
 ```sql
 BITNOT(a)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `a` | `INT` / `BIGINT` | The integer value |
+
+- **a** - Integer value to complement.
 
 ## Returns
-`BIGINT` — The bitwise NOT result. Returns `NULL` if the argument is `NULL`.
 
-## Example
+Returns the bitwise complement as a `BIGINT`.
+
+## Null Behavior
+
+Returns `NULL` when `a` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT BITNOT(0);       -- → -1
+SELECT BITNOT(0) AS all_bits_set;
 ```
 
-## See Also
-- [Standard Library — §5.4 Bitwise](../../../guides/getting-started.md#54-bitwise)
-- Related: [`BITAND`](bitand.md), [`BITOR`](bitor.md), [`BITXOR`](bitxor.md)
+```sql
+SELECT BITAND(permission_mask, BITNOT(4)) AS mask_without_permission
+FROM #roles;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [BITAND](bitand.md)
+- [BITOR](bitor.md)
+- [BITXOR](bitxor.md)

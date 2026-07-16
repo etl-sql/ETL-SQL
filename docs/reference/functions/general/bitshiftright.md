@@ -1,27 +1,38 @@
 # BITSHIFTRIGHT
+
 Performs a bitwise right shift on an integer.
 
-**Category:** Math / Bitwise
-
 ## Syntax
+
 ```sql
 BITSHIFTRIGHT(a, n)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `a` | `INT` / `BIGINT` | The integer value to shift |
-| `n` | `INT` | The number of bits to shift right |
+
+- **a** - Integer value to shift.
+- **n** - Number of bit positions to shift right.
 
 ## Returns
-`BIGINT` — The shifted integer. Returns `NULL` if either argument is `NULL`.
 
-## Example
+Returns the shifted integer as a `BIGINT`.
+
+## Null Behavior
+
+Returns `NULL` when either argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT BITSHIFTRIGHT(16, 2); -- → 4 (binary: 10000 >> 2 = 0100)
+SELECT BITSHIFTRIGHT(16, 2) AS shifted_value;
 ```
 
-## See Also
-- [Standard Library — §5.4 Bitwise](../../../guides/getting-started.md#54-bitwise)
-- Related: [`BITSHIFTLEFT`](bitshiftleft.md)
+```sql
+SELECT packed_value, BITSHIFTRIGHT(packed_value, 8) AS high_byte
+FROM #packed_values;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [BITSHIFTLEFT](bitshiftleft.md)

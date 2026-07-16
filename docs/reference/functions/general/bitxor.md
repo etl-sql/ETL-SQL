@@ -1,27 +1,40 @@
 # BITXOR
+
 Performs a bitwise XOR (exclusive OR) operation on two integers.
 
-**Category:** Math / Bitwise
-
 ## Syntax
+
 ```sql
 BITXOR(a, b)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `a` | `INT` / `BIGINT` | The first integer value |
-| `b` | `INT` / `BIGINT` | The second integer value |
+
+- **a** - First integer value.
+- **b** - Second integer value.
 
 ## Returns
-`BIGINT` — The bitwise XOR result. Returns `NULL` if either argument is `NULL`.
 
-## Example
+Returns the bitwise XOR result as a `BIGINT`.
+
+## Null Behavior
+
+Returns `NULL` when either argument is `NULL`.
+
+## Examples
+
 ```sql
-SELECT BITXOR(12, 9);   -- → 5 (binary: 1100 ^ 1001 = 0101)
+SELECT BITXOR(12, 9) AS changed_bits;
 ```
 
-## See Also
-- [Standard Library — §5.4 Bitwise](../../../guides/getting-started.md#54-bitwise)
-- Related: [`BITAND`](bitand.md), [`BITOR`](bitor.md), [`BITNOT`](bitnot.md)
+```sql
+SELECT old_mask, new_mask, BITXOR(old_mask, new_mask) AS changed_mask
+FROM #permission_changes;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [BITAND](bitand.md)
+- [BITOR](bitor.md)
+- [BITNOT](bitnot.md)
