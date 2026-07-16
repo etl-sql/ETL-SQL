@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Governance;
 using ETL_SQL.Core.Services;
 using ETL_SQL.Data;
@@ -31,21 +32,10 @@ public sealed class PortalDesignerSchemaService(
         var alias = NormalizeConnectionRef(connectionRef);
         var definition = await catalog.ResolveAsync(alias, BuildIdentity(user), cancellationToken);
         var effectiveDocumentUri = ResolveDocumentUri(user, alias, documentUri);
-        await RegisterResolvedConnectionAsync(alias, definition, effectiveDocumentUri, cancellationToken);
-
-        var tables = new List<DesignerSchemaTableDto>();
-        foreach (var table in (await metadata.GetTablesAsync(alias, effectiveDocumentUri)).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var columns = (await metadata.GetColumnDetailsAsync(alias, table, effectiveDocumentUri))
-                .Select(c => new DesignerSchemaColumnDto(c.Name, c.DataType))
-                .ToList();
-            tables.Add(new DesignerSchemaTableDto(table, columns));
-        }
-
-        return new DesignerSchemaResponse(alias, tables.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList());
+        return await RegisterResolvedConnectionAsync(alias, definition, effectiveDocumentUri, cancellationToken);
     }
 
-    public async Task RegisterResolvedConnectionAsync(
+    public async Task<DesignerSchemaResponse> RegisterResolvedConnectionAsync(
         string alias,
         SharedConnectionDefinition definition,
         string documentUri,
@@ -59,7 +49,57 @@ public sealed class PortalDesignerSchemaService(
         if (string.IsNullOrEmpty(target) && options.Count > 0)
             target = connector.BuildConnectionString(options);
 
-        metadata.RegisterDocumentConnection(documentUri, alias, connector.Name, target);
+        var tables = new List<DesignerSchemaTableDto>();
+        var metadataColumns = new Dictionary<string, IEnumerable<ColumnMetadata>>(StringComparer.OrdinalIgnoreCase);
+        await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, target);
+        foreach (var table in (await source.GetTablesAsync()).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var columns = await GetColumnsAsync(source, table);
+            metadataColumns[table] = columns;
+            tables.Add(new DesignerSchemaTableDto(
+                table,
+                columns.Select(c => new DesignerSchemaColumnDto(c.Name, c.DataType)).ToList()));
+        }
+
+        metadata.RegisterDocumentMetadata(
+            documentUri,
+            alias,
+            connector.Name,
+            tables.Select(t => t.Name),
+            metadataColumns);
+
+        return new DesignerSchemaResponse(alias, tables.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    private static async Task<List<ColumnMetadata>> GetColumnsAsync(IDataSource source, string table)
+    {
+        var catalogProvider = source.GetCatalogProvider();
+        if (catalogProvider != null)
+        {
+            try
+            {
+                var (schema, name) = SplitQualifiedName(table);
+                var catalogColumns = await catalogProvider.GetColumnMetadataAsync(schema, name);
+                if (catalogColumns.Count > 0)
+                    return catalogColumns.Select(c => new ColumnMetadata(c.ColumnName, c.DataType)).ToList();
+            }
+            catch
+            {
+                // Fall back to datasource column discovery below.
+            }
+        }
+
+        var rawColumns = source is IDatabaseSource db
+            ? await db.GetColumnsAsync(table)
+            : await source.GetColumnsAsync();
+        return rawColumns.Select(c => new ColumnMetadata(c, "ANY")).ToList();
+    }
+
+    private static (string Schema, string Name) SplitQualifiedName(string qualified)
+    {
+        var parts = qualified.Split('.');
+        return parts.Length > 1 ? (parts[^2], parts[^1]) : ("", qualified);
     }
 
     public static string NormalizeConnectionRef(string connectionRef)

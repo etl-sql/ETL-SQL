@@ -5,7 +5,7 @@ using ETL_SQL.Data;
 
 namespace ETL_SQL.Core;
 
-public record ConnectionInfo(string Name, string Type, string ConnectionString, bool IsDocument);
+public record ConnectionInfo(string Name, string Type, string ConnectionString, bool IsDocument, bool IsMetadataOnly = false);
 public record ColumnMetadata(string Name, string DataType);
 
 /// <summary>
@@ -20,6 +20,15 @@ public interface IMetadataManager
     /// <summary>Registers a new connection in the global metadata context.</summary>
     void RegisterConnection(string name, string type, string connectionString);
     void RegisterDocumentConnection(string uri, string name, string type, string connectionString);
+    void RegisterDocumentMetadata(
+        string uri,
+        string name,
+        string type,
+        IEnumerable<string> tables,
+        IReadOnlyDictionary<string, IEnumerable<ColumnMetadata>> columns,
+        IEnumerable<string>? views = null)
+    {
+    }
     void ClearDocumentConnections(string uri);
     List<ConnectionInfo> GetConnections(string? uri = null);
     Task<IEnumerable<string>> GetTablesAsync(string connectionName, string? uri = null);

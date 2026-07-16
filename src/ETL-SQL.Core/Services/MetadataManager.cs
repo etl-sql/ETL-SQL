@@ -142,6 +142,52 @@ public class MetadataManager : IMetadataManager
         TryLoadAndRefreshCache(name, connectionString, normalizedUri);
     }
 
+    public void RegisterDocumentMetadata(
+        string uri,
+        string name,
+        string type,
+        IEnumerable<string> tables,
+        IReadOnlyDictionary<string, IEnumerable<ColumnMetadata>> columns,
+        IEnumerable<string>? views = null)
+    {
+        var normalizedUri = NormalizeUri(uri);
+        var list = _docConnections.GetOrAdd(normalizedUri, _ => new List<ConnectionInfo>());
+        lock (list)
+        {
+            list.RemoveAll(c => string.Equals(c.Name, name, StringComparison.OrdinalIgnoreCase));
+            list.Add(new ConnectionInfo(name, type, string.Empty, true, IsMetadataOnly: true));
+        }
+
+        ClearCacheForDocument(normalizedUri, name);
+
+        var key = GetCacheKey(name, normalizedUri);
+        var tableList = tables
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (!tableList.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
+            tableList.Add("DUAL");
+
+        _tables[key] = tableList;
+        _views[key] = views?
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+        foreach (var kvp in columns)
+        {
+            var colKey = key + ":" + kvp.Key.ToUpperInvariant();
+            _columns[colKey] = kvp.Value.ToList();
+            StampCache(colKey);
+        }
+        var dualKey = key + ":DUAL";
+        _columns[dualKey] = new List<ColumnMetadata> { new("DUMMY", "VARCHAR") };
+        StampCache(dualKey);
+        StampCache(key);
+
+        _logger.Info("Registered metadata-only document connection {Name} for {Uri}", name, uri);
+    }
+
     public void ClearDocumentConnections(string uri)
     {
         var normalizedUri = NormalizeUri(uri);
@@ -236,10 +282,13 @@ public class MetadataManager : IMetadataManager
             if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
             {
                 // Stale-while-revalidate: serve instantly, refresh in the background when aged.
-                if (ShouldBackgroundRefresh(key))
+                if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(key))
                     TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
                 return cached;
             }
+
+            if (conn.IsMetadataOnly)
+                return Enumerable.Empty<string>();
 
             // Try to load disk cache
             var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
@@ -308,10 +357,13 @@ public class MetadataManager : IMetadataManager
             var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
             if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
             {
-                if (ShouldBackgroundRefresh(key))
+                if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(key))
                     TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
                 return cached;
             }
+
+            if (conn.IsMetadataOnly)
+                return Enumerable.Empty<string>();
 
             // Try to load disk cache
             var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);
@@ -454,10 +506,13 @@ public class MetadataManager : IMetadataManager
             // If in memory cache, return immediately
             if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type))
             {
-                if (ShouldBackgroundRefresh(GetCacheKey(connectionName, conn.IsDocument ? uri : null)))
+                if (!conn.IsMetadataOnly && ShouldBackgroundRefresh(GetCacheKey(connectionName, conn.IsDocument ? uri : null)))
                     TriggerBackgroundRefresh(connectionName, conn.ConnectionString, conn.IsDocument ? uri : null);
                 return cached;
             }
+
+            if (conn.IsMetadataOnly)
+                return Enumerable.Empty<ColumnMetadata>();
 
             // Try to load disk cache if memory cache is empty
             var diskCache = await LoadSchemaFromDiskAsync(connectionName, conn.ConnectionString);

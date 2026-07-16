@@ -64,6 +64,39 @@ namespace ETL_SQL.LanguageServer.Tests
         }
 
         [Fact]
+        public async Task RegisterDocumentMetadata_ServesSchemaWithoutRetainingConnectionString()
+        {
+            var connectorMock = new Mock<IConnector>();
+            _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
+
+            var uri = "portal-designer://u/1/c/Sales/default";
+            _manager.RegisterDocumentMetadata(
+                uri,
+                "Sales",
+                "MSSQL",
+                new[] { "Orders" },
+                new Dictionary<string, IEnumerable<ColumnMetadata>>
+                {
+                    ["Orders"] = new[] { new ColumnMetadata("OrderId", "INT") }
+                });
+
+            var connections = _manager.GetConnections(uri);
+            var connection = Assert.Single(connections, c => c.Name == "Sales");
+            Assert.True(connection.IsMetadataOnly);
+            Assert.Equal(string.Empty, connection.ConnectionString);
+
+            var tables = await _manager.GetTablesAsync("Sales", uri);
+            var columns = await _manager.GetColumnDetailsAsync("Sales", "Orders", uri);
+
+            Assert.Contains("Orders", tables);
+            Assert.Contains("DUAL", tables);
+            Assert.Contains(columns, c => c.Name == "OrderId" && c.DataType == "INT");
+            connectorMock.Verify(
+                c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task GetTablesAsync_UsesConnectorRegistry()
         {
             // Arrange
