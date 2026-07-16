@@ -176,6 +176,15 @@ Thin-page batches completed:
 - `docs/reference/functions/datetime/hour.md`
 - `docs/reference/functions/datetime/month.md`
 - `docs/reference/functions/datetime/year.md`
+- `docs/reference/functions/general/date_part.md`
+- `docs/reference/functions/general/datetimefromparts.md`
+- `docs/reference/functions/general/datetrunc.md`
+- `docs/reference/functions/general/eomonth.md`
+- `docs/reference/functions/general/isdate.md`
+- `docs/reference/functions/general/parse.md`
+- `docs/reference/functions/general/timefromparts.md`
+- `docs/reference/functions/general/to_timestamp.md`
+- `docs/reference/functions/general/trunc.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 

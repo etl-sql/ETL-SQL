@@ -1,32 +1,44 @@
 # TRUNC
+
 Truncates the time portion of a datetime, returning the date at midnight.
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 TRUNC(date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `date` | `DATETIME` | The datetime value to truncate |
+
+- **date** - Datetime value to truncate.
 
 ## Returns
-`DATE` — The date portion only, with time set to 00:00:00.
+
+Returns the date portion with time set to midnight.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
 
 ## Remarks
-- Equivalent to `CAST(date AS DATE)`.
-- For truncation to other date parts (month, hour, etc.), use [`DATETRUNC`](datetrunc.md).
 
-## Example
+- `TRUNC(date)` is equivalent to casting a datetime to `DATE`.
+- Use [`DATETRUNC`](datetrunc.md) when truncating to month, hour, or another date part boundary.
+
+## Examples
+
 ```sql
-SELECT TRUNC('2026-05-17 14:30:00');   -- → 2026-05-17
-SELECT TRUNC(GETDATE()) AS today;
-SELECT * FROM #orders WHERE TRUNC(order_time) = TRUNC(GETDATE());  -- today's orders
+SELECT TRUNC('2026-05-17 14:30:00') AS order_day;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`DATETRUNC`](datetrunc.md), [`CAST`](../conversion/cast.md)
+```sql
+SELECT *
+FROM #orders
+WHERE TRUNC(order_time) = TRUNC(GETDATE());
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [DATETRUNC](datetrunc.md)
+- [CAST](../conversion/cast.md)

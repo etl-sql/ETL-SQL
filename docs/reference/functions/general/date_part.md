@@ -1,31 +1,44 @@
 # DATE_PART
+
 Extracts a specified date part component from a date as an integer value.
 
-**Category:** Date
-
 ## Syntax
+
 ```sql
 DATE_PART(datepart, date)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `datepart` | `KEYWORD` | The part to extract — see [§3.1 Keyword Parameter Enumerations](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract) |
-| `date` | `DATE` / `DATETIME` | The date to extract from |
+
+- **datepart** - Date part to extract. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **date** - Source date or datetime value.
 
 ## Returns
-`INTEGER` — The value representing the specified date part.
+
+Returns an integer value for the specified date part.
+
+## Null Behavior
+
+Returns `NULL` when `date` is `NULL`.
 
 ## Accepted Values for `datepart`
+
 `YEAR`, `QUARTER`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND`, `DOW`, `DOY`
 
-## Example
+## Examples
+
 ```sql
-SELECT DATE_PART(MONTH, '2026-05-17');        -- → 5
-SELECT DATE_PART(QUARTER, '2026-05-17');      -- → 2
+SELECT DATE_PART(MONTH, '2026-05-17') AS month_number;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`DATEPART`](../datetime/datepart.md), [`EXTRACT`](../../../guides/getting-started.md#extract)
+```sql
+SELECT DATE_PART(QUARTER, order_date) AS order_quarter
+FROM #orders;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [DATEPART](../datetime/datepart.md)
+- [EXTRACT](../datetime/extract.md)

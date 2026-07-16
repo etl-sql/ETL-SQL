@@ -1,33 +1,45 @@
 # PARSE
+
 Converts a string to a date, time, or numeric type using culture-aware parsing.
 
-**Category:** System
-
 ## Syntax
+
 ```sql
 PARSE(string, type)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The culture-formatted string to parse |
-| `type` | `TYPE` | The target data type (`DATE`, `DATETIME`, `INT`, `DECIMAL`, etc.) |
+
+- **string** - Culture-formatted string to parse.
+- **type** - Target data type, such as `DATE`, `DATETIME`, `INT`, or `DECIMAL`.
 
 ## Returns
-The parsed value in `type`. Raises an exception if parsing fails (use [`TRY_PARSE`](try_parse.md) for safe parsing).
+
+Returns the parsed value using the requested target type.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
 
 ## Remarks
-- More flexible than `CAST` for locale-specific formats (e.g., `'May 17, 2026'`, `'17/05/2026'`).
-- For dates, recognizes month names and various delimiters.
 
-## Example
+- `PARSE` raises an error when parsing fails.
+- Use [`TRY_PARSE`](try_parse.md) when invalid source data should produce `NULL` instead.
+- `PARSE` is more flexible than `CAST` for locale-style date strings and formatted numeric values.
+
+## Examples
+
 ```sql
-SELECT PARSE('May 17, 2026', DATE);       -- → 2026-05-17
-SELECT PARSE('17/05/2026', DATE);         -- → 2026-05-17
-SELECT PARSE('1,234.56', DECIMAL);        -- → 1234.56
+SELECT PARSE('May 17, 2026', DATE) AS parsed_date;
 ```
 
-## See Also
-- [Standard Library — §2. Type Conversion](../../../guides/getting-started.md#2-type-conversion)
-- Related: [`TRY_PARSE`](try_parse.md), [`CAST`](../conversion/cast.md), [`TRY_CAST`](../conversion/try_cast.md)
+```sql
+SELECT PARSE('1,234.56', DECIMAL(10, 2)) AS parsed_amount;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [TRY_PARSE](try_parse.md)
+- [CAST](../conversion/cast.md)
+- [TRY_CAST](../conversion/try_cast.md)

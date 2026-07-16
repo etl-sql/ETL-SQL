@@ -1,32 +1,39 @@
 # ISDATE
-Returns 1 if the expression can be parsed as a valid date, 0 otherwise.
 
-**Category:** Date
+Returns `1` when a string can be parsed as a valid date or datetime, and `0` otherwise.
 
 ## Syntax
+
 ```sql
 ISDATE(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The value to test for date parseability |
+
+- **string** - Value to test for date parseability.
 
 ## Returns
-`BIT` — `1` if the value is a valid date/datetime; `0` otherwise.
 
-## Example
+Returns `1` when the value is a valid date or datetime; otherwise returns `0`.
+
+## Null Behavior
+
+Returns `0` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT ISDATE('2026-05-17');    -- → 1
-SELECT ISDATE('not a date');    -- → 0
-SELECT ISDATE('2026-13-01');    -- → 0  (invalid month)
-
--- Filter valid date strings before casting
-SELECT TRY_CAST(date_str AS DATE) AS parsed
-  FROM #raw WHERE ISDATE(date_str) = 1;
+SELECT ISDATE('2026-05-17') AS is_valid_date;
 ```
 
-## See Also
-- [Standard Library — §4. Date & Time Functions](../../../guides/getting-started.md#4-date--time-functions)
-- Related: [`TRY_CAST`](../conversion/try_cast.md), [`CAST`](../conversion/cast.md)
+```sql
+SELECT TRY_CAST(date_str AS DATE) AS parsed_date
+FROM #raw
+WHERE ISDATE(date_str) = 1;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [TRY_CAST](../conversion/try_cast.md)
+- [CAST](../conversion/cast.md)
