@@ -1,33 +1,52 @@
 # SUM
+
 Returns the sum of all non-NULL values in a group or window.
 
-**Category:** Aggregate
-
 ## Syntax
+
 ```sql
 SUM(expression)
 SUM(expression) OVER (...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `INT` / `DECIMAL` / `FLOAT` | The numeric column or expression to sum |
+
+- **expression** - Numeric column or expression to sum.
 
 ## Returns
-Same type as input — the total. Returns `NULL` if all values are NULL.
 
-## Example
+Returns the total of all non-NULL input values.
+
+## Null Behavior
+
+Ignores `NULL` inputs. Returns `NULL` when all input values are `NULL`.
+
+## Examples
+
 ```sql
-SELECT SUM(amount) AS total FROM #orders;
-SELECT region, SUM(revenue) AS region_total FROM #sales GROUP BY region;
+SELECT SUM(amount) AS total_amount
+FROM #orders;
+```
 
--- Running total (window)
-SELECT date, revenue,
-    SUM(revenue) OVER (ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulative
+```sql
+SELECT region, SUM(revenue) AS region_total
+FROM #sales
+GROUP BY region;
+```
+
+```sql
+SELECT sales_date, revenue,
+    SUM(revenue) OVER (
+        ORDER BY sales_date
+        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS cumulative_revenue
 FROM #daily_sales;
 ```
 
-## See Also
-- [Standard Library — §6. Statistical Aggregates](../../../guides/getting-started.md#6-statistical-aggregates)
-- Related: [`COUNT`](count.md), [`AVG`](avg.md), [`MIN`](min.md), [`MAX`](max.md)
+## References
+
+- [Standard Library](../standard-library.md)
+- [COUNT](count.md)
+- [AVG](avg.md)
+- [MIN](min.md)
+- [MAX](max.md)

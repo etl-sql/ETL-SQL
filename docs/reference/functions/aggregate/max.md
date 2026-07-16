@@ -1,29 +1,41 @@
 # MAX
+
 Returns the maximum (largest) non-NULL value in a group or window.
 
-**Category:** Aggregate
-
 ## Syntax
+
 ```sql
 MAX(expression)
 MAX(expression) OVER (...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `ANY` | Column or expression to find the maximum of |
+
+- **expression** - Column or expression to evaluate.
 
 ## Returns
-Same type as input — the largest value. Returns `NULL` if all values are NULL.
 
-## Example
+Returns the largest non-NULL value using the same type family as the input expression.
+
+## Null Behavior
+
+Ignores `NULL` inputs. Returns `NULL` when all input values are `NULL`.
+
+## Examples
+
 ```sql
-SELECT MAX(price) AS most_expensive FROM #products;
-SELECT MAX(score) AS top_score, MIN(score) AS low_score FROM #results;
-SELECT MAX(sale_date) OVER (PARTITION BY customer_id) AS last_purchase FROM #sales;
+SELECT MAX(price) AS most_expensive
+FROM #products;
 ```
 
-## See Also
-- [Standard Library — §6. Statistical Aggregates](../../../guides/getting-started.md#6-statistical-aggregates)
-- Related: [`MIN`](min.md), [`GREATEST`](../general/greatest.md)
+```sql
+SELECT customer_id,
+    MAX(sale_date) OVER (PARTITION BY customer_id) AS last_purchase
+FROM #sales;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [MIN](min.md)
+- [GREATEST](../general/greatest.md)

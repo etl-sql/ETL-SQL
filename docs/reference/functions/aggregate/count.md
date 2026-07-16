@@ -1,9 +1,9 @@
 # COUNT
+
 Returns the number of rows or non-NULL values in a group or window.
 
-**Category:** Aggregate
-
 ## Syntax
+
 ```sql
 COUNT(*)
 COUNT(expression)
@@ -12,26 +12,42 @@ COUNT(*) OVER (...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `ANY` | Column or expression to count (NULL values excluded unless `*` is used) |
+
+- **expression** - Optional column or expression to count.
 
 ## Returns
-`BIGINT` — Row count or non-NULL value count.
+
+Returns a `BIGINT` row count or non-NULL value count.
+
+## Null Behavior
+
+- `COUNT(*)` counts all rows, including rows where selected columns contain `NULL`.
+- `COUNT(expression)` counts only non-NULL expression values.
+- `COUNT(DISTINCT expression)` counts unique non-NULL expression values.
 
 ## Remarks
-- `COUNT(*)` counts all rows including NULLs.
-- `COUNT(col)` counts only non-NULL values in `col`.
-- `COUNT(DISTINCT col)` counts unique non-NULL values.
 
-## Example
+Use `COUNT(*) OVER (...)` to add partition counts without collapsing rows.
+
+## Examples
+
 ```sql
-SELECT COUNT(*) AS total_rows FROM #orders;
-SELECT COUNT(email) AS has_email FROM #users;
-SELECT COUNT(DISTINCT customer_id) AS unique_customers FROM #orders;
-SELECT region, COUNT(*) OVER (PARTITION BY region) AS region_count FROM #sales;
+SELECT COUNT(*) AS total_rows
+FROM #orders;
 ```
 
-## See Also
-- [Standard Library — §6. Statistical Aggregates](../../../guides/getting-started.md#6-statistical-aggregates)
-- Related: [`SUM`](sum.md), [`AVG`](avg.md)
+```sql
+SELECT COUNT(email) AS users_with_email
+FROM #users;
+```
+
+```sql
+SELECT region, COUNT(*) OVER (PARTITION BY region) AS region_count
+FROM #sales;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SUM](sum.md)
+- [AVG](avg.md)

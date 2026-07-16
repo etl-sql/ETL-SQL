@@ -1,9 +1,9 @@
 # STDEV
+
 Returns the sample standard deviation of values in a group.
 
-**Category:** Aggregate
-
 ## Syntax
+
 ```sql
 STDEV(expression)
 STDDEV_SAMP(expression)
@@ -11,21 +11,43 @@ STDEV(expression) OVER (...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `DECIMAL` / `FLOAT` | Numeric column to compute standard deviation for |
+
+- **expression** - Numeric column or expression to evaluate.
 
 ## Returns
-`FLOAT` — Sample standard deviation. `STDDEV_SAMP` is an alias. Returns `NULL` if fewer than 2 rows.
 
-## Example
+Returns a `FLOAT` sample standard deviation.
+
+## Null Behavior
+
+Ignores `NULL` inputs. Returns `NULL` when fewer than two non-NULL values are available.
+
+## Remarks
+
+`STDDEV_SAMP` is an alias for `STDEV`.
+
+## Examples
+
 ```sql
-SELECT STDEV(score) AS score_stddev FROM #exams;
-SELECT region, AVG(revenue) AS avg, STDEV(revenue) AS volatility
-  FROM #sales GROUP BY region;
-SELECT STDEV(price) OVER (PARTITION BY category) AS category_spread FROM #products;
+SELECT STDEV(score) AS score_stddev
+FROM #exams;
 ```
 
-## See Also
-- [Standard Library — §6. Statistical Aggregates](../../../guides/getting-started.md#6-statistical-aggregates)
-- Related: [`STDEVP`](stdevp.md), [`VAR`](var.md), [`AVG`](avg.md)
+```sql
+SELECT region, AVG(revenue) AS avg_revenue, STDEV(revenue) AS volatility
+FROM #sales
+GROUP BY region;
+```
+
+```sql
+SELECT product_id, category,
+    STDEV(price) OVER (PARTITION BY category) AS category_spread
+FROM #products;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [STDEVP](stdevp.md)
+- [VAR](var.md)
+- [AVG](avg.md)

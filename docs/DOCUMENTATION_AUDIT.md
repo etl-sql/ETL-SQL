@@ -150,6 +150,13 @@ Thin-page batches completed:
 - `docs/reference/functions/string/space.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`
+- `docs/reference/functions/aggregate/avg.md`
+- `docs/reference/functions/aggregate/count.md`
+- `docs/reference/functions/aggregate/max.md`
+- `docs/reference/functions/aggregate/min.md`
+- `docs/reference/functions/aggregate/stdev.md`
+- `docs/reference/functions/aggregate/string_agg.md`
+- `docs/reference/functions/aggregate/sum.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 
@@ -157,7 +164,6 @@ No function reference pages remain under 300 bytes, and the original under-700-b
 
 Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. The next category batches should start with:
 
-- Aggregate functions: `avg.md`, `count.md`, `max.md`, `min.md`, `stdev.md`, `string_agg.md`, `sum.md`
 - Conversion/logic functions: `coalesce.md`, `iif.md`, `isnull.md`, `nullif.md`, `try_cast.md`
 - Cryptography functions: `checksum.md`, `hashbytes.md`
 - Datetime functions: `dateadd.md`, `datediff.md`, `datepart.md`, `datename.md`, `date_trunc.md`, `day.md`, `extract.md`
