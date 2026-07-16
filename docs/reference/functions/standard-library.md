@@ -13,10 +13,10 @@ This document is the authoritative dictionary for all built-in types, casting be
 | `TINYINT` | 1 byte | 0 to 255 |
 | `SMALLINT` | 2 bytes | -32,768 to 32,767 |
 | `INT` / `INTEGER` | 4 bytes | -2,147,483,648 to 2,147,483,647 |
-| `BIGINT` | 8 bytes | -9.22 × 10¹⁸ to 9.22 × 10¹⁸ |
-| `DECIMAL(P,S)` / `NUMERIC(P,S)` | 16 bytes | Up to 28–29 significant digits. P = total digits; S = digits after decimal |
-| `FLOAT` / `DOUBLE` | 8 bytes | Approximate (~15–17 significant digits) |
-| `REAL` | 4 bytes | Approximate (~6–9 significant digits) |
+| `BIGINT` | 8 bytes | -9.22e18 to 9.22e18 |
+| `DECIMAL(P,S)` / `NUMERIC(P,S)` | 16 bytes | Up to 28-29 significant digits. P = total digits; S = digits after decimal |
+| `FLOAT` / `DOUBLE` | 8 bytes | Approximate (~15-17 significant digits) |
+| `REAL` | 4 bytes | Approximate (~6-9 significant digits) |
 | `MONEY` | 8 bytes | Fixed-precision currency (4 decimal places) |
 
 ### 1.2 Temporal Types

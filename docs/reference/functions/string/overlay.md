@@ -36,7 +36,7 @@ SELECT OVERLAY('Hello World' PLACING 'SQL' FROM 7 FOR 5) AS result;
 ```
 
 ```sql
-SELECT OVERLAY(account_number PLACING '****' FROM 1 FOR 4) AS masked_account
+SELECT OVERLAY(account_number PLACING 'XXXX' FROM 1 FOR 4) AS masked_account
 FROM #accounts;
 ```
 

@@ -1,6 +1,6 @@
 # Report-SQL
 
-Report-SQL extends ETL-SQL with components for building interactive dashboards — datasets, visuals, pages, navigation, containers, buttons, and styles.
+Report-SQL extends ETL-SQL with components for building interactive dashboards: datasets, visuals, pages, navigation, containers, buttons, and styles.
 
 A report is a sequence of `CREATE` statements. The engine compiles them into a self-contained dashboard served via the Report Portal.
 

@@ -23,7 +23,7 @@ Returns `NULL` when either argument is `NULL`.
 
 ## Security Notes
 
-Sensitive credential-like properties are masked with `********`, including `PASSWORD`, `APIKEY`, `SECRET`, `TOKEN`, and `KEYFILE`.
+Sensitive credential-like properties are returned as redacted mask values, including `PASSWORD`, `APIKEY`, `SECRET`, `TOKEN`, and `KEYFILE`.
 
 ## Examples
 
