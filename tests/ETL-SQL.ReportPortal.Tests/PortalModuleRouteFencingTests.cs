@@ -63,8 +63,8 @@ public class PortalModuleRouteFencingTests
 
         var response = await SendAsync(client, HttpMethod.Post, token, "/api/designer/run", new
         {
-            script = "SELECT 1 AS One;",
-            selection = "SELECT 1 AS One;"
+            script = "SELECT 'ssn-123-45-6789' AS SensitiveValue, 1 AS One;",
+            selection = "SELECT 'ssn-123-45-6789' AS SensitiveValue, 1 AS One;"
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -75,7 +75,11 @@ public class PortalModuleRouteFencingTests
 
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
-        Assert.True(await db.AuditLogs.AnyAsync(a => a.Action == "AD_HOC_RUN"));
+        var audit = await db.AuditLogs.SingleAsync(a => a.Action == "AD_HOC_RUN");
+        Assert.Contains("QueryHash=sha256:", audit.Detail);
+        Assert.Contains("Statement=SelectStatement", audit.Detail);
+        Assert.DoesNotContain("Query=", audit.Detail);
+        Assert.DoesNotContain("ssn-123-45-6789", audit.Detail);
     }
 
     [Fact]

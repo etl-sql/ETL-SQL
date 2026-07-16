@@ -113,7 +113,7 @@ work by priority.
 - [ ] **P1 — Make Designer schema discovery bounded.** Return tables before columns or use a provider
       batch catalog API; add object limits, single-flight caching, cancellation, timeouts, and controlled
       concurrency instead of sequential N+1 provider calls.
-- [ ] **P1 — Stop auditing full Designer SQL text.** Record a query fingerprint and structural resource
+- [x] **P1 — Stop auditing full Designer SQL text.** Record a query fingerprint and structural resource
       metadata; do not place arbitrary literals or potentially sensitive row filters in ordinary audit
       detail.
 - [x] **P1 — Make audit outbox claiming atomic across Portal nodes.** Claim batches with a database-safe

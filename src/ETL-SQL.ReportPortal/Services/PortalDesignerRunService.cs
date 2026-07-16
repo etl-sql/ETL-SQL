@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
@@ -58,14 +59,14 @@ public sealed class PortalDesignerRunService(
         var result = await session.ExecuteAsync(script, timeout.Token, "portal-designer-run", executionIdentity: identity);
         var elapsedMs = (long)(DateTime.UtcNow - start).TotalMilliseconds;
         var table = session.LastEvaluator?.LastResult;
-        var safeQuery = SecretRedactor.Redact(statement.ToSql()) ?? string.Empty;
+        var queryFingerprint = FingerprintQuery(statement.ToSql());
 
         await audit.LogAsync(
             identity.EffectiveUserId,
             "AD_HOC_RUN",
             "Designer",
             NormalizeResourceId(request.ConnectionRef),
-            $"Connection={NormalizeResourceId(request.ConnectionRef) ?? "(none)"}; Query={safeQuery}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}");
+            $"Connection={NormalizeResourceId(request.ConnectionRef) ?? "(none)"}; Statement={statement.GetType().Name}; QueryHash={queryFingerprint}; Rows={table?.Rows.Count ?? 0}; ElapsedMs={elapsedMs}");
 
         if (!result.Success)
         {
@@ -185,4 +186,10 @@ public sealed class PortalDesignerRunService(
 
     private static string QuoteIdentifier(string value)
         => "[" + value.Replace("]", "]]", StringComparison.Ordinal) + "]";
+
+    private static string FingerprintQuery(string query)
+    {
+        var bytes = Encoding.UTF8.GetBytes(query.Trim());
+        return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+    }
 }
