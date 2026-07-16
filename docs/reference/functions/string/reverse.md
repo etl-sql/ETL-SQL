@@ -1,29 +1,43 @@
 # REVERSE
+
 Returns a string with characters in reverse order.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 REVERSE(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The string to reverse |
+
+- **string** - String to reverse.
 
 ## Returns
-`STRING` — The input string with character order reversed.
 
-## Example
+Returns the input string with character order reversed.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT REVERSE('hello');          -- → 'olleh'
-SELECT REVERSE('racecar');        -- → 'racecar'  (palindrome check)
+SELECT REVERSE('hello') AS reversed_text;
+```
+
+```sql
+SELECT word
+FROM #words
+WHERE word = REVERSE(word);
 ```
 
 ## Remarks
+
 - Operates on Unicode code points; surrogate pairs are kept intact.
 
-## See Also
-- [Standard Library — §3. String Functions](../../../guides/getting-started.md#3-string-functions)
+## References
+
+- [Standard Library](../standard-library.md)
+- [SUBSTRING](substring.md)
+- [LENGTH](length.md)

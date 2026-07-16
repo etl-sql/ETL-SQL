@@ -1,27 +1,38 @@
 # LOWER
+
 Converts all characters in a string to lowercase.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 LOWER(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The input string to convert |
+
+- **string** - Input string to convert.
 
 ## Returns
-`STRING` — The input string with all alphabetic characters in lowercase.
 
-## Example
+Returns the input string with alphabetic characters converted to lowercase.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT LOWER('HELLO WORLD');          -- → 'hello world'
-SELECT LOWER(email) AS email FROM #users;
+SELECT LOWER('HELLO WORLD') AS normalized_text;
 ```
 
-## See Also
-- [Standard Library — §3.1 Case & Whitespace](../../../guides/getting-started.md#31-case--whitespace)
-- Related: [`UPPER`](upper.md), [`INITCAP`](../general/initcap.md)
+```sql
+SELECT user_id, LOWER(email) AS normalized_email
+FROM #users;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [UPPER](upper.md)
+- [INITCAP](../general/initcap.md)

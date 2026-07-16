@@ -143,11 +143,6 @@ Thin-page batches completed:
 - `docs/reference/functions/math/sign.md`
 - `docs/reference/functions/math/sqrt.md`
 - `docs/reference/functions/math/tan.md`
-
-`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
-
-No function reference pages remain under 300 bytes. Some reviewed pages are still under 700 bytes because the topic is small, so the next queue excludes pages already expanded in the batches above. Remaining under-700-byte candidates still needing review:
-
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
 - `docs/reference/functions/string/reverse.md`
@@ -155,6 +150,17 @@ No function reference pages remain under 300 bytes. Some reviewed pages are stil
 - `docs/reference/functions/string/space.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`
+
+`docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
+
+No function reference pages remain under 300 bytes, and the original under-700-byte review queue is complete. Some reviewed pages remain under 700 bytes because the topic is small.
+
+Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. The next category batches should start with:
+
+- Aggregate functions: `avg.md`, `count.md`, `max.md`, `min.md`, `stdev.md`, `string_agg.md`, `sum.md`
+- Conversion/logic functions: `coalesce.md`, `iif.md`, `isnull.md`, `nullif.md`, `try_cast.md`
+- Cryptography functions: `checksum.md`, `hashbytes.md`
+- Datetime functions: `dateadd.md`, `datediff.md`, `datepart.md`, `datename.md`, `date_trunc.md`, `day.md`, `extract.md`
 
 ## P1: Duplicate Pages
 

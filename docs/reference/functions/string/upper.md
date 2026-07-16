@@ -1,27 +1,38 @@
 # UPPER
+
 Converts all characters in a string to uppercase.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 UPPER(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The input string to convert |
+
+- **string** - Input string to convert.
 
 ## Returns
-`STRING` — The input string with all alphabetic characters in uppercase.
 
-## Example
+Returns the input string with alphabetic characters converted to uppercase.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT UPPER('hello world');          -- → 'HELLO WORLD'
-SELECT UPPER(first_name) AS Name FROM #customers;
+SELECT UPPER('hello world') AS display_text;
 ```
 
-## See Also
-- [Standard Library — §3.1 Case & Whitespace](../../../guides/getting-started.md#31-case--whitespace)
-- Related: [`LOWER`](lower.md), [`INITCAP`](../general/initcap.md)
+```sql
+SELECT customer_id, UPPER(first_name) AS display_name
+FROM #customers;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LOWER](lower.md)
+- [INITCAP](../general/initcap.md)

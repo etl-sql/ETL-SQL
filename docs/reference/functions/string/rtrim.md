@@ -1,27 +1,38 @@
 # RTRIM
+
 Removes trailing (right-side) whitespace from a string.
 
-**Category:** String
-
 ## Syntax
+
 ```sql
 RTRIM(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The string to right-trim |
+
+- **string** - String to trim.
 
 ## Returns
-`STRING` — The input string with trailing whitespace removed.
 
-## Example
+Returns the input string with trailing whitespace removed.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT RTRIM('hello   ');   -- → 'hello'
-SELECT RTRIM(address) AS address FROM #contacts;
+SELECT RTRIM('hello   ') AS trimmed_value;
 ```
 
-## See Also
-- [Standard Library — §3.1 Case & Whitespace](../../../guides/getting-started.md#31-case--whitespace)
-- Related: [`LTRIM`](ltrim.md), [`TRIM`](trim.md)
+```sql
+SELECT contact_id, RTRIM(address) AS normalized_address
+FROM #contacts;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LTRIM](ltrim.md)
+- [TRIM](trim.md)
