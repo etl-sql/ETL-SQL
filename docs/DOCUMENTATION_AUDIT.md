@@ -157,11 +157,14 @@ Thin-page batches completed:
 - `docs/reference/functions/math/sin.md`
 - `docs/reference/functions/math/sqrt.md`
 - `docs/reference/functions/math/tan.md`
+- `docs/reference/functions/string/ascii.md`
+- `docs/reference/functions/string/char.md`
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
 - `docs/reference/functions/string/reverse.md`
 - `docs/reference/functions/string/rtrim.md`
 - `docs/reference/functions/string/space.md`
+- `docs/reference/functions/string/unicode.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`
 - `docs/reference/functions/window/dense_rank.md`
