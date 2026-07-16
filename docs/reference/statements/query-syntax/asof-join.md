@@ -1,5 +1,5 @@
 # ASOF JOIN
-A nearest-match join. For each left row it returns the single closest right row satisfying one inequality (after any equality keys) — ideal for aligning time series such as trades to the most recent quote.
+A nearest-match join. For each left row it returns the single closest right row satisfying one inequality after any equality keys. It is ideal for aligning time series such as trades to the most recent quote.
 
 ## Syntax
 ```sql
@@ -11,8 +11,8 @@ ASOF [LEFT] JOIN <right>
 ## Semantics
 - The `ON` clause must contain **exactly one** inequality (`<`, `<=`, `>`, `>=`) plus zero or more equality predicates.
 - Direction follows the operator:
-  - `>=` / `>` → the **largest** qualifying right value (most recent at/before the left value).
-  - `<=` / `<` → the **smallest** qualifying right value (nearest at/after).
+  - `>=` / `>` selects the **largest** qualifying right value (most recent at/before the left value).
+  - `<=` / `<` selects the **smallest** qualifying right value (nearest at/after).
 - `ASOF JOIN` drops left rows with no match; `ASOF LEFT JOIN` keeps them with NULLs on the right side.
 
 ## Example
@@ -26,8 +26,8 @@ ASOF JOIN quotes q
 ```
 
 ## Notes
-- The right side is buffered and matching is currently O(left × right); add equality keys to narrow candidates on large inputs.
+- The right side is buffered and matching is currently O(left * right); add equality keys to narrow candidates on large inputs.
 - A missing or multiple inequality predicate is rejected at execution time.
 
 References:
-- [Grammar — ASOF JOIN](../../../guides/getting-started.md#561-asof-join)
+- [Grammar](../../../guides/getting-started.md)

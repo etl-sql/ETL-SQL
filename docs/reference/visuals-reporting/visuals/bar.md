@@ -23,24 +23,24 @@ CREATE VISUAL VisualName AS BAR (
 ```
 
 ### Visual Types
-- **BAR** — Vertical column chart (default).
-- **HBAR** — Horizontal bar chart.
+- **BAR** - Vertical column chart (default).
+- **HBAR** - Horizontal bar chart.
 
 ### Mappings
-- **X** — The column containing categories/groups for the X-axis (required).
-- **Y** — The column containing metrics/numeric values for the Y-axis (required).
-- **SERIES** — The column containing series breakdown for multi-series grouping or stacking (optional).
+- **X** - The column containing categories/groups for the X-axis (required).
+- **Y** - The column containing metrics/numeric values for the Y-axis (required).
+- **SERIES** - The column containing series breakdown for multi-series grouping or stacking (optional).
 
 ### Configuration Options
-- **STACKED = ON\|OFF** — Enables stacked bars instead of grouped columns when SERIES is mapped. Default is `OFF`.
-- **LEGEND = ON\|OFF** — Toggles visual series legend. Default is `ON`.
-- **LABEL_POSITION = INSIDE\|OUTSIDE\|NONE** — Toggles and positions data labels. Default is `NONE`.
-- **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** — Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
+- **STACKED = ON\|OFF** - Enables stacked bars instead of grouped columns when SERIES is mapped. Default is `OFF`.
+- **LEGEND = ON\|OFF** - Toggles visual series legend. Default is `ON`.
+- **LABEL_POSITION = INSIDE\|OUTSIDE\|NONE** - Toggles and positions data labels. Default is `NONE`.
+- **AXIS_SORT = ASC\|DESC\|SOURCE\|VALUE\|VALUE_DESC** - Category sorting logic. Use `SOURCE` to preserve the query order, or `VALUE_DESC` for ranked bars. Default is `ASC`.
 
 ### Interactive Actions
-- **ON_CLICK = DRILL_IN(HIERARCHY = (...))** — Enables hierarchical drilling (e.g. Year → Quarter → Month) on click with breadcrumb navigation.
-- **ON_CLICK = SET_PARAMETER(...)** — Binds category selection to updates of a query parameter.
-- **ON_CLICK = RUN_SCRIPT(...)** — Runs an external script with parameters.
+- **ON_CLICK = DRILL_IN(HIERARCHY = (...))** - Enables hierarchical drilling, such as Year to Quarter to Month, on click with breadcrumb navigation.
+- **ON_CLICK = SET_PARAMETER(...)** - Binds category selection to updates of a query parameter.
+- **ON_CLICK = RUN_SCRIPT(...)** - Runs an external script with parameters.
 
 ### Examples
 

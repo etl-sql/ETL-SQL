@@ -30,9 +30,9 @@ This document is the authoritative dictionary for all built-in types, casting be
 | `DATETIMEOFFSET` | `DATETIME2` with time zone offset |
 | `TIMESTAMP` | Alias for `DATETIME` |
 
-**System constants** — use anywhere a datetime is expected:
-- `SYSDATE` / `CURRENT_TIMESTAMP` — bare identifiers (no parentheses)
-- `GETDATE()` / `NOW()` — functions (parentheses **required**)
+**System constants:** use anywhere a datetime is expected:
+- `SYSDATE` / `CURRENT_TIMESTAMP` are bare identifiers (no parentheses).
+- `GETDATE()` / `NOW()` are functions, so parentheses are required.
 
 **Date arithmetic:**
 ```sql
@@ -83,7 +83,7 @@ Casts to string yield Base64 or hex (e.g. `0x48656C6C6F`).
 | `PATH` | File system path; normalizes separators cross-platform |
 | `ENCRYPTED` | Semantic type for `ENC:`-prefixed secrets |
 | `UNIQUEIDENTIFIER` / `UUID` / `GUID` | 128-bit globally unique identifier |
-| `ANY` | Default when no type is declared — inferred from the assigned value |
+| `ANY` | Default when no type is declared; inferred from the assigned value |
 
 ---
 
@@ -157,7 +157,7 @@ SELECT CAST('[0.1, 0.2]' AS VECTOR)    AS v;
 | :--- | :--- | :--- |
 | `CONCAT` | `CONCAT(s1, s2, ...)` | All arguments joined |
 | `CONCAT_WS` | `CONCAT_WS(sep, s1, s2, ...)` | Arguments joined with separator; nulls skipped |
-| `STRING_AGG` | `STRING_AGG(col, sep) [WITHIN GROUP (ORDER BY col)]` | Aggregate — rows joined into one string |
+| `STRING_AGG` | `STRING_AGG(col, sep) [WITHIN GROUP (ORDER BY col)]` | Aggregate; rows joined into one string |
 | `STRING_SPLIT` | `STRING_SPLIT(str, sep)` | Table-valued: rows of substrings |
 | `SPLIT_PART` | `SPLIT_PART(str, delim, n)` | Nth segment after splitting by delimiter |
 
@@ -190,7 +190,7 @@ SELECT CAST('[0.1, 0.2]' AS VECTOR)    AS v;
 | `TRANSLATE` | `TRANSLATE(str, from, to)` | Characters in `from` replaced by corresponding chars in `to` |
 | `REPLACE` | `REPLACE(str, search, new)` | All occurrences of `search` replaced |
 | `REMOVE_HIDDEN_CHARACTERS` | `REMOVE_HIDDEN_CHARACTERS(str [, char, ...])` | Whitespace-class characters (tab, newline, CR, vertical tab, form feed, NBSP and other Unicode spaces) collapsed to a single standard space, and zero-width characters (zero-width space/joiner, BOM, soft hyphen) stripped. Pass one or more characters to replace **only** those with a space (e.g. `CHAR(13)`, `CHAR(10)`). |
-| `REMOVE_HTML_CHARACTERS` | `REMOVE_HTML_CHARACTERS(str)` | Decodes literal HTML entities (`&nbsp;`, `&mdash;`, `&#8217;`, …), then normalizes typographic/"smart" Unicode to plain ASCII — curly quotes → `"` and `'`, en/em dashes → `-`, ellipsis → `...`, bullet → `*`, NBSP → space — and strips zero-width characters. Fixes invisible mismatches that break equality/joins. |
+| `REMOVE_HTML_CHARACTERS` | `REMOVE_HTML_CHARACTERS(str)` | Decodes literal HTML entities (`&nbsp;`, `&mdash;`, `&#8217;`, etc.), then normalizes typographic/"smart" Unicode to plain ASCII: curly quotes to `"` and `'`, en/em dashes to `-`, ellipsis to `...`, bullet to `*`, and NBSP to space. Also strips zero-width characters. Fixes invisible mismatches that break equality/joins. |
 | `STRING_ESCAPE` | `STRING_ESCAPE(text, type)` | Special chars escaped (e.g. `'json'`) |
 | `LEN` / `LENGTH` | `LEN(str)` | Character count of a string; item count of a list |
 | `CHARACTER_LENGTH` | `CHARACTER_LENGTH(str)` | ANSI-style character count |
@@ -229,9 +229,9 @@ DST rules, connector normalization matrix, precision, and invariant formatting g
 | `GETDATE` / `NOW` / `SYSDATE` | `GETDATE()`, `NOW()`, `SYSDATE()` | Current system date and time (bare identifiers or function calls) |
 | `DATEADD` | `DATEADD(part, n, date)` | Date with N intervals added. Parts: `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `MILLISECOND` |
 | `DATEDIFF` | `DATEDIFF(part, start, end)` | Count of part boundaries crossed between two dates |
-| `DATEPART` | `DATEPART(part, date)` | Integer value of the date part (e.g. month → 4) |
+| `DATEPART` | `DATEPART(part, date)` | Integer value of the date part, such as month `4` |
 | `DATE_PART` | `DATE_PART(part, date)` | Integer value of the date part (alias for `DATEPART`) |
-| `DATENAME` | `DATENAME(part, date)` | String name of the date part (e.g. month → `'April'`) |
+| `DATENAME` | `DATENAME(part, date)` | String name of the date part, such as month `'April'` |
 | `EXTRACT` | `EXTRACT(field FROM source)` | ANSI-style part extraction (`YEAR`, `MONTH`, `DAY`, `DOW`, `DOY`, `HOUR`, `MINUTE`, `SECOND`, `EPOCH`, `QUARTER`, `WEEK`, `ISODOW`, `DECADE`, `CENTURY`, `MILLENNIUM`) |
 | `YEAR` | `YEAR(date)` | Integer year |
 | `MONTH` | `MONTH(date)` | Integer month (1–12) |
@@ -323,13 +323,13 @@ SELECT ATAN2(1.0, 1.0) AS Angle45;   -- ~0.785 radians (π/4)
 
 | Function | Signature | Returns / Return Type |
 | :--- | :--- | :--- |
-| `BITAND` | `BITAND(a, b)` | `BIGINT` — bitwise AND of two integers |
-| `BITOR` | `BITOR(a, b)` | `BIGINT` — bitwise OR of two integers |
-| `BITXOR` | `BITXOR(a, b)` | `BIGINT` — bitwise XOR of two integers |
-| `BITNOT` | `BITNOT(a)` | `BIGINT` — bitwise NOT of an integer |
-| `BITSHIFTLEFT` | `BITSHIFTLEFT(a, n)` | `BIGINT` — bitwise left shift of `a` by `n` bits |
-| `BITSHIFTRIGHT` | `BITSHIFTRIGHT(a, n)` | `BIGINT` — bitwise right shift of `a` by `n` bits |
-| `BIT_COUNT` | `BIT_COUNT(a)` | `BIGINT` — popcount (count of set bits) in the integer |
+| `BITAND` | `BITAND(a, b)` | `BIGINT`; bitwise AND of two integers |
+| `BITOR` | `BITOR(a, b)` | `BIGINT`; bitwise OR of two integers |
+| `BITXOR` | `BITXOR(a, b)` | `BIGINT`; bitwise XOR of two integers |
+| `BITNOT` | `BITNOT(a)` | `BIGINT`; bitwise NOT of an integer |
+| `BITSHIFTLEFT` | `BITSHIFTLEFT(a, n)` | `BIGINT`; bitwise left shift of `a` by `n` bits |
+| `BITSHIFTRIGHT` | `BITSHIFTRIGHT(a, n)` | `BIGINT`; bitwise right shift of `a` by `n` bits |
+| `BIT_COUNT` | `BIT_COUNT(a)` | `BIGINT`; popcount (count of set bits) in the integer |
 
 *Example:*
 ```sql
@@ -389,9 +389,9 @@ FROM #products;
 | `NULLIF` | `NULLIF(v1, v2)` | `NULL` if `v1 = v2`, else `v1` |
 | `IS_NULL` | `IS_NULL(expr)` | `TRUE` if expression is null |
 | `IS_NOT_NULL` | `IS_NOT_NULL(expr)` | `TRUE` if expression is not null |
-| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional — compiles to `CASE WHEN` (short-circuits, pushes down as CASE) |
+| `IIF` | `IIF(cond, true_val, false_val)` | Inline conditional; compiles to `CASE WHEN` (short-circuits, pushes down as CASE) |
 | `DECODE` | `DECODE(val, s1, r1, ..., default)` | Oracle-style `CASE` shorthand |
-| `CASE...WHEN...END` | — | Sequential conditional evaluation |
+| `CASE...WHEN...END` | n/a | Sequential conditional evaluation |
 
 *Example:*
 ```sql
@@ -410,7 +410,7 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | :--- | :--- |
 | `NEWID()` / `NEWSEQUENTIALID()` | New UUID v7 (time-ordered unique identifier) |
 | `GETDATE()` / `NOW()` | Current system date and time |
-| `SYSDATE` / `CURRENT_TIMESTAMP` | Current date/time (bare identifiers — no parentheses) |
+| `SYSDATE` / `CURRENT_TIMESTAMP` | Current date/time (bare identifiers; no parentheses) |
 | `ERROR_MESSAGE()` | Error message string inside `CATCH` block |
 | `ERROR_NUMBER()` | Error number/code inside `CATCH` block |
 | `ERROR_SEVERITY()` | Error severity level inside `CATCH` block |
@@ -514,7 +514,7 @@ SELECT * FROM #roles WHERE RoleCode IN (SELECT RoleName FROM USER_ROLES());
 
 Supported algorithms for `HASHBYTES`: `MD5`, `SHA1`, `SHA256` / `SHA2_256`, `SHA512` / `SHA2_512`
 
-*Change-data-capture (CDC) pattern — detect changed rows efficiently:*
+*Change-data-capture (CDC) pattern for detecting changed rows efficiently:*
 ```sql
 -- Source has changed rows if the checksum differs from last load
 SELECT
@@ -563,8 +563,8 @@ END
 | :--- | :--- | :--- |
 | `JSON_VALUE` / `JSON_EXTRACT` | `JSON_VALUE(json, path)` | Scalar extracted value (alias: `JSON_EXTRACT`) |
 | `JSON_QUERY` | `JSON_QUERY(json, path)` | JSON object/array fragment |
-| `JSON_GET` | `JSON_GET(json, key_or_index)` — or `json -> key` | One access step as JSON (chainable); the `->` operator |
-| `JSON_GET_TEXT` | `JSON_GET_TEXT(json, key_or_index)` — or `json ->> key` | One access step as text (strings unquoted); the `->>` operator |
+| `JSON_GET` | `JSON_GET(json, key_or_index)` or `json -> key` | One access step as JSON (chainable); the `->` operator |
+| `JSON_GET_TEXT` | `JSON_GET_TEXT(json, key_or_index)` or `json ->> key` | One access step as text (strings unquoted); the `->>` operator |
 | `JSON_MODIFY` | `JSON_MODIFY(json, path, val)` | Updated JSON string |
 | `ISJSON` | `ISJSON(str)` | `1` if valid JSON |
 | `JSON_EXISTS` | `JSON_EXISTS(json, path)` | `1` if path exists |
@@ -624,8 +624,8 @@ When no frame is specified, aggregate window functions default to the full parti
 | Function | Returns |
 | :--- | :--- |
 | `ROW_NUMBER()` | Unique sequential integer per partition, starting at 1 |
-| `RANK()` | Rank with gaps on ties (1, 1, 3, 4, …) — requires `ORDER BY` |
-| `DENSE_RANK()` | Rank without gaps on ties (1, 1, 2, 3, …) — requires `ORDER BY` |
+| `RANK()` | Rank with gaps on ties, such as 1, 1, 3, 4; requires `ORDER BY` |
+| `DENSE_RANK()` | Rank without gaps on ties, such as 1, 1, 2, 3; requires `ORDER BY` |
 | `NTILE(n)` | Bucket number 1–n distributed as evenly as possible |
 | `PERCENT_RANK()` | Relative rank as (rank − 1) / (N − 1), range 0–1 |
 | `CUME_DIST()` | Cumulative distribution as peer_end_position / N, range (0, 1] |
@@ -672,7 +672,7 @@ All standard aggregates support an `OVER` clause. When used as window functions 
 
 | Frame type | Behavior |
 | :--- | :--- |
-| `ROWS BETWEEN n PRECEDING AND m FOLLOWING` | Physical row offsets — always fully supported |
+| `ROWS BETWEEN n PRECEDING AND m FOLLOWING` | Physical row offsets; always fully supported |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | Cumulative from partition start to current row |
 | `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | Extends to all peers of the current row (logical peers share the same `ORDER BY` value) |
 | Other `RANGE` bounds | Parsed; treated as full partition (true range-based peer comparison is not implemented) |
@@ -708,7 +708,7 @@ FROM #sales;
 
 ### 13.8 Large-Scale Window Processing (ExternalWindowEngine)
 
-When the number of rows in a `SELECT` result exceeds `WINDOW_SPILL_THRESHOLD` (default 100,000), the engine automatically switches from in-memory processing to the `ExternalWindowEngine`. This is transparent — query syntax does not change.
+When the number of rows in a `SELECT` result exceeds `WINDOW_SPILL_THRESHOLD` (default 100,000), the engine automatically switches from in-memory processing to the `ExternalWindowEngine`. This is transparent; query syntax does not change.
 
 **How it works:**
 
@@ -731,8 +731,8 @@ Spill metrics are available after a query:
 
 ```sql
 SHOW VARIABLES;
--- @@TOTAL_SPILLED_BYTES  — bytes written to disk
--- @@PARTITIONS_COUNT     — number of partition files created
+-- @@TOTAL_SPILLED_BYTES: bytes written to disk
+-- @@PARTITIONS_COUNT: number of partition files created
 ```
 
 ---
@@ -827,16 +827,16 @@ PRINT GET_TAG_VALUE('#TaggedUsers', 'UserId', 'd');  -- 'Internal user ID'
 
 Fuzzy matching functions enable comparison and normalization of strings that may differ due to typos, abbreviations, formatting variation, or phonetic spelling differences. Apply `NORMALIZE` first to eliminate surface variation, then use `SIMILARITY` or a phonetic function to score candidates.
 
-### 16.1 `NORMALIZE` — Domain-Aware Preprocessing
+### 16.1 `NORMALIZE` Domain-Aware Preprocessing
 
 Preprocesses a string to eliminate surface variation before similarity scoring. Applying `NORMALIZE` before `SIMILARITY` typically raises match rates by 5–15 percentage points at the same threshold.
 
 | Syntax | What it does |
 | :--- | :--- |
 | `NORMALIZE(s)` | Base: lowercase, trim, collapse whitespace, Unicode NFC, strip control characters |
-| `NORMALIZE(s, 'COMPANY')` | Remove legal suffixes (LLC, Inc, Corp, Ltd…), expand `&` → `and`, `Mfg` → `Manufacturing`, strip leading articles (The/A/An), strip punctuation |
-| `NORMALIZE(s, 'PERSON')` | Remove titles and generational suffixes (Mr, Mrs, Dr, Jr, Sr, MD, PhD…), normalize hyphens in hyphenated names |
-| `NORMALIZE(s, 'ADDRESS')` | Expand directional abbreviations (N → North, NE → Northeast…), expand street type abbreviations (St → Street, Ave → Avenue, Blvd → Boulevard…), remove unit designators (Apt, Ste, #) |
+| `NORMALIZE(s, 'COMPANY')` | Remove legal suffixes (LLC, Inc, Corp, Ltd, etc.), expand `&` to `and`, expand `Mfg` to `Manufacturing`, strip leading articles (The/A/An), strip punctuation |
+| `NORMALIZE(s, 'PERSON')` | Remove titles and generational suffixes (Mr, Mrs, Dr, Jr, Sr, MD, PhD, etc.), normalize hyphens in hyphenated names |
+| `NORMALIZE(s, 'ADDRESS')` | Expand directional abbreviations such as `N` to `North` and `NE` to `Northeast`; expand street type abbreviations such as `St` to `Street`, `Ave` to `Avenue`, and `Blvd` to `Boulevard`; remove unit designators (Apt, Ste, #) |
 | `NORMALIZE(s, 'PHONE')` | Strip all non-digit characters; remove leading country code `1` if result is 11 digits |
 | `NORMALIZE(s, 'EMAIL')` | Lowercase and trim only |
 
@@ -857,14 +857,14 @@ WHERE SIMILARITY(
 SELECT id, NORMALIZE(name, 'COMPANY') AS norm INTO #norm_ref FROM #reference;
 ```
 
-### 16.2 `SIMILARITY` — Normalized Similarity Score
+### 16.2 `SIMILARITY` Normalized Similarity Score
 
-Returns a `DECIMAL` in `[0.0, 1.0]` — `1.0` means identical, `0.0` means completely unlike.
+Returns a `DECIMAL` in `[0.0, 1.0]`; `1.0` means identical, and `0.0` means completely unlike.
 
 ```sql
 SIMILARITY(a, b)                         -- default algorithm: JAROWINKLER
 SIMILARITY(a, b, 'JAROWINKLER')          -- Jaro-Winkler (best for short strings, names)
-SIMILARITY(a, b, 'LEVENSHTEIN')          -- 1 − (edit_distance / max_length)
+SIMILARITY(a, b, 'LEVENSHTEIN')          -- 1 - (edit_distance / max_length)
 SIMILARITY(a, b, 'TRIGRAM')              -- Sørensen-Dice on character trigrams (general purpose)
 SIMILARITY(a, b, 'JACCARD')             -- word-token Jaccard: |intersect| / |union|
 SIMILARITY(a, b, 'TOKENSORT')           -- Jaro-Winkler after sorting tokens (handles name reversal)
@@ -878,16 +878,16 @@ SIMILARITY(a, b, 'TOKENSORT')           -- Jaro-Winkler after sorting tokens (ha
 | `JACCARD` | Strings where word presence matters more than order | Single-word strings |
 | `TOKENSORT` | Names where first/last may be swapped | Strings that aren't name-like |
 
-### 16.3 `LEVENSHTEIN` — Raw Edit Distance
+### 16.3 `LEVENSHTEIN` Raw Edit Distance
 
-Returns a whole-number `DECIMAL` — the minimum number of single-character insertions, deletions, or substitutions needed to transform `a` into `b`.
+Returns a whole-number `DECIMAL`: the minimum number of single-character insertions, deletions, or substitutions needed to transform `a` into `b`.
 
 ```sql
-LEVENSHTEIN('kitten', 'sitting')  -- → 3
-LEVENSHTEIN('Smith', 'Smith')     -- → 0
+SELECT LEVENSHTEIN('kitten', 'sitting') AS edit_distance;
+SELECT LEVENSHTEIN('Smith', 'Smith') AS edit_distance;
 ```
 
-Use `LEVENSHTEIN` directly when you need the raw distance (e.g., to enforce a maximum number of changes). Use `SIMILARITY(a, b, 'LEVENSHTEIN')` when you need a normalized 0–1 score.
+Use `LEVENSHTEIN` directly when you need the raw distance (e.g., to enforce a maximum number of changes). Use `SIMILARITY(a, b, 'LEVENSHTEIN')` when you need a normalized 0-1 score.
 
 ### 16.4 Phonetic Encoding Functions
 
@@ -899,14 +899,15 @@ Phonetic functions encode pronunciation rather than spelling. They enable fast e
 | `METAPHONE` | `METAPHONE(s)` | Variable-length code | English; more accurate than Soundex |
 | `DMETAPHONE` | `DMETAPHONE(s)` | Primary code | Multi-origin names; handles European patterns |
 | `DMETAPHONE_ALT` | `DMETAPHONE_ALT(s)` | Alternate code | Join on either primary or alternate for better recall |
-| `DIFFERENCE` | `DIFFERENCE(s1, s2)` | Score `0`–`4` | Quick Soundex similarity rank between two strings (`4` = identical codes) |
+| `DIFFERENCE` | `DIFFERENCE(s1, s2)` | Score `0` to `4` | Quick Soundex similarity rank between two strings (`4` = identical codes) |
 
 ```sql
 -- Fast phonetic blocking before expensive SIMILARITY scoring
 SELECT a.*, b.*, SIMILARITY(a.name, b.name) AS score
 INTO   #candidates
 FROM   #dirty a
-JOIN   #reference b AS METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
+JOIN   #reference b
+  ON   METAPHONE(a.name) = METAPHONE(b.name);
 
 SELECT *, ROW_NUMBER() OVER (PARTITION BY a_id ORDER BY score DESC) AS rank
 FROM   #candidates
@@ -916,21 +917,21 @@ WHERE  score > 0.75;
 SELECT a.*, b.*
 FROM   #dirty a
 JOIN   #reference b
-    AS DMETAPHONE(a.name) = DMETAPHONE(b.name)
+    ON DMETAPHONE(a.name) = DMETAPHONE(b.name)
     OR DMETAPHONE_ALT(a.name) = DMETAPHONE(b.name)
     OR DMETAPHONE(a.name) = DMETAPHONE_ALT(b.name);
 ```
 
-### 16.5 `NGRAMS` / `NGRAM_TOKENS` — Blocking Utilities
+### 16.5 `NGRAMS` / `NGRAM_TOKENS` Blocking Utilities
 
 Table-valued functions that return character n-grams. Used with `CROSS APPLY` to build inverted-index blocking tables that dramatically reduce the candidate set before scoring.
 
 ```sql
-NGRAMS(s, n)        -- Returns a table of n-character grams. NGRAMS('hello', 3) → 'hel', 'ell', 'llo'
-NGRAM_TOKENS(s)     -- Convenience: 3-grams, space-padded, lowercased. NGRAM_TOKENS('cat') → ' ca', 'cat', 'at '
+SELECT Value FROM NGRAMS('hello', 3);
+SELECT Value FROM NGRAM_TOKENS('cat');
 ```
 
-Both return a one-column table with column name `Value`.
+Both return a one-column table with column name `Value`. For example, `NGRAMS('hello', 3)` returns `hel`, `ell`, and `llo`; `NGRAM_TOKENS('cat')` returns ` ca`, `cat`, and `at `.
 
 ```sql
 -- Build a trigram inverted index on the reference side (once per session)
@@ -956,7 +957,7 @@ WHERE  SIMILARITY(d.name, r.name) > 0.80
 ORDER  BY c.dirty_id, score DESC;
 ```
 
-> **Performance note:** A raw `CROSS JOIN` + `WHERE SIMILARITY(...) > threshold` is O(n × m). With 10 k unstructured records × 100 k reference records that is 1 billion comparisons. The phonetic blocking pattern (§16.4) or the trigram inverted-index pattern above reduce that to tens or hundreds of candidates per row. `FUZZY JOIN` (see §5.4.2 of Grammar.md) automates this blocking — use it when the pipeline fits; use the manual pattern above when you need finer control over blocking strategy.
+> **Performance note:** A raw `CROSS JOIN` + `WHERE SIMILARITY(...) > threshold` is O(n * m). With 10 k unstructured records * 100 k reference records, that is 1 billion comparisons. The phonetic blocking pattern in section 16.4 or the trigram inverted-index pattern above reduce that to tens or hundreds of candidates per row. `FUZZY JOIN` automates this blocking when the pipeline fits; use the manual pattern above when you need finer control over blocking strategy.
 
 ---
 

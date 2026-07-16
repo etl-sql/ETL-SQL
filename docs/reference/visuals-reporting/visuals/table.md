@@ -1,6 +1,6 @@
 # TABLE
 
-A paginated, sortable data table. Columns are driven by the `SOURCE` query — every column in the `SELECT` becomes a table column by default. Use `MAPPINGS` to rename, reorder, restrict, and format columns.
+A paginated, sortable data table. Columns are driven by the `SOURCE` query. Every column in the `SELECT` becomes a table column by default. Use `MAPPINGS` to rename, reorder, restrict, and format columns.
 
 ## Syntax
 
@@ -29,7 +29,7 @@ CREATE VISUAL RecentOrders AS TABLE (
 - **`column_name ALIGN 'right'`**: Set column text alignment (`left`|`center`|`right`).
 - **`column_name DATA_BAR`**: Show a proportional fill bar behind cell value.
 - **`column_name DATA_BAR COLOR '#4472C4'`**: Data bar with custom color.
-- **`column_name COLOR_SCALE FROM '#FF0000' TO '#00FF00'`**: Gradient cell background (min→max).
+- **`column_name COLOR_SCALE FROM '#FF0000' TO '#00FF00'`**: Gradient cell background from minimum to maximum.
 - **`column_name IMAGE [WIDTH n]`**: Render cell value as an `<img>` tag (URL column).
 - **`column_name HYPERLINK [LABEL 'text']`**: Render cell value as a clickable link.
 - **`SPARKLINE(col1, col2, ...) [LINE|BAR|AREA] [AS 'alias']`**: Mini trend chart across columns.
@@ -51,7 +51,7 @@ CREATE VISUAL RecentOrders AS TABLE (
 
 ## Sorting
 
-Column headers are clickable — click to sort ascending, click again to sort descending.
+Column headers are clickable. Click to sort ascending, and click again to sort descending.
 
 ## Conditional Row Formatting
 

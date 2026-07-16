@@ -1,6 +1,6 @@
 # LINEAGE
 
-Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE operations in a script. Records how each output column was derived — which source tables and columns it came from, what transformation was applied, and any governance tags attached along the way.
+Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE operations in a script. Records how each output column was derived, including which source tables and columns it came from, what transformation was applied, and any governance tags attached along the way.
 
 ## Viewing Lineage
 
@@ -28,7 +28,7 @@ SHOW LINEAGE INTO #lineage;
 | Dataset | `dataset:&name` | `[Dataset: ...]` | Cylinder `[()]` |
 | Report visual | `report:Name` | `[Visual: ...]` | Rounded rect `()` |
 
-This enables end-to-end tracing: `CRM.dbo.Orders → #orders → dataset:&daily_sales → report:SalesChart`.
+This enables end-to-end tracing across nodes such as `CRM.dbo.Orders`, `#orders`, `dataset:&daily_sales`, and `report:SalesChart`.
 
 ## Querying the LINEAGE Virtual Table
 
@@ -74,13 +74,13 @@ WHERE TransformationKind = 'Aggregation';
 
 | Value | Meaning |
 | :--- | :--- |
-| `PassThrough` | Direct column reference — no transformation |
+| `PassThrough` | Direct column reference with no transformation |
 | `Literal` | Constant value |
 | `Cast` | CAST, CONVERT, TRY_CAST, TO_DATE, etc. |
 | `FunctionCall` | Any scalar function |
 | `Aggregation` | SUM, COUNT, AVG, MIN, MAX, STRING_AGG, etc. |
 | `WindowFunction` | ROW_NUMBER, RANK, LAG, LEAD, etc. (OVER clause) |
-| `CaseExpression` | CASE WHEN … END |
+| `CaseExpression` | CASE WHEN ... END |
 | `Conditional` | COALESCE, ISNULL, IIF, NVL, NULLIF, etc. |
 | `Arithmetic` | +, -, *, /, % operators |
 | `StringOperation` | String concatenation (+ or \|\|) |
@@ -97,7 +97,7 @@ Tags are attached to columns and tables using inline SQL comments with the `/* @
 
 | Tag | Type | Values | Purpose |
 | :--- | :--- | :--- | :--- |
-| `@pii` | boolean | `true` / `false` | Personal Identifiable Information — inherits as `true` if any source is `true` |
+| `@pii` | boolean | `true` / `false` | Personal Identifiable Information; inherits as `true` if any source is `true` |
 | `@phi` | boolean | `true` / `false` | Protected Health Information (HIPAA) |
 | `@pci` | boolean | `true` / `false` | Payment Card data (PCI-DSS) |
 | `@sensitive` | boolean | `true` / `false` | Sensitive data requiring access controls |
@@ -155,10 +155,10 @@ FROM #orders;
 
 ### Tag Inheritance Rules
 
-1. **Column-level overrides table-level** — column tags win when both exist.
-2. **@pii: true wins** — if any upstream column carries `@pii: true`, the derived column inherits `true` regardless of what the expression sets.
-3. **@d is not overwritten** — if a column has its own `@d` tag, inherited descriptions are stored in `DerivedFromDescriptions` instead.
-4. **Tags accumulate through chains** — tags on `#raw.email` flow to `#cleaned.email` which flows to `#report.email`.
+1. **Column-level overrides table-level**: column tags win when both exist.
+2. **@pii: true wins**: if any upstream column carries `@pii: true`, the derived column inherits `true` regardless of what the expression sets.
+3. **@d is not overwritten**: if a column has its own `@d` tag, inherited descriptions are stored in `DerivedFromDescriptions` instead.
+4. **Tags accumulate through chains**: tags on `#raw.email` flow to `#cleaned.email` which flows to `#report.email`.
 
 ## Script-Level Metadata
 
@@ -180,7 +180,7 @@ SELECT
 INTO #orders_raw
 FROM CRM.dbo.Orders /* @source_system: Salesforce; @load_pattern: incremental */;
 
--- Transformation step — pii inherited automatically
+-- Transformation step; pii inherited automatically
 SELECT
     customer_id,
     SUM(amount) /* @d: Monthly revenue per customer; @unit: USD */ AS monthly_revenue,
@@ -207,7 +207,7 @@ WHERE TargetTable = '#customer_summary'
 
 ## LINEAGE_TAGS Virtual Table
 
-`LINEAGE_TAGS` exposes every tag as a flat row — one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of the `LINEAGE` table.
+`LINEAGE_TAGS` exposes every tag as a flat row, one row per tag per lineage entry. This eliminates the need for `JSON_VALUE` gymnastics on the `Metadata` column of the `LINEAGE` table.
 
 ```sql
 -- Find all PII columns in the session
@@ -251,7 +251,7 @@ WHERE l.TargetColumn IS NOT NULL
 
 ## HAS_TAG() Function
 
-`HAS_TAG(table, column, tag_name [, expected_value])` — predicate that returns 1 if the tag exists (optionally matching a specific value), 0 otherwise. Useful in WHERE clauses against the LINEAGE table.
+`HAS_TAG(table, column, tag_name [, expected_value])` is a predicate that returns 1 if the tag exists, optionally matching a specific value, and 0 otherwise. It is useful in WHERE clauses against the LINEAGE table.
 
 ```sql
 -- Filter lineage to PII-tagged columns

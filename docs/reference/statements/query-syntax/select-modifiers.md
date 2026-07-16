@@ -2,7 +2,7 @@
 Modern, DuckDB/Snowflake-style ergonomics for the SELECT statement.
 
 ## Star modifiers
-Adjust a `*` projection inline. Modifiers apply in the order `EXCLUDE` → `REPLACE` → `RENAME`.
+Adjust a `*` projection inline. Modifiers apply in this order: `EXCLUDE`, then `REPLACE`, then `RENAME`.
 
 ```sql
 -- Drop columns from the wildcard

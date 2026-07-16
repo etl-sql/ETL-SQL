@@ -27,6 +27,7 @@ Completed in the first cleanup pass:
 - Verified no exact duplicate markdown files remained after the pass.
 - Verified no mojibake replacement artifacts remained under `docs/` after the latest pass.
 - Normalized encoding artifacts in `docs/reference/statements/grammar.md`.
+- Normalized old typography markers in `docs/reference/functions/standard-library.md` plus representative statement and visual reference pages.
 
 ## P0: Navigation And Entry Points
 

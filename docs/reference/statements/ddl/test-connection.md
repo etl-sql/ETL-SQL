@@ -1,5 +1,5 @@
 # TEST CONNECTION
-Actively diagnoses a catalog connection and prints a plain-English troubleshooting report. Layers are checked in order — DNS resolution → TCP reachability → TLS handshake → connector-specific credential authentication — and the report stops at the first failure with a specific remedy.
+Actively diagnoses a catalog connection and prints a plain-English troubleshooting report. Layers are checked in order: DNS resolution, TCP reachability, TLS handshake, and connector-specific credential authentication. The report stops at the first failure with a specific remedy.
 
 ## Syntax
 ```sql

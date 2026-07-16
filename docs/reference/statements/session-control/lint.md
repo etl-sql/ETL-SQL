@@ -20,16 +20,16 @@ LINT this;
 
 ## Example output
 ```
-SEC-1  Line 12: Plaintext password detected in CREATE CONNECTION — use ENC: or a SENSITIVE variable.
-PERF-3 Line 34: JOIN on #orders.CustomerId with no index — consider CREATE INDEX.
+SEC-1  Line 12: Plaintext password detected in CREATE CONNECTION. Use ENC: or a SENSITIVE variable.
+PERF-3 Line 34: JOIN on #orders.CustomerId with no index. Consider CREATE INDEX.
 STY-2  Line 8:  Variable @Temp declared but never used.
-LOG-1  Line 55: Output table #results has no traceable source — add a lineage comment or MERGE source.
+LOG-1  Line 55: Output table #results has no traceable source. Add a lineage comment or MERGE source.
 ```
 
 ## Notes
 - Lint runs automatically in the TUI editor (side panel) and VS Code extension (via LSP diagnostics) as you type.
 - `LINT 'file'` exits with a non-zero code when any SEC- or PERF- violations are found, making it suitable for CI gates.
-- Rule severity can be configured per-rule in `appsettings.json → Lint`.
+- Rule severity can be configured per-rule in the `Lint` section of `appsettings.json`.
 - See: ASSERT, TRY
 
 References:
