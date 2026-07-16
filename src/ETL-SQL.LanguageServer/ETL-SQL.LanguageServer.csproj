@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Infrastructure.Docker\ETL-SQL.Infrastructure.Docker.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />

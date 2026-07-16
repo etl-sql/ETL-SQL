@@ -133,6 +133,9 @@ work by priority.
 - [ ] **P1 — Restore `ETL-SQL.Core` as a contracts/domain layer.** Move Testcontainers out of the runtime
       project first, then move Docker, SQLite persistence, native SQLite, and file-sink implementations
       into infrastructure projects behind Core interfaces.
+      - [x] Move Docker/Testcontainers runtime implementation into `ETL-SQL.Infrastructure.Docker`.
+      - [ ] Move SQLite session/governance persistence and native SQLite packages behind infrastructure interfaces.
+      - [ ] Move file-sink implementations behind infrastructure interfaces.
 - [x] **P1 — Correct the Engine dependency direction.** Remove Engine dependencies on Reporting,
       presentation packages such as `Spectre.Console`, and other upper layers; update implementation or
       boundary documentation where Analysis integration is intentionally part of execution.

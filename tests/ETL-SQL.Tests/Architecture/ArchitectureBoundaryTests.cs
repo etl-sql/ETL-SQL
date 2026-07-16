@@ -37,6 +37,7 @@ public sealed class ArchitectureBoundaryTests
         ["ReportRuntime"] = 2,
         ["ReportPortal.Data"] = 2,
         ["Connectors"] = 3,
+        ["Infrastructure.Docker"] = 3,
         ["Orchestrator"] = 3,
         ["ReportHosting"] = 3,
         ["ReportPortal.Migrations.Postgres"] = 3,
@@ -69,12 +70,6 @@ public sealed class ArchitectureBoundaryTests
     // permitted; resolving one requires removing its entry here.
     private static readonly HashSet<(string Project, string Package)> KnownBannedPackages =
     [
-        ("Core", "Docker.DotNet.Enhanced"),
-        ("Core", "Testcontainers"),
-        ("Core", "Testcontainers.MsSql"),
-        ("Core", "Testcontainers.PostgreSql"),
-        ("Core", "Testcontainers.Oracle"),
-        ("Core", "Testcontainers.MySql"),
         ("Core", "Microsoft.Data.Sqlite"),
         ("Core", "SQLitePCLRaw.bundle_e_sqlite3"),
     ];

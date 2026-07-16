@@ -5,7 +5,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Docker.DotNet.Enhanced" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
@@ -16,11 +15,6 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="System.Linq.Async" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
-    <PackageReference Include="Testcontainers" />
-    <PackageReference Include="Testcontainers.MsSql" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
-    <PackageReference Include="Testcontainers.Oracle" />
-    <PackageReference Include="Testcontainers.MySql" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
   </ItemGroup>

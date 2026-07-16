@@ -340,7 +340,7 @@ public class DockerContainerManager : IDockerManager
 
     public ValueTask DisposeAsync()
     {
-        // Do not automatically close containers! 
+        // Do not automatically close containers!
         // We want them to persist across multiple "Run" commands in the same session.
         return ValueTask.CompletedTask;
     }

@@ -35,6 +35,7 @@
     <ProjectReference Include="..\..\src\ETL-SQL.App\ETL-SQL.App.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.Infrastructure.Docker\ETL-SQL.Infrastructure.Docker.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
