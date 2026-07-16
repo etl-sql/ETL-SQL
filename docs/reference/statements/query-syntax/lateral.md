@@ -1,5 +1,5 @@
 # LATERAL
-The ANSI/DuckDB/PostgreSQL spelling of `CROSS APPLY` / `OUTER APPLY`. The right-hand subquery is **correlated** — it may reference columns from the tables to its left — and is evaluated once per left row, like a relational for-each.
+The ANSI/DuckDB/PostgreSQL spelling of `CROSS APPLY` / `OUTER APPLY`. The right-hand subquery is **correlated**: it may reference columns from the tables to its left and is evaluated once per left row, like a relational for-each.
 
 ## Syntax
 ```sql
@@ -35,4 +35,4 @@ LEFT JOIN LATERAL (
 - `LATERAL` is only valid with `[INNER] JOIN`, `LEFT JOIN`, or `CROSS JOIN`.
 
 References:
-- [Grammar — CROSS APPLY / OUTER APPLY (and LATERAL)](../../../guides/getting-started.md#56-cross-apply--outer-apply-and-lateral)
+- [Grammar](../../../guides/getting-started.md)

@@ -1,5 +1,5 @@
 # MATCH_RECOGNIZE
-Identifies sequences of rows that match a pattern — similar to a regex applied to ordered result sets.
+Identifies sequences of rows that match a pattern, similar to a regex applied to ordered result sets.
 
 ## Syntax
 ```sql
@@ -23,7 +23,7 @@ MATCH_RECOGNIZE (
 |---|---|
 | `PARTITION BY` | Groups rows before pattern matching, like a window OVER clause |
 | `ORDER BY` | Defines the sequence order for pattern evaluation |
-| `MEASURES` | Computes values from the matched rows — available in the output |
+| `MEASURES` | Computes values from the matched rows; available in the output |
 | `PATTERN` | The sequence pattern using variable names defined in DEFINE |
 | `DEFINE` | Conditions each pattern variable must satisfy |
 
@@ -77,7 +77,7 @@ MATCH_RECOGNIZE (
 ## Notes
 - `PREV(col)` and `NEXT(col)` reference adjacent rows within the current pattern match context.
 - Results include one row per matched pattern instance. Unmatched rows are excluded from output.
-- MATCH_RECOGNIZE is processed in-memory on sorted partitions — pre-filter large datasets before matching.
+- MATCH_RECOGNIZE is processed in-memory on sorted partitions. Pre-filter large datasets before matching.
 - PARTITION BY is optional; omit it to match across the entire result set as a single sequence.
 - See: SELECT, WITH, PIVOT
 

@@ -1,7 +1,7 @@
 # CASE
 Conditional value expression; usable anywhere an expression is valid (SELECT, WHERE, SET, etc.).
 
-## Simple form — matches a single value
+## Simple form - matches a single value
 ```sql
 SELECT
   OrderId,
@@ -14,7 +14,7 @@ SELECT
 FROM #orders;
 ```
 
-## Searched form — evaluates boolean conditions
+## Searched form - evaluates boolean conditions
 ```sql
 SELECT
   OrderId,

@@ -15,11 +15,11 @@ WINDOW <window_name> AS (
 [QUALIFY <condition>];
 ```
 
-- **`OVER window_name`** — Uses the named window exactly as defined.
-- **`OVER (window_name ROWS ...)`** — Starts from a named window and adds or overrides frame details.
-- **`PARTITION BY`** — Splits input rows into independent window partitions.
-- **`ORDER BY`** — Orders rows within each partition.
-- **`ROWS`, `RANGE`, `GROUPS`** — Defines the frame used by aggregate window functions.
+- **`OVER window_name`** - Uses the named window exactly as defined.
+- **`OVER (window_name ROWS ...)`** - Starts from a named window and adds or overrides frame details.
+- **`PARTITION BY`** - Splits input rows into independent window partitions.
+- **`ORDER BY`** - Orders rows within each partition.
+- **`ROWS`, `RANGE`, `GROUPS`** - Defines the frame used by aggregate window functions.
 
 ```sql
 SELECT

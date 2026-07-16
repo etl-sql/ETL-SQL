@@ -1,12 +1,18 @@
+# TRANSACTION
+
 Transactions group multiple DML operations into an atomic unit. If any statement fails the entire group can be rolled back.
 
-Syntax:
-  BEGIN TRANSACTION;
-    ...
-  COMMIT;     -- or ROLLBACK;
+## Syntax
 
-Nesting:
-  Transactions can be nested. Each BEGIN TRANSACTION increments @@TRANCOUNT; COMMIT decrements it. ROLLBACK always rolls back the outermost transaction regardless of nesting depth.
+```sql
+BEGIN TRANSACTION;
+  ...
+COMMIT;     -- or ROLLBACK;
+```
+
+## Nesting
+
+Transactions can be nested. Each `BEGIN TRANSACTION` increments `@@TRANCOUNT`; `COMMIT` decrements it. `ROLLBACK` always rolls back the outermost transaction regardless of nesting depth.
 
 ```sql
 BEGIN TRANSACTION;
@@ -18,7 +24,7 @@ BEGIN TRANSACTION;
 
   IF @@ERROR <> 0 BEGIN
     ROLLBACK;
-    THROW 'Transaction failed — rolled back.';
+    THROW 'Transaction failed; rolled back.';
   END;
 
 COMMIT;

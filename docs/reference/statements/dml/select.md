@@ -18,10 +18,10 @@ SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
   [LIMIT n];
 ```
 
-- **`#temp_table`** — In-memory engine working set.
-- **`connection.schema.table`** — Qualified remote table.
-- **`(subquery)`** — Inline subquery.
-- **`WINDOW name AS (...)`** — Reusable named window specification for `OVER name` or `OVER (name ...)`.
+- **`#temp_table`** - In-memory engine working set.
+- **`connection.schema.table`** - Qualified remote table.
+- **`(subquery)`** - Inline subquery.
+- **`WINDOW name AS (...)`** - Reusable named window specification for `OVER name` or `OVER (name ...)`.
 
 ```sql
 SELECT order_id, customer, amount

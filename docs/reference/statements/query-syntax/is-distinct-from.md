@@ -8,8 +8,8 @@ Null-safe comparison operator. Treats `NULL` as an ordinary comparable value ins
 ```
 
 ## Semantics
-- `a IS DISTINCT FROM b` — `TRUE` when the operands differ, **including** when exactly one side is `NULL`; `FALSE` when they are equal or **both** `NULL`.
-- `a IS NOT DISTINCT FROM b` — the logical negation: a null-safe equality (`NULL IS NOT DISTINCT FROM NULL` is `TRUE`).
+- `a IS DISTINCT FROM b` returns `TRUE` when the operands differ, **including** when exactly one side is `NULL`; it returns `FALSE` when they are equal or **both** `NULL`.
+- `a IS NOT DISTINCT FROM b` is the logical negation: a null-safe equality (`NULL IS NOT DISTINCT FROM NULL` is `TRUE`).
 
 | `a` | `b` | `IS DISTINCT FROM` | `IS NOT DISTINCT FROM` |
 | :-- | :-- | :--: | :--: |
@@ -19,7 +19,7 @@ Null-safe comparison operator. Treats `NULL` as an ordinary comparable value ins
 | `NULL` | `NULL` | `FALSE` | `TRUE` |
 
 ## Example
-Detect changed rows where a `NULL` ↔ value transition counts as a change (plain `<>` would drop those rows under three-valued logic):
+Detect changed rows where a `NULL` to value transition counts as a change (plain `<>` would drop those rows under three-valued logic):
 ```sql
 SELECT s.id
 FROM #staging s
@@ -35,7 +35,7 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 ## Notes
 - Uses the same value/type comparison rules as `=` for non-`NULL` operands; only the `NULL` handling differs.
 - Honors the session `CASE_SENSITIVE` setting for string comparison, exactly like `=`.
-- Equivalent rewrites: `a IS DISTINCT FROM b` ≡ `NOT (a IS NOT DISTINCT FROM b)`; `a IS NOT DISTINCT FROM b` ≡ `(a = b) OR (a IS NULL AND b IS NULL)`.
+- Equivalent rewrites: `a IS DISTINCT FROM b` is `NOT (a IS NOT DISTINCT FROM b)`; `a IS NOT DISTINCT FROM b` is `(a = b) OR (a IS NULL AND b IS NULL)`.
 
 References:
 - [Grammar](../../../guides/getting-started.md#is-not-distinct-from)

@@ -28,6 +28,7 @@ Completed in the first cleanup pass:
 - Verified no mojibake replacement artifacts remained under `docs/` after the latest pass.
 - Normalized encoding artifacts in `docs/reference/statements/grammar.md`.
 - Normalized old typography markers in `docs/reference/functions/standard-library.md` plus representative statement and visual reference pages.
+- Normalized marker/style artifacts across visual reference pages and smaller statement reference pages; `docs/reference/statements/grammar.md` remains the dedicated large-file cleanup target.
 
 ## P0: Navigation And Entry Points
 

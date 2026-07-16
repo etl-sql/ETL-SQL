@@ -28,7 +28,7 @@ INTO #orders;
 ## Notes
 - Best practice: place `REQUIRE` as the first statement in a script.
 - Version format is `MAJOR.MINOR.PATCH` (semantic versioning).
-- If the running engine does not satisfy the constraint, execution stops immediately with a version mismatch error — no partial execution occurs.
+- If the running engine does not satisfy the constraint, execution stops immediately with a version mismatch error. No partial execution occurs.
 - See: DECLARE, RUN SCRIPT
 
 References:

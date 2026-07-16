@@ -1,5 +1,5 @@
 # ANALYZE
-Collects statistics about a temp table or result set — row count, column cardinality, null ratios, and min/max values.
+Collects statistics about a temp table or result set, including row count, column cardinality, null ratios, and min/max values.
 
 ## Syntax
 ```sql
@@ -31,10 +31,10 @@ SELECT column_name, distinct_values, null_ratio, min_value, max_value
 
 ## Notes
 - Output columns include: `column_name`, `row_count`, `distinct_values`, `null_ratio`, `min_value`, `max_value`.
-- Statistics are advisory — they inform the query planner but do not change data.
+- Statistics are advisory. They inform the query planner but do not change data.
 - ANALYZE is most useful on large temp tables before complex joins or GROUP BY operations.
 - Run ANALYZE before EXPLAIN to give the optimizer accurate cardinality data.
-- Only applies to `#temp` tables in the current session — ANALYZE cannot be run against remote connector tables directly.
+- Only applies to `#temp` tables in the current session. ANALYZE cannot be run against remote connector tables directly.
 - See: EXPLAIN, SELECT, CREATE
 
 References:

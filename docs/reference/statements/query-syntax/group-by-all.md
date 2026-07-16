@@ -32,4 +32,4 @@ ORDER BY 2 DESC;  -- order by total (the 2nd select item)
 - Positional references cannot be used when the SELECT list contains `*` (the position would be ambiguous); list the columns explicitly instead.
 
 References:
-- [Grammar — Hierarchical Aggregation](../../../guides/getting-started.md#group-by-all)
+- [Grammar](../../../guides/getting-started.md)

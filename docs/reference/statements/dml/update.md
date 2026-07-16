@@ -1,10 +1,15 @@
-UPDATE modifies column values in existing rows. Use WHERE to limit which rows are affected — omitting it updates every row.
+# UPDATE
 
-Syntax:
-  UPDATE <target>
-    SET col1 = val1, col2 = val2, ...
-    [FROM <source>]
-    [WHERE <condition>];
+UPDATE modifies column values in existing rows. Use WHERE to limit which rows are affected; omitting it updates every row.
+
+## Syntax
+
+```sql
+UPDATE <target>
+  SET col1 = val1, col2 = val2, ...
+  [FROM <source>]
+  [WHERE <condition>];
+```
 
 The FROM clause allows joining to another table to derive the new values.
 

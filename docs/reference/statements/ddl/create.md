@@ -3,16 +3,16 @@ Creates connections, temporary tables, indexes, or named sets.
 
 ## Variants
 
-**CREATE CONNECTION** — register a named alias to an external system.
-**CREATE TABLE** — define a persistent or in-session schema.
-**CREATE INDEX** — add an index to a #temp table for join/filter performance.
-**CREATE VIEW** — define a session-scoped query alias.
-**CREATE SETS** — define a named, reusable list of values (see also: USE SETS).
-**CREATE SHARE LINK** — create a portal report share link.
-**CREATE EMBED TOKEN** — create a portal embed token.
-**CREATE SAVED VIEW** — save portal report parameter values.
-**CREATE ALERT** — create a portal report alert.
-**CREATE SUBSCRIPTION** — schedule report delivery through the portal.
+- **CREATE CONNECTION** - register a named alias to an external system.
+- **CREATE TABLE** - define a persistent or in-session schema.
+- **CREATE INDEX** - add an index to a #temp table for join/filter performance.
+- **CREATE VIEW** - define a session-scoped query alias.
+- **CREATE SETS** - define a named, reusable list of values (see also: USE SETS).
+- **CREATE SHARE LINK** - create a portal report share link.
+- **CREATE EMBED TOKEN** - create a portal embed token.
+- **CREATE SAVED VIEW** - save portal report parameter values.
+- **CREATE ALERT** - create a portal report alert.
+- **CREATE SUBSCRIPTION** - schedule report delivery through the portal.
 
 ## Syntax
 ```sql
@@ -52,7 +52,7 @@ END;
 ## Notes
 - Connection types: MSSQL, POSTGRES, MYSQL, SQLITE, ORACLE, FLATFILE, SFTP, S3, SMTP, API, SNOWFLAKE, BIGQUERY, REDSHIFT, ODBC.
 - `ENC:` prefix marks an encrypted credential value decrypted at connect time.
-- `CREATE TABLE` is optional when using `SELECT ... INTO #table` — the schema is inferred automatically.
+- `CREATE TABLE` is optional when using `SELECT ... INTO #table`. The schema is inferred automatically.
 - `CREATE VIEW` stores a query definition only; rows are evaluated when the view is selected.
 - Portal administration variants require `EXECUTE <reportportal-connection> BEGIN ... END`.
 - See: DROP, USE SETS, ENCRYPT

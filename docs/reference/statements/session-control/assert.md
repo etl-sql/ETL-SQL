@@ -23,7 +23,7 @@ ASSERT (
   SELECT COUNT(*) FROM #orders o
   LEFT JOIN #customers c ON o.CustomerId = c.Id
   WHERE c.Id IS NULL
-) = 0 'Orphaned orders detected — missing customer records.';
+) = 0 'Orphaned orders detected; missing customer records.';
 ```
 
 ## Notes

@@ -21,9 +21,9 @@ SELECT u.Value FROM FLATTEN([[1, 2], [3, 4]]) AS u;     -- 1, 2, 3, 4
 
 ## Notes
 - Output is a single column named `Value`.
-- These are **table-valued** — use them in `FROM`/`CROSS APPLY`, not as a bare scalar in the SELECT list.
+- These are **table-valued**. Use them in `FROM`/`CROSS APPLY`, not as a bare scalar in the SELECT list.
 - A non-list argument yields a single row with that value; NULL yields no rows.
-- List literals use `[a, b, c]`. A single-element `[x]` is parsed as a **quoted identifier**, not a one-element list — use a 2+ element literal, a list column, or `STRING_SPLIT`.
+- List literals use `[a, b, c]`. A single-element `[x]` is parsed as a **quoted identifier**, not a one-element list. Use a 2+ element literal, a list column, or `STRING_SPLIT`.
 
 References:
-- [Grammar — CROSS APPLY / OUTER APPLY](../../../guides/getting-started.md#56-cross-apply--outer-apply-and-lateral)
+- [Grammar](../../../guides/getting-started.md)

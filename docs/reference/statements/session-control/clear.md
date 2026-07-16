@@ -24,7 +24,7 @@ CLEAR SESSIONS STALE;
 
 ## Notes
 - `CLEAR SESSION` is automatically called at the end of a successful script run. Call it explicitly after a recoverable error to free disk space.
-- `CLEAR SESSIONS STALE` is safe to run from a maintenance job — it removes data from sessions that have no active process, leaving running sessions untouched.
+- `CLEAR SESSIONS STALE` is safe to run from a maintenance job. It removes data from sessions that have no active process, leaving running sessions untouched.
 - `CLEAR SESSIONS ALL` requires elevated permissions and should be used carefully in multi-user Orchestrator deployments.
 - See: SCHEDULE, TRANSACTION
 

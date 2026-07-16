@@ -1,13 +1,18 @@
-MERGE performs an upsert — matching rows are updated; unmatched rows are inserted. Optionally, rows present in the target but absent from the source can be deleted.
+# MERGE
 
-Syntax:
-  MERGE INTO <target>
-  USING <source> ON <join_condition>
-  WHEN MATCHED THEN
-    UPDATE SET col = val, ...
-  WHEN NOT MATCHED THEN
-    INSERT (col, ...) VALUES (val, ...)
-  [WHEN NOT MATCHED BY SOURCE THEN DELETE];
+MERGE performs an upsert. Matching rows are updated; unmatched rows are inserted. Optionally, rows present in the target but absent from the source can be deleted.
+
+## Syntax
+
+```sql
+MERGE INTO <target>
+USING <source> ON <join_condition>
+WHEN MATCHED THEN
+  UPDATE SET col = val, ...
+WHEN NOT MATCHED THEN
+  INSERT (col, ...) VALUES (val, ...)
+[WHEN NOT MATCHED BY SOURCE THEN DELETE];
+```
 
 The source can be a #temp table, a subquery, or a connection table.
 
@@ -24,7 +29,7 @@ WHEN NOT MATCHED THEN
 PRINT 'Merged rows: ' + @@ROWCOUNT;
 ```
 
-WHEN NOT MATCHED BY SOURCE THEN DELETE removes target rows with no matching source row — use with caution on production tables.
+WHEN NOT MATCHED BY SOURCE THEN DELETE removes target rows with no matching source row. Use with caution on production tables.
 Wrap MERGE in a transaction to make the operation atomic.
 
 References:

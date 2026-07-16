@@ -1,23 +1,34 @@
+# CONFIG
+
 CONFIG is a keyword used exclusively with the SHOW CONNECTION command to inspect the configuration options and parameters of a data source connection.
 
-Syntax:
-  SHOW CONNECTION <connection_name> CONFIG [INTO #temp_table];
+## Syntax
 
-Description:
-  Retrieves a list of all configured options and values for the specified connection name.
-  For security and compliance, sensitive credentials (such as PASSWORD, PWD, and KEYFILE) are redacted in the output.
+```sql
+SHOW CONNECTION <connection_name> CONFIG [INTO #temp_table];
+```
 
-Columns Returned:
-- **Option** — The name of the configuration option (e.g. HOST, DATABASE, USER, PORT)
-- **Value** — The configured value (redacted with mask characters if sensitive)
+## Description
 
-Examples:
-  -- Inspect the configuration of the SalesDB connection
-  SHOW CONNECTION SalesDB CONFIG;
+Retrieves a list of all configured options and values for the specified connection name. For security and compliance, sensitive credentials such as PASSWORD, PWD, and KEYFILE are redacted in the output.
 
-  -- Save configuration to a temp table to query it programmatically
-  SHOW CONNECTION WebAPI CONFIG INTO #api_config;
-  SELECT Value FROM #api_config WHERE Option = 'URL';
+## Columns Returned
+
+- **Option** - The name of the configuration option, such as HOST, DATABASE, USER, or PORT.
+- **Value** - The configured value, redacted with mask characters if sensitive.
+
+## Examples
+
+```sql
+-- Inspect the configuration of the SalesDB connection
+SHOW CONNECTION SalesDB CONFIG;
+```
+
+```sql
+-- Save configuration to a temp table to query it programmatically
+SHOW CONNECTION WebAPI CONFIG INTO #api_config;
+SELECT Value FROM #api_config WHERE Option = 'URL';
+```
 
 References:
 - [Grammar](../../../guides/getting-started.md)

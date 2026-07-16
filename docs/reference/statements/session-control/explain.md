@@ -33,10 +33,10 @@ SELECT operation, target, estimated_rows, pushdown
 
 ## Notes
 - Returns a result set describing each plan step: `step_id`, `operation`, `target`, `estimated_rows`, `pushdown`, and `notes`.
-- Does not execute the statement — no data is read or written.
+- Does not execute the statement. No data is read or written.
 - Useful for diagnosing slow queries, verifying SQL pushdown to remote connectors, and understanding join algorithm choices (hash join, nested loop, merge join).
 - Results can be captured with `INTO #table` for programmatic inspection.
-- Pushdown decisions shown in the plan reflect the capabilities of the target connector — some connectors support partial pushdown only.
+- Pushdown decisions shown in the plan reflect the capabilities of the target connector. Some connectors support partial pushdown only.
 - See: ANALYZE, SET, SHOW
 
 References:
