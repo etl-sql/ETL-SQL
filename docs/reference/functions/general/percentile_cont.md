@@ -1,38 +1,49 @@
 # PERCENTILE_CONT
+
 Returns the continuous interpolated percentile value within a group or window.
 
-**Category:** Window
-
 ## Syntax
+
 ```sql
 PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY expression)
 PERCENTILE_CONT(fraction) WITHIN GROUP (ORDER BY expression) OVER (PARTITION BY col1, ...)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `fraction` | `DECIMAL` | Percentile in [0.0, 1.0] — e.g., `0.5` for median |
+
+- **fraction** - Percentile fraction from `0` through `1`; use `0.5` for the median.
+- **expression** - Numeric expression that defines the ordered value set.
+- **PARTITION BY** - Optional window partition columns for per-group percentile values.
 
 ## Returns
-`FLOAT` — The interpolated value at the given percentile.
+
+Returns the interpolated percentile value as `FLOAT`.
+
+## Null Behavior
+
+`NULL` ordered values are ignored. If no non-null values exist, the result is `NULL`.
 
 ## Remarks
+
 - `PERCENTILE_CONT(0.5)` is equivalent to `MEDIAN`.
 - For discrete (non-interpolated) percentile, use `PERCENTILE_DISC`.
 
-## Example
-```sql
--- Overall median price
-SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) AS median_price
-  FROM #products;
+## Examples
 
--- Median per category (window form)
-SELECT category, price,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER (PARTITION BY category) AS cat_median
+```sql
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) AS median_price
 FROM #products;
 ```
 
-## See Also
-- [Standard Library — §13.5 Distribution Functions](../../../guides/getting-started.md#135-distribution-functions)
-- Related: [`PERCENTILE_DISC`](percentile_disc.md), [`MEDIAN`](median.md), [`NTILE`](../window/ntile.md)
+```sql
+SELECT category, price,
+  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER (PARTITION BY category) AS cat_median
+FROM #products;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [PERCENTILE_DISC](percentile_disc.md)
+- [MEDIAN](median.md)
+- [NTILE](../window/ntile.md)
