@@ -32,4 +32,4 @@ END;
 - See: TRY, ASSERT, TRANSACTION
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

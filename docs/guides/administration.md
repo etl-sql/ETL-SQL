@@ -1479,7 +1479,7 @@ After installation or upgrade:
 5. Publish and execute a small report, then confirm the snapshot is written under `Portal:SnapshotDirectory`.
 6. Confirm logs, backup jobs, and monitoring checks are collecting the expected files.
 
-For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [ReportPortal_Administrators_Guide.md](report-portal-admin.md).
+For report catalog, user, group, ACL, subscription, snapshot, and export operations, continue in [Report Portal Admin Guide](report-portal-admin.md).
 
 ### 9.1 External monitoring and alerting
 
@@ -1719,7 +1719,7 @@ folder permissions, jobs, subscriptions, datasets (and their at-rest key version
 
 The full in-place upgrade procedure, the post-upgrade verification checklist, and the supported
 rollback path (**restore-from-backup, not a down-migration**) are documented in
-[ReportPortal_Administrators_Guide.md §6.5 → "Versioned Upgrades and Rollback"](report-portal-admin.md#versioned-upgrades-and-rollback).
+[Report Portal Admin Guide: Versioned Upgrades and Rollback](report-portal-admin.md#versioned-upgrades-and-rollback).
 
 This upgrade path is gated before every release tag by the **"N→N+1 upgrade-path drill"** phase in
 `scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over

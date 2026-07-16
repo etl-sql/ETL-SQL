@@ -44,4 +44,4 @@ etlsql encrypt --password "my-passphrase" --value "db-password-here"
 - See: USE, CREATE CONNECTION, DECLARE
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [File Operations](README.md)

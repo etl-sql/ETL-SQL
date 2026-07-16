@@ -29,4 +29,4 @@ WHERE status = 'Active';
 - See: CREATE TABLE, CREATE VIEW, SELECT INTO
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

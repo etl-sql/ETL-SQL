@@ -44,7 +44,7 @@ SELECT JSON_GET(@payload, @field) AS selected_json;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Grammar](../../statements/grammar.md)
+- [JSON and XML Functions](../README.md)
 - [JSON_GET_TEXT](json_get_text.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_QUERY](json_query.md)

@@ -34,4 +34,4 @@ END;
 - See: SHOW, SCHEDULE, EXECUTE
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

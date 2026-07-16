@@ -61,4 +61,4 @@ PIVOT #sales
 - See: SELECT, GROUP BY, WITH
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

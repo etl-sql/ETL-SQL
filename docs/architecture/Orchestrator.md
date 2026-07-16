@@ -661,7 +661,7 @@ All Orchestrator configuration is bound from `appsettings.json` in the host appl
 
 *For the engine internals (Evaluator, Lexer, Parser, AST), see [Engine.md](Engine.md).*
 *For connector implementation details, see [Connectors.md](Connectors.md).*
-*For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Grammar.md](../guides/getting-started.md).*
+*For the language scheduling syntax (`CREATE JOB`, `RUN SCRIPT`, `PARALLEL`), see [Orchestrator Jobs](../reference/orchestrator-jobs/README.md) and [Control Flow](../reference/control-flow/README.md).*
 
 ---
 

@@ -44,7 +44,7 @@ FROM #orders;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Grammar](../../statements/grammar.md)
+- [JSON and XML Functions](../README.md)
 - [JSON_GET](json_get.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_QUERY](json_query.md)

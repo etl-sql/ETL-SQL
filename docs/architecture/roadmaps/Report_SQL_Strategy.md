@@ -1,7 +1,7 @@
 # Report-SQL Post-Launch Strategy
 
 > [!IMPORTANT]
-> **Historical roadmap/backlog.** Report-SQL has since shipped a large portion of this plan. Do not treat backlog tables in this file as current product truth without checking `docs/guides/report-sql.md`, `docs/cookbooks/report-recipes.md`, `Docs/Syntax_Index.md`, and the reporting source.
+> **Historical roadmap/backlog.** Report-SQL has since shipped a large portion of this plan. Do not treat backlog tables in this file as current product truth without checking `docs/guides/report-sql.md`, `docs/cookbooks/report-recipes.md`, `docs/syntax-index.md`, and the reporting source.
 
 **Status:** Historical roadmap/backlog — reconcile before using for implementation
 **Date:** 2026-04-14  

@@ -22,4 +22,4 @@ WHERE email ILIKE '%@company.com';
 - For regex pattern matching, use `~` (case-sensitive) or `~*` (case-insensitive).
 
 References:
-- [Grammar](../../../guides/getting-started.md#8-logical-operators-filter-predicates)
+- [Statements](../README.md)

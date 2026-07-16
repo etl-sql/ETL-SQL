@@ -58,4 +58,4 @@ SELECT dataset_name, hit_rate, last_refreshed, ttl FROM #metrics;
 
 References:
 - [Data Connectors](../../guides/administration.md)
-- [Grammar](../../guides/getting-started.md)
+- [Portal Admin Commands](README.md)

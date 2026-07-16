@@ -146,7 +146,7 @@ The command generates a pre-formatted ETL-SQL script containing:
 *   Cleansing and casting statements (e.g. `TRY_CAST`, `SUBSTRING`) for every target column.
 *   Validation review tables for regex and allowed-value checks, with optional quarantine behavior when `source.reject_policy` is `quarantine`.
 *   Lineage tagging declarations using `TAG` (see [Lineage.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/reference/statements/session-control/lineage.md)).
-*   An `EXPECT SCHEMA` constraint validator (see [Grammar.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/guides/getting-started.md)).
+*   An `EXPECT SCHEMA` constraint validator (see [EXPECT SCHEMA](../reference/statements/ddl/expect-schema.md)).
 
 ---
 

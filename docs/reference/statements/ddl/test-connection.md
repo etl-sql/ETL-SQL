@@ -39,4 +39,4 @@ Result: all attempted checks passed.
 - See: CREATE CONNECTION, SHOW CONNECTION, ALTER CONNECTION
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

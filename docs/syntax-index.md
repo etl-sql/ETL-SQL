@@ -1,9 +1,9 @@
 # ETL-SQL Syntax Index
 
-This document provides a comprehensive index of every keyword, command, function, and configuration option available in the ETL-SQL language. Use this as a central map to find definitions, examples, and help documentation.
+This document indexes every keyword, command, function, and configuration option available in the ETL-SQL language. Use it as a central map to find focused reference pages, examples, and help documentation.
 
 > [!NOTE]
-> This is a cross-reference inventory, not the primary explanation of the language. Use the reference docs for authoritative syntax and examples. The `Help File` column intentionally points at source-tree help assets and may use local/file links until this index is generated or normalized for release packaging.
+> This is a cross-reference inventory, not the primary explanation of the language. Focused reference pages are the source of truth for syntax and examples. The `Help File` column intentionally points at source-tree help assets and may use local/file links until this index is generated or normalized for release packaging.
 
 ---
 
@@ -13,148 +13,148 @@ Statements are the top-level actions in an ETL-SQL script.
 
 | Command | Category | Documentation | Help File |
 | :--- | :--- | :--- | :--- |
-| `SELECT` | DML / Query | [Grammar.md](guides/getting-started.md) | [SELECT.md](reference/statements/dml/select.md) |
-| `INSERT` | DML | [Grammar.md](guides/getting-started.md) | [INSERT.md](reference/statements/dml/insert.md) |
-| `UPDATE` | DML | [Grammar.md](guides/getting-started.md) | [UPDATE.md](reference/statements/dml/update.md) |
-| `DELETE` | DML | [Grammar.md](guides/getting-started.md) | [DELETE.md](reference/statements/dml/delete.md) |
-| `MERGE` | DML | [Grammar.md](guides/getting-started.md) | [MERGE.md](reference/statements/dml/merge.md) |
-| `TRUNCATE` | DML | [Grammar.md](guides/getting-started.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
-| `CREATE CONNECTION` | DDL / Conn | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `ALTER CONNECTION` | DDL / Conn | [Grammar.md](guides/getting-started.md) | [ALTER.md](reference/statements/ddl/alter.md) |
-| `DROP CONNECTION` | DDL / Conn | [Grammar.md](guides/getting-started.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `CREATE TABLE` | DDL | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `ALTER TABLE` | DDL | [Grammar.md](guides/getting-started.md) | [ALTER.md](reference/statements/ddl/alter.md) |
-| `DROP TABLE` | DDL | [Grammar.md](guides/getting-started.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `DECLARE` | Variables | [Grammar.md](guides/getting-started.md) | [DECLARE.md](reference/variables-parameters/declare.md) |
-| `SET @var` | Variables | [Grammar.md](guides/getting-started.md) | [SET.md](reference/set-commands/set.md) |
-| `IF / ELSE` | Flow Control | [Grammar.md](guides/getting-started.md) | [IF.md](reference/control-flow/if.md) |
-| `WHILE` | Flow Control | [Grammar.md](guides/getting-started.md) | [WHILE.md](reference/control-flow/while.md) |
-| `FOR` | Flow Control | [Grammar.md](guides/getting-started.md) | [FOR.md](reference/control-flow/for.md) |
-| `FOREACH` | Flow Control | [Grammar.md](guides/getting-started.md) | [FOREACH.md](reference/control-flow/foreach.md) |
-| `TRY / CATCH` | Flow Control | [Grammar.md](guides/getting-started.md) | [TRY.md](reference/control-flow/try-catch.md) |
-| `WAITFOR` | Flow Control | [Grammar.md](guides/getting-started.md) | [WAITFOR.md](reference/control-flow/waitfor.md) |
-| `BREAK` | Flow Control | [Grammar.md](guides/getting-started.md) | [BREAK.md](reference/control-flow/break.md) |
-| `CONTINUE` | Flow Control | [Grammar.md](guides/getting-started.md) | [CONTINUE.md](reference/control-flow/continue.md) |
-| `RETURN` | Flow Control | [Grammar.md](guides/getting-started.md) | [RETURN.md](reference/control-flow/return.md) |
-| `THROW` | Flow Control | [Grammar.md](guides/getting-started.md) | [THROW.md](reference/control-flow/throw.md) |
-| `BEGIN TRANSACTION` | Session | [Grammar.md](guides/getting-started.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
-| `COMMIT` | Session | [Grammar.md](guides/getting-started.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
-| `ROLLBACK` | Session | [Grammar.md](guides/getting-started.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
-| `PRINT` | IO | [Grammar.md](guides/getting-started.md) | [PRINT.md](reference/statements/session-control/print.md) |
-| `EXECUTE` | Orchestration | [Grammar.md](guides/getting-started.md) | [EXECUTE.md](reference/control-flow/execute.md) |
-| `RUN SCRIPT` | Orchestration | [Grammar.md](guides/getting-started.md) | [RUN.md](reference/control-flow/run.md) |
-| `PUBLISH BUNDLE` | Orchestration | [Grammar.md](guides/getting-started.md) | [PUBLISH.md](reference/orchestrator-jobs/publish.md) |
-| `VALIDATE BUNDLE` | Orchestration | [Grammar.md](guides/getting-started.md) | [VALIDATE.md](reference/orchestrator-jobs/validate.md) |
-| `EXPORT SCRIPT` | Orchestration | [Grammar.md](guides/getting-started.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
-| `PARALLEL` | Orchestration | [Grammar.md](guides/getting-started.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
-| `GO` | Scripting | [Grammar.md](guides/getting-started.md) | [GO.md](reference/control-flow/go.md) |
-| `ASSERT` | Validation | [Grammar.md](guides/getting-started.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
-| `EXPECT SCHEMA` | Validation | [Grammar.md](guides/getting-started.md) | [EXPECT_SCHEMA.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/expect_schema.md) |
-| `LINT` | Validation | [Grammar.md](guides/getting-started.md) | [LINT.md](reference/statements/session-control/lint.md) |
-| `EXPLAIN` | Diagnostics | [Grammar.md](guides/getting-started.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
-| `SHOW PROFILE` | Diagnostics | [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW VARIABLES` | Diagnostics | [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Grammar.md](guides/getting-started.md) | [CONFIG.md](reference/statements/session-control/config.md) |
-| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `SHOW LOCKS` | Diagnostics | [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `CLEAR SESSION` | Session | [Grammar.md](guides/getting-started.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
-| `USE PASSWORD` | Session / Security | [Grammar.md](guides/getting-started.md) | [USE.md](reference/variables-parameters/use.md) |
-| `USE SETS` | Session | [Grammar.md](guides/getting-started.md) | [USE.md](reference/variables-parameters/use.md) |
-| `CREATE SETS` | Session | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `DROP SETS` | Session | [Grammar.md](guides/getting-started.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `REQUIRE VERSION` | Session | [Grammar.md](guides/getting-started.md) | [REQUIRE.md](reference/statements/session-control/require.md) |
-| `BULK INSERT` | File IO | [Grammar.md](guides/getting-started.md) | [BULK.INSERT.md](reference/file-operations/bulk-insert.md) |
-| `COPY FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [COPY.md](reference/file-operations/copy-file.md) |
-| `MOVE FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [FILE.md](reference/file-operations/file.md) |
-| `DELETE FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [DELETE.md](reference/statements/dml/delete.md) |
-| `ENCRYPT FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
-| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](guides/administration.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [SEND/FILE.md](reference/file-operations/file.md) |
-| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](guides/administration.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [RECEIVE/FILE.md](reference/file-operations/file.md) |
-| `SEND EMAIL` | Notifications | [Specialized_Operations.md](guides/administration.md) | [SEND/EMAIL.md](reference/file-operations/send-email.md) |
-| `DOCKER` | Containers | [Specialized_Operations.md](guides/administration.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `CREATE JOB` | Orchestration | [Grammar.md](guides/getting-started.md) | [SCHEDULE.md](reference/orchestrator-jobs/schedule.md) |
-| `KILL JOB` | Orchestration | [Grammar.md](guides/getting-started.md) | [KILL.md](reference/orchestrator-jobs/kill.md) |
-| `CREATE INDEX` | DDL | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `CREATE PROCEDURE` | DDL | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `CREATE FUNCTION` | DDL | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `CREATE VIEW` | DDL / Query Alias | [Grammar.md](guides/getting-started.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `ALTER VIEW` | DDL / Query Alias | [Grammar.md](guides/getting-started.md) | [ALTER.md](reference/statements/ddl/alter.md) |
-| `DROP VIEW` | DDL / Query Alias | [Grammar.md](guides/getting-started.md) | [DROP.md](reference/statements/ddl/drop.md) |
-| `SHOW VIEWS` | Diagnostics | [Grammar.md](guides/getting-started.md) | [SHOW.md](reference/show-commands/show.md) |
-| `GENERATE` | DML | [Grammar.md](guides/getting-started.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
-| `CASE` | Expressions | [Grammar.md](guides/getting-started.md) | [CASE.md](reference/statements/query-syntax/case.md) |
-| `WITH` | CTE | [Grammar.md](guides/getting-started.md) | [WITH.md](reference/statements/query-syntax/with.md) |
-| `WITH RECURSIVE` | CTE | [Grammar.md](guides/getting-started.md) | [WITH.md](reference/statements/query-syntax/with.md) |
-| `PIVOT` / `UNPIVOT` | DML / Transform | [Grammar.md](guides/getting-started.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | DML / Pattern Matching | [Grammar.md](guides/getting-started.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
-| `EXPORT REPORT` | Orchestration | [Grammar.md](guides/getting-started.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
+| `SELECT` | DML / Query | [Statement Reference](reference/statements/README.md) | [SELECT.md](reference/statements/dml/select.md) |
+| `INSERT` | DML | [Statement Reference](reference/statements/README.md) | [INSERT.md](reference/statements/dml/insert.md) |
+| `UPDATE` | DML | [Statement Reference](reference/statements/README.md) | [UPDATE.md](reference/statements/dml/update.md) |
+| `DELETE` | DML | [Statement Reference](reference/statements/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
+| `MERGE` | DML | [Statement Reference](reference/statements/README.md) | [MERGE.md](reference/statements/dml/merge.md) |
+| `TRUNCATE` | DML | [Statement Reference](reference/statements/README.md) | [TRUNCATE.md](reference/statements/dml/truncate.md) |
+| `CREATE CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `ALTER CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
+| `DROP CONNECTION` | DDL / Conn | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
+| `CREATE TABLE` | DDL | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `ALTER TABLE` | DDL | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
+| `DROP TABLE` | DDL | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
+| `DECLARE` | Variables | [Statement Reference](reference/statements/README.md) | [DECLARE.md](reference/variables-parameters/declare.md) |
+| `SET @var` | Variables | [Statement Reference](reference/statements/README.md) | [SET.md](reference/set-commands/set.md) |
+| `IF / ELSE` | Flow Control | [Statement Reference](reference/statements/README.md) | [IF.md](reference/control-flow/if.md) |
+| `WHILE` | Flow Control | [Statement Reference](reference/statements/README.md) | [WHILE.md](reference/control-flow/while.md) |
+| `FOR` | Flow Control | [Statement Reference](reference/statements/README.md) | [FOR.md](reference/control-flow/for.md) |
+| `FOREACH` | Flow Control | [Statement Reference](reference/statements/README.md) | [FOREACH.md](reference/control-flow/foreach.md) |
+| `TRY / CATCH` | Flow Control | [Statement Reference](reference/statements/README.md) | [TRY.md](reference/control-flow/try-catch.md) |
+| `WAITFOR` | Flow Control | [Statement Reference](reference/statements/README.md) | [WAITFOR.md](reference/control-flow/waitfor.md) |
+| `BREAK` | Flow Control | [Statement Reference](reference/statements/README.md) | [BREAK.md](reference/control-flow/break.md) |
+| `CONTINUE` | Flow Control | [Statement Reference](reference/statements/README.md) | [CONTINUE.md](reference/control-flow/continue.md) |
+| `RETURN` | Flow Control | [Statement Reference](reference/statements/README.md) | [RETURN.md](reference/control-flow/return.md) |
+| `THROW` | Flow Control | [Statement Reference](reference/statements/README.md) | [THROW.md](reference/control-flow/throw.md) |
+| `BEGIN TRANSACTION` | Session | [Statement Reference](reference/statements/README.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
+| `COMMIT` | Session | [Statement Reference](reference/statements/README.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
+| `ROLLBACK` | Session | [Statement Reference](reference/statements/README.md) | [TRANSACTION.md](reference/statements/session-control/transaction.md) |
+| `PRINT` | IO | [Statement Reference](reference/statements/README.md) | [PRINT.md](reference/statements/session-control/print.md) |
+| `EXECUTE` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXECUTE.md](reference/control-flow/execute.md) |
+| `RUN SCRIPT` | Orchestration | [Statement Reference](reference/statements/README.md) | [RUN.md](reference/control-flow/run.md) |
+| `PUBLISH BUNDLE` | Orchestration | [Statement Reference](reference/statements/README.md) | [PUBLISH.md](reference/orchestrator-jobs/publish.md) |
+| `VALIDATE BUNDLE` | Orchestration | [Statement Reference](reference/statements/README.md) | [VALIDATE.md](reference/orchestrator-jobs/validate.md) |
+| `EXPORT SCRIPT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
+| `PARALLEL` | Orchestration | [Statement Reference](reference/statements/README.md) | [PARALLEL.md](reference/control-flow/parallel.md) |
+| `GO` | Scripting | [Statement Reference](reference/statements/README.md) | [GO.md](reference/control-flow/go.md) |
+| `ASSERT` | Validation | [Statement Reference](reference/statements/README.md) | [ASSERT.md](reference/statements/session-control/assert.md) |
+| `EXPECT SCHEMA` | Validation | [Statement Reference](reference/statements/README.md) | [EXPECT_SCHEMA.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/expect_schema.md) |
+| `LINT` | Validation | [Statement Reference](reference/statements/README.md) | [LINT.md](reference/statements/session-control/lint.md) |
+| `EXPLAIN` | Diagnostics | [Statement Reference](reference/statements/README.md) | [EXPLAIN.md](reference/statements/session-control/explain.md) |
+| `SHOW PROFILE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW VARIABLES` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW LOCAL VARIABLES`| Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW CONNECTION <conn> CONFIG` | Diagnostics| [Statement Reference](reference/statements/README.md) | [CONFIG.md](reference/statements/session-control/config.md) |
+| `SHOW CONNECTIONS` | Diagnostics| [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `SHOW LOCKS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `CLEAR SESSION` | Session | [Statement Reference](reference/statements/README.md) | [CLEAR.md](reference/statements/session-control/clear.md) |
+| `USE PASSWORD` | Session / Security | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
+| `USE SETS` | Session | [Statement Reference](reference/statements/README.md) | [USE.md](reference/variables-parameters/use.md) |
+| `CREATE SETS` | Session | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `DROP SETS` | Session | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
+| `REQUIRE VERSION` | Session | [Statement Reference](reference/statements/README.md) | [REQUIRE.md](reference/statements/session-control/require.md) |
+| `BULK INSERT` | File IO | [Statement Reference](reference/statements/README.md) | [BULK.INSERT.md](reference/file-operations/bulk-insert.md) |
+| `COPY FILE` | File IO | [File Operations](reference/file-operations/README.md) | [COPY.md](reference/file-operations/copy-file.md) |
+| `MOVE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
+| `DELETE FILE` | File IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
+| `ENCRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
+| `SEND FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [SEND/FILE.md](reference/file-operations/file.md) |
+| `RECEIVE FILE` | File IO / Conn | [File Operations](reference/file-operations/README.md) (see also [TRANSFER.md](reference/file-operations/transfer.md)) | [RECEIVE/FILE.md](reference/file-operations/file.md) |
+| `SEND EMAIL` | Notifications | [File Operations](reference/file-operations/README.md) | [SEND/EMAIL.md](reference/file-operations/send-email.md) |
+| `DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `CREATE JOB` | Orchestration | [Statement Reference](reference/statements/README.md) | [SCHEDULE.md](reference/orchestrator-jobs/schedule.md) |
+| `KILL JOB` | Orchestration | [Statement Reference](reference/statements/README.md) | [KILL.md](reference/orchestrator-jobs/kill.md) |
+| `CREATE INDEX` | DDL | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `CREATE PROCEDURE` | DDL | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `CREATE FUNCTION` | DDL | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `CREATE VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `ALTER VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [ALTER.md](reference/statements/ddl/alter.md) |
+| `DROP VIEW` | DDL / Query Alias | [Statement Reference](reference/statements/README.md) | [DROP.md](reference/statements/ddl/drop.md) |
+| `SHOW VIEWS` | Diagnostics | [Statement Reference](reference/statements/README.md) | [SHOW.md](reference/show-commands/show.md) |
+| `GENERATE` | DML | [Statement Reference](reference/statements/README.md) | [GENERATE.md](reference/statements/session-control/generate.md) |
+| `CASE` | Expressions | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
+| `WITH` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
+| `WITH RECURSIVE` | CTE | [Statement Reference](reference/statements/README.md) | [WITH.md](reference/statements/query-syntax/with.md) |
+| `PIVOT` / `UNPIVOT` | DML / Transform | [Statement Reference](reference/statements/README.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
+| `MATCH_RECOGNIZE` | DML / Pattern Matching | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `EXPORT REPORT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `EXPORT REPORT ... WITH (PDF_MODE = ...)` | Reporting / Export | `PDF_MODE = STATIC\|AUTO\|HOSTED\|BROWSER`, `HOST`, `BROWSER_PATH` | [EXPORT.md](reference/orchestrator-jobs/export.md) |
-| `SUBSCRIPTION` | Orchestration | [Grammar.md](guides/getting-started.md) | [SUBSCRIPTION.md](reference/orchestrator-jobs/subscription.md) |
+| `SUBSCRIPTION` | Orchestration | [Statement Reference](reference/statements/README.md) | [SUBSCRIPTION.md](reference/orchestrator-jobs/subscription.md) |
 | `RELDATE` | Variables | [RelativeDate_Parameters.md](reference/functions/general/reldate.md) | [RELDATE.md](reference/functions/general/reldate.md) |
-| `RAISEERROR` | Flow Control | [Grammar.md](guides/getting-started.md) | [THROW.md](reference/control-flow/throw.md) |
-| `HELP` | Diagnostics | [Grammar.md](guides/getting-started.md) | [HELP.md](reference/statements/session-control/help.md) |
-| `ANALYZE` | Diagnostics | [Grammar.md](guides/getting-started.md) | [ANALYZE.md](reference/statements/session-control/analyze.md) |
-| `RENAME FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [FILE.md](reference/file-operations/file.md) |
-| `COMPRESS FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [COMPRESS.md](reference/file-operations/compress-file.md) |
-| `DECOMPRESS FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [FILE.md](reference/file-operations/file.md) |
-| `DECRYPT FILE` | File IO | [Specialized_Operations.md](guides/administration.md) | [FILE.md](reference/file-operations/file.md) |
-| `CREATE DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [CREATE.md](reference/statements/ddl/create.md) |
-| `COPY DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [COPY.md](reference/file-operations/copy-file.md) |
-| `MOVE DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `RENAME DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `DELETE DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [DELETE.md](reference/statements/dml/delete.md) |
-| `DELETE DIRECTORY_CONTENTS`| Dir IO | [Specialized_Operations.md](guides/administration.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `COMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [COMPRESS.md](reference/file-operations/compress-file.md) |
-| `DECOMPRESS DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `ENCRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
-| `DECRYPT DIRECTORY` | Dir IO | [Specialized_Operations.md](guides/administration.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `CREATE SSH_KEY_PAIR` | Security | [Specialized_Operations.md](guides/administration.md) | [CREATE.SSH_KEY_PAIR.md](reference/file-operations/create-ssh-key-pair.md) |
-| `CREATE PGP_KEY_PAIR` | Security | [Specialized_Operations.md](guides/administration.md) | [CREATE.PGP_KEY_PAIR.md](reference/file-operations/create-pgp-key-pair.md) |
-| `START DOCKER` | Containers | [Specialized_Operations.md](guides/administration.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `STOP DOCKER` | Containers | [Specialized_Operations.md](guides/administration.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `PAUSE DOCKER` | Containers | [Specialized_Operations.md](guides/administration.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `CLOSE DOCKER` | Containers | [Specialized_Operations.md](guides/administration.md) | [DOCKER.md](reference/file-operations/docker.md) |
-| `CREATE USER` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `ALTER USER` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `DROP USER` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `DISCONNECT USER` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `REVOKE TOKENS FOR USER` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
-| `CREATE GROUP` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `DROP GROUP` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `ADD USER TO GROUP` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
-| `CREATE FOLDER` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
-| `DROP FOLDER` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
-| `GRANT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_PERMISSIONS.md](reference/portal-admin/portal-permissions.md) |
-| `REVOKE` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [REVOKE.md](reference/portal-admin/revoke.md) |
-| `FAVORITE REPORT` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [FAVORITE.md](reference/portal-admin/favorite.md) |
-| `UNFAVORITE REPORT` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [FAVORITE.md](reference/portal-admin/favorite.md) |
-| `PUBLISH REPORT` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `ALTER REPORT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `DROP REPORT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `REFRESH REPORT` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
-| `CREATE SHARE LINK` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
-| `REVOKE SHARE LINK` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
-| `CREATE SAVED VIEW` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
-| `DROP SAVED VIEW` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
-| `CREATE ALERT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
-| `DROP ALERT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
-| `CREATE SMTP CONNECTION` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
-| `DROP SMTP CONNECTION` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
-| `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
-| `DROP SUBSCRIPTION` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
-| `REFRESH DATASET` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `ALTER DATASET` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `DROP DATASET` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `REBUILD SNAPSHOT` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `DROP SNAPSHOT` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
-| `CREATE REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
-| `DROP REFRESH JOB` | Portal / Orchestrator | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
-| `SHOW USERS` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
-| `SHOW REPORTS` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
-| `SHOW ACTIVE SESSIONS` (portal) | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
-| `RESTART PORTAL` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
-| `SHUTDOWN PORTAL` | Portal Admin | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
+| `RAISEERROR` | Flow Control | [Statement Reference](reference/statements/README.md) | [THROW.md](reference/control-flow/throw.md) |
+| `HELP` | Diagnostics | [Statement Reference](reference/statements/README.md) | [HELP.md](reference/statements/session-control/help.md) |
+| `ANALYZE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [ANALYZE.md](reference/statements/session-control/analyze.md) |
+| `RENAME FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
+| `COMPRESS FILE` | File IO | [File Operations](reference/file-operations/README.md) | [COMPRESS.md](reference/file-operations/compress-file.md) |
+| `DECOMPRESS FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
+| `DECRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
+| `CREATE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
+| `COPY DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [COPY.md](reference/file-operations/copy-file.md) |
+| `MOVE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `RENAME DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `DELETE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
+| `DELETE DIRECTORY_CONTENTS`| Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `COMPRESS DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [COMPRESS.md](reference/file-operations/compress-file.md) |
+| `DECOMPRESS DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `ENCRYPT DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
+| `DECRYPT DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `CREATE SSH_KEY_PAIR` | Security | [File Operations](reference/file-operations/README.md) | [CREATE.SSH_KEY_PAIR.md](reference/file-operations/create-ssh-key-pair.md) |
+| `CREATE PGP_KEY_PAIR` | Security | [File Operations](reference/file-operations/README.md) | [CREATE.PGP_KEY_PAIR.md](reference/file-operations/create-pgp-key-pair.md) |
+| `START DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `STOP DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `PAUSE DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `CLOSE DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
+| `CREATE USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
+| `ALTER USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
+| `DROP USER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
+| `DISCONNECT USER` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
+| `REVOKE TOKENS FOR USER` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_USER.md](reference/portal-admin/portal-user.md) |
+| `CREATE GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
+| `DROP GROUP` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
+| `ADD USER TO GROUP` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_GROUP.md](reference/portal-admin/portal-group.md) |
+| `CREATE FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
+| `DROP FOLDER` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_FOLDER.md](reference/portal-admin/portal-folder.md) |
+| `GRANT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_PERMISSIONS.md](reference/portal-admin/portal-permissions.md) |
+| `REVOKE` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [REVOKE.md](reference/portal-admin/revoke.md) |
+| `FAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [FAVORITE.md](reference/portal-admin/favorite.md) |
+| `UNFAVORITE REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [FAVORITE.md](reference/portal-admin/favorite.md) |
+| `PUBLISH REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
+| `ALTER REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
+| `DROP REPORT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
+| `REFRESH REPORT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REPORT.md](reference/portal-admin/portal-report.md) |
+| `CREATE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
+| `REVOKE SHARE LINK` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHARE.md](reference/portal-admin/portal-share.md) |
+| `CREATE SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
+| `DROP SAVED VIEW` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SAVEDVIEW.md](reference/portal-admin/portal-savedview.md) |
+| `CREATE ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
+| `DROP ALERT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ALERT.md](reference/portal-admin/portal-alert.md) |
+| `CREATE SMTP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
+| `DROP SMTP CONNECTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SMTP.md](reference/portal-admin/portal-smtp.md) |
+| `CREATE SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
+| `DROP SUBSCRIPTION` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SUBSCRIPTION.md](reference/portal-admin/portal-subscription.md) |
+| `REFRESH DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
+| `ALTER DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
+| `DROP DATASET` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
+| `REBUILD SNAPSHOT` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
+| `DROP SNAPSHOT` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_DATASET.md](reference/portal-admin/portal-dataset.md) |
+| `CREATE REFRESH JOB` | Portal / Orchestrator | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `DROP REFRESH JOB` | Portal / Orchestrator | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_REFRESHJOB.md](reference/portal-admin/portal-refreshjob.md) |
+| `SHOW USERS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW REPORTS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `SHOW ACTIVE SESSIONS` (portal) | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_SHOW.md](reference/portal-admin/portal-show.md) |
+| `RESTART PORTAL` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
+| `SHUTDOWN PORTAL` | Portal Admin | [Portal Admin](reference/portal-admin/README.md) | [PORTAL_ADMIN.md](reference/portal-admin/portal-admin.md) |
 
 ---
 
@@ -190,8 +190,8 @@ Connectors define how to communicate with external data sources.
 | `KAFKA` | Streaming | [KAFKA.md](reference/connectors/services/kafka.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
 | `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/general/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
-| `REPORTPORTAL` | Admin Service | [Data_Connectors.md](guides/administration.md#81-report-portal-reportportal) | HOST, PORT, USER, PASSWORD |
-| `ORCHESTRATOR` | Admin Service | [Data_Connectors.md](guides/administration.md#82-orchestrator-orchestrator) | HOST, PORT, API_KEY |
+| `REPORTPORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
+| `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/data-connectors.md) | HOST, PORT, API_KEY |
 | `ACTIVE_DIRECTORY` | Admin Service | [ACTIVE_DIRECTORY.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Snippets/active_directory.md) | HOST, PORT, USE_SSL, AUTH_MODE, USER, PASSWORD, DOMAIN, BASE_DN, FILTER_CONTEXT, FILTER, ATTRIBUTES |
 
 ### 2.1 File-Based Table Alias
@@ -381,8 +381,8 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
 | `MAX(expression)` | Aggregate | [MAX.md](reference/functions/aggregate/max.md) | Maximum value |
 | `MIN(expression)` | Aggregate | [MIN.md](reference/functions/aggregate/min.md) | Minimum value |
-| `APPROX_COUNT_DISTINCT(expression)` | Aggregate | [Standard_Library.md](guides/getting-started.md#5-aggregate-functions) | HyperLogLog approximate distinct count |
-| `EVERY(expression)` / `ANY(expression)` / `SOME(expression)` | Aggregate | [Standard_Library.md](guides/getting-started.md#5-aggregate-functions) | Standard boolean aggregates |
+| `APPROX_COUNT_DISTINCT(expression)` | Aggregate | [Aggregate Functions](reference/functions/aggregate/avg.md) | HyperLogLog approximate distinct count |
+| `EVERY(expression)` / `ANY(expression)` / `SOME(expression)` | Aggregate | [Aggregate Functions](reference/functions/aggregate/avg.md) | Standard boolean aggregates |
 | `MEDIAN(expression)` | Aggregate | [MEDIAN.md](reference/functions/general/median.md) | Median (50th percentile) |
 | `VAR(expression)` / `VAR_SAMP` | Aggregate | [VAR.md](reference/functions/aggregate/var.md) | Sample variance |
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](reference/functions/aggregate/varp.md) | Population variance |
@@ -431,7 +431,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](reference/functions/general/ngram_tokens.md) | Table of 3-grams (blocking) |
 | `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md](reference/functions/general/difference.md) | SOUNDEX difference score (0-4) |
 
-*Note: Over 190 functions are registered. See [Standard_Library.md](guides/getting-started.md) for full signatures and examples.*
+*Note: Over 190 functions are registered. See [Standard Library](reference/functions/standard-library.md) for full signatures and examples.*
 
 ---
 
@@ -587,8 +587,8 @@ Read-only counters tracking session state.
 | `@@SORT_SPILLS` | Count of external sort spills | [@@SORT_SPILLS.md](reference/variables-parameters/@@sort_spills.md) |
 | `@@SUBQUERY_CACHE_HITS` | Subquery cache hit count | [@@SUBQUERY_CACHE_HITS.md](reference/variables-parameters/@@subquery_cache_hits.md) |
 | `@@SUBQUERY_CACHE_MISSES` | Subquery cache miss count | [@@SUBQUERY_CACHE_MISSES.md](reference/variables-parameters/@@subquery_cache_misses.md) |
-| `@@RESULTSETS` | Count of result sets from last stmt | [Standard_Library.md](guides/getting-started.md) |
-| `@@PARTITIONS_COUNT` | External spill partition count | [Standard_Library.md](guides/getting-started.md) |
+| `@@RESULTSETS` | Count of result sets from last stmt | [Standard Library](reference/functions/standard-library.md) |
+| `@@PARTITIONS_COUNT` | External spill partition count | [Standard Library](reference/functions/standard-library.md) |
 | `@@FILE_EXISTS(p)` | File existence check (also available as function `FILE_EXISTS()`) | - |
 | `@@DIRECTORY_EXISTS(p)` | Directory existence check (also available as function `DIRECTORY_EXISTS()`) | - |
 
@@ -674,20 +674,20 @@ CREATE CONNECTION name AS <Provider>( ... )
 ```
 | Option | Description | Documentation |
 | :--- | :--- | :--- |
-| `HOST` / `SERVER` | Server hostname or IP | [Data_Connectors.md](guides/administration.md) |
-| `PORT` | Network port | [Data_Connectors.md](guides/administration.md) |
-| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data_Connectors.md](guides/administration.md) |
-| `DATABASE` | Database name | [Data_Connectors.md](guides/administration.md) |
-| `USER` / `UID` | Username | [Data_Connectors.md](guides/administration.md) |
-| `PASSWORD` | Password (can be 'ENC:...') | [Data_Connectors.md](guides/administration.md) |
-| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data_Connectors.md](guides/administration.md) |
-| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data_Connectors.md](guides/administration.md) |
-| `ENCRYPT` | Enable SSL/TLS encryption | [Data_Connectors.md](guides/administration.md) |
-| `PATH` | Root path for file-based connectors | [Data_Connectors.md](guides/administration.md) |
-| `DSN` / `DRIVER` | ODBC specific identifiers | [Data_Connectors.md](guides/administration.md) |
-| `KEYFILE` | Path to private key (SFTP/PGP) | [Data_Connectors.md](guides/administration.md) |
-| `PASSPHRASE` | Keyfile decryption password | [Data_Connectors.md](guides/administration.md) |
-| `SSL_MODE` | Postgres SSL behavior | [Data_Connectors.md](guides/administration.md) |
+| `HOST` / `SERVER` | Server hostname or IP | [Data Connectors](reference/connectors/data-connectors.md) |
+| `PORT` | Network port | [Data Connectors](reference/connectors/data-connectors.md) |
+| `CONNECTION_STRING` / `URI` | Connection URI / string | [Data Connectors](reference/connectors/data-connectors.md) |
+| `DATABASE` | Database name | [Data Connectors](reference/connectors/data-connectors.md) |
+| `USER` / `UID` | Username | [Data Connectors](reference/connectors/data-connectors.md) |
+| `PASSWORD` | Password (can be 'ENC:...') | [Data Connectors](reference/connectors/data-connectors.md) |
+| `TIMEOUT_SECONDS` | Connection and query timeout limit | [Data Connectors](reference/connectors/data-connectors.md) |
+| `TRUSTED_CONNECTION`| Use Windows Auth (MSSQL only) | [Data Connectors](reference/connectors/data-connectors.md) |
+| `ENCRYPT` | Enable SSL/TLS encryption | [Data Connectors](reference/connectors/data-connectors.md) |
+| `PATH` | Root path for file-based connectors | [Data Connectors](reference/connectors/data-connectors.md) |
+| `DSN` / `DRIVER` | ODBC specific identifiers | [Data Connectors](reference/connectors/data-connectors.md) |
+| `KEYFILE` | Path to private key (SFTP/PGP) | [Data Connectors](reference/connectors/data-connectors.md) |
+| `PASSPHRASE` | Keyfile decryption password | [Data Connectors](reference/connectors/data-connectors.md) |
+| `SSL_MODE` | Postgres SSL behavior | [Data Connectors](reference/connectors/data-connectors.md) |
 
 ### 7.2 CREATE TABLE
 ```sql
@@ -1086,37 +1086,37 @@ Standard clauses available within a `SELECT` statement.
 
 | Clause | Description | Documentation | Help File |
 | :--- | :--- | :--- | :--- |
-| `DISTINCT` | Returns only unique rows | [Grammar.md](guides/getting-started.md) | - |
-| `TOP (n)` | Limits results (MSSQL style) | [Grammar.md](guides/getting-started.md) | - |
-| `LIMIT n` | Limits results (Postgres style) | [Grammar.md](guides/getting-started.md) | - |
-| `OFFSET n` | Skips first N rows | [Grammar.md](guides/getting-started.md) | - |
-| `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [Grammar.md](guides/getting-started.md#53-top--limit--offset-fetch) | - |
-| `USING SAMPLE n PERCENT\|ROWS` | Random row sampling (`REPEATABLE (seed)` for determinism) | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | - |
-| `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [Grammar.md](guides/getting-started.md#54-values-table-constructor) | - |
-| `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Grammar.md](guides/getting-started.md) | - |
-| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [Grammar.md](guides/getting-started.md#group-by-all) | [GROUP_BY_ALL.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
-| `HAVING` | Filters aggregated groups | [Grammar.md](guides/getting-started.md) | - |
-| `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Grammar.md](guides/getting-started.md) | - |
-| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `count()` | Shorthand for `COUNT(*)` | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Grammar.md](guides/getting-started.md#511-modern-select-conveniences) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
-| `ASC` / `DESC` | Sorting direction | [Grammar.md](guides/getting-started.md) | - |
-| `ROLLUP` | Grouping set extension for hierarchies | [Grammar.md](guides/getting-started.md) | - |
-| `CUBE` | Grouping set extension for all permutations| [Grammar.md](guides/getting-started.md) | - |
-| `GROUPING SETS` | Explicit grouping set list | [Grammar.md](guides/getting-started.md) | - |
-| `QUALIFY` | Filters results of window functions | [Grammar.md](guides/getting-started.md#511-qualify-filter-window-results) | [QUALIFY.md](reference/statements/query-syntax/qualify.md) |
-| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [Grammar.md](guides/getting-started.md#5101-filter-conditional-aggregation) | [FILTER.md](reference/statements/query-syntax/filter.md) |
-| `ILIKE` | Case-insensitive pattern match | [Grammar.md](guides/getting-started.md#8-logical-operators-filter-predicates) | [ILIKE.md](reference/statements/query-syntax/ilike.md) |
-| `~` / `~*` | Regex match / case-insensitive regex match | [Grammar.md](guides/getting-started.md#8-logical-operators-filter-predicates) | - |
-| `OUTPUT` | Returns modified rows (DML only) | [Grammar.md](guides/getting-started.md) | - |
-| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Grammar.md](guides/getting-started.md) | - |
-| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Grammar.md](guides/getting-started.md) | - |
-| `CASE` | Start of conditional expression | [Grammar.md](guides/getting-started.md) | [CASE.md](reference/statements/query-syntax/case.md) |
-| `WHEN / THEN` | Conditional branch | [Grammar.md](guides/getting-started.md) | [CASE.md](reference/statements/query-syntax/case.md) |
-| `ELSE / END` | Fallback and termination of CASE | [Grammar.md](guides/getting-started.md) | [CASE.md](reference/statements/query-syntax/case.md) |
+| `DISTINCT` | Returns only unique rows | [Statement Reference](reference/statements/README.md) | - |
+| `TOP (n)` | Limits results (MSSQL style) | [Statement Reference](reference/statements/README.md) | - |
+| `LIMIT n` | Limits results (Postgres style) | [Statement Reference](reference/statements/README.md) | - |
+| `OFFSET n` | Skips first N rows | [Statement Reference](reference/statements/README.md) | - |
+| `FETCH FIRST/NEXT n ROWS ONLY` | SQL:2008 result limiting | [SELECT](reference/statements/dml/select.md) | - |
+| `USING SAMPLE n PERCENT\|ROWS` | Random row sampling (`REPEATABLE (seed)` for determinism) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | - |
+| `VALUES (...) AS alias(...)` | Standalone table constructor in `FROM`/`JOIN` | [SELECT](reference/statements/dml/select.md) | - |
+| `GROUP BY` | Aggregates rows by column values (supports positional `GROUP BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
+| `GROUP BY ALL` | Group by all non-aggregate SELECT expressions | [GROUP BY ALL](reference/statements/query-syntax/group-by-all.md) | [GROUP_BY_ALL.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/GROUP_BY_ALL.md) |
+| `HAVING` | Filters aggregated groups | [Statement Reference](reference/statements/README.md) | - |
+| `ORDER BY` | Sorts the final result set (supports positional `ORDER BY 1, 2`) | [Statement Reference](reference/statements/README.md) | - |
+| `ORDER BY ALL` | Sorts by every output column, left to right (`[DESC]`) | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `* EXCLUDE / REPLACE / RENAME` | Inline star-projection modifiers | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `COLUMNS(* EXCLUDE (...))` / `COLUMNS('regex')` | Multi-column projection selector | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `count()` | Shorthand for `COUNT(*)` | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| Lateral column aliases | A SELECT item (or `ORDER BY`) may reference an alias from an earlier item | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| Trailing commas / `1_000` separators | Lenient list commas; underscores in numeric literals | [Select Modifiers](reference/statements/query-syntax/select-modifiers.md) | [SELECT_MODIFIERS.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/SELECT_MODIFIERS.md) |
+| `ASC` / `DESC` | Sorting direction | [Statement Reference](reference/statements/README.md) | - |
+| `ROLLUP` | Grouping set extension for hierarchies | [Statement Reference](reference/statements/README.md) | - |
+| `CUBE` | Grouping set extension for all permutations| [Statement Reference](reference/statements/README.md) | - |
+| `GROUPING SETS` | Explicit grouping set list | [Statement Reference](reference/statements/README.md) | - |
+| `QUALIFY` | Filters results of window functions | [QUALIFY](reference/statements/query-syntax/qualify.md) | [QUALIFY.md](reference/statements/query-syntax/qualify.md) |
+| `FILTER (WHERE ...)` | Per-aggregate conditional filter | [FILTER](reference/statements/query-syntax/filter.md) | [FILTER.md](reference/statements/query-syntax/filter.md) |
+| `ILIKE` | Case-insensitive pattern match | [ILIKE](reference/statements/query-syntax/ilike.md) | [ILIKE.md](reference/statements/query-syntax/ilike.md) |
+| `~` / `~*` | Regex match / case-insensitive regex match | [ILIKE and pattern predicates](reference/statements/query-syntax/ilike.md) | - |
+| `OUTPUT` | Returns modified rows (DML only) | [Statement Reference](reference/statements/README.md) | - |
+| `FOR JSON` | Formats output as JSON (PATH/AUTO/RAW) | [Statement Reference](reference/statements/README.md) | - |
+| `FOR XML` | Formats output as XML (PATH/AUTO/RAW) | [Statement Reference](reference/statements/README.md) | - |
+| `CASE` | Start of conditional expression | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
+| `WHEN / THEN` | Conditional branch | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
+| `ELSE / END` | Fallback and termination of CASE | [Statement Reference](reference/statements/README.md) | [CASE.md](reference/statements/query-syntax/case.md) |
 
 ---
 
@@ -1126,11 +1126,11 @@ Operators that transform the shape of a table in the `FROM` clause.
 
 | Operator | Syntax | Description | Documentation | Help File |
 | :--- | :--- | :--- | :--- | :--- |
-| `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns | [Grammar.md](guides/getting-started.md#58-pivot--unpivot) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [Grammar.md](guides/getting-started.md#58-pivot--unpivot) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `PIVOT` (DuckDB) | `PIVOT src ON cols [IN (...)] USING aggs [GROUP BY cols]` | Statement form; dynamic values, multi-col/agg | [Grammar.md](guides/getting-started.md#duckdb-style-statement-form) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `UNPIVOT` (DuckDB) | `UNPIVOT src ON cols\|COLUMNS(* EXCLUDE (...)) INTO NAME n VALUE v` | Statement form; supports `COLUMNS(* EXCLUDE)` | [Grammar.md](guides/getting-started.md#duckdb-style-statement-form) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
-| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [Grammar.md](guides/getting-started.md#59-match_recognize) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
+| `PIVOT` | `PIVOT ( agg(col) FOR pivot_col IN (...) )` | Rotates rows into columns | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
+| `UNPIVOT` | `UNPIVOT ( val_col FOR name_col IN (...) )` | Rotates columns into rows | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
+| `PIVOT` (DuckDB) | `PIVOT src ON cols [IN (...)] USING aggs [GROUP BY cols]` | Statement form; dynamic values, multi-col/agg | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
+| `UNPIVOT` (DuckDB) | `UNPIVOT src ON cols\|COLUMNS(* EXCLUDE (...)) INTO NAME n VALUE v` | Statement form; supports `COLUMNS(* EXCLUDE)` | [PIVOT](reference/statements/query-syntax/pivot.md) | [PIVOT.md](reference/statements/query-syntax/pivot.md) |
+| `MATCH_RECOGNIZE` | `MATCH_RECOGNIZE (PARTITION BY ... ORDER BY ... MEASURES ... PATTERN (...) DEFINE ...)` | Finds row patterns in ordered sequences | [MATCH_RECOGNIZE](reference/statements/query-syntax/match-recognize.md) | [MATCH_RECOGNIZE.md](../.worktrees/enterprise-policy-hardening/src/ETL-SQL.Core/Resources/Help/Keywords/MATCH_RECOGNIZE.md) |
 
 ---
 

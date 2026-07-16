@@ -20,4 +20,4 @@ Use INPUT to let callers (CLI, parent script, subscription) supply the expressio
 CLI override: etlsql run report.etlsql --var @start=W-1
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Dates and Times](dates-times.md)

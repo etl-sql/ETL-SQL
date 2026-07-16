@@ -30,4 +30,4 @@ RETURN;
 - See: RUN SCRIPT, DECLARE, TRANSACTION
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

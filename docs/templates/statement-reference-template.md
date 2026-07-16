@@ -32,5 +32,5 @@ Document security boundaries, dialect restrictions, transaction requirements, or
 
 ## References
 
-- [Grammar](../reference/statements/grammar.md)
-
+- [Statement Reference](../reference/statements/README.md)
+- [Syntax Index](../syntax-index.md)

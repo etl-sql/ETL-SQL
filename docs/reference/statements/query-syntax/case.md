@@ -34,4 +34,4 @@ FROM #orders;
 - See: IF, SET
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

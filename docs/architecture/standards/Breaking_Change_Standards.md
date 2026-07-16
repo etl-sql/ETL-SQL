@@ -30,7 +30,7 @@ When introducing a deprecation or breaking change, developers must strictly adhe
 
 1. **Inline Annotation**: Add a `// COMPAT_BREAK: x.y` or `// DEPRECATED_SYNTAX: x.y` comment directly above the modified line of code in the source, where `x.y` is the first release that warns.
 2. **Attribution Log**: Register the change in [BREAKING_CHANGES.md](../../../BREAKING_CHANGES.md) at the repository root, including the diagnostic code and earliest removal version when the change is a deprecation.
-3. **Reference Update**: Update [Grammar.md](../../guides/getting-started.md), [Data_Connectors.md](../../guides/administration.md), [Standard_Library.md](../../guides/getting-started.md), or the affected product guide in the same change.
+3. **Reference Update**: Update the affected focused reference page, [Syntax Index](../../syntax-index.md), [Data Connectors](../../reference/connectors/data-connectors.md), [Standard Library](../../reference/functions/standard-library.md), or the affected product guide in the same change.
 4. **Regression Testing**: Write a dedicated compatibility test proving both the deprecated form and replacement behavior. Mark the test class with the Xunit trait:
    `[Trait("CompatBreak", "x.y")]`
 

@@ -32,4 +32,4 @@ SELECT * FROM ranked WHERE Rank <= 10;
 - See: SELECT, PARALLEL
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

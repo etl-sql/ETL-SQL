@@ -8,7 +8,7 @@ ETL-SQL documentation is organized by how readers use the product: learn the pla
 - [ETL Recipes](cookbooks/etl-recipes.md) - complete pipeline examples for extraction, staging, validation, merge, cleanup, and notification.
 - [Report SQL](guides/report-sql.md) - author `.rptsql` dashboards, visuals, layouts, filters, datasets, and portal publishing flows.
 - [Administration](guides/administration.md) - install, configure, secure, back up, monitor, and scale ETL-SQL.
-- [Syntax Index](Syntax_Index.md) - central index of statements, functions, connectors, options, visuals, variables, and CLI commands.
+- [Syntax Index](syntax-index.md) - searchable map of statements, functions, connectors, options, visuals, variables, and CLI commands.
 
 ## Documentation Sections
 
@@ -44,4 +44,4 @@ Existing uppercase reference filenames should be migrated gradually with link up
 
 ## Current Migration Status
 
-The reconfigure from `Docs_Legacy/` is still in progress. Use [Documentation Audit](DOCUMENTATION_AUDIT.md) for the active gap list and cleanup order.
+The reconfigure from `Docs_Legacy/` is still in progress. Use [Documentation Audit](DOCUMENTATION_AUDIT.md) for the active gap list and cleanup order. Large legacy guides are being split into focused guides, reference pages, and index entries instead of remaining as catch-all manuals.

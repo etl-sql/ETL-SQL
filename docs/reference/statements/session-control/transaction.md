@@ -47,4 +47,4 @@ END CATCH;
 ```
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

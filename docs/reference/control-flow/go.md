@@ -46,4 +46,4 @@ DROP TABLE IF EXISTS #summary;
 - See: TRY, RETURN, BREAK
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

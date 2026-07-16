@@ -10,7 +10,7 @@ DATEDIFF(datepart, start_date, end_date)
 
 ## Parameters
 
-- **datepart** - Unit to measure. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **datepart** - Unit to measure. See [datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
 - **start_date** - Starting date.
 - **end_date** - Ending date.
 
@@ -45,6 +45,6 @@ FROM #jobs;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEADD](dateadd.md)
 - [DATEPART](datepart.md)

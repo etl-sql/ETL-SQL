@@ -409,4 +409,4 @@ Use this checklist when reviewing any PR that adds or significantly modifies a c
 
 ---
 
-*Refer to [Connectors.md](../Connectors.md) for technical implementation details and [Grammar](../../reference/statements/grammar.md) for language specifications.*
+*Refer to [Connectors.md](../Connectors.md) for technical implementation details and [Data Connectors](../../reference/connectors/data-connectors.md) for connector syntax.*

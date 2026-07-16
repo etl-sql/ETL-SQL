@@ -33,4 +33,4 @@ WHEN NOT MATCHED BY SOURCE THEN DELETE removes target rows with no matching sour
 Wrap MERGE in a transaction to make the operation atomic.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

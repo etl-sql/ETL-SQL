@@ -33,4 +33,4 @@ Only literal `RUN SCRIPT 'child.etlsql'` dependencies can be included in publish
 - See: DECLARE, RETURN, EXECUTE
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

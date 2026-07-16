@@ -10,7 +10,7 @@ DATEPART(datepart, date)
 
 ## Parameters
 
-- **datepart** - Date part to extract. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **datepart** - Date part to extract. See [datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
 - **date** - Source date or datetime value.
 
 ## Returns
@@ -40,7 +40,7 @@ GROUP BY DATEPART(HOUR, order_time);
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATENAME](datename.md)
 - [DATEADD](dateadd.md)
 - [YEAR](year.md)

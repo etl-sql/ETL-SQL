@@ -32,4 +32,4 @@ BREAK exits the loop immediately. CONTINUE skips to the next condition check.
 Use FOR or FOREACH when iterating a fixed numeric range or result set — WHILE is best for retry loops and polling.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

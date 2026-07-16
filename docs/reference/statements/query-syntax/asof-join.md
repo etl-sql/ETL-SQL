@@ -30,4 +30,4 @@ ASOF JOIN quotes q
 - A missing or multiple inequality predicate is rejected at execution time.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

@@ -38,4 +38,4 @@ UPDATE SalesDB.dbo.Orders
 @@ROWCOUNT reflects the number of rows affected after UPDATE.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

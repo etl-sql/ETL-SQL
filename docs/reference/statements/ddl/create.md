@@ -58,5 +58,5 @@ END;
 - See: DROP, USE SETS, ENCRYPT
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)
 

@@ -33,4 +33,4 @@ ASSERT (
 - See: THROW, TRY, LINT
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

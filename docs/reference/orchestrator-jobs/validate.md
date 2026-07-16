@@ -15,4 +15,4 @@ Notes:
 - Use `INTO #table` when deployment scripts need to inspect validation rows.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

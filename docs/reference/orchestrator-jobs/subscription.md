@@ -35,4 +35,4 @@ Example:
     PARAMETERS (@start = 'D-1', @end = 'D');
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

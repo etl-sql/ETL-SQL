@@ -54,4 +54,4 @@ EXPECT SCHEMA MyConn.dbo.Products (
 - See: ASSERT, VALIDATE, CREATE
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

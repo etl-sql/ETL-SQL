@@ -17,4 +17,4 @@ Notes:
 - Share and embed token lookup is global; duplicate matching tokens are treated as an error.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Portal Admin Commands](README.md)

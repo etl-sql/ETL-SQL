@@ -43,4 +43,4 @@ SELECT line FROM #docs WHERE line LIKE '%INTO%';
 - See: LINT, SHOW
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

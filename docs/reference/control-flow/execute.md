@@ -1,4 +1,4 @@
-﻿# EXECUTE
+# EXECUTE
 Sends a raw command block to an external connection, or runs administrative/portal operations.
 
 ## Syntax
@@ -22,4 +22,4 @@ EXECUTE MyDB 'TRUNCATE TABLE staging';
 - See: RUN, TRANSACTION
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

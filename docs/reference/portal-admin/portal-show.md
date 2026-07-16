@@ -104,4 +104,4 @@ SELECT report_name, folder, relevance_score FROM #results ORDER BY relevance_sco
 
 References:
 - [Data Connectors](../../guides/administration.md)
-- [Grammar](../../guides/getting-started.md)
+- [Portal Admin Commands](README.md)

@@ -39,4 +39,4 @@ WINDOW ordered_months AS (ORDER BY month);
 ```
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

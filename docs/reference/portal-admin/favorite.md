@@ -17,4 +17,4 @@ Notes:
 - `FOR USER` requires an admin connection because it writes another user's favorites.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Portal Admin Commands](README.md)

@@ -26,4 +26,4 @@ END;
 In headless mode PRINT writes to stdout. In the TUI editor messages appear in the output panel. In scheduled jobs they are captured in the execution log.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

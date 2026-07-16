@@ -39,4 +39,4 @@ END;
 - See: CREATE, CLEAR SESSION
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

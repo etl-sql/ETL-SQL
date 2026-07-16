@@ -37,4 +37,4 @@ GENERATE 10000 ROWS INTO #mock AS (
 - See: CREATE TABLE, INSERT, DECLARE
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

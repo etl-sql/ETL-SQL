@@ -30,4 +30,4 @@ SELECT * FROM #orders WHERE Region IN !Regions;
 - See: CREATE SETS, ENCRYPT, DECLARE
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Variables and Parameters](README.md)

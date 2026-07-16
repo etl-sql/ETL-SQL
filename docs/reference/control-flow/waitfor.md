@@ -30,4 +30,4 @@ WAITFOR (SELECT COUNT(*) FROM dbo.Incoming) > 0;
 > `WAIT UNTIL condition` is the preferred alias for `WAITFOR (condition)`.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

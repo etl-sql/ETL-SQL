@@ -26,4 +26,4 @@ END;
 DELETE on a connection table issues the DELETE on the remote database. DELETE on a #temp table removes rows from the in-memory working set. To remove all rows and reset identity, use TRUNCATE TABLE.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

@@ -40,4 +40,4 @@ SELECT operation, target, estimated_rows, pushdown
 - See: ANALYZE, SET, SHOW
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

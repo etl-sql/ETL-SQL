@@ -39,4 +39,4 @@ KEYFILE = 'C:\Transfer\keys\dataset_transport';
 - Failed publication removes its allocated row and partial files. Transport credentials are never persisted.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

@@ -33,4 +33,4 @@ END;
 BREAK exits the loop early. CONTINUE skips to the next item.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

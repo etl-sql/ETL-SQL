@@ -24,4 +24,4 @@ QUALIFY salary_rank <= 2;
 - You can filter on the window function alias, or specify the window function directly in the `QUALIFY` expression.
 
 References:
-- [Grammar](../../../guides/getting-started.md#511-qualify-filter-window-results)
+- [Statements](../README.md)

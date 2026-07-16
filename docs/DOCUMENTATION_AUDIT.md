@@ -28,7 +28,8 @@ Completed in the first cleanup pass:
 - Verified no mojibake replacement artifacts remained under `docs/` after the latest pass.
 - Normalized encoding artifacts in `docs/reference/statements/grammar.md`.
 - Normalized old typography markers in `docs/reference/functions/standard-library.md` plus representative statement and visual reference pages.
-- Normalized marker/style artifacts across visual reference pages and smaller statement reference pages; `docs/reference/statements/grammar.md` remains the dedicated large-file cleanup target.
+- Normalized marker/style artifacts across visual reference pages and smaller statement reference pages.
+- Renamed `docs/Syntax_Index.md` to `docs/syntax-index.md` and started demoting the legacy grammar monolith from active navigation.
 
 ## P0: Navigation And Entry Points
 
@@ -58,10 +59,10 @@ Many new docs still mention old locations such as `Docs/Architecture`, `Docs/Ref
 
 Fixed representative examples:
 
-- `docs/Syntax_Index.md` links to `.worktrees/enterprise-policy-hardening/Docs/User_Manual.md`.
-- `docs/guides/administration.md` links to `.worktrees/enterprise-policy-hardening/Docs/Orchestrators_Guide.md` and `.worktrees/enterprise-policy-hardening/Docs/User_Manual.md`.
+- `docs/syntax-index.md` is now the lowercase syntax locator and no longer points to legacy worktree manuals.
+- `docs/guides/administration.md` links now prefer current operator, portal, and orchestrator docs.
 - `docs/guides/getting-started.md` links to old Orchestrator, VS Code architecture, and docs map paths.
-- `docs/cookbooks/etl-recipes.md` still references `.worktrees/enterprise-policy-hardening/Docs/User_Manual.md`.
+- `docs/cookbooks/etl-recipes.md` no longer routes users through old worktree manuals.
 - `docs/reference/dates-times/dates-times.md` links to `.worktrees/enterprise-policy-hardening/Docs/Reference/RelativeDate_Parameters.md`.
 - Release files in `docs/releases/` use old "User Manual" paths.
 
@@ -291,8 +292,8 @@ Preferred rule: keep short, predictable URLs in `guides/`, keep authoritative re
 
 Most legacy files have some new equivalent, but these legacy topics need deliberate placement or explicit deprecation:
 
-- `Docs_Legacy/User_Manual.md` should become either `docs/guides/user-manual.md` or be fully absorbed by `docs/guides/getting-started.md`.
-- `Docs_Legacy/Orchestrators_Guide.md` appears to map to `docs/guides/job-orchestration.md`, but old links still use the legacy title.
+- `Docs_Legacy/User_Manual.md` should be fully absorbed by `docs/guides/getting-started.md` and focused reference pages.
+- `Docs_Legacy/Orchestrators_Guide.md` maps to `docs/guides/job-orchestration.md`, which is still large enough to split into focused operator pages.
 - `Docs_Legacy/Administrators_Guide.md` maps to `docs/guides/administration.md`, but the current guide is still very large and should be split into focused operator pages.
 - `Docs_Legacy/Report_SQL_Guide.md` maps to `docs/guides/report-sql.md`, but that file is still over 2,600 lines and should be split into report authoring, visual reference, layout, actions, and publishing.
 - `Docs_Legacy/Cookbook.md` maps to `docs/cookbooks/etl-recipes.md`, but the cookbook should have a README and recipe template.
@@ -333,7 +334,7 @@ The reconfigure goal was smaller and more concise documents. Several new files r
 - `docs/guides/job-orchestration.md` is about 1,200 lines.
 - `docs/reference/statements/grammar.md` is about 3,400 lines.
 
-These should become overview pages that link to focused reference pages and recipes.
+These should become overview pages that link to focused reference pages, recipes, and `docs/syntax-index.md`. The legacy `grammar.md` file should be decomposed into focused statement/query/variable pages, then deleted once unique content has moved and inbound links have been rewritten. Do not replace it with a compatibility pointer.
 
 ## P1: Template Follow-Up
 

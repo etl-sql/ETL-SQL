@@ -55,4 +55,4 @@ SET WEEK_START_DAY = 'Sunday';
 ```
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [SET Commands](set.md)

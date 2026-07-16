@@ -10,7 +10,7 @@ DATE_TRUNC(datepart, date)
 
 ## Parameters
 
-- **datepart** - Boundary to truncate to. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **datepart** - Boundary to truncate to. See [datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
 - **date** - Date or datetime value to truncate.
 
 ## Returns
@@ -40,6 +40,6 @@ GROUP BY DATE_TRUNC(HOUR, event_time);
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATETRUNC](../general/datetrunc.md)
 - [TRUNC](../general/trunc.md)

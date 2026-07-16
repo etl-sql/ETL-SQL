@@ -81,4 +81,4 @@ KILL JOB 1023;
 - See: RUN SCRIPT, EXECUTE, SHOW
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

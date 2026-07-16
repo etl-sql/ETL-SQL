@@ -26,4 +26,4 @@ SELECT u.Value FROM FLATTEN([[1, 2], [3, 4]]) AS u;     -- 1, 2, 3, 4
 - List literals use `[a, b, c]`. A single-element `[x]` is parsed as a **quoted identifier**, not a one-element list. Use a 2+ element literal, a list column, or `STRING_SPLIT`.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

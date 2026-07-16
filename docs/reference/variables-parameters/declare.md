@@ -39,4 +39,4 @@ DECLARE @result_count INT OUTPUT;
 Use HELP RELDATE for the full relative-date expression syntax.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Variables and Parameters](README.md)

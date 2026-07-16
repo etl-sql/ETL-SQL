@@ -42,4 +42,4 @@ QUALIFY rnk <= 10;
 ```
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

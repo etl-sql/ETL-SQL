@@ -79,4 +79,4 @@ END;
 ```
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [SHOW Commands](show.md)

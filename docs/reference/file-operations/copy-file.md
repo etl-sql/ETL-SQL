@@ -38,4 +38,4 @@ COPY DIRECTORY 'reports/' TO S3Conn:'bucket/reports/' WITH (
 - See: EXPORT, COMPRESS, CREATE CONNECTION
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [File Operations](README.md)

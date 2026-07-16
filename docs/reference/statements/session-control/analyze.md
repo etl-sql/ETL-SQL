@@ -38,4 +38,4 @@ SELECT column_name, distinct_values, null_ratio, min_value, max_value
 - See: EXPLAIN, SELECT, CREATE
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

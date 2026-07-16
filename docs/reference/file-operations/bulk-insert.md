@@ -35,4 +35,4 @@ For files with column headers, set FIRST_ROW = 2.
 Use FLATFILE connections (via CREATE CONNECTION) for full parsing control including delimiter, encoding, and fixed-width formats.
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [File Operations](README.md)

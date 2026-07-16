@@ -23,4 +23,4 @@ GROUP BY department;
 - Avoids multiple subqueries or complex `CASE WHEN` logic when computing multiple conditional metrics from the same table.
 
 References:
-- [Grammar](../../../guides/getting-started.md#5101-filter-conditional-aggregation)
+- [Statements](../README.md)

@@ -293,7 +293,7 @@ For a load-balanced Portal fleet:
   shared snapshot storage, or the node-registry/lease store is unavailable.
 
 The full HA setup and SQLite-to-PostgreSQL migration procedure is in
-[Administrators_Guide.md §6.1](administration.md#61-practical-high-availability-configuration)
+[Administration: Practical High Availability Configuration](administration.md#61-practical-high-availability-configuration)
 and [§11.5](administration.md#115-migrating-from-sqlite-to-postgresql--etl-sql-admin-migrate-database).
 
 ## 3. First-Run Setup

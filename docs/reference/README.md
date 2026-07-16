@@ -4,7 +4,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 
 ## Language
 
-- [Grammar](statements/grammar.md) - full ETL-SQL grammar reference.
+- [Syntax Index](../syntax-index.md) - searchable map of statements, functions, options, visuals, and related focused pages.
 - [Statements](statements/README.md) - DDL, DML, query syntax, and session-control statements.
 - [Control Flow](control-flow/README.md) - `IF`, `WHILE`, `FOREACH`, `TRY...CATCH`, `WAITFOR`, `PARALLEL`, and script execution.
 - [Variables and Parameters](variables-parameters/README.md) - `DECLARE`, `USE`, system variables, and runtime parameters.

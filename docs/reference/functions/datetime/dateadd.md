@@ -10,7 +10,7 @@ DATEADD(datepart, number, date)
 
 ## Parameters
 
-- **datepart** - Unit to add. See [datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
+- **datepart** - Unit to add. See [datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract).
 - **number** - Number of units to add. Use a negative value to subtract.
 - **date** - Base date or datetime value.
 
@@ -36,7 +36,7 @@ FROM #orders;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [Datepart values](../../../Syntax_Index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
+- [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEDIFF](datediff.md)
 - [DATEPART](datepart.md)
 - [DATENAME](datename.md)

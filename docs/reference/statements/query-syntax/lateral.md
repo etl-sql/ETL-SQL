@@ -35,4 +35,4 @@ LEFT JOIN LATERAL (
 - `LATERAL` is only valid with `[INNER] JOIN`, `LEFT JOIN`, or `CROSS JOIN`.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

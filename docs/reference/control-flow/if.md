@@ -34,4 +34,4 @@ END;
 ```
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

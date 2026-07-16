@@ -31,4 +31,4 @@ SELECT Value FROM #api_config WHERE Option = 'URL';
 ```
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

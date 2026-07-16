@@ -84,4 +84,4 @@ WITH (
 - See: CREATE CONNECTION, SELECT, PORTAL_ADMIN
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Orchestrator Jobs](README.md)

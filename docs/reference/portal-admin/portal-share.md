@@ -65,4 +65,4 @@ END;
 
 References:
 - [Data Connectors](../../guides/administration.md)
-- [Grammar](../../guides/getting-started.md)
+- [Portal Admin Commands](README.md)

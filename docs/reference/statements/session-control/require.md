@@ -32,4 +32,4 @@ INTO #orders;
 - See: DECLARE, RUN SCRIPT
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

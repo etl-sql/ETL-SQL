@@ -38,4 +38,4 @@ SELECT * FROM #data WHERE notes IS NOT DISTINCT FROM @expected;
 - Equivalent rewrites: `a IS DISTINCT FROM b` is `NOT (a IS NOT DISTINCT FROM b)`; `a IS NOT DISTINCT FROM b` is `(a = b) OR (a IS NULL AND b IS NULL)`.
 
 References:
-- [Grammar](../../../guides/getting-started.md#is-not-distinct-from)
+- [Statements](../README.md)

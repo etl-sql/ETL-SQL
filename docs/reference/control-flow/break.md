@@ -24,4 +24,4 @@ END;
 - See: CONTINUE, FOR, FOREACH, WHILE
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [Control Flow](README.md)

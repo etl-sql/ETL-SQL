@@ -30,4 +30,4 @@ To insert into a remote connection table, the connection must be specified via A
 To replace all rows, use TRUNCATE followed by INSERT, or use MERGE for upsert semantics.
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

@@ -41,4 +41,4 @@ DECOMPRESS FILE 'downloads/archive.zip' TO 'staging/';
 - See: COPY, EXPORT, ENCRYPT
 
 References:
-- [Grammar](../../guides/getting-started.md)
+- [File Operations](README.md)

@@ -71,4 +71,4 @@ ORDER BY region,;
 - Lateral column aliases resolve **left to right** and are inlined into the referencing expression. A real source column always wins over an alias of the same name, so existing queries are unaffected. A query with lateral aliases is resolved locally (not pushed down).
 
 References:
-- [Grammar](../../../guides/getting-started.md#511-modern-select-conveniences)
+- [Statements](../README.md)

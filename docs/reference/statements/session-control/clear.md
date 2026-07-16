@@ -29,4 +29,4 @@ CLEAR SESSIONS STALE;
 - See: SCHEDULE, TRANSACTION
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)

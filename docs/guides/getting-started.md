@@ -3,7 +3,7 @@
 Welcome to ETL-SQL. This guide is designed to help you transition from thinking in "Single Database SQL" to "Multi-Context Data Flow." Work through each section in order — each one builds on the last.
 
 > [!TIP]
-> **Stuck on something specific?** Use the table of contents below to jump directly to the section you need. For a searchable list of errors and gotchas, see the [FAQ](faq.md). For connector-specific syntax, see [Data_Connectors.md](administration.md).
+> **Stuck on something specific?** Use the table of contents below to jump directly to the section you need. For a searchable list of errors and gotchas, see the [FAQ](faq.md). For connector-specific syntax, see [Data Connectors](../reference/connectors/data-connectors.md).
 
 ## What Makes ETL-SQL Different
 
@@ -211,7 +211,7 @@ Choose the connector by the system you are talking to, not by the shape of the d
 | Filesystem metadata | `DIRECTORY` | Query local file inventories |
 | Tests and demos | `MOCKDB` | Develop examples without real infrastructure |
 
-Use `HELP CONNECTION <type>` for the exact options accepted by a connector, and [Data_Connectors.md](administration.md) for authentication patterns and mutually exclusive settings.
+Use `HELP CONNECTION <type>` for the exact options accepted by a connector, and [Data Connectors](../reference/connectors/data-connectors.md) for authentication patterns and mutually exclusive settings.
 
 ### 2.5 Running a Script
 
@@ -605,7 +605,7 @@ Common transformation tools:
 | Handle missing values | `COALESCE`, `ISNULL`, `NULLIF` |
 | Convert types safely | `CAST`, `TRY_CAST` |
 | Mask or fingerprint sensitive values | `HASHBYTES` |
-| Parse semi-structured data | JSON/XML functions in [Standard_Library.md](getting-started.md) |
+| Parse semi-structured data | JSON/XML functions in [Standard Library](../reference/functions/standard-library.md) |
 | Match messy names or addresses | `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `FUZZY JOIN` |
 
 ### 5.7 Dialect Awareness
@@ -1026,7 +1026,7 @@ WHERE LastModified >= DATEADD(HOUR, -24, GETDATE());
 ```
 
 > [!TIP]
-> For the full file operation reference — `COMPRESS FILE`, `ENCRYPT FILE`, `MOVE FILE`, directory operations, and SFTP/FTP patterns — see [Specialized_Operations.md](administration.md).
+> For the full file operation reference — `COMPRESS FILE`, `ENCRYPT FILE`, `MOVE FILE`, directory operations, and SFTP/FTP patterns — see [Specialized Operations](../reference/file-operations/specialized-operations.md).
 
 ---
 
@@ -1276,7 +1276,7 @@ SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 ```
 
 > [!TIP]
-> `@@LAST_EXEC_MS`, `@@TOTAL_SPILLED_BYTES`, and `@@PEAK_MEMORY_MB` are system variables you can query at any time — no profiling mode required. See [Administrators_Guide.md §5.4](administration.md) for the full system variable reference.
+> `@@LAST_EXEC_MS`, `@@TOTAL_SPILLED_BYTES`, and `@@PEAK_MEMORY_MB` are system variables you can query at any time — no profiling mode required. See [Administration](administration.md) for the full system variable reference.
 
 ### 12.4 MOCKDB — Safe Development
 
@@ -1720,7 +1720,7 @@ ASSERT (SELECT COUNT(*) FROM #users) > 0, 'Expected at least one user';
 -- 3. Run the script or publish it through your chosen host
 ```
 
-See [VS Code Extension Architecture](../architecture/VSCodeExtension.md) for implementation details and [Grammar](../reference/statements/grammar.md) for the syntax accepted by the language server.
+See [VS Code Extension Architecture](../architecture/VSCodeExtension.md) for implementation details and the [Syntax Index](../syntax-index.md) for the language surface accepted by the language server.
 
 ### 16.1 Query Formatting Configuration (`.etlsqlformat.json`)
 
@@ -1858,7 +1858,7 @@ Common portal commands include:
 | Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS`, `SHOW PORTAL OPERATIONAL METRICS` |
 | Security review | `SHOW EFFECTIVE PERMISSIONS`, `VALIDATE REPORT SCRIPT` |
 
-For browser usage, see [ReportPortal_User_Guide.md](report-portal-user.md). For deployment and administration, see [ReportPortal_Administrators_Guide.md](report-portal-admin.md).
+For browser usage, see [Report Portal User Guide](report-portal-user.md). For deployment and administration, see [Report Portal Admin Guide](report-portal-admin.md).
 
 ---
 
@@ -1866,16 +1866,17 @@ For browser usage, see [ReportPortal_User_Guide.md](report-portal-user.md). For 
 
 | Topic | Document |
 | :--- | :--- |
-| Full language syntax — every keyword | **[Grammar.md](getting-started.md)** |
-| Connector options and authentication | **[Data_Connectors.md](administration.md)** |
-| All built-in functions | **[Standard_Library.md](getting-started.md)** |
-| File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](administration.md)** |
+| Find syntax by keyword | **[Syntax Index](../syntax-index.md)** |
+| Statement syntax | **[Statement Reference](../reference/statements/README.md)** |
+| Connector options and authentication | **[Data Connectors](../reference/connectors/data-connectors.md)** |
+| All built-in functions | **[Standard Library](../reference/functions/standard-library.md)** |
+| File ops, email, lineage, Docker, jobs | **[Specialized Operations](../reference/file-operations/specialized-operations.md)** |
 | 18 production-ready recipes | **[Cookbook.md](../cookbooks/etl-recipes.md)** |
 | 55+ sample scripts inventory | **[Sample_Guide.md](sample-guide.md)** |
 | Reporting & dashboards | **[Report_SQL_Guide.md](report-sql.md)** |
 | Report examples | **[Report_Cookbook.md](../cookbooks/report-recipes.md)** |
 | Portal users | **[ReportPortal_User_Guide.md](report-portal-user.md)** |
-| Portal administrators | **[ReportPortal_Administrators_Guide.md](report-portal-admin.md)** |
+| Portal administrators | **[Report Portal Admin Guide](report-portal-admin.md)** |
 | Local and release test lanes | **[Testing.md](../../Testing.md)** |
 | Documentation map | **[Docs README](../../README.md)** |
 | Security policy | **[SECURITY.md](../../src/etl-sql-vscode/.vscode-test/vscode-win32-x64-archive-1.125.1/fcf604774b/resources/app/extensions/ms-vscode.js-debug-companion/SECURITY.md)** |

@@ -82,4 +82,4 @@ MATCH_RECOGNIZE (
 - See: SELECT, WITH, PIVOT
 
 References:
-- [Grammar](../../../guides/getting-started.md)
+- [Statements](../README.md)
