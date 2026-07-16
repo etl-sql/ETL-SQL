@@ -151,6 +151,11 @@ Thin-page batches completed:
 - `docs/reference/functions/string/space.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`
+- `docs/reference/functions/window/dense_rank.md`
+- `docs/reference/functions/window/lag.md`
+- `docs/reference/functions/window/lead.md`
+- `docs/reference/functions/window/ntile.md`
+- `docs/reference/functions/window/row_number.md`
 - `docs/reference/functions/aggregate/avg.md`
 - `docs/reference/functions/aggregate/count.md`
 - `docs/reference/functions/aggregate/max.md`

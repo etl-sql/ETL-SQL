@@ -1,34 +1,58 @@
 # LAG
+
 Returns the value of an expression from a previous row within the partition.
 
-**Category:** Window
-
 ## Syntax
+
 ```sql
-LAG(expression, [offset], [default]) OVER (
-    [PARTITION BY col1, ...]
-    ORDER BY colA [ASC|DESC], ...
+LAG(expression)
+LAG(expression, offset)
+LAG(expression, offset, default)
+  OVER (
+    [PARTITION BY column_name [, ...]]
+    ORDER BY sort_expression [ASC|DESC] [, ...]
 )
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `ANY` | The column or expression to look back at |
-| `offset` | `INT` | Optional: how many rows back to look (default: 1) |
-| `default` | `ANY` | Optional: value to return when the row doesn't exist (default: NULL) |
+
+- **expression** - Column or expression to read from a prior row.
+- **offset** - Optional number of rows to look back. Defaults to `1`.
+- **default** - Optional value to return when the requested prior row does not exist. Defaults to `NULL`.
 
 ## Returns
-Same type as `expression`.
 
-## Example
+Returns the same type as `expression`.
+
+## Null Behavior
+
+Returns `default` when the target row is outside the partition. If `default` is omitted, returns `NULL`.
+
+## Remarks
+
+- `ORDER BY` inside `OVER (...)` is required for deterministic results.
+- `PARTITION BY` restarts the offset calculation for each partition.
+
+## Examples
+
 ```sql
-SELECT date, revenue,
-    LAG(revenue) OVER (ORDER BY date) AS prev_day_revenue,
-    revenue - LAG(revenue, 1, 0) OVER (ORDER BY date) AS day_change
+SELECT
+  sale_date,
+  revenue,
+  LAG(revenue) OVER (ORDER BY sale_date) AS previous_revenue
 FROM #daily_sales;
 ```
 
-## See Also
-- [Standard Library — §13.3 Analytic Functions](../../../guides/getting-started.md#133-analytic-functions)
-- Related: [`LEAD`](lead.md), [`FIRST_VALUE`](first_value.md)
+```sql
+SELECT
+  sale_date,
+  revenue,
+  revenue - LAG(revenue, 1, 0) OVER (ORDER BY sale_date) AS revenue_change
+FROM #daily_sales;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LEAD](lead.md)
+- [FIRST_VALUE](first_value.md)

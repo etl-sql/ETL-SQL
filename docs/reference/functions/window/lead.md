@@ -1,34 +1,58 @@
 # LEAD
+
 Returns the value of an expression from a subsequent row within the partition.
 
-**Category:** Window
-
 ## Syntax
+
 ```sql
-LEAD(expression, [offset], [default]) OVER (
-    [PARTITION BY col1, ...]
-    ORDER BY colA [ASC|DESC], ...
+LEAD(expression)
+LEAD(expression, offset)
+LEAD(expression, offset, default)
+  OVER (
+    [PARTITION BY column_name [, ...]]
+    ORDER BY sort_expression [ASC|DESC] [, ...]
 )
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `expression` | `ANY` | The column or expression to look ahead at |
-| `offset` | `INT` | Optional: how many rows forward to look (default: 1) |
-| `default` | `ANY` | Optional: value when the row doesn't exist (default: NULL) |
+
+- **expression** - Column or expression to read from a later row.
+- **offset** - Optional number of rows to look forward. Defaults to `1`.
+- **default** - Optional value to return when the requested later row does not exist. Defaults to `NULL`.
 
 ## Returns
-Same type as `expression`.
 
-## Example
+Returns the same type as `expression`.
+
+## Null Behavior
+
+Returns `default` when the target row is outside the partition. If `default` is omitted, returns `NULL`.
+
+## Remarks
+
+- `ORDER BY` inside `OVER (...)` is required for deterministic results.
+- `PARTITION BY` restarts the offset calculation for each partition.
+
+## Examples
+
 ```sql
-SELECT date, revenue,
-    LEAD(revenue) OVER (ORDER BY date) AS next_day_revenue,
-    LEAD(revenue, 7) OVER (ORDER BY date) AS next_week_revenue
+SELECT
+  sale_date,
+  revenue,
+  LEAD(revenue) OVER (ORDER BY sale_date) AS next_revenue
 FROM #daily_sales;
 ```
 
-## See Also
-- [Standard Library — §13.3 Analytic Functions](../../../guides/getting-started.md#133-analytic-functions)
-- Related: [`LAG`](lag.md), [`LAST_VALUE`](last_value.md)
+```sql
+SELECT
+  sale_date,
+  revenue,
+  LEAD(revenue, 7, 0) OVER (ORDER BY sale_date) AS revenue_in_seven_rows
+FROM #daily_sales;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [LAG](lag.md)
+- [LAST_VALUE](last_value.md)
