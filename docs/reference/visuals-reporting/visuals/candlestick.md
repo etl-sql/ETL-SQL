@@ -2,15 +2,15 @@ Type: CANDLESTICK
 An OHLC candlestick chart for visualizing price movement over time. Each candle shows Open, High, Low, and Close values for a period.
 
 Mappings:
-- **X** — date or period label on the category axis (required)
-- **OPEN** — opening price (required)
-- **HIGH** — session high (required)
-- **LOW** — session low (required)
-- **CLOSE** — closing price (required)
+- **X** - date or period label on the category axis (required)
+- **OPEN** - opening price (required)
+- **HIGH** - session high (required)
+- **LOW** - session low (required)
+- **CLOSE** - closing price (required)
 
 Options:
-- **COLOR_UP   = '#hex'** — candle color when close >= open (default green)
-- **COLOR_DOWN = '#hex'** — candle color when close < open  (default red)
+- **COLOR_UP = '#hex'** - candle color when close >= open (default green)
+- **COLOR_DOWN = '#hex'** - candle color when close < open (default red)
   TITLE      = 'text'
 
 Positional fallback: if MAPPINGS are omitted, columns are assumed in X, OPEN, HIGH, LOW, CLOSE order.
@@ -31,7 +31,7 @@ SELECT
 CREATE VISUAL AcmeChart AS CANDLESTICK (
   SOURCE   = #ohlc,
   MAPPINGS (X = period, OPEN = open_price, HIGH = high_price, LOW = low_price, CLOSE = close_price),
-  OPTIONS  (COLOR_UP = '#26a69a', COLOR_DOWN = '#ef5350', TITLE = 'ACME — 90-Day Price')
+  OPTIONS  (COLOR_UP = '#26a69a', COLOR_DOWN = '#ef5350', TITLE = 'ACME 90-Day Price')
 );
 ```
 
