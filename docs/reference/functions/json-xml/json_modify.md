@@ -1,31 +1,41 @@
 # JSON_MODIFY
+
 Returns a JSON string with a value at the specified path updated, added, or removed.
 
-**Category:** JSON
-
 ## Syntax
+
 ```sql
 JSON_MODIFY(json, path, new_value)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `json` | `STRING` | The JSON string to modify |
-| `path` | `STRING` | JSONPath of the key to set |
-| `new_value` | `ANY` | The new value. Pass `NULL` to remove the key |
+
+- **json** - JSON string to modify.
+- **path** - JSONPath of the key to set.
+- **new_value** - Value to write. Pass `NULL` to remove the key.
 
 ## Returns
-`STRING` — Modified JSON string.
 
-## Example
+Returns the modified JSON string.
+
+## Null Behavior
+
+Returns `NULL` when `json` is `NULL`.
+
+## Examples
+
 ```sql
 DECLARE @json STRING = '{"name": "Alice", "status": "active"}';
-SELECT JSON_MODIFY(@json, '$.status', 'inactive');     -- → '{"name":"Alice","status":"inactive"}'
-SELECT JSON_MODIFY(@json, '$.score', 99);              -- → adds $.score
-SELECT JSON_MODIFY(@json, '$.status', NULL);           -- → removes $.status
+SELECT JSON_MODIFY(@json, '$.status', 'inactive') AS updated_json;
 ```
 
-## See Also
-- [Standard Library — §11. JSON Functions](../../../guides/getting-started.md#11-json-functions)
-- Related: [`JSON_VALUE`](json_value.md), [`JSON_QUERY`](json_query.md)
+```sql
+UPDATE #profiles
+SET profile_json = JSON_MODIFY(profile_json, '$.lastSeen', GETDATE());
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [JSON_VALUE](json_value.md)
+- [JSON_QUERY](json_query.md)

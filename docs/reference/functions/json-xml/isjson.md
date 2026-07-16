@@ -1,30 +1,39 @@
 # ISJSON
-Returns 1 if the string is valid JSON, 0 otherwise.
 
-**Category:** JSON
+Returns `1` when a string contains valid JSON, and `0` otherwise.
 
 ## Syntax
+
 ```sql
 ISJSON(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The value to test |
+
+- **string** - Value to test.
 
 ## Returns
-`BIT` — `1` if valid JSON; `0` otherwise.
 
-## Example
+Returns `1` when `string` is valid JSON; otherwise returns `0`.
+
+## Null Behavior
+
+Returns `0` when `string` is `NULL`.
+
+## Examples
+
 ```sql
-SELECT ISJSON('{"id": 1}');          -- → 1
-SELECT ISJSON('[1, 2, 3]');          -- → 1
-SELECT ISJSON('not json');           -- → 0
-
-SELECT * FROM #raw WHERE ISJSON(payload) = 0;  -- find invalid JSON rows
+SELECT ISJSON('{"id": 1}') AS is_valid_json;
 ```
 
-## See Also
-- [Standard Library — §11. JSON Functions](../../../guides/getting-started.md#11-json-functions)
-- Related: [`JSON_VALUE`](../json-xml/json_value.md), [`TRY_CAST`](../conversion/try_cast.md)
+```sql
+SELECT *
+FROM #raw
+WHERE ISJSON(payload) = 0;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [JSON_VALUE](json_value.md)
+- [TRY_CAST](../conversion/try_cast.md)

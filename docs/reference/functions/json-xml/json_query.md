@@ -1,33 +1,45 @@
 # JSON_QUERY
+
 Extracts an object or array fragment from a JSON string at a specified path.
 
-**Category:** JSON
-
 ## Syntax
+
 ```sql
 JSON_QUERY(json, path)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `json` | `STRING` | The JSON string to query |
-| `path` | `STRING` | JSONPath expression pointing to an object or array |
+
+- **json** - JSON string to query.
+- **path** - JSONPath expression pointing to an object or array.
 
 ## Returns
-`STRING` — The JSON fragment (object or array) at the path, or `NULL` if not found.
+
+Returns the JSON object or array fragment at `path`.
+
+## Null Behavior
+
+Returns `NULL` when `json` is `NULL`, `path` is missing, or the path does not point to an object or array.
 
 ## Remarks
+
 - Use `JSON_VALUE` for scalar values (strings, numbers, booleans).
 - Use `JSON_QUERY` for nested objects and arrays.
 
-## Example
+## Examples
+
 ```sql
 DECLARE @json STRING = '{"user": {"id": 1, "name": "Alice"}, "tags": ["a", "b"]}';
-SELECT JSON_QUERY(@json, '$.user');    -- → '{"id":1,"name":"Alice"}'
-SELECT JSON_QUERY(@json, '$.tags');   -- → '["a","b"]'
+SELECT JSON_QUERY(@json, '$.user') AS user_json;
 ```
 
-## See Also
-- [Standard Library — §11. JSON Functions](../../../guides/getting-started.md#11-json-functions)
-- Related: [`JSON_VALUE`](json_value.md), [`JSON_MODIFY`](json_modify.md)
+```sql
+SELECT JSON_QUERY(payload, '$.items') AS items_json
+FROM #api_responses;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [JSON_VALUE](json_value.md)
+- [JSON_MODIFY](json_modify.md)

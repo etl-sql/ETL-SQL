@@ -95,6 +95,12 @@ Thin-page batches completed:
 - `docs/reference/functions/json-xml/xmltable.md`
 - `docs/reference/functions/json-xml/json_exists.md`
 - `docs/reference/functions/json-xml/json_array.md`
+- `docs/reference/functions/json-xml/isjson.md`
+- `docs/reference/functions/json-xml/json_get.md`
+- `docs/reference/functions/json-xml/json_get_text.md`
+- `docs/reference/functions/json-xml/json_modify.md`
+- `docs/reference/functions/json-xml/json_query.md`
+- `docs/reference/functions/json-xml/json_value.md`
 - `docs/reference/functions/datetime/current_date.md`
 - `docs/reference/functions/json-xml/xmlattributes.md`
 - `docs/reference/functions/json-xml/json_object.md`
@@ -116,6 +122,7 @@ Thin-page batches completed:
 - `docs/reference/functions/general/reldate.md`
 - `docs/reference/functions/general/remote_file_exists.md`
 - `docs/reference/functions/json-xml/xmlforest.md`
+- `docs/reference/functions/json-xml/xmlvalue.md`
 - `docs/reference/functions/datetime/current_timestamp.md`
 - `docs/reference/functions/datetime/minute.md`
 - `docs/reference/functions/datetime/now.md`
