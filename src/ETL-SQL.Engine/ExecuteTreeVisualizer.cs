@@ -2,15 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Common;
-using Spectre.Console;
-using Spectre.Console.Rendering;
 
 namespace ETL_SQL.Engine;
 /// <summary>
-/// High-performance visualizer for the graphical execution tree using Spectre.Console.
+/// High-performance visualizer for the graphical execution tree.
 /// Lives in Engine so both App (headless executor) and TUI can render execution trees
 /// without a circular project dependency.
 /// </summary>
@@ -38,29 +37,18 @@ public class ExecuteTreeVisualizer
             return;
         }
 
-        await AnsiConsole.Live(CreateRenderable())
-            .AutoClear(false)
-            .StartAsync(async ctx =>
-            {
-                while (!ct.IsCancellationRequested)
-                {
-                    ctx.UpdateTarget(CreateRenderable());
-                    await Task.Delay(100, ct);
-                }
-            });
+        while (!ct.IsCancellationRequested)
+        {
+            Console.WriteLine(CreateTextSnapshot());
+            await Task.Delay(100, ct);
+        }
     }
 
-    /// <summary>Builds the Tree-Table renderable object with support for scrolling.</summary>
-    public IRenderable CreateRenderable(int skip = 0, int take = int.MaxValue)
+    /// <summary>Builds a text snapshot of the execution tree with support for scrolling.</summary>
+    public string CreateTextSnapshot(int skip = 0, int take = int.MaxValue)
     {
-        var table = new Table()
-            .Border(TableBorder.Rounded)
-            .BorderColor(Color.Grey15)
-            .Title("[bold cyan]ETL-SQL Graphical Execution Progress[/]")
-            .AddColumn("Pipeline Hierarchy")
-            .AddColumn(new TableColumn("Rows").RightAligned())
-            .AddColumn(new TableColumn("Time").RightAligned())
-            .AddColumn(new TableColumn("Speed").RightAligned());
+        var rows = new List<string[]>();
+        rows.Add(["Pipeline Hierarchy", "Rows", "Time", "Speed"]);
 
         int currentRow = 0;
         int count = 0;
@@ -68,13 +56,13 @@ public class ExecuteTreeVisualizer
         {
             var rootNode = _tree.GetNode(rootId);
             if (rootNode != null)
-                AddNodeToTable(table, rootNode, 0, ref currentRow, skip, take, ref count);
+                AddNodeToRows(rows, rootNode, 0, ref currentRow, skip, take, ref count);
         }
 
-        return table;
+        return RenderRows(rows);
     }
 
-    private void AddNodeToTable(Table table, ExecutionNode node, int depth, ref int currentRow, int skip, int take, ref int count)
+    private void AddNodeToRows(List<string[]> rows, ExecutionNode node, int depth, ref int currentRow, int skip, int take, ref int count)
     {
         if (count >= take) return;
 
@@ -83,20 +71,19 @@ public class ExecuteTreeVisualizer
             var statusStyle = GetStatusStyle(node.Status);
             var indent = new string(' ', depth * 2);
             var prefix = depth > 0 ? "└─ " : "";
-
-            var nameMarkup = $"{indent}[grey]{prefix}[/]{statusStyle.Icon} {statusStyle.Color}{Markup.Escape(node.Name)}[/]";
+            var name = $"{indent}{prefix}{statusStyle.Icon} {node.Name}";
 
             var elapsed = node.GetElapsedMs();
             var timeStr = elapsed > 1000 ? $"{(elapsed / 1000.0):N1}s" : $"{elapsed:N0}ms";
             var velocity = node.GetVelocity();
             var velStr = velocity > 1000 ? $"{(velocity / 1000.0):N1}k/s" : $"{velocity:N0} r/s";
 
-            table.AddRow(
-                new Markup(nameMarkup),
-                new Markup($"{statusStyle.Color}{node.RowsProcessed:N0}[/]"),
-                new Markup($"[grey]{timeStr}[/]"),
-                new Markup(node.Status == ExecutionStatus.Running ? $"[yellow]{velStr}[/]" : "[grey]--[/]")
-            );
+            rows.Add([
+                name,
+                $"{node.RowsProcessed:N0}",
+                timeStr,
+                node.Status == ExecutionStatus.Running ? velStr : "--"
+            ]);
             count++;
         }
         currentRow++;
@@ -105,16 +92,28 @@ public class ExecuteTreeVisualizer
         {
             var child = _tree.GetNode(childId);
             if (child != null)
-                AddNodeToTable(table, child, depth + 1, ref currentRow, skip, take, ref count);
+                AddNodeToRows(rows, child, depth + 1, ref currentRow, skip, take, ref count);
         }
+    }
+
+    private static string RenderRows(IReadOnlyList<string[]> rows)
+    {
+        var widths = Enumerable.Range(0, rows[0].Length)
+            .Select(index => rows.Max(row => row[index].Length))
+            .ToArray();
+        var builder = new StringBuilder();
+        builder.AppendLine("ETL-SQL Graphical Execution Progress");
+        foreach (var row in rows)
+            builder.AppendLine("| " + string.Join(" | ", row.Select((value, index) => value.PadRight(widths[index]))) + " |");
+        return builder.ToString().TrimEnd();
     }
 
     private (string Icon, string Color) GetStatusStyle(ExecutionStatus status) => status switch
     {
-        ExecutionStatus.Waiting => ("⏳", "[grey]"),
-        ExecutionStatus.Running => ("▶️", "[bold cyan]"),
-        ExecutionStatus.Completed => ("✅", "[bold green]"),
-        ExecutionStatus.Faulted => ("❌", "[bold red]"),
-        _ => ("❓", "[white]")
+        ExecutionStatus.Waiting => ("WAIT", ""),
+        ExecutionStatus.Running => ("RUN", ""),
+        ExecutionStatus.Completed => ("DONE", ""),
+        ExecutionStatus.Faulted => ("FAIL", ""),
+        _ => ("?", "")
     };
 }

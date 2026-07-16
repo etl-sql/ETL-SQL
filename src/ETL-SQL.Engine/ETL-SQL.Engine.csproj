@@ -7,7 +7,6 @@
   <ItemGroup>
     <PackageReference Include="Apache.Arrow" />
     <PackageReference Include="PgpCore" />
-    <PackageReference Include="Spectre.Console" />
   </ItemGroup>
 
   <ItemGroup>

@@ -8,7 +8,6 @@ using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using Microsoft.Extensions.DependencyInjection;
-using Spectre.Console;
 using Xunit;
 
 namespace ETL_SQL.Tests.Engine
@@ -142,9 +141,7 @@ namespace ETL_SQL.Tests.Engine
         private sealed class CaptureOutputSink : ResultFormatter.IResultOutputSink
         {
             public List<string> Lines { get; } = new();
-            public void Write(Table table) { }
             public void WriteLine(string text) => Lines.Add(text);
-            public void MarkupLine(string markup) => Lines.Add(markup);
             public ConsoleKeyInfo ReadKey(bool intercept) => default;
         }
     }

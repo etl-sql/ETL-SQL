@@ -23,7 +23,6 @@ using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Spectre.Console;
 
 namespace ETL_SQL.Engine;
 // Using ExecutionException from ETL_SQL.Core.Common.Exceptions
@@ -1111,8 +1110,8 @@ public partial class Evaluator : IExecutionContext, IAsyncDisposable, IDataValid
         }
         catch (ReturnException ex)
         {
-            if (ex.Value != null) Spectre.Console.AnsiConsole.MarkupLine($"[cyan][[RETURN]][/] {Spectre.Console.Markup.Escape(ex.Value?.ToString() ?? "")}");
-            else Spectre.Console.AnsiConsole.MarkupLine("[cyan][[RETURN]][/]");
+            if (ex.Value != null) Console.WriteLine($"[RETURN] {ex.Value}");
+            else Console.WriteLine("[RETURN]");
         }
         finally
         {

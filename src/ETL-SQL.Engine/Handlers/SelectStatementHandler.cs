@@ -12,7 +12,6 @@ using ETL_SQL.Core.Planning;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Engine.Services;
-using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers;
 /// <summary>

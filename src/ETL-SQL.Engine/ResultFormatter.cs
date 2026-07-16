@@ -10,7 +10,6 @@ using System.Xml;
 using System.Xml.Linq;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
-using Spectre.Console;
 
 namespace ETL_SQL.Engine;
 /// <summary>
@@ -20,24 +19,20 @@ public class ResultFormatter
 {
     public interface IResultOutputSink
     {
-        void Write(Table table);
         void WriteLine(string text);
-        void MarkupLine(string markup);
         ConsoleKeyInfo ReadKey(bool intercept);
     }
 
-    private sealed class SpectreResultOutputSink : IResultOutputSink
+    private sealed class ConsoleResultOutputSink : IResultOutputSink
     {
-        public void Write(Table table) => AnsiConsole.Write(table);
-        public void WriteLine(string text) => AnsiConsole.Console.WriteLine(text);
-        public void MarkupLine(string markup) => AnsiConsole.MarkupLine(markup);
+        public void WriteLine(string text) => Console.WriteLine(text);
         public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);
     }
 
     public static bool IsJsonMode { get; set; } = false;
     public static bool EnablePaging { get; set; } = false;
     public static bool SuppressOutput { get; set; } = false;
-    public static IResultOutputSink OutputSink { get; set; } = new SpectreResultOutputSink();
+    public static IResultOutputSink OutputSink { get; set; } = new ConsoleResultOutputSink();
     private static int _resultSetCount = 0;
 
     /// <summary>Resets the internal result set count for paging.</summary>
@@ -55,39 +50,13 @@ public class ResultFormatter
 
         if (EnablePaging && isFirst && _resultSetCount > 0)
         {
-            OutputSink.MarkupLine("\n[yellow]Press any key to see the next result set...[/]");
+            OutputSink.WriteLine("");
+            OutputSink.WriteLine("Press any key to see the next result set...");
             OutputSink.ReadKey(true);
         }
         if (isFirst) _resultSetCount++;
 
-        var table = new Table();
-        foreach (var col in batch.ColumnNames)
-        {
-            table.AddColumn(new TableColumn($"[blue]{Markup.Escape(col)}[/]").Centered());
-        }
-
-        foreach (var row in batch.Rows)
-        {
-            var values = batch.ColumnNames.Select(c =>
-            {
-                var val = SecretRedactor.RedactValue(c, row[c]);
-                return Markup.Escape(val?.ToString() ?? "NULL");
-            }).ToArray();
-            table.AddRow(values);
-        }
-
-        if (isFirst)
-        {
-            OutputSink.Write(table);
-        }
-        else
-        {
-            // For streaming batches, we might just append rows if possible, 
-            // but Spectre Table doesn't support easy appending to an existing rendered table.
-            // For now, we print a new table for each batch (less than ideal but better than nothing).
-            // Usually we'd use a Live display, but that's harder to orchestrate across batches.
-            OutputSink.Write(table);
-        }
+        OutputSink.WriteLine(FormatPlainTable(batch));
     }
 
     /// <summary>Prints an entire DataTable to the console.</summary>
@@ -114,6 +83,36 @@ public class ResultFormatter
         };
         OutputSink.WriteLine(JsonSerializer.Serialize(data, options));
     }
+
+    private static string FormatPlainTable(DataTable batch)
+    {
+        var columns = batch.ColumnNames.ToList();
+        if (columns.Count == 0)
+            return string.Empty;
+
+        var rows = batch.Rows
+            .Select(row => columns
+                .Select(column => SecretRedactor.RedactValue(column, row[column])?.ToString() ?? "NULL")
+                .ToList())
+            .ToList();
+
+        var widths = columns
+            .Select((column, index) => Math.Max(column.Length, rows.Count == 0 ? 0 : rows.Max(row => row[index].Length)))
+            .ToArray();
+
+        var builder = new StringBuilder();
+        builder.AppendLine(RenderPlainRow(columns, widths));
+        builder.AppendLine(RenderPlainSeparator(widths));
+        foreach (var row in rows)
+            builder.AppendLine(RenderPlainRow(row, widths));
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string RenderPlainRow(IReadOnlyList<string> values, IReadOnlyList<int> widths) =>
+        "| " + string.Join(" | ", values.Select((value, index) => value.PadRight(widths[index]))) + " |";
+
+    private static string RenderPlainSeparator(IReadOnlyList<int> widths) =>
+        "|-" + string.Join("-|-", widths.Select(width => new string('-', width))) + "-|";
 
     /// <summary>
     /// Formats a collection of rows into a JSON string using specific mode (AUTO/PATH).

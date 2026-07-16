@@ -78,7 +78,6 @@ public sealed class ArchitectureBoundaryTests
         ("Core", "Testcontainers.MySql"),
         ("Core", "Microsoft.Data.Sqlite"),
         ("Core", "SQLitePCLRaw.bundle_e_sqlite3"),
-        ("Engine", "Spectre.Console"),
     ];
 
     [Fact]

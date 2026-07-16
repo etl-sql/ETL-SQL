@@ -15,7 +15,7 @@ namespace ETL_SQL.Engine.Handlers;
 public class ExplainStatementHandler : IStatementHandler
 {
     public Type SupportedStatementType => typeof(ExplainStatement);
-    /// <summary>Executes the EXPLAIN statement, building a plan table and displaying it via Spectre.Console.</summary>
+    /// <summary>Executes the EXPLAIN statement, building a plan table and displaying it through the result formatter.</summary>
     public async Task Execute(Statement statement, IExecutionContext context)
     {
         var stmt = (ExplainStatement)statement;
