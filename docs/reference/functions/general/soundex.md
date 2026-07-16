@@ -1,33 +1,48 @@
 # SOUNDEX
+
 Returns the Soundex phonetic encoding of a string.
 
-**Category:** Fuzzy
-
 ## Syntax
+
 ```sql
 SOUNDEX(string)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string` | `STRING` | The word or name to encode |
+
+- **string** - Word or name to encode.
 
 ## Returns
-`STRING` — A 4-character Soundex code (e.g., `'R163'`).
+
+Returns a 4-character Soundex code, such as `R163`.
+
+## Null Behavior
+
+Returns `NULL` when `string` is `NULL`.
 
 ## Remarks
+
 - Soundex encodes English pronunciation. Useful for fast phonetic blocking before `SIMILARITY` scoring.
 - For more accurate encoding, use [`METAPHONE`](metaphone.md) or [`DMETAPHONE`](dmetaphone.md).
 - To score the Soundex difference between two strings, use [`DIFFERENCE`](difference.md).
 
-## Example
+## Examples
+
 ```sql
-SELECT SOUNDEX('Robert');    -- → 'R163'
-SELECT SOUNDEX('Rupert');    -- → 'R163'  (same code — phonetically similar)
-SELECT * FROM #names a JOIN #names b AS SOUNDEX(a.name) = SOUNDEX(b.name);
+SELECT SOUNDEX('Robert') AS soundex_code;
 ```
 
-## See Also
-- [Standard Library — §16.4 Phonetic Encoding Functions](../../../guides/getting-started.md#164-phonetic-encoding-functions)
-- Related: [`METAPHONE`](metaphone.md), [`DMETAPHONE`](dmetaphone.md), [`DIFFERENCE`](difference.md), [`SIMILARITY`](similarity.md)
+```sql
+SELECT a.name AS source_name, b.name AS candidate_name
+FROM #source AS a
+JOIN #reference AS b
+  ON SOUNDEX(a.name) = SOUNDEX(b.name);
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [METAPHONE](metaphone.md)
+- [DMETAPHONE](dmetaphone.md)
+- [DIFFERENCE](difference.md)
+- [SIMILARITY](similarity.md)

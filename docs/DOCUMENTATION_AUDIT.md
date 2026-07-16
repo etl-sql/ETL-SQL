@@ -107,6 +107,7 @@ Thin-page batches completed:
 - `docs/reference/functions/general/to_date.md`
 - `docs/reference/functions/general/datetimeoffsetsfromparts.md`
 - `docs/reference/functions/general/decode.md`
+- `docs/reference/functions/general/difference.md`
 - `docs/reference/functions/general/regexp_matches.md`
 - `docs/reference/functions/general/regexp_instr.md`
 - `docs/reference/functions/general/regexp_like.md`
@@ -135,6 +136,7 @@ Thin-page batches completed:
 - `docs/reference/functions/general/median.md`
 - `docs/reference/functions/general/mod.md`
 - `docs/reference/functions/general/newid.md`
+- `docs/reference/functions/general/normalize.md`
 - `docs/reference/functions/general/nvl.md`
 - `docs/reference/functions/general/nvl2.md`
 - `docs/reference/functions/datetime/current_timestamp.md`
@@ -159,6 +161,8 @@ Thin-page batches completed:
 - `docs/reference/functions/general/random_decimal.md`
 - `docs/reference/functions/general/random_int.md`
 - `docs/reference/functions/general/remote_file_list.md`
+- `docs/reference/functions/general/similarity.md`
+- `docs/reference/functions/general/soundex.md`
 - `docs/reference/functions/general/initcap.md`
 - `docs/reference/functions/general/remove_hidden_characters.md`
 - `docs/reference/functions/general/remove_html_characters.md`

@@ -1,42 +1,52 @@
 # SIMILARITY
-Returns a normalized similarity score (0.0–1.0) between two strings using the specified algorithm.
 
-**Category:** Fuzzy
+Returns a normalized similarity score between two strings using the specified algorithm.
 
 ## Syntax
+
 ```sql
 SIMILARITY(string1, string2)
 SIMILARITY(string1, string2, mode)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `string1` | `STRING` | First string |
-| `string2` | `STRING` | Second string |
-| `mode` | `STRING` | Optional: algorithm name — see Accepted Values |
+
+- **string1** - First string.
+- **string2** - Second string.
+- **mode** - Optional algorithm name. See [accepted values](#accepted-values-for-mode).
 
 ## Returns
-`DECIMAL` — Score in [0.0, 1.0]. `1.0` = identical strings; `0.0` = completely different.
+
+Returns a `DECIMAL` score from `0.0` through `1.0`. `1.0` means identical strings; `0.0` means completely different strings.
+
+## Null Behavior
+
+Returns `NULL` when either string argument is `NULL`.
 
 ## Accepted Values for `mode`
-| Value | Best for |
-| :--- | :--- |
-| `'JAROWINKLER'` *(default)* | Person names, short identifiers |
-| `'LEVENSHTEIN'` | Short strings with typos |
-| `'TRIGRAM'` | General purpose, longer strings |
-| `'JACCARD'` | Word presence matters more than order |
-| `'TOKENSORT'` | Names where first/last may be swapped |
 
-## Example
+- **`'JAROWINKLER'`** - Default. Best for person names and short identifiers.
+- **`'LEVENSHTEIN'`** - Best for short strings with typos.
+- **`'TRIGRAM'`** - General-purpose option for longer strings.
+- **`'JACCARD'`** - Best when word presence matters more than order.
+- **`'TOKENSORT'`** - Best for names where first and last tokens may be swapped.
+
+## Examples
+
 ```sql
-SELECT SIMILARITY('Smith', 'Smyth');                        -- → 0.943...
-SELECT SIMILARITY('Robert Smith', 'Smith Robert', 'TOKENSORT'); -- → 1.0
-SELECT a.id, b.id, SIMILARITY(a.name, b.name) AS score
-  FROM #dirty a CROSS JOIN #reference b
-  WHERE SIMILARITY(a.name, b.name) > 0.85;
+SELECT SIMILARITY('Smith', 'Smyth') AS score;
 ```
 
-## See Also
-- [Standard Library — §16.2 SIMILARITY](../../../guides/getting-started.md#162-similarity--normalized-similarity-score)
-- Related: [`NORMALIZE`](normalize.md), [`LEVENSHTEIN`](levenshtein.md), [`SOUNDEX`](soundex.md)
+```sql
+SELECT a.id, b.id, SIMILARITY(a.name, b.name) AS score
+FROM #dirty AS a
+CROSS JOIN #reference AS b
+WHERE SIMILARITY(a.name, b.name) > 0.85;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [NORMALIZE](normalize.md)
+- [LEVENSHTEIN](levenshtein.md)
+- [SOUNDEX](soundex.md)

@@ -1,33 +1,49 @@
 # DIFFERENCE
+
 Returns a Soundex similarity score between two strings.
 
-**Category:** Fuzzy
-
 ## Syntax
+
 ```sql
 DIFFERENCE(s1, s2)
 ```
 
 ## Parameters
-| Parameter | Type | Description |
-| :--- | :--- | :--- |
-| `s1` | `STRING` | First string to compare |
-| `s2` | `STRING` | Second string to compare |
+
+- **s1** - First string to compare.
+- **s2** - Second string to compare.
 
 ## Returns
-`INT` — A score from `0` to `4` comparing the two 4-character [`SOUNDEX`](soundex.md) codes position by position: `4` means the codes are identical (strongly similar sounding), `0` means none of the four positions match. Returns `NULL` if either argument is `NULL`.
+
+Returns an `INT` score from `0` through `4` comparing the two 4-character [`SOUNDEX`](soundex.md) codes position by position.
+
+## Null Behavior
+
+Returns `NULL` when either argument is `NULL`.
 
 ## Remarks
-- A different first letter can never score a full `4`, since the Soundex code keeps the leading character.
-- Use it for cheap phonetic ranking; for graded similarity use [`SIMILARITY`](similarity.md) (0–1) and for raw edit distance use [`LEVENSHTEIN`](levenshtein.md).
 
-## Example
+- `4` means the Soundex codes are identical; `0` means none of the four positions match.
+- A different first letter can never score a full `4`, since the Soundex code keeps the leading character.
+- Use it for cheap phonetic ranking; for graded similarity use [`SIMILARITY`](similarity.md), and for raw edit distance use [`LEVENSHTEIN`](levenshtein.md).
+
+## Examples
+
 ```sql
-SELECT DIFFERENCE('Smith', 'Smythe');   -- → 4  (both encode to S530)
-SELECT DIFFERENCE('Robert', 'Rupert');  -- → 4  (same Soundex code)
-SELECT DIFFERENCE('Smith', 'Jones');    -- → 2  (different initials)
+SELECT DIFFERENCE('Smith', 'Smythe') AS phonetic_score;
 ```
 
-## See Also
-- [Standard Library — §16.4 Phonetic Encoding Functions](../../../guides/getting-started.md#164-phonetic-encoding-functions)
-- Related: [`SOUNDEX`](soundex.md), [`METAPHONE`](metaphone.md), [`SIMILARITY`](similarity.md), [`LEVENSHTEIN`](levenshtein.md)
+```sql
+SELECT a.name, b.name, DIFFERENCE(a.name, b.name) AS soundex_score
+FROM #source AS a
+CROSS JOIN #reference AS b
+WHERE DIFFERENCE(a.name, b.name) >= 3;
+```
+
+## References
+
+- [Standard Library](../standard-library.md)
+- [SOUNDEX](soundex.md)
+- [METAPHONE](metaphone.md)
+- [SIMILARITY](similarity.md)
+- [LEVENSHTEIN](levenshtein.md)
