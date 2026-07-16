@@ -160,6 +160,8 @@ Thin-page batches completed:
 - `docs/reference/functions/string/ascii.md`
 - `docs/reference/functions/string/char.md`
 - `docs/reference/functions/string/charindex.md`
+- `docs/reference/functions/string/concat.md`
+- `docs/reference/functions/string/concat_ws.md`
 - `docs/reference/functions/string/instr.md`
 - `docs/reference/functions/string/lower.md`
 - `docs/reference/functions/string/ltrim.md`
@@ -168,6 +170,8 @@ Thin-page batches completed:
 - `docs/reference/functions/string/reverse.md`
 - `docs/reference/functions/string/rtrim.md`
 - `docs/reference/functions/string/space.md`
+- `docs/reference/functions/string/split_part.md`
+- `docs/reference/functions/string/string_split.md`
 - `docs/reference/functions/string/unicode.md`
 - `docs/reference/functions/string/upper.md`
 - `docs/reference/functions/window/rank.md`
