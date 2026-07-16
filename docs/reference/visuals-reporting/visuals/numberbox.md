@@ -4,18 +4,17 @@ A numeric input field with validation. The value is bound to an INT or DECIMAL v
 Mappings: none
 
 Properties:
-- **LABEL_POSITION = TOP|LEFT|HIDDEN** — position of the visual name label (default: TOP)
-- **MIN            = n** — minimum allowed value
-- **MAX            = n** — maximum allowed value
-- **DECIMALS       = n** — number of decimal places to allow (default: 0)
+- **LABEL_POSITION = TOP|LEFT|HIDDEN** - position of the visual name label (default: TOP)
+- **MIN = n** - minimum allowed value
+- **MAX = n** - maximum allowed value
+- **DECIMALS = n** - number of decimal places to allow (default: 0)
 
 Options:
-- **PLACEHOLDER = 'hint text'** — greyed-out text shown when the input is empty
-- **DEFAULT     = n** — pre-populated value on load
+- **PLACEHOLDER = 'hint text'** - greyed-out text shown when the input is empty
+- **DEFAULT = n** - pre-populated value on load
 
 Actions:
-  ON_CHANGE = SET_PARAMETER(@variable, value)
-- **** — fires when the value changes; passes the numeric result to @variable
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** - fires when the value changes; passes the numeric result to @variable
 
 ```sql
 DECLARE @threshold DECIMAL = 500.00;

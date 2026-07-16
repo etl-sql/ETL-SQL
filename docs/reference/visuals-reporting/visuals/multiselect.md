@@ -2,16 +2,15 @@ Type: MULTISELECT
 A checkbox list that lets users pick multiple values. The selection is bound to a LIST variable via ACTIONS and used to filter other visuals (typically with an IN clause).
 
 Mappings:
-- **VALUE** — column that provides the selectable option values
-- **LABEL** — optional column for display text (defaults to VALUE if omitted)
+- **VALUE** - column that provides the selectable option values
+- **LABEL** - optional column for display text (defaults to VALUE if omitted)
 
 Options:
-- **DEFAULT = 'value'** — pre-selected value on load; use ACTIONS binding for multi-default
-- **LEGEND  = ON|OFF** — show a "Select all / Clear all" control (default ON)
+- **DEFAULT = 'value'** - pre-selected value on load; use ACTIONS binding for multi-default
+- **LEGEND = ON|OFF** - show a "Select all / Clear all" control (default ON)
 
 Actions:
-  ON_CHANGE = SET_PARAMETER(@variable, value)
-- **** — passes the full selection as a LIST to @variable
+- **ON_CHANGE = SET_PARAMETER(@variable, value)** - passes the full selection as a LIST to @variable
 
 ```sql
 DECLARE @selected_regions LIST = ('All');
