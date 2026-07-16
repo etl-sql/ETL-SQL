@@ -118,7 +118,7 @@ work by priority.
       detail.
 - [x] **P1 — Make audit outbox claiming atomic across Portal nodes.** Claim batches with a database-safe
       update/lease operation and retain the documented at-least-once EventId deduplication contract.
-- [ ] **P2 — Correct operational metric labels and values.** Derive database reachability and topology
+- [x] **P2 — Correct operational metric labels and values.** Derive database reachability and topology
       from actual state rather than exporting constant healthy/HA values.
 - [ ] **P2 — Make CodeMirror builds reproducible.** Pin CodeMirror and esbuild versions in a lockfile or
       equivalent manifest and generate SBOM versions from the resolved dependency graph.

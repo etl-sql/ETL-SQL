@@ -17,7 +17,8 @@ public sealed class OperationalMetricsService(
     PortalConfig config,
     PortalNodeIdentity? nodeIdentity = null,
     HealthCheckService? healthChecks = null,
-    PortalStorageUsageSampler? storageUsage = null)
+    PortalStorageUsageSampler? storageUsage = null,
+    PortalTopologyReadinessService? topologyReadiness = null)
 {
     /// <summary>The window over which failure rates are computed.</summary>
     public static readonly TimeSpan FailureWindow = TimeSpan.FromHours(24);
@@ -167,7 +168,7 @@ public sealed class OperationalMetricsService(
             queuedExecutions,
             config.Resources.MaxConcurrentReportExecutions,
             config.Resources.MaxConcurrentExecutionsPerUser,
-            ResolveTopology(),
+            await ResolveTopologyAsync(ct),
             nodeIdentity?.NodeId ?? Environment.MachineName,
             config.LoadBalancer.SessionAffinityCookieName,
             recentExecutions,
@@ -211,8 +212,24 @@ public sealed class OperationalMetricsService(
             (int)FailureWindow.TotalHours);
     }
 
-    private string ResolveTopology()
+    private async Task<string> ResolveTopologyAsync(CancellationToken ct)
     {
+        if (topologyReadiness is not null)
+        {
+            try
+            {
+                return (await topologyReadiness.CheckAsync(ct)).Mode;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Fall back to config-derived topology below.
+            }
+        }
+
         var expected = config.Topology.ExpectedMode?.Trim();
         if (!string.IsNullOrWhiteSpace(expected)
             && !string.Equals(expected, "Auto", StringComparison.OrdinalIgnoreCase))
@@ -322,7 +339,17 @@ public sealed class OperationalMetricsService(
     private async Task<HealthSummary> GetHealthSummaryAsync(CancellationToken ct)
     {
         if (healthChecks is null)
-            return new HealthSummary(true, false, true, 0);
+        {
+            try
+            {
+                var canConnect = await db.Database.CanConnectAsync(ct);
+                return new HealthSummary(canConnect, false, true, canConnect ? 0 : 1);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return new HealthSummary(false, IsPoolExhaustion(ex), true, 1);
+            }
+        }
 
         try
         {
