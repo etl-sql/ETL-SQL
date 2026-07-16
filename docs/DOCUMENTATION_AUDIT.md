@@ -163,6 +163,8 @@ Thin-page batches completed:
 - `docs/reference/functions/conversion/isnull.md`
 - `docs/reference/functions/conversion/nullif.md`
 - `docs/reference/functions/conversion/try_cast.md`
+- `docs/reference/functions/cryptography/checksum.md`
+- `docs/reference/functions/cryptography/hashbytes.md`
 
 `docs/reference/functions/conversion/cast.md` and `docs/reference/visuals-reporting/visuals/hbar.md` have been expanded and can be used as starter examples for the new style.
 
@@ -170,7 +172,6 @@ No function reference pages remain under 300 bytes, and the original under-700-b
 
 Next function-reference cleanup should be driven by old-format markers instead of byte size. A broad scan still finds older function pages with `**Category:**`, `## See Also`, deep guide anchors, and inline output-arrow examples. The next category batches should start with:
 
-- Cryptography functions: `checksum.md`, `hashbytes.md`
 - Datetime functions: `dateadd.md`, `datediff.md`, `datepart.md`, `datename.md`, `date_trunc.md`, `day.md`, `extract.md`
 
 Window aggregate note: aggregate functions such as `SUM`, `AVG`, `COUNT`, `MIN`, `MAX`, and `STDEV` already document their `OVER (...)` forms in their aggregate pages. Keep those pages as the source of truth and link to them from `docs/reference/functions/window/README.md`; do not duplicate full pages in the window folder unless behavior diverges.
@@ -209,6 +210,23 @@ Most legacy files have some new equivalent, but these legacy topics need deliber
 - `snippets/README.md` now documents snippet frontmatter, placeholder syntax, authoring rules, and build/runtime flow.
 - `docs/reference/snippets/README.md` now provides the user-facing guide for built-in and user-defined snippets.
 - Old physical `src/ETL-SQL.Core/Resources/Help` copies should be removed only after the project file embeds replacement docs/snippets from `/docs` and `/snippets`, and build/test coverage confirms runtime help and snippet loading still work.
+
+## P1: Function Folder Taxonomy Cleanup
+
+`docs/reference/functions/general/` is still too broad. It contains several well-defined categories that should move into focused folders after the old-format cleanup batches are complete.
+
+Proposed moves:
+
+- Datetime functions: `date_part.md`, `datetimefromparts.md`, `datetimeoffsetsfromparts.md`, `datetrunc.md`, `eomonth.md`, `isdate.md`, `parse.md`, `reldate.md`, `timefromparts.md`, `to_date.md`, `to_timestamp.md`, `trunc.md`
+- File/path functions: `directory.md`, `directory_exists.md`, `file_exists.md`, `file_hash.md`, `file_list.md`, `file_modified.md`, `file_size.md`, `path_combine.md`, `path_directory.md`, `path_extension.md`, `path_filename.md`, `remote_file_exists.md`, `remote_file_list.md`
+- Regex functions: `regexp_count.md`, `regexp_instr.md`, `regexp_like.md`, `regexp_matches.md`, `regexp_replace.md`, `regexp_split_to_table.md`, `regexp_substr.md`
+- Fuzzy matching functions: `difference.md`, `dmetaphone.md`, `dmetaphone_alt.md`, `levenshtein.md`, `metaphone.md`, `ngram_tokens.md`, `ngrams.md`, `normalize.md`, `similarity.md`, `soundex.md`
+- Lineage/tag functions: `get_tag_value.md`, `get_tags.md`, `has_tag.md`
+- Job state functions: `get_job_state.md`, `set_job_state.md`
+- Random/GUID functions: `newid.md`, `newsequentialid.md`, `random.md`, `random_decimal.md`, `random_int.md`
+- Bitwise functions: `bit_count.md`, `bitand.md`, `bitnot.md`, `bitor.md`, `bitshiftleft.md`, `bitshiftright.md`, `bitxor.md`
+
+Do the taxonomy move as a dedicated pass with automated link rewriting and docs validation. Avoid moving these files piecemeal while old pages may still reference their current paths.
 
 ## P1: Oversized Guides
 
