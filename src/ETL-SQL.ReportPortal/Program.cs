@@ -417,6 +417,7 @@ builder.Services.AddScoped<IDatasetRegistry>(sp =>
     ETL_SQL.Core.Observability.DatasetObservability.Instrument(
         sp.GetRequiredService<ETL_SQL.ReportPortal.Services.DatasetRegistryService>()));
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetExportService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetRefreshService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
 

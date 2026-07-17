@@ -20,13 +20,13 @@ public class DatasetController(
     PortalDbContext db,
     IDatasetRegistry registry,
     AuditService audit,
-    ExecutionJobService jobService,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
     FolderPermissionService folderPermissions,
     SecuritySessionService securitySessions,
     SessionCache sessions,
-    DatasetExportService exports) : ControllerBase
+    DatasetExportService exports,
+    DatasetRefreshService refreshes) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -212,44 +212,20 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanRefresh(perm)) return Forbid();
 
-        // Concurrent refresh guard: reject if the owning report is already executing
-        if (dataset.OwningReportId.HasValue)
+        var result = await refreshes.RefreshAsync(dataset, User, CurrentUserId, IsAdmin, HttpContext.TraceIdentifier);
+        if (result.Kind == DatasetRefreshResultKind.Conflict)
         {
-            var existingJobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
-            if (existingJobId is not null)
-            {
-                Response.Headers.Append("Location", $"/api/jobs/{existingJobId}");
-                return Conflict(new { error = "Refresh already in progress.", jobId = existingJobId });
-            }
+            Response.Headers.Append("Location", $"/api/jobs/{result.JobId}");
+            return Conflict(new { error = result.Message, jobId = result.JobId });
         }
 
-        // Mark stale so the engine re-materialises on next CREATE DATASET hit
-        await registry.SetStale(dataset.Name);
-
-        // If we have an owning report, queue a real engine refresh.
-        // Path security is enforced inside RunJobAsync — no need to pre-validate here.
-        if (dataset.OwningReport is not null)
+        if (result.Kind == DatasetRefreshResultKind.Queued)
         {
-            var jobId = await jobService.EnqueueRefreshAsync(
-                dataset.OwningReport.Id,
-                CurrentUserId,
-                dataset.OwningReport.ScriptPath,
-                isAdministrator: IsAdmin,
-                actorType: User.FindFirstValue(TokenService.IdentityTypeClaim) == TokenService.ServiceIdentityType
-                    ? "ServiceAccount" : "User",
-                actorId: User.FindFirstValue(TokenService.ServiceAccountIdClaim) ?? CurrentUserId.ToString(),
-                effectiveScopes: string.Join(' ', User.FindAll(TokenService.ScopeClaim)
-                    .Select(value => value.Value).OrderBy(value => value)),
-                correlationId: HttpContext.TraceIdentifier);
-            await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
-            Response.Headers.Append("Location", $"/api/jobs/{jobId}");
-            return Accepted(new { triggered = true, jobId });
+            Response.Headers.Append("Location", $"/api/jobs/{result.JobId}");
+            return Accepted(new { triggered = true, jobId = result.JobId });
         }
 
-        // No owning report — dataset was created outside the Portal (e.g. ad-hoc CLI run).
-        // Mark stale so it re-materialises when the producing script next executes.
-        await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name + " (stale-only)");
-        return Accepted(new { triggered = false, message = $"Dataset '{dataset.Name}' has no linked report. Run the script that produced it to refresh the data." });
+        return Accepted(new { triggered = false, message = result.Message });
     }
 
     // ── GET /api/datasets/{id}/refresh-status ────────────────────────────────
@@ -263,22 +239,7 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanView(perm)) return Forbid();
 
-        if (dataset.OwningReportId.HasValue)
-        {
-            var jobId = await jobService.GetActiveRefreshJobIdAsync(dataset.OwningReportId.Value);
-            if (jobId is not null)
-            {
-                var job = await jobService.GetAsync(jobId);
-                return Ok(new DatasetRefreshStatusDto(
-                    "InProgress", jobId,
-                    job?.StartedAt, null, null,
-                    dataset.LastRefresh, IsStale(dataset)));
-            }
-        }
-
-        return Ok(new DatasetRefreshStatusDto(
-            "Idle", null, null, null, null,
-            dataset.LastRefresh, IsStale(dataset)));
+        return Ok(await refreshes.GetStatusAsync(dataset));
     }
 
     // ── PATCH /api/datasets/{id} ──────────────────────────────────────────────
