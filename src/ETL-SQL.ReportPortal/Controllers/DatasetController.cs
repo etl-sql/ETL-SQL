@@ -22,10 +22,10 @@ public class DatasetController(
     AuditService audit,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
-    SecuritySessionService securitySessions,
     DatasetExportService exports,
     DatasetRefreshService refreshes,
-    DatasetMoveService moves) : ControllerBase
+    DatasetMoveService moves,
+    DatasetAclService acls) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -386,35 +386,14 @@ public class DatasetController(
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
-        if (!Enum.TryParse<DatasetPermission>(req.Permission, ignoreCase: true, out var granted))
+        var result = await acls.GrantAsync(dataset, req.GroupId, req.Permission, expectedVersion.Value, CurrentUserId);
+        if (result.Kind == DatasetAclMutationResultKind.InvalidPermission)
             return BadRequest(new { error = "permission must be 'Viewer', 'Refresh', 'Editor', or 'Owner'." });
-
-        if (!await db.Groups.AnyAsync(g => g.Id == req.GroupId))
+        if (result.Kind == DatasetAclMutationResultKind.GroupNotFound)
             return NotFound(new { error = "Group not found." });
-
-        var existing = await db.DatasetAcls
-            .FirstOrDefaultAsync(a => a.DatasetId == id && a.GroupId == req.GroupId);
-
-        if (existing is null)
-            db.DatasetAcls.Add(new DatasetAcl { DatasetId = id, GroupId = req.GroupId, Permission = granted });
-        else
-            existing.Permission = granted;
-
-        audit.Stage(CurrentUserId, "GRANT_DATASET_PERMISSION", "Dataset", id.ToString(),
-            $"{dataset.Name} → group {req.GroupId} as {granted}");
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await db.Entry(dataset).ReloadAsync();
+        if (result.Kind == DatasetAclMutationResultKind.Conflict)
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
-        }
-        await securitySessions.InvalidateGroupMembersAsync(req.GroupId);
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });
@@ -433,26 +412,12 @@ public class DatasetController(
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
-        var acl = await db.DatasetAcls
-            .FirstOrDefaultAsync(a => a.DatasetId == id && a.GroupId == groupId);
-        if (acl is null) return NotFound(new { error = "ACL entry not found." });
-
-        db.DatasetAcls.Remove(acl);
-        audit.Stage(CurrentUserId, "REVOKE_DATASET_PERMISSION", "Dataset", id.ToString(),
-            $"{dataset.Name} → group {groupId}");
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await db.Entry(dataset).ReloadAsync();
+        var result = await acls.RevokeAsync(dataset, groupId, expectedVersion.Value, CurrentUserId);
+        if (result.Kind == DatasetAclMutationResultKind.AclNotFound)
+            return NotFound(new { error = "ACL entry not found." });
+        if (result.Kind == DatasetAclMutationResultKind.Conflict)
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
-        }
-        await securitySessions.InvalidateGroupMembersAsync(groupId);
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });
