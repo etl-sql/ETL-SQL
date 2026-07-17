@@ -75,6 +75,9 @@ scanDirectories(docsDir, dir => {
   const mdFiles = getMarkdownFiles(dir);
   if (mdFiles.length > 5) {
     const relativeDir = path.relative(docsDir, dir);
+    if (relativeDir.replace(/\\/g, '/').toLowerCase() === 'reference/cli') {
+      return;
+    }
     console.log(`Generating README.md for docs/${relativeDir || ''}`);
     
     // Generate markdown content

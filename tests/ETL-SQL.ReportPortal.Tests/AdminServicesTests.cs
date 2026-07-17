@@ -170,6 +170,7 @@ public class AdminServicesTests
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var utcNow = DateTime.UtcNow;
             db.PortalExecutionJobs.AddRange(
                 new PortalExecutionJob
                 {
@@ -178,9 +179,9 @@ public class AdminServicesTests
                     ReportId = 42,
                     UserId = 7,
                     Status = "Succeeded",
-                    CreatedAt = DateTime.UtcNow.AddMinutes(-20),
-                    StartedAt = DateTime.UtcNow.AddMinutes(-19),
-                    CompletedAt = DateTime.UtcNow.AddMinutes(-18),
+                    CreatedAt = utcNow.AddMinutes(-20),
+                    StartedAt = utcNow.AddMinutes(-19),
+                    CompletedAt = utcNow.AddMinutes(-18),
                     RowsProcessed = 100,
                     PeakMemoryBytes = 128 * mb,
                     CpuTimeSeconds = 0.5
@@ -192,9 +193,9 @@ public class AdminServicesTests
                     ReportId = 42,
                     UserId = 7,
                     Status = "Failed",
-                    CreatedAt = DateTime.UtcNow.AddMinutes(-15),
-                    StartedAt = DateTime.UtcNow.AddMinutes(-14),
-                    CompletedAt = DateTime.UtcNow.AddMinutes(-13),
+                    CreatedAt = utcNow.AddMinutes(-15),
+                    StartedAt = utcNow.AddMinutes(-14),
+                    CompletedAt = utcNow.AddMinutes(-13),
                     RowsProcessed = 0,
                     PeakMemoryBytes = 64 * mb,
                     CpuTimeSeconds = 0.25
@@ -203,7 +204,7 @@ public class AdminServicesTests
             {
                 ServiceName = "capacity-report",
                 Outcome = "Sent",
-                StartedAtUtc = DateTime.UtcNow.AddDays(-400)
+                StartedAtUtc = utcNow.AddDays(-400)
             });
             await db.SaveChangesAsync();
         }
