@@ -12,7 +12,7 @@ Do not write any markdown descriptions, preambles, or explanations. Return only 
 
 You must output a single, valid JSON object. 
 
-The machine-readable contract is maintained at `Docs/Reference/spec_pipeline.schema.json`. Do not include comments, markdown fences, or fields from both shapes in the same output.
+The machine-readable contract is maintained at `docs/spec-import/spec_pipeline.schema.json`. Do not include comments, markdown fences, or fields from both shapes in the same output.
 
 *   **For a Single-Dataset Specification:** You can place `destination` and `schema` directly at the root.
 *   **For a Multi-Dataset Specification (Multiple Files/Sheets):** Omit the root-level `destination` and `schema` keys, and instead define a list under `datasets`.
