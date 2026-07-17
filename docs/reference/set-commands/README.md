@@ -79,6 +79,6 @@ All produce an audit entry. Paths must be within a Safe Zone.
 
 ## References
 
-- [Configuration Settings Reference](../../administration/platform/settings.md)
+- [Configuration Settings Reference](../../administration/platform/appsettings-reference.md)
 - [Statement Reference](../statements/README.md)
 - [Syntax Index](../../syntax-index.md)

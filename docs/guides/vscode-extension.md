@@ -1,6 +1,6 @@
-# VS Code and Deployment
+# VS Code Extension
 
-## 9. VS Code Extension
+## VS Code Extension
 
 ETL-SQL ships with a dedicated VS Code extension (`src/etl-sql-vscode/`) that enhances the development experience. The extension communicates with the engine via the JSON REPL protocol (`ETL-SQL ui repl`).
 
@@ -17,9 +17,9 @@ The extension auto-launches `ETL-SQL ui repl` in the background when you open an
 
 ---
 
-## 10. Configuration & Deployment
+## Configuration & Deployment
 
-Host-level settings, including security limits, dashboard ports, and background service deployment (NSSM/systemd), are now managed in the central **[Administrators Guide](../platform/README.md)**.
+Host-level settings, including security limits, dashboard ports, and background service deployment (NSSM/systemd), are now managed in the central **[Administrators Guide](../administration/platform/README.md)**.
 
 Refer to that guide for:
 - **`appsettings.json`** configuration keys.

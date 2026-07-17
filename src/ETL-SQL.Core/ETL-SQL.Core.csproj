@@ -69,7 +69,7 @@
     <EmbeddedResource Include="..\..\docs\reference\orchestrator-jobs\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\orchestrator-jobs\README.md" />
 
     <!-- Global & Session Configuration (Options Category) -->
-    <EmbeddedResource Include="..\..\docs\administration\platform\settings.md" Link="Resources\Help\Options\settings.md" />
+    <EmbeddedResource Include="..\..\docs\administration\platform\appsettings-reference.md" Link="Resources\Help\Options\settings.md" />
 
     <!-- Code Autocomplete Snippets -->
     <EmbeddedResource Include="..\..\snippets\*.md" Link="Resources\Help\Snippets\%(Filename)%(Extension)" Exclude="..\..\snippets\README.md" />

@@ -53,7 +53,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | :--- | :--- |
 | Schedule a recurring job (`CREATE JOB`) | [Job Scheduling](administration/orchestration/job-scheduling.md) |
 | Schedule a job on a remote Orchestrator | [ETL Recipes](cookbooks/etl-recipes.md) — Scheduling a Recurring Job on a Remote Orchestrator |
-| Compose pipelines as a DAG (fan-out, gating, branching) | [DAGs and Advanced Orchestration](administration/orchestration/dags.md) |
+| Compose pipelines as a DAG (fan-out, gating, branching) | [Pipelines and DAGs](guides/pipelines-and-dags.md) |
 | Deploy an immutable published script bundle (CI/CD) | [ETL Recipes](cookbooks/etl-recipes.md) — Immutable Published Script Bundles |
 
 ## Notify and deliver

@@ -165,4 +165,16 @@ BEGIN CATCH
     PRINT 'Pipeline failed at: ' + GETDATE();
     THROW;
 END CATCH
+
+---
+
+## 6. Visualizing the DAG
+
+When running complex nested scripts, use the `--progress` flag in the CLI:
+
+```bash
+ETL-SQL run orchestrator.etlsql --progress
 ```
+
+The console will render a live, dynamic **Execution Tree** showing which scripts are currently running, which are queued in `PARALLEL` blocks, and their individual progress bars.
+

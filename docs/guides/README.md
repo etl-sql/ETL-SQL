@@ -19,6 +19,8 @@ syntax option. For operating and administering ETL-SQL (platform, portal, orches
 - [Spec-Driven Development](../spec-import/spec-driven-development.md) - generate scripts from source specifications.
 - [Data Spec Parser Instructions](../spec-import/data-spec-parser-instructions.md) - prompt and JSON contract guidance.
 - [Notebook Guide](notebook-guide.md) - notebook workflows and script execution.
+- [VS Code Extension](vscode-extension.md) - edit, lint, preview, and debug scripts with the editor integration.
+- [Logging and Performance Tuning](logging-and-performance.md) - optimize batch size, logging, and metrics for scripts.
 
 ## Reporting
 

@@ -15,5 +15,5 @@ area's README lists its pages.
 ## See Also
 
 - [CLI Reference](../reference/cli/README.md) - every `etl-sql` command, generated from the command tree.
-- [Configuration Settings](platform/settings.md) and [Data Types](../reference/data-types.md).
+- [Configuration Settings](platform/appsettings-reference.md) and [Data Types](../reference/data-types.md).
 - [Documentation Home](../README.md)

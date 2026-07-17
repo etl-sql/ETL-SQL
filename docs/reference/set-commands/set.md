@@ -82,4 +82,4 @@ SET JOIN_SPILL_THRESHOLD = 500000;
 
 ## References
 - [SET Commands Index](README.md)
-- [Configuration Settings Reference](../../administration/platform/settings.md)
+- [Configuration Settings Reference](../../administration/platform/appsettings-reference.md)
