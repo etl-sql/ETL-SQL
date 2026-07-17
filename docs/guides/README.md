@@ -1,31 +1,36 @@
 # Guides
 
-Guides explain workflows end to end. Use them when you know what you want to accomplish but do not need every syntax option.
+Task-focused user guides — use them when you know what you want to accomplish but don't need every
+syntax option. For operating and administering ETL-SQL (platform, portal, orchestration), see the
+[Administration](../administration/README.md) area.
 
-## Core User Guides
+## Getting Started
 
-- [Getting Started](getting-started.md) - first script, language model, connectors, variables, temp tables, reports, and editor workflows.
+- [Getting Started](getting-started.md) - the engine mental model, connections, variables, temp
+  tables, and core `SELECT`, with pointers onward.
 - [FAQ](faq.md) - short answers to common language, connector, reporting, and operational questions.
-- [Migration Guide](migration-guide.md) - upgrade notes and breaking-change migration help.
 - [Sample Guide](sample-guide.md) - how to run and interpret the sample scripts.
+- [Migration Guide](migration-guide.md) - upgrade notes and breaking-change migration help.
 
-## Pipeline And Data Workflows
+## Building Pipelines
 
-- [Pipelines and DAGs](pipelines-and-dags.md) - script composition, dependencies, and DAG-style orchestration.
-- [Job Orchestration](../administration/orchestration/README.md) - jobs, schedules, remote orchestration, exports, and operational execution.
+- [ETL Recipes](../cookbooks/etl-recipes.md) - complete, runnable pipeline patterns.
+- [Pipelines and DAGs](pipelines-and-dags.md) - script composition, dependencies, and DAG-style flows.
+- [Spec-Driven Development](spec-driven-development.md) - generate scripts from source specifications.
+- [Data Spec Parser Instructions](data-spec-parser-instructions.md) - prompt and JSON contract guidance.
 - [Notebook Guide](notebook-guide.md) - notebook workflows and script execution.
-- [Spec-Driven Development](spec-driven-development.md) - generate ETL-SQL scripts from source specifications.
-- [Data Spec Parser Instructions](data-spec-parser-instructions.md) - prompt and JSON contract guidance for data specification extraction.
 
-## Reporting And Portal Guides
+## Reporting
 
-- [Report SQL](report-sql.md) - `.rptsql` authoring, visuals, pages, datasets, interactions, and styling.
-- [Portal User Guide](portal-user.md) - browsing, running, filtering, exporting, and subscribing to reports.
-- [Portal Administration](../administration/portal/README.md) - users, groups, folders, permissions, datasets, subscriptions, SMTP, HA, and governance.
+- [Report SQL](report-sql.md) - author `.rptsql` dashboards (workflow, parameters, RLS, examples).
+- [Portal User Guide](portal-user.md) - browse, run, filter, export, and subscribe to reports.
 
-## Operations
+## Testing and Release
 
-- [Administration](../administration/platform/README.md) - installation, configuration, security, backup, HA, and monitoring.
-- [Testing](testing.md) - local validation lanes, release gates, SLT, and evidence.
+- [Testing](testing.md) - local validation lanes, release gates, and evidence.
 - [Release Checklist](../releases/release-checklist.md) - release execution checklist.
 
+## See Also
+
+- [Administration](../administration/README.md) - install, secure, operate, and administer.
+- [Task Index](../task-index.md) - goal-oriented "how do I…" locator · [Syntax Index](../syntax-index.md) - keyword map.
