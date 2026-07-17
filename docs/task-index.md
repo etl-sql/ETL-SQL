@@ -43,7 +43,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Encrypt a connection string for a script | [etl-sql encrypt](reference/cli/encrypt.md) |
-| Manage secrets and secret references | [Security and Secret Management](administration/platform/security.md) |
+| Manage secrets and secret references | [Security and Secret Management](administration/platform/secrets.md) |
 | Mask or hash PII during load | [ETL Recipes](cookbooks/etl-recipes.md) — Secure PII Masking & Hashing |
 | Send files securely to a vendor over SFTP | [ETL Recipes](cookbooks/etl-recipes.md) — Secure Vendor Handshake |
 
