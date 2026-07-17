@@ -136,7 +136,7 @@ work by priority.
       - [x] Move Docker/Testcontainers runtime implementation into `ETL-SQL.Infrastructure.Docker`.
       - [x] Move SQLite session metadata persistence behind infrastructure interfaces.
       - [x] Move SQLite governance outbox persistence and native SQLite packages behind infrastructure interfaces.
-      - [ ] Move file-sink implementations behind infrastructure interfaces.
+      - [x] Move file-sink logging implementation behind infrastructure interfaces.
 - [x] **P1 — Correct the Engine dependency direction.** Remove Engine dependencies on Reporting,
       presentation packages such as `Spectre.Console`, and other upper layers; update implementation or
       boundary documentation where Analysis integration is intentionally part of execution.

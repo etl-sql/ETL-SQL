@@ -54,6 +54,7 @@
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Infrastructure.Logging\ETL-SQL.Infrastructure.Logging.csproj" />
     <ProjectReference Include="..\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />

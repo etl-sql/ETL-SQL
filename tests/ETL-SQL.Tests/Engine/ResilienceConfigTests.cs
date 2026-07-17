@@ -38,6 +38,7 @@ namespace ETL_SQL.Tests.Engine
             services.AddSingleton<ETL_SQL.Core.Functions.IFunctionRegistry>(new ETL_SQL.Engine.Functions.FunctionRegistry());
             services.AddSingleton<ILineageTracker>(new LineageTracker(testLogger));
             services.AddSingleton<IDockerManager>(new DockerContainerManager(testLogger));
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionMetadataStoreFactory, ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory>();
 
 
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();

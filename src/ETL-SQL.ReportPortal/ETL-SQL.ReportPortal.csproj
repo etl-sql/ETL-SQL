@@ -28,6 +28,7 @@
     <!-- Postgres migration set loaded at runtime when the Postgres provider is selected. -->
     <ProjectReference Include="..\ETL-SQL.ReportPortal.Migrations.Postgres\ETL-SQL.ReportPortal.Migrations.Postgres.csproj" />
     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Infrastructure.Logging\ETL-SQL.Infrastructure.Logging.csproj" />
     <ProjectReference Include="..\ETL-SQL.Infrastructure.Sqlite\ETL-SQL.Infrastructure.Sqlite.csproj" />
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
