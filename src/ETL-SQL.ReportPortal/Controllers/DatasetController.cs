@@ -1,4 +1,3 @@
-using System.IO.Pipelines;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -27,7 +26,7 @@ public class DatasetController(
     FolderPermissionService folderPermissions,
     SecuritySessionService securitySessions,
     SessionCache sessions,
-    ILogger<DatasetController> logger) : ControllerBase
+    DatasetExportService exports) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -129,56 +128,11 @@ public class DatasetController(
         if (!CanView(perm)) return Forbid();
 
         var filterList = ParseFilters(filters);
-        var safeName = string.Concat(dataset.Name.Where(c => char.IsLetterOrDigit(c) || c == '_'));
 
         try
         {
-            var (filteredRows, columns) = await viewer.PrepareExportAsync(id, sort, dir, search, filterList);
-
-            if (string.Equals(format, "xlsx", StringComparison.OrdinalIgnoreCase))
-            {
-                var pipe = new Pipe();
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await using var stream = pipe.Writer.AsStream();
-                        await viewer.ExportXlsxAsync(columns, filteredRows, stream, dataset.Name);
-                        await pipe.Writer.CompleteAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        // Completing with the exception aborts the client download mid-stream;
-                        // log it too or the server has no record of why the export failed.
-                        logger.LogError(ex, "XLSX export of dataset {DatasetId} failed mid-stream.", id);
-                        await pipe.Writer.CompleteAsync(ex);
-                    }
-                });
-
-                return File(pipe.Reader.AsStream(),
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    $"{safeName}.xlsx");
-            }
-
-            var csvPipe = new Pipe();
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await using var stream = csvPipe.Writer.AsStream();
-                    await viewer.ExportCsvAsync(columns, filteredRows, stream);
-                    await csvPipe.Writer.CompleteAsync();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "CSV export of dataset {DatasetId} failed mid-stream.", id);
-                    await csvPipe.Writer.CompleteAsync(ex);
-                }
-            });
-
-            return File(csvPipe.Reader.AsStream(),
-                "text/csv; charset=utf-8",
-                $"{safeName}.csv");
+            var export = await exports.PrepareAsync(dataset, sort, dir, search, filterList, format);
+            return File(export.Stream, export.ContentType, export.FileName);
         }
         catch (InvalidOperationException ex)
         {
