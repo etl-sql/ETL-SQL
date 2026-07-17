@@ -1621,6 +1621,7 @@ export function createDesigner(container, opts = {}) {
     const reportId  = opts.reportId   ?? null;
     let reportVersion = opts.reportVersion ?? null;
     let sourceRevision = opts.sourceRevision ?? null;
+    const sourceControlEnabled = Boolean(opts.sourceControlEnabled);
     const folderId  = opts.folderId   ?? null;
     const apiBase   = opts.apiBase    ?? '';
     const _fetch    = opts.authFetch  ?? ((url, o) => fetch(url, o));
@@ -1703,10 +1704,24 @@ export function createDesigner(container, opts = {}) {
         <button class="btn btn-sm" id="dsgn-script-toggle">⌨ Script</button>
         <span class="etlsql-preview-badge">Preview: VS Code only</span>
         <button class="btn btn-sm btn-primary" id="dsgn-save">Save</button>
+        <button class="btn btn-sm" id="dsgn-commit" title="Commit the saved script to source control (Git)" style="display:none">Commit</button>
+        <span id="dsgn-scm-status" role="status" aria-live="polite"></span>
         <button class="btn btn-sm" id="dsgn-cancel">Cancel</button>
     `;
     root.appendChild(topbar);
     topbar.querySelector('#dsgn-name').value = reportName;
+    if (sourceControlEnabled && reportId) topbar.querySelector('#dsgn-commit').style.display = '';
+
+    function setScmStatus(text, kind) {
+        const el = topbar.querySelector('#dsgn-scm-status');
+        if (!el) return;
+        el.textContent = text || '';
+        const colors = { success: '#16a34a', error: '#dc2626', pending: '#a16207', neutral: '#64748b' };
+        el.style.color = colors[kind] || colors.neutral;
+        el.style.marginLeft = '8px';
+        el.style.fontSize = '12px';
+    }
+    const shortRev = r => (r ? String(r).slice(0, 8) : '');
 
     // Sidebar
     const sidebar = document.createElement('div');
@@ -2136,7 +2151,16 @@ export function createDesigner(container, opts = {}) {
                     reportVersion);
                 reportVersion = saved?.version ?? reportVersion;
                 sourceRevision = saved?.sourceRevision ?? sourceRevision;
-                opts.onSave?.();
+                if (sourceControlEnabled) {
+                    // Save writes the catalog + script artifact only. Committing to Git is a
+                    // separate, explicit step, so stay on the page and surface the Commit action
+                    // instead of navigating away.
+                    setScmStatus(`Saved v${reportVersion} · not yet committed`, 'pending');
+                    const commitBtn = topbar.querySelector('#dsgn-commit');
+                    if (commitBtn) commitBtn.disabled = false;
+                } else {
+                    opts.onSave?.();
+                }
             } else {
                 saveModal.querySelector('#dsgn-modal-name').value   = reportName;
                 saveModal.querySelector('#dsgn-modal-folder').value = folderId ?? '';
@@ -2144,6 +2168,30 @@ export function createDesigner(container, opts = {}) {
                 saveModal.style.display = 'flex';
             }
         } catch (e) { alert('Save failed: ' + e.message); }
+    }
+
+    // Explicit, separately reported source-control step. Commits the last-saved script
+    // artifact to Git (and pushes if the server is configured to push on commit). This never
+    // holds a database transaction — the server stages/commits under its own repository lease.
+    async function commitScript() {
+        if (!reportId) return;
+        const commitBtn = topbar.querySelector('#dsgn-commit');
+        const prevLabel = commitBtn ? commitBtn.textContent : 'Commit';
+        if (commitBtn) { commitBtn.disabled = true; commitBtn.textContent = 'Committing…'; }
+        setScmStatus('Committing to source control…', 'pending');
+        try {
+            const res = await apiJson(`/api/reports/${reportId}/script-source/commit`, 'POST', {});
+            if (res?.committed) {
+                sourceRevision = res.sourceRevision ?? sourceRevision;
+                setScmStatus(`Committed ${shortRev(res.sourceRevision)}`, 'success');
+            } else {
+                setScmStatus(`Nothing to commit — working tree matches ${shortRev(res?.sourceRevision) || 'HEAD'}`, 'neutral');
+            }
+        } catch (e) {
+            setScmStatus(`Commit failed: ${e.message}`, 'error');
+        } finally {
+            if (commitBtn) { commitBtn.disabled = false; commitBtn.textContent = prevLabel || 'Commit'; }
+        }
     }
 
     async function saveAsNew() {
@@ -2167,6 +2215,7 @@ export function createDesigner(container, opts = {}) {
     topbar.querySelector('#dsgn-back').addEventListener('click',    () => opts.onCancel?.());
     topbar.querySelector('#dsgn-cancel').addEventListener('click',  () => opts.onCancel?.());
     topbar.querySelector('#dsgn-save').addEventListener('click',    saveReport);
+    topbar.querySelector('#dsgn-commit')?.addEventListener('click', commitScript);
     topbar.querySelector('#dsgn-add-page').addEventListener('click', addPage);
     topbar.querySelector('#dsgn-name').addEventListener('change',   e => { reportName = e.target.value; });
     topbar.querySelector('#dsgn-script-toggle').addEventListener('click', () =>

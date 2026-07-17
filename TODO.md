@@ -71,9 +71,21 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
         Ctrl-. each open the completion popup. Canonical `designer.js` edited + `sync-assets.js` run.
       - Note: there is **no** dedicated "expand `SELECT *` → column list" feature anywhere (designer/mock/LSP);
         autocomplete is the mechanism. Building real `*` expansion is a separate enhancement if wanted.
-- [ ] **Separate Save from Git Commit/Push** — `Save` updates the Portal script and catalog only.
+- [x] **Separate Save from Git Commit/Push** — `Save` updates the Portal script and catalog only.
       When source control is configured, expose Git commit/push as an explicit, separately reported
       operation with its own button. Do not hold a database transaction open during Git or network I/O.
+      - Backend was already separated (the checked P1 items): `ReportScriptSaveService.SaveAsync` writes
+        catalog + script artifact in one DB transaction and records `sourceControlPending`, never touching
+        Git; `PortalScriptSourceControlService.CommitScriptAsync` commits/pushes under its own repository
+        lease; and `POST /api/reports/{id}/script-source/commit` exists. The **UI was the gap** — nothing
+        called that endpoint and the designer redirected away on Save.
+      - Added a `SourceControlEnabled` flag to `ScriptContentResponse` (accurate even before the first
+        commit) and surfaced it to the designer. The designer now shows a separate **Commit** button (only
+        when source control is on); Save writes catalog/artifact and — when source control is on — stays on
+        the page with a status line instead of navigating away, so Commit is reachable. Commit calls the
+        endpoint and reports its own result (committed `rev` / nothing-to-commit / error). Verified in the
+        ui-sandbox (new "Sales + source control" designer fixture + mock commit endpoint): Save → "Saved
+        v2 · not yet committed"; Commit → "Committed <rev>"; second Commit → "Nothing to commit".
 
 ---
 

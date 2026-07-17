@@ -1622,7 +1622,7 @@ public class ReportsController : ControllerBase
             ? await artifacts.ReadAllTextAsync(ETL_SQL.Core.Storage.ArtifactArea.Scripts, scriptKey)
             : string.Empty;
         OptimisticConcurrency.SetETag(Response, report.Version);
-        return Ok(new ScriptContentResponse(text, report.Version, await sourceControl.GetCurrentRevisionAsync()));
+        return Ok(new ScriptContentResponse(text, report.Version, await sourceControl.GetCurrentRevisionAsync(), sourceControl.IsEnabled));
     }
 
     // ── PUT /api/reports/{id}/script-content ──────────────────────────────────

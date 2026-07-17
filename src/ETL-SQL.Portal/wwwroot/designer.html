@@ -59,6 +59,7 @@ let initialReportName = 'New Report';
 let initialFolderId   = folderId;
 let initialReportVersion = null;
 let initialSourceRevision = null;
+let initialSourceControlEnabled = false;
 
 if (reportId) {
   try {
@@ -70,6 +71,7 @@ if (reportId) {
     const sc = await apiJson(`/api/reports/${reportId}/script-content`);
     initialReportVersion = sc?.version ?? report?.version ?? null;
     initialSourceRevision = sc?.sourceRevision ?? null;
+    initialSourceControlEnabled = sc?.sourceControlEnabled ?? false;
     if (sc?.scriptText) {
       const parsed = await apiJson('/api/designer/parse', { method: 'POST', body: { script: sc.scriptText } });
       if (parsed?.designState?.pages?.length) initialState = parsed.designState;
@@ -84,6 +86,7 @@ createDesigner(container, {
   reportId,
   reportVersion: initialReportVersion,
   sourceRevision: initialSourceRevision,
+  sourceControlEnabled: initialSourceControlEnabled,
   reportName:   initialReportName,
   folderId:     initialFolderId,
   apiBase:      '',

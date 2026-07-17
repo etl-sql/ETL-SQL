@@ -13,6 +13,7 @@
 // The parse round-trip just echoes the seed state — a faithful script↔state parse
 // is the real DesignerController's job; here we only need the UI to round-trip.
 export function makeMockApi(seedState) {
+  let commitCount = 0;
   return async (url, init) => {
     const path = String(url).replace(/^https?:\/\/[^/]+/, '').replace(/\?.*$/, '');
     let body = {};
@@ -27,6 +28,12 @@ export function makeMockApi(seedState) {
       data = { diagnostics: analyzeMockScript(body.script ?? '') };
     } else if (path.endsWith('/api/designer/complete')) {
       data = { items: completeMockScript(body.script ?? '', body.line ?? 0, body.column ?? 0, body.connectionRef ?? null) };
+    } else if (path.endsWith('/script-source/commit')) {
+      // First commit records a new revision; a second (no changes) reports nothing to commit.
+      commitCount += 1;
+      data = commitCount === 1
+        ? { sourceRevision: 'sandboxc0ffee1', committed: true }
+        : { sourceRevision: 'sandboxc0ffee1', committed: false };
     } else if (path.endsWith('/api/designer/run')) {
       data = runMockScript(body.selection || body.script || '');
     } else if (path.endsWith('/api/designer/schema')) {
