@@ -187,7 +187,7 @@ etl-sql doctor --profile full --strict --json
 - Run `etl-sql doctor` as the first step of any new host setup or post-upgrade verification.
 - Add `etl-sql doctor --strict` to the service startup validation in your CI/CD pipeline.
 - Use `etl-sql doctor --json` to feed a monitoring system that alerts on WARN/FAIL status.
-- See the [Production Readiness Checklist](../report-portal-admin.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
+- See the [Production Readiness Checklist](../report-portal-admin/production-readiness.md#14-production-readiness-checklist) in the portal admin guide for the full go-live gate.
 
 ---
 

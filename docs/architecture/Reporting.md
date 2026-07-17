@@ -610,7 +610,7 @@ owned by the caller; a userless trusted publication falls back to the destinatio
 The at-rest key is a recovery dependency, not just a runtime setting. Production startup fails for
 missing, weak, invalid, or unresolved key-version configuration. Operators must back up the current and
 previous key mappings together with the database and dataset directory. See the
-[Report Portal Administrator Guide](../guides/report-portal-admin.md#65-dataset-at-rest-key-lifecycle)
+[Report Portal Administrator Guide](../guides/report-portal-admin/publishing.md#65-dataset-at-rest-key-lifecycle)
 for provisioning, rotation, restore, and orphan-reconciliation procedures.
 
 ---

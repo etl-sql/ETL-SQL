@@ -110,7 +110,7 @@ that the backup was **not** produced by a newer release than the restoring binar
 reconstructs the on-disk layout and re-injects the secrets into the restored `appsettings.json`; on the
 next portal start, pending migrations apply automatically. Dataset caches referenced by **absolute**
 path in the catalog must be restored to their original `DatasetRootPath` (or re-materialized) — see
-[§6.5](../report-portal-admin.md#versioned-upgrades-and-rollback).
+[§6.5](../report-portal-admin/publishing.md#versioned-upgrades-and-rollback).
 The optional `--report` path writes a machine-readable recovery report containing the backup id,
 validation status, achieved RPO/data-loss window, missing dependencies, and required operator actions.
 
@@ -127,7 +127,7 @@ folder permissions, jobs, subscriptions, datasets (and their at-rest key version
 
 The full in-place upgrade procedure, the post-upgrade verification checklist, and the supported
 rollback path (**restore-from-backup, not a down-migration**) are documented in
-[Report Portal Admin Guide: Versioned Upgrades and Rollback](../report-portal-admin.md#versioned-upgrades-and-rollback).
+[Report Portal Admin Guide: Versioned Upgrades and Rollback](../report-portal-admin/publishing.md#versioned-upgrades-and-rollback).
 
 This upgrade path is gated before every release tag by the **"N→N+1 upgrade-path drill"** phase in
 `scripts/Test-PreRelease.ps1`, which seeds the previous release's schema, migrates forward over
