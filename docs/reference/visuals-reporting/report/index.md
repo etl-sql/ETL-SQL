@@ -12,7 +12,8 @@ A report is a sequence of `CREATE` statements. The engine compiles them into a s
 - **`CONTAINER`**: Nested layout group within a page.
 - **`NAVIGATION`**: Menu or tab strip linking pages.
 - **`BUTTON`**: Interactive back / refresh / link button.
-- **`STYLE`**: Reusable formatting theme.
+- **`STYLE`**: Reusable formatting rules applied to visuals and pages.
+- **`THEME`**: Named light/dark theme referenced by pages and visuals.
 
 ## Canonical Layout Rules
 
