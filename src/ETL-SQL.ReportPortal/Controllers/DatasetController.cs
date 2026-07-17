@@ -22,11 +22,10 @@ public class DatasetController(
     AuditService audit,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
-    FolderPermissionService folderPermissions,
     SecuritySessionService securitySessions,
-    SessionCache sessions,
     DatasetExportService exports,
-    DatasetRefreshService refreshes) : ControllerBase
+    DatasetRefreshService refreshes,
+    DatasetMoveService moves) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -303,60 +302,19 @@ public class DatasetController(
         if (destination is null)
             return NotFound(new { error = "Destination folder not found." });
 
-        if (dataset.FolderId == destination.Id)
-            return Ok(ToDto(dataset));
-
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
 
-        if (dataset.FolderId is int sourceFolderId)
-        {
-            if (!await folderPermissions.HasPermissionAsync(
-                    sourceFolderId,
-                    FolderPermission.Manage,
-                    User))
-            {
-                return Forbid();
-            }
-        }
-        else if (!IsAdmin)
+        var result = await moves.MoveAsync(dataset, destination, expectedVersion.Value, User, CurrentUserId, IsAdmin);
+        if (result.Kind == DatasetMoveResultKind.Forbidden)
         {
             return Forbid();
         }
-
-        if (!await folderPermissions.HasPermissionAsync(
-                destination.Id,
-                FolderPermission.Manage,
-                User))
+        if (result.Kind == DatasetMoveResultKind.Conflict)
         {
-            return Forbid();
-        }
-
-        var sourcePath = dataset.FolderPath;
-        dataset.FolderId = destination.Id;
-        dataset.FolderPath = destination.Path;
-        dataset.UpdatedAt = DateTime.UtcNow;
-        audit.Stage(
-            CurrentUserId,
-            "MOVE_DATASET",
-            "Dataset",
-            id.ToString(),
-            $"{dataset.Name}: {sourcePath} -> {destination.Path}");
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await db.Entry(dataset).ReloadAsync();
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
         }
-
-        if (dataset.OwningReportId is int reportId)
-            await sessions.InvalidateReportAsync(reportId);
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));
