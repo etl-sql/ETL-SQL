@@ -215,7 +215,7 @@ try {
 
   dag.dispose();
 
-  const lineageUiTemp = await importTempModule(path.resolve('src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js'), 'etl-sql-lineage-ui');
+  const lineageUiTemp = await importTempModule(path.resolve('src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js'), 'etl-sql-lineage-ui');
   try {
     const { lineageRowsToCsv, renderDependencies, renderLineageRow } = await import(lineageUiTemp.href);
     const row = {

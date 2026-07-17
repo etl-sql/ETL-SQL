@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace ETL_SQL.ReportPortal;
+namespace ETL_SQL.Portal;
 
 public class PortalConfig
 {

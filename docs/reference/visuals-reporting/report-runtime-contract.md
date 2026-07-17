@@ -14,7 +14,7 @@ The canonical browser runtime files live in `src/ETL-SQL.ReportRuntime/Resources
 Host copies are generated artifacts:
 
 - ReportPlayer: `src/ETL-SQL.ReportPlayer/wwwroot/`
-- Portal: `src/ETL-SQL.ReportPortal/wwwroot/js/` and `src/ETL-SQL.ReportPortal/wwwroot/css/`
+- Portal: `src/ETL-SQL.Portal/wwwroot/js/` and `src/ETL-SQL.Portal/wwwroot/css/`
 - VS Code: `src/etl-sql-vscode/media/`
 
 Edit the canonical files first, then run:

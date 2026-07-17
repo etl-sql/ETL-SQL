@@ -258,13 +258,13 @@ While ETL-SQL significantly reduces the risk of accidental secret leaks, a scrip
 
 ## 8. Reporting and Portal Security
 
-Report-SQL and the Report Portal add a web surface around script execution and report viewing.
+Report-SQL and the Portal add a web surface around script execution and report viewing.
 
 Controls include:
 
 - `ReportPlayer` serves local dashboards and defaults to local hosting; port selection is configurable with `ReportPlayer:Port`.
 - `SnapshotStore` uses atomic write behavior and path-based async locks to reduce snapshot corruption during refreshes.
-- Report Portal records report publish/update/delete, folder permission, subscription, saved view, share link, embed token, dataset, and admin actions in portal audit logs.
+- Portal records report publish/update/delete, folder permission, subscription, saved view, share link, embed token, dataset, and admin actions in portal audit logs.
 - Portal publish and update flows validate script paths against configured script roots.
 - JWT secrets must be configured with sufficient length before production use.
 - Folder, report, and dataset permissions are enforced in portal controllers.
@@ -275,7 +275,7 @@ Report snapshots (`.etlsnap`) are packaged as compressed ZIP streams containing 
 - **Key Derivation & Rotation**: Cryptographic keys are derived from the configured `Portal:Dataset:AtRestKey` and mixed with versioning headers. The `SnapshotPackageService` supports versioned key rotation, resolving legacy keys from a configured dictionary (`Portal:Dataset:PreviousAtRestKeys`) to decrypt older snapshots.
 
 ### 8.2 Identity and Authentication (OIDC)
-The Report Portal supports federated identity via OpenID Connect (OIDC) to standardize access:
+The Portal supports federated identity via OpenID Connect (OIDC) to standardize access:
 - **Token Validation**: Strictly validates OIDC signatures, issuer authority, and token audience.
 - **Group Claim Synchronization**: Dynamically maps OIDC group claims to portal roles and ACL permissions (folder, report, and dataset authorization), ensuring membership revocation propagates automatically.
 
@@ -288,7 +288,7 @@ Operational cautions:
 
 - Treat `.rptsql` files as executable scripts, not passive dashboard definitions.
 - Restrict who can publish, update, or execute report scripts.
-- Do not expose ReportPlayer directly to untrusted networks without an authenticated reverse proxy or the Report Portal.
+- Do not expose ReportPlayer directly to untrusted networks without an authenticated reverse proxy or the Portal.
 - Review share-link and embed-token lifetimes and revocation behavior before enabling external access.
 
 ---

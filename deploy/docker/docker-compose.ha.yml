@@ -1,6 +1,6 @@
 # High Availability (HA) cluster configuration for ETL-SQL.
 #
-# Runs multiple load-balanced instances of the Report Portal and Orchestrator services.
+# Runs multiple load-balanced instances of the Portal and Orchestrator services.
 # Shared state is stored in PostgreSQL (instead of local SQLite), and shared artifacts 
 # (Reports, Snapshots, datasets, maps, and Data Protection key ring) are mapped to a
 # shared directory on the host. An HAProxy container serves as the frontend load balancer,
@@ -53,7 +53,7 @@ services:
       - ${ENV_DATA_ROOT}/Sessions:/app/Sessions
 
   portal:
-    image: etl-sql/report-portal:${ETLSQL_IMAGE_TAG:-latest}
+    image: etl-sql/portal:${ETLSQL_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       postgres:

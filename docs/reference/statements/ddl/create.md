@@ -54,7 +54,7 @@ END;
 - `ENC:` prefix marks an encrypted credential value decrypted at connect time.
 - `CREATE TABLE` is optional when using `SELECT ... INTO #table`. The schema is inferred automatically.
 - `CREATE VIEW` stores a query definition only; rows are evaluated when the view is selected.
-- Portal administration variants require `EXECUTE <reportportal-connection> BEGIN ... END`.
+- Portal administration variants require `EXECUTE <portal-connection> BEGIN ... END`.
 - See: DROP, USE SETS, ENCRYPT
 
 References:

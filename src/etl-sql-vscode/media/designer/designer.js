@@ -15,7 +15,7 @@
  *   createDesigner()     Phase 4 — full WYSIWYG report designer
  *
  * Hosted in two places via sync-assets.ps1:
- *   Portal   → src/ETL-SQL.ReportPortal/wwwroot/designer/designer.js
+ *   Portal   → src/ETL-SQL.Portal/wwwroot/designer/designer.js
  *   VS Code  → src/etl-sql-vscode/media/designer/designer.js
  *
  * Both hosts load this as a plain ES module:

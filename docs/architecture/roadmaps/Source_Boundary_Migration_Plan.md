@@ -16,7 +16,7 @@ This plan is intentionally conservative: document the target boundaries first, k
 - AST records, parser/lexer contracts, language metadata, shared expression and report model contracts.
 - Cross-cutting value objects and interfaces that do not execute scripts or depend on a specific host.
 
-Core should not depend on host shells such as ReportPlayer, ReportPortal, VS Code, the TUI, or CLI apps.
+Core should not depend on host shells such as ReportPlayer, Portal, VS Code, the TUI, or CLI apps.
 
 ### Engine Execution
 
@@ -66,7 +66,7 @@ The canonical browser runtime lives in:
 src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
-Generated host copies live under ReportPlayer, ReportPortal, and the VS Code extension. Do not edit those copies directly; use `node .\scripts\sync-assets.js`.
+Generated host copies live under ReportPlayer, Portal, and the VS Code extension. Do not edit those copies directly; use `node .\scripts\sync-assets.js`.
 
 `ETL-SQL.ReportRuntime` is the dedicated source area for canonical JavaScript, CSS, themes, browser dependencies, runtime fixtures, and runtime debugging utilities. The contract in `Docs/Report_Runtime_Contract.md` is the source of truth.
 
@@ -75,16 +75,16 @@ Generated host copies live under ReportPlayer, ReportPortal, and the VS Code ext
 `src/ETL-SQL.ReportHosting` owns reusable report session services that need Engine execution plus Reporting manifest construction, but should not belong to a specific host shell:
 
 - Report script evaluation sessions, parameter state, selective visual refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories.
-- Shared hosting behavior used by ReportPlayer and ReportPortal.
+- Shared hosting behavior used by ReportPlayer and Portal.
 
-This boundary may depend on Engine and Reporting. ReportPlayer and ReportPortal may depend on ReportHosting, but ReportPortal should not depend on ReportPlayer.
+This boundary may depend on Engine and Reporting. ReportPlayer and Portal may depend on ReportHosting, but Portal should not depend on ReportPlayer.
 
 ### Host Shells
 
 Hosts should provide shell behavior and delegate semantics downward:
 
 - ReportPlayer: local/standalone hosting, HTTP routes, session plumbing, static asset hosting, and report embedding.
-- ReportPortal: authentication, authorization, folders, publishing, snapshots, subscriptions, audit, portal navigation, and dataset registry APIs.
+- Portal: authentication, authorization, folders, publishing, snapshots, subscriptions, audit, portal navigation, and dataset registry APIs.
 - VS Code extension: editor integration, webview shell, LSP client wiring, commands, packaging, and marketplace-facing structure. Preserve the ecosystem-friendly `src/etl-sql-vscode` folder/package naming.
 - TUI, CLI, App, Orchestrator, and LanguageServer: user interaction, process hosting, protocol wiring, scheduling, diagnostics transport, and command surfaces.
 
@@ -131,7 +131,7 @@ Recommended steps:
 1. Add the new runtime source area with the same canonical files. *(Done: canonical assets moved to `src/ETL-SQL.ReportRuntime/Resources/Shared` and represented by `ETL-SQL.ReportRuntime.csproj`.)*
 2. Update `scripts/sync-assets.ps1` and `Docs/Report_Runtime_Contract.md`. *(Done: sync/check tooling now reads from ReportRuntime and covers nested map assets; use the Node wrapper for cross-platform runs.)*
 3. Run the runtime sync check. *(Done: `node .\scripts\sync-assets.js -Check` passes from the ReportRuntime source.)*
-4. Verify ReportPlayer, ReportPortal, and VS Code still consume generated copies. *(Done: ReportPlayer and ReportPortal build from generated host copies; VS Code compile runs the canonical sync script.)*
+4. Verify ReportPlayer, Portal, and VS Code still consume generated copies. *(Done: ReportPlayer and Portal build from generated host copies; VS Code compile runs the canonical sync script.)*
 
 Phase 3 is complete. Keep canonical browser runtime changes in `ETL-SQL.ReportRuntime`, run the sync script after edits, and treat host runtime files as generated outputs.
 
@@ -156,7 +156,7 @@ Recommended steps:
 1. Introduce the new project or namespace boundary. *(Done: project boundary created; namespace compatibility retained for now.)*
 2. Move manifest, style, visual, page, container, dataset, chart, and action semantics. *(Done for the first-pass boundary: manifest/visual builders, manifest contracts, style/page/dataset builders, theme translation, Markdown/SVG/PDF/terminal rendering, snapshot persistence, and shared ECharts chart semantics moved.)*
 3. Leave compatibility references or forwarding types while hosts migrate. *(Done: `ETL-SQL.ReportBuilder` remains for the engine-facing export handler, and `CreateThemeStatementHandler.BuildEChartsTheme` forwards to the reporting helper.)*
-4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, ReportPortal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
+4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, Portal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
 5. Rename packages/projects only after references are clean.
 
 Phase 4 is functionally complete for the first-pass boundary. Keep `ETL-SQL.ReportBuilder` as the compatibility assembly for the engine-facing `EXPORT REPORT` handler.
@@ -174,8 +174,8 @@ After Analysis, ReportRuntime, and Reporting boundaries exist, remove any remain
 Current progress:
 
 - Report interaction refresh/dependency semantics moved from ReportPlayer into `ETL-SQL.Reporting` as `ReportInteractionRefresher`; ReportPlayer now delegates parameter-driven visual refresh behavior to Reporting.
-- Report CSV rendering moved from ReportBuilder/ReportPortal host code into `ETL-SQL.Reporting` as `CsvRenderer`; export hosts now share the same table selection and CSV escaping behavior.
-- Reusable report session hosting moved from ReportPlayer into `ETL-SQL.ReportHosting`; ReportPlayer and ReportPortal now consume the same `DashboardService`/`DashboardServiceFactory` without a host-to-host project reference.
+- Report CSV rendering moved from ReportBuilder/Portal host code into `ETL-SQL.Reporting` as `CsvRenderer`; export hosts now share the same table selection and CSV escaping behavior.
+- Reusable report session hosting moved from ReportPlayer into `ETL-SQL.ReportHosting`; ReportPlayer and Portal now consume the same `DashboardService`/`DashboardServiceFactory` without a host-to-host project reference.
 
 Phase 5 is functionally complete for the first-pass boundary. Hosts now delegate shared report session, rendering, snapshot, runtime, and interaction semantics to lower layers.
 

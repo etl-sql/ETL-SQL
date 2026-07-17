@@ -133,7 +133,7 @@ function New-EnvService([string]$Name, [string]$Display, [string]$Exe, [string[]
 }
 
 New-EnvService -Name $orchSvc   -Display "ETL-SQL Orchestrator ($Environment)" -Exe $orchExe   -EnvBlock $orchEnv
-New-EnvService -Name $portalSvc -Display "ETL-SQL Report Portal ($Environment)" -Exe $portalExe -EnvBlock $portalEnv
+New-EnvService -Name $portalSvc -Display "ETL-SQL Portal ($Environment)" -Exe $portalExe -EnvBlock $portalEnv
 
 # 5. Emit the environment descriptor used by the isolation verifier and the runbook.
 $descriptor = @"

@@ -15,7 +15,7 @@ Nothing is shared between environments — see
 | `docker-compose.override.example.yml` | Optional local-source override. Copy to repository-root `docker-compose.override.yml` when you want Docker Compose to build local C# source instead of using registry images. |
 | `docker-compose.ha.yml` | High Availability cluster stack: PostgreSQL + load-balanced / scaled Orchestrator and Portal nodes. |
 | `environment-ha.env.example` | Per-environment settings for the HA stack. |
-| `haproxy.cfg` | HAProxy configuration for cookie-based sticky sessions (Report Portal) and round-robin routing (Orchestrator). |
+| `haproxy.cfg` | HAProxy configuration for cookie-based sticky sessions (Portal) and round-robin routing (Orchestrator). |
 | `initdb/10-create-orchestrator-db.sh` | First-run hook that creates the separate Orchestrator database in Postgres. |
 
 ## Quick start (Standard Isolated Environment)
@@ -46,7 +46,7 @@ To run a multi-node, load-balanced HA setup with a variable number of service re
    cp environment-ha.env.example production-ha.env
    ```
 2. Edit `production-ha.env` to set unique credentials, shared path roots, and keys.
-3. Bring up the stack with any desired number of Report Portal and Orchestrator instances:
+3. Bring up the stack with any desired number of Portal and Orchestrator instances:
    ```bash
    docker compose --env-file production-ha.env -f docker-compose.ha.yml up -d --scale portal=3 --scale orchestrator=2
    ```

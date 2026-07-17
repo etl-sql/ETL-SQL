@@ -10,8 +10,8 @@ $SharedDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportRuntime\Resources\Sha
 # Targets
 $VsCodeMedia = Join-Path $PSScriptRoot "..\src\etl-sql-vscode\media"
 $PlayerWwwRoot = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPlayer\wwwroot"
-$PortalJsDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPortal\wwwroot\js"
-$PortalCssDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPortal\wwwroot\css"
+$PortalJsDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Portal\wwwroot\js"
+$PortalCssDir = Join-Path $PSScriptRoot "..\src\ETL-SQL.Portal\wwwroot\css"
 $Mode = if ($Check) { "Check" } else { "Sync" }
 
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -131,22 +131,22 @@ foreach ($File in $Files) {
     # 2. ReportPlayer (Static Web Files)
     Sync-Or-Check -File $File -TargetDir $PlayerWwwRoot -Label "ReportPlayer"
 
-    # 3. ReportPortal (Categorized JS/CSS/maps/designer)
+    # 3. Portal (Categorized JS/CSS/maps/designer)
     if ((Test-Path $PortalJsDir) -and (Test-Path $PortalCssDir)) {
         $relativePath = Get-AssetRelativePath -Path $File.FullName
-        $portalRoot = Join-Path $PSScriptRoot "..\src\ETL-SQL.ReportPortal\wwwroot"
+        $portalRoot = Join-Path $PSScriptRoot "..\src\ETL-SQL.Portal\wwwroot"
         if ($relativePath -like "maps\*") {
             # Maps preserve their subdirectory under wwwroot/maps/
-            Sync-Or-Check -File $File -TargetDir $portalRoot -Label "ReportPortal (Maps)"
+            Sync-Or-Check -File $File -TargetDir $portalRoot -Label "Portal (Maps)"
         } elseif ($relativePath -like "designer\*") {
             # Designer files preserve their full subdirectory under wwwroot/designer/
-            Sync-Or-Check -File $File -TargetDir $portalRoot -Label "ReportPortal (Designer)"
+            Sync-Or-Check -File $File -TargetDir $portalRoot -Label "Portal (Designer)"
         } elseif ($File.Extension -eq ".js") {
-            Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "ReportPortal (JS)"
+            Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "Portal (JS)"
         } elseif ($File.Extension -eq ".css") {
-            Sync-Or-Check -File $File -TargetDir $PortalCssDir -Label "ReportPortal (CSS)"
+            Sync-Or-Check -File $File -TargetDir $PortalCssDir -Label "Portal (CSS)"
         } else {
-            Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "ReportPortal (Misc)"
+            Sync-Or-Check -File $File -TargetDir $PortalJsDir -Label "Portal (Misc)"
         }
     }
 }

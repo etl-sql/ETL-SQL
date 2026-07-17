@@ -69,36 +69,53 @@ Initial product-facing rename landed in `788c2c3b`: user docs, visible strings, 
 and the admin connector token now use **Portal** / `PORTAL` instead of **Report Portal** /
 `REPORTPORTAL`. Remaining work should be handled as explicit mechanical batches:
 
-- [ ] **Decide whether to rename internal project identities.** Answer: Yes,  Current code still uses project,
-      assembly, namespace, and test names such as `ETL-SQL.ReportPortal`,
-      `ETL_SQL.ReportPortal`, and `tests/ETL-SQL.ReportPortal.Tests`. If we want the rename to be
+- [x] **Decide whether to rename internal project identities.** Answer: Yes,  Current code still uses project,
+      assembly, namespace, and test names such as `ETL-SQL.Portal`,
+      `ETL_SQL.Portal`, and `tests/ETL-SQL.Portal.Tests`. If we want the rename to be
       complete end-to-end, rename these to `ETL-SQL.Portal`, `ETL_SQL.Portal`, and
       `tests/ETL-SQL.Portal.Tests`, then update solution/project references, Dockerfiles,
       installer scripts, CI/test-lane scripts, architecture boundary tests, and publish/build scripts.
-- [ ] **Rename connector implementation folders/classes if internal identities are renamed.**
+- [x] **Rename connector implementation folders/classes if internal identities are renamed.**
       `src/ETL-SQL.Connectors/ReportPortal/ReportPortalConnector.cs` and
       `ReportPortalDataSource` still use the old internal type names while exposing the new
       `PORTAL` connector token. Rename to `PortalConnector` / `PortalDataSource` only as part of the
       internal identity pass so tests and DI registration move together.
-- [ ] **Rename sample folder paths after checking release/script references.**
+- [x] **Rename sample folder paths after checking release/script references.**
       `samples/report_portal_deployment/` still uses the old folder name even though its prose was
       updated. Rename to `samples/portal_deployment/` and update every sample guide, test, release,
       and packaging reference.
-- [ ] **Regenerate and verify VS Code syntax assets after any token/name changes.**
+- [x] **Regenerate and verify VS Code syntax assets after any token/name changes.**
       The grammar already advertises `PORTAL`; after additional renames, rerun the syntax/asset
       generation checks and verify `src/etl-sql-vscode/syntaxes/etlsql.tmLanguage.json` has no stale
       `REPORTPORTAL` entry.
-- [ ] **Run a full stale-name audit before closing the rename.**
+- [x] **Run a full stale-name audit before closing the rename.**
       Search docs, scripts, source, tests, samples, installer assets, Docker assets, snapshots, and
       generated browser assets for `Report Portal`, `report portal`, `REPORTPORTAL`,
       `REPORT_PORTAL`, `ReportPortal`, and `report_portal`. Keep only intentional internal names if
       the project/namespace rename is deferred.
-- [ ] **Verification gate for the internal rename batch.**
+- [x] **Verification gate for the internal rename batch.**
       Run `node .\scripts\sync-assets.js -Check`, `node .\scripts\generate-syntax-index.js --check`,
       `dotnet build src\ETL-SQL.App\ETL-SQL.App.csproj --no-restore`,
-      `dotnet build src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj --no-restore` (or the new
+      `dotnet build src\ETL-SQL.Portal\ETL-SQL.Portal.csproj --no-restore` (or the new
       Portal path), focused docs/suggestion tests, and the Portal test lane. Include Docker-backed
       connector smoke once Docker is available.
+
+> **Completed 2026-07-17** on branch `feat/portal-internal-rename` (off `release/v0.16.0`). Renamed the four
+> projects (`ETL-SQL.Portal{,.Data,.Migrations.Postgres}`, `tests/ETL-SQL.Portal.Tests`), the connector
+> folder/classes (`Portal/PortalConnector` + `PortalDataSource`, namespace `ETL_SQL.Connectors.Portal`),
+> and `samples/portal_deployment/`. Full solution builds clean; architecture-boundary tests pass; Portal
+> lane 335/336 (the 1 failure — `AdminCatalogs_FilterPageAndBulkMutate…` — passes in isolation, a
+> pre-existing order-dependent flake, not a rename regression). Also renamed deployment-facing artifacts:
+> Docker image `etl-sql/report-portal` → `etl-sql/portal`, CI/test image tag `etl-sql-reportportal-test`
+> → `etl-sql-portal-test`, AD-group sample mappings `GG-ReportPortal-*` → `GG-Portal-*`, and the optional
+> config key `Doctor:ReportPortalHealthUrl` → `Doctor:PortalHealthUrl`.
+> **Intentionally kept** (historical/point-in-time records): `CHANGELOG.md`, `BREAKING_CHANGES.md`,
+> `certification-results/`, `capacity-results/`, and the old→new link map keys in
+> `scripts/migrate-all-docs-links.js`.
+> **Pre-existing debt found, not fixed here** (docs IA restructure, not the rename): `AGENTS.md`'s admin-guide
+> link pointed at the non-existent `docs/guides/report-portal-admin.md` (repointed to
+> `docs/administration/portal/README.md`); and `scripts/publish_release.ps1` still copies pre-restructure
+> `Docs/…` doc files that no longer exist — the doc-copy block needs a separate pass.
 
 ---
 

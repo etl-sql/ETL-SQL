@@ -114,7 +114,7 @@ show_pre_release_plan() {
     print_plan_phase "$i" "Format verify" "dotnet format ETL-SQL.slnx --verify-no-changes --no-restore (auto-applies 'dotnet format' on drift)" "Code formatting (whitespace + import ordering) matches .editorconfig — same check the CI format gate runs. On drift the fix is applied automatically; commit it and re-run."; i=$((i + 1))
     print_plan_phase "$i" "Smoke lane" "./scripts/test-lane.sh --lane smoke" "Critical startup, security, report, and portal checks."; i=$((i + 1))
     print_plan_phase "$i" "Fast lane" "./scripts/test-lane.sh --lane fast" "Default local correctness lane across engine, language server, and portal."; i=$((i + 1))
-    print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
+    print_plan_phase "$i" "N->N+1 upgrade-path drill" "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" "In-place EF migration over a live release-N catalog keeps data intact (release gate)."; i=$((i + 1))
     print_plan_phase "$i" "Sample scripts" "./scripts/test-all-samples.sh" "Published samples remain runnable."; i=$((i + 1))
     print_plan_phase "$i" "HA soak contract gate" "./scripts/Test-HaSoakContracts.ps1 (via pwsh)" "PostgreSQL HA soak topology, workload, metrics, diagnostics, runbook, evidence validation, and fault/soak plan contracts stay usable before release."; i=$((i + 1))
 
@@ -653,8 +653,8 @@ run_phase "Fast lane" \
 # Explicit release gate: prove the in-place N->N+1 upgrade drill independently (it is also Category=Portal
 # so the fast lane exercises it, but this named phase makes the upgrade gate visible and separately logged).
 run_phase "N->N+1 upgrade-path drill" \
-    "dotnet test tests/ETL-SQL.ReportPortal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" \
-    dotnet test "tests/ETL-SQL.ReportPortal.Tests/ETL-SQL.ReportPortal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
+    "dotnet test tests/ETL-SQL.Portal.Tests --filter FullyQualifiedName~UpgradePathDrillTests" \
+    dotnet test "tests/ETL-SQL.Portal.Tests/ETL-SQL.Portal.Tests.csproj" "--filter" "FullyQualifiedName~UpgradePathDrillTests" "--configuration" "$CONFIGURATION" "--no-restore" "--no-build"
 
 run_phase "Sample scripts" \
     "./scripts/test-all-samples.sh" \

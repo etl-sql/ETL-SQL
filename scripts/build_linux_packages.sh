@@ -123,7 +123,7 @@ systemctl enable --now etl-sql-orchestrator.service etl-sql-portal.service || tr
 
 echo ""
 echo "ETL-SQL installed. Once the services start:"
-echo "  Report Portal:    http://localhost:5002"
+echo "  Portal:    http://localhost:5002"
 echo "  Orchestrator API: http://localhost:5001"
 POSTINST
 chmod 755 "$BUILD_ROOT/DEBIAN/postinst"

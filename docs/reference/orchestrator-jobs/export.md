@@ -65,7 +65,7 @@ WITH (
 | Option | Values | Default |
 |---|---|---|
 | PDF_MODE | STATIC \| AUTO \| HOSTED \| BROWSER | STATIC |
-| HOST | report serve / ReportPortal URL for hosted export | none |
+| HOST | report serve / Portal URL for hosted export | none |
 | BROWSER_PATH | installed Chrome, Edge, or Chromium executable path | none |
 
 `STATIC` uses the built-in PDFsharp/MigraDoc exporter and requires no browser. `HOSTED` and `BROWSER` use an installed Chrome, Edge, or Chromium browser with the shared report runtime. `AUTO` tries the configured browser-backed path when `HOST` is available and falls back to `STATIC` with a warning.

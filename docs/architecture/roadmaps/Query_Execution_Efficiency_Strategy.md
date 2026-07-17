@@ -351,7 +351,7 @@ Do not attempt a single large rewrite. Each phase should ship behind focused tes
 #### Phase 1 — Result Retention and Row-Width Reduction
 
 - Define the retained-result contract for `LastResult`, `LastResultSets`, `OnResultSet`, CLI/TUI,
-  ReportPlayer, ReportPortal, tests, and SLT.
+  ReportPlayer, Portal, tests, and SLT.
 - Enforce capped retention consistently while preserving `TotalRowsMatched`.
 - Add required-column analysis for SELECT, WHERE, JOIN, GROUP BY, HAVING, QUALIFY, ORDER BY,
   aggregate/window expressions, lineage, and final projection.
@@ -451,7 +451,7 @@ The rewrite is successful only when all of these are true:
 - `LastResult` remains correct for small results and clearly capped for large results.
 - `EXPLAIN` or profile output identifies blocking operators and spill events.
 - Profile output includes row estimates, row-width estimates or actuals, and spill bytes for heavy operators.
-- ReportPlayer and ReportPortal render the same report data before and after the rewrite.
+- ReportPlayer and Portal render the same report data before and after the rewrite.
 
 ---
 

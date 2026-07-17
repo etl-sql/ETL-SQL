@@ -18,7 +18,7 @@ using ETL_SQL.Core.Storage;
 using ETL_SQL.Reporting;
 using Microsoft.Extensions.Logging;
 
-namespace ETL_SQL.ReportPortal.Services;
+namespace ETL_SQL.Portal.Services;
 
 public sealed class SnapshotPackageService(
     PortalConfig config,

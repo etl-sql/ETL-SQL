@@ -217,7 +217,7 @@ const CONNECTOR_COMPLETIONS = [
   ['EXCEL(PATH = \'workbook.xlsx\')', 'Excel workbook connection'],
   ['SFTP(HOST = \'\', USER = \'\', KEYFILE = \'\')', 'SFTP connection'],
   ['REST(BASE_URL = \'\')', 'REST API connection'],
-  ['REPORTPORTAL(BASE_URL = \'\')', 'Report Portal connection'],
+  ['PORTAL(BASE_URL = \'\')', 'Portal connection'],
   ['ORCHESTRATOR(BASE_URL = \'\')', 'Orchestrator connection'],
 ];
 

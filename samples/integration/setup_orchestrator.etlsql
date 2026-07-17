@@ -34,7 +34,7 @@ PRINT 'Orchestrator Jobs created successfully.';
 
 -- 5. Publish the Report and Dataset to the Portal
 -- The dataset definition is embedded in the report, so publishing the report registers the dataset.
-CREATE CONNECTION portal AS REPORTPORTAL(HOST='localhost', PORT=5000, USER='admin', PASSWORD='ENC:AV1QYOWmcD/pmLkaT5Xpa0RZtNh40ndG3TUJY1LRjXm3iNoOtCR3+pmtfyAZ1Zzp9MWyI1F+GEfMfHr/oWBWQlA=');
+CREATE CONNECTION portal AS PORTAL(HOST='localhost', PORT=5000, USER='admin', PASSWORD='ENC:AV1QYOWmcD/pmLkaT5Xpa0RZtNh40ndG3TUJY1LRjXm3iNoOtCR3+pmtfyAZ1Zzp9MWyI1F+GEfMfHr/oWBWQlA=');
 
 EXECUTE portal 
 BEGIN

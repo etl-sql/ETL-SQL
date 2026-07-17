@@ -11,4 +11,4 @@ services:
   portal-srv:
     build:
       context: .
-      dockerfile: src/ETL-SQL.ReportPortal/Dockerfile
+      dockerfile: src/ETL-SQL.Portal/Dockerfile

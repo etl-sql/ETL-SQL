@@ -412,7 +412,7 @@ These are pure engine changes with no UI surface. They can be built and unit-tes
 
 ### Phase 3 — Portal Data Layer
 
-**`ETL-SQL.ReportPortal` — Entity / Migration**
+**`ETL-SQL.Portal` — Entity / Migration**
 - [ ] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) and `ParametersJson` (nullable `TEXT`) columns.
 - [ ] New EF Core migration: `AddSubscriptionNameAndParameters`.
 - [ ] `PortalDbContext.cs`: No index needed on `Name` (not queried by name from the portal — only stored for display).
@@ -443,7 +443,7 @@ These are pure engine changes with no UI surface. They can be built and unit-tes
 
 ### Phase 5 — Portal UI
 
-All UI changes are in the static web files served by `ETL-SQL.ReportPortal/wwwroot/`.
+All UI changes are in the static web files served by `ETL-SQL.Portal/wwwroot/`.
 
 **Subscribe modal / form**
 - [ ] On "Subscribe" click, call `GET /api/reports/{path}/parameters` before showing the modal.

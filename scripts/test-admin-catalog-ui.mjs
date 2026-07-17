@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const mod = await import(pathToFileURL(path.resolve(
-    'src/ETL-SQL.ReportPortal/wwwroot/js/admin-catalog-ui.js')).href);
+    'src/ETL-SQL.Portal/wwwroot/js/admin-catalog-ui.js')).href);
 const { catalogQuery, headerSelectionCell, selectionCell } = mod;
 
 function assert(condition, message) {

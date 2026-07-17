@@ -38,7 +38,7 @@ The engine coordinates work across heterogeneous data sources, stages data throu
 
 - Treat reports and dashboards as source-controlled scripts.
 - Keep report data prep, visuals, pages, datasets, containers, navigation, filters, and portal operations scriptable.
-- Maintain one shared report semantic model across ReportPlayer, ReportPortal, VS Code preview, and generated manifests.
+- Maintain one shared report semantic model across ReportPlayer, Portal, VS Code preview, and generated manifests.
 - Support paginated report patterns, dashboard layouts, interactive filtering, saved views, subscriptions, alerts, catalog operations, and portal administration.
 - Keep report runtime behavior consistent across hosts, with shared assets maintained from the canonical report runtime source.
 

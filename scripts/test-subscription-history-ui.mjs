@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const mod = await import(pathToFileURL(path.resolve(
-    'src/ETL-SQL.ReportPortal/wwwroot/js/subscription-history-ui.js')).href);
+    'src/ETL-SQL.Portal/wwwroot/js/subscription-history-ui.js')).href);
 const { renderSubscriptionHistory, summarizeSubscriptionHistory } = mod;
 
 function assert(condition, message) {

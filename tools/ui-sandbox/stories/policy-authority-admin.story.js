@@ -162,7 +162,7 @@ export default {
     { id: 'empty', label: 'Empty scope' },
   ],
   async mount(stage, fixtureId, ctx) {
-    const { createPolicyAuthorityAdmin } = await importFresh('/src/ETL-SQL.ReportPortal/wwwroot/js/policy-authority-admin.js');
+    const { createPolicyAuthorityAdmin } = await importFresh('/src/ETL-SQL.Portal/wwwroot/js/policy-authority-admin.js');
     stage.classList.add('portal-page');
     const policyAuthorityApi = makeFakeApi({
       configured: fixtureId !== 'unconfigured',

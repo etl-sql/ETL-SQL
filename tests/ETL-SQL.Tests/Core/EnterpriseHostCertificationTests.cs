@@ -6,7 +6,7 @@ public sealed class EnterpriseHostCertificationTests
 {
     public static TheoryData<string, string, string> ExecutableHosts => new()
     {
-        { "Portal", "src/ETL-SQL.ReportPortal/Program.cs", "WebApplication.CreateBuilder" },
+        { "Portal", "src/ETL-SQL.Portal/Program.cs", "WebApplication.CreateBuilder" },
         { "Orchestrator", "src/ETL-SQL.Orchestrator.Service/Program.cs", "WebApplication.CreateBuilder" },
         { "CLI", "src/ETL-SQL.App/Program.cs", "DependencyInjectionSetup.BuildServiceProvider" },
         { "TUI", "src/ETL-SQL.TUI/Program.cs", "TuiDependencyInjectionSetup.BuildServiceProvider" },
@@ -17,7 +17,7 @@ public sealed class EnterpriseHostCertificationTests
 
     public static TheoryData<string, string, string, string> ConfigurationHosts => new()
     {
-        { "Portal", "src/ETL-SQL.ReportPortal/Program.cs", "builder.Configuration.AddEnterprisePolicy();", "builder.Services.AddEtlSqlEngine" },
+        { "Portal", "src/ETL-SQL.Portal/Program.cs", "builder.Configuration.AddEnterprisePolicy();", "builder.Services.AddEtlSqlEngine" },
         { "Orchestrator", "src/ETL-SQL.Orchestrator.Service/Program.cs", ".AddEnterprisePolicy();", "builder.Services.AddEtlSqlEngine" },
         { "CLI and Report Builder", "src/ETL-SQL.App/App/DependencyInjectionSetup.cs", "builder.AddEnterprisePolicy();", "var configuration = builder.Build();" },
         { "TUI", "src/ETL-SQL.TUI/App/TuiDependencyInjectionSetup.cs", ".AddEnterprisePolicy()", ".Build();" },

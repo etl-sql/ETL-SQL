@@ -352,7 +352,7 @@ namespace ETL_SQL.LSP
         private static string EscapeStr(string s) => s.Replace("'", "''");
     }
 
-    // ── Local DTOs (parallel to ReportPortal.Models, camelCase JSON output) ──
+    // ── Local DTOs (parallel to Portal.Models, camelCase JSON output) ──
 
     record LspDesignState(List<LspDesignPage> Pages, List<LspDesignDataset> Datasets);
     record LspDesignPage(string Id, string Name, string Mode, List<LspDesignVisual> Visuals);

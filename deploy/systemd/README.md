@@ -6,7 +6,7 @@ This directory contains Linux `systemd` templates for isolated ETL-SQL environme
 
 | File | Purpose |
 | :--- | :--- |
-| `etl-sql-portal@.service` | Templated Report Portal unit. Run as `etl-sql-portal@<env>.service`. |
+| `etl-sql-portal@.service` | Templated Portal unit. Run as `etl-sql-portal@<env>.service`. |
 | `etl-sql-orchestrator@.service` | Templated Orchestrator unit. Run as `etl-sql-orchestrator@<env>.service`. |
 | `install-environment.sh` | Installer that creates the environment user, data directories, environment descriptor, and service registrations. |
 

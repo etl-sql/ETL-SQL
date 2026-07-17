@@ -22,7 +22,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 | `10_Kitchen_Sinks` | Broad release-readiness coverage for report visuals and language features. |
 | `golden_workflow` | End-to-end Report-SQL workflow used for demos and regression checks. |
 | `paginated` | Multi-report/paginated hosting examples. |
-| `report_portal_deployment` | Script-first portal promotion and deployment pattern. |
+| `portal_deployment` | Script-first portal promotion and deployment pattern. |
 | `99_Experimental` | Stress tests and experiments; not the first place to learn the language. |
 | `output` and nested `samples/output` folders | Generated or checked-in sample output artifacts. |
 
@@ -35,7 +35,7 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Runs without external services or machine-specific credentials.
 - Shares one script across VS Code preview, standalone serve, Portal, and automated tests.
 
-### [report_portal_deployment/portal_promotion.etlsql](../../samples/report_portal_deployment/portal_promotion.etlsql)
+### [portal_deployment/portal_promotion.etlsql](../../samples/portal_deployment/portal_promotion.etlsql)
 **Purpose**: Script-first Portal promotion pattern for dev/prod deployments.
 - Uses `CREATE SETS` and `USE SETS` as the environment boundary.
 - Publishes and updates reports with canonical `PUBLISH REPORT` and `ALTER REPORT` syntax.

@@ -34,7 +34,7 @@ Tier 5 — Report Layer
   ETL-SQL.ReportBuilder   → Reporting, Core
   ETL-SQL.ReportBuilder.CLI → Reporting, App
   ETL-SQL.ReportPlayer    → ReportHosting, Reporting
-  ETL-SQL.ReportPortal    → ReportHosting, Reporting, Engine, Connectors, Orchestrator
+  ETL-SQL.Portal    → ReportHosting, Reporting, Engine, Connectors, Orchestrator
 
 Service Host
   ETL-SQL.Orchestrator.Service → Core, Engine, Connectors, Orchestrator, Reporting
@@ -120,10 +120,10 @@ Report-SQL semantics, report sessions, and dashboard runtime.
 - Parser extensions for Report-SQL keywords (`CREATE DATASET`, `CREATE PAGE`, `CREATE VISUAL`, etc.).
 - **`ETL-SQL.Reporting`** — manifest contracts/builders, renderers, snapshot persistence, visual/page/dataset semantics.
 - **`ETL-SQL.ReportHosting.DashboardService`** — evaluates report scripts via `Evaluator`, caches manifests, and manages parameter state.
-- **`ETL-SQL.ReportRuntime`** — canonical browser JavaScript/CSS assets synced into ReportPlayer, ReportPortal, and VS Code.
+- **`ETL-SQL.ReportRuntime`** — canonical browser JavaScript/CSS assets synced into ReportPlayer, Portal, and VS Code.
 
-### ETL-SQL.ReportBuilder.CLI / ReportPlayer / ReportPortal
-Thin entry points. CLI compiles a `.rptsql` file to a manifest; ReportPlayer and ReportPortal host report shells over HTTP (ASP.NET).
+### ETL-SQL.ReportBuilder.CLI / ReportPlayer / Portal
+Thin entry points. CLI compiles a `.rptsql` file to a manifest; ReportPlayer and Portal host report shells over HTTP (ASP.NET).
 
 ### ETL-SQL.LanguageServer
 Implements the Language Server Protocol using OmniSharp. Provides completions, diagnostics, hover info, formatting, and navigation for `.etlsql` and `.rptsql` files. The VS Code extension is the primary bundled client; other editors can host it if they speak LSP over stdio.

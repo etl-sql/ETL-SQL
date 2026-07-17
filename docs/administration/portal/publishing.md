@@ -333,14 +333,14 @@ managed heap bytes, generation 0/1/2 GC collection counts, and a database-reacha
 Portal state store used to compose the scrape.
 
 Portal execution jobs also emit `System.Diagnostics.ActivitySource` spans from
-`ETL-SQL.ReportPortal`. The `portal.execution_job` span uses bounded dimensions for environment,
+`ETL-SQL.Portal`. The `portal.execution_job` span uses bounded dimensions for environment,
 component, job id, report id, user id, workload kind, execution mode, terminal status, row count,
 peak memory, CPU time, script hash, and request correlation id. These dimensions are intended for
 OpenTelemetry collectors or .NET listeners; avoid adding report names, usernames, local paths,
 parameter values, SQL text, or connection metadata as tags.
 
 The same service exposes first-class `System.Diagnostics.Metrics` instruments from meter
-`ETL-SQL.ReportPortal` for terminal execution count, duration, rows processed, peak memory, and CPU
+`ETL-SQL.Portal` for terminal execution count, duration, rows processed, peak memory, and CPU
 time. Metric tags intentionally stay low-cardinality: environment, node, component, workload kind,
 execution mode, and terminal status. Job id, report id, user id, and script hash remain trace-only
 correlation fields.
@@ -503,7 +503,7 @@ END
 
 Promotion is a normal script replay with a different active set and explicit portal literals for the target environment. Use `PUBLISH REPORT ...` for first publish or the portal's report update flow when replacing the script behind an existing catalog entry; follow with `REFRESH REPORT` after the publish step succeeds.
 
-The copy-pasteable sample lives at `samples/report_portal_deployment/portal_promotion.etlsql`. Keep promotion scripts in source control next to the report scripts they publish so folder grants, refresh jobs, and publish paths are reviewed together.
+The copy-pasteable sample lives at `samples/portal_deployment/portal_promotion.etlsql`. Keep promotion scripts in source control next to the report scripts they publish so folder grants, refresh jobs, and publish paths are reviewed together.
 
 ---
 

@@ -27,7 +27,7 @@ ETL-SQL is **not** a traditional SQL engine. It is an **orchestration conductor*
 When writing user-facing docs, examples, READMEs, release notes, or onboarding material, make the differentiators explicit:
 
 - **Script-first** — pipelines, reports, jobs, validation, and governance metadata are plain-text `.etlsql` / `.rptsql` artifacts.
-- **Source-control friendly** — changes are diffable, reviewable, testable, packageable, and runnable in CLI, VS Code, notebooks, Orchestrator, Report Portal, and CI/CD.
+- **Source-control friendly** — changes are diffable, reviewable, testable, packageable, and runnable in CLI, VS Code, notebooks, Orchestrator, Portal, and CI/CD.
 - **The T is back in ETL** — transformation, validation, masking, fuzzy matching, enrichment, lineage tagging, and quality gates can happen before loading or publishing.
 - **ELT tradeoffs without ELT lock-in** — compatible work can push down to databases, but cross-source work stays portable instead of being trapped in one warehouse dialect or split across Python, schedulers, and BI designer files.
 - **Lineage and tags are native** — lineage metadata follows data through transformations into reports and can be queried, diagrammed, or exported.
@@ -64,7 +64,7 @@ Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
 - **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY`, `REPORTPORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
+- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `SNOWFLAKE`, `BIGQUERY`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY`, `PORTAL`, `ORCHESTRATOR`, `MYSQL`, `SQLITE`, `MONGODB`, `KAFKA`, `NEO4J`, `S3`, `SHAREPOINT`, `ACTIVE_DIRECTORY` (and `MOCKDB` for test/mock workloads)
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 
 > [!NOTE]
@@ -109,7 +109,7 @@ Key syntax facts:
 
 The platform now includes shipped enterprise operations features. When generating scripts, editing server code, or writing docs, do not assume ETL-SQL is single-node or SQLite-only.
 
-- **Practical High Availability is shipped**: Report Portal and Orchestrator support shared PostgreSQL state, shared Portal artifact roots, node heartbeats, lease fencing, leader election, node-capacity heartbeats, health probes, and load-balancer session affinity.
+- **Practical High Availability is shipped**: Portal and Orchestrator support shared PostgreSQL state, shared Portal artifact roots, node heartbeats, lease fencing, leader election, node-capacity heartbeats, health probes, and load-balancer session affinity.
 - **Single-node defaults remain SQLite/local storage**. Multi-node HA requires `Portal:Database:Provider=Postgres`, `Orchestrator:Database:Provider=Postgres`, shared Portal storage roots (`Smb`/UNC), a shared Data Protection key ring, and identical JWT/orchestrator/dataset keys across Portal nodes.
 - **Interactive report sessions are node-local**. HA deployments must use sticky routing on `ETLSQL_PORTAL_AFFINITY` or the configured `Portal:LoadBalancer:SessionAffinityCookieName`.
 - **Load balancers should probe `GET /healthz`** for Portal node readiness. Use `GET /health` for richer monitoring. Orchestrator API routes require `X-Orchestrator-Key`; unauthenticated network-reachable Orchestrator startup is rejected.
@@ -241,7 +241,7 @@ Use this map to find the right document for any task.
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report-SQL Guide](docs/guides/report-sql.md)** |
 | Rules for composing ETL-SQL scripts | **[Standards/Script_Composition_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Script_Composition_Standards.md)** |
 | Production install, HA, Governance Core, OIDC | **[Administration](docs/guides/administration.md)** |
-| Portal user/admin operations | **[Report Portal Admin](docs/guides/report-portal-admin.md)** |
+| Portal user/admin operations | **[Portal Admin](docs/administration/portal/README.md)** |
 | Orchestrator job operations | **[Job Orchestration](docs/guides/job-orchestration.md)** |
 | Enterprise roadmap and trust model | **[Enterprise_Platform_Strategy.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/roadmaps/Enterprise_Platform_Strategy.md)** |
 
@@ -252,7 +252,7 @@ Use this map to find the right document for any task.
 | Engine internals (parser, evaluator, AST) | **[Architecture/Engine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Engine.md)** |
 | Presentation layer (IDE, ANSI rendering) | **[Architecture/Presentation.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation.md)** |
 | Orchestrator internals, leases, scheduling, job execution | **[Architecture/Orchestrator.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Orchestrator.md)** |
-| Report Portal auth, HA topology, API, health checks | **[Architecture/ReportPortal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/ReportPortal.md)** |
+| Portal auth, HA topology, API, health checks | **[Architecture/Portal.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Portal.md)** |
 | Grammar State Engine model, autocomplete, and doc-testing | **[Architecture/GrammarStateEngine.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/GrammarStateEngine.md)** |
 | C# engine coding guidelines | **[Standards/Engine_Coding_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Engine_Coding_Standards.md)** |
 | Rules for writing a new connector | **[Standards/Connectors_Standards.md](file:///C:/Users/chuck/scratch/ETL-SQL/docs/architecture/standards/Connectors_Standards.md)** |
@@ -386,8 +386,8 @@ src/ETL-SQL.ReportRuntime/Resources/Shared/
 Files copied under these host folders are generated sync outputs and must not be edited directly:
 
 - `src/ETL-SQL.ReportPlayer/wwwroot/`
-- `src/ETL-SQL.ReportPortal/wwwroot/js/`
-- `src/ETL-SQL.ReportPortal/wwwroot/css/`
+- `src/ETL-SQL.Portal/wwwroot/js/`
+- `src/ETL-SQL.Portal/wwwroot/css/`
 - `src/etl-sql-vscode/media/`
 
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
@@ -400,7 +400,7 @@ Do not "fix" drift by editing generated host copies. The check step compares hos
 
 ### Prototyping browser-side UI (no Docker)
 
-Before changing a browser-side report/portal component, prototype and visually verify it in the **UI sandbox** at `tools/ui-sandbox/` (`pwsh -File tools\ui-sandbox\serve.ps1`) — do **not** spin up Docker or the full portal just to eyeball a JS/CSS change. It is a no-build "stories" harness that imports the canonical/source files directly (cache-busted on **↻ Reload**), so an edit shows immediately with no sync, no portal build, and no catalog DB. It hosts the `designer.js` exports (`renderDag`, `createScriptEditor`, `createDesigner`) and extracted portal UI modules (e.g. `src/ETL-SQL.ReportPortal/wwwroot/js/lineage-ui.js`); each surface is a story under `tools/ui-sandbox/stories/` driven by fixture data, with an injectable mock fetch (`mockApi.js`) for API-backed components. Add or extend a story when you change a surface. The sandbox is dev-only and does **not** replace the sync step above.
+Before changing a browser-side report/portal component, prototype and visually verify it in the **UI sandbox** at `tools/ui-sandbox/` (`pwsh -File tools\ui-sandbox\serve.ps1`) — do **not** spin up Docker or the full portal just to eyeball a JS/CSS change. It is a no-build "stories" harness that imports the canonical/source files directly (cache-busted on **↻ Reload**), so an edit shows immediately with no sync, no portal build, and no catalog DB. It hosts the `designer.js` exports (`renderDag`, `createScriptEditor`, `createDesigner`) and extracted portal UI modules (e.g. `src/ETL-SQL.Portal/wwwroot/js/lineage-ui.js`); each surface is a story under `tools/ui-sandbox/stories/` driven by fixture data, with an injectable mock fetch (`mockApi.js`) for API-backed components. Add or extend a story when you change a surface. The sandbox is dev-only and does **not** replace the sync step above.
 
 ---
 
@@ -410,8 +410,8 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 
 - Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
 - Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.
-- Keep report semantics in the reporting layer; ReportPlayer, ReportPortal, and VS Code should host reports, not fork manifest, style, visual, page, dataset, or chart behavior.
-- Keep reusable report session hosting in `ETL-SQL.ReportHosting`; ReportPlayer and ReportPortal may consume it, but Portal should not depend on Player for execution/session behavior.
+- Keep report semantics in the reporting layer; ReportPlayer, Portal, and VS Code should host reports, not fork manifest, style, visual, page, dataset, or chart behavior.
+- Keep reusable report session hosting in `ETL-SQL.ReportHosting`; ReportPlayer and Portal may consume it, but Portal should not depend on Player for execution/session behavior.
 - Preserve the VS Code extension's ecosystem-facing `src/etl-sql-vscode` folder/package naming unless there is a deliberate release plan.
 - Do not start source cleanup with a broad restructure. Prefer one ownership boundary at a time, update docs/tests with the move, and leave compatibility shims while hosts migrate.
 

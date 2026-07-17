@@ -107,7 +107,7 @@ $Projects = @(
     "..\src\ETL-SQL.ReportBuilder.CLI\ETL-SQL.ReportBuilder.CLI.csproj",
     "..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj",
     "..\src\ETL-SQL.Orchestrator.Service\ETL-SQL.Orchestrator.Service.csproj",
-    "..\src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj"
+    "..\src\ETL-SQL.Portal\ETL-SQL.Portal.csproj"
 )
 
 foreach ($Proj in $Projects) {
