@@ -9,7 +9,7 @@ Reference pages for Math in the ETL-SQL engine.
 | [ASIN](asin.md) | Returns the arcsine (inverse sine) of a number, in radians. |
 | [ATAN](atan.md) | Returns the arctangent (inverse tangent) of a number, in radians. |
 | [ATAN2](atan2.md) | Returns the angle, in radians, between the positive x-axis and the point represented by `(x, y)`. |
-| [CEIL](ceil.md) | Rounds a numeric value up to the nearest integer. `CEIL` is an alias for [`CEILING`](ceiling.md). |
+| [CEIL](ceil.md) | Rounds a numeric value up to the nearest integer. `CEIL` is an alias for `CEILING`. |
 | [CEILING](ceiling.md) | Returns the smallest integer greater than or equal to a number. |
 | [COS](cos.md) | Returns the trigonometric cosine of an angle in radians. |
 | [COT](cot.md) | Returns the cotangent of the angle specified in radians. |
@@ -20,7 +20,7 @@ Reference pages for Math in the ETL-SQL engine.
 | [LOG10](log10.md) | Returns the base-10 logarithm of a number. |
 | [MOD](mod.md) | Returns the remainder of integer division. |
 | [PI](pi.md) | Returns the mathematical constant pi. |
-| [POW](pow.md) | Raises a number to a power. `POW` is an alias for [`POWER`](../math/power.md). |
+| [POW](pow.md) | Raises a number to a power. `POW` is an alias for `POWER`. |
 | [POWER](power.md) | Raises a base number to an exponent. |
 | [QUOTIENT](quotient.md) | Returns the integer quotient of a division operation. |
 | [RADIANS](radians.md) | Converts an angle value in degrees to radians. |

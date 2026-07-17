@@ -6,7 +6,7 @@ Reference pages for String in the ETL-SQL engine.
 | :--- | :--- |
 | [ASCII](ascii.md) | Returns the ASCII / Unicode code point of the first character of a string. |
 | [CHAR](char.md) | Returns the character corresponding to an ASCII or Unicode code point. |
-| [CHAR_LENGTH](char_length.md) | Returns the number of characters in a string. `CHAR_LENGTH` is the SQL-standard alias for [`LEN`](len.md). |
+| [CHAR_LENGTH](char_length.md) | Returns the number of characters in a string. `CHAR_LENGTH` is the SQL-standard alias for `LEN`. |
 | [CHARINDEX](charindex.md) | Returns the 1-based position of the first occurrence of a substring within a string. |
 | [CONCAT](concat.md) | Concatenates two or more strings into a single string. |
 | [CONCAT_WS](concat_ws.md) | Concatenates strings with a separator, automatically skipping NULL values. |
@@ -39,7 +39,7 @@ Reference pages for String in the ETL-SQL engine.
 | [STRING_ESCAPE](string_escape.md) | Escapes special characters in a string for safe embedding in a target format. |
 | [STRING_SPLIT](string_split.md) | Splits a string by a delimiter and returns the segments as a table. |
 | [STUFF](stuff.md) | Deletes a specified number of characters and inserts a replacement string at a given position. |
-| [SUBSTR](substr.md) | Returns a portion of a string. `SUBSTR` is an alias for [`SUBSTRING`](substring.md). |
+| [SUBSTR](substr.md) | Returns a portion of a string. `SUBSTR` is an alias for `SUBSTRING`. |
 | [SUBSTRING](substring.md) | Returns a portion of a string starting at a given position. |
 | [TO_STR](to_str.md) | Converts any value to its string representation. |
 | [TRANSLATE](translate.md) | Replaces individual characters in a string using a character-to-character mapping. |

@@ -54,13 +54,16 @@
 
     <!-- Connectors (Connectors Category) -->
     <EmbeddedResource Include="..\..\docs\reference\connectors\**\*.md" Link="Resources\Help\Connectors\%(Filename)%(Extension)" Exclude="..\..\docs\reference\connectors\**\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\connectors\README.md" Link="Resources\Help\Connectors\INDEX.md" />
 
     <!-- Functions (Functions Category) -->
     <EmbeddedResource Include="..\..\docs\reference\functions\**\*.md" Link="Resources\Help\Functions\%(Filename)%(Extension)" Exclude="..\..\docs\reference\functions\**\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\functions\README.md" Link="Resources\Help\Functions\INDEX.md" />
 
     <!-- Visuals & Reporting (Visuals & Report Categories) -->
     <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\visuals\*.md" Link="Resources\Help\Visuals\%(Filename)%(Extension)" Exclude="..\..\docs\reference\visuals-reporting\visuals\README.md" />
     <EmbeddedResource Include="..\..\docs\reference\visuals-reporting\report\*.md" Link="Resources\Help\Report\%(Filename)%(Extension)" Exclude="..\..\docs\reference\visuals-reporting\report\README.md" />
+    <EmbeddedResource Include="..\..\docs\reference\statements\README.md" Link="Resources\Help\Keywords\INDEX.md" />
 
     <!-- Portal Administration (Keywords Category) -->
     <EmbeddedResource Include="..\..\docs\reference\portal-admin\*.md" Link="Resources\Help\Keywords\%(Filename)%(Extension)" Exclude="..\..\docs\reference\portal-admin\README.md" />

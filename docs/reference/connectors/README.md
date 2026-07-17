@@ -1,5 +1,7 @@
 # Connectors
 
+Connections link ETL-SQL to external data sources — databases, files, APIs, and protocols.
+
 Connector reference pages define `CREATE CONNECTION` syntax, options, authentication patterns, security behavior, and examples.
 
 ## Connector Families
