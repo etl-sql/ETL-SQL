@@ -20,7 +20,7 @@ Aggregate functions summarize values across grouped rows. Most aggregate functio
 ## String Aggregates
 
 - [STRING_AGG](string_agg.md) - concatenate grouped string values with a separator.
-- [LISTAGG](../general/listagg.md) - ordered list aggregation syntax.
+- [LISTAGG](../aggregate/listagg.md) - ordered list aggregation syntax.
 
 ## Window Usage
 

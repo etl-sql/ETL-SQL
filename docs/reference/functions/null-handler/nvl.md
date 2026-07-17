@@ -36,6 +36,6 @@ FROM #orders;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [ISNULL](../conversion/isnull.md)
+- [ISNULL](../null-handler/isnull.md)
 - [NVL2](nvl2.md)
-- [COALESCE](../conversion/coalesce.md)
+- [COALESCE](../null-handler/coalesce.md)

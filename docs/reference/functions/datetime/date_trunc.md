@@ -41,5 +41,5 @@ GROUP BY DATE_TRUNC(HOUR, event_time);
 
 - [Standard Library](../standard-library.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
-- [DATETRUNC](../general/datetrunc.md)
-- [TRUNC](../general/trunc.md)
+- [DATETRUNC](../datetime/datetrunc.md)
+- [TRUNC](../datetime/trunc.md)

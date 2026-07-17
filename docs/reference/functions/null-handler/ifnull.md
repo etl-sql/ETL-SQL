@@ -1,6 +1,6 @@
 # IFNULL
 
-Returns a replacement value when an expression is `NULL`. `IFNULL` is an alias for [`ISNULL`](../conversion/isnull.md).
+Returns a replacement value when an expression is `NULL`. `IFNULL` is an alias for [`ISNULL`](../null-handler/isnull.md).
 
 ## Syntax
 
@@ -24,8 +24,8 @@ If both arguments are `NULL`, returns `NULL`.
 ## Remarks
 
 - `IFNULL` is useful when porting scripts from engines that use MySQL or SQLite-style null handling.
-- For more than two fallback values, use [`COALESCE`](../conversion/coalesce.md).
-- For Oracle-style conditional replacement, use [`NVL2`](nvl2.md).
+- For more than two fallback values, use [`COALESCE`](../null-handler/coalesce.md).
+- For Oracle-style conditional replacement, use [`NVL2`](../null-handler/nvl2.md).
 
 ## Examples
 
@@ -42,5 +42,5 @@ FROM #customers;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [ISNULL](../conversion/isnull.md)
-- [COALESCE](../conversion/coalesce.md)
+- [ISNULL](../null-handler/isnull.md)
+- [COALESCE](../null-handler/coalesce.md)

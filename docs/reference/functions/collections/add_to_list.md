@@ -24,8 +24,8 @@ If `list` is `NULL`, ETL-SQL treats it as an empty list and returns a one-item l
 ## Remarks
 
 - Assign the returned value back to keep the change.
-- Use [`REMOVE_FROM_LIST`](../general/remove_from_list.md) to remove matching values.
-- Use [`SORT_LIST`](../general/sort_list.md) to sort a list.
+- Use [`REMOVE_FROM_LIST`](../collections/remove_from_list.md) to remove matching values.
+- Use [`SORT_LIST`](../collections/sort_list.md) to sort a list.
 
 ## Examples
 
@@ -39,4 +39,4 @@ SET @tags = ADD_TO_LIST(@tags, 'reviewed');
 
 - [Standard Library](../standard-library.md)
 - [APPEND_TO_LIST](append_to_list.md)
-- [REMOVE_FROM_LIST](../general/remove_from_list.md)
+- [REMOVE_FROM_LIST](../collections/remove_from_list.md)

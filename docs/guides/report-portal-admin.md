@@ -1201,7 +1201,7 @@ PARAMETERS (
 
 #### RELDATE parameter values
 
-When a report uses `RELDATE` INPUT parameters, the subscription stores the expression string — not a resolved date. The engine resolves it fresh each time the subscription fires. See [`docs/reference/dates-times/reldate.md`](../reference/functions/general/reldate.md) for the full expression reference.
+When a report uses `RELDATE` INPUT parameters, the subscription stores the expression string — not a resolved date. The engine resolves it fresh each time the subscription fires. See [`docs/reference/dates-times/reldate.md`](../reference/functions/datetime/reldate.md) for the full expression reference.
 
 Common expressions:
 

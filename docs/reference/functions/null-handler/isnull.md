@@ -49,4 +49,4 @@ FROM #contacts;
 - [Standard Library](../standard-library.md)
 - [COALESCE](coalesce.md)
 - [NULLIF](nullif.md)
-- [NVL2](../general/nvl2.md)
+- [NVL2](../null-handler/nvl2.md)

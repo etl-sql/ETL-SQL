@@ -35,4 +35,4 @@ FROM #users;
 
 - [Standard Library](../standard-library.md)
 - [UPPER](upper.md)
-- [INITCAP](../general/initcap.md)
+- [INITCAP](../string/initcap.md)

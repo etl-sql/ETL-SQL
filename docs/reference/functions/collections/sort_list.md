@@ -42,4 +42,4 @@ SET @scores = SORT_LIST(@scores, 'DESC');
 
 - [Standard Library](../standard-library.md)
 - [ADD_TO_LIST](../collections/add_to_list.md)
-- [REMOVE_FROM_LIST](remove_from_list.md)
+- [REMOVE_FROM_LIST](../collections/remove_from_list.md)

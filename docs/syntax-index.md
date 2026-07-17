@@ -91,7 +91,7 @@ Statements are the top-level actions in an ETL-SQL script.
 | `EXPORT REPORT` | Orchestration | [Statement Reference](reference/statements/README.md) | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `EXPORT REPORT ... WITH (PDF_MODE = ...)` | Reporting / Export | `PDF_MODE = STATIC\|AUTO\|HOSTED\|BROWSER`, `HOST`, `BROWSER_PATH` | [EXPORT.md](reference/orchestrator-jobs/export.md) |
 | `SUBSCRIPTION` | Orchestration | [Statement Reference](reference/statements/README.md) | [SUBSCRIPTION.md](reference/orchestrator-jobs/subscription.md) |
-| `RELDATE` | Variables | [RelativeDate_Parameters.md](reference/functions/general/reldate.md) | [RELDATE.md](reference/functions/general/reldate.md) |
+| `RELDATE` | Variables | [RelativeDate_Parameters.md](reference/functions/datetime/reldate.md) | [RELDATE.md](reference/functions/datetime/reldate.md) |
 | `RAISEERROR` | Flow Control | [Statement Reference](reference/statements/README.md) | [THROW.md](reference/control-flow/throw.md) |
 | `HELP` | Diagnostics | [Statement Reference](reference/statements/README.md) | [HELP.md](reference/statements/session-control/help.md) |
 | `ANALYZE` | Diagnostics | [Statement Reference](reference/statements/README.md) | [ANALYZE.md](reference/statements/session-control/analyze.md) |
@@ -101,14 +101,14 @@ Statements are the top-level actions in an ETL-SQL script.
 | `DECRYPT FILE` | File IO | [File Operations](reference/file-operations/README.md) | [FILE.md](reference/file-operations/file.md) |
 | `CREATE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [CREATE.md](reference/statements/ddl/create.md) |
 | `COPY DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [COPY.md](reference/file-operations/copy-file.md) |
-| `MOVE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
-| `RENAME DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `MOVE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/file-path/directory.md) |
+| `RENAME DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/file-path/directory.md) |
 | `DELETE DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DELETE.md](reference/statements/dml/delete.md) |
-| `DELETE DIRECTORY_CONTENTS`| Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `DELETE DIRECTORY_CONTENTS`| Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/file-path/directory.md) |
 | `COMPRESS DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [COMPRESS.md](reference/file-operations/compress-file.md) |
-| `DECOMPRESS DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `DECOMPRESS DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/file-path/directory.md) |
 | `ENCRYPT DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [ENCRYPT.md](reference/file-operations/encrypt-file.md) |
-| `DECRYPT DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/general/directory.md) |
+| `DECRYPT DIRECTORY` | Dir IO | [File Operations](reference/file-operations/README.md) | [DIRECTORY.md](reference/functions/file-path/directory.md) |
 | `CREATE SSH_KEY_PAIR` | Security | [File Operations](reference/file-operations/README.md) | [CREATE.SSH_KEY_PAIR.md](reference/file-operations/create-ssh-key-pair.md) |
 | `CREATE PGP_KEY_PAIR` | Security | [File Operations](reference/file-operations/README.md) | [CREATE.PGP_KEY_PAIR.md](reference/file-operations/create-pgp-key-pair.md) |
 | `START DOCKER` | Containers | [File Operations](reference/file-operations/README.md) | [DOCKER.md](reference/file-operations/docker.md) |
@@ -188,7 +188,7 @@ Connectors define how to communicate with external data sources.
 | `SMTP` | Service | [SMTP.md](reference/connectors/services/smtp.md) | HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM |
 | `SHAREPOINT` | Transfer/Service | [SHAREPOINT.md](reference/connectors/services/sharepoint.md) | URL, AUTH_MODE, USER, PASSWORD, DOMAIN, CLIENT_ID, CLIENT_SECRET, TENANT_ID, DOCUMENT_LIBRARY, LIST_NAME |
 | `KAFKA` | Streaming | [KAFKA.md](reference/connectors/services/kafka.md) | BOOTSTRAP_SERVERS, TOPIC, GROUP_ID, AUTO_OFFSET_RESET, TIMEOUT_MS, MAX_MESSAGES, SASL_USERNAME, SASL_PASSWORD, SASL_MECHANISM, SECURITY_PROTOCOL |
-| `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/general/directory.md) | PATH, RECURSIVE, ... |
+| `DIRECTORY` | Service | [DIRECTORY.md](reference/functions/file-path/directory.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](reference/connectors/services/mockdb.md) | - |
 | `REPORTPORTAL` | Admin Service | [Portal Admin](reference/portal-admin/README.md) | HOST, PORT, USER, PASSWORD |
 | `ORCHESTRATOR` | Admin Service | [Orchestrator Connector](reference/connectors/data-connectors.md) | HOST, PORT, API_KEY |
@@ -216,7 +216,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `TRIM(string)` | String | [TRIM.md](reference/functions/string/trim.md) | Removes leading/trailing whitespace |
 | `REPLACE(string, find, replacement)` | String | [REPLACE.md](reference/functions/string/replace.md) | Replaces occurrences of a substring |
 | `CHARINDEX(find, string)` | String | [CHARINDEX.md](reference/functions/string/charindex.md) | Returns index of first occurrence |
-| `INITCAP(string)` | String | [INITCAP.md](reference/functions/general/initcap.md) | Capitalizes first letter of each word |
+| `INITCAP(string)` | String | [INITCAP.md](reference/functions/string/initcap.md) | Capitalizes first letter of each word |
 | `LTRIM(string)` | String | [LTRIM.md](reference/functions/string/ltrim.md) | Removes leading whitespace |
 | `RTRIM(string)` | String | [RTRIM.md](reference/functions/string/rtrim.md) | Removes trailing whitespace |
 | `REVERSE(string)` | String | [REVERSE.md](reference/functions/string/reverse.md) | Reverses string characters |
@@ -255,15 +255,15 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `DATEPART(datepart, date)` | Date | [DATEPART.md](reference/functions/datetime/datepart.md) | Returns integer date part |
 | `DATE_PART(datepart, date)` | Date | [DATE_PART.md](reference/functions/datetime/datepart.md) | Postgres-style datepart extractor |
 | `EXTRACT(datepart FROM date)` | Date | [EXTRACT.md](reference/functions/datetime/extract.md) | SQL-standard datepart extractor |
-| `EOMONTH(date)` | Date | [EOMONTH.md](reference/functions/general/eomonth.md) | Last day of the month |
-| `ISDATE(string)` | Date | [ISDATE.md](reference/functions/general/isdate.md) | 1 if parseable as date |
-| `TO_TIMESTAMP(string, [format])` | Date | [TO_TIMESTAMP.md](reference/functions/general/to_timestamp.md) | Parses string to a timestamp |
-| `TO_DATE(string, [format])` | Date | [TO_DATE.md](reference/functions/general/to_date.md) | Converts a string to a date |
-| `RELDATE(expression)` | Date | [RELDATE.md](reference/functions/general/reldate.md) | Resolves relative date expression (e.g. 'D-7', 'M-1') |
-| `DATETIMEFROMPARTS(year, month, day, hour, minute, second, ms)` | Date | [DATETIMEFROMPARTS.md](reference/functions/general/datetimefromparts.md) | Build DATETIME from components |
-| `DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)` | Date | [DATETIMEOFFSETSFROMPARTS.md](reference/functions/general/datetimeoffsetsfromparts.md) | Build DATETIMEOFFSET from components |
-| `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md](reference/functions/general/timefromparts.md) | Build TIME from components |
-| `TRUNC(date)` | Date | [TRUNC.md](reference/functions/general/trunc.md) | Truncates time portion |
+| `EOMONTH(date)` | Date | [EOMONTH.md](reference/functions/datetime/eomonth.md) | Last day of the month |
+| `ISDATE(string)` | Date | [ISDATE.md](reference/functions/datetime/isdate.md) | 1 if parseable as date |
+| `TO_TIMESTAMP(string, [format])` | Date | [TO_TIMESTAMP.md](reference/functions/datetime/to_timestamp.md) | Parses string to a timestamp |
+| `TO_DATE(string, [format])` | Date | [TO_DATE.md](reference/functions/datetime/to_date.md) | Converts a string to a date |
+| `RELDATE(expression)` | Date | [RELDATE.md](reference/functions/datetime/reldate.md) | Resolves relative date expression (e.g. 'D-7', 'M-1') |
+| `DATETIMEFROMPARTS(year, month, day, hour, minute, second, ms)` | Date | [DATETIMEFROMPARTS.md](reference/functions/datetime/datetimefromparts.md) | Build DATETIME from components |
+| `DATETIMEOFFSETSFROMPARTS(year, month, day, hour, minute, second, fractions, hour_offset, minute_offset, precision)` | Date | [DATETIMEOFFSETSFROMPARTS.md](reference/functions/datetime/datetimeoffsetsfromparts.md) | Build DATETIMEOFFSET from components |
+| `TIMEFROMPARTS(hour, minute, second, fractions, precision)` | Date | [TIMEFROMPARTS.md](reference/functions/datetime/timefromparts.md) | Build TIME from components |
+| `TRUNC(date)` | Date | [TRUNC.md](reference/functions/datetime/trunc.md) | Truncates time portion |
 | `AT TIME ZONE(date, timezone)` | Date | [AT_TIME_ZONE.md](guides/getting-started.md#4-date--time-functions) | Converts to specified timezone |
 | `CURRENT_DATE()` | Date | [CURRENT_DATE.md](reference/functions/datetime/current_date.md) | Current date (no time) |
 | `CURRENT_TIME()` | Date | [CURRENT_TIME.md](reference/functions/datetime/current_time.md) | Current time |
@@ -282,18 +282,18 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `CEILING(number)` | Math | [CEILING.md](reference/functions/math/ceiling.md) | Smallest integer >= number |
 | `CEIL(number)` | Math | [CEIL.md](reference/functions/math/ceil.md) | Alias for CEILING |
 | `RAND()` | Math | [RAND.md](reference/functions/math/rand.md) | Random number [0, 1) |
-| `RANDOM()` | Math | [RANDOM.md](reference/functions/general/random.md) | Alias for RAND() |
-| `RANDOM_INT(min, max)` | Math | [RANDOM_INT.md](reference/functions/general/random_int.md) | Random integer in range |
-| `RANDOM_DECIMAL(min, max)` | Math | [RANDOM_DECIMAL.md](reference/functions/general/random_decimal.md) | Random decimal in range |
-| `MOD(number, divisor)` / `number % divisor` | Math | [MOD.md](reference/functions/general/mod.md) | Remainder of division |
+| `RANDOM()` | Math | [RANDOM.md](reference/functions/random-guid/random.md) | Alias for RAND() |
+| `RANDOM_INT(min, max)` | Math | [RANDOM_INT.md](reference/functions/random-guid/random_int.md) | Random integer in range |
+| `RANDOM_DECIMAL(min, max)` | Math | [RANDOM_DECIMAL.md](reference/functions/random-guid/random_decimal.md) | Random decimal in range |
+| `MOD(number, divisor)` / `number % divisor` | Math | [MOD.md](reference/functions/math/mod.md) | Remainder of division |
 | `POWER(base, exponent)` | Math | [POWER.md](reference/functions/math/power.md) | Base raised to exponent |
-| `POW(base, exponent)` | Math | [POW.md](reference/functions/general/pow.md) | Alias for POWER |
+| `POW(base, exponent)` | Math | [POW.md](reference/functions/math/pow.md) | Alias for POWER |
 | `SQRT(number)` | Math | [SQRT.md](reference/functions/math/sqrt.md) | Square root |
 | `EXP(number)` | Math | [EXP.md](reference/functions/math/exp.md) | e raised to the power of number |
 | `LOG(number)` / `LN(number)` | Math | [LOG.md](reference/functions/math/log.md) | Natural logarithm |
 | `LOG10(number)` | Math | [LOG10.md](reference/functions/math/log10.md) | Base-10 logarithm |
-| `LEAST(value1, value2, ...)` | Math | [LEAST.md](reference/functions/general/least.md) | Smallest of arguments |
-| `GREATEST(value1, value2, ...)` | Math | [GREATEST.md](reference/functions/general/greatest.md) | Largest of arguments |
+| `LEAST(value1, value2, ...)` | Math | [LEAST.md](reference/functions/collections/least.md) | Smallest of arguments |
+| `GREATEST(value1, value2, ...)` | Math | [GREATEST.md](reference/functions/collections/greatest.md) | Largest of arguments |
 | `SIN(radians)` | Math | [SIN.md](reference/functions/math/sin.md) | Sine |
 | `COS(radians)` | Math | [COS.md](reference/functions/math/cos.md) | Cosine |
 | `TAN(radians)` | Math | [TAN.md](reference/functions/math/tan.md) | Tangent |
@@ -306,45 +306,45 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `DEGREES(radians)` | Math | [DEGREES.md](reference/functions/math/degrees.md) | Converts radians to degrees |
 | `RADIANS(degrees)` | Math | [RADIANS.md](reference/functions/math/radians.md) | Converts degrees to radians |
 | `PI()` | Math | [PI.md](reference/functions/math/pi.md) | Mathematical constant Ï€ |
-| `QUOTIENT(number, divisor)` | Math | [QUOTIENT.md](reference/functions/general/quotient.md) | Integer quotient of division |
+| `QUOTIENT(number, divisor)` | Math | [QUOTIENT.md](reference/functions/math/quotient.md) | Integer quotient of division |
 | `TRUNCATE(number, decimals)` | Math | [TRUNCATE.md](reference/statements/dml/truncate.md) | Truncates number to N decimal places |
-| `BITAND(a, b)` | Math | [BITAND.md](reference/functions/general/bitand.md) | Bitwise AND |
-| `BITOR(a, b)` | Math | [BITOR.md](reference/functions/general/bitor.md) | Bitwise OR |
-| `BITXOR(a, b)` | Math | [BITXOR.md](reference/functions/general/bitxor.md) | Bitwise XOR |
-| `BITNOT(a)` | Math | [BITNOT.md](reference/functions/general/bitnot.md) | Bitwise NOT (negation) |
-| `BITSHIFTLEFT(a, shift)` | Math | [BITSHIFTLEFT.md](reference/functions/general/bitshiftleft.md) | Bitwise left shift |
-| `BITSHIFTRIGHT(a, shift)` | Math | [BITSHIFTRIGHT.md](reference/functions/general/bitshiftright.md) | Bitwise right shift |
-| `BIT_COUNT(a)` | Math | [BIT_COUNT.md](reference/functions/general/bit_count.md) | Number of set bits (popcount) |
-| `COALESCE(value1, value2, ...)` | Logic | [COALESCE.md](reference/functions/conversion/coalesce.md) | First non-null value |
-| `ISNULL(value, default)` | Logic | [ISNULL.md](reference/functions/conversion/isnull.md) | Returns default if value is null |
+| `BITAND(a, b)` | Math | [BITAND.md](reference/functions/bitwise/bitand.md) | Bitwise AND |
+| `BITOR(a, b)` | Math | [BITOR.md](reference/functions/bitwise/bitor.md) | Bitwise OR |
+| `BITXOR(a, b)` | Math | [BITXOR.md](reference/functions/bitwise/bitxor.md) | Bitwise XOR |
+| `BITNOT(a)` | Math | [BITNOT.md](reference/functions/bitwise/bitnot.md) | Bitwise NOT (negation) |
+| `BITSHIFTLEFT(a, shift)` | Math | [BITSHIFTLEFT.md](reference/functions/bitwise/bitshiftleft.md) | Bitwise left shift |
+| `BITSHIFTRIGHT(a, shift)` | Math | [BITSHIFTRIGHT.md](reference/functions/bitwise/bitshiftright.md) | Bitwise right shift |
+| `BIT_COUNT(a)` | Math | [BIT_COUNT.md](reference/functions/bitwise/bit_count.md) | Number of set bits (popcount) |
+| `COALESCE(value1, value2, ...)` | Logic | [COALESCE.md](reference/functions/null-handler/coalesce.md) | First non-null value |
+| `ISNULL(value, default)` | Logic | [ISNULL.md](reference/functions/null-handler/isnull.md) | Returns default if value is null |
 | `IIF(condition, true_value, false_value)` | Logic | [IIF.md](reference/functions/conversion/iif.md) | Inline IF |
-| `NVL(value, default)` | Logic | [NVL.md](reference/functions/general/nvl.md) | Alias for ISNULL |
-| `IFNULL(value, default)` | Logic | [IFNULL.md](reference/functions/general/ifnull.md) | Alias for ISNULL |
-| `NVL2(value, not_null_result, null_result)` | Logic | [NVL2.md](reference/functions/general/nvl2.md) | Oracle-style null conditional |
-| `NULLIF(value1, value2)` | Logic | [NULLIF.md](reference/functions/conversion/nullif.md) | NULL if value1 = value2 |
-| `IS_NULL(value)` | Logic | [IS_NULL.md](reference/functions/conversion/isnull.md) | 1 if value is null |
-| `IS_NOT_NULL(value)` | Logic | [IS_NOT_NULL.md](reference/functions/general/is_not_null.md) | 1 if value is not null |
-| `DECODE(value, search1, result1, ..., [default])` | Logic | [DECODE.md](reference/functions/general/decode.md) | Oracle-style CASE shorthand |
+| `NVL(value, default)` | Logic | [NVL.md](reference/functions/null-handler/nvl.md) | Alias for ISNULL |
+| `IFNULL(value, default)` | Logic | [IFNULL.md](reference/functions/null-handler/ifnull.md) | Alias for ISNULL |
+| `NVL2(value, not_null_result, null_result)` | Logic | [NVL2.md](reference/functions/null-handler/nvl2.md) | Oracle-style null conditional |
+| `NULLIF(value1, value2)` | Logic | [NULLIF.md](reference/functions/null-handler/nullif.md) | NULL if value1 = value2 |
+| `IS_NULL(value)` | Logic | [IS_NULL.md](reference/functions/null-handler/isnull.md) | 1 if value is null |
+| `IS_NOT_NULL(value)` | Logic | [IS_NOT_NULL.md](reference/functions/null-handler/is_not_null.md) | 1 if value is not null |
+| `DECODE(value, search1, result1, ..., [default])` | Logic | [DECODE.md](reference/functions/conversion/decode.md) | Oracle-style CASE shorthand |
 | `CAST(value AS type)` | System | [CAST.md](reference/functions/conversion/cast.md) | Converts value to type |
 | `TRY_CAST(value AS type)` | System | [TRY_CAST.md](reference/functions/conversion/try_cast.md) | Converts value to type, NULL on fail |
 | `CONVERT(type, value)` | System | [CONVERT.md](reference/functions/conversion/convert.md) | Converts value to type |
-| `TRY_CONVERT(type, value)` | System | [TRY_CONVERT.md](reference/functions/general/try_convert.md) | CONVERT with NULL on failure |
-| `PARSE(string, type)` | System | [PARSE.md](reference/functions/general/parse.md) | Culture-aware string to type |
-| `TRY_PARSE(string, type)` | System | [TRY_PARSE.md](reference/functions/general/try_parse.md) | PARSE with NULL on failure |
+| `TRY_CONVERT(type, value)` | System | [TRY_CONVERT.md](reference/functions/conversion/try_convert.md) | CONVERT with NULL on failure |
+| `PARSE(string, type)` | System | [PARSE.md](reference/functions/conversion/parse.md) | Culture-aware string to type |
+| `TRY_PARSE(string, type)` | System | [TRY_PARSE.md](reference/functions/conversion/try_parse.md) | PARSE with NULL on failure |
 | `HASHBYTES(algorithm, string)` | System | [HASHBYTES.md](reference/functions/cryptography/hashbytes.md) | Returns hash of string |
-| `NEWID()` | System | [NEWID.md](reference/functions/general/newid.md) | Generates a new GUID |
-| `NEWSEQUENTIALID()` | System | [NEWSEQUENTIALID.md](reference/functions/general/newsequentialid.md) | Time-ordered GUID v7 |
-| `FORMAT(value, format_string)` | System | [FORMAT.md](reference/functions/general/format.md) | Formats value using string pattern |
+| `NEWID()` | System | [NEWID.md](reference/functions/random-guid/newid.md) | Generates a new GUID |
+| `NEWSEQUENTIALID()` | System | [NEWSEQUENTIALID.md](reference/functions/random-guid/newsequentialid.md) | Time-ordered GUID v7 |
+| `FORMAT(value, format_string)` | System | [FORMAT.md](reference/functions/string/format.md) | Formats value using string pattern |
 | `CHECKSUM(value1, ...)` | System | [CHECKSUM.md](reference/functions/cryptography/checksum.md) | 64-bit integer hash |
 | `BINARY_CHECKSUM(value1, ...)` | System | [BINARY_CHECKSUM.md](reference/functions/cryptography/binary_checksum.md) | Binary-compatible hash |
 | `ENV(variable_name)` | System | [ENV.md](reference/functions/general/env.md) | Host environment variable value |
 | `CONNECTION_PROPERTY(connection, property)` | System | [CONNECTION_PROPERTY.md](reference/functions/table-valued/connection_property.md) | Resolves properties of configured connections |
-| `GENERATE_SERIES(start, stop, [step])` | System | [GENERATE_SERIES.md](reference/functions/general/generate_series.md) | Returns table of numbers/dates |
-| `ERROR_MESSAGE()` | System | [ERROR_MESSAGE.md](reference/functions/general/error_message.md) | Error string in CATCH block |
-| `ERROR_NUMBER()` | System | [ERROR_NUMBER.md](reference/functions/general/error_number.md) | Error code in CATCH block |
-| `ERROR_SEVERITY()` | System | [ERROR_SEVERITY.md](reference/functions/general/error_severity.md) | Error severity in CATCH block |
-| `ERROR_STATE()` | System | [ERROR_STATE.md](reference/functions/general/error_state.md) | Error state in CATCH block |
-| `ERROR_LINE()` | System | [ERROR_LINE.md](reference/functions/general/error_line.md) | Error line in CATCH block |
+| `GENERATE_SERIES(start, stop, [step])` | System | [GENERATE_SERIES.md](reference/functions/table-valued/generate_series.md) | Returns table of numbers/dates |
+| `ERROR_MESSAGE()` | System | [ERROR_MESSAGE.md](reference/functions/error/error_message.md) | Error string in CATCH block |
+| `ERROR_NUMBER()` | System | [ERROR_NUMBER.md](reference/functions/error/error_number.md) | Error code in CATCH block |
+| `ERROR_SEVERITY()` | System | [ERROR_SEVERITY.md](reference/functions/error/error_severity.md) | Error severity in CATCH block |
+| `ERROR_STATE()` | System | [ERROR_STATE.md](reference/functions/error/error_state.md) | Error state in CATCH block |
+| `ERROR_LINE()` | System | [ERROR_LINE.md](reference/functions/error/error_line.md) | Error line in CATCH block |
 | `JSON_VALUE(json, path)` / `JSON_EXTRACT` | JSON | [JSON_VALUE.md](reference/functions/json-xml/json_value.md) / [JSON_EXTRACT.md](reference/functions/json-xml/json_extract.md) | Extracts scalar from JSON (alias: JSON_EXTRACT) |
 | `JSON_QUERY(json, path)` | JSON | [JSON_QUERY.md](reference/functions/json-xml/json_query.md) | Extracts object/array from JSON |
 | `JSON_GET(json, key)` / `->` | JSON | [JSON_GET.md](reference/functions/json-xml/json_get.md) | One access step (field/element) as JSON; the `->` operator |
@@ -363,19 +363,19 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `XMLELEMENT(name, content)` | XML | [XMLELEMENT.md](reference/functions/json-xml/xmlelement.md) | Builds XML element |
 | `XMLATTRIBUTES(name, value, ...)` | XML | [XMLATTRIBUTES.md](reference/functions/json-xml/xmlattributes.md) | XML attributes |
 | `XMLFOREST(value1, ...)` | XML | [XMLFOREST.md](reference/functions/json-xml/xmlforest.md) | Forest of XML elements |
-| `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](reference/functions/general/file_exists.md) | 1 if file exists, 0 otherwise |
-| `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/general/file_size.md) | Returns local file size in bytes |
-| `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/general/file_modified.md) | Returns local file last modified timestamp |
-| `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/general/file_hash.md) | Computes cryptographic hash of a file |
-| `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/general/directory_exists.md) | 1 if directory exists, 0 otherwise |
-| `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/general/file_list.md) | Returns table of files in path |
-| `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/general/remote_file_list.md) | Table of files on remote connection |
-| `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/general/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
-| `DIRECTORY(path)` | File | [DIRECTORY.md](reference/functions/general/directory.md) | Returns directory metadata |
-| `PATH_COMBINE(path1, path2, ...)` | File | [PATH_COMBINE.md](reference/functions/general/path_combine.md) | Combines multiple path segments |
-| `PATH_DIRECTORY(path)` | File | [PATH_DIRECTORY.md](reference/functions/general/path_directory.md) | Extracts directory path from a full path |
-| `PATH_EXTENSION(path)` | File | [PATH_EXTENSION.md](reference/functions/general/path_extension.md) | Extracts file extension from a path |
-| `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/general/path_filename.md) | Extracts filename from a full path |
+| `FILE_EXISTS(path)` | File | [FILE_EXISTS.md](reference/functions/file-path/file_exists.md) | 1 if file exists, 0 otherwise |
+| `FILE_SIZE(path)` | File | [FILE_SIZE.md](reference/functions/file-path/file_size.md) | Returns local file size in bytes |
+| `FILE_MODIFIED(path)` | File | [FILE_MODIFIED.md](reference/functions/file-path/file_modified.md) | Returns local file last modified timestamp |
+| `FILE_HASH(path, [algorithm])` | File | [FILE_HASH.md](reference/functions/file-path/file_hash.md) | Computes cryptographic hash of a file |
+| `DIRECTORY_EXISTS(path)` | File | [DIRECTORY_EXISTS.md](reference/functions/file-path/directory_exists.md) | 1 if directory exists, 0 otherwise |
+| `FILE_LIST(path, [mask])` | File | [FILE_LIST.md](reference/functions/file-path/file_list.md) | Returns table of files in path |
+| `REMOTE_FILE_LIST(connection, path)` | File | [REMOTE_FILE_LIST.md](reference/functions/file-path/remote_file_list.md) | Table of files on remote connection |
+| `REMOTE_FILE_EXISTS(connection, path)` | File | [REMOTE_FILE_EXISTS.md](reference/functions/file-path/remote_file_exists.md) | 1 if remote file exists, 0 otherwise |
+| `DIRECTORY(path)` | File | [DIRECTORY.md](reference/functions/file-path/directory.md) | Returns directory metadata |
+| `PATH_COMBINE(path1, path2, ...)` | File | [PATH_COMBINE.md](reference/functions/file-path/path_combine.md) | Combines multiple path segments |
+| `PATH_DIRECTORY(path)` | File | [PATH_DIRECTORY.md](reference/functions/file-path/path_directory.md) | Extracts directory path from a full path |
+| `PATH_EXTENSION(path)` | File | [PATH_EXTENSION.md](reference/functions/file-path/path_extension.md) | Extracts file extension from a path |
+| `PATH_FILENAME(path)` | File | [PATH_FILENAME.md](reference/functions/file-path/path_filename.md) | Extracts filename from a full path |
 | `SUM(expression)` | Aggregate | [SUM.md](reference/functions/aggregate/sum.md) | Sum of values |
 | `COUNT(expression)` | Aggregate | [COUNT.md](reference/functions/aggregate/count.md) | Count of non-null values |
 | `AVG(expression)` | Aggregate | [AVG.md](reference/functions/aggregate/avg.md) | Average of values |
@@ -383,15 +383,15 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `MIN(expression)` | Aggregate | [MIN.md](reference/functions/aggregate/min.md) | Minimum value |
 | `APPROX_COUNT_DISTINCT(expression)` | Aggregate | [Aggregate Functions](reference/functions/aggregate/avg.md) | HyperLogLog approximate distinct count |
 | `EVERY(expression)` / `ANY(expression)` / `SOME(expression)` | Aggregate | [Aggregate Functions](reference/functions/aggregate/avg.md) | Standard boolean aggregates |
-| `MEDIAN(expression)` | Aggregate | [MEDIAN.md](reference/functions/general/median.md) | Median (50th percentile) |
+| `MEDIAN(expression)` | Aggregate | [MEDIAN.md](reference/functions/aggregate/median.md) | Median (50th percentile) |
 | `VAR(expression)` / `VAR_SAMP` | Aggregate | [VAR.md](reference/functions/aggregate/var.md) | Sample variance |
 | `VARP(expression)` / `VAR_POP` | Aggregate | [VARP.md](reference/functions/aggregate/varp.md) | Population variance |
-| `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](reference/functions/aggregate/stdev.md) / [STDDEV.md](reference/functions/general/stddev.md) | Sample standard deviation |
+| `STDEV(expression)` / `STDDEV` | Aggregate | [STDEV.md](reference/functions/aggregate/stdev.md) / [STDDEV.md](reference/functions/aggregate/stddev.md) | Sample standard deviation |
 | `STDEVP(expression)` | Aggregate | [STDEVP.md](reference/functions/aggregate/stdevp.md) | Population standard deviation |
 | `COVAR_SAMP(expr1, expr2)` | Aggregate | [COVAR_SAMP.md](guides/getting-started.md#6-statistical-aggregates) | Sample covariance |
 | `COVAR_POP(expr1, expr2)` | Aggregate | [COVAR_POP.md](guides/getting-started.md#6-statistical-aggregates) | Population covariance |
 | `CORR(expr1, expr2)` | Aggregate | [CORR.md](guides/getting-started.md#6-statistical-aggregates) | Pearson correlation |
-| `LISTAGG(expression, separator)` | Aggregate | [LISTAGG.md](reference/functions/general/listagg.md) | Concatenates values with separator |
+| `LISTAGG(expression, separator)` | Aggregate | [LISTAGG.md](reference/functions/aggregate/listagg.md) | Concatenates values with separator |
 | `STRING_AGG(expression, separator)` | Aggregate | [STRING_AGG.md](reference/functions/aggregate/string_agg.md) | Concatenates strings with separator |
 | `ROW_NUMBER()` | Window | [ROW_NUMBER.md](reference/functions/window/row_number.md) | Sequential row number |
 | `RANK()` | Window | [RANK.md](reference/functions/window/rank.md) | Rank with gaps |
@@ -404,32 +404,32 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `FIRST_VALUE(expression)` | Window | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in partition |
 | `LAST_VALUE(expression)` | Window | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in partition |
 | `NTH_VALUE(expression, nth)` | Window | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
-| `PERCENTILE_CONT(fraction)` | Window | [PERCENTILE_CONT.md](reference/functions/general/percentile_cont.md) | Continuous percentile |
-| `PERCENTILE_DISC(fraction)` | Window | [PERCENTILE_DISC.md](reference/functions/general/percentile_disc.md) | Discrete percentile |
-| `REGEXP_LIKE(string, pattern)` | Regex | [REGEXP_LIKE.md](reference/functions/general/regexp_like.md) | 1 if string matches regex |
-| `REGEXP_REPLACE(string, pattern, replacement)` | Regex | [REGEXP_REPLACE.md](reference/functions/general/regexp_replace.md) | Replace matches in string |
-| `REGEXP_SUBSTR(string, pattern)` | Regex | [REGEXP_SUBSTR.md](reference/functions/general/regexp_substr.md) | Matched substring |
-| `REGEXP_INSTR(string, pattern)` | Regex | [REGEXP_INSTR.md](reference/functions/general/regexp_instr.md) | Position of match |
-| `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md](reference/functions/general/regexp_count.md) | Count of matches |
-| `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md](reference/functions/general/regexp_matches.md) | Table of all matches |
-| `REGEXP_SPLIT_TO_TABLE(string, pattern)` | Regex | [REGEXP_SPLIT_TO_TABLE.md](reference/functions/general/regexp_split_to_table.md) | Splits a string into a table using regex |
+| `PERCENTILE_CONT(fraction)` | Window | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
+| `PERCENTILE_DISC(fraction)` | Window | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
+| `REGEXP_LIKE(string, pattern)` | Regex | [REGEXP_LIKE.md](reference/functions/regex/regexp_like.md) | 1 if string matches regex |
+| `REGEXP_REPLACE(string, pattern, replacement)` | Regex | [REGEXP_REPLACE.md](reference/functions/regex/regexp_replace.md) | Replace matches in string |
+| `REGEXP_SUBSTR(string, pattern)` | Regex | [REGEXP_SUBSTR.md](reference/functions/regex/regexp_substr.md) | Matched substring |
+| `REGEXP_INSTR(string, pattern)` | Regex | [REGEXP_INSTR.md](reference/functions/regex/regexp_instr.md) | Position of match |
+| `REGEXP_COUNT(string, pattern)` | Regex | [REGEXP_COUNT.md](reference/functions/regex/regexp_count.md) | Count of matches |
+| `REGEXP_MATCHES(string, pattern)` | Regex | [REGEXP_MATCHES.md](reference/functions/regex/regexp_matches.md) | Table of all matches |
+| `REGEXP_SPLIT_TO_TABLE(string, pattern)` | Regex | [REGEXP_SPLIT_TO_TABLE.md](reference/functions/regex/regexp_split_to_table.md) | Splits a string into a table using regex |
 | `ADD_TO_LIST(list, value)` | List | [ADD_TO_LIST.md](reference/functions/collections/add_to_list.md) | Appends value to a LIST |
-| `SORT_LIST(list)` | List | [SORT_LIST.md](reference/functions/general/sort_list.md) | Returns sorted copy of list |
+| `SORT_LIST(list)` | List | [SORT_LIST.md](reference/functions/collections/sort_list.md) | Returns sorted copy of list |
 | `APPEND_TO_LIST(list, value)` | List | [APPEND_TO_LIST.md](reference/functions/collections/append_to_list.md) | Alias for ADD_TO_LIST |
-| `REMOVE_FROM_LIST(list, value)` | List | [REMOVE_FROM_LIST.md](reference/functions/general/remove_from_list.md) | Removes occurrences from list |
-| `GET_TAGS(table, [column])` | Lineage | [GET_TAGS.md](reference/functions/general/get_tags.md) | Returns list of tag names |
-| `GET_TAG_VALUE(table, column, tag_name)` | Lineage | [GET_TAG_VALUE.md](reference/functions/general/get_tag_value.md) | Returns value of specific tag |
-| `HAS_TAG(table, column, tag_name, [expected_value])` | Lineage | [HAS_TAG.md](reference/functions/general/has_tag.md) | Returns 1 if tag exists (optionally matching expected value) |
-| `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md](reference/functions/general/normalize.md) | Domain-aware preprocessing |
-| `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md](reference/functions/general/similarity.md) | Normalized similarity score (0-1) |
-| `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md](reference/functions/general/levenshtein.md) | Raw edit distance |
-| `SOUNDEX(string)` | Fuzzy | [SOUNDEX.md](reference/functions/general/soundex.md) | 4-char phonetic code |
-| `METAPHONE(string)` | Fuzzy | [METAPHONE.md](reference/functions/general/metaphone.md) | English phonetic code |
-| `DMETAPHONE(string)` | Fuzzy | [DMETAPHONE.md](reference/functions/general/dmetaphone.md) | Double Metaphone primary code |
-| `DMETAPHONE_ALT(string)` | Fuzzy | [DMETAPHONE_ALT.md](reference/functions/general/dmetaphone_alt.md) | Double Metaphone alternate code |
-| `NGRAMS(string, size)` | Fuzzy | [NGRAMS.md](reference/functions/general/ngrams.md) | Table of N-character grams |
-| `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](reference/functions/general/ngram_tokens.md) | Table of 3-grams (blocking) |
-| `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md](reference/functions/general/difference.md) | SOUNDEX difference score (0-4) |
+| `REMOVE_FROM_LIST(list, value)` | List | [REMOVE_FROM_LIST.md](reference/functions/collections/remove_from_list.md) | Removes occurrences from list |
+| `GET_TAGS(table, [column])` | Lineage | [GET_TAGS.md](reference/functions/tags/get_tags.md) | Returns list of tag names |
+| `GET_TAG_VALUE(table, column, tag_name)` | Lineage | [GET_TAG_VALUE.md](reference/functions/tags/get_tag_value.md) | Returns value of specific tag |
+| `HAS_TAG(table, column, tag_name, [expected_value])` | Lineage | [HAS_TAG.md](reference/functions/tags/has_tag.md) | Returns 1 if tag exists (optionally matching expected value) |
+| `NORMALIZE(string, [mode])` | Fuzzy | [NORMALIZE.md](reference/functions/fuzzy-match/normalize.md) | Domain-aware preprocessing |
+| `SIMILARITY(string1, string2, [mode])` | Fuzzy | [SIMILARITY.md](reference/functions/fuzzy-match/similarity.md) | Normalized similarity score (0-1) |
+| `LEVENSHTEIN(string1, string2)` | Fuzzy | [LEVENSHTEIN.md](reference/functions/fuzzy-match/levenshtein.md) | Raw edit distance |
+| `SOUNDEX(string)` | Fuzzy | [SOUNDEX.md](reference/functions/fuzzy-match/soundex.md) | 4-char phonetic code |
+| `METAPHONE(string)` | Fuzzy | [METAPHONE.md](reference/functions/fuzzy-match/metaphone.md) | English phonetic code |
+| `DMETAPHONE(string)` | Fuzzy | [DMETAPHONE.md](reference/functions/fuzzy-match/dmetaphone.md) | Double Metaphone primary code |
+| `DMETAPHONE_ALT(string)` | Fuzzy | [DMETAPHONE_ALT.md](reference/functions/fuzzy-match/dmetaphone_alt.md) | Double Metaphone alternate code |
+| `NGRAMS(string, size)` | Fuzzy | [NGRAMS.md](reference/functions/fuzzy-match/ngrams.md) | Table of N-character grams |
+| `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](reference/functions/fuzzy-match/ngram_tokens.md) | Table of 3-grams (blocking) |
+| `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md](reference/functions/fuzzy-match/difference.md) | SOUNDEX difference score (0-4) |
 
 *Note: Over 190 functions are registered. See [Standard Library](reference/functions/standard-library.md) for full signatures and examples.*
 
@@ -554,8 +554,8 @@ FUNCTION_NAME(args) OVER (
 | `FIRST_VALUE(expression)` | [FIRST_VALUE.md](reference/functions/window/first_value.md) | First value in window frame |
 | `LAST_VALUE(expression)` | [LAST_VALUE.md](reference/functions/window/last_value.md) | Last value in window frame |
 | `NTH_VALUE(expression, nth)` | [NTH_VALUE.md](guides/getting-started.md#133-analytic-functions) | Nth value in window frame |
-| `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md](reference/functions/general/percentile_cont.md) | Continuous percentile |
-| `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md](reference/functions/general/percentile_disc.md) | Discrete percentile |
+| `PERCENTILE_CONT(fraction)` | [PERCENTILE_CONT.md](reference/functions/aggregate/percentile_cont.md) | Continuous percentile |
+| `PERCENTILE_DISC(fraction)` | [PERCENTILE_DISC.md](reference/functions/aggregate/percentile_disc.md) | Discrete percentile |
 
 ### 4.3 Aggregate-as-Window Functions
 Any standard aggregate function can be used as a window function by appending the `OVER` clause.
@@ -602,7 +602,7 @@ Used in `DECLARE` to define behavior.
 | `XML` | Validated XML string | [Grammar.md#L106] |
 | `LIST` / `LIST(t)` | Ordered collection | [Grammar.md#L137] |
 | `MINMAX(t)` | Pair of values (.MIN, .MAX) | [Grammar.md#L151] |
-| `RELDATE` | Relative date expression (e.g. 'D-7') | [RelativeDate_Parameters.md](reference/functions/general/reldate.md) |
+| `RELDATE` | Relative date expression (e.g. 'D-7') | [RelativeDate_Parameters.md](reference/functions/datetime/reldate.md) |
 | `SENSITIVE` | Masked in output, auto-decrypts `ENC:` | [Grammar.md#L195] |
 | `SECRET` | Same as SENSITIVE, purged at session end | [Grammar.md#L213] |
 | `MARKDOWN` | Hint for Report Portal rendering | [Grammar.md#L125] |

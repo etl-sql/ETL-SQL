@@ -43,7 +43,7 @@ FROM #contacts;
 
 - [Standard Library](../standard-library.md)
 - [TRANSLATE](translate.md)
-- [REGEXP_REPLACE](../general/regexp_replace.md)
+- [REGEXP_REPLACE](../regex/regexp_replace.md)
 - [STUFF](stuff.md)
-- [REMOVE_HIDDEN_CHARACTERS](../general/remove_hidden_characters.md)
-- [REMOVE_HTML_CHARACTERS](../general/remove_html_characters.md)
+- [REMOVE_HIDDEN_CHARACTERS](../string/remove_hidden_characters.md)
+- [REMOVE_HTML_CHARACTERS](../string/remove_html_characters.md)

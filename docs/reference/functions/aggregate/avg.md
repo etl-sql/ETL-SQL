@@ -54,4 +54,4 @@ FROM #daily_sales;
 - [Standard Library](../standard-library.md)
 - [SUM](sum.md)
 - [STDEV](stdev.md)
-- [MEDIAN](../general/median.md)
+- [MEDIAN](../aggregate/median.md)

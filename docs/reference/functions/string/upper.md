@@ -35,4 +35,4 @@ FROM #customers;
 
 - [Standard Library](../standard-library.md)
 - [LOWER](lower.md)
-- [INITCAP](../general/initcap.md)
+- [INITCAP](../string/initcap.md)

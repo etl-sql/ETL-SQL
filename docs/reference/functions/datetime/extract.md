@@ -41,4 +41,4 @@ FROM #events;
 - [Standard Library](../standard-library.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEPART](datepart.md)
-- [DATE_PART](../general/date_part.md)
+- [DATE_PART](../datetime/date_part.md)

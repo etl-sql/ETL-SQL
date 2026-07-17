@@ -38,5 +38,5 @@ FROM #ledger;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [FORMAT](../general/format.md)
+- [FORMAT](../string/format.md)
 - [TO_STR](to_str.md)

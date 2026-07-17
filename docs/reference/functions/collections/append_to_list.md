@@ -38,4 +38,4 @@ SET @columns = APPEND_TO_LIST(@columns, 'email');
 
 - [Standard Library](../standard-library.md)
 - [ADD_TO_LIST](add_to_list.md)
-- [REMOVE_FROM_LIST](../general/remove_from_list.md)
+- [REMOVE_FROM_LIST](../collections/remove_from_list.md)

@@ -23,7 +23,7 @@ Returns `NULL` when `value` is `NULL`.
 ## Remarks
 
 - `TO_STR` is a convenience alias for `CAST(value AS STRING)`.
-- For locale-aware formatting of numbers and dates, use [`FORMAT`](../general/format.md) instead.
+- For locale-aware formatting of numbers and dates, use [`FORMAT`](../string/format.md) instead.
 
 ## Examples
 
@@ -40,5 +40,5 @@ FROM #orders;
 
 - [Standard Library](../standard-library.md)
 - [CAST](../conversion/cast.md)
-- [FORMAT](../general/format.md)
+- [FORMAT](../string/format.md)
 - [STR](str.md)

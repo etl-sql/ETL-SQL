@@ -38,4 +38,4 @@ SET @tags = REMOVE_FROM_LIST(@tags, 'draft');
 
 - [Standard Library](../standard-library.md)
 - [ADD_TO_LIST](../collections/add_to_list.md)
-- [SORT_LIST](sort_list.md)
+- [SORT_LIST](../collections/sort_list.md)

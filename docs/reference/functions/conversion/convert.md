@@ -25,7 +25,7 @@ Returns the converted value using the requested target type.
 ## Remarks
 
 - `CONVERT` is the function-style equivalent of [`CAST`](cast.md) and is useful when a style code is needed.
-- Use [`TRY_CONVERT`](../general/try_convert.md) when invalid values should return `NULL` instead of failing the script.
+- Use [`TRY_CONVERT`](../conversion/try_convert.md) when invalid values should return `NULL` instead of failing the script.
 - Inside `EXECUTE connection BEGIN ... END`, use the target database's native `CONVERT` behavior.
 
 ## Examples
@@ -43,4 +43,4 @@ FROM #staging;
 
 - [Standard Library](../standard-library.md)
 - [CAST](cast.md)
-- [TRY_CONVERT](../general/try_convert.md)
+- [TRY_CONVERT](../conversion/try_convert.md)

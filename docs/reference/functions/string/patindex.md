@@ -23,7 +23,7 @@ Returns `NULL` when any required argument is `NULL`.
 
 ## Remarks
 
-- Uses SQL `LIKE`-style wildcards (`%`, `_`), not regex. Use [`REGEXP_INSTR`](../general/regexp_instr.md) for regex-based position searches.
+- Uses SQL `LIKE`-style wildcards (`%`, `_`), not regex. Use [`REGEXP_INSTR`](../regex/regexp_instr.md) for regex-based position searches.
 - Case sensitivity follows `SET CASE_SENSITIVE`.
 
 ## Examples
@@ -42,4 +42,4 @@ WHERE PATINDEX('%@%', email) = 0;
 
 - [Standard Library](../standard-library.md)
 - [CHARINDEX](charindex.md)
-- [REGEXP_INSTR](../general/regexp_instr.md)
+- [REGEXP_INSTR](../regex/regexp_instr.md)

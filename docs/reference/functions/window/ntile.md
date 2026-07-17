@@ -51,4 +51,4 @@ FROM #students;
 
 - [Standard Library](../standard-library.md)
 - [RANK](rank.md)
-- [PERCENTILE_CONT](../general/percentile_cont.md)
+- [PERCENTILE_CONT](../aggregate/percentile_cont.md)

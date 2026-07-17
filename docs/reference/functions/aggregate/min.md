@@ -38,4 +38,4 @@ FROM #products;
 
 - [Standard Library](../standard-library.md)
 - [MAX](max.md)
-- [LEAST](../general/least.md)
+- [LEAST](../collections/least.md)

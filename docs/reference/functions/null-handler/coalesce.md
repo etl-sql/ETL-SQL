@@ -48,4 +48,4 @@ FROM #staging;
 - [Standard Library](../standard-library.md)
 - [ISNULL](isnull.md)
 - [NULLIF](nullif.md)
-- [IIF](iif.md)
+- [IIF](../conversion/iif.md)

@@ -37,4 +37,4 @@ FROM #prices;
 - [Standard Library](../standard-library.md)
 - [FLOOR](floor.md)
 - [CEILING](ceiling.md)
-- [TRUNCATE](../general/truncate.md)
+- [TRUNCATE](../math/truncate.md)

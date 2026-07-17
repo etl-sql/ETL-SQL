@@ -38,4 +38,4 @@ GROUP BY DATENAME(WEEKDAY, order_date);
 - [Standard Library](../standard-library.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEPART](datepart.md)
-- [FORMAT](../general/format.md)
+- [FORMAT](../string/format.md)

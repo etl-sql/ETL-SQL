@@ -25,7 +25,7 @@ When `seed` is `NULL`, behavior is the same as calling `RAND()` without a seed.
 
 - Without a seed, each call returns a different value. With a seed, the same seed always starts the same sequence.
 - To generate a random integer in a range: `FLOOR(RAND() * (max - min + 1)) + min`.
-- See also [`RANDOM_INT`](../general/random_int.md) and [`RANDOM_DECIMAL`](../general/random_decimal.md) for range-bounded shortcuts.
+- See also [`RANDOM_INT`](../random-guid/random_int.md) and [`RANDOM_DECIMAL`](../random-guid/random_decimal.md) for range-bounded shortcuts.
 
 ## Examples
 
@@ -40,6 +40,6 @@ SELECT FLOOR(RAND() * 100) AS random_percent;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [RANDOM_INT](../general/random_int.md)
-- [RANDOM_DECIMAL](../general/random_decimal.md)
-- [RANDOM](../general/random.md)
+- [RANDOM_INT](../random-guid/random_int.md)
+- [RANDOM_DECIMAL](../random-guid/random_decimal.md)
+- [RANDOM](../random-guid/random.md)

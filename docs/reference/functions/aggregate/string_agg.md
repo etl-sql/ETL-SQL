@@ -43,4 +43,4 @@ GROUP BY order_id;
 
 - [Standard Library](../standard-library.md)
 - [CONCAT_WS](../string/concat_ws.md)
-- [LISTAGG](../general/listagg.md)
+- [LISTAGG](../aggregate/listagg.md)

@@ -49,6 +49,6 @@ WHERE TRY_CAST(raw_amount AS DECIMAL(18, 2)) IS NOT NULL;
 
 - [Standard Library](../standard-library.md)
 - [CAST](cast.md)
-- [TRY_CONVERT](../general/try_convert.md)
-- [TRY_PARSE](../general/try_parse.md)
-- [ISDATE](../general/isdate.md)
+- [TRY_CONVERT](../conversion/try_convert.md)
+- [TRY_PARSE](../conversion/try_parse.md)
+- [ISDATE](../datetime/isdate.md)

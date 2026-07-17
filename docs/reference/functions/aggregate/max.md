@@ -38,4 +38,4 @@ FROM #sales;
 
 - [Standard Library](../standard-library.md)
 - [MIN](min.md)
-- [GREATEST](../general/greatest.md)
+- [GREATEST](../collections/greatest.md)

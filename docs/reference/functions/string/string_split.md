@@ -43,4 +43,4 @@ CROSS APPLY STRING_SPLIT(o.tags, ',') AS t;
 
 - [Standard Library](../standard-library.md)
 - [SPLIT_PART](split_part.md)
-- [REGEXP_SPLIT_TO_TABLE](../general/regexp_split_to_table.md)
+- [REGEXP_SPLIT_TO_TABLE](../regex/regexp_split_to_table.md)

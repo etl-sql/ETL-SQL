@@ -48,6 +48,6 @@ FROM #data;
 ## References
 
 - [Standard Library](../standard-library.md)
-- [COALESCE](coalesce.md)
-- [NULLIF](nullif.md)
-- [DECODE](../general/decode.md)
+- [COALESCE](../null-handler/coalesce.md)
+- [NULLIF](../null-handler/nullif.md)
+- [DECODE](../conversion/decode.md)
