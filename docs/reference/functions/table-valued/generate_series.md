@@ -43,6 +43,6 @@ CROSS JOIN GENERATE_SERIES(1, 5) AS c;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SORT_LIST](../collections/sort_list.md)
 - [APPEND_TO_LIST](../collections/append_to_list.md)

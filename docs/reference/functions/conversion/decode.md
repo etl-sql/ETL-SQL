@@ -38,6 +38,6 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [IIF](../conversion/iif.md)
 - [COALESCE](../null-handler/coalesce.md)

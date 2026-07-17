@@ -39,7 +39,7 @@ WHERE amount > 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LOG10](log10.md)
 - [EXP](exp.md)
 - [POWER](power.md)

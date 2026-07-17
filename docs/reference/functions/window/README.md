@@ -43,5 +43,5 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Aggregate Functions](../aggregate/README.md)

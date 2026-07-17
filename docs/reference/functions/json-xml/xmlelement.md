@@ -40,6 +40,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [XMLATTRIBUTES](xmlattributes.md)
 - [XMLFOREST](xmlforest.md)

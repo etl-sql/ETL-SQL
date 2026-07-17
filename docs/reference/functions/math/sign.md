@@ -33,5 +33,5 @@ FROM #transactions;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ABS](abs.md)

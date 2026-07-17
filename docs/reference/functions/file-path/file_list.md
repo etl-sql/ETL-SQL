@@ -45,7 +45,7 @@ WHERE SIZE > 1048576;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Administration Guide](../../../guides/administration.md)
 - [REMOTE_FILE_LIST](remote_file_list.md)
 - [FILE_EXISTS](file_exists.md)

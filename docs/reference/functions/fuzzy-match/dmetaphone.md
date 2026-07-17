@@ -38,7 +38,7 @@ JOIN #customers b
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DMETAPHONE_ALT](dmetaphone_alt.md)
 - [METAPHONE](metaphone.md)
 - [SIMILARITY](similarity.md)

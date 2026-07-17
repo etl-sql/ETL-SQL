@@ -39,6 +39,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ASCII](ascii.md)
 - [CHAR](char.md)

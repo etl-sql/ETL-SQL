@@ -34,7 +34,7 @@ FROM #prices;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FLOOR](floor.md)
 - [CEILING](ceiling.md)
 - [TRUNCATE](../math/truncate.md)

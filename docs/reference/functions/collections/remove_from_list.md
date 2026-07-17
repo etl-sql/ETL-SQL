@@ -36,6 +36,6 @@ SET @tags = REMOVE_FROM_LIST(@tags, 'draft');
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ADD_TO_LIST](../collections/add_to_list.md)
 - [SORT_LIST](../collections/sort_list.md)

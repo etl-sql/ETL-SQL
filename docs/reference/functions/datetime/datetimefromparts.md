@@ -42,6 +42,6 @@ SELECT DATETIMEFROMPARTS(YEAR(GETDATE()), MONTH(GETDATE()), 1, 0, 0, 0, 0) AS fi
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TIMEFROMPARTS](timefromparts.md)
 - [DATEPART](../datetime/datepart.md)

@@ -10,5 +10,5 @@ Table-valued functions return a result set that can be selected from like a tabl
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

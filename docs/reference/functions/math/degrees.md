@@ -34,6 +34,6 @@ FROM #vectors;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RADIANS](radians.md)
 - [PI](pi.md)

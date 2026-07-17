@@ -41,6 +41,6 @@ GROUP BY order_id;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CONCAT_WS](../string/concat_ws.md)
 - [LISTAGG](../aggregate/listagg.md)

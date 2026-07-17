@@ -10,5 +10,5 @@ Job state functions read and write durable per-job state for orchestrated runs.
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

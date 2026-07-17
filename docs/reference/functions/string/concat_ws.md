@@ -40,6 +40,6 @@ FROM #people;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CONCAT](concat.md)
 - [STRING_AGG](../aggregate/string_agg.md)

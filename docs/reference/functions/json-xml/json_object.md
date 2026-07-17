@@ -39,6 +39,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_ARRAY](json_array.md)
 - [JSON_VALUE](json_value.md)

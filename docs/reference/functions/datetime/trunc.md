@@ -39,6 +39,6 @@ WHERE TRUNC(order_time) = TRUNC(GETDATE());
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DATETRUNC](datetrunc.md)
 - [CAST](../conversion/cast.md)

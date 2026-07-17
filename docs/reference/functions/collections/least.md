@@ -35,6 +35,6 @@ FROM #items;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GREATEST](greatest.md)
 - [MIN](../aggregate/min.md)

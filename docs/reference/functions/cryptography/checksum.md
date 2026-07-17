@@ -46,5 +46,5 @@ WHEN MATCHED AND T.row_hash <> S.row_hash THEN
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [HASHBYTES](hashbytes.md)

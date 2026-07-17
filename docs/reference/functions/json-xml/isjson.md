@@ -34,6 +34,6 @@ WHERE ISJSON(payload) = 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_VALUE](json_value.md)
 - [TRY_CAST](../conversion/try_cast.md)

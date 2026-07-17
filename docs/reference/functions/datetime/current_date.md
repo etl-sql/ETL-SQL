@@ -36,7 +36,7 @@ SELECT * FROM #orders WHERE order_date = CURRENT_DATE();
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CURRENT_TIME](current_time.md)
 - [CURRENT_TIMESTAMP](current_timestamp.md)
 - [GETDATE](getdate.md)

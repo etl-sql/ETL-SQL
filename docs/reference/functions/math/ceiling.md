@@ -34,7 +34,7 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CEIL](ceil.md)
 - [FLOOR](floor.md)
 - [ROUND](round.md)

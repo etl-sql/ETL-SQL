@@ -41,6 +41,6 @@ GROUP BY region;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STDEV](../aggregate/stdev.md)
 - [STDEVP](../aggregate/stdevp.md)

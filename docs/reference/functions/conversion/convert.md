@@ -41,6 +41,6 @@ FROM #staging;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CAST](cast.md)
 - [TRY_CONVERT](../conversion/try_convert.md)

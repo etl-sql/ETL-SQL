@@ -42,7 +42,7 @@ WHERE DIFFERENCE(a.name, b.name) >= 3;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SOUNDEX](soundex.md)
 - [METAPHONE](metaphone.md)
 - [SIMILARITY](similarity.md)

@@ -34,5 +34,5 @@ FROM #packed_values;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITSHIFTLEFT](bitshiftleft.md)

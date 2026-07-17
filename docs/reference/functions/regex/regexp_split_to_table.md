@@ -36,6 +36,6 @@ CROSS APPLY REGEXP_SPLIT_TO_TABLE(raw_list, '\s*\|\s*') AS part;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STRING_SPLIT](../string/string_split.md)
 - [REGEXP_MATCHES](regexp_matches.md)

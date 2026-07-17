@@ -21,5 +21,5 @@ File and path functions inspect the filesystem and manipulate path strings.
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

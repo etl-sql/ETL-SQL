@@ -47,7 +47,7 @@ FROM #products;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STDEVP](stdevp.md)
 - [VAR](var.md)
 - [AVG](avg.md)

@@ -38,7 +38,7 @@ GROUP BY YEAR(order_date);
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [MONTH](month.md)
 - [DAY](day.md)
 - [DATEPART](datepart.md)

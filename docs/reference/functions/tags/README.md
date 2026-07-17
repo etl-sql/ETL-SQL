@@ -11,5 +11,5 @@ Tag and lineage functions read column and dataset tags for governance and lineag
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

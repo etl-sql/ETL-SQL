@@ -33,7 +33,7 @@ FROM #vectors;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SIN](sin.md)
 - [ACOS](acos.md)
 - [ATAN](atan.md)

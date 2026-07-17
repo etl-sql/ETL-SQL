@@ -46,7 +46,7 @@ WHERE SIMILARITY(a.name, b.name) > 0.85;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [NORMALIZE](normalize.md)
 - [LEVENSHTEIN](levenshtein.md)
 - [SOUNDEX](soundex.md)

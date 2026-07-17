@@ -36,7 +36,7 @@ FROM #api;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [EXTRACTVALUE](extractvalue.md)
 - [XMLEXISTS](xmlexists.md)
 - [XMLQUERY](xmlquery.md)

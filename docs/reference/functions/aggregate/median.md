@@ -40,7 +40,7 @@ GROUP BY category;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [AVG](../aggregate/avg.md)
 - [PERCENTILE_CONT](percentile_cont.md)
 - [STDEV](../aggregate/stdev.md)

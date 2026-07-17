@@ -35,7 +35,7 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ISNULL](../null-handler/isnull.md)
 - [NVL2](nvl2.md)
 - [COALESCE](../null-handler/coalesce.md)

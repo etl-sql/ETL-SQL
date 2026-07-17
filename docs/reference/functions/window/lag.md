@@ -53,6 +53,6 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEAD](lead.md)
 - [FIRST_VALUE](first_value.md)

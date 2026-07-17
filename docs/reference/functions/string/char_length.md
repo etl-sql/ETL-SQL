@@ -39,7 +39,7 @@ WHERE CHAR_LENGTH(email) > 254;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEN](len.md)
 - [LENGTH](length.md)
 - [DATALENGTH](datalength.md)

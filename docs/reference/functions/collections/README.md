@@ -14,5 +14,5 @@ Collection functions build, combine, and reshape list and array values.
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

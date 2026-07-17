@@ -36,6 +36,6 @@ FROM #products;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [MAX](max.md)
 - [LEAST](../collections/least.md)

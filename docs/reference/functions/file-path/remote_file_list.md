@@ -35,6 +35,6 @@ WHERE NAME LIKE '%.csv' AND LASTMODIFIED > DATEADD(DAY, -1, GETDATE());
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Administration Guide](../../../guides/administration.md)
 - [FILE_LIST](file_list.md)

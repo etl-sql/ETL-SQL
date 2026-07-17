@@ -38,7 +38,7 @@ FROM #events;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEPART](datepart.md)
 - [DATE_PART](../datetime/date_part.md)

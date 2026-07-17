@@ -35,5 +35,5 @@ FROM #items;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [QUOTIENT](quotient.md)

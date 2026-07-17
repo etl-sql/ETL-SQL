@@ -16,5 +16,5 @@ Null handling functions substitute, detect, and compare NULL values.
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

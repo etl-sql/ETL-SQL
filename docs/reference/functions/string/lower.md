@@ -33,6 +33,6 @@ FROM #users;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [UPPER](upper.md)
 - [INITCAP](../string/initcap.md)

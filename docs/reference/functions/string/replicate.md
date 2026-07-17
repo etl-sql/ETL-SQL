@@ -34,7 +34,7 @@ FROM #items;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REPEAT](repeat.md)
 - [SPACE](space.md)
 - [STR](str.md)

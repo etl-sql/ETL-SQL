@@ -45,7 +45,7 @@ FROM #staging;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ISNULL](isnull.md)
 - [NULLIF](nullif.md)
 - [IIF](../conversion/iif.md)

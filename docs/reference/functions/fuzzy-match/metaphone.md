@@ -33,6 +33,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SOUNDEX](soundex.md)
 - [DMETAPHONE](dmetaphone.md)

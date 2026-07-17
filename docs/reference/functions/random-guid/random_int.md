@@ -37,6 +37,6 @@ SELECT RANDOM_INT(1, 6) AS dice_roll;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RAND](../math/rand.md)
 - [RANDOM_DECIMAL](random_decimal.md)

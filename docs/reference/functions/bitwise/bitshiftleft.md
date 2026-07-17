@@ -34,5 +34,5 @@ FROM #flags;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITSHIFTRIGHT](bitshiftright.md)

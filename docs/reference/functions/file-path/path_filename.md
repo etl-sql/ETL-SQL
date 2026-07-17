@@ -33,7 +33,7 @@ FROM #file_inventory;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PATH_COMBINE](path_combine.md)
 - [PATH_EXTENSION](path_extension.md)
 - [PATH_DIRECTORY](path_directory.md)

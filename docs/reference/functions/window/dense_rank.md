@@ -46,6 +46,6 @@ FROM #employees;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RANK](rank.md)
 - [ROW_NUMBER](row_number.md)

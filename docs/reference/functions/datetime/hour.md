@@ -39,7 +39,7 @@ ORDER BY event_hour;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [MINUTE](minute.md)
 - [SECOND](second.md)
 - [DATEPART](datepart.md)

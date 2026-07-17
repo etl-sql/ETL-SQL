@@ -35,7 +35,7 @@ WHERE role_name = 'Reviewer';
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITAND](bitand.md)
 - [BITXOR](bitxor.md)
 - [BITNOT](bitnot.md)

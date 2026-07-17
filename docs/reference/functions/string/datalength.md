@@ -35,7 +35,7 @@ FROM #raw_files;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEN](len.md)
 - [CHAR_LENGTH](char_length.md)
 - [LENGTH](length.md)

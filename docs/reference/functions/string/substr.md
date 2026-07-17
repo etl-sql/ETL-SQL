@@ -41,7 +41,7 @@ FROM #products;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SUBSTRING](substring.md)
 - [LEFT](left.md)
 - [RIGHT](right.md)

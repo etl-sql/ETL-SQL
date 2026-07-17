@@ -38,5 +38,5 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Window Functions](../window/README.md)

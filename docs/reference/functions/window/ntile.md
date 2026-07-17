@@ -49,6 +49,6 @@ FROM #students;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RANK](rank.md)
 - [PERCENTILE_CONT](../aggregate/percentile_cont.md)

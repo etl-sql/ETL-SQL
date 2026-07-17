@@ -39,6 +39,6 @@ FROM #batch_summary;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CEILING](ceiling.md)
 - [FLOOR](floor.md)

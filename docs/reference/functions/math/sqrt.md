@@ -38,6 +38,6 @@ WHERE variance >= 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [POWER](power.md)
 - [EXP](exp.md)

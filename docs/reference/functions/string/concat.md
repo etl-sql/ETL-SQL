@@ -40,6 +40,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CONCAT_WS](concat_ws.md)
 - [STRING_AGG](../aggregate/string_agg.md)

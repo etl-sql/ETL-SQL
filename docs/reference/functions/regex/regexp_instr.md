@@ -39,6 +39,6 @@ FROM #data;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REGEXP_SUBSTR](regexp_substr.md)
 - [CHARINDEX](../string/charindex.md)

@@ -36,6 +36,6 @@ SET profile_json = JSON_MODIFY(profile_json, '$.lastSeen', GETDATE());
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_QUERY](json_query.md)

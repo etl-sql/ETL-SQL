@@ -36,6 +36,6 @@ CROSS APPLY REGEXP_MATCHES(text_value, '[A-Z]{2}\d{4}') AS m;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REGEXP_SUBSTR](regexp_substr.md)
 - [REGEXP_SPLIT_TO_TABLE](regexp_split_to_table.md)

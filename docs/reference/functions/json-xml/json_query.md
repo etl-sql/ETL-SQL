@@ -40,6 +40,6 @@ FROM #api_responses;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_MODIFY](json_modify.md)

@@ -228,4 +228,4 @@ Use **Disable** when you want to pause a recurring job temporarily. Use **Delete
 
 *For the scheduling internals, see [Orchestrator Architecture](../../architecture/Orchestrator.md).*  
 *For the full `CREATE JOB` syntax and all scheduling options, see [Reference/Grammar.md](../getting-started.md#13-job-scheduling).*  
-*For complete function and connector references, see [Standard Library](../../reference/functions/standard-library.md) and [Data Connectors](../../reference/connectors/data-connectors.md).*
+*For complete function and connector references, see [Standard Library](../../reference/functions/README.md) and [Data Connectors](../../reference/connectors/data-connectors.md).*

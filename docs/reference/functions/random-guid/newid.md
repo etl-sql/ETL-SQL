@@ -39,5 +39,5 @@ SELECT @batch_id AS batch;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [NEWSEQUENTIALID](newsequentialid.md)

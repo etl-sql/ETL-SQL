@@ -42,7 +42,7 @@ FROM #products;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEFT](left.md)
 - [RIGHT](right.md)
 - [CHARINDEX](charindex.md)

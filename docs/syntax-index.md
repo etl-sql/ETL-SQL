@@ -431,7 +431,7 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `NGRAM_TOKENS(string)` | Fuzzy | [NGRAM_TOKENS.md](reference/functions/fuzzy-match/ngram_tokens.md) | Table of 3-grams (blocking) |
 | `DIFFERENCE(string1, string2)` | Fuzzy | [DIFFERENCE.md](reference/functions/fuzzy-match/difference.md) | SOUNDEX difference score (0-4) |
 
-*Note: Over 190 functions are registered. See [Standard Library](reference/functions/standard-library.md) for full signatures and examples.*
+*Note: Over 190 functions are registered. See [Standard Library](reference/functions/README.md) for full signatures and examples.*
 
 ---
 
@@ -587,8 +587,8 @@ Read-only counters tracking session state.
 | `@@SORT_SPILLS` | Count of external sort spills | [@@SORT_SPILLS.md](reference/variables-parameters/@@sort_spills.md) |
 | `@@SUBQUERY_CACHE_HITS` | Subquery cache hit count | [@@SUBQUERY_CACHE_HITS.md](reference/variables-parameters/@@subquery_cache_hits.md) |
 | `@@SUBQUERY_CACHE_MISSES` | Subquery cache miss count | [@@SUBQUERY_CACHE_MISSES.md](reference/variables-parameters/@@subquery_cache_misses.md) |
-| `@@RESULTSETS` | Count of result sets from last stmt | [Standard Library](reference/functions/standard-library.md) |
-| `@@PARTITIONS_COUNT` | External spill partition count | [Standard Library](reference/functions/standard-library.md) |
+| `@@RESULTSETS` | Count of result sets from last stmt | [Standard Library](reference/functions/README.md) |
+| `@@PARTITIONS_COUNT` | External spill partition count | [Standard Library](reference/functions/README.md) |
 | `@@FILE_EXISTS(p)` | File existence check (also available as function `FILE_EXISTS()`) | - |
 | `@@DIRECTORY_EXISTS(p)` | Directory existence check (also available as function `DIRECTORY_EXISTS()`) | - |
 

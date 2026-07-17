@@ -40,6 +40,6 @@ FROM #vectors;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ATAN](atan.md)
 - [DEGREES](degrees.md)

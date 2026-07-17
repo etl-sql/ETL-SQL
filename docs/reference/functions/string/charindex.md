@@ -37,7 +37,7 @@ WHERE CHARINDEX('@', email) = 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PATINDEX](patindex.md)
 - [POSITION](position.md)
 - [INSTR](instr.md)

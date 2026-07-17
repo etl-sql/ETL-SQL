@@ -53,6 +53,6 @@ WHERE SIMILARITY(
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SIMILARITY](similarity.md)
 - [LEVENSHTEIN](levenshtein.md)

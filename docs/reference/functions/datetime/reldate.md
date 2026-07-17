@@ -34,6 +34,6 @@ WHERE order_date >= RELDATE('M-1');
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GETDATE](../datetime/getdate.md)
 - [NOW](../datetime/now.md)

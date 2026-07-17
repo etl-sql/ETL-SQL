@@ -51,7 +51,7 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SUM](sum.md)
 - [STDEV](stdev.md)
 - [MEDIAN](../aggregate/median.md)

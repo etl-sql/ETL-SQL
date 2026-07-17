@@ -40,7 +40,7 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_QUERY](json_query.md)
 - [OPENJSON](openjson.md)

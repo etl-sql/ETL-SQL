@@ -41,5 +41,5 @@ GROUP BY department;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STRING_AGG](../aggregate/string_agg.md)

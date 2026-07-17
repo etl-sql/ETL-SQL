@@ -41,5 +41,5 @@ GROUP BY region;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PERCENTILE_CONT](percentile_cont.md)

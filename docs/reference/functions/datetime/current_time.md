@@ -36,7 +36,7 @@ SELECT HOUR(CURRENT_TIME()) AS current_hour;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CURRENT_DATE](current_date.md)
 - [CURRENT_TIMESTAMP](current_timestamp.md)
 - [GETDATE](getdate.md)

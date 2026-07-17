@@ -42,7 +42,7 @@ CROSS APPLY OPENJSON(payload_json, '$.items') AS item;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_VALUE](json_value.md)
 - [JSON_QUERY](json_query.md)
 - [JSON_TABLE](json_table.md)

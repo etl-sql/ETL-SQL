@@ -33,6 +33,6 @@ FROM #circles;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DEGREES](degrees.md)
 - [RADIANS](radians.md)

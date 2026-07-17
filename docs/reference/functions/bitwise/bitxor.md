@@ -34,7 +34,7 @@ FROM #permission_changes;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITAND](bitand.md)
 - [BITOR](bitor.md)
 - [BITNOT](bitnot.md)

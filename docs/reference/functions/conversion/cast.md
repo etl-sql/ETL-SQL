@@ -41,6 +41,6 @@ WHERE amount_text IS NOT NULL;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TRY_CAST](try_cast.md)
 - [CONVERT](convert.md)

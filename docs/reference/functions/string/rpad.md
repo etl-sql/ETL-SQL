@@ -36,6 +36,6 @@ FROM #statuses;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LPAD](lpad.md)
 - [REPEAT](repeat.md)

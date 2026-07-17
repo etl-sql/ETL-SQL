@@ -33,6 +33,6 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LTRIM](ltrim.md)
 - [TRIM](trim.md)

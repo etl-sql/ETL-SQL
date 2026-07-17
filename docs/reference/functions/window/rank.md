@@ -41,7 +41,7 @@ FROM #sales_by_month;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DENSE_RANK](dense_rank.md)
 - [ROW_NUMBER](row_number.md)
 - [NTILE](ntile.md)

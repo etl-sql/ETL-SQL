@@ -15,5 +15,5 @@ Regular expression functions match, extract, split, and replace text using patte
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

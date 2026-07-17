@@ -1171,4 +1171,4 @@ END CATCH
 
 ---
 
-*Refer to [Standard Library](../reference/functions/standard-library.md) for function signatures, [Data Connectors](../reference/connectors/data-connectors.md) for connector options, and [Getting Started](../guides/getting-started.md) for the mental model.*
+*Refer to [Standard Library](../reference/functions/README.md) for function signatures, [Data Connectors](../reference/connectors/data-connectors.md) for connector options, and [Getting Started](../guides/getting-started.md) for the mental model.*

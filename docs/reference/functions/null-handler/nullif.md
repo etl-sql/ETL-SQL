@@ -44,6 +44,6 @@ FROM #data;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [COALESCE](coalesce.md)
 - [ISNULL](isnull.md)

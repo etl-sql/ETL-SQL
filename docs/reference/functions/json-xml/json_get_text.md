@@ -43,7 +43,7 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON and XML Functions](../README.md)
 - [JSON_GET](json_get.md)
 - [JSON_VALUE](json_value.md)

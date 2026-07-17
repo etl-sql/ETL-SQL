@@ -41,6 +41,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ISNULL](../null-handler/isnull.md)
 - [COALESCE](../null-handler/coalesce.md)

@@ -33,7 +33,7 @@ FROM #files;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PATH_COMBINE](path_combine.md)
 - [PATH_FILENAME](path_filename.md)
 - [PATH_EXTENSION](path_extension.md)

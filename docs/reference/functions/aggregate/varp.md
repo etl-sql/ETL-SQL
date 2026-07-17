@@ -41,6 +41,6 @@ GROUP BY product_id;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [VAR](var.md)
 - [STDEVP](stdevp.md)

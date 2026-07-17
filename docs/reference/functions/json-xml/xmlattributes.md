@@ -39,6 +39,6 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [XMLELEMENT](xmlelement.md)
 - [XMLFOREST](xmlforest.md)

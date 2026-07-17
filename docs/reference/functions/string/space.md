@@ -33,6 +33,6 @@ FROM #items;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REPLICATE](replicate.md)
 - [STR](str.md)

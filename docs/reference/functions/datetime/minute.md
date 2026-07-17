@@ -32,7 +32,7 @@ SELECT MINUTE(GETDATE()) AS current_minute;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [HOUR](hour.md)
 - [SECOND](second.md)
 - [DATEPART](datepart.md)

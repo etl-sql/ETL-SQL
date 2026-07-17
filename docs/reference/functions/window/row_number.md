@@ -49,6 +49,6 @@ WHERE rn BETWEEN 21 AND 30;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RANK](rank.md)
 - [DENSE_RANK](dense_rank.md)

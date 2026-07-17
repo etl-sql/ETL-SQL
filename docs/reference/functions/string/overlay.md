@@ -42,6 +42,6 @@ FROM #accounts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STUFF](stuff.md)
 - [REPLACE](replace.md)

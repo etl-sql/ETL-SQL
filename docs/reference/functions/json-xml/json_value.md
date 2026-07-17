@@ -35,7 +35,7 @@ FROM #api_responses;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [JSON_QUERY](json_query.md)
 - [JSON_MODIFY](json_modify.md)
 - [ISJSON](isjson.md)

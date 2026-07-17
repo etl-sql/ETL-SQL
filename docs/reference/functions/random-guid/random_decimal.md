@@ -37,6 +37,6 @@ SELECT RANDOM_DECIMAL(9.99, 99.99) AS test_price;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RAND](../math/rand.md)
 - [RANDOM_INT](random_int.md)

@@ -13,5 +13,5 @@ Error functions expose details of the active error inside a `TRY ... CATCH` bloc
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

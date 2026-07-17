@@ -40,6 +40,6 @@ WHERE RANDOM() < 0.10;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RANDOM_INT](random_int.md)
 - [RANDOM_DECIMAL](random_decimal.md)

@@ -45,7 +45,7 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [COUNT](count.md)
 - [AVG](avg.md)
 - [MIN](min.md)

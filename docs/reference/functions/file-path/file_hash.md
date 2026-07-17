@@ -39,7 +39,7 @@ FROM #incoming_files;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FILE_SIZE](file_size.md)
 - [FILE_MODIFIED](file_modified.md)
 - [HASHBYTES](../cryptography/hashbytes.md)

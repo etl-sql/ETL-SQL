@@ -47,7 +47,7 @@ WHERE TRY_CAST(raw_amount AS DECIMAL(18, 2)) IS NOT NULL;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CAST](cast.md)
 - [TRY_CONVERT](../conversion/try_convert.md)
 - [TRY_PARSE](../conversion/try_parse.md)

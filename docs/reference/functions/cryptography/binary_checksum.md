@@ -41,6 +41,6 @@ WHERE BINARY_CHECKSUM(name) <> BINARY_CHECKSUM(previous_name);
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CHECKSUM](checksum.md)
 - [HASHBYTES](hashbytes.md)

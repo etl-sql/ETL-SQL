@@ -38,6 +38,6 @@ FROM #requests;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [POSITION](position.md)
 - [CHARINDEX](charindex.md)

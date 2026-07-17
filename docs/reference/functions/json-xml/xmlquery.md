@@ -42,6 +42,6 @@ WHERE XMLEXISTS(payload_xml, '/order/items/item') = 1;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [XMLEXISTS](xmlexists.md)
 - [XMLVALUE](xmlvalue.md)

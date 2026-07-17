@@ -33,7 +33,7 @@ FROM #jobs;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [HOUR](hour.md)
 - [MINUTE](minute.md)
 - [DATEPART](datepart.md)

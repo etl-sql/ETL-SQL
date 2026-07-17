@@ -35,6 +35,6 @@ FROM #jobs;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEAST](least.md)
 - [MAX](../aggregate/max.md)

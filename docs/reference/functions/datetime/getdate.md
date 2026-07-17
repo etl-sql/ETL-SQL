@@ -38,6 +38,6 @@ INSERT INTO #log (created_at) VALUES (GETDATE());
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [NOW](now.md)
 - [CURRENT_TIMESTAMP](current_timestamp.md)

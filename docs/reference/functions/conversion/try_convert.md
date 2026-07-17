@@ -48,6 +48,6 @@ SELECT TRY_CONVERT(DATE, '20250101', 112) AS business_date;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CONVERT](../conversion/convert.md)
 - [TRY_CAST](../conversion/try_cast.md)

@@ -40,7 +40,7 @@ FROM #vectors;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TAN](tan.md)
 - [SIN](sin.md)
 - [COS](cos.md)

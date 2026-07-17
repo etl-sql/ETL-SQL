@@ -34,6 +34,6 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEFT](left.md)
 - [SUBSTRING](substring.md)

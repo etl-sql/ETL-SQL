@@ -35,7 +35,7 @@ FROM #exports;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PATH_FILENAME](path_filename.md)
 - [PATH_EXTENSION](path_extension.md)
 - [PATH_DIRECTORY](path_directory.md)

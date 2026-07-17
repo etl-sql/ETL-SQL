@@ -50,5 +50,5 @@ END
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GET_JOB_STATE](get_job_state.md)

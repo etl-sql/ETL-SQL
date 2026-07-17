@@ -42,6 +42,6 @@ JOIN #customers b
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SIMILARITY](similarity.md)
 - [SOUNDEX](soundex.md)

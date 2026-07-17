@@ -36,6 +36,6 @@ CROSS APPLY NGRAMS(normalized_name, 3) AS gram;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [NGRAM_TOKENS](ngram_tokens.md)
 - [SIMILARITY](similarity.md)

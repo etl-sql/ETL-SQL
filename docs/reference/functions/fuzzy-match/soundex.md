@@ -41,7 +41,7 @@ JOIN #reference AS b
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [METAPHONE](metaphone.md)
 - [DMETAPHONE](dmetaphone.md)
 - [DIFFERENCE](difference.md)

@@ -34,5 +34,5 @@ FROM #stage;
 
 ## References
 
-- [Standard Library](../reference/functions/standard-library.md)
+- [Standard Library](../reference/functions/README.md)
 

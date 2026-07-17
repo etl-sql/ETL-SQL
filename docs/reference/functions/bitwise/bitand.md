@@ -35,7 +35,7 @@ WHERE BITAND(permission_mask, 4) = 4;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITOR](bitor.md)
 - [BITXOR](bitxor.md)
 - [BITNOT](bitnot.md)

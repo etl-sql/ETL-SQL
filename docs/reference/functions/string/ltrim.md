@@ -33,6 +33,6 @@ FROM #data;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RTRIM](rtrim.md)
 - [TRIM](trim.md)

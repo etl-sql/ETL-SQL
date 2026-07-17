@@ -33,6 +33,6 @@ SET notes = REPLACE(notes, CHAR(13), '');
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ASCII](ascii.md)
 - [UNICODE](unicode.md)

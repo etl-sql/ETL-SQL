@@ -39,7 +39,7 @@ SELECT FLOOR(RAND() * 100) AS random_percent;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RANDOM_INT](../random-guid/random_int.md)
 - [RANDOM_DECIMAL](../random-guid/random_decimal.md)
 - [RANDOM](../random-guid/random.md)

@@ -37,6 +37,6 @@ FROM #file_inventory;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FILE_HASH](file_hash.md)
 - [FILE_MODIFIED](file_modified.md)

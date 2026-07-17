@@ -37,6 +37,6 @@ FROM #ledger;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FORMAT](../string/format.md)
 - [TO_STR](to_str.md)

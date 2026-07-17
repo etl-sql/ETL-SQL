@@ -37,5 +37,5 @@ SELECT CONNECTION_PROPERTY('landing_files', 'Path') AS landing_path;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ENV](../general/env.md)

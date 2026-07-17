@@ -42,5 +42,5 @@ WHERE IS_NULL(account_id) = 1;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [IS_NOT_NULL](is_not_null.md)

@@ -13,5 +13,5 @@ Random and GUID functions generate random values and unique identifiers.
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

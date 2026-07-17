@@ -41,7 +41,7 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REPLACE](replace.md)
 - [OVERLAY](overlay.md)
 - [SUBSTRING](substring.md)

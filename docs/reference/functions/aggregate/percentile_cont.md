@@ -43,7 +43,7 @@ FROM #products;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PERCENTILE_DISC](percentile_disc.md)
 - [MEDIAN](median.md)
 - [NTILE](../window/ntile.md)

@@ -42,6 +42,6 @@ WHERE path LIKE '%.csv';
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FILE_LIST](file_list.md)
 - [DIRECTORY_EXISTS](directory_exists.md)

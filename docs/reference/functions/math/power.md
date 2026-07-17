@@ -35,7 +35,7 @@ FROM #values;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SQRT](sqrt.md)
 - [EXP](exp.md)
 - [LOG](log.md)

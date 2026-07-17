@@ -34,7 +34,7 @@ WHERE DAY(order_date) = 1;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [YEAR](year.md)
 - [MONTH](month.md)
 - [DATEPART](datepart.md)

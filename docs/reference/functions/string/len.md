@@ -39,6 +39,6 @@ SELECT LEN(@ids) AS item_count;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DATALENGTH](datalength.md)
 - [CHAR_LENGTH](char_length.md)

@@ -39,6 +39,6 @@ FROM #messages;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [QUOTENAME](quotename.md)
 - [JSON_MODIFY](../json-xml/json_modify.md)

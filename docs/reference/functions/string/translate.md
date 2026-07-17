@@ -44,5 +44,5 @@ FROM #messages;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REPLACE](replace.md)

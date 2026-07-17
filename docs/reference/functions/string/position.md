@@ -38,7 +38,7 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CHARINDEX](charindex.md)
 - [INSTR](instr.md)
 - [PATINDEX](patindex.md)

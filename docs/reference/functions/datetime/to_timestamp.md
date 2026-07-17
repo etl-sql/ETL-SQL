@@ -33,6 +33,6 @@ FROM #events;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [EXTRACT](../datetime/extract.md)
 - [DATEADD](../datetime/dateadd.md)

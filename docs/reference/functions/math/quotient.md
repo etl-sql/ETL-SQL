@@ -46,5 +46,5 @@ FROM #load_summary;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [MOD](mod.md)

@@ -43,6 +43,6 @@ FROM XMLTABLE(
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [XMLVALUE](xmlvalue.md)
 - [XMLQUERY](xmlquery.md)

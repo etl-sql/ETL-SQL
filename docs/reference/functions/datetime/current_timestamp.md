@@ -38,6 +38,6 @@ VALUES ('load-started', CURRENT_TIMESTAMP);
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GETDATE](getdate.md)
 - [NOW](now.md)

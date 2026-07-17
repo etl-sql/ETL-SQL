@@ -39,7 +39,7 @@ SELECT PARSE('1,234.56', DECIMAL(10, 2)) AS parsed_amount;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TRY_PARSE](try_parse.md)
 - [CAST](../conversion/cast.md)
 - [TRY_CAST](../conversion/try_cast.md)

@@ -35,5 +35,5 @@ FROM #columns;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STRING_ESCAPE](string_escape.md)

@@ -24,7 +24,7 @@ Function reference pages define exact signatures, return types, null behavior, e
 - [Table-valued](table-valued/connection_property.md)
 - [Tags and lineage](tags/get_tags.md)
 - [Window](window/row_number.md)
-- [Standard Library Overview](standard-library.md)
+- [Data Types](../data-types.md)
 
 ## Page Standard
 

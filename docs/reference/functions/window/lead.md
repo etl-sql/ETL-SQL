@@ -53,6 +53,6 @@ FROM #daily_sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LAG](lag.md)
 - [LAST_VALUE](last_value.md)

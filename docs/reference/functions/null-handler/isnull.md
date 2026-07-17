@@ -46,7 +46,7 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [COALESCE](coalesce.md)
 - [NULLIF](nullif.md)
 - [NVL2](../null-handler/nvl2.md)

@@ -33,7 +33,7 @@ SELECT REPEAT('-', 40) AS separator_line;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REPLICATE](replicate.md)
 - [LPAD](lpad.md)
 - [RPAD](rpad.md)

@@ -42,5 +42,5 @@ WHERE IS_NOT_NULL(shipped_at) = 1;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [IS_NULL](is_null.md)

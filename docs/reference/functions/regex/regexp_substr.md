@@ -38,7 +38,7 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REGEXP_LIKE](regexp_like.md)
 - [REGEXP_REPLACE](regexp_replace.md)
 - [REGEXP_INSTR](regexp_instr.md)

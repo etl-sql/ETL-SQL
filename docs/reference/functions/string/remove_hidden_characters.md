@@ -50,7 +50,7 @@ FROM #raw;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REMOVE_HTML_CHARACTERS](remove_html_characters.md)
 - [REPLACE](../string/replace.md)
 - [TRANSLATE](../string/translate.md)

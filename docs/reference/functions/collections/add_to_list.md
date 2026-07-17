@@ -37,6 +37,6 @@ SET @tags = ADD_TO_LIST(@tags, 'reviewed');
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [APPEND_TO_LIST](append_to_list.md)
 - [REMOVE_FROM_LIST](../collections/remove_from_list.md)

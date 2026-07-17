@@ -49,6 +49,6 @@ FROM #people;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CHECKSUM](checksum.md)
 - [BINARY_CHECKSUM](binary_checksum.md)

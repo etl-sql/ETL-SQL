@@ -37,7 +37,7 @@ WHERE REGEXP_LIKE(email, '@gmail\.com$') = 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REGEXP_SUBSTR](regexp_substr.md)
 - [REGEXP_REPLACE](regexp_replace.md)
 - [REGEXP_INSTR](regexp_instr.md)

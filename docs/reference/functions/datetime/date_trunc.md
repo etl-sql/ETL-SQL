@@ -39,7 +39,7 @@ GROUP BY DATE_TRUNC(HOUR, event_time);
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATETRUNC](../datetime/datetrunc.md)
 - [TRUNC](../datetime/trunc.md)

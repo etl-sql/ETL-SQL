@@ -51,5 +51,5 @@ CREATE CONNECTION src AS POSTGRES(
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Configuration](../../configuration/index.md)

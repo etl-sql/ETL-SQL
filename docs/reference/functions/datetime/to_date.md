@@ -41,6 +41,6 @@ WHERE TO_DATE(order_date_text, 'yyyy-MM-dd') IS NOT NULL;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TO_TIMESTAMP](to_timestamp.md)
 - [CAST](../conversion/cast.md)

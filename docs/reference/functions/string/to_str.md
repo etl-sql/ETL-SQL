@@ -38,7 +38,7 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CAST](../conversion/cast.md)
 - [FORMAT](../string/format.md)
 - [STR](str.md)

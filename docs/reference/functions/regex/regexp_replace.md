@@ -44,7 +44,7 @@ FROM #people;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REGEXP_LIKE](regexp_like.md)
 - [REGEXP_SUBSTR](regexp_substr.md)
 - [REPLACE](../string/replace.md)

@@ -38,6 +38,6 @@ FROM #customers;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [UNICODE](unicode.md)
 - [CHAR](char.md)

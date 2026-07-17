@@ -40,7 +40,7 @@ WHERE LENGTH(tags) > 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LEN](len.md)
 - [CHAR_LENGTH](char_length.md)
 - [DATALENGTH](datalength.md)

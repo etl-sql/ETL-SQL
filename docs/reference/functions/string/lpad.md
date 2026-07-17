@@ -36,6 +36,6 @@ FROM #accounts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RPAD](rpad.md)
 - [REPEAT](repeat.md)

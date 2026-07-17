@@ -33,6 +33,6 @@ FROM #catalog;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CEILING](ceiling.md)
 - [ROUND](round.md)

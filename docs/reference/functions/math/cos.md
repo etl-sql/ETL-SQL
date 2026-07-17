@@ -33,7 +33,7 @@ FROM #angles;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SIN](sin.md)
 - [TAN](tan.md)
 - [ACOS](acos.md)

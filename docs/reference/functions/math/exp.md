@@ -34,6 +34,6 @@ WHERE x > 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [LOG](log.md)
 - [POWER](power.md)

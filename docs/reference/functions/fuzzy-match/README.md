@@ -18,5 +18,5 @@ Fuzzy matching functions compare strings by similarity, phonetics, and edit dist
 ## References
 
 - [Functions](../README.md)
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

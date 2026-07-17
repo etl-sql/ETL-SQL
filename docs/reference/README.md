@@ -20,6 +20,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 ## Built-ins
 
 - [Functions](functions/README.md) - scalar, aggregate, window, JSON/XML, collection, conversion, string, math, date/time, and cryptography functions.
+- [Data Types](data-types.md) - built-in data types and type conversion.
 - [Dates and Times](dates-times/dates-times.md) - temporal model, date arithmetic, aliases, and relative date handling.
 - [Performance](performance/performance.md) - spill thresholds, external execution, memory model, and scale guidance.
 - [Snippets](snippets/README.md) - built-in and user-defined autocomplete templates.

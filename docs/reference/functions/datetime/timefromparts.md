@@ -40,5 +40,5 @@ SELECT TIMEFROMPARTS(14, 30, 45, 500, 3) AS precise_time;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DATETIMEFROMPARTS](datetimefromparts.md)

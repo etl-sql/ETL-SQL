@@ -35,6 +35,6 @@ FROM #people;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [STRING_SPLIT](string_split.md)
 - [CHARINDEX](charindex.md)

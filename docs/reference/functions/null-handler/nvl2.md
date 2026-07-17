@@ -36,7 +36,7 @@ FROM #items;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [ISNULL](../null-handler/isnull.md)
 - [IIF](../conversion/iif.md)
 - [COALESCE](../null-handler/coalesce.md)

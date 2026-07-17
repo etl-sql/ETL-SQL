@@ -34,6 +34,6 @@ FROM #jobs;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GETDATE](getdate.md)
 - [CURRENT_TIMESTAMP](current_timestamp.md)

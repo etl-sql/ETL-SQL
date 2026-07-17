@@ -41,7 +41,7 @@ FROM #contacts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TRANSLATE](translate.md)
 - [REGEXP_REPLACE](../regex/regexp_replace.md)
 - [STUFF](stuff.md)

@@ -44,7 +44,7 @@ FROM #jobs;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Datepart values](../../../syntax-index.md#datepart--dateadd-datediff-datename-datepart-datetrunc-extract)
 - [DATEADD](dateadd.md)
 - [DATEPART](datepart.md)

@@ -36,7 +36,7 @@ SELECT DATENAME(MONTH, GETDATE()) AS current_month_name;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [YEAR](year.md)
 - [DAY](day.md)
 - [DATENAME](datename.md)

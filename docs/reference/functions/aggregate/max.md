@@ -36,6 +36,6 @@ FROM #sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [MIN](min.md)
 - [GREATEST](../collections/greatest.md)

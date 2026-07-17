@@ -41,6 +41,6 @@ CROSS APPLY NGRAM_TOKENS(customer_name) AS token;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [NGRAMS](ngrams.md)
 - [NORMALIZE](normalize.md)

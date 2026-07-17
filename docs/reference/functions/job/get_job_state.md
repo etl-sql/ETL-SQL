@@ -39,5 +39,5 @@ WHERE order_id > @last_watermark;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SET_JOB_STATE](set_job_state.md)

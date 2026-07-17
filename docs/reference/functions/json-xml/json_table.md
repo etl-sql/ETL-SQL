@@ -48,6 +48,6 @@ CROSS APPLY JSON_TABLE(
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [OPENJSON](openjson.md)
 - [JSON_QUERY](json_query.md)

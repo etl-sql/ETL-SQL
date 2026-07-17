@@ -38,6 +38,6 @@ FROM #imported;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [PARSE](parse.md)
 - [TRY_CAST](../conversion/try_cast.md)

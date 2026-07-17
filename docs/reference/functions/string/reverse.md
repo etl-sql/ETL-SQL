@@ -38,6 +38,6 @@ WHERE word = REVERSE(word);
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SUBSTRING](substring.md)
 - [LENGTH](length.md)

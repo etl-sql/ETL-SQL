@@ -39,5 +39,5 @@ FROM #forecast;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [POWER](../math/power.md)

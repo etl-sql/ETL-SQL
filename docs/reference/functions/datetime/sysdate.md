@@ -40,6 +40,6 @@ WHERE event_time < SYSDATE();
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [GETDATE](getdate.md)
 - [NOW](now.md)

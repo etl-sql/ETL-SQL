@@ -32,6 +32,6 @@ SELECT DATETIMEOFFSETSFROMPARTS(2026, 6, 12, 14, 30, 0, 0, -5, 0, 0) AS local_ti
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DATETIMEFROMPARTS](datetimefromparts.md)
 - [TIMEFROMPARTS](timefromparts.md)

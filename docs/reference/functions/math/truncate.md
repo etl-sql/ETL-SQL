@@ -34,6 +34,6 @@ FROM #payments;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FLOOR](../math/floor.md)
 - [ROUND](../math/round.md)

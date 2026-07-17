@@ -33,6 +33,6 @@ FROM #role_permissions;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITAND](bitand.md)
 - [BITOR](bitor.md)

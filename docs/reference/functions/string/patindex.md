@@ -40,6 +40,6 @@ WHERE PATINDEX('%@%', email) = 0;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [CHARINDEX](charindex.md)
 - [REGEXP_INSTR](../regex/regexp_instr.md)

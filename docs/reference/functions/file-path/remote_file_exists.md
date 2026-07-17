@@ -36,6 +36,6 @@ END;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [FILE_EXISTS](file_exists.md)
 - [REMOTE_FILE_LIST](remote_file_list.md)

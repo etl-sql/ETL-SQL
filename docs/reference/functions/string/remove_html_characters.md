@@ -50,7 +50,7 @@ FROM #leads;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [REMOVE_HIDDEN_CHARACTERS](remove_hidden_characters.md)
 - [REPLACE](../string/replace.md)
 - [TRANSLATE](../string/translate.md)

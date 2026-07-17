@@ -34,6 +34,6 @@ FROM #addresses;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [RIGHT](right.md)
 - [SUBSTRING](substring.md)

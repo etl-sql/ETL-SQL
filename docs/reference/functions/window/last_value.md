@@ -46,6 +46,6 @@ FROM #orders;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [Window Query Syntax](../../statements/query-syntax/window.md)
 - [FIRST_VALUE](first_value.md)

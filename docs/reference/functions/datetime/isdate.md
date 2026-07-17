@@ -34,6 +34,6 @@ WHERE ISDATE(date_str) = 1;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [TRY_CAST](../conversion/try_cast.md)
 - [CAST](../conversion/cast.md)

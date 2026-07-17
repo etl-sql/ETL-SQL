@@ -605,7 +605,7 @@ Common transformation tools:
 | Handle missing values | `COALESCE`, `ISNULL`, `NULLIF` |
 | Convert types safely | `CAST`, `TRY_CAST` |
 | Mask or fingerprint sensitive values | `HASHBYTES` |
-| Parse semi-structured data | JSON/XML functions in [Standard Library](../reference/functions/standard-library.md) |
+| Parse semi-structured data | JSON/XML functions in [Standard Library](../reference/functions/README.md) |
 | Match messy names or addresses | `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `FUZZY JOIN` |
 
 ### 5.7 Dialect Awareness
@@ -1869,7 +1869,7 @@ For browser usage, see [Portal User Guide](portal-user.md). For deployment and a
 | Find syntax by keyword | **[Syntax Index](../syntax-index.md)** |
 | Statement syntax | **[Statement Reference](../reference/statements/README.md)** |
 | Connector options and authentication | **[Data Connectors](../reference/connectors/data-connectors.md)** |
-| All built-in functions | **[Standard Library](../reference/functions/standard-library.md)** |
+| All built-in functions | **[Standard Library](../reference/functions/README.md)** |
 | File ops, email, lineage, Docker, jobs | **[Specialized Operations](../reference/file-operations/specialized-operations.md)** |
 | 18 production-ready recipes | **[Cookbook.md](../cookbooks/etl-recipes.md)** |
 | 55+ sample scripts inventory | **[Sample_Guide.md](sample-guide.md)** |

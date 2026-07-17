@@ -47,7 +47,7 @@ FROM #data;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [COALESCE](../null-handler/coalesce.md)
 - [NULLIF](../null-handler/nullif.md)
 - [DECODE](../conversion/decode.md)

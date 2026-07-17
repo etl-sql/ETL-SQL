@@ -39,6 +39,6 @@ FROM #invoices;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [DATEADD](../datetime/dateadd.md)
 - [DATETRUNC](datetrunc.md)

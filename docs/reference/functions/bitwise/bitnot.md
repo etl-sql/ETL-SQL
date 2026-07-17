@@ -33,7 +33,7 @@ FROM #roles;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [BITAND](bitand.md)
 - [BITOR](bitor.md)
 - [BITXOR](bitxor.md)

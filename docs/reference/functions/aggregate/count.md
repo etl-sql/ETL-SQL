@@ -48,6 +48,6 @@ FROM #sales;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SUM](sum.md)
 - [AVG](avg.md)

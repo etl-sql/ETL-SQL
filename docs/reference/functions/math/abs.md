@@ -33,6 +33,6 @@ FROM #accounts;
 
 ## References
 
-- [Standard Library](../standard-library.md)
+- [Functions](../README.md)
 - [SIGN](sign.md)
 - [ROUND](round.md)
