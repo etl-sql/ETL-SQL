@@ -1,23 +1,30 @@
-# Architecture Decisions
+# DECISIONS Reference
 
-Decision documents capture why a design, operational policy, or release gate exists. They are supporting context, not the primary source of syntax truth.
+[« Back to parent](../README.md)
 
-## Classification
-
-Each decision document should start with one of these status labels:
-
-- **Current reference** - use as current implementation guidance.
-- **Implementation record** - describes shipped work and evidence.
-- **Active roadmap** - planned or in-progress work.
-- **Historical design note** - useful rationale, but current behavior belongs elsewhere.
-- **Superseded** - retained for history only.
-
-## Authoring Rules
-
-- Link to the current guide or reference page for user-facing behavior.
-- Link to source files or tests when documenting implementation contracts.
-- Keep open questions explicit and date them when possible.
-- Move stable facts into `docs/reference/`, `docs/guides/`, or subsystem architecture docs.
-
-Use [Decision Record Template](../../templates/decision-record-template.md) for new decisions.
-
+| Page | Description |
+| :--- | :--- |
+| [Adaptive Execution Controller (v0.15.0 Phase 2) — Design](AdaptiveExecutionController.md) | **Status:** DRAFT for review — no implementation yet. |
+| [Alerting and Service Objectives](Alerting_Service_Objectives.md) | This guide defines baseline service indicators, starter objectives, alert routing, and runbook |
+| [Billion-Row Operator Certification (v0.15.0 Phase 4) — Design](BillionRowOperatorCertification.md) | **Status:** Candidate implementation complete for the v0.15.0 Phase 4 scope; 1B operator-run |
+| [Portal and Orchestrator Capacity Planning](Capacity_Planning.md) | Use this guide to turn an expected user base and job schedule into a starter server plan for |
+| [Portal and Orchestrator Capacity Testing](Capacity_Testing.md) | Use `scripts/test-service-capacity.mjs` to measure Portal-user and Orchestrator-job capacity against |
+| [Concurrent PostgreSQL and Failure Soak Certification (v0.15.0 Phase 6) — Design](ConcurrentPostgresFailureSoak.md) | **Status:** Implementation in progress; Slice A topology harness is implemented. |
+| [Departmental Isolation Topology](Departmental_Isolation.md) | This document defines how to run **multiple isolated ETL-SQL environments** — for example |
+| [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md) | This guide defines supported RPO/RTO targets, recovery-set contents, restore-drill expectations, and |
+| [Enterprise Release Evidence Checklist](Enterprise_Release_Evidence_Checklist.md) | Status: Prepared checklist, not release evidence. |
+| [Enterprise Release Gates](Enterprise_Release_Gates.md) | This document is the release-gate checklist for the enterprise policy, monitoring, HA, recovery, and |
+| [Enterprise Security Review Packet](Enterprise_Security_Review_Packet.md) | Status: Prepared, not signed off. |
+| [Execution Transparency and Fallback Coverage (v0.15.0 Phase 5) — Design](ExecutionTransparencyAndFallbacks.md) | **Status:** Phase 5 implementation complete for the current v0.15 native/pushdown/external surfaces; |
+| [HA Topology and Failure Certification](HA_Topology_Failure_Certification.md) | This guide defines the supported Portal and Orchestrator deployment topologies, the readiness |
+| [Host Utilization Time Series & Capacity Reporting — Implementation Plan](HostUtilizationAndCapacityPlanning.md) | > **Status:** ✅ **COMPLETE** (drafted 2026-07-02, finished 2026-07-03). All six sequencing steps have |
+| [Performance Regression Quality (v0.15.0 Phase 3) — Design](PerformanceRegressionQuality.md) | **Status:** Implemented for v0.15.0 Phase 3. |
+| [Design Strategy: First-Class Web Script Editing in the Portal](PortalEditorStrategy.md) | As ETL-SQL scales into enterprise farms (multiple orchestrators/portals) and SaaS/multi-tenant |
+| [Row-Level Security via Injected Identity — Reference Specification](RowLevelSecurity.md) | > **Status:** ✅ **COMPLETE** (shipped in v0.14.0). |
+| [SME Secret Management and Administration Hardening (v0.15.0 Phase 7) - Design](SMESecretManagementAdministrationHardening.md) | **Status:** Draft for implementation planning. |
+| [Design Spec: Smart Snippets and Schema-Aware Code Generation](SmartSnippetsSpec.md) | This document outlines the design and workflow for **Smart Snippets** in ETL-SQL. It details how slash commands (like `/merge` and `/upsert`) can i... |
+| [Design Spec: Unified Notebook & Script Execution (Virtual Cells and Checkpoints)](UnifiedNotebookScriptExecution.md) | This document specifies the design for unifying the `.etlnb` (ETL-SQL Notebook) execution controller with plain-text `.etlsql` and `.rptsql` script... |
+| [v0.13.0 Code Review — Bugs & Security](v0.13.0-code-review.md) | **Reviewer:** Claude (Opus 4.8) · **Date:** 2026-06-28 · **Base:** `v0.12.0..HEAD` |
+| [v0.13.0 Performance Results](v0.13.0-performance-results.md) | Generated 2026-06-27 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX. |
+| [Flaky Tests — noted during v0.15.0 release, fix in v0.16.0](v0.15.0-flaky-tests.md) | Tracking note for flaky tests hit during the v0.15.0 release. Policy: **don't fight a flaky test |
+| [v0.15.0 Performance Results](v0.15.0-performance-results.md) | Generated 2026-07-12 on .NET 10.0.9, Windows 11, Intel Core Ultra 9 275HX (CHUCKPC). |

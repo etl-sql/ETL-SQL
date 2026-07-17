@@ -1,8 +1,8 @@
-﻿# Functions: String
+# STRING Reference
 
-Reference pages for String in the ETL-SQL engine.
+[« Back to parent](../README.md)
 
-| Name | Description |
+| Page | Description |
 | :--- | :--- |
 | [ASCII](ascii.md) | Returns the ASCII / Unicode code point of the first character of a string. |
 | [CHAR](char.md) | Returns the character corresponding to an ASCII or Unicode code point. |
@@ -25,7 +25,7 @@ Reference pages for String in the ETL-SQL engine.
 | [POSITION](position.md) | Returns the 1-based position of the first occurrence of a substring. SQL-standard form. |
 | [QUOTENAME](quotename.md) | Returns a string wrapped in delimiters to make it a valid identifier. |
 | [REMOVE_HIDDEN_CHARACTERS](remove_hidden_characters.md) | Cleans invisible and whitespace-class characters out of a string. A specialized form of `REPLACE`. |
-| [REMOVE_HTML_CHARACTERS](remove_html_characters.md) | Decodes HTML entities and normalizes typographic ("smart") Unicode to plain ASCII, fixing invisible mismatches that b... |
+| [REMOVE_HTML_CHARACTERS](remove_html_characters.md) | Decodes HTML entities and normalizes typographic ("smart") Unicode to plain ASCII, fixing invisible mismatches that break string comparisons. |
 | [REPEAT](repeat.md) | Repeats a string a specified number of times. |
 | [REPLACE](replace.md) | Replaces all occurrences of a substring within a string. |
 | [REPLICATE](replicate.md) | Repeats a string a specified number of times. |
@@ -46,9 +46,3 @@ Reference pages for String in the ETL-SQL engine.
 | [TRIM](trim.md) | Removes leading and trailing whitespace (or specified characters) from a string. |
 | [UNICODE](unicode.md) | Returns the Unicode code point of the first character of a string. |
 | [UPPER](upper.md) | Converts all characters in a string to uppercase. |
-
-## References
-
-- [Functions Reference](../README.md)
-- [Syntax Index](../../../syntax-index.md)
-

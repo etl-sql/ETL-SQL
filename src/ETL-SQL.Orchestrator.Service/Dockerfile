@@ -17,6 +17,10 @@ COPY ["src/ETL-SQL.Reporting/ETL-SQL.Reporting.csproj", "ETL-SQL.Reporting/"]
 COPY ["src/ETL-SQL.ReportBuilder/ETL-SQL.ReportBuilder.csproj", "ETL-SQL.ReportBuilder/"]
 COPY ["src/ETL-SQL.App/ETL-SQL.App.csproj", "ETL-SQL.App/"]
 COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
+COPY ["src/ETL-SQL.Infrastructure.Docker/ETL-SQL.Infrastructure.Docker.csproj", "ETL-SQL.Infrastructure.Docker/"]
+COPY ["src/ETL-SQL.Infrastructure.Logging/ETL-SQL.Infrastructure.Logging.csproj", "ETL-SQL.Infrastructure.Logging/"]
+COPY ["src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj", "ETL-SQL.Infrastructure.Sqlite/"]
+
 
 RUN dotnet restore "ETL-SQL.Orchestrator.Service/ETL-SQL.Orchestrator.Service.csproj" -r linux-x64
 RUN dotnet restore "ETL-SQL.App/ETL-SQL.App.csproj" -r linux-x64
@@ -28,6 +32,9 @@ COPY deploy/docker/environment-ha.env.example /deploy/docker/environment-ha.env.
 COPY capacity-results/workloads/postgres-ha-sustained.workload.json /capacity-results/workloads/postgres-ha-sustained.workload.json
 COPY certification-results/ha-large-job-soak-scenarios.json /certification-results/ha-large-job-soak-scenarios.json
 COPY certification-results/ha-fault-injection-matrix.json /certification-results/ha-fault-injection-matrix.json
+
+COPY docs/ /docs/
+COPY snippets/ /snippets/
 
 WORKDIR "/src/ETL-SQL.Orchestrator.Service"
 RUN dotnet build "ETL-SQL.Orchestrator.Service.csproj" -c Release -r linux-x64 --no-restore -o /app/build

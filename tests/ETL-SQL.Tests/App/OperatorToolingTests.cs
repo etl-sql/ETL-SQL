@@ -23,6 +23,7 @@ namespace ETL_SQL.Tests.CliCommands
 
         public OperatorToolingTests()
         {
+            SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
             _baseDir = Path.Combine(Path.GetTempPath(), "etlsql_operator_test_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_baseDir);
         }

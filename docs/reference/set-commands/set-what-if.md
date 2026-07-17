@@ -2,7 +2,7 @@
 Enables or disables dry-run mode. When enabled, side-effecting operations (INSERT, UPDATE, DELETE, MERGE, file writes, SEND EMAIL, Docker) are logged but not executed.
 
 ## Syntax
-```sql
+```text
 SET WHAT_IF = ON|OFF;
 ```
 

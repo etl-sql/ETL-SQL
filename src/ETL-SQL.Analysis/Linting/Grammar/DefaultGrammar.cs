@@ -1384,7 +1384,7 @@ public static class DefaultGrammar
 
             // Options that take arbitrary values/expressions (e.g. SET ALLOW_FILE_OPERATIONS = 100)
             var valueOptions = new[] {
-                "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS", "BATCH_SIZE", "MAX_ERRORS",
+                "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS", "ALLOW_FILE_TYPE_ACCESS", "BATCH_SIZE", "MAX_ERRORS",
                 "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "WINDOW_SPILL_THRESHOLD",
                 "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "BATCHSIZE",
                 "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE",

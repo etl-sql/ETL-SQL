@@ -1,8 +1,8 @@
-﻿# Functions: Math
+# MATH Reference
 
-Reference pages for Math in the ETL-SQL engine.
+[« Back to parent](../README.md)
 
-| Name | Description |
+| Page | Description |
 | :--- | :--- |
 | [ABS](abs.md) | Returns the absolute (non-negative) value of a number. |
 | [ACOS](acos.md) | Returns the arccosine (inverse cosine) of a number, in radians. |
@@ -31,9 +31,3 @@ Reference pages for Math in the ETL-SQL engine.
 | [SQRT](sqrt.md) | Returns the square root of a non-negative number. |
 | [TAN](tan.md) | Returns the trigonometric tangent of an angle in radians. |
 | [TRUNCATE](truncate.md) | Truncates a number to a specified number of decimal places without rounding. |
-
-## References
-
-- [Functions Reference](../README.md)
-- [Syntax Index](../../../syntax-index.md)
-

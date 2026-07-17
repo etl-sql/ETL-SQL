@@ -2,7 +2,7 @@
 Controls whether `CREATE CONNECTION` targets and quoted option values are encrypted on save using the script/master password.
 
 ## Syntax
-```sql
+```text
 SET CONNECTION_ENCRYPTION = ON|OFF;
 ```
 

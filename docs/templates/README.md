@@ -1,21 +1,18 @@
-# Documentation Templates
+# TEMPLATES Reference
 
-Use these templates when creating or rewriting documentation pages.
+[« Back to parent](../README.md)
 
-## Templates
-
-- [Function Reference Template](function-reference-template.md)
-- [Connector Reference Template](connector-reference-template.md)
-- [Statement Reference Template](statement-reference-template.md)
-- [Visual Reference Template](visual-reference-template.md)
-- [Configuration Reference Template](configuration-reference-template.md)
-- [CLI Command Reference Template](cli-command-reference-template.md)
-- [Guide Template](guide-template.md)
-- [Hub Template](hub-template.md)
-- [Cookbook Recipe Template](cookbook-recipe-template.md)
-- [Index Template](index-template.md)
-- [Architecture Template](architecture-template.md)
-- [Decision Record Template](decision-record-template.md)
-
-Templates are authoring aids, not user documentation. Keep them concise and update them when the documentation standards change.
-
+| Page | Description |
+| :--- | :--- |
+| [Subsystem Architecture](architecture-template.md) | Short description of the subsystem and its ownership boundary. |
+| [etl-sql COMMAND](cli-command-reference-template.md) | One-sentence description of what the command does. |
+| [Configuration Area](configuration-reference-template.md) | One sentence: which subsystem these settings control and where they are set |
+| [CONNECTOR_NAME Connector](connector-reference-template.md) | One-sentence description of the connector and its intended use. |
+| [Recipe Title](cookbook-recipe-template.md) | Describe the scenario and final outcome. |
+| [Decision Title](decision-record-template.md) | **Status:** Current reference | Implementation record | Active roadmap | Historical design note | Superseded |
+| [FUNCTION_NAME](function-reference-template.md) | One-sentence description of what the function returns. |
+| [Guide Title](guide-template.md) | Short description of the workflow and outcome. |
+| [Hub Title](hub-template.md) | One sentence: what this area covers and who it is for. A hub orients and links; it does |
+| [Index Title](index-template.md) | One sentence describing what this index maps and how to use it. |
+| [STATEMENT](statement-reference-template.md) | One-sentence description of what the statement does. |
+| [VISUAL_TYPE](visual-reference-template.md) | One-sentence description of when to use this visual. |

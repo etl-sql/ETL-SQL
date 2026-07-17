@@ -633,5 +633,38 @@ namespace ETL_SQL.Tests.Docs
                 $"Found broken relative markdown links in repository ({brokenLinks.Count}):\n" +
                 string.Join("\n", brokenLinks));
         }
+
+        [Fact]
+        public void EveryDirectoryWithMoreThanFiveMarkdownFiles_HasAReadme()
+        {
+            var docsDir = RepoFile("docs");
+            Assert.True(Directory.Exists(docsDir), $"Missing docs dir: {docsDir}");
+
+            var missing = new List<string>();
+            foreach (var dir in Directory.GetDirectories(docsDir, "*", SearchOption.AllDirectories))
+            {
+                var dirName = Path.GetFileName(dir);
+                if (dirName.Equals("assets", StringComparison.OrdinalIgnoreCase) || 
+                    dirName.Equals("bin", StringComparison.OrdinalIgnoreCase) || 
+                    dirName.Equals("obj", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var mdFiles = Directory.GetFiles(dir, "*.md", SearchOption.TopDirectoryOnly);
+                if (mdFiles.Length > 5)
+                {
+                    var readmePath = Path.Combine(dir, "README.md");
+                    if (!File.Exists(readmePath))
+                    {
+                        missing.Add(Path.GetRelativePath(RepoRoot, dir));
+                    }
+                }
+            }
+
+            Assert.True(missing.Count == 0,
+                $"The following directories contain >5 markdown files but lack a README.md index ({missing.Count}):\n" +
+                string.Join("\n", missing));
+        }
     }
 }

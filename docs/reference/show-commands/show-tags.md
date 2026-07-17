@@ -14,9 +14,8 @@ A result set with tag name, value, and scope for each lineage tag in the session
 
 ## Example
 ```sql
--- Apply some tags
-TAG 'source' = 'CRM';
-TAG 'pipeline' = 'daily_sync';
+-- Apply tags to a temp table
+SELECT customer_id /* @pii: true; @owner: CRM */ INTO #customers FROM src.Customers;
 
 -- View tags
 SHOW TAGS;

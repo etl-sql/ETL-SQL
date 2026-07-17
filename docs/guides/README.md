@@ -1,38 +1,18 @@
-# Guides
+# GUIDES Reference
 
-Task-focused user guides — use them when you know what you want to accomplish but don't need every
-syntax option. For operating and administering ETL-SQL (platform, portal, orchestration), see the
-[Administration](../administration/README.md) area.
+[« Back to parent](../README.md)
 
-## Getting Started
-
-- [Getting Started](getting-started.md) - the engine mental model, connections, variables, temp
-  tables, and core `SELECT`, with pointers onward.
-- [FAQ](faq.md) - short answers to common language, connector, reporting, and operational questions.
-- [Sample Guide](sample-guide.md) - how to run and interpret the sample scripts.
-- [Migration Guide](migration-guide.md) - upgrade notes and breaking-change migration help.
-
-## Building Pipelines
-
-- [ETL Recipes](../cookbooks/etl-recipes.md) - complete, runnable pipeline patterns.
-- [Pipelines and DAGs](pipelines-and-dags.md) - script composition, dependencies, and DAG-style flows.
-- [Spec-Driven Development](../spec-import/spec-driven-development.md) - generate scripts from source specifications.
-- [Data Spec Parser Instructions](../spec-import/data-spec-parser-instructions.md) - prompt and JSON contract guidance.
-- [Notebook Guide](notebook-guide.md) - notebook workflows and script execution.
-- [VS Code Extension](vscode-extension.md) - edit, lint, preview, and debug scripts with the editor integration.
-- [Logging and Performance Tuning](logging-and-performance.md) - optimize batch size, logging, and metrics for scripts.
-
-## Reporting
-
-- [Report SQL](report-sql.md) - author `.rptsql` dashboards (workflow, parameters, RLS, examples).
-- [Portal User Guide](portal-user.md) - browse, run, filter, export, and subscribe to reports.
-
-## Testing and Release
-
-- [Testing](testing.md) - local validation lanes, release gates, and evidence.
-- [Release Checklist](../releases/release-checklist.md) - release execution checklist.
-
-## See Also
-
-- [Administration](../administration/README.md) - install, secure, operate, and administer.
-- [Task Index](../task-index.md) - goal-oriented "how do I…" locator · [Syntax Index](../syntax-index.md) - keyword map.
+| Page | Description |
+| :--- | :--- |
+| [ETL-SQL FAQ & Troubleshooting Guide](faq.md) | Common questions, gotchas, and their solutions. If you're stuck, start here. |
+| [ETL-SQL User Manual: Thinking in Pipelines](getting-started.md) | Welcome to ETL-SQL. This guide is designed to help you transition from thinking in "Single Database SQL" to "Multi-Context Data Flow." Work through... |
+| [Logging and Performance Tuning](logging-and-performance.md) | ## 6. Logging |
+| [ETL-SQL Migration Guide (v0.15.0)](migration-guide.md) | ETL-SQL v0.15.0 is the current release baseline. Because the app has not had a public stable release before this baseline, this guide is mainly for... |
+| [ETL-SQL Notebooks (.etlnb)](notebook-guide.md) | ETL-SQL Notebooks provide a stateful, iterative environment for writing and running ETL-SQL cells directly inside VS Code. |
+| [Orchestrating Pipelines & DAGs](pipelines-and-dags.md) | ETL-SQL handles pipeline coordination with normal script control flow: `RUN SCRIPT`, `PARALLEL`, `IF`, `TRY...CATCH`, scheduler jobs, and file or d... |
+| [ETL-SQL Portal: User Guide](portal-user.md) | The Portal is a web application that lets you browse, run, and subscribe to reports built with Report-SQL scripts. You don't need to know ETL-SQL s... |
+| [ETL-SQL Release Checklist](release-checklist.md) | A physical, copy-pasteable checklist for cutting a release. It wraps the real scripts under |
+| [Report-SQL Scripting Guide](report-sql.md) | Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL... |
+| [ETL-SQL Sample Guide](sample-guide.md) | This guide describes the provided sample scripts in the `samples/` folder. These samples are organized into topical subfolders (for example, `01_Ba... |
+| [Testing](testing.md) | For the overall lane model and cleanup guidance, see Test_Strategy.md. |
+| [VS Code Extension](vscode-extension.md) | ## VS Code Extension |

@@ -2,7 +2,7 @@
 Enables or disables per-statement timing collection. View results with `SHOW PROFILE`.
 
 ## Syntax
-```sql
+```text
 SET PROFILING = ON|OFF;
 ```
 

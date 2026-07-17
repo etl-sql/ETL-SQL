@@ -1,84 +1,35 @@
-# SET Commands
+# SET-COMMANDS Reference
 
-`SET` assigns a value to a session variable or changes an engine execution option. All options are session-scoped and reset when the session ends.
+[« Back to parent](../README.md)
 
-```sql
--- Variable assignment
-SET @variable = <expression>;
-
--- Engine option
-SET <OPTION> = ON|OFF|<value>;
-```
-
-## Variable Assignment
-
-| Command | Description |
+| Page | Description |
 | :--- | :--- |
-| [SET @variable](set-variable.md) | Assign a value to a session variable |
-
-## Execution Mode
-
-| Command | Description |
-| :--- | :--- |
-| [SET WHAT_IF](set-what-if.md) | Dry-run mode — plan and log without executing DML |
-| [SET PROFILING](set-profiling.md) | Collect per-statement timing; view with `SHOW PROFILE` |
-| [SET WITH_PROMPT](set-with-prompt.md) | Prompt for confirmation before applying SET operations |
-
-## Display & Secret Handling
-
-| Command | Description |
-| :--- | :--- |
-| [SET SHOW_SECRETS](set-show-secrets.md) | Unmask SENSITIVE/ENCRYPTED variables in output (alias: `SHOW_PASSWORD`) |
-| [SET ALLOW_PLAINTEXT_SECRETS](set-allow-plaintext-secrets.md) | Unsafe: allow plaintext secrets in saved source |
-| [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Scrub sensitive literals from saved source |
-| [SET NO_SAVE_CONNECTION](set-no-save-connection.md) | Replace connection details with placeholders on save |
-| [SET CONNECTION_ENCRYPTION](set-connection-encryption.md) | Encrypt connection details on save |
-
-## Date & Locale
-
-| Command | Description |
-| :--- | :--- |
-| [SET WEEK_START_DAY](set-week-start-day.md) | Anchor day for RELDATE week expressions (default: Monday) |
-
-## Performance Thresholds
-
-| Command | Description | Default |
-| :--- | :--- | :--- |
-| [SET BATCHSIZE](set-batchsize.md) | Pipeline batch size | 10,000 |
-| [SET JOIN_SPILL_THRESHOLD](set-join-spill-threshold.md) | Rows before join spills to disk | 100,000 |
-| [SET SORT_SPILL_THRESHOLD](set-sort-spill-threshold.md) | Rows before sort spills to disk | 100,000 |
-| [SET WINDOW_SPILL_THRESHOLD](set-window-spill-threshold.md) | Rows before window functions spill | 100,000 |
-| [SET TEMP_TABLE_SPILL_THRESHOLD](set-temp-table-spill-threshold.md) | Rows before `#temp` spills to disk | 1,000,000 |
-| [SET EXTERNAL_HASH_PARTITIONS](set-external-hash-partitions.md) | Partitions for spilled hash operations | 32 |
-| [SET EXTERNAL_SORT_CHUNK_SIZE](set-external-sort-chunk-size.md) | Rows per sort chunk when spilling | 50,000 |
-| [SET MAX_LAST_RESULT_ROWS](set-max-last-result-rows.md) | Rows in the interactive display buffer | 50,000 |
-| [SET MAX_GENERATE_ROWS](set-max-generate-rows.md) | Max rows GENERATE may produce | 1,000,000 |
-| [SET MAX_PARALLEL_DEGREE](set-max-parallel-degree.md) | Thread limit for `PARALLEL BEGIN...END` | CPU count |
-| [SET FOREACH_PAGE_SIZE](set-foreach-page-size.md) | Batch size for FOREACH iteration | — |
-
-## Security Overrides
-
-All produce an audit entry. Paths must be within a Safe Zone.
-
-| Command | Description |
-| :--- | :--- |
-| [SET ALLOW_FILE_TYPE_ACCESS](set-allow-file-type-access.md) | Allow file extensions outside the global whitelist |
-| [SET ALLOW_FILE_OPERATIONS](set-allow-file-operations.md) | Override runaway file-op protection limit (default: 100) |
-| [SET ALLOW_RECURSIVE_LAYERS](set-allow-recursive-layers.md) | Override directory recursion depth limit (default: 5) |
-| [SET MAX_SMTP_EMAILS_PER_SCRIPT](set-max-smtp-emails.md) | Anti-spam limit on emails per script (default: 100) |
-| [SET MAX_STRING_RESULT_SIZE](set-max-string-result-size.md) | Maximum string result size in bytes (default: 100 MB) |
-| [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Regex evaluation timeout in ms (default: 1,000) |
-
-## Spill Security
-
-| Command | Description | Default |
-| :--- | :--- | :--- |
-| [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Encrypt spilled buffers at rest | ON |
-| [SET SPILL_COMPRESSION](set-spill-compression.md) | Compress spilled buffers | ON |
-| [SET SPILL_FORMAT](set-spill-format.md) | Serialization format for spills | Arrow |
-
-## References
-
-- [Configuration Settings Reference](../../administration/platform/appsettings-reference.md)
-- [Statement Reference](../statements/README.md)
-- [Syntax Index](../../syntax-index.md)
+| [SET ALLOW_FILE_OPERATIONS](set-allow-file-operations.md) | Overrides the runaway file-operation protection limit for the current session. |
+| [SET ALLOW_FILE_TYPE_ACCESS](set-allow-file-type-access.md) | Controls whether file extensions outside the global whitelist are permitted, or adds a specific extension to the session whitelist. |
+| [SET ALLOW_PLAINTEXT_SECRETS](set-allow-plaintext-secrets.md) | Unsafe local-development escape hatch. Controls whether plaintext secrets may remain in saved source files. |
+| [SET ALLOW_RECURSIVE_LAYERS](set-allow-recursive-layers.md) | Overrides the directory recursion depth limit for the current session. |
+| [SET BATCHSIZE](set-batchsize.md) | Sets the number of rows per remote fetch batch for `SELECT ... FROM connection`. |
+| [SET CONNECTION_ENCRYPTION](set-connection-encryption.md) | Controls whether `CREATE CONNECTION` targets and quoted option values are encrypted on save using the script/master password. |
+| [SET EXTERNAL_HASH_PARTITIONS](set-external-hash-partitions.md) | Sets the number of partitions used for spilled hash operations. |
+| [SET EXTERNAL_SORT_CHUNK_SIZE](set-external-sort-chunk-size.md) | Sets the number of rows per sort chunk when sort operations spill to disk. |
+| [SET FOREACH_PAGE_SIZE](set-foreach-page-size.md) | Sets the batch size when `FOREACH` iterates over a `#temp` table. |
+| [SET JOIN_SPILL_THRESHOLD](set-join-spill-threshold.md) | Sets the row count before a hash join spills intermediate results to disk. |
+| [SET MAX_GENERATE_ROWS](set-max-generate-rows.md) | Sets the maximum number of rows that `GENERATE` is allowed to produce. |
+| [SET MAX_LAST_RESULT_ROWS](set-max-last-result-rows.md) | Sets the maximum number of rows retained in the interactive display buffer. |
+| [SET MAX_PARALLEL_DEGREE](set-max-parallel-degree.md) | Sets the thread limit inside `PARALLEL BEGIN...END` blocks. |
+| [SET MAX_SMTP_EMAILS_PER_SCRIPT](set-max-smtp-emails.md) | Sets the anti-spam limit capping the number of emails a single script run may send. |
+| [SET MAX_STRING_RESULT_SIZE](set-max-string-result-size.md) | Sets the maximum length in bytes allowed for string results. |
+| [SET NO_SAVE_CONNECTION](set-no-save-connection.md) | Controls whether `CREATE CONNECTION` targets and quoted option values are replaced with placeholders on save. Use for source-controlled templates w... |
+| [SET NO_SAVE_SENSITIVE](set-no-save-sensitive.md) | Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITI... |
+| [SET PROFILING](set-profiling.md) | Enables or disables per-statement timing collection. View results with `SHOW PROFILE`. |
+| [SET REGEX_MATCH_TIMEOUT](set-regex-match-timeout.md) | Sets the execution duration cap in milliseconds for regex evaluations to prevent denial-of-service from catastrophic backtracking. |
+| [SET SHOW_SECRETS](set-show-secrets.md) | Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `SHOW VARIABLES` output. This is a display-only setting and does not affect sa... |
+| [SET SPILL_COMPRESSION](set-spill-compression.md) | Controls whether data buffers spilled to disk are compressed. |
+| [SET SPILL_ENCRYPTION](set-spill-encryption.md) | Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest. |
+| [SET TEMP_TABLE_SPILL_THRESHOLD](set-temp-table-spill-threshold.md) | Sets the row count before a `#temp` table spills its data to disk. |
+| [SET @variable](set-variable.md) | Assigns a value to a declared or implicitly declared session variable. |
+| [SET WEEK_START_DAY](set-week-start-day.md) | Sets the first day of the week for RELDATE week-boundary expressions (`W`, `W-1`, `WE`, etc.). |
+| [SET WHAT_IF](set-what-if.md) | Enables or disables dry-run mode. When enabled, side-effecting operations (INSERT, UPDATE, DELETE, MERGE, file writes, SEND EMAIL, Docker) are logg... |
+| [SET WINDOW_SPILL_THRESHOLD](set-window-spill-threshold.md) | Sets the row count before window function operations spill intermediate results to disk. |
+| [SET WITH_PROMPT](set-with-prompt.md) | Controls whether SET operations marked with `WITH_PROMPT` prompt for confirmation before applying. |
+| [SET](set.md) | Assigns a value to a session variable or changes an engine execution option. All options are session-scoped and reset when the session ends. |

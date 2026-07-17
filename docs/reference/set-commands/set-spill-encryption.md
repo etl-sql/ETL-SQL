@@ -2,7 +2,7 @@
 Controls whether data buffers spilled to local disk during heavy queries are encrypted at rest.
 
 ## Syntax
-```sql
+```text
 SET SPILL_ENCRYPTION = ON|OFF;
 ```
 

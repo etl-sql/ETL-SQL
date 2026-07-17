@@ -2,7 +2,7 @@
 Controls whether `CREATE CONNECTION` targets and quoted option values are replaced with placeholders on save. Use for source-controlled templates where hosts, usernames, databases, and credentials should be injected later.
 
 ## Syntax
-```sql
+```text
 SET NO_SAVE_CONNECTION = ON|OFF;
 ```
 

@@ -21,11 +21,18 @@ COPY ["src/ETL-SQL.TUI/ETL-SQL.TUI.csproj", "ETL-SQL.TUI/"]
 COPY ["src/ETL-SQL.ReportPortal.Data/ETL-SQL.ReportPortal.Data.csproj", "ETL-SQL.ReportPortal.Data/"]
 COPY ["src/ETL-SQL.ReportPortal.Migrations.Postgres/ETL-SQL.ReportPortal.Migrations.Postgres.csproj", "ETL-SQL.ReportPortal.Migrations.Postgres/"]
 COPY ["src/ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj", "ETL-SQL.ReportPortal/"]
+COPY ["src/ETL-SQL.Infrastructure.Docker/ETL-SQL.Infrastructure.Docker.csproj", "ETL-SQL.Infrastructure.Docker/"]
+COPY ["src/ETL-SQL.Infrastructure.Logging/ETL-SQL.Infrastructure.Logging.csproj", "ETL-SQL.Infrastructure.Logging/"]
+COPY ["src/ETL-SQL.Infrastructure.Sqlite/ETL-SQL.Infrastructure.Sqlite.csproj", "ETL-SQL.Infrastructure.Sqlite/"]
+
 
 RUN dotnet restore "ETL-SQL.ReportPortal/ETL-SQL.ReportPortal.csproj" -r linux-x64
 
 # Copy the rest of the source
 COPY src/ .
+
+COPY docs/ /docs/
+COPY snippets/ /snippets/
 
 WORKDIR "/src/ETL-SQL.ReportPortal"
 RUN dotnet build "ETL-SQL.ReportPortal.csproj" -c Release -r linux-x64 --no-restore -o /app/build

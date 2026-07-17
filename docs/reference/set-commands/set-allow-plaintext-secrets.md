@@ -2,7 +2,7 @@
 Unsafe local-development escape hatch. Controls whether plaintext secrets may remain in saved source files.
 
 ## Syntax
-```sql
+```text
 SET ALLOW_PLAINTEXT_SECRETS = ON|OFF;
 ```
 

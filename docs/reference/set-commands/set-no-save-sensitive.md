@@ -2,7 +2,7 @@
 Controls whether sensitive literals are scrubbed from saved source. When enabled, rewrites `USE PASSWORD` literals to `PROMPT` and replaces SENSITIVE/ENCRYPTED literals plus credential-like options with placeholders.
 
 ## Syntax
-```sql
+```text
 SET NO_SAVE_SENSITIVE = ON|OFF;
 ```
 

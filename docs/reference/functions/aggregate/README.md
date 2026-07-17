@@ -1,42 +1,21 @@
-# Aggregate Functions
+# AGGREGATE Reference
 
-Aggregate functions summarize values across grouped rows. Most aggregate functions can also be used with `OVER (...)` as window functions when the query needs per-row output plus partition or frame-level metrics.
+[« Back to parent](../README.md)
 
-## Numeric Aggregates
-
-- [SUM](sum.md) - total non-NULL numeric values.
-- [AVG](avg.md) - arithmetic mean of non-NULL numeric values.
-- [MIN](min.md) - smallest non-NULL value.
-- [MAX](max.md) - largest non-NULL value.
-- [COUNT](count.md) - row count or non-NULL value count.
-
-## Statistical Aggregates
-
-- [STDEV](stdev.md) - sample standard deviation.
-- [STDEVP](stdevp.md) - population standard deviation.
-- [VAR](var.md) - sample variance.
-- [VARP](varp.md) - population variance.
-
-## String Aggregates
-
-- [STRING_AGG](string_agg.md) - concatenate grouped string values with a separator.
-- [LISTAGG](../aggregate/listagg.md) - ordered list aggregation syntax.
-
-## Window Usage
-
-Use `OVER (...)` with aggregate functions for running totals, moving averages, partition counts, and framed min/max calculations.
-
-```sql
-SELECT sales_date, region, amount,
-    SUM(amount) OVER (
-        PARTITION BY region
-        ORDER BY sales_date
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS running_region_total
-FROM #daily_sales;
-```
-
-## References
-
-- [Functions](../README.md)
-- [Window Functions](../window/README.md)
+| Page | Description |
+| :--- | :--- |
+| [AVG](avg.md) | Returns the arithmetic mean of non-NULL values in a group or window. |
+| [COUNT](count.md) | Returns the number of rows or non-NULL values in a group or window. |
+| [LISTAGG](listagg.md) | Concatenates grouped values into a single string with a separator. `LISTAGG` is an alias for `STRING_AGG`. |
+| [MAX](max.md) | Returns the maximum (largest) non-NULL value in a group or window. |
+| [MEDIAN](median.md) | Returns the median (50th percentile) value of a numeric column. |
+| [MIN](min.md) | Returns the minimum (smallest) non-NULL value in a group or window. |
+| [PERCENTILE_CONT](percentile_cont.md) | Returns the continuous interpolated percentile value within a group or window. |
+| [PERCENTILE_DISC](percentile_disc.md) | Returns the discrete percentile value from an ordered group. |
+| [STDDEV](stddev.md) | Returns the sample standard deviation of a numeric expression. `STDDEV` is an alias for `STDEV`. |
+| [STDEV](stdev.md) | Returns the sample standard deviation of values in a group. |
+| [STDEVP](stdevp.md) | Returns the population standard deviation of a numeric expression. |
+| [STRING_AGG](string_agg.md) | Concatenates string values within a group, separated by a delimiter. |
+| [SUM](sum.md) | Returns the sum of all non-NULL values in a group or window. |
+| [VAR](var.md) | Returns the sample variance of a numeric expression. |
+| [VARP](varp.md) | Returns the population variance of a numeric expression. |

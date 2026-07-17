@@ -2,12 +2,12 @@
 Controls whether SENSITIVE/ENCRYPTED variable values are unmasked in `SHOW VARIABLES` output. This is a display-only setting and does not affect save behavior.
 
 ## Syntax
-```sql
+```text
 SET SHOW_SECRETS = ON|OFF;
 ```
 
 ## Aliases
-```sql
+```text
 SET SHOW_PASSWORD = ON|OFF;
 ```
 

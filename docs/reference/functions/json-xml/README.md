@@ -1,8 +1,8 @@
-﻿# Functions: Json Xml
+# JSON-XML Reference
 
-Reference pages for Json Xml in the ETL-SQL engine.
+[« Back to parent](../README.md)
 
-| Name | Description |
+| Page | Description |
 | :--- | :--- |
 | [EXTRACTVALUE](extractvalue.md) | Extracts a scalar value from XML using an XPath expression. `EXTRACTVALUE` is an alias for `XMLVALUE`. |
 | [ISJSON](isjson.md) | Returns `1` when a string contains valid JSON, and `0` otherwise. |
@@ -24,9 +24,3 @@ Reference pages for Json Xml in the ETL-SQL engine.
 | [XMLQUERY](xmlquery.md) | Returns an XML fragment selected by an XPath expression. |
 | [XMLTABLE](xmltable.md) | Projects rows and columns from XML data using XPath expressions. |
 | [XMLVALUE](xmlvalue.md) | Extracts a scalar value from an XML string using an XPath expression. Alias: EXTRACTVALUE. |
-
-## References
-
-- [Functions Reference](../README.md)
-- [Syntax Index](../../../syntax-index.md)
-

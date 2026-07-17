@@ -165,6 +165,7 @@ BEGIN CATCH
     PRINT 'Pipeline failed at: ' + GETDATE();
     THROW;
 END CATCH
+```
 
 ---
 

@@ -2,7 +2,7 @@
 Controls whether data buffers spilled to disk are compressed.
 
 ## Syntax
-```sql
+```text
 SET SPILL_COMPRESSION = ON|OFF;
 ```
 

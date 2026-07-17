@@ -2,7 +2,7 @@
 Controls whether SET operations marked with `WITH_PROMPT` prompt for confirmation before applying.
 
 ## Syntax
-```sql
+```text
 SET WITH_PROMPT = ON|OFF;
 ```
 
