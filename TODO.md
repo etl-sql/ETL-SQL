@@ -112,10 +112,12 @@ and the admin connector token now use **Portal** / `PORTAL` instead of **Report 
 > **Intentionally kept** (historical/point-in-time records): `CHANGELOG.md`, `BREAKING_CHANGES.md`,
 > `certification-results/`, `capacity-results/`, and the old→new link map keys in
 > `scripts/migrate-all-docs-links.js`.
-> **Pre-existing debt found, not fixed here** (docs IA restructure, not the rename): `AGENTS.md`'s admin-guide
+> **Pre-existing debt found and fixed** (docs IA restructure, not the rename): `AGENTS.md`'s admin-guide
 > link pointed at the non-existent `docs/guides/report-portal-admin.md` (repointed to
-> `docs/administration/portal/README.md`); and `scripts/publish_release.ps1` still copies pre-restructure
-> `Docs/…` doc files that no longer exist — the doc-copy block needs a separate pass.
+> `docs/administration/portal/README.md`); and `scripts/publish_release.ps1` copied pre-restructure
+> `Docs/…` guide files that no longer exist (also a Linux case-sensitivity bug via capital `Docs`) — the
+> two stale guide copies were dropped in favor of a version-pinned `DOCS.txt` pointer, keeping the
+> LICENSE/NOTICE/third-party/changelog artifacts bundled.
 
 ---
 
