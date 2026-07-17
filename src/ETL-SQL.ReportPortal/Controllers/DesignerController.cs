@@ -2,11 +2,8 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using System.Text;
 using System.Text.RegularExpressions;
-using ETL_SQL.Analysis.Diagnostics;
-using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Services;
 using ETL_SQL.ReportPortal.Filters;
 using ETL_SQL.ReportPortal.Models;
@@ -14,7 +11,6 @@ using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using CoreParser = ETL_SQL.Core.Parser.Parser;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -30,6 +26,7 @@ public class DesignerController : ControllerBase
     private readonly PortalDesignerRunService? _runService;
     private readonly ReportScriptSaveService? _scriptSave;
     private readonly ILanguageService? _languageService;
+    private readonly DesignerAnalysisService _analysisService;
     private readonly PortalConfig _portalConfig;
 
     public DesignerController(
@@ -37,12 +34,14 @@ public class DesignerController : ControllerBase
         PortalDesignerRunService? runService = null,
         ReportScriptSaveService? scriptSave = null,
         ILanguageService? languageService = null,
+        DesignerAnalysisService? analysisService = null,
         PortalConfig? portalConfig = null)
     {
         _schemaService = schemaService;
         _runService = runService;
         _scriptSave = scriptSave;
         _languageService = languageService;
+        _analysisService = analysisService ?? new DesignerAnalysisService();
         _portalConfig = portalConfig ?? new PortalConfig();
     }
 
@@ -53,23 +52,17 @@ public class DesignerController : ControllerBase
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
             return limitResult;
-        if (string.IsNullOrWhiteSpace(req.Script))
-            return Ok(new ParseDesignerResponse(EmptyState(), null));
 
         if (!TryEnterDesignerGate(out var gate))
             return DesignerBusy();
 
         try
         {
-            var tokens = new Lexer(req.Script).Tokenize();
-            var ast = new CoreParser(tokens, req.Script).Parse();
-            if (ValidateAstLimit(ast) is { } astLimitResult)
-                return astLimitResult;
-            return Ok(new ParseDesignerResponse(ScriptToState(ast), null));
+            return Ok(_analysisService.Parse(req.Script, MaxAstStatements));
         }
-        catch (Exception ex)
+        catch (DesignerAstLimitExceededException ex)
         {
-            return Ok(new ParseDesignerResponse(EmptyState(), ex.Message));
+            return AstLimitExceeded(ex);
         }
         finally
         {
@@ -85,46 +78,22 @@ public class DesignerController : ControllerBase
     {
         if (ValidateTextLimit(req.Script, "script", MaxScriptCharacters) is { } limitResult)
             return limitResult;
-        if (string.IsNullOrWhiteSpace(req.Script))
-            return Ok(new AnalyzeDesignerResponse([]));
 
         if (!TryEnterDesignerGate(out var gate))
             return DesignerBusy();
 
-        var lines = SplitLines(req.Script);
-        var diagnostics = new List<AnalysisDiagnostic>();
-
         try
         {
-            var tokens = new Lexer(req.Script).Tokenize();
-            var ast = new CoreParser(tokens, req.Script).Parse();
-            if (ValidateAstLimit(ast) is { } astLimitResult)
-                return astLimitResult;
-            diagnostics.AddRange(AnalysisDiagnosticBuilder.FromParserDiagnostics(ast.Diagnostics, lines));
-
-            var linter = LinterFactory.CreateWithAllRules(HttpContext?.RequestServices);
-            var lintContext = new DefaultLintContext
-            {
-                DocumentUri = string.IsNullOrWhiteSpace(req.DocumentUri) ? "portal-designer" : req.DocumentUri!
-            };
-            var lintResults = await linter.AnalyzeAsync(ast, lintContext);
-            diagnostics.AddRange(AnalysisDiagnosticBuilder.FromLintResults(lintResults, lines));
+            return Ok(await _analysisService.AnalyzeAsync(req.Script, req.DocumentUri, MaxAstStatements, HttpContext?.RequestServices));
         }
-        catch (Exception ex)
+        catch (DesignerAstLimitExceededException ex)
         {
-            diagnostics.Add(AnalysisDiagnosticBuilder.FromException(ex, lines));
+            return AstLimitExceeded(ex);
         }
         finally
         {
             gate?.Release();
         }
-
-        var ordered = diagnostics
-            .OrderByDescending(d => d.Severity == DiagnosticSeverity.Error)
-            .ThenBy(d => d.StartLine)
-            .ThenBy(d => d.StartColumn)
-            .ToList();
-        return Ok(new AnalyzeDesignerResponse(ordered));
     }
 
     // ── GET /api/designer/schema ─────────────────────────────────────────────
@@ -374,11 +343,6 @@ public class DesignerController : ControllerBase
         }
     }
 
-    // ── Parsing helpers ───────────────────────────────────────────────────────
-
-    private static DesignerStateDto EmptyState() =>
-        new(new List<DesignerPageDto>(), new List<DesignerDatasetDto>());
-
     private static IReadOnlyList<string> SplitLines(string text) =>
         text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
@@ -397,11 +361,8 @@ public class DesignerController : ControllerBase
         return null;
     }
 
-    private IActionResult? ValidateAstLimit(Script ast) =>
-        ast.Statements.Count > MaxAstStatements
-            ? StatusCode(StatusCodes.Status413PayloadTooLarge,
-                new { error = $"Designer script exceeds the {MaxAstStatements} statement complexity limit." })
-            : null;
+    private IActionResult AstLimitExceeded(DesignerAstLimitExceededException ex) =>
+        StatusCode(StatusCodes.Status413PayloadTooLarge, new { error = ex.Message });
 
     private IActionResult? ValidateDesignerState(DesignerStateDto? state)
     {
@@ -484,168 +445,6 @@ public class DesignerController : ControllerBase
     {
         OptimisticConcurrency.SetETag(Response, result.Version!.Value);
         return Ok(new SaveDesignerResponse(result.Version.Value, result.SourceRevision));
-    }
-
-    private static DesignerStateDto ScriptToState(Script ast)
-    {
-        // Collect datasets
-        var datasets = ast.Statements.OfType<CreateDatasetStatement>()
-            .Select((ds, i) => new DesignerDatasetDto(
-                $"ds_{i}",
-                NormalizeDatasetName(ds.TempTableName),
-                ds.SourceQuery.ToSql().Trim().TrimEnd(';')))
-            .ToList();
-
-        var elements = new Dictionary<string, DesignerVisualDto>(StringComparer.OrdinalIgnoreCase);
-        int idx = 0;
-        foreach (var v in ast.Statements.OfType<CreateVisualStatement>())
-        {
-            elements[v.Name] = VisualToDto(v, idx++, 1, 1, 12, 4);
-        }
-        foreach (var c in ast.Statements.OfType<CreateContainerStatement>())
-        {
-            elements[c.Name] = ContainerToDto(c, idx++);
-        }
-        foreach (var b in ast.Statements.OfType<CreateButtonStatement>())
-        {
-            elements[b.Name] = ButtonToDto(b, idx++);
-        }
-
-        // Build pages
-        var pages = new List<DesignerPageDto>();
-        int pageNum = 0;
-        foreach (var stmt in ast.Statements.OfType<CreatePageStatement>())
-        {
-            pageNum++;
-            var grid = ParseStructure(stmt.Structure ?? ".");
-            var pageVisuals = new List<DesignerVisualDto>();
-            int vidx = 0;
-
-            foreach (var (slot, elName) in stmt.SlotMap)
-            {
-                if (!elements.TryGetValue(elName, out var el)) continue;
-                var (col, row, colSpan, rowSpan) = FindSlotBounds(grid, slot);
-                pageVisuals.Add(el with { GridCol = col, GridRow = row, GridColSpan = colSpan, GridRowSpan = rowSpan });
-            }
-
-            // Fallback: visuals referenced but not in SlotMap
-            if (pageVisuals.Count == 0)
-            {
-                foreach (var el in elements.Values)
-                {
-                    pageVisuals.Add(el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 });
-                }
-            }
-
-            pages.Add(new DesignerPageDto(
-                $"p{pageNum}",
-                stmt.Name,
-                stmt.PageMode.ToString(),
-                pageVisuals));
-        }
-
-        // No pages but visuals exist — create synthetic page
-        if (pages.Count == 0 && elements.Count > 0)
-        {
-            int vidx = 0;
-            var synth = elements.Values.Select(el =>
-                el with { GridCol = 1, GridRow = ++vidx * 4 - 3, GridColSpan = 12, GridRowSpan = 4 }).ToList();
-            pages.Add(new DesignerPageDto("p1", "Page 1", "Dashboard", synth));
-        }
-
-        return new DesignerStateDto(pages, datasets);
-    }
-
-    private static DesignerVisualDto VisualToDto(
-        CreateVisualStatement v, int idx, int col, int row, int colSpan, int rowSpan)
-    {
-        var title = v.Title is LiteralExpression lit
-            ? lit.Value?.ToString()
-            : v.Title?.ToSql().Trim('\'', '"');
-
-        var dataset = string.IsNullOrWhiteSpace(v.Source.TempTableName) ? null : NormalizeDatasetName(v.Source.TempTableName);
-
-        var mappings = v.Mappings.ToDictionary(
-            m => m.Role.ToUpper(),
-            m => m.Column,
-            StringComparer.OrdinalIgnoreCase);
-
-        var options = v.Options.ToDictionary(
-            o => o.Key,
-            o => o.Value,
-            StringComparer.OrdinalIgnoreCase);
-
-        return new DesignerVisualDto(
-            $"v_{v.Name}_{idx}",
-            v.Name,
-            v.VisualType.ToString().ToUpper(),
-            col, row, colSpan, rowSpan,
-            title,
-            dataset,
-            mappings,
-            options);
-    }
-
-    private static DesignerVisualDto ContainerToDto(CreateContainerStatement c, int idx)
-    {
-        var title = c.Title is LiteralExpression lit
-            ? lit.Value?.ToString()
-            : c.Title?.ToSql().Trim('\'', '"');
-        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["CONTAINER_TYPE"] = c.ContainerType
-        };
-        return new DesignerVisualDto(
-            $"v_{c.Name}_{idx}", c.Name, "CONTAINER",
-            1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
-    }
-
-    private static DesignerVisualDto ButtonToDto(CreateButtonStatement b, int idx)
-    {
-        var title = b.Title is LiteralExpression lit
-            ? lit.Value?.ToString()
-            : b.Title?.ToSql().Trim('\'', '"');
-        var options = b.Options.ToDictionary(
-            o => o.Key,
-            o => o.Value,
-            StringComparer.OrdinalIgnoreCase);
-        if (!options.ContainsKey("BUTTON_TYPE"))
-        {
-            options["BUTTON_TYPE"] = "REFRESH";
-        }
-        return new DesignerVisualDto(
-            $"v_{b.Name}_{idx}", b.Name, "BUTTON",
-            1, 1, 12, 4, title, null, new Dictionary<string, string>(), options);
-    }
-
-    private static List<List<string>> ParseStructure(string structure)
-    {
-        var rows = structure.Split('/', StringSplitOptions.TrimEntries);
-        return rows.Select(r =>
-            r.Split(' ', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-             .Select(s => s.Trim('"', '\'', '[', ']'))
-             .ToList()
-        ).ToList();
-    }
-
-    private static (int col, int row, int colSpan, int rowSpan) FindSlotBounds(
-        List<List<string>> grid, string slot)
-    {
-        int minC = int.MaxValue, maxC = 0, minR = int.MaxValue, maxR = 0;
-        for (int r = 0; r < grid.Count; r++)
-        {
-            for (int c = 0; c < grid[r].Count; c++)
-            {
-                if (!string.Equals(grid[r][c], slot, StringComparison.OrdinalIgnoreCase)) continue;
-                if (c + 1 < minC) minC = c + 1;
-                if (c + 1 > maxC) maxC = c + 1;
-                if (r + 1 < minR) minR = r + 1;
-                if (r + 1 > maxR) maxR = r + 1;
-            }
-        }
-        return minC == int.MaxValue
-            ? (1, 1, GridCols, 4)
-            : (minC, minR, maxC - minC + 1, maxR - minR + 1);
     }
 
     // ── Generation helpers ────────────────────────────────────────────────────

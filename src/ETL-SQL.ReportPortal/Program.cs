@@ -403,6 +403,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetPermissionServic
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DesignerAnalysisService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerSchemaService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerRunService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalScriptSourceControlService>();
