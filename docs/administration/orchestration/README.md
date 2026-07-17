@@ -5,7 +5,7 @@ Schedule, run, and monitor ETL-SQL jobs from the command line, including DAGs an
 ## Pages
 
 - [CI/CD Integration](ci-cd.md) - ```powershell
-- [CLI Command Reference](cli-commands.md) - ```
+- [CLI Command Reference](../../reference/cli/README.md) - Command-line interface for the ETL-SQL engine, including syntax, arguments, options, examples, and exit codes.
 - [DAGs and Advanced Orchestration](dags.md) - As your data ecosystem grows, you will inevitably need to orchestrate complex dependencies where scripts must run in a specific order, sometimes in parallel, and often gated by the appearance of external data.
 - [VS Code and Deployment](ide-and-deployment.md) - ETL-SQL ships with a dedicated VS Code extension (`src/etl-sql-vscode/`) that enhances the development experience. The extension communicates with the engine via the JSON REPL protocol (`ETL-SQL ui repl`).
 - [Job Scheduling](job-scheduling.md) - Jobs are scheduled from within your `.etlsql` scripts using the `CREATE JOB` statement. Once registered, they are stored in a SQLite database and executed automatically by the background scheduler — no cron job or Windows Task Scheduler entry is required.

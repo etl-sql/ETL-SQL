@@ -22,6 +22,16 @@ etl-sql ui edit [file] [options]
 | `--session` | Enable session persistence with the specified session ID. |
 | `--verbose, -v` | Print detailed execution tracking. |
 
+## Examples
+
+```bash
+# Open the IDE with a file pre-loaded
+ETL-SQL ui edit nightly_load.etlsql
+
+# Open the IDE with a persistent session
+ETL-SQL ui edit --session dev-workspace
+```
+
 ## References
 
 - [CLI Reference](README.md)

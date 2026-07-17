@@ -18,6 +18,67 @@ public static class CliReferenceGenerator
 {
     public const string CliDir = "docs/reference/cli";
 
+    private static readonly Dictionary<string, string> Examples = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["run"] = @"```bash
+# Simplest run
+ETL-SQL run nightly_load.etlsql
+
+# With perf metrics and logging
+ETL-SQL run nightly_load.etlsql --perf --log C:\Logs\etlsql\
+
+# Inject runtime parameters
+ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
+
+# Headless with JSON output for automation
+ETL-SQL run nightly_load.etlsql --json --silent
+
+# Persistent session — connections survive between runs
+ETL-SQL run setup_connections.etlsql --session prod-session
+ETL-SQL run nightly_load.etlsql --session prod-session
+
+# Live progress tree in the terminal
+ETL-SQL run heavy_transform.etlsql --progress --perf
+```",
+
+        ["ui-edit"] = @"```bash
+# Open the IDE with a file pre-loaded
+ETL-SQL ui edit nightly_load.etlsql
+
+# Open the IDE with a persistent session
+ETL-SQL ui edit --session dev-workspace
+```",
+
+        ["encrypt"] = @"```bash
+# Encrypt a connection string
+ETL-SQL encrypt ""Server=prod-sql;Database=DW;User Id=sa;Password=S3cr3t!"" --pass MyMasterKey
+
+# Output:
+# Encrypted: ENC:U2FsdGVkX1+...
+
+# Use in a script:
+# CREATE CONNECTION prod AS MSSQL('ENC:U2FsdGVkX1+...', TRUSTED_CONNECTION=FALSE);
+```
+
+> [!IMPORTANT]
+> The master password must be the same each time you run scripts referencing `ENC:` strings. Pass it at runtime with `--pass MyMasterKey` or set `USE PASSWORD = '...';` at the top of your script.",
+
+        ["session-clear"] = @"```bash
+ETL-SQL session clear dev-workspace
+```",
+
+        ["gen-script"] = @"```bash
+ETL-SQL gen-script --schema ./specs/customer_feed.json --output ./scripts/load_customers.etlsql
+```
+
+Generated scripts include schema gates, casting, lineage tags, AI review/evidence comments when present, validation issue summaries, and optional quarantine scaffolding. Review the JSON, complete the generated `#staging` extraction block, and test with real vendor files before production use. See [Spec-Driven Development](../../spec-import/spec-driven-development.md) and Cookbook recipe 25 for the full workflow.",
+
+        ["extract-spec"] = @"```bash
+ETL-SQL extract-spec --input ./specs/vendor_api_spec.pdf --output ./specs/trimmed_schema_spec.pdf
+```"
+    };
+
+
     /// <summary>Returns a map of repo-relative page path -> expected markdown content.</summary>
     public static IReadOnlyDictionary<string, string> Generate()
     {
@@ -61,6 +122,15 @@ public static class CliReferenceGenerator
         sb.AppendLine("| :--- | :--- |");
         foreach (var (path, cmd) in commands.OrderBy(c => Slug(c.Path), StringComparer.Ordinal))
             sb.AppendLine($"| [`etl-sql {string.Join(" ", path)}`]({Slug(path)}.md) | {Clean(cmd.Description)} |");
+        sb.AppendLine();
+        sb.AppendLine("## Exit Codes");
+        sb.AppendLine();
+        sb.AppendLine("| Code | Meaning |");
+        sb.AppendLine("| :--- | :--- |");
+        sb.AppendLine("| `0` | Script completed successfully |");
+        sb.AppendLine("| `1` | Parse error, lint error, or runtime exception |");
+        sb.AppendLine();
+        sb.AppendLine("Exit codes are suitable for use in CI/CD pipeline gating.");
         sb.AppendLine();
         AppendGeneratedMarker(sb);
         return sb.ToString();
@@ -121,6 +191,15 @@ public static class CliReferenceGenerator
             sb.AppendLine("| :--- | :--- |");
             foreach (var s in subs)
                 sb.AppendLine($"| [`{s.Name}`]({Slug(path.Append(s.Name).ToArray())}.md) | {Clean(s.Description)} |");
+            sb.AppendLine();
+        }
+
+        var slug = Slug(path);
+        if (Examples.TryGetValue(slug, out var examples))
+        {
+            sb.AppendLine("## Examples");
+            sb.AppendLine();
+            sb.AppendLine(examples);
             sb.AppendLine();
         }
 

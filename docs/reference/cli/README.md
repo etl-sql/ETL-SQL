@@ -62,6 +62,15 @@ the command definitions so they stay in sync with the code.
 | [`etl-sql ui repl`](ui-repl.md) | Start the JSON-based REPL protocol for IDE integration |
 | [`etl-sql ui simple`](ui-simple.md) | Start the simple interactive menu UI |
 
+## Exit Codes
+
+| Code | Meaning |
+| :--- | :--- |
+| `0` | Script completed successfully |
+| `1` | Parse error, lint error, or runtime exception |
+
+Exit codes are suitable for use in CI/CD pipeline gating.
+
 ---
 
 <!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.

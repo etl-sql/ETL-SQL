@@ -14,6 +14,12 @@ etl-sql session clear <id>
 | :--- | :--- | :--- |
 | `id` | yes | The session ID to clear |
 
+## Examples
+
+```bash
+ETL-SQL session clear dev-workspace
+```
+
 ## References
 
 - [CLI Reference](README.md)

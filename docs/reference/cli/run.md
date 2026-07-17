@@ -31,6 +31,29 @@ etl-sql run <script> [options]
 | `--var, -d` | Inject a variable into the script (e.g. @Name=Value). |
 | `--verbose, -v` | Print detailed execution tracking. |
 
+## Examples
+
+```bash
+# Simplest run
+ETL-SQL run nightly_load.etlsql
+
+# With perf metrics and logging
+ETL-SQL run nightly_load.etlsql --perf --log C:\Logs\etlsql\
+
+# Inject runtime parameters
+ETL-SQL run monthly_report.etlsql --var @env=PROD --var @month=2026-03
+
+# Headless with JSON output for automation
+ETL-SQL run nightly_load.etlsql --json --silent
+
+# Persistent session — connections survive between runs
+ETL-SQL run setup_connections.etlsql --session prod-session
+ETL-SQL run nightly_load.etlsql --session prod-session
+
+# Live progress tree in the terminal
+ETL-SQL run heavy_transform.etlsql --progress --perf
+```
+
 ## References
 
 - [CLI Reference](README.md)

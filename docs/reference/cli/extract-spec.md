@@ -15,6 +15,12 @@ etl-sql extract-spec [options]
 | `--input, -i` | Path to the input large PDF specification file. |
 | `--output, -o` | Destination path for the extracted trimmed PDF file. |
 
+## Examples
+
+```bash
+ETL-SQL extract-spec --input ./specs/vendor_api_spec.pdf --output ./specs/trimmed_schema_spec.pdf
+```
+
 ## References
 
 - [CLI Reference](README.md)
