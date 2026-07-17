@@ -312,4 +312,4 @@ SHOW LINEAGE HISTORY FOR TAG classification = 'restricted' AT ProdOrch LIMIT 100
 Returns all entries whose `Tags` JSON contains the given key, optionally filtered to a specific value.
 
 References:
-- [Specialized Operations](../../../guides/administration.md)
+- [Specialized Operations](../../../administration/platform/README.md)

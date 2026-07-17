@@ -334,7 +334,7 @@ Standard ASP.NET Core connection configurations.
 ---
 
 ## References
-- [Administrators Guide](../../guides/administration.md)
-- [Portal Administrators Guide](../../guides/portal-admin.md)
-- [Orchestrators Guide](../../guides/job-orchestration.md)
+- [Administrators Guide](../../administration/platform/README.md)
+- [Portal Administrators Guide](../../administration/portal/README.md)
+- [Orchestrators Guide](../../administration/orchestration/README.md)
 

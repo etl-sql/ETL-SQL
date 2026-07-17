@@ -61,4 +61,4 @@ SELECT 'ALERT_CRITICAL' AS severity, 'CPU Usage high' AS message
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

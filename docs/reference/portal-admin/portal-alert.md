@@ -31,5 +31,5 @@ END;
   definitions and skips equal definitions.
 
 References:
-- [Data Connectors](../../guides/administration.md)
+- [Data Connectors](../../administration/platform/README.md)
 - [Portal Admin Commands](README.md)

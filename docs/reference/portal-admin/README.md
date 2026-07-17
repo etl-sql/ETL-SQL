@@ -22,5 +22,5 @@ Portal admin commands run inside `EXECUTE portal BEGIN ... END` blocks and manag
 - [REVOKE](revoke.md)
 - [Service Accounts](service-accounts.md)
 
-For operational workflows, see [Portal Administration](../../guides/portal-admin.md).
+For operational workflows, see [Portal Administration](../../administration/portal/README.md).
 

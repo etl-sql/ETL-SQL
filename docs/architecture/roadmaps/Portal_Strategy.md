@@ -1,7 +1,7 @@
 # ETL-SQL Portal — Development Strategy
 
 > [!IMPORTANT]
-> **Historical roadmap.** The Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `docs/guides/portal-user.md`, `docs/guides/portal-admin.md`, and `Docs/Architecture/Portal.md`.
+> **Historical roadmap.** The Portal implementation has moved beyond this launch plan. Use this file for design rationale only. For current behavior, use `docs/guides/portal-user.md`, `docs/administration/portal/README.md`, and `Docs/Architecture/Portal.md`.
 
 **Status:** Historical roadmap — reconcile before using for implementation
 **Date:** 2026-04-24

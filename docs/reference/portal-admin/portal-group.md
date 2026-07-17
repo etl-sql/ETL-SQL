@@ -43,5 +43,5 @@ END;
 - See: PORTAL_PERMISSIONS, PORTAL_USER, PORTAL_SHOW
 
 References:
-- [Data Connectors](../../guides/administration.md)
+- [Data Connectors](../../administration/platform/README.md)
 - [Portal Admin Commands](README.md)

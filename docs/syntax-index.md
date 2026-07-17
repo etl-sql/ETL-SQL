@@ -1166,7 +1166,7 @@ Commands run outside a script via `etl-sql <command>`. These are shell-level ent
 | `etl-sql gen-script -s <json> -o <etlsql>` | Compile a reviewed JSON spec contract into an ETL-SQL starter script with schema checks, lineage tags, validation summaries, and quarantine scaffolding |
 | `etl-sql extract-spec -i <pdf> -o <pdf>` | Trim likely data dictionary / schema pages from a large vendor PDF before LLM review |
 
-See [Getting Started](guides/getting-started.md) and [Administration](guides/administration.md) for full option reference.
+See [Getting Started](guides/getting-started.md) and [Administration](administration/platform/README.md) for full option reference.
 
 ---
 

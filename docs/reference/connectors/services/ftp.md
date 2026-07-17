@@ -35,4 +35,4 @@ SEND FILE 'C:\data\report.csv' TO 'outgoing/report.csv' AT DropzoneFTP;
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

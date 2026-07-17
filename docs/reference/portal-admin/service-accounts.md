@@ -84,4 +84,4 @@ retains account IDs, policy, and secret hashes, but it cannot reveal client secr
 after restoring into another environment or whenever backup custody is uncertain.
 
 ## References
-- [Administrators Guide](../../guides/administration.md)
+- [Administrators Guide](../../administration/platform/README.md)

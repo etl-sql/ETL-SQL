@@ -27,4 +27,4 @@ Examples:
   SEND EMAIL(MySmtp, 'user@corp.com', 'etl@corp.com', 'Report', 'See attached.');
 
 References:
-- [Specialized Operations](../../guides/administration.md)
+- [Specialized Operations](../../administration/platform/README.md)

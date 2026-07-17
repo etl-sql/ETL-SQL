@@ -15,5 +15,4 @@ Bitwise functions operate on the individual bits of integer values.
 ## References
 
 - [Functions](../README.md)
-- [Functions](../README.md)
 - [Syntax Index](../../../syntax-index.md)

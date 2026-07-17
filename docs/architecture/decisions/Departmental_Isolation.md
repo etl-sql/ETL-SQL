@@ -107,8 +107,8 @@ ASPNETCORE_URLS / Kestrel endpoints
 
 The standalone single-node defaults stay SQLite + local storage; set `Provider=Postgres` and
 `Storage:Provider=Smb`/`Unc` only for HA. See the
-[Portal Administrators Guide](../../guides/portal-admin.md) for the full key
-reference and the [Administrator's Guide](../../guides/administration.md) for HA requirements.
+[Portal Administrators Guide](../../administration/portal/README.md) for the full key
+reference and the [Administrator's Guide](../../administration/platform/README.md) for HA requirements.
 
 ---
 

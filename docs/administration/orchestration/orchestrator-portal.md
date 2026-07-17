@@ -74,7 +74,7 @@ Two roles can access the Orchestrator tab in the portal:
 | **Admin** | Full access — Orchestrator tab is always visible |
 | **OrchestratorManager** | Orchestrator tab only — cannot access the Admin panel |
 
-Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Portal Administrator's Guide](../portal-admin.md#orchestrator-manager-role) for role assignment instructions.
+Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Portal Administrator's Guide](../portal/README.md#orchestrator-manager-role) for role assignment instructions.
 
 ### 14.5 Dashboard Features
 
@@ -227,5 +227,5 @@ Use **Disable** when you want to pause a recurring job temporarily. Use **Delete
 ---
 
 *For the scheduling internals, see [Orchestrator Architecture](../../architecture/Orchestrator.md).*  
-*For the full `CREATE JOB` syntax and all scheduling options, see [Reference/Grammar.md](../getting-started.md#13-job-scheduling).*  
+*For the full `CREATE JOB` syntax and all scheduling options, see [Reference/Grammar.md](../../guides/getting-started.md#13-job-scheduling).*  
 *For complete function and connector references, see [Standard Library](../../reference/functions/README.md) and [Data Connectors](../../reference/connectors/data-connectors.md).*

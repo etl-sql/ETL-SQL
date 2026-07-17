@@ -17,4 +17,4 @@ Examples:
   SEND FILE('C:\exports\report.csv', MyFtp, '/data/report.csv', TRUE);
 
 References:
-- [Specialized Operations](../../guides/administration.md)
+- [Specialized Operations](../../administration/platform/README.md)

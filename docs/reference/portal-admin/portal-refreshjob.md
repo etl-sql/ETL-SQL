@@ -58,5 +58,5 @@ ORDER BY started_at DESC;
 - See: PORTAL_DATASET, PORTAL_REPORT, PORTAL_SHOW
 
 References:
-- [Data Connectors](../../guides/administration.md)
+- [Data Connectors](../../administration/platform/README.md)
 - [Portal Admin Commands](README.md)

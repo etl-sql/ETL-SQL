@@ -57,5 +57,5 @@ SELECT dataset_name, hit_rate, last_refreshed, ttl FROM #metrics;
 - See: PORTAL_REPORT, PORTAL_REFRESHJOB, PORTAL_SHOW
 
 References:
-- [Data Connectors](../../guides/administration.md)
+- [Data Connectors](../../administration/platform/README.md)
 - [Portal Admin Commands](README.md)

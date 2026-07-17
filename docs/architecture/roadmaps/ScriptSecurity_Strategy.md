@@ -184,8 +184,8 @@ These are real scenarios. They are not the typical ETL-SQL deployment.
 
 ### Phase 3 — Documentation
 
-- [ ] `docs/guides/administration.md`: Add `Engine.ScriptHashPolicy` to configuration reference.
-- [ ] `docs/guides/portal-admin.md`: Document hash tracking in the publishing and execution sections.
+- [ ] `docs/administration/platform/README.md`: Add `Engine.ScriptHashPolicy` to configuration reference.
+- [ ] `docs/administration/portal/README.md`: Document hash tracking in the publishing and execution sections.
 - [ ] `Docs/Architecture/Orchestrator.md`: Document hash fields on job and execution history entities.
 
 ---

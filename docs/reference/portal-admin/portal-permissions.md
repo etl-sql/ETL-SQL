@@ -58,5 +58,5 @@ SELECT * FROM #perms;
 - See: PORTAL_USER, PORTAL_GROUP, PORTAL_FOLDER, PORTAL_SHOW
 
 References:
-- [Data Connectors](../../guides/administration.md)
+- [Data Connectors](../../administration/platform/README.md)
 - [Portal Admin Commands](README.md)

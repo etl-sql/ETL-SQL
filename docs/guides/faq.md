@@ -139,7 +139,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > 3. **Shared Key Ring:** Configure a shared path for the ASP.NET Data Protection key ring. This ensures all nodes can decrypt cookies and secure states identically.
 > 4. **Session Affinity:** Set up your load balancer with sticky routing bound to the `ETLSQL_PORTAL_AFFINITY` cookie.
 >
-> For full details, see the [Administrators Guide](administration.md).
+> For full details, see the [Administrators Guide](../administration/platform/README.md).
 
 **Q: How do HA nodes avoid duplicate scheduled runs or schema migration conflicts?**
 > ETL-SQL uses a database-backed **lease fencing** system. 

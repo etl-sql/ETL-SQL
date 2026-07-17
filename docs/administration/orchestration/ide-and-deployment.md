@@ -19,7 +19,7 @@ The extension auto-launches `ETL-SQL ui repl` in the background when you open an
 
 ## 10. Configuration & Deployment
 
-Host-level settings, including security limits, dashboard ports, and background service deployment (NSSM/systemd), are now managed in the central **[Administrators Guide](../administration.md)**.
+Host-level settings, including security limits, dashboard ports, and background service deployment (NSSM/systemd), are now managed in the central **[Administrators Guide](../platform/README.md)**.
 
 Refer to that guide for:
 - **`appsettings.json`** configuration keys.

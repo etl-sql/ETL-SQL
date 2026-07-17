@@ -51,4 +51,4 @@ Notes:
 - For large exports, prefer SELECT ... INTO #temp then process locally rather than streaming back millions of BigQuery rows.
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

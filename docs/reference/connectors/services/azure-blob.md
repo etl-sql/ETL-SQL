@@ -36,4 +36,4 @@ SELECT * FROM #output INTO ReportBlobs.'exports/summary_2024.csv';
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

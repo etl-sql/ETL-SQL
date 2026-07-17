@@ -44,4 +44,4 @@ WHERE sAMAccountName = '*smith*';
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

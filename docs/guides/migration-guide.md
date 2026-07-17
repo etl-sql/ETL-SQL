@@ -32,7 +32,7 @@ To migrate an existing SQLite database to PostgreSQL, run the admin migration CL
 etl-sql admin migrate-database --provider postgres --connection-string "Host=localhost;Database=etlsql;Username=admin;Password=..."
 ```
 
-See [Administration](administration.md) for database-backed heartbeats, lease fencing, and load balancer session-affinity configurations.
+See [Administration](../administration/platform/README.md) for database-backed heartbeats, lease fencing, and load balancer session-affinity configurations.
 
 ### Row-Level Security (RLS)
 

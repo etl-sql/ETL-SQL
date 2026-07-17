@@ -11,5 +11,5 @@ These pages define script-first job and orchestration commands.
 - [SUBSCRIPTION](subscription.md)
 - [VALIDATE](validate.md)
 
-For workflow guidance, see [Job Orchestration](../../guides/job-orchestration.md).
+For workflow guidance, see [Job Orchestration](../../administration/orchestration/README.md).
 

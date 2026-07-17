@@ -12,7 +12,7 @@ Guides explain workflows end to end. Use them when you know what you want to acc
 ## Pipeline And Data Workflows
 
 - [Pipelines and DAGs](pipelines-and-dags.md) - script composition, dependencies, and DAG-style orchestration.
-- [Job Orchestration](job-orchestration.md) - jobs, schedules, remote orchestration, exports, and operational execution.
+- [Job Orchestration](../administration/orchestration/README.md) - jobs, schedules, remote orchestration, exports, and operational execution.
 - [Notebook Guide](notebook-guide.md) - notebook workflows and script execution.
 - [Spec-Driven Development](spec-driven-development.md) - generate ETL-SQL scripts from source specifications.
 - [Data Spec Parser Instructions](data-spec-parser-instructions.md) - prompt and JSON contract guidance for data specification extraction.
@@ -21,11 +21,11 @@ Guides explain workflows end to end. Use them when you know what you want to acc
 
 - [Report SQL](report-sql.md) - `.rptsql` authoring, visuals, pages, datasets, interactions, and styling.
 - [Portal User Guide](portal-user.md) - browsing, running, filtering, exporting, and subscribing to reports.
-- [Portal Administration](portal-admin.md) - users, groups, folders, permissions, datasets, subscriptions, SMTP, HA, and governance.
+- [Portal Administration](../administration/portal/README.md) - users, groups, folders, permissions, datasets, subscriptions, SMTP, HA, and governance.
 
 ## Operations
 
-- [Administration](administration.md) - installation, configuration, security, backup, HA, and monitoring.
+- [Administration](../administration/platform/README.md) - installation, configuration, security, backup, HA, and monitoring.
 - [Testing](testing.md) - local validation lanes, release gates, SLT, and evidence.
 - [Release Checklist](../releases/release-checklist.md) - release execution checklist.
 

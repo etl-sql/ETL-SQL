@@ -26,4 +26,4 @@ DELETE FILE 'C:\export\payroll.enc';
 ```
 
 References:
-- [Specialized Operations](../../guides/administration.md)
+- [Specialized Operations](../../administration/platform/README.md)

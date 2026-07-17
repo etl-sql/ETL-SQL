@@ -43,4 +43,4 @@ SEND FILE 'C:\data\summary.csv' TO 'outgoing/summary.csv' AT PartnerSFTP;
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

@@ -168,7 +168,7 @@ ETL-SQL gen-script --schema <path-to-json> --output <path-to-etlsql>
 ETL-SQL gen-script --schema ./specs/customer_feed.json --output ./scripts/load_customers.etlsql
 ```
 
-Generated scripts include schema gates, casting, lineage tags, AI review/evidence comments when present, validation issue summaries, and optional quarantine scaffolding. Review the JSON, complete the generated `#staging` extraction block, and test with real vendor files before production use. See [Spec-Driven Development](../spec-driven-development.md) and Cookbook recipe 25 for the full workflow.
+Generated scripts include schema gates, casting, lineage tags, AI review/evidence comments when present, validation issue summaries, and optional quarantine scaffolding. Review the JSON, complete the generated `#staging` extraction block, and test with real vendor files before production use. See [Spec-Driven Development](../../guides/spec-driven-development.md) and Cookbook recipe 25 for the full workflow.
 
 ### 2.8 `extract-spec` — Trim Schema Pages from Large PDF
 

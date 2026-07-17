@@ -46,6 +46,6 @@ WHERE SIZE > 1048576;
 ## References
 
 - [Functions](../README.md)
-- [Administration Guide](../../../guides/administration.md)
+- [Administration Guide](../../../administration/platform/README.md)
 - [REMOTE_FILE_LIST](remote_file_list.md)
 - [FILE_EXISTS](file_exists.md)

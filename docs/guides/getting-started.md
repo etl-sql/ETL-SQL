@@ -1141,7 +1141,7 @@ EXEC LoadRegion 'South', '2026-01-01';
 ```
 
 > [!TIP]
-> For the full scheduling reference — `SHOW JOBS`, `DROP JOB`, `KILL JOB`, CI/CD integration, and Windows Service deployment — see [Job Orchestration](job-orchestration.md).
+> For the full scheduling reference — `SHOW JOBS`, `DROP JOB`, `KILL JOB`, CI/CD integration, and Windows Service deployment — see [Job Orchestration](../administration/orchestration/README.md).
 
 Published Orchestrator bundles let production jobs run immutable script versions instead of live disk files:
 
@@ -1276,7 +1276,7 @@ SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 ```
 
 > [!TIP]
-> `@@LAST_EXEC_MS`, `@@TOTAL_SPILLED_BYTES`, and `@@PEAK_MEMORY_MB` are system variables you can query at any time — no profiling mode required. See [Administration](administration.md) for the full system variable reference.
+> `@@LAST_EXEC_MS`, `@@TOTAL_SPILLED_BYTES`, and `@@PEAK_MEMORY_MB` are system variables you can query at any time — no profiling mode required. See [Administration](../administration/platform/README.md) for the full system variable reference.
 
 ### 12.4 MOCKDB — Safe Development
 
@@ -1858,7 +1858,7 @@ Common portal commands include:
 | Operations | `SHOW REPORT HISTORY`, `SHOW REPORT DEPENDENCIES`, `SHOW PORTAL USAGE METRICS`, `SHOW PORTAL OPERATIONAL METRICS` |
 | Security review | `SHOW EFFECTIVE PERMISSIONS`, `VALIDATE REPORT SCRIPT` |
 
-For browser usage, see [Portal User Guide](portal-user.md). For deployment and administration, see [Portal Admin Guide](portal-admin.md).
+For browser usage, see [Portal User Guide](portal-user.md). For deployment and administration, see [Portal Admin Guide](../administration/portal/README.md).
 
 ---
 
@@ -1876,7 +1876,7 @@ For browser usage, see [Portal User Guide](portal-user.md). For deployment and a
 | Reporting & dashboards | **[Report_SQL_Guide.md](report-sql.md)** |
 | Report examples | **[Report_Cookbook.md](../cookbooks/report-recipes.md)** |
 | Portal users | **[ReportPortal_User_Guide.md](portal-user.md)** |
-| Portal administrators | **[Portal Admin Guide](portal-admin.md)** |
+| Portal administrators | **[Portal Admin Guide](../administration/portal/README.md)** |
 | Local and release test lanes | **[Testing.md](../../Testing.md)** |
 | Documentation map | **[Docs README](../../README.md)** |
 | Security policy | **[SECURITY.md](../../src/etl-sql-vscode/.vscode-test/vscode-win32-x64-archive-1.125.1/fcf604774b/resources/app/extensions/ms-vscode.js-debug-companion/SECURITY.md)** |

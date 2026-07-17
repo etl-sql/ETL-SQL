@@ -44,4 +44,4 @@ WITH(LIST_NAME='Tasks');
 ```
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

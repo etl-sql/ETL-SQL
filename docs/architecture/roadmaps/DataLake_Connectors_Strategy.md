@@ -1,7 +1,7 @@
 # Data Lake Connectors Strategy
 
 > [!IMPORTANT]
-> **Mixed shipped capability and future direction.** Native Snowflake and BigQuery connector behavior belongs in `docs/guides/administration.md` and `Docs/Architecture/Connectors.md`. Treat the raw object-storage/table-format sections as future strategy, not shipped feature reference.
+> **Mixed shipped capability and future direction.** Native Snowflake and BigQuery connector behavior belongs in `docs/administration/platform/README.md` and `Docs/Architecture/Connectors.md`. Treat the raw object-storage/table-format sections as future strategy, not shipped feature reference.
 
 **Status:** Partly implemented (BigQuery/Snowflake shipped; object-storage and open table format are strategic direction)
 
@@ -225,7 +225,7 @@ Data warehouses can have tens of thousands of tables. The LSP schema cache TTL s
 - [ ] `DependencyInjectionSetup.cs`: Register `SnowflakeConnector`.
 - [ ] Unit tests using Snowflake mock transport.
 - [ ] `Category=Integration` tests with free trial account. CI secret: `SNOWFLAKE_CONNECTION_STRING`.
-- [ ] `docs/guides/administration.md`: Snowflake section.
+- [ ] `docs/administration/platform/README.md`: Snowflake section.
 
 ### Phase 2 — BigQuery native connector
 
@@ -235,7 +235,7 @@ Data warehouses can have tens of thousands of tables. The LSP schema cache TTL s
 - [ ] `ISchemaProvider` via `INFORMATION_SCHEMA`.
 - [ ] Unit tests against BigQuery emulator Docker image.
 - [ ] `Category=Integration` tests using `bigquery-public-data` dataset (no fixture setup). CI secret: `GCP_SA_KEY_JSON`.
-- [ ] `docs/guides/administration.md`: BigQuery section.
+- [ ] `docs/administration/platform/README.md`: BigQuery section.
 
 ### Phase 3 — Connector interface enhancements (applies to all connectors)
 
@@ -247,7 +247,7 @@ Data warehouses can have tens of thousands of tables. The LSP schema cache TTL s
 
 ### Phase 4 — Documentation and ODBC guidance
 
-- [ ] `docs/guides/administration.md`: Add a **Data Warehouse Connections** section that leads with the ODBC path (covers Redshift, Databricks, Synapse, Trino, Dremio) and notes which platforms have native connectors (Snowflake, BigQuery).
+- [ ] `docs/administration/platform/README.md`: Add a **Data Warehouse Connections** section that leads with the ODBC path (covers Redshift, Databricks, Synapse, Trino, Dremio) and notes which platforms have native connectors (Snowflake, BigQuery).
 - [ ] Include ODBC connection string examples for Redshift, Databricks, Synapse, Trino.
 - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
 - [ ] `docs/architecture/standards/Connectors_Standards.md`: Data warehouse connector checklist.
@@ -259,7 +259,7 @@ Data warehouses can have tens of thousands of tables. The LSP schema cache TTL s
 - [ ] No auth needed for local mode; S3 credentials via `OPTIONS(S3_ACCESS_KEY_ID, S3_SECRET)`.
 - [ ] `DependencyInjectionSetup.cs`: Register `DuckDbConnector`.
 - [ ] Unit tests: in-process, no `Category=Integration`. Test data: small Parquet file committed to `tests/testdata/`.
-- [ ] `docs/guides/administration.md`: DuckDB section. Document as "embedded analytical engine" distinct from file connectors.
+- [ ] `docs/administration/platform/README.md`: DuckDB section. Document as "embedded analytical engine" distinct from file connectors.
 
 ---
 

@@ -43,7 +43,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Encrypt a connection string for a script | [etl-sql encrypt](reference/cli/encrypt.md) |
-| Manage secrets and secret references | [Security and Secret Management](guides/administration/security.md) |
+| Manage secrets and secret references | [Security and Secret Management](administration/platform/security.md) |
 | Mask or hash PII during load | [ETL Recipes](cookbooks/etl-recipes.md) — Secure PII Masking & Hashing |
 | Send files securely to a vendor over SFTP | [ETL Recipes](cookbooks/etl-recipes.md) — Secure Vendor Handshake |
 
@@ -51,9 +51,9 @@ link to the page that shows how. For language keywords, functions, and options, 
 
 | I want to… | Go to |
 | :--- | :--- |
-| Schedule a recurring job (`CREATE JOB`) | [Job Scheduling](guides/job-orchestration/job-scheduling.md) |
+| Schedule a recurring job (`CREATE JOB`) | [Job Scheduling](administration/orchestration/job-scheduling.md) |
 | Schedule a job on a remote Orchestrator | [ETL Recipes](cookbooks/etl-recipes.md) — Scheduling a Recurring Job on a Remote Orchestrator |
-| Compose pipelines as a DAG (fan-out, gating, branching) | [DAGs and Advanced Orchestration](guides/job-orchestration/dags.md) |
+| Compose pipelines as a DAG (fan-out, gating, branching) | [DAGs and Advanced Orchestration](administration/orchestration/dags.md) |
 | Deploy an immutable published script bundle (CI/CD) | [ETL Recipes](cookbooks/etl-recipes.md) — Immutable Published Script Bundles |
 
 ## Notify and deliver
@@ -61,16 +61,16 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Send Slack/Teams alerts from a pipeline | [ETL Recipes](cookbooks/etl-recipes.md) — Automated Slack/Teams Alerting |
-| Email report subscriptions to users | [SMTP Connections and Subscriptions](guides/portal-admin/connections-and-subscriptions.md) |
+| Email report subscriptions to users | [SMTP Connections and Subscriptions](administration/portal/connections-and-subscriptions.md) |
 | Burst files out over SFTP on a schedule | [ETL Recipes](cookbooks/etl-recipes.md) — Automated SFTP Bursting |
 
 ## Operate the server
 
 | I want to… | Go to |
 | :--- | :--- |
-| Install ETL-SQL in production | [Installation and Deployment](guides/administration/installation.md) |
-| Configure Practical High Availability | [Portal State, Data Roots, and High Availability](guides/administration/state-and-ha.md) |
-| Back up and restore state | [Backup, Monitoring, and Health](guides/administration/backup-and-monitoring.md) · [etl-sql admin backup](reference/cli/admin-backup.md) · [restore](reference/cli/admin-restore.md) |
+| Install ETL-SQL in production | [Installation and Deployment](administration/platform/installation.md) |
+| Configure Practical High Availability | [Portal State, Data Roots, and High Availability](administration/platform/state-and-ha.md) |
+| Back up and restore state | [Backup, Monitoring, and Health](administration/platform/backup-and-monitoring.md) · [etl-sql admin backup](reference/cli/admin-backup.md) · [restore](reference/cli/admin-restore.md) |
 | Migrate from SQLite to PostgreSQL | [etl-sql admin migrate-database](reference/cli/admin-migrate-database.md) |
 | Run an environment health check | [etl-sql admin doctor](reference/cli/admin-doctor.md) |
 
@@ -78,10 +78,10 @@ link to the page that shows how. For language keywords, functions, and options, 
 
 | I want to… | Go to |
 | :--- | :--- |
-| Add, edit, or deactivate a user | [User Management](guides/portal-admin/users.md) |
-| Grant folder permissions with groups | [Groups and Folder Permissions](guides/portal-admin/permissions.md) |
-| Publish a report and manage a catalog | [Publishing Reports](guides/portal-admin/publishing.md) · [ETL Recipes](cookbooks/etl-recipes.md) — Publishing and Operating a Portal Catalog |
-| Configure and review the audit log | [Health Monitoring and Audit Log](guides/portal-admin/monitoring-and-audit.md) |
+| Add, edit, or deactivate a user | [User Management](administration/portal/users.md) |
+| Grant folder permissions with groups | [Groups and Folder Permissions](administration/portal/permissions.md) |
+| Publish a report and manage a catalog | [Publishing Reports](administration/portal/publishing.md) · [ETL Recipes](cookbooks/etl-recipes.md) — Publishing and Operating a Portal Catalog |
+| Configure and review the audit log | [Health Monitoring and Audit Log](administration/portal/monitoring-and-audit.md) |
 
 ## Author reports
 

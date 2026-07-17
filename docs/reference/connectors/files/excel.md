@@ -42,4 +42,4 @@ PRINT 'Budget rows loaded: ' + @@ROWCOUNT;
 When schema-resilience options change the accepted shape, EXCEL emits a diagnostic with ignored extra-column count, null-filled missing-column count, and affected row count. Use `EXPECT SCHEMA` after staging when the accepted `#temp` shape is a downstream contract.
 
 References:
-- [Data Connectors](../../../guides/administration.md)
+- [Data Connectors](../../../administration/platform/README.md)

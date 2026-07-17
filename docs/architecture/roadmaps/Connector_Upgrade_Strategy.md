@@ -1,7 +1,7 @@
 # ETL-SQL Connector Upgrade Notes
 
 > [!NOTE]
-> This is an implemented modernization note for the 0.7.0 connector work. Current connector syntax belongs in `docs/guides/administration.md`; current implementation contracts belong in `Docs/Architecture/Connectors.md` and `docs/architecture/standards/Connectors_Standards.md`.
+> This is an implemented modernization note for the 0.7.0 connector work. Current connector syntax belongs in `docs/administration/platform/README.md`; current implementation contracts belong in `Docs/Architecture/Connectors.md` and `docs/architecture/standards/Connectors_Standards.md`.
 
 **Status:** Implemented for ETL-SQL 0.7.0
 

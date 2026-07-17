@@ -16,4 +16,4 @@ Examples:
   RECEIVE FILE(MyFtp, '/data/report.csv', 'C:\downloads\report.csv');
 
 References:
-- [Specialized Operations](../../guides/administration.md)
+- [Specialized Operations](../../administration/platform/README.md)

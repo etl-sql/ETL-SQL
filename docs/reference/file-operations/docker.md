@@ -32,4 +32,4 @@ CLOSE_DOCKER TestPG;
 ```
 
 References:
-- [Specialized Operations](../../guides/administration.md)
+- [Specialized Operations](../../administration/platform/README.md)

@@ -83,6 +83,6 @@ Any future remote mutation proposal requires a separate threat model that includ
 
 - [Enterprise Release Gates](Enterprise_Release_Gates.md)
 - [Enterprise Platform Strategy](../roadmaps/Enterprise_Platform_Strategy.md)
-- [Administrators Guide](../../guides/administration.md)
+- [Administrators Guide](../../administration/platform/README.md)
 - [HA Topology Failure Certification](HA_Topology_Failure_Certification.md)
 - [Disaster Recovery Objectives](Disaster_Recovery_Objectives.md)
