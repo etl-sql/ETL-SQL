@@ -95,35 +95,114 @@ function analyzeMockScript(script) {
 }
 
 function runMockScript(script) {
-  if (!/^\s*SELECT\b/i.test(String(script || ''))) {
+  const select = extractSelectStatement(String(script || ''));
+  if (!select) {
     return {
       columns: [],
       rows: [],
       rowCount: 0,
       capped: false,
       elapsedMs: 0,
-      message: 'Select a single SELECT statement.',
+      message: 'No SELECT statement to run.',
     };
   }
 
-  const rows = [
-    { region: 'North', revenue: 18420, orders: 122 },
-    { region: 'South', revenue: 15980, orders: 104 },
-    { region: 'West', revenue: 22750, orders: 147 },
-  ];
+  const tables = mockSchemaTables();
+  const tableName = selectTargetTable(select);
+  const table = tables.find((t) => t.name.toLowerCase() === (tableName || '').toLowerCase());
+  const columns = resolveSelectColumns(select, table);
+  const rows = mockRowsForColumns(columns, table);
+
   return {
-    columns: ['region', 'revenue', 'orders'],
+    columns,
     rows,
     rowCount: rows.length,
     capped: false,
     elapsedMs: 18,
     message: `Returned ${rows.length} rows.`,
-    trace: mockProgressTrace({
-      columns: ['region', 'revenue', 'orders'],
-      rows,
-      elapsedMs: 18,
-    }, script),
+    trace: mockProgressTrace({ columns, rows, elapsedMs: 18 }, select),
   };
+}
+
+// Pull the SELECT to run out of a (possibly multi-statement) script. The designer
+// sends the selected/current statement when it can, but when the cursor sits past
+// the trailing ';' it falls back to the whole script (e.g. `CREATE CONNECTION m AS
+// MOCKDB(); SELECT ...`). Match the real Portal, which executes the whole thing, by
+// scanning for the last SELECT rather than requiring the text to start with one.
+function extractSelectStatement(text) {
+  const statements = text
+    .replace(/--[^\n]*/g, ' ') // strip line comments so ';' splitting is clean
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const selects = statements.filter((s) => /^SELECT\b/i.test(s));
+  if (selects.length) return selects[selects.length - 1];
+  const bare = text.trim().replace(/;+\s*$/, '');
+  return /^SELECT\b/i.test(bare) ? bare : '';
+}
+
+// Resolve the FROM target, dropping any connection/schema qualifier and alias:
+//   `FROM m.Users AS u` -> `Users`
+function selectTargetTable(select) {
+  const m = /\bFROM\s+([A-Za-z0-9_.[\]"`]+)/i.exec(select);
+  if (!m) return '';
+  const ref = m[1].replace(/[[\]"`]/g, '');
+  const parts = ref.split('.').filter(Boolean);
+  return parts[parts.length - 1] || '';
+}
+
+// Resolve the projected columns. `*` / `<alias>.*` expands to the table's columns;
+// explicit columns keep their name with any `<alias>.` qualifier or trailing `AS`
+// alias reduced to a plain identifier.
+function resolveSelectColumns(select, table) {
+  const m = /^SELECT\s+(?:DISTINCT\s+|TOP\s+\d+\s+)*([\s\S]+?)\s+FROM\b/i.exec(select);
+  const list = (m ? m[1] : '*').trim();
+  if (!list || /(^|,)\s*[A-Za-z0-9_]*\.?\*/.test(list)) {
+    return table ? table.columns.map((c) => c.name) : ['col1', 'col2', 'col3'];
+  }
+  const cols = splitTopLevel(list)
+    .map((part) => {
+      const asMatch = /\s+AS\s+([A-Za-z0-9_]+)\s*$/i.exec(part);
+      let name = asMatch ? asMatch[1] : part.trim();
+      name = name.replace(/^[A-Za-z0-9_]+\./, ''); // drop `alias.` qualifier
+      return name.trim();
+    })
+    .filter(Boolean);
+  return cols.length ? cols : (table ? table.columns.map((c) => c.name) : ['col1']);
+}
+
+// Split a projection list on top-level commas, ignoring commas inside parens (e.g. fn(a, b)).
+function splitTopLevel(list) {
+  const out = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of list) {
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    if (ch === ',' && depth === 0) { out.push(cur); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+// Synthesize three representative rows, typing values by the mock schema when known.
+function mockRowsForColumns(columns, table) {
+  const typeOf = (name) => {
+    const col = table?.columns?.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    return (col?.type || '').toUpperCase();
+  };
+  const sample = (name, type, i) => {
+    if (/INT/.test(type)) return (i + 1) * 10 + i;
+    if (/DEC|NUM|FLOAT|MONEY|REAL/.test(type)) return Math.round((1000 + i * 137.5) * 100) / 100;
+    if (/DATE|TIME/.test(type)) return `2026-0${i + 1}-1${i}`;
+    if (/BOOL|BIT/.test(type)) return i % 2 === 0;
+    return `${name}-${i + 1}`;
+  };
+  return [0, 1, 2].map((i) => {
+    const row = {};
+    for (const name of columns) row[name] = sample(name, typeOf(name), i);
+    return row;
+  });
 }
 
 function mockProgressTrace(result, script) {

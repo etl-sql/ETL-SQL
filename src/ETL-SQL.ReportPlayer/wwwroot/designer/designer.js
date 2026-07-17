@@ -906,8 +906,13 @@ export async function createScriptEditor(container, opts = {}) {
     const hasCmLint = Boolean(analyzeUrl && typeof linter === 'function');
     const completionKeys = Array.isArray(completionKeymap) ? completionKeymap : [];
     const acceptCompletionKey = completionKeys.find(binding => binding?.key === 'Enter' && typeof binding.run === 'function');
+    // Reuse the bundle's Ctrl-Space -> startCompletion binding so the toolbar button and an
+    // OS-safe alternate key can invoke completion without importing the minified internal.
+    // Windows commonly swallows Ctrl-Space for IME/input-language switching, so we also bind Ctrl-.
+    const startCompletionKey = completionKeys.find(binding => binding?.key === 'Ctrl-Space' && typeof binding.run === 'function');
     const keymaps = [
         ...(acceptCompletionKey ? [{ ...acceptCompletionKey, key: 'Tab' }] : []),
+        ...(startCompletionKey ? [{ ...startCompletionKey, key: 'Ctrl-.' }] : []),
         ...completionKeys,
         indentWithTab,
         ...(Array.isArray(defaultKeymap) ? defaultKeymap : []),
@@ -1206,6 +1211,12 @@ export async function createScriptEditor(container, opts = {}) {
             return ranges.join('\n');
         },
         getCurrentStatement: () => currentStatement(),
+        hasCompletion: Boolean(completeUrl),
+        triggerCompletion: () => {
+            if (!startCompletionKey || !view) return false;
+            view.focus();
+            return startCompletionKey.run(view);
+        },
         setValue: (text) => view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: text },
         }),
@@ -1395,6 +1406,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
                 <strong>${escapeHtml(opts.title || 'Script')}</strong>
                 <span class="etlsql-script-workbench-spacer"></span>
                 <button type="button" class="btn btn-sm" data-command-palette title="Command Palette (Ctrl+Shift+P)">Commands</button>
+                ${opts.editor?.completeUrl ? '<button type="button" class="btn btn-sm" data-suggest title="Autocomplete suggestions (Ctrl+Space or Ctrl+.)">Suggest</button>' : ''}
                 <button type="button" class="btn btn-sm btn-primary" data-run>Run</button>
                 ${opts.onApply ? '<button type="button" class="btn btn-sm btn-primary" data-apply>Update Designer</button>' : ''}
                 ${opts.onSave ? '<button type="button" class="btn btn-sm" data-save>Save</button>' : ''}
@@ -1485,6 +1497,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     function commandItems() {
         return [
             { id: 'run', label: 'ETL-SQL: Run Selection or Current Statement', enabled: Boolean(opts.runUrl || opts.onRun), action: run },
+            { id: 'suggest', label: 'ETL-SQL: Trigger Suggestions (Ctrl-Space / Ctrl-.)', enabled: Boolean(editor.hasCompletion && editor.triggerCompletion), action: () => editor.triggerCompletion() },
             { id: 'analyze', label: 'ETL-SQL: Analyze Script', enabled: typeof editor.analyze === 'function', action: () => editor.analyze() },
             { id: 'apply', label: 'ETL-SQL: Update Designer from Script', enabled: Boolean(opts.onApply), action: apply },
             { id: 'save', label: 'ETL-SQL: Save Script', enabled: Boolean(opts.onSave), action: save },
@@ -1521,6 +1534,7 @@ export async function createScriptEditorWorkbench(container, opts = {}) {
     }
 
     container.querySelector('[data-command-palette]')?.addEventListener('click', openPalette);
+    container.querySelector('[data-suggest]')?.addEventListener('click', () => editor.triggerCompletion?.());
     container.querySelector('[data-run]')?.addEventListener('click', run);
     container.querySelector('[data-apply]')?.addEventListener('click', apply);
     container.querySelector('[data-save]')?.addEventListener('click', save);

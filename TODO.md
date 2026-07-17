@@ -55,8 +55,22 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 - [ ] **Report Preview Pane** Having a report preview pane, using the VS Code preview pane allows the user to do a more WYSIWYG approach to creating reports
       - How do we do a serve command?  You already have everything you need can we just build a preview without calling that?
 - [ ] **tools/ui-sandbox match**  Make sure ui-sandbox works the exact same as Portal so we can have a better debug/preview experience for developers
-- [ ] **Query with Alias not running**  Using CREATE CONNECTION m AS MOCKDB();  SELECT u.* FROM m.Users AS u;  Did not run in the ui-sandbox
-- [ ] **Expand * command** I'm pretty sure this is available, but ctrl+space does not work.  If its a different key combo we need to know.
+- [x] **Query with Alias not running**  Using CREATE CONNECTION m AS MOCKDB();  SELECT u.* FROM m.Users AS u;  Did not run in the ui-sandbox
+      - Fixed in `tools/ui-sandbox/mockApi.js`: `runMockScript` rejected any text not starting with `SELECT`
+        (so a full `CREATE CONNECTION …; SELECT …` script — what you get when the cursor is past the trailing
+        `;` and `currentStatement()` returns empty — was refused) and returned fixed dummy columns. It now
+        scans a multi-statement script for the SELECT, resolves the `FROM` target through the connection/schema
+        qualifier + alias, and reflects the referenced mock table's columns (expanding `*`/`alias.*`, stripping
+        `alias.`/`AS` on explicit columns), matching real Portal behavior.
+- [x] **Expand * command** I'm pretty sure this is available, but ctrl+space does not work.  If its a different key combo we need to know.
+      - The trigger is **Ctrl-Space** (only binding in the CodeMirror `completionKeymap`), already wired in the
+        script editor + designer script overlay. It likely "did nothing" because Windows commonly captures
+        Ctrl+Space for IME/input-language switching. Added a discoverable **Suggest** toolbar button plus an
+        OS-safe alternate key **Ctrl-.** — both invoke `startCompletion` via the editor's new
+        `triggerCompletion()`; a command-palette entry was added too. Verified in the ui-sandbox: button and
+        Ctrl-. each open the completion popup. Canonical `designer.js` edited + `sync-assets.js` run.
+      - Note: there is **no** dedicated "expand `SELECT *` → column list" feature anywhere (designer/mock/LSP);
+        autocomplete is the mechanism. Building real `*` expansion is a separate enhancement if wanted.
 - [ ] **Separate Save from Git Commit/Push** — `Save` updates the Portal script and catalog only.
       When source control is configured, expose Git commit/push as an explicit, separately reported
       operation with its own button. Do not hold a database transaction open during Git or network I/O.
