@@ -18,14 +18,14 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [RequirePortalModule("Reporting")]
 public class SubscriptionsController(
     PortalDbContext db,
-    PortalConfig config,
     OrchestratorDbLocator dbLocator,
     IOrchestratorStoreFactory orchestratorStoreFactory,
     AuditService audit,
     SubscriptionDeliveryStatusService deliveryStatus,
     FolderPermissionService folderPermissions,
     SmtpPasswordProtector pwdProtector,
-    IDatasetRegistry datasetRegistry) : ControllerBase
+    IDatasetRegistry datasetRegistry,
+    SubscriptionScriptService subscriptionScripts) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -194,7 +194,7 @@ public class SubscriptionsController(
         // Row first (it is the source of truth and carries everything needed to rebuild the
         // rest), then script, then ScriptPath, then the Orchestrator job. A crash anywhere in
         // between is healed by SubscriptionScriptMaintenance at the next startup.
-        var scriptPath = GenerateJobScript(sub, report);
+        var scriptPath = subscriptionScripts.WriteTriggerScript(sub, report);
         sub.ScriptPath = scriptPath;
         await db.SaveChangesAsync();
 
@@ -249,12 +249,12 @@ public class SubscriptionsController(
 
         if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath))
         {
-            if (!TryResolveSubscriptionScript(sub.ScriptPath, out _))
+            if (!subscriptionScripts.TryResolve(sub.ScriptPath, out _))
                 return Forbid();
 
             // Format/parameter/recipient changes live in the subscription row and are read by
             // the delivery service at send time; rewriting just heals any legacy script content.
-            GenerateJobScript(sub, sub.Report);
+            subscriptionScripts.WriteTriggerScript(sub, sub.Report);
         }
 
         try
@@ -387,7 +387,7 @@ public class SubscriptionsController(
         var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
         string? resolvedScriptPath = null;
         if (!string.IsNullOrEmpty(sub.ScriptPath)
-            && !TryResolveSubscriptionScript(sub.ScriptPath, out resolvedScriptPath))
+            && !subscriptionScripts.TryResolve(sub.ScriptPath, out resolvedScriptPath))
             return Forbid();
 
         var orchDbPath = dbLocator.Resolve();
@@ -526,34 +526,7 @@ public class SubscriptionsController(
         return NoContent();
     }
 
-    // ── Script generation ──────────────────────────────────────────────────────
-
-    /// <summary>
-    /// Writes the persisted Orchestrator job script for the subscription. The script is a
-    /// credential-free trigger only (P0.1): the portal's SubscriptionDeliveryService performs
-    /// the actual export and email delivery in-process after delivery-time reauthorization,
-    /// so no SMTP credential, recipient, or parameter is ever written to disk.
-    /// </summary>
-    private string GenerateJobScript(Subscription sub, Report report)
-    {
-        // COMPAT_BREAK: 0.11
-        var scriptName = SubscriptionOrchestration.ScriptFileName(sub.Id, report.Name);
-        if (!PortalPathGuard.TryResolveScript(config, System.IO.Path.Combine("subscriptions", scriptName), out var scriptPath))
-            throw new InvalidOperationException("Subscription script path must be within the configured script root.");
-
-        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(scriptPath)!);
-        SubscriptionTriggerScript.Write(scriptPath, sub.Id);
-        return scriptPath;
-    }
-
     // ── Helpers ────────────────────────────────────────────────────────────────
-
-    private bool TryResolveSubscriptionScript(string? scriptPath, out string resolved)
-    {
-        resolved = string.Empty;
-        return !string.IsNullOrWhiteSpace(scriptPath)
-            && PortalPathGuard.TryResolveScript(config, scriptPath, out resolved);
-    }
 
     private static SubscriptionDto ToDto(Subscription s)
     {
