@@ -130,7 +130,7 @@ work by priority.
 - [ ] **P1 — Split connector implementations into independently deployable projects.** Create a small
       connector contracts/registry layer and provider-specific projects or coherent provider groups so
       hosts do not load every database, cloud, messaging, and native dependency.
-- [ ] **P1 — Restore `ETL-SQL.Core` as a contracts/domain layer.** Move Testcontainers out of the runtime
+- [x] **P1 — Restore `ETL-SQL.Core` as a contracts/domain layer.** Move Testcontainers out of the runtime
       project first, then move Docker, SQLite persistence, native SQLite, and file-sink implementations
       into infrastructure projects behind Core interfaces.
       - [x] Move Docker/Testcontainers runtime implementation into `ETL-SQL.Infrastructure.Docker`.
