@@ -25,7 +25,8 @@ public class DatasetController(
     DatasetExportService exports,
     DatasetRefreshService refreshes,
     DatasetMoveService moves,
-    DatasetAclService acls) : ControllerBase
+    DatasetAclService acls,
+    DatasetUpdateService updates) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -254,37 +255,14 @@ public class DatasetController(
         var expectedVersion = OptimisticConcurrency.ReadExpectedVersion(Request);
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
-        if (!OptimisticConcurrency.Prepare(db, dataset, expectedVersion.Value))
+
+        var result = await updates.UpdateAsync(dataset, req, expectedVersion.Value, CurrentUserId, CanManage(perm));
+        if (result.Kind == DatasetUpdateResultKind.InvalidAccessLevel)
+            return BadRequest(new { error = "accessLevel must be 'Public' or 'Private'." });
+        if (result.Kind == DatasetUpdateResultKind.Forbidden)
+            return Forbid();
+        if (result.Kind == DatasetUpdateResultKind.Conflict)
             return OptimisticConcurrency.Conflict(this, ToDto(dataset));
-
-        if (req.AccessLevel is not null)
-        {
-            if (!Enum.TryParse<DatasetAccessLevel>(req.AccessLevel, ignoreCase: true, out var level))
-                return BadRequest(new { error = "accessLevel must be 'Public' or 'Private'." });
-
-            // Changing exposure (Private→Public widens access to every folder reader) is the
-            // same class of operation as ACL grant/revoke and requires Manage, not Edit.
-            if (level != dataset.AccessLevel && !CanManage(perm))
-                return Forbid();
-
-            dataset.AccessLevel = level;
-        }
-
-        if (req.Ttl is not null)
-            dataset.Ttl = string.IsNullOrWhiteSpace(req.Ttl) ? null : req.Ttl;
-
-        dataset.UpdatedAt = DateTime.UtcNow;
-        // Staged so the mutation and its audit row share one commit (P1.6).
-        audit.Stage(CurrentUserId, "UPDATE_DATASET", "Dataset", id.ToString(), dataset.Name);
-        try
-        {
-            await db.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await db.Entry(dataset).ReloadAsync();
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
-        }
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(ToDto(dataset));

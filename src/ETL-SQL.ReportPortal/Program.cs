@@ -420,6 +420,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetExportService>()
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetRefreshService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetMoveService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAclService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetUpdateService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetViewerService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ILdapService, ETL_SQL.ReportPortal.Services.LdapService>();
 
