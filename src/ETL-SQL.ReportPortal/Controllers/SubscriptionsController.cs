@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.Json;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Storage;
@@ -25,7 +24,8 @@ public class SubscriptionsController(
     FolderPermissionService folderPermissions,
     SmtpPasswordProtector pwdProtector,
     IDatasetRegistry datasetRegistry,
-    SubscriptionScriptService subscriptionScripts) : ControllerBase
+    SubscriptionScriptService subscriptionScripts,
+    SubscriptionQueryService subscriptionQueries) : ControllerBase
 {
     private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin => User.IsInRole("Admin");
@@ -73,13 +73,7 @@ public class SubscriptionsController(
     [HttpGet("api/subscriptions")]
     public async Task<IActionResult> List()
     {
-        var userId = CurrentUserId;
-        var subs = await db.Subscriptions
-            .AsNoTracking()
-            .Include(s => s.Report)
-            .Where(s => IsAdmin || s.UserId == userId)
-            .ToListAsync();
-        return Ok(subs.Select(ToDto));
+        return Ok(await subscriptionQueries.ListAsync(CurrentUserId, IsAdmin));
     }
 
     [HttpGet("api/admin/subscriptions/catalog")]
@@ -91,48 +85,17 @@ public class SubscriptionsController(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 25)
     {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 100);
-        var query = db.Subscriptions
-            .AsNoTracking()
-            .Include(s => s.Report)
-            .AsQueryable();
-        if (string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
-            query = query.Where(s => s.IsActive);
-        else if (string.Equals(status, "paused", StringComparison.OrdinalIgnoreCase))
-            query = query.Where(s => !s.IsActive);
-        else if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase))
-            query = query.Where(s => s.FailCount > 0);
-        if (!string.IsNullOrWhiteSpace(format) &&
-            Enum.TryParse<SubscriptionFormat>(format, true, out var parsedFormat))
-            query = query.Where(s => s.Format == parsedFormat);
-
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var pattern = LikePattern(q.Trim());
-            query = query.Where(s =>
-                (s.Name != null && EF.Functions.Like(s.Name, pattern, @"\")) ||
-                (s.Recipients != null && EF.Functions.Like(s.Recipients, pattern, @"\")) ||
-                EF.Functions.Like(s.Report.Name, pattern, @"\"));
-        }
-
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderBy(s => s.Report.Name).ThenBy(s => s.Recipients)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-        return Ok(new PagedResult<SubscriptionDto>(items.Select(ToDto).ToList(), total, page, pageSize));
+        return Ok(await subscriptionQueries.GetAdminCatalogAsync(q, status, format, page, pageSize));
     }
 
     [HttpGet("api/subscriptions/{id:int}")]
     public async Task<IActionResult> Get(int id)
     {
-        var sub = await db.Subscriptions.AsNoTracking().Include(s => s.Report).FirstOrDefaultAsync(s => s.Id == id);
+        var sub = await subscriptionQueries.LoadAsync(id);
         if (sub is null) return NotFound();
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
         OptimisticConcurrency.SetETag(Response, sub.Version);
-        return Ok(ToDto(sub));
+        return Ok(subscriptionQueries.ToDto(sub));
     }
 
     /// <summary>
@@ -185,7 +148,7 @@ public class SubscriptionsController(
             Format = format,
             SmtpAlias = req.SmtpAlias ?? string.Empty,
             Recipients = recipientEmail,
-            ParametersJson = SerializeParams(req.Parameters),
+            ParametersJson = SubscriptionQueryService.SerializeParams(req.Parameters),
             IsActive = true
         };
         db.Subscriptions.Add(sub);
@@ -208,7 +171,7 @@ public class SubscriptionsController(
         }
 
         await audit.LogAsync(CurrentUserId, "CREATE_SUBSCRIPTION", "Subscription", sub.Id.ToString(), jobDef.Name);
-        return CreatedAtAction(nameof(Get), new { id = sub.Id }, ToDto(sub));
+        return CreatedAtAction(nameof(Get), new { id = sub.Id }, subscriptionQueries.ToDto(sub));
     }
 
     /// <summary>
@@ -226,7 +189,7 @@ public class SubscriptionsController(
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, sub, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+            return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
 
         var scheduleChanged = req.Schedule is not null && req.Schedule != sub.Schedule;
         var newFormat = sub.Format;
@@ -245,7 +208,7 @@ public class SubscriptionsController(
         if (req.SmtpAlias is not null) sub.SmtpAlias = req.SmtpAlias;
         if (req.Recipients is not null) sub.Recipients = req.Recipients;
         if (req.IsActive.HasValue) sub.IsActive = req.IsActive.Value;
-        if (parametersChanged) sub.ParametersJson = SerializeParams(req.Parameters);
+        if (parametersChanged) sub.ParametersJson = SubscriptionQueryService.SerializeParams(req.Parameters);
 
         if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath))
         {
@@ -264,7 +227,7 @@ public class SubscriptionsController(
         catch (DbUpdateConcurrencyException)
         {
             await db.Entry(sub).ReloadAsync();
-            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+            return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
         }
 
         // Sync the Orchestrator job if schedule or active state changed
@@ -298,7 +261,7 @@ public class SubscriptionsController(
 
         await audit.LogAsync(CurrentUserId, "UPDATE_SUBSCRIPTION", "Subscription", sub.Id.ToString());
         OptimisticConcurrency.SetETag(Response, sub.Version);
-        return Ok(ToDto(sub));
+        return Ok(subscriptionQueries.ToDto(sub));
     }
 
     [HttpPost("api/admin/subscriptions/bulk-status")]
@@ -372,7 +335,7 @@ public class SubscriptionsController(
         if (expectedVersion is null)
             return OptimisticConcurrency.MissingVersion(this);
         if (!OptimisticConcurrency.Prepare(db, sub, expectedVersion.Value))
-            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+            return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
 
         try
         {
@@ -381,7 +344,7 @@ public class SubscriptionsController(
         catch (DbUpdateConcurrencyException)
         {
             await db.Entry(sub).ReloadAsync();
-            return OptimisticConcurrency.Conflict(this, ToDto(sub));
+            return OptimisticConcurrency.Conflict(this, subscriptionQueries.ToDto(sub));
         }
 
         var jobName = SubscriptionOrchestration.JobName(sub.Id, sub.Report?.Name);
@@ -528,17 +491,6 @@ public class SubscriptionsController(
 
     // ── Helpers ────────────────────────────────────────────────────────────────
 
-    private static SubscriptionDto ToDto(Subscription s)
-    {
-        var parameters = DeserializeParams(s.ParametersJson);
-        var summary = BuildParameterSummary(parameters);
-        return new SubscriptionDto(
-            s.Id, s.ReportId, s.Report?.Name ?? "",
-            s.Name, s.Schedule, s.DeliverOnRefresh, s.Format.ToString(),
-            s.SmtpAlias, s.Recipients, s.LastSentAt, s.NextRunAt, s.FailCount, s.IsActive,
-            parameters, summary, s.Version);
-    }
-
     private static SmtpConnectionDto ToSmtpDto(SmtpConnection connection) =>
         new(
             connection.Id,
@@ -550,21 +502,4 @@ public class SubscriptionsController(
             connection.UseSsl,
             connection.Version);
 
-    private static string? SerializeParams(Dictionary<string, string>? p) =>
-        p is { Count: > 0 } ? JsonSerializer.Serialize(p) : null;
-
-    private static Dictionary<string, string>? DeserializeParams(string? json)
-    {
-        if (string.IsNullOrEmpty(json)) return null;
-        try { return JsonSerializer.Deserialize<Dictionary<string, string>>(json); }
-        catch { return null; }
-    }
-
-    private static string? BuildParameterSummary(Dictionary<string, string>? p) =>
-        p is { Count: > 0 }
-            ? string.Join(", ", p.Select(kv => $"{kv.Key}={kv.Value}"))
-            : null;
-
-    private static string LikePattern(string query) =>
-        $"%{query.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_")}%";
 }

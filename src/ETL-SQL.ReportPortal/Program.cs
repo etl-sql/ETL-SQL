@@ -394,6 +394,7 @@ builder.Services.AddScoped<ETL_SQL.Core.Governance.IPolicyAuthorityStore, ETL_SQ
 builder.Services.AddScoped<ETL_SQL.Core.Governance.PolicyAuthorityService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionDeliveryStatusService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionScriptService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.SubscriptionQueryService>();
 // Trusted subscription executor (P0.1/P0.2): delivery runs in-process with delivery-time
 // reauthorization; persisted job scripts are credential-free triggers.
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.ISubscriptionScriptRunner,
