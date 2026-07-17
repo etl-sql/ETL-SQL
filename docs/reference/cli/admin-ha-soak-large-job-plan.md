@@ -1,0 +1,23 @@
+# etl-sql admin ha-soak large-job-plan
+
+Generate the concurrent large-job soak plan
+
+## Synopsis
+
+```text
+etl-sql admin ha-soak large-job-plan [options]
+```
+
+## Options
+
+| Option | Description |
+| :--- | :--- |
+| `--force, -f` | Overwrite existing generated HA soak artifacts. |
+| `--mode` | Plan depth: CiSmoke or ManualCertification. |
+| `--output, -o` | Destination file path for the generated HA soak artifact. |
+| `--run-root, -r` | Path to a generated HA soak topology run root. |
+
+---
+
+<!-- Generated from src/ETL-SQL.App/App/CliOrchestrator.cs by CliReferenceGenerator.
+     Do not edit by hand; regenerate with ETLSQL_REGEN_CLI_DOCS=1 dotnet test --filter CliReferenceTests. -->
