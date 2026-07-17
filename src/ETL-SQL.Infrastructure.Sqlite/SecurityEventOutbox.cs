@@ -5,36 +5,11 @@ using Microsoft.Data.Sqlite;
 
 namespace ETL_SQL.Core.Governance;
 
-public sealed record SecurityEventOutboxOptions
-{
-    public required string DatabasePath { get; init; }
-    public long MaxBytes { get; init; } = 64 * 1024 * 1024;
-    public int MaxPendingEvents { get; init; } = 100_000;
-    public int MaxDeliveryAttempts { get; init; } = 10;
-    public TimeSpan InitialRetryDelay { get; init; } = TimeSpan.FromSeconds(30);
-    public TimeSpan MaxRetryDelay { get; init; } = TimeSpan.FromHours(1);
-}
-
-public sealed record SecurityEventOutboxItem(
-    SecurityEvent Event,
-    int Attempts,
-    DateTimeOffset CreatedAtUtc);
-
-public sealed record SecurityEventOutboxHealth(
-    int PendingCount,
-    int FailedCount,
-    int FilteredCount,
-    long StoredBytes,
-    DateTimeOffset? OldestPendingUtc,
-    DateTimeOffset? LastDeliveredUtc);
-
-public sealed class SecurityEventOutboxFullException(string message) : IOException(message);
-
 /// <summary>
 /// Process-independent SQLite outbox for sanitized security events. A unique event ID provides
 /// idempotent append, and leased claims recover automatically when a process exits mid-delivery.
 /// </summary>
-public sealed class SecurityEventOutbox : ISecurityEventSink
+public sealed class SecurityEventOutbox : ISecurityEventOutbox
 {
     private readonly SecurityEventOutboxOptions _options;
     private readonly string _connectionString;
@@ -464,4 +439,10 @@ public sealed class SecurityEventOutbox : ISecurityEventSink
     private static DateTimeOffset Parse(string value) =>
         DateTimeOffset.Parse(value, CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+}
+
+public sealed class SqliteSecurityEventOutboxFactory : ISecurityEventOutboxFactory
+{
+    public ISecurityEventOutbox Create(SecurityEventOutboxOptions options, Func<double>? jitter = null) =>
+        new SecurityEventOutbox(options, jitter);
 }

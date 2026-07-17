@@ -76,6 +76,7 @@ namespace ETL_SQL.Orchestrator
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ISessionMetadataStoreFactory, SqliteSessionMetadataStoreFactory>();
+            services.AddSingleton<ISecurityEventOutboxFactory, SqliteSecurityEventOutboxFactory>();
             services.AddSingleton<IGovernancePolicyRegistry>(_ => GovernancePolicyRegistry.CreateDefault());
             services.AddHostedService<EnterprisePolicyRefreshService>();
             services.AddSingleton<ISecretProvider>(_ =>

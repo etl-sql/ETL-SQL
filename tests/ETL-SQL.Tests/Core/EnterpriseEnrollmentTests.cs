@@ -10,7 +10,11 @@ public sealed class EnterpriseEnrollmentTests : IDisposable
     private readonly string _root = System.IO.Path.Combine(
         System.IO.Path.GetTempPath(), "enterprise_enrollment_" + Guid.NewGuid().ToString("N"));
 
-    public EnterpriseEnrollmentTests() => Directory.CreateDirectory(_root);
+    public EnterpriseEnrollmentTests()
+    {
+        SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
+        Directory.CreateDirectory(_root);
+    }
 
     public void Dispose()
     {

@@ -44,6 +44,8 @@ namespace ETL_SQL.LSP
     {
         static async Task Main(string[] args)
         {
+            ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+                new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
             await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
             var server = await LanguageServer.From(options =>
@@ -117,6 +119,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<ILineageTracker, LineageTracker>();
                         services.AddSingleton<IDockerManager, DockerContainerManager>();
                         services.AddSingleton<ISessionMetadataStoreFactory, SqliteSessionMetadataStoreFactory>();
+                        services.AddSingleton<ISecurityEventOutboxFactory, SqliteSecurityEventOutboxFactory>();
                         services.AddSingleton<ISessionStateManager, Engine.Services.SessionStateManager>();
                         services.AddSingleton<Engine.Services.SessionStateManager>(sp => (Engine.Services.SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
                         services.AddSingleton<Services.SecurityService>(sp =>

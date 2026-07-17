@@ -20,6 +20,8 @@ namespace ETL_SQL.ReportBuilder.CLI
     {
         private static async Task<int> Main(string[] args)
         {
+            ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+                new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
             await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 
             if (args.Length == 0)

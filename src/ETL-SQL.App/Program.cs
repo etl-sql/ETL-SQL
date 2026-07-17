@@ -36,6 +36,8 @@ namespace ETL_SQL
 
             try
             {
+                ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+                    new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
                 if (args.Length == 0 || !string.Equals(args[0], "enterprise", StringComparison.OrdinalIgnoreCase))
                     await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 

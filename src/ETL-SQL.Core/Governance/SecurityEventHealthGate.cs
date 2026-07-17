@@ -11,7 +11,7 @@ public static class SecurityEventHealthGate
 {
     public static void EnsureExecutionAllowed(
         ExecutionPolicySnapshot snapshot,
-        SecurityEventOutbox? outbox = null,
+        ISecurityEventOutbox? outbox = null,
         DateTimeOffset? nowUtc = null,
         BootstrapSecurityEventReporter? reporter = null)
     {

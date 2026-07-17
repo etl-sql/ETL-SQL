@@ -503,7 +503,7 @@ public static class EnterprisePolicyRuntime
     }
 
     private static async Task ReplaceSecurityEventTransportAsync(
-        SecurityEventOutbox? outbox,
+        ISecurityEventOutbox? outbox,
         EnterpriseEnrollmentDocument? enrollment,
         EffectiveEnterprisePolicy? policy)
     {

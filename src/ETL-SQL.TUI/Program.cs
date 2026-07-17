@@ -17,6 +17,8 @@ namespace ETL_SQL.TUI
         {
             try
             {
+                ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+                    new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
                 await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
                 ServiceProvider = TuiDependencyInjectionSetup.BuildServiceProvider();
 

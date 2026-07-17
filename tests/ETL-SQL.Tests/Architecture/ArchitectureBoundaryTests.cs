@@ -71,8 +71,6 @@ public sealed class ArchitectureBoundaryTests
     // permitted; resolving one requires removing its entry here.
     private static readonly HashSet<(string Project, string Package)> KnownBannedPackages =
     [
-        ("Core", "Microsoft.Data.Sqlite"),
-        ("Core", "SQLitePCLRaw.bundle_e_sqlite3"),
     ];
 
     [Fact]

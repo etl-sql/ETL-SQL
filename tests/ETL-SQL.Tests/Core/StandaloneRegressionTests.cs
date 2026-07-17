@@ -15,7 +15,11 @@ namespace ETL_SQL.Tests.Core;
 /// </summary>
 public sealed class StandaloneRegressionTests : IDisposable
 {
-    public StandaloneRegressionTests() => EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+    public StandaloneRegressionTests()
+    {
+        SecurityEventRuntime.ConfigureLocalOutboxFactory(new SqliteSecurityEventOutboxFactory());
+        EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
+    }
     public void Dispose() => EnterprisePolicyRuntime.SetCurrent(EffectiveEnterprisePolicy.Standalone);
 
     [Fact]

@@ -31,12 +31,12 @@ public sealed record SecurityEventDeliveryResult(
 public sealed class SecurityEventTransport
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private readonly SecurityEventOutbox _outbox;
+    private readonly ISecurityEventOutbox _outbox;
     private readonly HttpClient _http;
     private readonly SecurityEventTransportOptions _options;
 
     public SecurityEventTransport(
-        SecurityEventOutbox outbox,
+        ISecurityEventOutbox outbox,
         HttpClient http,
         SecurityEventTransportOptions options)
     {

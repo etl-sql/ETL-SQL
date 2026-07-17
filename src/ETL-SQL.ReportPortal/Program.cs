@@ -25,6 +25,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 
+ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+    new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
 await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
 var builder = WebApplication.CreateBuilder(args);
 #if WINDOWS

@@ -27,6 +27,7 @@ public static class SecurityEventRuntime
 {
     private static readonly object SinkSync = new();
     private static ISecurityEventSink _sink = NullSecurityEventSink.Instance;
+    private static ISecurityEventOutboxFactory? _outboxFactory;
     private static readonly AsyncLocal<ISecurityEventSink?> ScopedSink = new();
     private static readonly ConditionalWeakTable<Exception, object> EmittedExceptions = new();
     private static readonly object DiagnosticsSync = new();
@@ -44,18 +45,26 @@ public static class SecurityEventRuntime
         set => Volatile.Write(ref _sink, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
-    public static SecurityEventOutbox? LocalOutbox => Sink as SecurityEventOutbox;
+    public static ISecurityEventOutbox? LocalOutbox => Sink as ISecurityEventOutbox;
 
-    public static SecurityEventOutbox ConfigureLocalOutbox(string databasePath)
+    public static void ConfigureLocalOutboxFactory(ISecurityEventOutboxFactory factory)
+    {
+        ArgumentNullException.ThrowIfNull(factory);
+        lock (SinkSync) _outboxFactory = factory;
+    }
+
+    public static ISecurityEventOutbox ConfigureLocalOutbox(string databasePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(databasePath);
         var fullPath = Path.GetFullPath(databasePath);
         lock (SinkSync)
         {
-            if (_sink is SecurityEventOutbox existing
+            if (_sink is ISecurityEventOutbox existing
                 && string.Equals(existing.DatabasePath, fullPath, PathComparison()))
                 return existing;
-            var outbox = new SecurityEventOutbox(new SecurityEventOutboxOptions
+            var factory = _outboxFactory ?? throw new InvalidOperationException(
+                "Security event outbox factory has not been configured.");
+            var outbox = factory.Create(new SecurityEventOutboxOptions
             {
                 DatabasePath = fullPath
             });

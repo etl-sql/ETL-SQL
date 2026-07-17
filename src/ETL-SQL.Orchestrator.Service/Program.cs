@@ -61,6 +61,8 @@ try
 {
     Log.Information("ETL-SQL Orchestrator Service starting up.");
 
+    ETL_SQL.Core.Governance.SecurityEventRuntime.ConfigureLocalOutboxFactory(
+        new ETL_SQL.Core.Governance.SqliteSecurityEventOutboxFactory());
     await ETL_SQL.Core.Governance.EnterprisePolicyRuntime.InitializeFromMachineAsync();
     var builder = WebApplication.CreateBuilder(args);
 
