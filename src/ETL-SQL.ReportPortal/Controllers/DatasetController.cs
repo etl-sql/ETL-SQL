@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Filters;
@@ -8,7 +7,6 @@ using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -20,6 +18,7 @@ public class DatasetController(
     PortalDbContext db,
     DatasetViewerService viewer,
     DatasetPermissionService datasetPermissions,
+    DatasetQueryService queries,
     DatasetExportService exports,
     DatasetRefreshService refreshes,
     DatasetMoveService moves,
@@ -45,19 +44,7 @@ public class DatasetController(
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var datasets = await db.Datasets
-            .AsNoTracking()
-            .Include(d => d.OwningReport)
-            .Include(d => d.Acls)
-            .ToListAsync();
-
-        var permissions = await datasetPermissions.GetEffectivePermissionsAsync(
-            datasets, CurrentUserId, IsAdmin);
-
-        return Ok(datasets
-            .Where(d => CanView(permissions[d.Id]))
-            .Select(ToDto)
-            .ToList());
+        return Ok(await queries.GetAllAsync(CurrentUserId, IsAdmin));
     }
 
     // ── GET /api/datasets/{id} ────────────────────────────────────────────────
@@ -65,14 +52,14 @@ public class DatasetController(
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanView(perm)) return Forbid();
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(ToDto(dataset));
+        return Ok(queries.ToDto(dataset));
     }
 
     // ── GET /api/datasets/{id}/data ──────────────────────────────────────────
@@ -87,7 +74,7 @@ public class DatasetController(
         [FromQuery] string? search = null,
         [FromQuery] string? filters = null)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -120,7 +107,7 @@ public class DatasetController(
         [FromQuery] string? filters = null,
         [FromQuery] string? format = null)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -144,7 +131,7 @@ public class DatasetController(
     [HttpGet("{id:int}/data/stats")]
     public async Task<IActionResult> GetStats(int id, [FromQuery] string? filters = null)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -169,7 +156,7 @@ public class DatasetController(
         [FromQuery] string? search = null,
         [FromQuery] int limit = 50)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -191,13 +178,13 @@ public class DatasetController(
     [HttpGet("{id:int}/rows")]
     public async Task<IActionResult> GetRows(int id)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanView(perm)) return Forbid();
 
-        return Ok(new DatasetPreviewDto(ParseColumnSchema(dataset.ColumnSchema), dataset.RowCount));
+        return Ok(queries.ToPreview(dataset));
     }
 
     // ── POST /api/datasets/{id}/refresh ──────────────────────────────────────
@@ -205,7 +192,7 @@ public class DatasetController(
     [HttpPost("{id:int}/refresh")]
     public async Task<IActionResult> Refresh(int id)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -232,7 +219,7 @@ public class DatasetController(
     [HttpGet("{id:int}/refresh-status")]
     public async Task<IActionResult> GetRefreshStatus(int id)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -246,7 +233,7 @@ public class DatasetController(
     [HttpPatch("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDatasetRequest req)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -261,10 +248,10 @@ public class DatasetController(
         if (result.Kind == DatasetUpdateResultKind.Forbidden)
             return Forbid();
         if (result.Kind == DatasetUpdateResultKind.Conflict)
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(ToDto(dataset));
+        return Ok(queries.ToDto(dataset));
     }
 
     // ── POST /api/datasets/{id}/move ─────────────────────────────────────────
@@ -272,7 +259,7 @@ public class DatasetController(
     [HttpPost("{id:int}/move")]
     public async Task<IActionResult> Move(int id, [FromBody] MoveDatasetRequest req)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var destination = await db.Folders.FindAsync(req.DestinationFolderId);
@@ -290,11 +277,11 @@ public class DatasetController(
         }
         if (result.Kind == DatasetMoveResultKind.Conflict)
         {
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
         }
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
-        return Ok(ToDto(dataset));
+        return Ok(queries.ToDto(dataset));
     }
 
     // ── DELETE /api/datasets/{id} ─────────────────────────────────────────────
@@ -302,7 +289,7 @@ public class DatasetController(
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -316,7 +303,7 @@ public class DatasetController(
         if (result.Kind == DatasetDeleteResultKind.NotFound)
             return NotFound();
         if (result.Kind == DatasetDeleteResultKind.Conflict)
-            return OptimisticConcurrency.Conflict(this, ToDto(result.Current!));
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(result.Current!));
 
         return NoContent();
     }
@@ -326,19 +313,13 @@ public class DatasetController(
     [HttpGet("{id:int}/acl")]
     public async Task<IActionResult> GetAcl(int id)
     {
-        var dataset = await db.Datasets
-            .AsNoTracking()
-            .Include(d => d.OwningReport)
-            .Include(d => d.Acls).ThenInclude(a => a.Group)
-            .FirstOrDefaultAsync(d => d.Id == id);
-
+        var dataset = await queries.LoadDatasetWithAclGroupsAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanView(perm)) return Forbid();
 
-        return Ok(dataset.Acls.Select(a =>
-            new DatasetAclEntryDto(a.GroupId, a.Group.Name, a.Permission.ToString())));
+        return Ok(queries.ToAclEntries(dataset));
     }
 
     // ── POST /api/datasets/{id}/acl ───────────────────────────────────────────
@@ -346,7 +327,7 @@ public class DatasetController(
     [HttpPost("{id:int}/acl")]
     public async Task<IActionResult> GrantPermission(int id, [FromBody] GrantDatasetPermissionRequest req)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -361,7 +342,7 @@ public class DatasetController(
         if (result.Kind == DatasetAclMutationResultKind.GroupNotFound)
             return NotFound(new { error = "Group not found." });
         if (result.Kind == DatasetAclMutationResultKind.Conflict)
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });
@@ -372,7 +353,7 @@ public class DatasetController(
     [HttpDelete("{id:int}/acl/{groupId:int}")]
     public async Task<IActionResult> RevokePermission(int id, int groupId)
     {
-        var dataset = await LoadDataset(id);
+        var dataset = await queries.LoadDatasetAsync(id);
         if (dataset is null) return NotFound();
 
         var perm = await GetEffectivePermissionAsync(dataset);
@@ -385,7 +366,7 @@ public class DatasetController(
         if (result.Kind == DatasetAclMutationResultKind.AclNotFound)
             return NotFound(new { error = "ACL entry not found." });
         if (result.Kind == DatasetAclMutationResultKind.Conflict)
-            return OptimisticConcurrency.Conflict(this, ToDto(dataset));
+            return OptimisticConcurrency.Conflict(this, queries.ToDto(dataset));
 
         OptimisticConcurrency.SetETag(Response, dataset.Version);
         return Ok(new { dataset.Version });
@@ -400,62 +381,4 @@ public class DatasetController(
         catch { return []; }
     }
 
-    private Task<Dataset?> LoadDataset(int id) =>
-        db.Datasets
-            .Include(d => d.OwningReport)
-            .Include(d => d.Acls)
-            .FirstOrDefaultAsync(d => d.Id == id);
-
-    private static DatasetDto ToDto(Dataset d) => new(
-        d.Id, d.Name, d.FolderPath,
-        d.AccessLevel.ToString(),
-        d.RowCount, IsStale(d),
-        d.LastRefresh, d.Ttl, d.RefreshInterval,
-        IsEncrypted: !string.IsNullOrWhiteSpace(d.ParquetFilePath)
-            && d.EncryptionMode != ETL_SQL.Core.DatasetEncryptionMode.None,
-        d.CreatedAt, d.UpdatedAt,
-        d.OwningReport?.Name,
-        d.OwningReportId,
-        d.Version);
-
-    private static bool IsStale(Dataset d)
-    {
-        if (!d.LastRefresh.HasValue) return true;
-        if (string.IsNullOrWhiteSpace(d.Ttl)) return false;
-        var ttl = ParseDuration(d.Ttl);
-        return ttl.HasValue && d.LastRefresh.Value + ttl.Value < DateTime.UtcNow;
-    }
-
-    private static TimeSpan? ParseDuration(string? s)
-    {
-        if (string.IsNullOrWhiteSpace(s)) return null;
-        var m = Regex.Match(s.Trim(), @"^(\d+)([smhd])$", RegexOptions.IgnoreCase);
-        if (!m.Success) return null;
-        int v = int.Parse(m.Groups[1].Value);
-        return m.Groups[2].Value.ToUpperInvariant() switch
-        {
-            "S" => TimeSpan.FromSeconds(v),
-            "M" => TimeSpan.FromMinutes(v),
-            "H" => TimeSpan.FromHours(v),
-            "D" => TimeSpan.FromDays(v),
-            _ => null
-        };
-    }
-
-    private static IEnumerable<DatasetColumnDto> ParseColumnSchema(string? json)
-    {
-        if (string.IsNullOrWhiteSpace(json)) return [];
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return [];
-            return doc.RootElement.EnumerateArray()
-                .Select(e => new DatasetColumnDto(
-                    e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
-                    e.TryGetProperty("type", out var t) ? t.GetString() ?? "unknown" : "unknown"))
-                .Where(c => !string.IsNullOrWhiteSpace(c.Name))
-                .ToList();
-        }
-        catch { return []; }
-    }
 }
