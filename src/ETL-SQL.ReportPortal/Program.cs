@@ -404,6 +404,7 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DatasetAtRestKeyRotatio
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalSecretStoreService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalConnectionCatalogService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DesignerAnalysisService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.DesignerScriptGenerationService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerSchemaService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalDesignerRunService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.PortalScriptSourceControlService>();
