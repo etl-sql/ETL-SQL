@@ -44,8 +44,14 @@ namespace ETL_SQL.Tests.Integration.Connectors
             return ctx.Object;
         }
 
-        private FtpConnector ValidConnector() =>
-            new FtpConnector(MakeContext(), _ftp.Host, FtpFixture.TestUser, FtpFixture.TestPassword, _ftp.Port);
+        private FtpConnector ValidConnector()
+        {
+            var c = new FtpConnector(MakeContext(), _ftp.Host, FtpFixture.TestUser, FtpFixture.TestPassword, _ftp.Port);
+            // Docker passive-mode fix: the PASV response advertises the container's internal IP;
+            // override it so the data connection always goes to the mapped host address instead.
+            c.ConfigureClient(client => client.Config.AddressResolver = () => _ftp.Host);
+            return c;
+        }
 
         private FtpConnector WrongPasswordConnector() =>
             new FtpConnector(MakeContext(), _ftp.Host, FtpFixture.TestUser, "wrong-password", _ftp.Port);

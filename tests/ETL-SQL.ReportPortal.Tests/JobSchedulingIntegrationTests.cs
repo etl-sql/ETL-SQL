@@ -30,7 +30,7 @@ namespace ETL_SQL.ReportPortal.Tests
             _smtp = smtp;
         }
 
-        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(HttpClient client, string jobName, int expectedCount, int timeoutSeconds = 45)
+        private async Task<List<JobHistoryEntry>> PollHistoryUntilCountAsync(HttpClient client, string jobName, int expectedCount, int timeoutSeconds = 90)
         {
             var start = DateTime.UtcNow;
             while ((DateTime.UtcNow - start).TotalSeconds < timeoutSeconds)

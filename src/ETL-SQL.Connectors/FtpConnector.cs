@@ -22,6 +22,16 @@ namespace ETL_SQL.Connectors
         public string ConnectorType => "FTP";
 
         private readonly FtpClient? _client;
+
+        /// <summary>
+        /// Allows tests and fixtures to apply additional post-construction configuration
+        /// to the underlying FtpClient before the first connection (e.g. AddressResolver
+        /// for Docker passive-mode port mapping).
+        /// </summary>
+        internal void ConfigureClient(Action<FtpClient> configure)
+        {
+            if (_client != null) configure(_client);
+        }
         private readonly string? _host;
         private readonly int _port;
         private readonly string? _username;
