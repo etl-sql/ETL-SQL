@@ -177,7 +177,7 @@ public sealed class BillionRowOperatorManifestTests
     private static string LargeDataCertificationPath()
     {
         var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
-        return Path.Combine(root, "Docs", "Large_Data_Certification.md");
+        return Path.Combine(root, "docs", "reference", "performance", "large-data-certification.md");
     }
 
     private sealed record MatrixRow(string Operator, string State, string Artifact);

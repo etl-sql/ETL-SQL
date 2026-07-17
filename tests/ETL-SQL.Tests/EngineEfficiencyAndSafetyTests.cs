@@ -141,7 +141,7 @@ SELECT * FROM #collision ORDER BY id;"));
             tracker.Setup(t => t.GlobalMetadata).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(l, _security, _config, null);
+            var sessions = new Mock<SessionStateManager>(l, _security, _config, new SqliteSessionMetadataStoreFactory(), null);
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
 
             var handlers = new List<IStatementHandler>

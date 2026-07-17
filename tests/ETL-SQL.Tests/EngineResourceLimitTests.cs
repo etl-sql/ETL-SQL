@@ -128,7 +128,7 @@ SELECT * FROM #large;";
             tracker.Setup(t => t.GlobalMetadata).Returns(new System.Collections.Concurrent.ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase));
 
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(l, _security, new Mock<IConfiguration>().Object, null);
+            var sessions = new Mock<SessionStateManager>(l, _security, new Mock<IConfiguration>().Object, new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(), null);
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
 
             var handlers = new List<IStatementHandler>

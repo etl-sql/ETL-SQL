@@ -48,6 +48,7 @@ namespace ETL_SQL.Tests.Orchestration
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
             services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionMetadataStoreFactory, ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory>();
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
 

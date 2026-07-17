@@ -64,7 +64,7 @@ namespace ETL_SQL.Tests.Security
             var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
             var tracker = new Mock<ILineageTracker>();
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
+            var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(), null);
 
             var handlers = new List<IStatementHandler>();
             var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
@@ -83,7 +83,7 @@ namespace ETL_SQL.Tests.Security
             var registry = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
             var tracker = new Mock<ILineageTracker>();
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
+            var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, new ETL_SQL.Core.Execution.SqliteSessionMetadataStoreFactory(), null);
 
             var handlers = new List<IStatementHandler>();
             var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
