@@ -60,7 +60,7 @@ Many new docs still mention old locations such as `Docs/Architecture`, `Docs/Ref
 Fixed representative examples:
 
 - `docs/syntax-index.md` is now the lowercase syntax locator and no longer points to legacy worktree manuals.
-- `docs/guides/administration.md` links now prefer current operator, portal, and orchestrator docs.
+- `docs/administration/platform/README.md` links now prefer current operator, portal, and orchestrator docs.
 - `docs/guides/getting-started.md` links to old Orchestrator, VS Code architecture, and docs map paths.
 - `docs/cookbooks/etl-recipes.md` no longer routes users through old worktree manuals.
 - `docs/reference/dates-times/dates-times.md` links to `.worktrees/enterprise-policy-hardening/Docs/Reference/RelativeDate_Parameters.md`.
@@ -293,8 +293,8 @@ Preferred rule: keep short, predictable URLs in `guides/`, keep authoritative re
 Most legacy files have some new equivalent, but these legacy topics need deliberate placement or explicit deprecation:
 
 - `Docs_Legacy/User_Manual.md` should be fully absorbed by `docs/guides/getting-started.md` and focused reference pages.
-- `Docs_Legacy/Orchestrators_Guide.md` maps to `docs/guides/job-orchestration.md`, which is still large enough to split into focused operator pages.
-- `Docs_Legacy/Administrators_Guide.md` maps to `docs/guides/administration.md`, but the current guide is still very large and should be split into focused operator pages.
+- `Docs_Legacy/Orchestrators_Guide.md` maps to `docs/administration/orchestration/README.md`, which is still large enough to split into focused operator pages.
+- `Docs_Legacy/Administrators_Guide.md` maps to `docs/administration/platform/README.md`, but the current guide is still very large and should be split into focused operator pages.
 - `Docs_Legacy/Report_SQL_Guide.md` maps to `docs/guides/report-sql.md`, but that file is still over 2,600 lines and should be split into report authoring, visual reference, layout, actions, and publishing.
 - `Docs_Legacy/Cookbook.md` maps to `docs/cookbooks/etl-recipes.md`, but the cookbook should have a README and recipe template.
 - `Docs_Legacy/Reference/Dates_and_Times.md` and `Docs_Legacy/Reference/RelativeDate_Parameters.md` map to `docs/reference/dates-times/`, but stale links still point to legacy names.
@@ -328,10 +328,10 @@ Do the taxonomy move as a dedicated pass with automated link rewriting and docs 
 The reconfigure goal was smaller and more concise documents. Several new files remain monolithic:
 
 - `docs/guides/report-sql.md` is about 2,600 lines.
-- `docs/guides/portal-admin.md` is about 1,870 lines.
-- `docs/guides/administration.md` is about 1,800 lines.
+- `docs/administration/portal/README.md` is about 1,870 lines.
+- `docs/administration/platform/README.md` is about 1,800 lines.
 - `docs/guides/getting-started.md` is about 1,880 lines.
-- `docs/guides/job-orchestration.md` is about 1,200 lines.
+- `docs/administration/orchestration/README.md` is about 1,200 lines.
 - `docs/reference/statements/grammar.md` is about 3,400 lines.
 
 These should become overview pages that link to focused reference pages, recipes, and `docs/syntax-index.md`. The legacy `grammar.md` file should be decomposed into focused statement/query/variable pages, then deleted once unique content has moved and inbound links have been rewritten. Do not replace it with a compatibility pointer.

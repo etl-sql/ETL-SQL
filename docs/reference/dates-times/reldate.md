@@ -21,3 +21,8 @@ CLI override: etlsql run report.etlsql --var @start=W-1
 
 References:
 - [Dates and Times](dates-times.md)
+
+## References
+
+- [Reference](../README.md)
+- [Syntax Index](../../syntax-index.md)

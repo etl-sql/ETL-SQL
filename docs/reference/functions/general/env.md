@@ -52,4 +52,4 @@ CREATE CONNECTION src AS POSTGRES(
 ## References
 
 - [Functions](../README.md)
-- [Configuration](../../configuration/index.md)
+- [Configuration Settings](../../../administration/platform/settings.md)

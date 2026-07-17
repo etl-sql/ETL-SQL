@@ -16,8 +16,8 @@ syntax option. For operating and administering ETL-SQL (platform, portal, orches
 
 - [ETL Recipes](../cookbooks/etl-recipes.md) - complete, runnable pipeline patterns.
 - [Pipelines and DAGs](pipelines-and-dags.md) - script composition, dependencies, and DAG-style flows.
-- [Spec-Driven Development](spec-driven-development.md) - generate scripts from source specifications.
-- [Data Spec Parser Instructions](data-spec-parser-instructions.md) - prompt and JSON contract guidance.
+- [Spec-Driven Development](../spec-import/spec-driven-development.md) - generate scripts from source specifications.
+- [Data Spec Parser Instructions](../spec-import/data-spec-parser-instructions.md) - prompt and JSON contract guidance.
 - [Notebook Guide](notebook-guide.md) - notebook workflows and script execution.
 
 ## Reporting

@@ -64,6 +64,6 @@ The editor cycles through `«placeholder»` fields when the snippet is accepted.
 ## References
 
 - [Autocomplete Snippets Source](../../../snippets/README.md)
-- [Configuration Settings](../configuration/settings.md)
+- [Configuration Settings](../../administration/platform/settings.md)
 - [Help Statement](../statements/session-control/help.md)
 - [Help and Snippet Standards](../../architecture/standards/Help_and_Snippet_Standards.md)

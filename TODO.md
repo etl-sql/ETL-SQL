@@ -63,6 +63,45 @@ Collect release-suite evidence before publishing v0.16.0. The detailed evidence 
 
 ---
 
+## Portal Rename Follow-Up
+
+Initial product-facing rename landed in `788c2c3b`: user docs, visible strings, samples, syntax index,
+and the admin connector token now use **Portal** / `PORTAL` instead of **Report Portal** /
+`REPORTPORTAL`. Remaining work should be handled as explicit mechanical batches:
+
+- [ ] **Decide whether to rename internal project identities.** Answer: Yes,  Current code still uses project,
+      assembly, namespace, and test names such as `ETL-SQL.ReportPortal`,
+      `ETL_SQL.ReportPortal`, and `tests/ETL-SQL.ReportPortal.Tests`. If we want the rename to be
+      complete end-to-end, rename these to `ETL-SQL.Portal`, `ETL_SQL.Portal`, and
+      `tests/ETL-SQL.Portal.Tests`, then update solution/project references, Dockerfiles,
+      installer scripts, CI/test-lane scripts, architecture boundary tests, and publish/build scripts.
+- [ ] **Rename connector implementation folders/classes if internal identities are renamed.**
+      `src/ETL-SQL.Connectors/ReportPortal/ReportPortalConnector.cs` and
+      `ReportPortalDataSource` still use the old internal type names while exposing the new
+      `PORTAL` connector token. Rename to `PortalConnector` / `PortalDataSource` only as part of the
+      internal identity pass so tests and DI registration move together.
+- [ ] **Rename sample folder paths after checking release/script references.**
+      `samples/report_portal_deployment/` still uses the old folder name even though its prose was
+      updated. Rename to `samples/portal_deployment/` and update every sample guide, test, release,
+      and packaging reference.
+- [ ] **Regenerate and verify VS Code syntax assets after any token/name changes.**
+      The grammar already advertises `PORTAL`; after additional renames, rerun the syntax/asset
+      generation checks and verify `src/etl-sql-vscode/syntaxes/etlsql.tmLanguage.json` has no stale
+      `REPORTPORTAL` entry.
+- [ ] **Run a full stale-name audit before closing the rename.**
+      Search docs, scripts, source, tests, samples, installer assets, Docker assets, snapshots, and
+      generated browser assets for `Report Portal`, `report portal`, `REPORTPORTAL`,
+      `REPORT_PORTAL`, `ReportPortal`, and `report_portal`. Keep only intentional internal names if
+      the project/namespace rename is deferred.
+- [ ] **Verification gate for the internal rename batch.**
+      Run `node .\scripts\sync-assets.js -Check`, `node .\scripts\generate-syntax-index.js --check`,
+      `dotnet build src\ETL-SQL.App\ETL-SQL.App.csproj --no-restore`,
+      `dotnet build src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj --no-restore` (or the new
+      Portal path), focused docs/suggestion tests, and the Portal test lane. Include Docker-backed
+      connector smoke once Docker is available.
+
+---
+
 ## v0.16.0 Sprint Code Review
 
 Findings from the 2026-07-15 review of `v0.15.0..HEAD` and the in-progress Portal editor work.

@@ -322,7 +322,7 @@ etl-sql-report build sales_dashboard.rptsql --format json
 | [Data Connectors](docs/reference/connectors/data-connectors.md) | Connector types, options, authentication patterns, and examples. |
 | [Specialized Operations](docs/reference/file-operations/specialized-operations.md) | File operations, email, transfer, lineage, Docker, jobs, and diagnostics. |
 | [Performance](docs/reference/performance/performance.md) | Spill thresholds, memory model, tuning guidance, and scale certification references. |
-| [Spec-Driven Development](docs/guides/spec-driven-development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
+| [Spec-Driven Development](docs/spec-import/spec-driven-development.md) | Guide for generating scripts and extracting data dictionaries from specifications. |
 
 ### Engineering
 

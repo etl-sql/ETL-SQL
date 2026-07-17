@@ -15,6 +15,7 @@ Install, configure, secure, scale, back up, and monitor the ETL-SQL platform and
 - [Row-Level Security](row-level-security.md) - Folder and dataset permissions control **which reports a user can open** — the coarse-grained gate.
 - [Secrets and Keys](secrets.md) - ETL-SQL supports encrypted values for secrets such as passwords, JWT secrets, certificate passwords, and connection strings. Encrypted values use the `ENC:` prefix.
 - [Portal State, Data Roots, and High Availability](state-and-ha.md) - The Portal constrains filesystem access to configured roots. Set these to service-owned directories rather than broad user folders:
+- [Configuration Settings Reference](settings.md) - Canonical reference for all `appsettings.json` keys, environment variable mappings, and ad-hoc `SET` overrides.
 
 ## See Also
 

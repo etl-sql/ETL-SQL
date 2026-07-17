@@ -96,7 +96,7 @@ link to the page that shows how. For language keywords, functions, and options, 
 | I want to… | Go to |
 | :--- | :--- |
 | Build a vendor feed from a JSON contract | [ETL Recipes](cookbooks/etl-recipes.md) — Specification-Driven Vendor Feed Build |
-| Understand spec-driven development | [Spec-Driven Development](guides/spec-driven-development.md) |
+| Understand spec-driven development | [Spec-Driven Development](spec-import/spec-driven-development.md) |
 
 ## See Also
 

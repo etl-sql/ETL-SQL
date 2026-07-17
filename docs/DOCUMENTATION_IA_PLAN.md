@@ -57,24 +57,24 @@ Each big guide becomes a **thin hub** (~80–150 lines: audience, orientation, "
 plus focused pages. Substance moves to `reference/` where it is help-embeddable; only
 genuinely narrative/workflow material stays in a guide sub-page.
 
-### 4a. Administration (`guides/administration.md`, 1,805 ln) — PRIORITY
-Hub: `guides/administration.md` → short overview + links.
+### 4a. Administration (`administration/platform/README.md`, 1,805 ln) — PRIORITY
+Hub: `administration/platform/README.md` → short overview + links.
 Move to reference (atomic, several already have homes):
-- Install/first-run → `guides/administration/installation.md` (narrative) + `reference/configuration/*` for settings.
+- Install/first-run → `administration/platform/installation.md` (narrative) + `reference/configuration/*` for settings.
 - Config files/`.etlsqlformat.json` → `reference/configuration/`.
 - Security & secrets (encrypting secrets, JWT secret, orchestrator API key, Governance
   Core, RLS) → `reference/security/*` + link RLS to existing row-level-security material.
 - HTTPS/network, state & data roots, **Practical HA**, containerized HA →
-  `guides/administration/high-availability.md` (narrative) + `reference/configuration/`.
+  `administration/platform/high-availability.md` (narrative) + `reference/configuration/`.
 - Resource controls (lockbox bundles, portal exec, job exec, engine defaults, lineage/
   OpenLineage, snippet templates) → `reference/configuration/`.
-- Backup & maintenance, operational checks, monitoring/alerting → `guides/administration/backup-and-monitoring.md`.
+- Backup & maintenance, operational checks, monitoring/alerting → `administration/platform/backup-and-monitoring.md`.
 - `etl-sql doctor`, **Operator CLI Commands** (§10–11: init, support-bundle, backup/
   restore, upgrade, migrate-database, ha-soak) → **generated `reference/cli/**`** (section 6).
 
-### 4b. Portal Admin (`guides/portal-admin.md`, 1,871 ln) — PRIORITY
-Hub: `guides/portal-admin.md` → overview + links.
-- Deployment (Windows/systemd/reverse proxy) → `guides/portal-admin/deployment.md`.
+### 4b. Portal Admin (`administration/portal/README.md`, 1,871 ln) — PRIORITY
+Hub: `administration/portal/README.md` → overview + links.
+- Deployment (Windows/systemd/reverse proxy) → `administration/portal/deployment.md`.
 - Configuration Reference (§2, huge) → `reference/portal-admin/configuration.md`.
 - User management, roles, enterprise identity/LDAP lifecycle → `reference/portal-admin/users-and-identity.md`.
 - Groups & folder ACLs, effective permissions → `reference/portal-admin/permissions.md`.
@@ -84,8 +84,8 @@ Hub: `guides/portal-admin.md` → overview + links.
 - Extended admin scripting / config export → `reference/portal-admin/scripting.md`.
 - Health monitoring, audit log (events/export/guarantees), security model → `reference/portal-admin/*`.
 
-### 4c. Orchestrator / Jobs (`guides/job-orchestration.md`, 1,205 ln) — PRIORITY
-Hub: `guides/job-orchestration.md` → overview + links.
+### 4c. Orchestrator / Jobs (`administration/orchestration/README.md`, 1,205 ln) — PRIORITY
+Hub: `administration/orchestration/README.md` → overview + links.
 - CLI Command Reference (§2: run, ui edit, ui repl, encrypt, session clear, generate,
   gen-script, extract-spec, exit codes) → **generated `reference/cli/**`**.
 - Job scheduling (`CREATE JOB`, retry, `SHOW JOBS`/`JOB HISTORY`/`HOST METRICS`,
@@ -93,7 +93,7 @@ Hub: `guides/job-orchestration.md` → overview + links.
   (already an embedded category) — one page per statement, keyword-named.
 - Live files vs published bundles, publishing, bundle inspection → `reference/orchestrator-jobs/bundles.md`.
 - Sessions, variable injection, logging, performance tuning, resource governance →
-  `reference/configuration/` (settings) + short `guides/job-orchestration/operations.md` (narrative).
+  `reference/configuration/` (settings) + short `administration/orchestration/operations.md` (narrative).
 - CI/CD integration, VS Code, DAGs → keep as narrative sub-pages or cookbook recipes.
 
 ### 4d. Report SQL (`guides/report-sql.md`, 2,633 ln)

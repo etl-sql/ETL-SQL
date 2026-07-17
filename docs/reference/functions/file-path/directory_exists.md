@@ -44,3 +44,8 @@ SELECT DIRECTORY_EXISTS('archive') AS archive_ready;
 - [File Operations](../../file-operations/specialized-operations.md)
 - [DIRECTORY](directory.md)
 - [FILE_EXISTS](file_exists.md)
+
+## References
+
+- [Functions](../README.md)
+- [Syntax Index](../../../syntax-index.md)

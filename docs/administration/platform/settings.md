@@ -334,7 +334,8 @@ Standard ASP.NET Core connection configurations.
 ---
 
 ## References
-- [Administrators Guide](../../administration/platform/README.md)
-- [Portal Administrators Guide](../../administration/portal/README.md)
-- [Orchestrators Guide](../../administration/orchestration/README.md)
+- [Platform Administration](README.md)
+- [Portal Administration](../portal/README.md)
+- [Orchestration](../orchestration/README.md)
+- [SET Commands](../../reference/set-commands/README.md)
 

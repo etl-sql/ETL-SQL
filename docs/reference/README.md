@@ -15,7 +15,7 @@ Reference pages define exact syntax and behavior. They should be concise, comple
 
 - [Connectors](connectors/README.md) - database, file, and service connectors.
 - [File Operations](file-operations/README.md) - file transfer, encryption, compression, directory operations, Docker, and email.
-- [Configuration](configuration/index.md) - settings and configuration export behavior.
+- [Configuration Settings](../administration/platform/settings.md) - canonical `appsettings.json` reference for all services.
 
 ## Built-ins
 
